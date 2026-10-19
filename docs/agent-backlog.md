@@ -16,7 +16,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 |------|-------|---|--------|
 | T01 | Bootstrap + gate check | 67% | in progress |
 | T02 | ~~Finish curation~~ — OUT OF SCOPE (user curates via Kodi) | n/a | struck |
-| T03 | Local search: Kodi titles via bridge (no curation adapters) | 25% | in progress |
+| T03 | Local search: Kodi titles via bridge (no curation adapters) | 75% | in progress |
 | T04 | Kodi preservation + desktop import | 33% | in progress |
 | T05 | Studio grid renderer consumes placements | 0% | not started |
 | T06 | Remote + desktop grid editor | 0% | not started |
@@ -28,7 +28,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 | T12 | System polish + input + on-screen keyboard | 0% | not started |
 | T13 | Appliance + release distribution | 0% | not started |
 | T14 | Optional online discovery + linguist subtitles | 0% | not started |
-| **Overall** | **average of 13 active (T02 excluded)** | **12%** | — |
+| **Overall** | **average of 13 active (T02 excluded)** | **16%** | — |
 
 ## T01 — Bootstrap + gate check (S, depends: none)
 Entry docs: `README.md`, `docs/implementation-order.md:19-38`, `tests/visual/home-reference/README.md`.
@@ -45,12 +45,12 @@ Decision (user 2026-10-19): curating the collection is the user's responsibility
 Entry docs: `docs/unified-master-plan.txt` Sec 13, `docs/kodi-media.md`.
 Entry files: `qml/CommandCenter.qml`, `src/home/PageData.h`, `qml/Main.qml` (openSearchFromPage).
 Scope (Kodi-bridge only — no tag/playlist/curation adapters; those were T02, struck):
-- [ ] T03.1 Kodi title search (Movies/Shows/Episodes) with per-type bounded paging, debounce + cancel-aware, explicit Kodi-unavailable state
-- [ ] T03.2 Persisted Web OFF/ON toggle data model default OFF (OFF = zero external requests; ON path stubbed, no endpoint wired)
+- [x] T03.1 Kodi title search (Movies/Shows/Episodes) with per-type bounded paging, debounce + cancel-aware, explicit Kodi-unavailable state
+- [x] T03.2 Persisted Web OFF/ON toggle data model default OFF (OFF = zero external requests; ON path stubbed, no endpoint wired)
 - [x] T03.3 Page-scoped sources via `pageSearchSources()` surfaced + routed back to originating page
 - [ ] T03.4 Installed remote-only + real-Kodi acceptance
 Done when: offscreen Command Center + bridge bounds tests pass, Web OFF provably silent.
-Verify: component suite `pagesPersistAndRouteAndTravelWithSkins`, network-denial check. Evidence: docs/development-plan.md Oct-18 M4 done (PageModel::pageSearchSources, CommandCenter pageSources, Main openSearchFromPage, local-first); Kodi title-search hardening (T03.1) + Web toggle model (T03.2) + acceptance (T03.4) pending. Curation adapters excluded — T02 struck.
+Verify: component suite `pagesPersistAndRouteAndTravelWithSkins`, network-denial check. Evidence: T03.1+T03.2+T03.3 verified by `tools/verify-t03-search.py` (8/8 static checks: 250ms debounce, min-2 gate, cancel-on-close, 3 per-type clients, mediaStatus unavailable, SearchSettings default-OFF, toggle entry, web-discovery-unavailable stub with no XHR/fetch/socket). T03.4 installed acceptance pending. Curation adapters excluded — T02 struck.
 
 ## T04 — Kodi preservation + desktop import (M, depends: T01)
 Entry docs: `docs/master-roadmap.md` steps 1-2, `docs/install.md`.
