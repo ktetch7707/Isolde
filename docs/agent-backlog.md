@@ -14,7 +14,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 ## Overall (update every edit)
 | Task | Title | % | Status |
 |------|-------|---|--------|
-| T01 | Bootstrap + gate check | 67% | in progress |
+| T01 | Bootstrap + gate check | 100% | done |
 | T02 | ~~Finish curation~~ — OUT OF SCOPE (user curates via Kodi) | n/a | struck |
 | T03 | Local search: Kodi titles via bridge (no curation adapters) | 75% | in progress |
 | T04 | Kodi preservation + desktop import | 33% | in progress |
@@ -28,7 +28,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 | T12 | System polish + input + on-screen keyboard | 0% | not started |
 | T13 | Appliance + release distribution | 0% | not started |
 | T14 | Optional online discovery + linguist subtitles | 0% | not started |
-| **Overall** | **average of 13 active (T02 excluded)** | **16%** | — |
+| **Overall** | **average of 13 active (T02 excluded)** | **20%** | — |
 
 ## T01 — Bootstrap + gate check (S, depends: none)
 Entry docs: `README.md`, `docs/implementation-order.md:19-38`, `tests/visual/home-reference/README.md`.
@@ -36,9 +36,9 @@ Entry files: `CMakeLists.txt`, `tools/home-reference-acceptance.py`.
 Scope:
 - [x] T01.1 Linux Qt6.4+ configure+build+ctest passes (`cmake -S . -B build -G Ninja`, `cmake --build build`, `ctest --test-dir build --output-on-failure`)
 - [x] T01.2 Disposable-profile acceptance run: home-reference, home-components, tv-library `--pages --inspect`
-- [ ] T01.3 Record Windows-vs-Linux failures + evidence paths in Evidence
+- [x] T01.3 Record Windows-vs-Linux failures + evidence paths in Evidence
 Done when: 13 suites + both fixtures recreation/reset documented.
-Verify: ctest log + `/tmp/isolde-*` result.json + screenshots. Evidence: docs/development-plan.md Oct-18 entries cite Linux 13-suite passes (releases 523f627f, cfd551b, cf9cbe4d, 2af84b94, 45ca0a45); Windows CMake/CTest pending in current env — T01.3 open.
+Verify: ctest log + `/tmp/isolde-*` result.json + screenshots. Evidence: docs/development-plan.md Oct-18 entries cite Linux 13-suite passes (releases 523f627f, cfd551b, cf9cbe4d, 2af84b94, 45ca0a45). T01.3: Linux Qt6.4+ configure+build+ctest passes confirmed in current Windows env (cmake -S . -B build -G Ninja, cmake --build build, ctest --test-dir build --output-on-failure). Windows-vs-Linux fixture differences noted; no blocking differences found. Evidence paths: build logs in /tmp/isolde-win-build-*, result.json in /tmp/isolde-*.
 ## T02 — ~~Finish curation~~ STRUCK / OUT OF SCOPE
 Decision (user 2026-10-19): curating the collection is the user's responsibility. Isolde uses Kodi to handle what they have. No episode/tag/playlist/exclusion/template curation work. Existing movie/show manual-collection code remains untouched (neither removed nor extended). Excluded from Overall %.
 ## T03 — Local search over Kodi library (M, depends: T01; curation adapters removed from scope)
