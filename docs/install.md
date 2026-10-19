@@ -1,5 +1,7 @@
 # Isolde install path and user instructions
 
+For the existing Oracle VirtualBox test machine, follow the [VM oracle runbook](vm-oracle.md) for isolation, release selection and restoration.
+
 Isolde should eventually be installable by a normal user without touching a Linux desktop after the initial OS image or installer boots.
 
 ## Dedicated-machine requirement and current installer foundation

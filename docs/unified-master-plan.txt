@@ -1,3 +1,13 @@
+AUDIT OVERRIDES — 2026-10-19
+This consolidated source contains conflicting proposals, not verified implementation facts. docs/agent-backlog.md controls work; docs/planning-audit.md records conflicts. These overrides govern the retained source excerpts:
+- Limits: 64 pages/profile; 4 MiB layouts, 1024 components, 128 categories; grids 4–16 columns by 3–10 rows. Unlimited means flexible within validated bounds, never unbounded allocation.
+- Kodi owns media metadata, artwork, watched/resume and playback. A future SQLite schedule store owns schedules only; media references/caches are disposable Kodi-derived data, never a second canonical media/progress database.
+- T02 curation expansion is out of scope. Existing movie/show manual collections remain as-is. Users curate through Kodi.
+- Tabs and destinations are editable presets, not permanent mandatory pages. Profile isolation follows the existing runtime; family layout presets are not security controls.
+- Capture currently uses Qt Multimedia/SerialPort. GStreamer installation/health checks do not prove a separate capture pipeline, backend isolation or hardware readiness.
+- Web OFF excludes external discovery requests/results. Web ON is an unavailable stub; provider decisions and runtime network-denial acceptance remain open.
+- No parallel schema files or code in layouts. Reject unknown versions/types. Preserve v1 read compatibility and atomic v2 writes with backup.
+Historical proposal text follows for provenance and cannot override these constraints.
 
 ISOLDE
 Unified Master Planning Document

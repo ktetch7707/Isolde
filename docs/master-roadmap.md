@@ -1,5 +1,7 @@
 # Isolde master roadmap
 
+> Current authority (2026-10-19 audit): [agent-backlog.md](agent-backlog.md) selects the next task and records completion; this document supplies requirements/dependency rationale. Older dated next-action and not-started statements below are historical. T02 curation extensions are out of scope; existing movie/show collections remain unchanged. Source presence is not acceptance. See [planning audit](planning-audit.md) and [VM oracle](vm-oracle.md).
+
 See [implementation-order.md](implementation-order.md) for the current dependency-ordered execution plan and codebase assessment. This document remains the full requirements reference.
 
 October 16 interface amendment: the supplied **Unified Television Interface Design Specification** guides the default experience: source-focused Home, poster-focused Library and Home/Library/TV Guide/Music/Games destinations. These replace the older default tab/shelf placement examples below. The user's clarification makes every such choice configurable, including tabs, hierarchy, arbitrary colors, component presentation and personality. [interface-design.md](interface-design.md) records the customization matrix, default design and implementation sequence; it takes precedence over older default-layout examples. Kodi retains backend ownership.

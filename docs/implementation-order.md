@@ -1,5 +1,7 @@
 # Product implementation order
 
+> Current authority (2026-10-19 audit): [agent-backlog.md](agent-backlog.md) selects the next task and records completion; this document supplies requirements/dependency rationale. Older dated next-action and not-started statements below are historical. T02 curation extensions are out of scope; existing movie/show collections remain unchanged. Source presence is not acceptance. See [planning audit](planning-audit.md) and [VM oracle](vm-oracle.md).
+
 Execution plan, October 16, 2026. Product requirements remain in [master-roadmap.md](master-roadmap.md); evidence and limitations remain in [development-plan.md](development-plan.md). This document takes precedence over older “next action” paragraphs for sequencing. Keep version **0.0.1.2**. Ordering minimizes rework; it is not a delivery-date estimate.
 
 Interface priority update: [interface-design.md](interface-design.md) incorporates the supplied proposal and the user's customization requirement. Its design is a first-run preset; tabs, hierarchy, colors, density and component presentation must be editable. Pull navigation/composition and the shared appearance foundation forward from step 9, before further fixed collection screens. Next: editable navigation and the one-screen default preset, then virtualized poster categories/shelves with step 4 curation, followed by universal search. The numerical table below records the original dependency packages; this paragraph and the interface sequence govern current execution.

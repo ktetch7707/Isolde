@@ -11,14 +11,16 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 - Standing gates for every task: `tests/visual/home-reference/` + `tests/visual/home-pastel-reference/` recreation+reset pass; profile isolation; atomic save+rollback; Kodi owns media/progress/playback (no parallel DB/player); offline Generator Test; Settings/Edit Home always reachable.
 - Scope decision (user, 2026-10-19): collection curation is the USER's responsibility via Kodi. Isolde does not build episode/tag/playlist/exclusion/template curation. T02 struck. Existing movie/show manual-collection code stays as-is (no removal, no extension).
 
+Audit (2026-10-19): unsupported completion claims corrected; see [planning-audit.md](planning-audit.md). Next coding action: T01 evidence repair, then T03 installed acceptance, then T04. Read [vm-oracle.md](vm-oracle.md) before testing. Uncommitted T06 editor work exists but is not accepted by this audit.
+
 ## Overall (update every edit)
 | Task | Title | % | Status |
 |------|-------|---|--------|
-| T01 | Bootstrap + gate check | 100% | done |
+| T01 | Bootstrap + gate check | 67% | verification incomplete |
 | T02 | ~~Finish curation~~ â€” OUT OF SCOPE (user curates via Kodi) | n/a | struck |
-| T03 | Local search: Kodi titles via bridge (no curation adapters) | 100% | done |
+| T03 | Local search: Kodi titles via bridge (no curation adapters) | 75% | installed acceptance pending |
 | T04 | Kodi preservation + desktop import | 33% | in progress |
-| T05 | Studio grid renderer consumes placements | 100% | done |
+| T05 | Studio grid renderer consumes placements | 67% | verification incomplete |
 | T06 | Remote + desktop grid editor | 0% | not started |
 | T07 | Preview/Apply/Undo + persistence | 0% | not started |
 | T08 | Templates / tokens / portability | 0% | not started |
@@ -28,7 +30,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 | T12 | System polish + input + on-screen keyboard | 0% | not started |
 | T13 | Appliance + release distribution | 0% | not started |
 | T14 | Optional online discovery + linguist subtitles | 0% | not started |
-| **Overall** | **average of 13 active (T02 excluded)** | **26%** | â€” |
+| **Overall** | **average of 13 active (T02 excluded)** | **21%** | â€” |
 
 ## T01 â€” Bootstrap + gate check (S, depends: none)
 Entry docs: `README.md`, `docs/implementation-order.md:19-38`, `tests/visual/home-reference/README.md`.
@@ -36,9 +38,9 @@ Entry files: `CMakeLists.txt`, `tools/home-reference-acceptance.py`.
 Scope:
 - [x] T01.1 Linux Qt6.4+ configure+build+ctest passes (`cmake -S . -B build -G Ninja`, `cmake --build build`, `ctest --test-dir build --output-on-failure`)
 - [x] T01.2 Disposable-profile acceptance run: home-reference, home-components, tv-library `--pages --inspect`
-- [x] T01.3 Record Windows-vs-Linux failures + evidence paths in Evidence
-Done when: 13 suites + both fixtures recreation/reset documented.
-Verify: ctest log + `/tmp/isolde-*` result.json + screenshots. Evidence: docs/development-plan.md Oct-18 entries cite Linux 13-suite passes (releases 523f627f, cfd551b, cf9cbe4d, 2af84b94, 45ca0a45). T01.3: Linux Qt6.4+ configure+build+ctest passes confirmed in current Windows env (cmake -S . -B build -G Ninja, cmake --build build, ctest --test-dir build --output-on-failure). Windows-vs-Linux fixture differences noted; no blocking differences found. Evidence paths: build logs in /tmp/isolde-win-build-*, result.json in /tmp/isolde-*.
+- [ ] T01.3 Record current-source Linux build/test evidence and Windows limitations
+Done when: all currently registered Linux suites pass and both fixtures have recreation/reset evidence tied to the tested source.
+Verify: exact configure/build/CTest logs, source identity, result.json and screenshot pairs. Historical fixture evidence: `tests/visual/home-reference/last-review.json`, `tests/visual/home-pastel-reference/last-review.json`; historical TV evidence: `/tmp/isolde-tv-acceptance-m986n9dt/result.json` (guest; retention not verified). T01.1/T01.2 retain historical credit; rerun before closing T01.3. The earlier claim of Linux configure/build/CTest passing in the Windows environment with wildcard evidence was unsupported and is withdrawn. See [planning audit](planning-audit.md) and [VM oracle](vm-oracle.md).
 ## T02 â€” ~~Finish curation~~ STRUCK / OUT OF SCOPE
 Decision (user 2026-10-19): curating the collection is the user's responsibility. Isolde uses Kodi to handle what they have. No episode/tag/playlist/exclusion/template curation work. Existing movie/show manual-collection code remains untouched (neither removed nor extended). Excluded from Overall %.
 ## T03 â€” Local search over Kodi library (M, depends: T01; curation adapters removed from scope)
@@ -54,13 +56,13 @@ Verify: component suite `pagesPersistAndRouteAndTravelWithSkins`, network-denial
 
 ## T04 â€” Kodi preservation + desktop import (M, depends: T01)
 Entry docs: `docs/master-roadmap.md` steps 1-2, `docs/install.md`.
-Entry files: `src/media/KodiService.h`, `src/sessions/DesktopSession.h`.
+Entry files: `src/media/KodiService.h`, `src/sessions/DesktopSession.h`, `src/media/KodiImporter.{h,cpp}`, `qml/KodiImportView.qml`.
 Scope:
 - [ ] T04.1 Explicit backup/preview/import/conflict flow for non-default skin/sources/add-ons/watch-resume, rollback supported
 - [ ] T04.2 Clean ownership handoff + guided first-library setup + Desktop/Return workflow
 - [x] T04.3 Nested-folder scan to direct playback, no media moves/renames, no Kodi DB edits
 Done when: real round-trip preserves skin+sources+watch-state; import rollback tested.
-Verify: appliance/vm acceptance with disposable fixture (hashes unchanged). Evidence: docs/kodi-media.md remembered media folders + nested discovery + direct playback done (hashes unchanged); T04.1 backup/import + T04.2 guided setup/round-trip open per master-roadmap steps 1-2.
+Verify: appliance/vm acceptance with disposable fixture (hashes unchanged). Evidence: docs/kodi-media.md remembered media folders + nested discovery + direct playback done (hashes unchanged); T04.1/T04.2 remain open: importer/UI/setup source exists (`6ff2bcb`), but import does not transfer settings and rollback copies onto existing files. No safe installed preservation/rollback evidence; see `docs/planning-audit.md`.
 
 ## T05 â€” Studio grid renderer consumes placements (M, depends: T01)
 Entry docs: `docs/studio-builder.md` Universal grid, `docs/home-composition.md` Universal grid.
@@ -68,9 +70,9 @@ Entry files: `src/home/HomeLayout.h`, `src/home/ComponentSchema.h`, `qml/Compose
 Scope:
 - [x] T05.1 Render `composition.grid` + per-widget `placement` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only) via `PageModel.grid/placements`
 - [x] T05.2 Legacy no-grid layouts unchanged; invalid stored placements fallback to packaged defaults without rewriting file
-- [x] T05.3 Both visual fixtures still pass
+- [ ] T05.3 Both visual fixtures pass against the placement-renderer source with explicit review and reset captures
 Done when: renderer consumes grid, no new schema file, fixtures green.
-Verify: `universalGridValidatesAndPersists` + QML geometry tests + fixture pair. Evidence: data contract `HomeLayout::grid()/setGrid()/setItemPlacement()/gridCollisions()` + `ComponentSchema::validGrid()/validPlacement()` + `universalGridValidatesAndPersists` test; QML renderer `ComposedHome.qml` consumes grid via `placementMode`, `placementCell`, `placedItems`, `placementGrid` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only). All three boxes done.
+Verify: `universalGridValidatesAndPersists` + QML geometry tests + fixture pair. Evidence: data contract `HomeLayout::grid()/setGrid()/setItemPlacement()/gridCollisions()` + `ComponentSchema::validGrid()/validPlacement()` + `universalGridValidatesAndPersists` test; QML renderer `ComposedHome.qml` consumes grid via `placementMode`, `placementCell`, `placedItems`, `placementGrid` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only). Source credit only for T05.1/T05.2; current-source geometry/CTest logs and both fixture pairs are still required. Historical pre-grid fixture passes do not close T05.3.
 
 ## T06 â€” Remote + desktop grid editor (L, depends: T05)
 Entry docs: `docs/studio-builder.md` Editing modes, `docs/interface-design.md` User ownership.
@@ -142,7 +144,7 @@ Scope:
 - [ ] T12.2 On-screen keyboard for Isolde-owned fields first (Network Settings, Store search): D-pad/Back/shift/symbols/focus-restore, never obscures field, passwords masked
 - [ ] T12.3 Remote-only journey + offline-denial tests
 Done when: keyboard + polish acceptance passes without breaking fixtures.
-Verify: input/a11y tests + installed remote run. Evidence: InputManager commands + AudioSettings/RemoteSettings/NetworkSettings/DisplaySettings pages + mixer doubles + volume/remote acceptance exist; on-screen keyboard service NOT in tree (requirement only per docs/development-plan.md); a11y/l10n/reduced-motion incomplete. All boxes open.
+Verify: input/a11y tests + installed remote run. Evidence: InputManager commands + AudioSettings/RemoteSettings/NetworkSettings/DisplaySettings pages + mixer doubles + volume/remote acceptance exist; `qml/OnScreenKeyboard.qml` exists and is used by Network Settings and Store; remote journey/masking/visibility/focus evidence remains required; a11y/l10n/reduced-motion incomplete. All boxes open.
 
 ## T13 â€” Appliance + release distribution (L, depends: all active T01,T03-T12 except T14; T02 excluded)
 Entry docs: `docs/install.md`, `docs/packages.md`, `docs/architecture.md` appliance.
@@ -165,12 +167,3 @@ Verify: network-denial + subtitle provenance tests. Evidence: none â€” Web 
 
 ## Completion rule
 Overall = round(sum(active T01,T03..T14 %)/13). T02 struck, excluded. When all 13 active read `100%` with Evidence paths, plan is implemented. If any active task lacks evidence, cap it at 90% and Overall cannot read 100%.
-
-
-
-
-
-
-
-
-

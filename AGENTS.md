@@ -3,6 +3,8 @@
 > Persistent instruction. Do not delete.
 
 1. On session start, read `docs/agent-backlog.md` — it is the single source of truth for sequencing and percent completion.
+Before VM actions, read `docs/vm-oracle.md`. Explicit user-requested architecture/planning/testing reviews may inspect relevant plans and evidence without implementing the next feature. Preserve unrelated working-tree changes.
+
 2. Pick the lowest-numbered task whose `status` is not `100%`. Do not skip ahead unless its `Depends` tasks are `100%`.
 3. Within a task, read ONLY its `Entry docs` + `Entry files`. Do not re-read the entire codebase or all planning docs.
 4. Implement its `Scope` to satisfy its `Done when` gate, preserving standing gates (both visual fixtures, profile isolation, atomic save/rollback, Kodi media ownership, offline Generator Test).
