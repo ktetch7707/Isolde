@@ -18,7 +18,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 | T02 | ~~Finish curation~~ — OUT OF SCOPE (user curates via Kodi) | n/a | struck |
 | T03 | Local search: Kodi titles via bridge (no curation adapters) | 75% | in progress |
 | T04 | Kodi preservation + desktop import | 33% | in progress |
-| T05 | Studio grid renderer consumes placements | 0% | not started |
+| T05 | Studio grid renderer consumes placements | 25% | in progress |
 | T06 | Remote + desktop grid editor | 0% | not started |
 | T07 | Preview/Apply/Undo + persistence | 0% | not started |
 | T08 | Templates / tokens / portability | 0% | not started |
@@ -165,3 +165,4 @@ Verify: network-denial + subtitle provenance tests. Evidence: none — Web OFF l
 
 ## Completion rule
 Overall = round(sum(active T01,T03..T14 %)/13). T02 struck, excluded. When all 13 active read `100%` with Evidence paths, plan is implemented. If any active task lacks evidence, cap it at 90% and Overall cannot read 100%.
+
