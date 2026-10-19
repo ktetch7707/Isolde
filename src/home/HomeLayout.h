@@ -21,6 +21,8 @@ class HomeLayout final : public QObject {
     Q_PROPERTY(double tileRoundness READ tileRoundness NOTIFY layoutChanged)
     Q_PROPERTY(QVariantMap appearance READ appearance NOTIFY layoutChanged)
     Q_PROPERTY(QVariantMap composition READ composition NOTIFY layoutChanged)
+    Q_PROPERTY(QVariantMap grid READ grid NOTIFY layoutChanged)
+    Q_PROPERTY(QVariantList placements READ placements NOTIFY layoutChanged)
 
     bool load(const QString &defaultPath = {}, const QString &userPath = {});
     Q_INVOKABLE bool addAppTile(const QString &appId);
@@ -86,6 +88,7 @@ public:
     [[nodiscard]] QVariantMap appearance() const;
     Q_INVOKABLE bool setAppearance(const QVariantMap &changes);
     [[nodiscard]] QVariantMap composition() const { return m_composition; }
+    [[nodiscard]] QVariantList placements() const;
     Q_INVOKABLE QVariantMap grid() const;
     Q_INVOKABLE bool setGrid(const QVariantMap &value);
     Q_INVOKABLE bool setItemPlacement(const QString &id, const QVariantMap &placement);
