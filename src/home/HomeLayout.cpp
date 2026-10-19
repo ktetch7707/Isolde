@@ -336,8 +336,18 @@ bool HomeLayout::clearItemPlacement(const QString &id)
     }
     return false;
 }
-QVariantList HomeLayout::gridCollisions(const QString &itemId, const QVariantMap &placement) const
+QVariantList HomeLayout::placements() const
 {
+    QVariantList result;
+    for (const auto &entry : m_items) {
+        const auto item = entry.toObject();
+        if (!item.contains("placement")) continue;
+        result.append(QVariantMap{{QStringLiteral("id"), item.value("id").toString()},
+                                 {QStringLiteral("placement"), item.value("placement").toObject().toVariantMap()}});
+    }
+    return result;
+}
+QVariantList HomeLayout::gridCollisions(const QString &itemId, const QVariantMap &placement) const{
     QVariantList result;
     const auto configured = grid();
     if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt()))

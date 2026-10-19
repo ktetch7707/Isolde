@@ -23,7 +23,7 @@ Item {
     function handleCommand(command) {
         if (editingFolders) { folderPage.handleCommand(command); return }
         if (command === inputManager.navigateUp) selectedIndex = Math.max(0, selectedIndex - 1)
-        else if (command === inputManager.navigateDown) selectedIndex = Math.min(6, selectedIndex + 1)
+        else if (command === inputManager.navigateDown) selectedIndex = Math.min(7, selectedIndex + 1)
         else if (command === inputManager.confirm) {
             if (kodiService.switching) return
             if (selectedIndex === 6) editingFolders = true
@@ -36,6 +36,7 @@ Item {
             else if (selectedIndex === 0) kodiService.setEnabled(!kodiService.enabled)
             else if (selectedIndex === 1) kodiService.retry()
             else if (selectedIndex === 2) kodiMedia.scanMovies()
+            else if (selectedIndex === 7) searchPreferences.toggleWebEnabled()
             else kodiMedia.refresh()
         }
     }
@@ -55,7 +56,7 @@ Item {
         Text { width: parent.width; wrapMode: Text.WordWrap; text: kodiService.status; color: root.accentColor; font.pixelSize: 22 }
         Repeater {
             id: actions
-            model: ["Automatic startup: " + (kodiService.enabled ? "On" : "Off"), "Restart Kodi background service", "Scan for New Movies", "Refresh library connection", "Frontend: " + (kodiService.frontend === "isolde" ? "Isolde (preview) — select for Kodi" : "Kodi application — select for Isolde"), "Open Kodi with your existing setup", "Media folder access · " + kodiService.libraryFolders.length + " allowed"]
+            model: ["Automatic startup: " + (kodiService.enabled ? "On" : "Off"), "Restart Kodi background service", "Scan for New Movies", "Refresh library connection", "Frontend: " + (kodiService.frontend === "isolde" ? "Isolde (preview) — select for Kodi" : "Kodi application — select for Isolde"), "Open Kodi with your existing setup", "Media folder access · " + kodiService.libraryFolders.length + " allowed", "Web search: " + (searchPreferences.webEnabled ? "ON — no provider configured, Kodi results only" : "OFF — Kodi library only")]
             delegate: Rectangle {
                 required property int index
                 required property string modelData
