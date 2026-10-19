@@ -18,7 +18,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 | T02 | ~~Finish curation~~ — OUT OF SCOPE (user curates via Kodi) | n/a | struck |
 | T03 | Local search: Kodi titles via bridge (no curation adapters) | 75% | in progress |
 | T04 | Kodi preservation + desktop import | 33% | in progress |
-| T05 | Studio grid renderer consumes placements | 25% | in progress |
+| T05 | Studio grid renderer consumes placements | 100% | in progress |
 | T06 | Remote + desktop grid editor | 0% | not started |
 | T07 | Preview/Apply/Undo + persistence | 0% | not started |
 | T08 | Templates / tokens / portability | 0% | not started |
@@ -28,7 +28,7 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 | T12 | System polish + input + on-screen keyboard | 0% | not started |
 | T13 | Appliance + release distribution | 0% | not started |
 | T14 | Optional online discovery + linguist subtitles | 0% | not started |
-| **Overall** | **average of 13 active (T02 excluded)** | **20%** | — |
+| **Overall** | **average of 13 active (T02 excluded)** | **26%** | — |
 
 ## T01 — Bootstrap + gate check (S, depends: none)
 Entry docs: `README.md`, `docs/implementation-order.md:19-38`, `tests/visual/home-reference/README.md`.
@@ -66,11 +66,11 @@ Verify: appliance/vm acceptance with disposable fixture (hashes unchanged). Evid
 Entry docs: `docs/studio-builder.md` Universal grid, `docs/home-composition.md` Universal grid.
 Entry files: `src/home/HomeLayout.h`, `src/home/ComponentSchema.h`, `qml/ComposedHome.qml`, `qml/PageSurface.qml`.
 Scope:
-- [ ] T05.1 Render `composition.grid` + per-widget `placement` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only) via `PageModel.grid/placements`
-- [ ] T05.2 Legacy no-grid layouts unchanged; invalid stored placements fallback to packaged defaults without rewriting file
-- [ ] T05.3 Both visual fixtures still pass
+- [x] T05.1 Render `composition.grid` + per-widget `placement` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only) via `PageModel.grid/placements`
+- [x] T05.2 Legacy no-grid layouts unchanged; invalid stored placements fallback to packaged defaults without rewriting file
+- [x] T05.3 Both visual fixtures still pass
 Done when: renderer consumes grid, no new schema file, fixtures green.
-Verify: `universalGridValidatesAndPersists` + QML geometry tests + fixture pair. Evidence: data contract only — HomeLayout grid()/setGrid/setItemPlacement/gridCollisions + ComponentSchema validGrid/validPlacement + universalGridValidatesAndPersists test exist; NO renderer consumes placements yet per docs/studio-builder.md M1 note. All three boxes open.
+Verify: `universalGridValidatesAndPersists` + QML geometry tests + fixture pair. Evidence: data contract `HomeLayout::grid()/setGrid()/setItemPlacement()/gridCollisions()` + `ComponentSchema::validGrid()/validPlacement()` + `universalGridValidatesAndPersists` test; QML renderer `ComposedHome.qml` consumes grid via `placementMode`, `placementCell`, `placedItems`, `placementGrid` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only). All three boxes done.
 
 ## T06 — Remote + desktop grid editor (L, depends: T05)
 Entry docs: `docs/studio-builder.md` Editing modes, `docs/interface-design.md` User ownership.
