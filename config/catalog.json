@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "packages": [
+    "packages/ambient-weather/manifest.json",
+    "packages/living-room-radio/manifest.json",
+    "packages/photo-gallery/manifest.json",
+    "packages/plex/manifest.json",
+    "packages/home-assistant/manifest.json",
+    "packages/kodi/manifest.json",
+    "packages/retro-arcade/manifest.json",
+    "packages/spotify/manifest.json"
+  ]
+}

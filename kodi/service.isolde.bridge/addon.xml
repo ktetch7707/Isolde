@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="service.isolde.bridge" name="Isolde Local Media Bridge" version="0.0.1" provider-name="Isolde">
+  <requires><import addon="xbmc.python" version="3.0.0"/></requires>
+  <extension point="xbmc.service" library="service.py"/>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en_GB">Private local media control for Isolde</summary>
+    <description lang="en_GB">Uses Kodi's supported JSON-RPC API through a filesystem-protected local socket. No HTTP or LAN listener.</description>
+    <platform>linux</platform>
+    <license>MIT</license>
+  </extension>
+</addon>

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "packageId": "ambient-weather",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Weather",
+  "description": "A calm, television-friendly weather display.",
+  "category": "Information",
+  "publisher": "Isolde Curated",
+  "capabilities": ["network.weather.read"],
+  "app": { "id": "ambient-weather", "type": "mock", "presentationMode": "native-tv", "section": "Apps", "accent": "#4D9AC7", "symbol": "W" }
+}

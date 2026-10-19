@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "packageId": "kodi",
+  "version": "21.3",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Kodi",
+  "description": "A living-room media center for local libraries, network shares, add-ons, and TV-style playback.",
+  "category": "Photo & Video",
+  "publisher": "Kodi Foundation",
+  "provenance": "Ubuntu universe package: kodi",
+  "setup": {
+    "required": true,
+    "prompt": "Choose at least one media source, network share, or detected disc handler before treating Kodi as ready for everyday use."
+  },
+  "capabilities": ["network", "audio.output", "video.output", "library.media.read", "desktop.external"],
+  "app": {
+    "id": "kodi",
+    "type": "desktop",
+    "presentationMode": "media",
+    "handledActions": ["open-folder", "open-file", "open-disc"],
+    "actionHandlers": {
+      "open-folder": { "appendTarget": true },
+      "open-file": { "appendTarget": true },
+      "open-disc": { "appendTarget": true }
+    },
+    "section": "Library",
+    "accent": "#1685D9",
+    "symbol": "K",
+    "desktopId": "isolde-kodi",
+    "windowClass": "Kodi.Kodi",
+    "containment": "fullscreen"
+  }
+}

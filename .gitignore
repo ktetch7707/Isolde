@@ -1,0 +1,8 @@
+/build*/
+/.qt/
+/.vscode/
+/.vm-testing/
+*.user
+*.user.*
+compile_commands.json
+__pycache__/

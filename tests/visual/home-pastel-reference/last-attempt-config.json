@@ -1,0 +1,738 @@
+{
+    "categories": [
+        {
+            "id": "shortcuts",
+            "name": "Your Sources",
+            "presentation": {
+                "cardGap": 28,
+                "columns": 5,
+                "contentWidth": 780,
+                "diameter": 110,
+                "height": 300,
+                "iconSize": 44,
+                "labelPill": true,
+                "labelSize": 15,
+                "showHeading": false,
+                "variant": "orb"
+            }
+        },
+        {
+            "id": "favorites",
+            "name": "Favorite Apps",
+            "presentation": {
+                "blur": 0.7,
+                "cardGap": 24,
+                "columns": 9,
+                "diameter": 70,
+                "headingBold": true,
+                "headingColor": "#ac3856",
+                "headingSize": 15,
+                "height": 154,
+                "icon": "heart",
+                "labelPill": false,
+                "labelSize": 11,
+                "padding": 14,
+                "panelColor": "#fff2fa",
+                "panelOpacity": 0.58,
+                "radius": 24,
+                "variant": "orb"
+            }
+        },
+        {
+            "id": "recent",
+            "name": "Recently Opened",
+            "presentation": {
+                "artHeight": 84,
+                "blur": 0.8,
+                "cardGap": 16,
+                "columns": 5,
+                "headingBold": false,
+                "headingColor": "#514b67",
+                "headingSize": 15,
+                "height": 184,
+                "icon": "clock",
+                "iconColor": "#328aaa",
+                "labelSize": 12,
+                "padding": 14,
+                "panelColor": "#f7edff",
+                "panelOpacity": 0.64,
+                "radius": 20,
+                "trailingAction": {
+                    "type": "app-drawer"
+                },
+                "trailingLabel": "See All",
+                "variant": "recent"
+            }
+        }
+    ],
+    "components": [
+        {
+            "action": {
+                "schemaVersion": 1,
+                "section": 4,
+                "type": "settings"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "hdmi1",
+            "kind": "action",
+            "name": "HDMI 1",
+            "presentation": {
+                "icon": "hdmi",
+                "iconColor": "#a24562",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#f8a6bc"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "settings",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "section": 4,
+                "type": "settings"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "hdmi2",
+            "kind": "action",
+            "name": "HDMI 2",
+            "presentation": {
+                "icon": "hdmi",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#c8b2ed"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "settings",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "section": 4,
+                "type": "settings"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "hdmi3",
+            "kind": "action",
+            "name": "HDMI 3",
+            "presentation": {
+                "icon": "hdmi",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#90c9ef"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "settings",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "section": 4,
+                "type": "settings"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "hdmi4",
+            "kind": "action",
+            "name": "HDMI 4",
+            "presentation": {
+                "icon": "hdmi",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#9ad8c1"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "settings",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "label": "Desktop Mode",
+                "schemaVersion": 1,
+                "type": "desktop-mode"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "desktop",
+            "kind": "action",
+            "name": "Desktop",
+            "presentation": {
+                "icon": "display",
+                "iconColor": "#ba8950",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#fee6ac"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "desktop-mode",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "section": 4,
+                "type": "settings"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "guide",
+            "kind": "action",
+            "name": "TV Guide",
+            "presentation": {
+                "icon": "tv",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#f8a6bc"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "settings",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "movies",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "movies",
+            "kind": "action",
+            "name": "Movies",
+            "presentation": {
+                "icon": "film",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#b9a3ed"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "movies",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "shows",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "shows",
+            "kind": "action",
+            "name": "TV Shows",
+            "presentation": {
+                "icon": "tv",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#89d6ee"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "shows",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "music",
+            "kind": "action",
+            "name": "Music",
+            "presentation": {
+                "icon": "music",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#a3dfc0"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "shortcuts",
+            "componentType": "launcher",
+            "id": "games",
+            "kind": "action",
+            "name": "Games",
+            "presentation": {
+                "icon": "gamepad",
+                "iconColor": "#ffffff",
+                "selectedLabelColor": "#a24562",
+                "surfaceColor": "#ffbc9c"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "netflix",
+            "kind": "action",
+            "name": "Netflix",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 109,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "youtube",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "youtube",
+            "kind": "action",
+            "name": "YouTube",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 232,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "youtube",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "disney",
+            "kind": "action",
+            "name": "Disney+",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 356,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "max",
+            "kind": "action",
+            "name": "Max",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 480,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "prime",
+            "kind": "action",
+            "name": "Prime Video",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 606,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "spotify",
+            "kind": "action",
+            "name": "Spotify",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 731,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "apple",
+            "kind": "action",
+            "name": "Apple TV",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 855,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "crunchy",
+            "kind": "action",
+            "name": "Crunchyroll",
+            "presentation": {
+                "imageCrop": {
+                    "height": 70,
+                    "width": 70,
+                    "x": 978,
+                    "y": 428
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "favorites",
+            "componentType": "launcher",
+            "id": "more",
+            "kind": "action",
+            "name": "More Apps",
+            "presentation": {
+                "icon": "grid",
+                "iconColor": "#65577a",
+                "surfaceColor": "#eee3f5"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "recent",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "avatar",
+            "kind": "action",
+            "name": "Avatar: The Last Airbender",
+            "presentation": {
+                "imageCrop": {
+                    "height": 81,
+                    "width": 212,
+                    "x": 75,
+                    "y": 582
+                },
+                "subtitle": "TV Show"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "recent",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "challengers",
+            "kind": "action",
+            "name": "Challengers",
+            "presentation": {
+                "imageCrop": {
+                    "height": 81,
+                    "width": 212,
+                    "x": 304,
+                    "y": 582
+                },
+                "subtitle": "Movie"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "recent",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "zelda",
+            "kind": "action",
+            "name": "Tears of the Kingdom",
+            "presentation": {
+                "imageCrop": {
+                    "height": 81,
+                    "width": 212,
+                    "x": 533,
+                    "y": 582
+                },
+                "subtitle": "Game"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "recent",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "decide",
+            "kind": "action",
+            "name": "DECIDE",
+            "presentation": {
+                "imageCrop": {
+                    "height": 81,
+                    "width": 212,
+                    "x": 764,
+                    "y": 582
+                },
+                "subtitle": "Music Album"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "type": "app-drawer"
+            },
+            "categoryId": "recent",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36.jpg",
+            "id": "italy",
+            "kind": "action",
+            "name": "Italy Trip",
+            "presentation": {
+                "imageCrop": {
+                    "height": 81,
+                    "width": 212,
+                    "x": 994,
+                    "y": 582
+                },
+                "subtitle": "Recently Viewed"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "app-drawer",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        }
+    ],
+    "composition": {
+        "columns": 1,
+        "designHeight": 720,
+        "enabled": true,
+        "fit": true,
+        "gap": 9,
+        "headerControls": [
+            "search",
+            "settings"
+        ],
+        "headerMode": "identity",
+        "identity": "Isolde",
+        "margin": 0,
+        "schemaVersion": 1,
+        "showClock": true,
+        "showProfile": false,
+        "wallpaper": "artwork/skin-489230c3af71b10d3159715d95b8a3a06d9c98184dbb1c1b45ade5317bfbf0fe.png"
+    },
+    "pages": [
+    ],
+    "schemaVersion": 2,
+    "theme": {
+        "backgroundEnd": "#bbc5df",
+        "backgroundStart": "#e9c7da",
+        "brandVisible": false,
+        "focusColor": "#ffffff",
+        "fontFamily": "DejaVu Sans",
+        "homeColumns": 5,
+        "motionEnabled": false,
+        "mutedColor": "#625b73",
+        "selectedColor": "#edd7ef",
+        "spacing": 16,
+        "surfaceColor": "#f5e7f4",
+        "textColor": "#514b67",
+        "tileRoundness": 0.18,
+        "typographyScale": 1
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "packageId": "photo-gallery",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Photos",
+  "description": "A local photo gallery designed for the living room.",
+  "category": "Photo & Video",
+  "publisher": "Isolde Curated",
+  "capabilities": ["library.photos.read"],
+  "app": { "id": "photo-gallery", "type": "mock", "presentationMode": "native-tv", "section": "Library", "accent": "#A477D4", "symbol": "P" }
+}

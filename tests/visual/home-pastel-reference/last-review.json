@@ -1,0 +1,38 @@
+{
+  "reference_sha256": "5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36",
+  "saved_skin_survives_reset": true,
+  "review_method": "Visual inspection of installed captures against retained user references; not a pixel-score test",
+  "visual_recreation": "pass_as_landscape_adaptation",
+  "automated_suites_passed": 13,
+  "settings_only_skin_selection": true,
+  "criteria": {
+    "layout_palette_and_typography": true,
+    "one_screen_fit": true,
+    "wallpaper_or_artwork": true,
+    "native_components": true,
+    "remote_editor_preserves_configuration": true
+  },
+  "adaptations": [
+    "Clean generated wallpaper recreates the reference scenery; the interface is rendered from components.",
+    "Actual clock/date and 1280x800 viewport differ from the source image."
+  ],
+  "installer_log": "/tmp/isolde-skins-install.log",
+  "release": "523f627f0c06211f92b6e43b",
+  "date": "2026-10-16",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "vm_evidence": "/tmp/isolde-reference-config-yj_y0vbc",
+  "limitations": [
+    "Static sample cards/artwork do not create provider sign-ins or Kodi history.",
+    "HDMI and guide setup routes do not qualify capture/guide backends.",
+    "Blur verified in the VM; physical-device performance remains unqualified."
+  ],
+  "saved_skin_round_trip": true,
+  "reset_verified": true,
+  "household_service": {
+    "restarts": 0,
+    "active": true
+  }
+}

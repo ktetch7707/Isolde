@@ -1,0 +1,16 @@
+{
+  "configuration_match": null,
+  "component_support": true,
+  "reference_sha256": "5bfdf90835b56e2256f20a483de1013fec7afa69186c14c2b00f0766e8952f36",
+  "visual_review_required": true,
+  "case": "/tmp/isolde-order-vsDgGY/tests/visual/home-pastel-reference",
+  "settings_skin_round_trip": true,
+  "saved_skin_survives_reset": true,
+  "reset_verified": true,
+  "executable": "/home/isolde-dev/.local/share/isolde-appliance/releases/523f627f0c06211f92b6e43b/bin/isolde",
+  "fixture_only": [
+    "Movie labels/progress are visual fixtures; launch opens the real library",
+    "HDMI 4 and guide open setup; real backends remain unqualified"
+  ],
+  "missing": []
+}

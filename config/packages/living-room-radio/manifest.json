@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "packageId": "living-room-radio",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Radio",
+  "description": "A simple launcher for radio and ambient audio sessions.",
+  "category": "Music & Audio",
+  "publisher": "Isolde Curated",
+  "capabilities": ["network.audio.stream", "audio.playback"],
+  "app": { "id": "living-room-radio", "type": "mock", "presentationMode": "media", "section": "Audio", "accent": "#C46B8A", "symbol": "R" }
+}

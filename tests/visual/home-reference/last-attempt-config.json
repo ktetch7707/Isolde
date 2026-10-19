@@ -1,0 +1,351 @@
+{
+    "categories": [
+        {
+            "id": "banner",
+            "name": "Featured",
+            "presentation": {
+                "columns": 1,
+                "height": 300,
+                "showHeading": false,
+                "span": 1,
+                "variant": "banner"
+            }
+        },
+        {
+            "id": "continue",
+            "name": "Continue Watching",
+            "presentation": {
+                "columns": 3,
+                "height": 265,
+                "span": 1,
+                "subtitle": "Pick up where you left off",
+                "variant": "media"
+            }
+        },
+        {
+            "id": "sources",
+            "name": "Your Sources",
+            "presentation": {
+                "columns": 4,
+                "height": 170,
+                "span": 2,
+                "variant": "source"
+            }
+        },
+        {
+            "id": "tonight",
+            "name": "On Tonight",
+            "presentation": {
+                "columns": 1,
+                "height": 135,
+                "span": 2,
+                "variant": "summary"
+            }
+        }
+    ],
+    "components": [
+        {
+            "action": {
+                "appId": "shows",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "banner",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-d2902fdacc0c196b88a844bb7794baa4ebedba50e5f95311fd30e07ae3e1c300.jpg",
+            "id": "hero",
+            "kind": "action",
+            "name": "Featured artwork",
+            "presentation": {
+                "imageCrop": {
+                    "height": 219,
+                    "width": 400,
+                    "x": 146,
+                    "y": 205
+                },
+                "label": "adobe"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "shows",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "shows",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "continue",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-d2902fdacc0c196b88a844bb7794baa4ebedba50e5f95311fd30e07ae3e1c300.jpg",
+            "id": "once",
+            "kind": "action",
+            "name": "Once Upon a Time",
+            "presentation": {
+                "imageCrop": {
+                    "height": 94,
+                    "width": 146,
+                    "x": 51,
+                    "y": 539
+                },
+                "progress": 0.64
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "shows",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "shows",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "continue",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-d2902fdacc0c196b88a844bb7794baa4ebedba50e5f95311fd30e07ae3e1c300.jpg",
+            "id": "glee",
+            "kind": "action",
+            "name": "Glee",
+            "presentation": {
+                "imageCrop": {
+                    "height": 104,
+                    "width": 158,
+                    "x": 216,
+                    "y": 534
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "shows",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "movies",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "continue",
+            "componentType": "launcher",
+            "customLogo": "artwork/skin-d2902fdacc0c196b88a844bb7794baa4ebedba50e5f95311fd30e07ae3e1c300.jpg",
+            "id": "ring",
+            "kind": "action",
+            "name": "The Fellowship of the Ring",
+            "presentation": {
+                "imageCrop": {
+                    "height": 104,
+                    "width": 158,
+                    "x": 389,
+                    "y": 534
+                }
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "movies",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "switch",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "sources",
+            "componentType": "launcher",
+            "id": "switch",
+            "kind": "action",
+            "name": "Switch",
+            "presentation": {
+                "icon": "gamepad"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "switch",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "switch2",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "sources",
+            "componentType": "launcher",
+            "id": "switch2",
+            "kind": "action",
+            "name": "Switch 2",
+            "presentation": {
+                "icon": "gamepad",
+                "surfaceColor": "#693b50"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "switch2",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "steam-machine",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "categoryId": "sources",
+            "componentType": "launcher",
+            "id": "steam",
+            "kind": "action",
+            "name": "Steam PC",
+            "presentation": {
+                "icon": "display"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "steam-machine",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "section": 4,
+                "type": "settings"
+            },
+            "categoryId": "sources",
+            "componentType": "launcher",
+            "id": "hdmi4",
+            "kind": "action",
+            "name": "HDMI 4",
+            "presentation": {
+                "icon": "hdmi"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "settings",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "schemaVersion": 1,
+                "section": 4,
+                "type": "settings"
+            },
+            "categoryId": "tonight",
+            "componentType": "launcher",
+            "id": "guide",
+            "kind": "action",
+            "name": "Your Personal TV Guide",
+            "presentation": {
+                "icon": "tv",
+                "subtitle": "Browse channels and tonight's lineup"
+            },
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "settings",
+                "provider": "shell",
+                "schemaVersion": 1
+            }
+        }
+    ],
+    "composition": {
+        "columns": 2,
+        "enabled": true,
+        "fit": true,
+        "gap": 24,
+        "initialTab": "home",
+        "margin": 38,
+        "navigation": [
+            {
+                "id": "home",
+                "name": "Home"
+            },
+            {
+                "action": {
+                    "appId": "movies",
+                    "type": "launch-app"
+                },
+                "id": "movies",
+                "name": "Movies"
+            },
+            {
+                "action": {
+                    "appId": "shows",
+                    "type": "launch-app"
+                },
+                "id": "television",
+                "name": "Television"
+            },
+            {
+                "id": "music",
+                "name": "Music",
+                "sections": [
+                    "sources"
+                ]
+            },
+            {
+                "id": "games",
+                "name": "Games",
+                "sections": [
+                    "sources"
+                ]
+            },
+            {
+                "id": "kids",
+                "name": "Kids",
+                "sections": [
+                    "continue"
+                ]
+            }
+        ],
+        "schemaVersion": 1,
+        "showProfile": false
+    },
+    "schemaVersion": 2,
+    "theme": {
+        "backgroundEnd": "#0e1018",
+        "backgroundStart": "#0e1018",
+        "brandVisible": false,
+        "focusColor": "#bd8198",
+        "fontFamily": "DejaVu Sans",
+        "homeColumns": 4,
+        "motionEnabled": false,
+        "mutedColor": "#aaa4b2",
+        "selectedColor": "#48333f",
+        "spacing": 16,
+        "surfaceColor": "#28262f",
+        "textColor": "#eeebf0",
+        "tileRoundness": 0.18,
+        "typographyScale": 1
+    }
+}

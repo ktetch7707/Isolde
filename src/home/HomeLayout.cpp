@@ -1,0 +1,988 @@
+#include "home/HomeLayout.h"
+#include "home/ComponentSchema.h"
+
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QUrl>
+#include <QRegularExpression>
+#include <QtMath>
+#include <QCryptographicHash>
+
+namespace {
+
+QVariantMap appearanceDefaults()
+{
+    return {{"focusColor", "#c994a5"}, {"surfaceColor", "#202126"}, {"selectedColor", "#353039"},
+            {"textColor", "#f5f1f3"}, {"mutedColor", "#aaa5af"}, {"typographyScale", 1.0},
+            {"homeColumns", 3}, {"spacing", 20}, {"motionEnabled", true}, {"fontFamily", "DejaVu Sans"}};
+}
+
+bool normalizeAppearance(QVariantMap &values)
+{
+    const auto defaults = appearanceDefaults();
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        const auto key = it.key();
+        if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd") {
+            const QColor color(it.value().toString());
+            if (!color.isValid() || color.alpha() != 255) return false;
+            it.value() = color.name();
+        } else if (key == "fontFamily") {
+            if (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty()
+                || it.value().toString().size() > 80 || it.value().toString().contains(QChar::Null)) return false;
+        } else if (key == "motionEnabled") {
+            if (it.value().metaType().id() != QMetaType::Bool) return false;
+        } else {
+            if (!defaults.contains(key) && key != "tileRoundness") return false;
+            if (it.value().metaType().id() == QMetaType::QString || it.value().metaType().id() == QMetaType::Bool) return false;
+            bool ok = false; const double number = it.value().toDouble(&ok);
+            const double low = key == "typographyScale" ? 0.8 : key == "homeColumns" ? 2 : key == "spacing" ? 8 : 0;
+            const double high = key == "typographyScale" ? 1.3 : key == "homeColumns" ? 6 : key == "spacing" ? 40 : 1;
+            if (!ok || !qIsFinite(number) || number < low || number > high
+                || ((key == "homeColumns" || key == "spacing") && number != qFloor(number))) return false;
+        }
+        if (!defaults.contains(key) && key != "backgroundStart" && key != "backgroundEnd" && key != "tileRoundness") return false;
+    }
+    return true;
+}
+
+bool isSafeActionId(const QString &id)
+{
+    return id.isEmpty() || ComponentSchema::safeId(id);
+}
+bool placementsFit(const QJsonArray &items, const QVariantMap &grid)
+{
+    const int columns = grid.value("columns").toInt(), rows = grid.value("rows").toInt();
+    for (const auto &entry : items) {
+        const auto item = entry.toObject();
+        if (!item.contains("placement")) continue;
+        if (!ComponentSchema::validPlacement(item.value("placement").toObject().toVariantMap(), columns, rows))
+            return false;
+    }
+    if (grid.value("overlap").toBool()) return true;
+    for (qsizetype i = 0; i < items.size(); ++i) {
+        const auto first = items[i].toObject();
+        if (!first.contains("placement")) continue;
+        for (qsizetype j = i + 1; j < items.size(); ++j) {
+            const auto second = items[j].toObject();
+            if (second.contains("placement") && ComponentSchema::placementsOverlap(
+                    first.value("placement").toObject().toVariantMap(),
+                    second.value("placement").toObject().toVariantMap())) return false;
+        }
+    }
+    return true;
+}
+
+bool isSupportedActionType(const QString &type)
+{
+    static const QSet<QString> actionTypes{QStringLiteral("launch-app"), QStringLiteral("open-folder"),
+                                           QStringLiteral("open-file"), QStringLiteral("open-url"),
+                                           QStringLiteral("open-disc"), QStringLiteral("desktop-mode"),
+                                           QStringLiteral("switch-input")};
+    return actionTypes.contains(type);
+}
+
+QString defaultActionTypeForKind(const QJsonObject &item)
+{
+    if (item.value(QStringLiteral("kind")).toString() == QStringLiteral("app"))
+        return QStringLiteral("launch-app");
+    return {};
+}
+
+QJsonObject normalizedActionForItem(const QJsonObject &item)
+{
+    auto action = item.value(QStringLiteral("action")).toObject();
+    if (action.isEmpty() && item.value("kind") == "app")
+        action = {{"type", "launch-app"}, {"appId", item.value("appId")}};
+    return QJsonObject::fromVariantMap(ComponentSchema::action(action.toVariantMap()));
+}
+
+} // namespace
+
+HomeLayout::HomeLayout(AppRegistry *registry, QObject *parent) : QObject(parent), m_registry(registry)
+{
+    connect(this,&HomeLayout::layoutChanged,this,&HomeLayout::syncPages);
+    connect(m_registry, &AppRegistry::appsChanged, this, &HomeLayout::layoutChanged);
+}
+
+QVariantList HomeLayout::items() const
+{
+    QVariantList result;
+    const auto appendItem = [this, &result](const QJsonValue &value) {
+        const auto object = value.toObject();
+        auto item = object.toVariantMap();
+        const auto action = normalizedActionForItem(object);
+        if (!action.isEmpty()) {
+            item.insert("actionType", action.value(QStringLiteral("type")).toString());
+            item.insert("action", action.toVariantMap());
+        }
+        if (item.value("kind") == QStringLiteral("app")) {
+            const auto appId = item.value("appId").toString();
+            const auto *app = m_registry->find(appId);
+            item.insert("name", app ? app->name : item.value("name", appId));
+            item.insert("section", app ? app->section : QStringLiteral("Missing app"));
+            const auto tileSymbol = item.value("symbol").toString();
+            const auto tileAccent = item.value("accent").toString();
+            item.insert("symbol", tileSymbol.isEmpty() ? (app ? app->symbol : "?") : tileSymbol);
+            item.insert("accent", tileAccent.isEmpty() ? (app ? app->accent.name() : "#64748B") : tileAccent);
+            item.insert("presentationMode", app ? app->presentationMode : "native-tv");
+            item.insert("networkRequirement", app ? app->networkRequirement : "none");
+        } else if (item.value("kind") == QStringLiteral("action")) {
+            const auto section = item.value("section").toString();
+            const auto symbol = item.value("symbol").toString();
+            const auto accent = item.value("accent").toString();
+            const auto networkRequirement = item.value("networkRequirement").toString();
+            item.insert("section", section.isEmpty() ? tr("Custom") : section);
+            item.insert("symbol", symbol.isEmpty() ? QStringLiteral("•") : symbol);
+            item.insert("accent", accent.isEmpty() ? QStringLiteral("#64748B") : accent);
+            item.insert("networkRequirement", networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
+        }
+        const auto logoFile = item.value("customLogo").toString();
+        item.insert("logoSource", logoFile.isEmpty() ? QString() : QUrl::fromLocalFile(
+            QDir(QFileInfo(m_userPath).absolutePath()).filePath(logoFile)).toString());
+        auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), m_registry, m_collections);
+        if (unavailable.isEmpty() && action.value("type").toString() == "switch-input" && !m_captureInputsReady)
+            unavailable = "Configure Settings → System → HDMI Inputs";
+        item.insert("unavailableReason", unavailable);
+        result.append(ComponentSchema::component(item, true));
+    };
+    for (const auto &categoryValue : m_categories) {
+        const auto categoryId = categoryValue.toObject().value("id").toString();
+        for (const auto &value : m_items)
+            if (value.toObject().value("categoryId").toString() == categoryId) appendItem(value);
+    }
+    for (const auto &value : m_items)
+        if (value.toObject().value("categoryId").toString().isEmpty()) appendItem(value);
+    return result;
+}
+
+QVariantList HomeLayout::components() const { return items(); }
+void HomeLayout::setCollections(const QVariantList &collections)
+{
+    if (m_collections == collections) return;
+    m_collections = collections; emit layoutChanged();
+}
+void HomeLayout::setCaptureInputsReady(bool ready)
+{
+    if (m_captureInputsReady == ready) return;
+    m_captureInputsReady = ready;
+    emit layoutChanged();
+}
+QVariantList HomeLayout::sourceChoices(const QString &itemId) const
+{
+    QVariantList choices;
+    for (const auto &value : m_items) {
+        const auto item = value.toObject();
+        if (item.value("id") != itemId) continue;
+        const auto action = normalizedActionForItem(item);
+        const auto type = action.value("type").toString();
+        if (type == "switch-input") {
+            for (int input = 1; input <= 8; ++input)
+                choices.append(QVariantMap{{"id", QString::number(input)}, {"name", QString("HDMI %1").arg(input)}});
+        } else if (type == "open-collection" || type == "play-movie" || type == "open-show") {
+            for (const auto &entry : m_collections) choices.append(QVariantMap{{"id", entry.toMap().value("id")}, {"name", entry.toMap().value("name")}});
+        } else for (const auto &entry : m_registry->apps()) {
+            const auto app = entry.toMap();
+            if (type == "launch-app" || app.value("handledActions").toStringList().contains(type))
+                choices.append(QVariantMap{{"id", app.value("id")}, {"name", app.value("name")}});
+        }
+        break;
+    }
+    return choices;
+}
+bool HomeLayout::rebindSource(const QString &itemId, const QString &sourceId)
+{
+    bool compatible = false;
+    for (const auto &choice : sourceChoices(itemId)) if (choice.toMap().value("id") == sourceId) compatible = true;
+    if (!compatible) { setError(tr("Choose a compatible installed source.")); return false; }
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items[i].toObject();
+        if (item.value("id") != itemId) continue;
+        const auto previous = item;
+        auto action = normalizedActionForItem(item);
+        const auto type = action.value("type").toString();
+        if (type == "launch-app") { action["appId"] = sourceId; if (item.value("kind") == "app") item["appId"] = sourceId; }
+        else if (type == "open-collection" || type == "play-movie" || type == "open-show") action["collectionId"] = sourceId;
+        else if (type == "switch-input") action["input"] = sourceId.toInt();
+        else action["openWith"] = sourceId;
+        item["action"] = action;
+        item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true));
+        m_items[i] = item;
+        if (!save()) { m_items[i] = previous; return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+QVariantList HomeLayout::categories() const
+{
+    return m_categories.toVariantList();
+}
+
+QVariantList HomeLayout::sections() const
+{
+    QVariantList result;
+    const auto resolved = items();
+    for (const auto &categoryValue : m_categories) {
+        const auto category = categoryValue.toObject();
+        QVariantList categoryItems;
+        for (const auto &itemValue : resolved)
+            if (itemValue.toMap().value("categoryId").toString() == category.value("id").toString()) categoryItems.append(itemValue);
+        if (!categoryItems.isEmpty() || category["presentation"].toObject()["variant"] == "library") { auto section = category.toVariantMap(); section["items"] = categoryItems; result.append(section); }
+    }
+    QVariantList uncategorized;
+    for (const auto &itemValue : resolved)
+        if (itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
+    if (!uncategorized.isEmpty()) result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
+    return result;
+}
+
+bool HomeLayout::brandVisible() const { return m_brandVisible; }
+QString HomeLayout::backgroundStart() const { return m_backgroundStart; }
+QString HomeLayout::backgroundEnd() const { return m_backgroundEnd; }
+double HomeLayout::tileRoundness() const { return m_tileRoundness; }
+QVariantMap HomeLayout::appearance() const
+{
+    auto result = appearanceDefaults();
+    for (auto it = m_appearance.cbegin(); it != m_appearance.cend(); ++it) result[it.key()] = it.value();
+    result["backgroundStart"] = m_backgroundStart; result["backgroundEnd"] = m_backgroundEnd;
+    result["tileRoundness"] = m_tileRoundness;
+    return result;
+}
+bool HomeLayout::setAppearance(const QVariantMap &changes)
+{
+    auto normalized = changes;
+    if (!normalizeAppearance(normalized)) { setError(tr("Choose valid opaque colors and appearance values within the displayed ranges.")); return false; }
+    const auto previous = m_appearance;
+    const auto previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
+    const auto previousRoundness = m_tileRoundness;
+    if (normalized.contains("backgroundStart")) m_backgroundStart = normalized.take("backgroundStart").toString();
+    if (normalized.contains("backgroundEnd")) m_backgroundEnd = normalized.take("backgroundEnd").toString();
+    if (normalized.contains("tileRoundness")) m_tileRoundness = normalized.take("tileRoundness").toDouble();
+    for (auto it = normalized.cbegin(); it != normalized.cend(); ++it) m_appearance[it.key()] = it.value();
+    if (!save()) {
+        m_appearance = previous; m_backgroundStart = previousStart; m_backgroundEnd = previousEnd;
+        m_tileRoundness = previousRoundness; return false;
+    }
+    emit layoutChanged(); return true;
+}
+bool HomeLayout::setComposition(const QVariantMap &value)
+{
+    if (!ComponentSchema::validComposition(value)) { setError(tr("Invalid Home composition.")); return false; }
+    if (!placementsFit(m_items, ComponentSchema::normalizedGrid(value.value("grid").toMap()))) {
+        setError(tr("Placed widgets do not fit this composition's grid.")); return false;
+    }
+    const auto previous = m_composition; m_composition = value;
+    if (!save()) { m_composition = previous; return false; }
+    emit layoutChanged(); return true;
+}
+QVariantMap HomeLayout::grid() const
+{
+    return ComponentSchema::normalizedGrid(m_composition.value("grid").toMap());
+}
+bool HomeLayout::setGrid(const QVariantMap &value)
+{
+    if (!ComponentSchema::validGrid(value)) { setError(tr("Invalid Home grid.")); return false; }
+    auto updated = grid();
+    for (auto it = value.cbegin(); it != value.cend(); ++it) updated.insert(it.key(), it.value());
+    // A grid change may not strand or newly overlap widgets that are already placed.
+    if (!placementsFit(m_items, updated)) {
+        setError(tr("This grid would move placed widgets outside its bounds.")); return false;
+    }
+    auto config = m_composition;
+    if (config.isEmpty()) config = {{"schemaVersion", 1}, {"enabled", true}};
+    config["grid"] = updated;
+    return setComposition(config);
+}
+bool HomeLayout::setItemPlacement(const QString &id, const QVariantMap &placement)
+{
+    const auto configured = grid();
+    if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt())) {
+        setError(tr("This placement does not fit inside the grid.")); return false;
+    }
+    if (!configured.value("overlap").toBool()) {
+        const auto placed = m_items;
+        for (const auto &entry : placed) {
+            const auto item = entry.toObject();
+            if (item.value("id").toString() == id || !item.contains("placement")) continue;
+            if (ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap())) {
+                setError(tr("Another widget already occupies those cells.")); return false;
+            }
+        }
+    }
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items[i].toObject(); if (item["id"] != id) continue;
+        const auto previous = item;
+        item["placement"] = QJsonObject::fromVariantMap(placement); m_items[i] = item;
+        if (!save()) { m_items[i] = previous; return false; }
+        emit layoutChanged(); setError({}); return true;
+    }
+    return false;
+}
+bool HomeLayout::clearItemPlacement(const QString &id)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items[i].toObject();
+        if (item["id"] != id || !item.contains("placement")) continue;
+        const auto previous = item;
+        item.remove("placement"); m_items[i] = item;
+        if (!save()) { m_items[i] = previous; return false; }
+        emit layoutChanged(); setError({}); return true;
+    }
+    return false;
+}
+QVariantList HomeLayout::gridCollisions(const QString &itemId, const QVariantMap &placement) const
+{
+    QVariantList result;
+    const auto configured = grid();
+    if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt()))
+        return result;
+    const auto placed = m_items;
+    for (const auto &entry : placed) {
+        const auto item = entry.toObject();
+        if (item.value("id").toString() == itemId || !item.contains("placement")) continue;
+        if (!ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap())) continue;
+        QString name = item.value("name").toString();
+        if (item.value("kind").toString() == QStringLiteral("app")) {
+            const auto *app = m_registry->find(item.value("appId").toString());
+            if (app) name = app->name;
+        }
+        result.append(QVariantMap{{"id", item.value("id").toString()}, {"name", name}});
+    }
+    return result;
+}
+QString HomeLayout::wallpaperSource() const
+{
+    const auto path = m_composition.value("wallpaper").toString();
+    return path.isEmpty() ? QString() : QUrl::fromLocalFile(QDir(QFileInfo(m_userPath).absolutePath()).filePath(path)).toString();
+}
+bool HomeLayout::setWallpaper(const QString &sourceUrl)
+{
+    const QUrl url(sourceUrl);
+    if (!url.isLocalFile()) { setError(tr("Choose a local PNG or JPEG wallpaper.")); return false; }
+    QFile source(url.toLocalFile());
+    if (!source.open(QIODevice::ReadOnly) || source.size() > 20*1024*1024) return false;
+    const auto data = source.readAll(); const bool png = data.startsWith(QByteArray::fromHex("89504e470d0a1a0a"));
+    if (!png && !data.startsWith(QByteArray::fromHex("ffd8ff"))) return false;
+    const auto relative = "artwork/wallpaper-" + QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex()) + (png ? ".png" : ".jpg");
+    const auto directory = QFileInfo(m_userPath).absolutePath();
+    if (!QDir().mkpath(QDir(directory).filePath("artwork"))) return false;
+    QSaveFile output(QDir(directory).filePath(relative));
+    if (!output.open(QIODevice::WriteOnly) || output.write(data) != data.size() || !output.commit()) return false;
+    auto config = m_composition;
+    if (config.isEmpty()) config = {{"schemaVersion",1},{"enabled",true}};
+    config["wallpaper"] = relative;
+    return setComposition(config);
+}
+bool HomeLayout::setItemPresentation(const QString &id, const QVariantMap &value)
+{
+    if (!ComponentSchema::validPresentation(value)) return false;
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items[i].toObject(); if (item["id"] != id) continue;
+        const auto previous = item; item["presentation"] = QJsonObject::fromVariantMap(value); m_items[i] = item;
+        if (!save()) { m_items[i] = previous; return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+bool HomeLayout::setSectionPresentation(const QString &id, const QVariantMap &value)
+{
+    if (!ComponentSchema::validPresentation(value, true)) return false;
+    for (qsizetype i = 0; i < m_categories.size(); ++i) {
+        auto section = m_categories[i].toObject(); if (section["id"] != id) continue;
+        const auto previous = section; section["presentation"] = QJsonObject::fromVariantMap(value); m_categories[i] = section;
+        if (!save()) { m_categories[i] = previous; return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+QString HomeLayout::errorString() const { return m_errorString; }
+
+bool HomeLayout::load(const QString &defaultPath, const QString &userPath)
+{
+    m_legacyDocument.clear();
+    m_defaultPath = defaultPath;
+    if (m_defaultPath.isEmpty()) {
+        m_defaultPath = QDir(QCoreApplication::applicationDirPath()).filePath("config/default-home-layout.json");
+        if (!QFile::exists(m_defaultPath)) m_defaultPath = QStringLiteral(":/config/default-home-layout.json");
+    }
+    m_userPath = userPath.isEmpty()
+        ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)).filePath("home-layout.json")
+        : userPath;
+
+    QFile defaults(m_defaultPath);
+    if (!defaults.open(QIODevice::ReadOnly) || !loadDocument(defaults.read(4 * 1024 * 1024 + 1), false)) return false;
+    QFile user(m_userPath);
+    if (user.exists() && user.open(QIODevice::ReadOnly)) {
+        const auto defaultItems = m_items;
+        const auto defaultCategories = m_categories;
+        const auto defaultBrand = m_brandVisible;
+        const auto defaultStart = m_backgroundStart;
+        const auto defaultEnd = m_backgroundEnd;
+        const auto defaultRoundness = m_tileRoundness;
+        if (!loadDocument(user.read(4 * 1024 * 1024 + 1), true)) {
+            m_items = defaultItems; m_brandVisible = defaultBrand;
+            m_categories = defaultCategories;
+            m_backgroundStart = defaultStart; m_backgroundEnd = defaultEnd;
+            m_tileRoundness = defaultRoundness;
+        }
+    }
+    emit layoutChanged();
+    emit skinsChanged();
+    return true;
+}
+
+bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
+{
+    if (data.size() > 4 * 1024 * 1024) { setError(tr("Home layout exceeds the supported size.")); return false; }
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(data, &error);
+    const int version = document.object().value("schemaVersion").toInt();
+    const auto entries = document.object().value(version == 1 ? "items" : "components");
+    if (error.error != QJsonParseError::NoError || !document.isObject()
+        || (version != 1 && version != 2) || !entries.isArray() || data.size() > 4 * 1024 * 1024
+        || entries.toArray().size() > 1024) {
+        setError(userDocument ? tr("User Home layout is invalid; defaults were restored.")
+                              : tr("Default Home layout is invalid."));
+        return false;
+    }
+    const auto object = document.object();
+    QJsonArray pages;
+    if (object.contains("pages") && (!object["pages"].isArray() || object["pages"].toArray().size() > 64 || m_owner)) {
+        setError(tr("Invalid page collection.")); return false;
+    }
+    QSet<QString> pageIds;
+    for (const auto &entry : object["pages"].toArray()) {
+        const auto page = entry.toObject(); const auto id = page["id"].toString();
+        HomeLayout validator(m_registry); validator.m_owner = this;
+        if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty()
+            || page["name"].toString().size() > 80 || !page["layout"].isObject()
+            || !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false)) {
+            setError(tr("A page has an invalid identity, name or layout.")); return false;
+        }
+        pageIds.insert(id); pages.append(page);
+    }
+    const auto theme = object.value("theme").toObject();
+    const auto composition = object.value("composition").toObject().toVariantMap();
+    if ((object.contains("composition") && !object["composition"].isObject()) || !ComponentSchema::validComposition(composition)) {
+        setError(tr("Home composition is invalid.")); return false;
+    }
+    const QColor start(theme.value("backgroundStart").toString());
+    const QColor end(theme.value("backgroundEnd").toString());
+    if (!start.isValid() || !end.isValid()) { setError(tr("Home theme contains invalid colors.")); return false; }
+    auto presentation = appearanceDefaults();
+    for (auto it = presentation.begin(); it != presentation.end(); ++it)
+        if (theme.contains(it.key())) it.value() = theme.value(it.key()).toVariant();
+    if (!normalizeAppearance(presentation)) { setError(tr("Home appearance contains invalid values.")); return false; }
+    QSet<QString> ids;
+    QSet<QString> categoryIds;
+    const auto categoryArray = object.value("categories").toArray();
+    if (categoryArray.size() > 128) { setError(tr("Too many Home categories.")); return false; }
+    for (const auto &value : categoryArray) {
+        const auto category = value.toObject();
+        const auto id = category.value("id").toString();
+        if (id.isEmpty() || category.value("name").toString().trimmed().isEmpty() || categoryIds.contains(id)
+            || (category.contains("presentation") && (!category["presentation"].isObject()
+                || !ComponentSchema::validPresentation(category["presentation"].toObject().toVariantMap(), true)))) {
+            setError(tr("Home layout contains an invalid or duplicate category.")); return false;
+        }
+        categoryIds.insert(id);
+    }
+    QJsonArray components;
+    for (const auto &value : entries.toArray()) {
+        QString componentError;
+        const auto normalized = ComponentSchema::component(value.toObject().toVariantMap(), version == 1, &componentError);
+        const auto item = QJsonObject::fromVariantMap(normalized);
+        const auto kind = item.value("kind").toString();
+        const auto id = item.value("id").toString();
+        const auto actionType = item.value("action").toObject().value("type").toString(defaultActionTypeForKind(item)).trimmed();
+        if (normalized.isEmpty() || item.value("componentType") == "media-shelf" || ids.contains(id) || (kind != "app" && kind != "widget" && kind != "action")
+            || (kind == "app" && actionType == QStringLiteral("launch-app") && item.value("appId").toString().isEmpty())
+            || (kind == "action" && item.value("name").toString().trimmed().isEmpty())
+            || (kind == "widget" && item.value("widgetType").toString().isEmpty())
+            || (!item.value("categoryId").toString().isEmpty() && !categoryIds.contains(item.value("categoryId").toString()))
+            || (!actionType.isEmpty() && normalizedActionForItem(item).isEmpty())
+            || (item.contains("opacity") && (!item.value("opacity").isDouble() || item.value("opacity").toDouble() < 0.0 || item.value("opacity").toDouble() > 1.0))) {
+            setError(tr("Home layout contains an invalid or duplicate item.")); return false;
+        }
+        ids.insert(id);
+        components.append(item);
+    }
+    const auto grid = ComponentSchema::normalizedGrid(composition.value("grid").toMap());
+    if (!placementsFit(components, grid)) {
+        setError(tr("Home layout contains widget placements that do not fit its grid.")); return false;
+    }
+    m_items = components;
+    m_pages = pages;
+    m_composition = composition;
+    m_appearance = presentation;
+    if (userDocument && version == 1) m_legacyDocument = data;
+    m_categories = categoryArray;
+    m_brandVisible = theme.value("brandVisible").toBool(false);
+    m_backgroundStart = start.name();
+    m_backgroundEnd = end.name();
+    m_tileRoundness = qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
+    setError({});
+    return true;
+}
+
+bool HomeLayout::addAppTile(const QString &appId)
+{
+    if (!m_registry->find(appId)) return false;
+    for (const auto &value : m_items)
+        if (value.toObject().value("appId").toString() == appId) return true;
+    QString id = appId;
+    int suffix = 2;
+    const auto idExists = [this](const QString &candidate) {
+        for (const auto &value : m_items) if (value.toObject().value("id") == candidate) return true;
+        return false;
+    };
+    while (idExists(id)) id = appId + '-' + QString::number(suffix++);
+    QJsonObject tile{{"kind", "app"}, {"id", id}, {"appId", appId},
+                     {"action", QJsonObject{{"type", "launch-app"}, {"appId", appId}}},
+                     {"size", "standard"}};
+    const auto section = m_registry->find(appId)->section;
+    for (const auto &value : m_categories) {
+        const auto category = value.toObject();
+        if (category.value("name").toString().compare(section, Qt::CaseInsensitive) == 0) { tile.insert("categoryId", category.value("id")); break; }
+    }
+    m_items.append(tile);
+    if (!save()) { m_items.removeLast(); return false; }
+    emit layoutChanged(); return true;
+}
+
+bool HomeLayout::addActionTile(const QString &name, const QString &actionType, const QString &target, const QString &categoryId, const QString &openWith)
+{
+    const auto cleanName = name.trimmed().left(80);
+    const auto cleanActionType = actionType.trimmed();
+    const auto cleanTarget = target.trimmed();
+    const auto cleanOpenWith = openWith.trimmed();
+    const bool captureInput = cleanActionType == QStringLiteral("switch-input");
+    QVariantMap requestedAction{{"type", cleanActionType}};
+    if (captureInput) requestedAction["input"] = cleanTarget.toInt();
+    else { requestedAction["target"] = cleanTarget; requestedAction["openWith"] = cleanOpenWith; }
+    const auto normalizedAction = ComponentSchema::action(requestedAction);
+    if (normalizedAction.isEmpty()) return false;
+    if (cleanName.isEmpty() || cleanTarget.isEmpty() || !isSupportedActionType(cleanActionType)
+        || cleanActionType == QStringLiteral("launch-app") || cleanActionType == QStringLiteral("desktop-mode")
+        || (captureInput && !cleanOpenWith.isEmpty())
+        || (!captureInput && (!isSafeActionId(cleanOpenWith) || (!cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system") && !m_registry->find(cleanOpenWith)))))
+        return false;
+    if (!captureInput && !cleanOpenWith.isEmpty() && cleanOpenWith != QStringLiteral("system")
+        && !m_registry->find(cleanOpenWith)->handledActions.contains(cleanActionType)) {
+        return false;
+    }
+    if (!categoryId.isEmpty()) {
+        bool found = false;
+        for (const auto &value : m_categories)
+            if (value.toObject().value("id").toString() == categoryId) found = true;
+        if (!found) return false;
+    }
+
+    auto base = cleanName.toLower();
+    base.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));
+    base.remove(QRegularExpression(QStringLiteral("^-|-$")));
+    if (base.isEmpty()) base = QStringLiteral("tile");
+    QString id = base;
+    int suffix = 2;
+    const auto idExists = [this](const QString &candidate) {
+        for (const auto &value : m_items)
+            if (value.toObject().value("id").toString() == candidate) return true;
+        return false;
+    };
+    while (idExists(id)) id = base + QStringLiteral("-") + QString::number(suffix++);
+
+    const QJsonObject action = QJsonObject::fromVariantMap(normalizedAction);
+    QJsonObject tile{{"kind", "action"}, {"id", id}, {"name", cleanName}, {"size", "standard"},
+                     {"action", action}};
+    if (!categoryId.isEmpty()) tile.insert(QStringLiteral("categoryId"), categoryId);
+    m_items.append(tile);
+    if (!save()) { m_items.removeLast(); return false; }
+    emit layoutChanged();
+    return true;
+}
+
+bool HomeLayout::removeAppTile(const QString &appId)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        if (m_items.at(i).toObject().value("appId").toString() == appId) {
+            const auto removed = m_items.takeAt(i);
+            if (!save()) { m_items.insert(i, removed); return false; }
+            emit layoutChanged(); return true;
+        }
+    }
+    return true;
+}
+
+bool HomeLayout::moveItem(const QString &id, int offset)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        if (m_items.at(i).toObject().value("id").toString() == id) {
+            const auto target = qBound<qsizetype>(0, i + offset, m_items.size() - 1);
+            if (target == i) return true;
+            const auto previousItems = m_items;
+            const auto item = m_items.takeAt(i); m_items.insert(target, item);
+            if (!save()) { m_items = previousItems; return false; }
+            emit layoutChanged(); return true;
+        }
+    }
+    return false;
+}
+
+bool HomeLayout::removeItem(const QString &id)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        if (m_items.at(i).toObject().value("id").toString() == id) {
+            const auto removed = m_items.takeAt(i);
+            if (!save()) { m_items.insert(i, removed); return false; }
+            emit layoutChanged(); return true;
+        }
+    }
+    return false;
+}
+
+bool HomeLayout::addWidget(const QString &widgetType)
+{
+    if (widgetType != QStringLiteral("clock") && widgetType != "text") return false;
+    QString id = widgetType;
+    int suffix = 2;
+    const auto idExists = [this](const QString &candidate) {
+        for (const auto &value : m_items)
+            if (value.toObject().value("id").toString() == candidate) return true;
+        return false;
+    };
+    while (idExists(id)) id = widgetType + QString::number(suffix++);
+    m_items.append(QJsonObject{{"kind", "widget"}, {"id", id}, {"widgetType", widgetType}, {"size", "standard"}});
+    if(widgetType=="text"){auto item=m_items.last().toObject();item["name"]="Text";item["presentation"]=QJsonObject{{"variant","text"},{"subtitle","Your message"}};m_items.replace(m_items.size()-1,item);}
+    if (!save()) { m_items.removeLast(); return false; }
+    emit layoutChanged(); return true;
+}
+
+bool HomeLayout::setItemSize(const QString &id, const QString &size)
+{
+    if (size != QStringLiteral("compact") && size != QStringLiteral("standard") && size != QStringLiteral("wide")) return false;
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items.at(i).toObject();
+        if (item.value("id").toString() != id) continue;
+        const auto previous = item.value("size");
+        item.insert("size", size); m_items.replace(i, item);
+        if (!save()) { item.insert("size", previous); m_items.replace(i, item); return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+bool HomeLayout::setItemOpacity(const QString &id, double opacity)
+{
+    if (!qIsFinite(opacity)) return false;
+    opacity = qBound(0.0, opacity, 1.0);
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items.at(i).toObject(); if (item.value("id").toString() != id) continue;
+        const auto previous = item.value("opacity"); item.insert("opacity", opacity); m_items.replace(i, item);
+        if (!save()) { if (previous.isUndefined()) item.remove("opacity"); else item.insert("opacity", previous); m_items.replace(i, item); return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+bool HomeLayout::setTileOption(const QString &id, const QString &option, bool enabled)
+{
+    static const QSet<QString> options{QStringLiteral("showTitle"), QStringLiteral("showType"),
+                                       QStringLiteral("showLogo"), QStringLiteral("logoFill")};
+    if (!options.contains(option)) return false;
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items.at(i).toObject();
+        const auto kind = item.value("kind").toString();
+        if (item.value("id").toString() != id || (kind != QStringLiteral("app") && kind != QStringLiteral("action"))) continue;
+        const auto previous = item.value(option);
+        item.insert(option, enabled); m_items.replace(i, item);
+        if (!save()) { if (previous.isUndefined()) item.remove(option); else item.insert(option, previous); m_items.replace(i, item); return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+bool HomeLayout::setTileAppearance(const QString &id, const QString &symbol, const QString &accent)
+{
+    const auto cleanSymbol = symbol.trimmed().left(3);
+    const QColor accentColor(accent);
+    if (cleanSymbol.isEmpty() || !accentColor.isValid())
+        return false;
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items.at(i).toObject();
+        const auto kind = item.value("kind").toString();
+        if (item.value("id").toString() != id || (kind != QStringLiteral("app") && kind != QStringLiteral("action")))
+            continue;
+        const auto previousSymbol = item.value("symbol");
+        const auto previousAccent = item.value("accent");
+        const auto previousLogo = item.value("customLogo");
+        item.insert(QStringLiteral("symbol"), cleanSymbol);
+        item.insert(QStringLiteral("accent"), accentColor.name());
+        item.remove(QStringLiteral("customLogo"));
+        m_items.replace(i, item);
+        if (!save()) {
+            if (previousSymbol.isUndefined()) item.remove(QStringLiteral("symbol")); else item.insert(QStringLiteral("symbol"), previousSymbol);
+            if (previousAccent.isUndefined()) item.remove(QStringLiteral("accent")); else item.insert(QStringLiteral("accent"), previousAccent);
+            if (!previousLogo.isUndefined()) item.insert(QStringLiteral("customLogo"), previousLogo);
+            m_items.replace(i, item);
+            return false;
+        }
+        emit layoutChanged();
+        return true;
+    }
+    return false;
+}
+
+bool HomeLayout::setTileLogo(const QString &id, const QString &sourceUrl)
+{
+    const auto sourcePath = QUrl(sourceUrl).isLocalFile() ? QUrl(sourceUrl).toLocalFile() : sourceUrl;
+    QFile source(sourcePath);
+    if (!source.open(QIODevice::ReadOnly) || source.size() > 20 * 1024 * 1024) return false;
+    const auto data = source.readAll();
+    const bool png = data.startsWith(QByteArray::fromHex("89504e470d0a1a0a"));
+    const bool jpeg = data.startsWith(QByteArray::fromHex("ffd8ff"));
+    if (data.size() < 8 || (!png && !jpeg)) return false;
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items.at(i).toObject();
+        const auto kind = item.value("kind").toString();
+        if (item.value("id").toString() != id || (kind != QStringLiteral("app") && kind != QStringLiteral("action"))) continue;
+        const auto artworkDir = QDir(QFileInfo(m_userPath).absolutePath()).filePath("artwork");
+        if (!QDir().mkpath(artworkDir)) return false;
+        const auto relativePath = QStringLiteral("artwork/logo-") + QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex()) + (png ? QStringLiteral(".png") : QStringLiteral(".jpg"));
+        QSaveFile output(QDir(QFileInfo(m_userPath).absolutePath()).filePath(relativePath));
+        if (!output.open(QIODevice::WriteOnly) || output.write(data) != data.size() || !output.commit()) return false;
+        const auto previous = item.value("customLogo");
+        item.insert("customLogo", relativePath); item.insert("showLogo", true); m_items.replace(i, item);
+        if (!save()) { if (previous.isUndefined()) item.remove("customLogo"); else item.insert("customLogo", previous); m_items.replace(i, item); return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+bool HomeLayout::clearTileLogo(const QString &id)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items.at(i).toObject();
+        const auto kind = item.value("kind").toString();
+        if (item.value("id").toString() != id || (kind != QStringLiteral("app") && kind != QStringLiteral("action"))) continue;
+        const auto relativePath = item.value("customLogo").toString();
+        if (relativePath.isEmpty()) return true;
+        item.remove("customLogo"); m_items.replace(i, item);
+        if (!save()) { item.insert("customLogo", relativePath); m_items.replace(i, item); return false; }
+        const auto *owner=m_owner?m_owner:this;
+        if(!owner->documentData().contains(QJsonDocument(QJsonArray{relativePath}).toJson(QJsonDocument::Compact).mid(1).chopped(1)))
+            QFile::remove(QDir(QFileInfo(m_userPath).absolutePath()).filePath(relativePath));
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+QString HomeLayout::addCategory(const QString &name)
+{
+    const auto cleanName = name.trimmed().left(60);
+    if (cleanName.isEmpty()) return {};
+    auto base = cleanName.toLower(); base.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")), QStringLiteral("-"));
+    base.remove(QRegularExpression(QStringLiteral("^-|-$"))); if (base.isEmpty()) base = QStringLiteral("category");
+    QString id = base; int suffix = 2;
+    const auto exists = [this](const QString &candidate) { for (const auto &v : m_categories) if (v.toObject().value("id").toString() == candidate) return true; return false; };
+    while (exists(id)) id = base + QStringLiteral("-") + QString::number(suffix++);
+    m_categories.append(QJsonObject{{"id", id}, {"name", cleanName}});
+    if (!save()) { m_categories.removeLast(); return {}; }
+    emit layoutChanged(); return id;
+}
+
+bool HomeLayout::renameCategory(const QString &categoryId, const QString &name)
+{
+    const auto cleanName = name.trimmed().left(60); if (cleanName.isEmpty()) return false;
+    for (qsizetype i = 0; i < m_categories.size(); ++i) {
+        auto category = m_categories.at(i).toObject(); if (category.value("id").toString() != categoryId) continue;
+        const auto previous = category.value("name"); category.insert("name", cleanName); m_categories.replace(i, category);
+        if (!save()) { category.insert("name", previous); m_categories.replace(i, category); return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+bool HomeLayout::removeCategory(const QString &categoryId)
+{
+    for (qsizetype i = 0; i < m_categories.size(); ++i) {
+        if (m_categories.at(i).toObject().value("id").toString() != categoryId) continue;
+        const auto oldCategories = m_categories, oldItems = m_items; m_categories.removeAt(i);
+        for (qsizetype j = 0; j < m_items.size(); ++j) { auto item = m_items.at(j).toObject(); if (item.value("categoryId").toString() == categoryId) { item.remove("categoryId"); m_items.replace(j, item); } }
+        if (!save()) { m_categories = oldCategories; m_items = oldItems; return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+bool HomeLayout::moveCategory(const QString &categoryId, int offset)
+{
+    for (qsizetype i = 0; i < m_categories.size(); ++i) {
+        if (m_categories.at(i).toObject().value("id").toString() != categoryId) continue;
+        const auto target = qBound<qsizetype>(0, i + offset, m_categories.size() - 1);
+        if (target == i) return true;
+        const auto category = m_categories.takeAt(i); m_categories.insert(target, category);
+        if (!save()) { m_categories.takeAt(target); m_categories.insert(i, category); return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
+bool HomeLayout::assignItemCategory(const QString &itemId, const QString &categoryId)
+{
+    if (!categoryId.isEmpty()) { bool found = false; for (const auto &v : m_categories) if (v.toObject().value("id").toString() == categoryId) found = true; if (!found) return false; }
+    for (qsizetype i = 0; i < m_items.size(); ++i) { auto item = m_items.at(i).toObject(); if (item.value("id").toString() != itemId) continue; const auto previous = item.value("categoryId"); if (categoryId.isEmpty()) item.remove("categoryId"); else item.insert("categoryId", categoryId); m_items.replace(i, item); if (!save()) { if (previous.isUndefined()) item.remove("categoryId"); else item.insert("categoryId", previous); m_items.replace(i, item); return false; } emit layoutChanged(); return true; }
+    return false;
+}
+
+bool HomeLayout::setBrandVisible(bool visible)
+{
+    if (m_brandVisible == visible) return true;
+    m_brandVisible = visible;
+    if (!save()) { m_brandVisible = !visible; return false; }
+    emit layoutChanged(); return true;
+}
+
+bool HomeLayout::setBackground(const QString &start, const QString &end)
+{
+    const QColor startColor(start), endColor(end);
+    if (!startColor.isValid() || !endColor.isValid()) return false;
+    const auto previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
+    m_backgroundStart = startColor.name(); m_backgroundEnd = endColor.name();
+    if (!save()) { m_backgroundStart = previousStart; m_backgroundEnd = previousEnd; return false; }
+    emit layoutChanged(); return true;
+}
+
+bool HomeLayout::setTileRoundness(double roundness)
+{
+    if (!qIsFinite(roundness)) return false;
+    roundness = qBound(0.0, roundness, 1.0);
+    if (qFuzzyCompare(m_tileRoundness, roundness)) return true;
+    const auto previous = m_tileRoundness; m_tileRoundness = roundness;
+    if (!save()) { m_tileRoundness = previous; return false; }
+    emit layoutChanged(); return true;
+}
+
+bool HomeLayout::applyTheme(const QVariantMap &theme, bool includeSuggestedArtwork)
+{
+    auto presentation = appearanceDefaults();
+    for (auto it = presentation.begin(); it != presentation.end(); ++it)
+        if (theme.contains(it.key())) it.value() = theme.value(it.key());
+    if (!normalizeAppearance(presentation)) return false;
+    const QColor startColor(theme.value(QStringLiteral("backgroundStart")).toString());
+    const QColor endColor(theme.value(QStringLiteral("backgroundEnd")).toString());
+    const auto roundness = theme.contains(QStringLiteral("tileRoundness"))
+        ? theme.value(QStringLiteral("tileRoundness")).toDouble()
+        : -1.0;
+    const auto tileOpacity = theme.contains(QStringLiteral("tileOpacity"))
+        ? theme.value(QStringLiteral("tileOpacity")).toDouble()
+        : 1.0;
+    if (!startColor.isValid() || !endColor.isValid() || !qIsFinite(roundness) || !qIsFinite(tileOpacity) || roundness < 0.0 || roundness > 1.0
+        || tileOpacity < 0.2 || tileOpacity > 1.0)
+        return false;
+    const auto previousStart = m_backgroundStart;
+    const auto previousEnd = m_backgroundEnd;
+    const auto previousRoundness = m_tileRoundness;
+    const auto previousItems = m_items;
+    const auto previousAppearance = m_appearance;
+    m_appearance = presentation;
+    m_backgroundStart = startColor.name();
+    m_backgroundEnd = endColor.name();
+    m_tileRoundness = roundness;
+    const auto suggestions = theme.value(QStringLiteral("suggestedArtwork")).toMap();
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        auto item = m_items.at(i).toObject();
+        const auto kind = item.value(QStringLiteral("kind")).toString();
+        if (kind != QStringLiteral("app") && kind != QStringLiteral("action"))
+            continue;
+        item.insert(QStringLiteral("opacity"), tileOpacity);
+        if (includeSuggestedArtwork) {
+            const QStringList keys{item.value(QStringLiteral("appId")).toString(),
+                                   item.value(QStringLiteral("id")).toString(),
+                                   item.value(QStringLiteral("sourceType")).toString(),
+                                   item.value(QStringLiteral("name")).toString().toLower()};
+            for (const auto &key : keys) {
+                const auto suggestion = suggestions.value(key).toMap();
+                const QColor accent(suggestion.value(QStringLiteral("accent")).toString());
+                const auto symbol = suggestion.value(QStringLiteral("symbol")).toString().trimmed().left(3);
+                if (symbol.isEmpty() || !accent.isValid())
+                    continue;
+                item.insert(QStringLiteral("symbol"), symbol);
+                item.insert(QStringLiteral("accent"), accent.name());
+                item.remove(QStringLiteral("customLogo"));
+                break;
+            }
+        }
+        m_items.replace(i, item);
+    }
+    if (!save()) {
+        m_backgroundStart = previousStart;
+        m_backgroundEnd = previousEnd;
+        m_tileRoundness = previousRoundness;
+        m_items = previousItems;
+        m_appearance = previousAppearance;
+        return false;
+    }
+    emit layoutChanged();
+    return true;
+}
+
+bool HomeLayout::resetToDefaults()
+{
+    if (m_owner || !m_pages.isEmpty()) {
+        QFile defaults(m_defaultPath);
+        if(!defaults.open(QIODevice::ReadOnly)){setError(tr("Unable to read defaults."));return false;}
+        return applySkinDocument(QJsonDocument::fromJson(defaults.readAll()).object(),{});
+    }
+    QFile::remove(m_userPath);
+    return load(m_defaultPath, m_userPath);
+}
+
+QByteArray HomeLayout::documentData() const
+{
+    auto theme = QJsonObject::fromVariantMap(appearance());
+    theme.insert("brandVisible", m_brandVisible);
+    QJsonArray components;
+    for (const auto &entry : m_items) {
+        const auto normalized = ComponentSchema::component(entry.toObject().toVariantMap(), true);
+        if (normalized.isEmpty()) return {};
+        components.append(QJsonObject::fromVariantMap(normalized));
+    }
+    QJsonObject object{{"schemaVersion", 2}, {"theme", theme}, {"composition", QJsonObject::fromVariantMap(m_composition)}, {"categories", m_categories}, {"components", components}};
+    if (!m_owner) object.insert("pages",m_pages);
+    return QJsonDocument(object).toJson();
+}
+
+bool HomeLayout::save()
+{
+    if (m_owner) {
+        const bool ok=m_owner->storePage(m_pageId,QJsonDocument::fromJson(documentData()).object());
+        setError(ok?QString():m_owner->errorString());return ok;
+    }
+    QDir().mkpath(QFileInfo(m_userPath).absolutePath());
+    const auto data = documentData();
+    if (data.isEmpty() || data.size()>4*1024*1024) { setError(tr("The design is invalid or exceeds 4 MiB.")); return false; }
+    if (!m_legacyDocument.isEmpty() && !QFile::exists(m_userPath + ".v1.backup.json")) {
+        QSaveFile backup(m_userPath + ".v1.backup.json");
+        if (!backup.open(QIODevice::WriteOnly) || backup.write(m_legacyDocument) != m_legacyDocument.size() || !backup.commit()) {
+            setError(tr("Unable to back up the previous Home layout.")); return false;
+        }
+    }
+    QSaveFile file(m_userPath);
+    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
+        setError(tr("Unable to save Home layout.")); return false;
+    }
+    m_legacyDocument.clear();
+    setError({}); return true;
+}
+
+void HomeLayout::setError(const QString &message)
+{
+    if (m_errorString == message) return;
+    m_errorString = message; emit errorStringChanged();
+}

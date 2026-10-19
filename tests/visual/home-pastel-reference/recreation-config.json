@@ -1,0 +1,516 @@
+{
+  "composition": {
+    "schemaVersion": 1,
+    "fit": true,
+    "showProfile": false,
+    "wallpaper": "artwork/wallpaper.png",
+    "headerControls": [
+      "search",
+      "settings"
+    ],
+    "columns": 1,
+    "headerMode": "identity",
+    "enabled": true,
+    "identity": "Isolde",
+    "margin": 0,
+    "showClock": true,
+    "gap": 9,
+    "designHeight": 720
+  },
+  "schemaVersion": 1,
+  "items": [
+    {
+      "kind": "action",
+      "id": "hdmi1",
+      "name": "HDMI 1",
+      "action": {
+        "type": "settings",
+        "section": 4
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#f8a6bc",
+        "iconColor": "#a24562",
+        "icon": "hdmi"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "hdmi2",
+      "name": "HDMI 2",
+      "action": {
+        "type": "settings",
+        "section": 4
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#c8b2ed",
+        "iconColor": "#ffffff",
+        "icon": "hdmi"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "hdmi3",
+      "name": "HDMI 3",
+      "action": {
+        "type": "settings",
+        "section": 4
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#90c9ef",
+        "iconColor": "#ffffff",
+        "icon": "hdmi"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "hdmi4",
+      "name": "HDMI 4",
+      "action": {
+        "type": "settings",
+        "section": 4
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#9ad8c1",
+        "iconColor": "#ffffff",
+        "icon": "hdmi"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "desktop",
+      "name": "Desktop",
+      "action": {
+        "type": "desktop-mode"
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#fee6ac",
+        "iconColor": "#ba8950",
+        "icon": "display"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "guide",
+      "name": "TV Guide",
+      "action": {
+        "type": "settings",
+        "section": 4
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#f8a6bc",
+        "iconColor": "#ffffff",
+        "icon": "tv"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "movies",
+      "name": "Movies",
+      "action": {
+        "type": "launch-app",
+        "appId": "movies"
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#b9a3ed",
+        "iconColor": "#ffffff",
+        "icon": "film"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "shows",
+      "name": "TV Shows",
+      "action": {
+        "type": "launch-app",
+        "appId": "shows"
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#89d6ee",
+        "iconColor": "#ffffff",
+        "icon": "tv"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "music",
+      "name": "Music",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#a3dfc0",
+        "iconColor": "#ffffff",
+        "icon": "music"
+      }
+    },
+    {
+      "kind": "action",
+      "id": "games",
+      "name": "Games",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "shortcuts",
+      "presentation": {
+        "selectedLabelColor": "#a24562",
+        "surfaceColor": "#ffbc9c",
+        "iconColor": "#ffffff",
+        "icon": "gamepad"
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "netflix",
+      "name": "Netflix",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 109,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "youtube",
+      "name": "YouTube",
+      "action": {
+        "type": "launch-app",
+        "appId": "youtube"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 232,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "disney",
+      "name": "Disney+",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 356,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "max",
+      "name": "Max",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 480,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "prime",
+      "name": "Prime Video",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 606,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "spotify",
+      "name": "Spotify",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 731,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "apple",
+      "name": "Apple TV",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 855,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "crunchy",
+      "name": "Crunchyroll",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "imageCrop": {
+          "x": 978,
+          "width": 70,
+          "height": 70,
+          "y": 428
+        }
+      }
+    },
+    {
+      "kind": "action",
+      "id": "more",
+      "name": "More Apps",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "favorites",
+      "presentation": {
+        "surfaceColor": "#eee3f5",
+        "iconColor": "#65577a",
+        "icon": "grid"
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "avatar",
+      "name": "Avatar: The Last Airbender",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "recent",
+      "presentation": {
+        "imageCrop": {
+          "x": 75,
+          "width": 212,
+          "height": 81,
+          "y": 582
+        },
+        "subtitle": "TV Show"
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "challengers",
+      "name": "Challengers",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "recent",
+      "presentation": {
+        "imageCrop": {
+          "x": 304,
+          "width": 212,
+          "height": 81,
+          "y": 582
+        },
+        "subtitle": "Movie"
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "zelda",
+      "name": "Tears of the Kingdom",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "recent",
+      "presentation": {
+        "imageCrop": {
+          "x": 533,
+          "width": 212,
+          "height": 81,
+          "y": 582
+        },
+        "subtitle": "Game"
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "decide",
+      "name": "DECIDE",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "recent",
+      "presentation": {
+        "imageCrop": {
+          "x": 764,
+          "width": 212,
+          "height": 81,
+          "y": 582
+        },
+        "subtitle": "Music Album"
+      }
+    },
+    {
+      "customLogo": "artwork/reference.jpg",
+      "kind": "action",
+      "id": "italy",
+      "name": "Italy Trip",
+      "action": {
+        "type": "app-drawer"
+      },
+      "categoryId": "recent",
+      "presentation": {
+        "imageCrop": {
+          "x": 994,
+          "width": 212,
+          "height": 81,
+          "y": 582
+        },
+        "subtitle": "Recently Viewed"
+      }
+    }
+  ],
+  "theme": {
+    "selectedColor": "#edd7ef",
+    "backgroundStart": "#e9c7da",
+    "brandVisible": false,
+    "textColor": "#514b67",
+    "typographyScale": 1.0,
+    "mutedColor": "#625b73",
+    "homeColumns": 5,
+    "focusColor": "#ffffff",
+    "spacing": 16,
+    "motionEnabled": false,
+    "tileRoundness": 0.18,
+    "backgroundEnd": "#bbc5df",
+    "fontFamily": "DejaVu Sans",
+    "surfaceColor": "#f5e7f4"
+  },
+  "categories": [
+    {
+      "name": "Your Sources",
+      "id": "shortcuts",
+      "presentation": {
+        "variant": "orb",
+        "labelPill": true,
+        "iconSize": 44,
+        "labelSize": 15,
+        "showHeading": false,
+        "columns": 5,
+        "contentWidth": 780,
+        "height": 300,
+        "diameter": 110,
+        "cardGap": 28
+      }
+    },
+    {
+      "name": "Favorite Apps",
+      "id": "favorites",
+      "presentation": {
+        "headingSize": 15,
+        "height": 154,
+        "cardGap": 24,
+        "variant": "orb",
+        "padding": 14,
+        "columns": 9,
+        "blur": 0.7,
+        "diameter": 70,
+        "headingColor": "#ac3856",
+        "labelPill": false,
+        "labelSize": 11,
+        "panelOpacity": 0.58,
+        "panelColor": "#fff2fa",
+        "icon": "heart",
+        "radius": 24,
+        "headingBold": true
+      }
+    },
+    {
+      "name": "Recently Opened",
+      "id": "recent",
+      "presentation": {
+        "cardGap": 16,
+        "iconColor": "#328aaa",
+        "headingColor": "#514b67",
+        "headingSize": 15,
+        "radius": 20,
+        "variant": "recent",
+        "padding": 14,
+        "panelOpacity": 0.64,
+        "panelColor": "#f7edff",
+        "trailingLabel": "See All",
+        "headingBold": false,
+        "labelSize": 12,
+        "height": 184,
+        "trailingAction": {
+          "type": "app-drawer"
+        },
+        "artHeight": 84,
+        "blur": 0.8,
+        "icon": "clock",
+        "columns": 5
+      }
+    }
+  ]
+}

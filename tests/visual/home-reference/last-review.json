@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-16",
+  "adaptations": [
+    "Banner and Continue Watching share the first row on the landscape TV.",
+    "Phone and ChatGPT chrome are excluded; only artwork regions are cropped from the reference."
+  ],
+  "reset_verified": true,
+  "settings_only_skin_selection": true,
+  "visual_recreation": "pass_as_landscape_adaptation",
+  "criteria": {
+    "layout_palette_and_typography": true,
+    "one_screen_fit": true,
+    "wallpaper_or_artwork": true,
+    "native_components": true,
+    "remote_editor_preserves_configuration": true
+  },
+  "vm_evidence": "/tmp/isolde-reference-config-run1lpai",
+  "saved_skin_survives_reset": true,
+  "release": "523f627f0c06211f92b6e43b",
+  "installer_log": "/tmp/isolde-skins-install.log",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "automated_suites_passed": 13,
+  "reference_sha256": "d2902fdacc0c196b88a844bb7794baa4ebedba50e5f95311fd30e07ae3e1c300",
+  "review_method": "Visual inspection of installed captures against retained user references; not a pixel-score test",
+  "saved_skin_round_trip": true,
+  "limitations": [
+    "Static sample cards/artwork do not create provider sign-ins or Kodi history.",
+    "HDMI and guide setup routes do not qualify capture/guide backends.",
+    "Blur verified in the VM; physical-device performance remains unqualified."
+  ],
+  "household_service": {
+    "restarts": 0,
+    "active": true
+  }
+}

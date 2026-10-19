@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "theme": {
+    "brandVisible": false,
+    "backgroundStart": "#19191E",
+    "backgroundEnd": "#101014",
+    "tileRoundness": 0.18
+  },
+  "categories": [
+    { "id": "widgets", "name": "Widgets" },
+    { "id": "apps", "name": "Apps" },
+    { "id": "music", "name": "Music" },
+    { "id": "inputs", "name": "Inputs" },
+    { "id": "system", "name": "System" }
+  ],
+  "items": [
+    { "kind": "widget", "id": "clock", "widgetType": "clock", "size": "standard", "categoryId": "widgets" },
+    { "kind": "app", "id": "movies", "appId": "movies", "size": "standard", "categoryId": "apps" },
+    { "kind": "app", "id": "shows", "appId": "shows", "size": "standard", "categoryId": "apps" },
+    { "kind": "app", "id": "youtube", "appId": "youtube", "size": "standard", "categoryId": "apps" },
+    { "kind": "action", "id": "hdmi-1", "name": "HDMI 1", "symbol": "1", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 1 } },
+    { "kind": "action", "id": "hdmi-2", "name": "HDMI 2", "symbol": "2", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 2 } },
+    { "kind": "action", "id": "hdmi-3", "name": "HDMI 3", "symbol": "3", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 3 } },
+    { "kind": "action", "id": "hdmi-4", "name": "HDMI 4", "symbol": "4", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 4 } },
+    { "kind": "action", "id": "hdmi-5", "name": "HDMI 5", "symbol": "5", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 5 } },
+    { "kind": "action", "id": "hdmi-6", "name": "HDMI 6", "symbol": "6", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 6 } },
+    { "kind": "action", "id": "hdmi-7", "name": "HDMI 7", "symbol": "7", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 7 } },
+    { "kind": "action", "id": "hdmi-8", "name": "HDMI 8", "symbol": "8", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 8 } },
+    { "kind": "app", "id": "steam-machine", "appId": "steam-machine", "size": "standard", "categoryId": "apps" },
+    { "kind": "app", "id": "app-store", "appId": "app-store", "size": "standard", "categoryId": "system" },
+    { "kind": "app", "id": "desktop-mode", "appId": "desktop-mode", "size": "standard", "categoryId": "system" },
+    { "kind": "app", "id": "settings", "appId": "settings", "size": "standard", "categoryId": "system" }
+  ]
+}

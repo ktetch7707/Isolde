@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "packs": [
+    {
+      "id": "living-room-starter",
+      "name": "Living Room Starter",
+      "description": "Isolde-owned badges for common apps, platforms, consoles, media sources, and household devices.",
+      "themes": [
+        { "id": "quiet-rose", "name": "Quiet Rose", "description": "Charcoal, muted rose and generous space. A starting point you can make your own.", "backgroundStart": "#19191E", "backgroundEnd": "#101014", "focusColor": "#C994A5", "typographyScale": 1.0, "tileRoundness": 0.18, "tileOpacity": 1.0 },
+        { "id": "midnight-theater", "name": "Midnight Theater", "description": "Deep blue cinema background with calm rounded tiles.", "backgroundStart": "#111A32", "backgroundEnd": "#080C18", "focusColor": "#F8FAFC", "typographyScale": 1.0, "tileRoundness": 0.18, "tileOpacity": 1.0, "suggestedArtwork": { "youtube": { "symbol": "▶", "accent": "#E45252" }, "movies": { "symbol": "◉", "accent": "#06B6D4" }, "steam-machine": { "symbol": "S", "accent": "#4F83A8" }, "desktop-mode": { "symbol": "D", "accent": "#68758F" }, "movie-disc": { "symbol": "◉", "accent": "#06B6D4" }, "game-disc": { "symbol": "◆", "accent": "#8B5CF6" }, "media-folder": { "symbol": "▣", "accent": "#14B8A6" } } },
+        { "id": "console-neon", "name": "Console Neon", "description": "Purple-blue game room look with more squared controller-friendly tiles.", "backgroundStart": "#241846", "backgroundEnd": "#070A18", "focusColor": "#C4B5FD", "typographyScale": 1.05, "tileRoundness": 0.10, "tileOpacity": 0.96, "suggestedArtwork": { "switch": { "symbol": "N", "accent": "#E85C68" }, "switch2": { "symbol": "N", "accent": "#E60012" }, "steam-machine": { "symbol": "S", "accent": "#4F83A8" }, "playstation": { "symbol": "PS", "accent": "#315DAA" }, "xbox": { "symbol": "X", "accent": "#107C10" }, "game-disc": { "symbol": "◆", "accent": "#8B5CF6" }, "desktop-mode": { "symbol": "D", "accent": "#68758F" } } },
+        { "id": "warm-media-room", "name": "Warm Media Room", "description": "Amber low-light palette for movies, music, and ambient mode.", "backgroundStart": "#3B2D1C", "backgroundEnd": "#16100A", "focusColor": "#FED7AA", "typographyScale": 1.0, "tileRoundness": 0.26, "tileOpacity": 0.94, "suggestedArtwork": { "movies": { "symbol": "◉", "accent": "#06B6D4" }, "kodi": { "symbol": "K", "accent": "#1685D9" }, "plex": { "symbol": "P", "accent": "#E5A00D" }, "spotify": { "symbol": "♪", "accent": "#1DB954" }, "media-folder": { "symbol": "▣", "accent": "#14B8A6" }, "movie-disc": { "symbol": "◉", "accent": "#06B6D4" } } },
+        { "id": "clean-appliance", "name": "Clean Appliance", "description": "Simple graphite interface for a quieter smart-TV look.", "backgroundStart": "#1F2937", "backgroundEnd": "#030712", "focusColor": "#E5E7EB", "typographyScale": 0.96, "tileRoundness": 0.04, "tileOpacity": 1.0, "suggestedArtwork": { "settings": { "symbol": "⚙", "accent": "#9B6BE3" }, "app-store": { "symbol": "+", "accent": "#D58A45" }, "desktop-mode": { "symbol": "D", "accent": "#68758F" }, "home-assistant": { "symbol": "⌂", "accent": "#41BDF5" } } }
+      ],
+      "artwork": [
+        { "id": "youtube", "name": "YouTube", "category": "Streaming", "symbol": "▶", "accent": "#E45252" },
+        { "id": "spotify", "name": "Spotify", "category": "Music", "symbol": "♪", "accent": "#1DB954" },
+        { "id": "plex", "name": "Plex", "category": "Media", "symbol": "P", "accent": "#E5A00D" },
+        { "id": "kodi", "name": "Kodi", "category": "Media", "symbol": "K", "accent": "#1685D9" },
+        { "id": "home-assistant", "name": "Home Assistant", "category": "Smart Home", "symbol": "⌂", "accent": "#41BDF5" },
+        { "id": "steam", "name": "Steam / PC Games", "category": "Games", "symbol": "S", "accent": "#4F83A8" },
+        { "id": "playstation", "name": "PlayStation", "category": "Games", "symbol": "PS", "accent": "#315DAA" },
+        { "id": "xbox", "name": "Xbox", "category": "Games", "symbol": "X", "accent": "#107C10" },
+        { "id": "nintendo", "name": "Nintendo", "category": "Games", "symbol": "N", "accent": "#E60012" },
+        { "id": "switch", "name": "Switch", "category": "Games", "symbol": "N", "accent": "#E85C68" },
+        { "id": "disc-movie", "name": "Movie Disc", "category": "Sources", "symbol": "◉", "accent": "#06B6D4" },
+        { "id": "disc-game", "name": "Game Disc", "category": "Sources", "symbol": "◆", "accent": "#8B5CF6" },
+        { "id": "folder", "name": "Media Folder", "category": "Sources", "symbol": "▣", "accent": "#14B8A6" },
+        { "id": "desktop", "name": "Desktop Mode", "category": "System", "symbol": "D", "accent": "#68758F" }
+      ]
+    }
+  ]
+}

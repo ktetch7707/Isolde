@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "packageId": "spotify",
+  "version": "1.2.95.453",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Spotify",
+  "description": "The real Spotify desktop music client for Linux. Requires a Spotify account.",
+  "category": "Music",
+  "publisher": "Spotify",
+  "provenance": "Spotify Debian repository",
+  "capabilities": ["network", "audio.output", "desktop.external", "account.spotify"],
+  "app": {
+    "id": "spotify",
+    "type": "desktop",
+    "presentationMode": "desktop-bridge",
+    "section": "Music",
+    "accent": "#1DB954",
+    "symbol": "S",
+    "desktopId": "isolde-spotify",
+    "windowClass": "spotify.Spotify",
+    "containment": "fullscreen",
+    "mprisBusName": "org.mpris.MediaPlayer2.spotify"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "packageId": "home-assistant",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Home Assistant",
+  "description": "A TV-accessible Home Assistant dashboard for local smart-home control.",
+  "category": "Smart Home",
+  "publisher": "Isolde Curated",
+  "provenance": "Home Assistant web dashboard",
+  "capabilities": ["network.local", "smart-home.control", "notifications"],
+  "app": {
+    "id": "home-assistant",
+    "type": "web",
+    "presentationMode": "web-kiosk",
+    "networkRequirement": "internet",
+    "section": "Apps",
+    "accent": "#41BDF5",
+    "symbol": "H",
+    "url": "https://demo.home-assistant.io",
+    "allowedOrigins": [
+      "https://demo.home-assistant.io"
+    ]
+  }
+}

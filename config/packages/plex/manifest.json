@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "packageId": "plex",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Plex",
+  "description": "A living-room Plex launcher for browsing and playing media from a Plex server.",
+  "category": "Photo & Video",
+  "publisher": "Isolde Curated",
+  "provenance": "Plex web app",
+  "capabilities": ["network.media.stream", "library.media.read", "audio.playback", "video.playback"],
+  "app": {
+    "id": "plex",
+    "type": "web",
+    "presentationMode": "web-kiosk",
+    "networkRequirement": "internet",
+    "handledActions": ["open-url"],
+    "section": "Library",
+    "accent": "#E5A00D",
+    "symbol": "P",
+    "url": "https://app.plex.tv/desktop",
+    "allowedOrigins": [
+      "https://app.plex.tv",
+      "https://plex.tv",
+      "https://clients.plex.tv"
+    ]
+  }
+}

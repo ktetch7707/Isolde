@@ -1,0 +1,1481 @@
+
+ISOLDE
+Unified Master Planning Document
+Version 0.0.1.1  •  Consolidated 18 October 2026
+Product requirements, system architecture, interface configuration, integration contracts, implementation notes, test criteria, and all supplied visual references.
+Non-negotiable product direction
+Everything is configurable. Nothing requires configuration.
+Isolde is a local-first, offline-capable, remote-first personal entertainment operating environment. A default experience must be polished and ready to use, while its pages, tabs, regions, shelves, menus, launcher tiles, and content sources are completely rearrangeable.
+When two source specifications prescribe different layouts or integrations, neither is discarded. Both become selectable templates, modes, widgets, data adapters, or per-page settings, so long as they can coexist safely. A user can select a preset and then change every part of it.
+The content catalog is separate from playback sources and separate from UI layout. Titles, access entitlements, local files, channels, games, shelf definitions, and page definitions must not be rigidly coupled.
+Offline core functionality does not depend on a service, account, online time server or cloud lookup. Optional apps, provider integrations and metadata enrichment enhance but cannot disable the core experience.
+Implementation limitations are identified explicitly; where a provider, HDMI device, capture adapter, PVR add-on or game launcher exposes an unverified capability, treat it as a tested integration requirement rather than a promise.
+How this document is organized
+Part I specifies shared decisions and makes formerly conflicting approaches configurable. Part II retains the complete technical substance of every supplied planning file in topic order, including every embedded source image and the original Kodi code and project tree. Source headings, tables, examples, phases, and acceptance criteria remain available for implementation detail.
+Part I — Unified configuration contract
+1. Page system, navigation and defaults
+Provide an editable page registry with unlimited user-created pages, arbitrary named tabs, sidebars, top navigation, contextual menus, custom landing pages and deep links. Pages can be duplicated, exported, imported, reordered, hidden, assigned icons and designated as Home. Every page can hold any compatible widget; no predefined category is mandatory.
+Ship multiple included templates, at minimum: (A) compact one-screen source launcher with Home, Library, TV Guide, Music and Games; (B) scrollable dashboard with HDMI, apps, On Now, Continue Watching and library shelves; (C) poster-led left-sidebar media library; and (D) user-designed minimal, pastel, or image-background variants. The five-tab navigation is a default template, not a system limit.
+Allow per-page vertical scrolling on/off, fixed-height versus content-driven layout, grid rows/columns, widget spanning, responsive spacing, sidebar collapse rules, background art/video/GIF, focus behavior and remote-safe transitions. A single-screen Home and a scrolling Home are both fully valid.
+Search and Settings may appear in a persistent header by default but must also be routable as normal actions/buttons/menus. All Apps, Desktop, and every HDMI input must be reachable without reliance on a specific default layout.
+2. Widget builder and look-and-feel
+Provide editable reusable widgets: HDMI source tile/grid; app launcher; action button; menu sidebar; top tabs; breadcrumb/quick navigation; media shelf; poster grid; collection; hero/banner; guide preview; full/overlay guide; clock/date; weather; now playing; device status; background art/video/GIF; music library; games library; search; settings shortcut; achievements; provider availability and recording widgets.
+Each widget exposes its supported source, query/filters, sort, item limit, card density, grid spans, alignment, geometry, visual skin, artwork, text, focus/hover/selection effects, input actions, transitions, visibility conditions and destinations. Action bindings support navigating to pages, opening apps, switching inputs, playing media and invoking supported context panels.
+Users can approximate different streaming-service or Kodi-skin layouts with the editor, but no copyrighted art or specific protected assets are necessary. Templates are starting points. All pages, not merely Home, must be editable. Preserve a live preview, undo/revert, backup/export, restore-default and keyboard/mouse-assisted editing alongside remote-first use.
+Typography, theme colors, icons, accents, circles/rectangles, posters/landscape art, backgrounds, animations, live wallpapers and screen-reader/focus accommodations must remain theme-level or per-widget settings rather than hardcoded appearance decisions.
+3. Catalog and content availability
+Maintain one canonical title/media record with multiple playback/access paths. “My Library” (user-controlled compatible local media) and “Borrowed” (external subscription/provider dependent access) are filters and classes, NOT mandatory pages. Users can combine them into one shelf or separate them by page, category or source.
+Prefer playback of local material when configured. Offline or lost-entitlement Borrowed titles automatically leave dynamic playable shelves without erasing history, user collections, bookmarks or metadata; they reappear when available again. Show accurate access states on demand rather than pretending streaming licenses equal permanent ownership.
+Curated and rules-driven shelves may overlap across sources, genre, tags, franchise, console, language, availability, studio, metadata and service. Do not require a user to organize files or adopt any preset hierarchy. Search supplements browsing rather than replacing intuitive navigation.
+Proactive recommendations may use local content and titles included in already-active subscriptions in the user’s normal authorized region, not promoted new subscriptions or retail purchases. Explicit title searches may show other services, rents, purchases, and relevant geographic differences as neutral facts, not ads or VPN guidance.
+4. Live television choices and persistence
+Provide a configurable unified EPG integrating local Isolde-generated channels, Kodi/PVR or existing PseudoTV channels, compatible IPTV/XMLTV, tuners, and authorized connected provider listings where supported. A user can choose Isolde’s guide, native Kodi guide, an overlay, a compact widget, or provider app handoff.
+Isolde-generated local channels use a persisted broadcast clock and schedule database, with configurable real-time, pause-when-off, fixed broadcast and shuffle rules. Keep committed slots stable when folders/rules change, and tune into the elapsed program rather than restarting each show.
+Retain imported PseudoTV definitions and their own schedules rather than automatically transferring ownership. Where an Isolde-native channel engine supersedes a PseudoTV workflow, this is an optional channel-source mode, not destructive migration.
+The full guide must offer Add Channel → Local/Service, playlist rule editor, scheduling, channel editing, logos, guide filters and remote navigation; guide reads should never require expensive global indexing.
+5. Players, HDMI, apps, VPN, downloads and games
+Kodi remains a supported media backend and native interface/skin option. Users can open Kodi screens or add-ons as routes within Isolde; a managed full-screen window is the pragmatic default where embedding is unsupported. Isolde UI and Kodi UI are user-selectable browsing modes, not mutually exclusive universes.
+Keep eight configurable HDMI inputs plus Desktop as available controls. Switching, capture, controller support and HDCP-protected hardware behavior must be separately validated. Never make the OS dependent on a live network. During external HDMI sessions or normal playback, prevent idle screensavers from interrupting content.
+Optional Linux apps (including FreeTube and Parabolic), favorite launchers, installed PC games and emulators integrate through adapters. Files imported through watched folders stay user-accessible, are indexed only when complete, and can power shelves and TV channels.
+Games share the same configurable shelf/catalog patterns as movies, with platform, franchise, edition, tag and launcher profile filtering; save metadata and local launch behavior remain offline-capable.
+Optional VPN settings can support multiple providers, a user-selected default policy, per-app override/never-use rules, preferred ordered servers, configurable auto-retry, and an app-side quick-control panel. VPN routing does not change the rules for proactive recommendations or circumvent service access requirements.
+6. Security, data resilience and implementation
+Local SQLite is the suggested canonical metadata/schedule registry, using stable media identities, incremental ingestion, cached artwork, backed-up configuration and schema migration. Source services, UI state, collections, assets, channel schedules and app connectors are separate modules.
+No default telemetry of local media files, play histories, paths or downloads. Restrict Kodi JSON-RPC to localhost by default; treat provider credentials as secrets; validate inputs and file parsing; isolate optional app failures. Existing media files should never be deleted as a side effect of a UI or entitlement change.
+Acceptance applies to every theme: user can reach Home, Source switching, Guide, Settings, Apps, local library and playback by remote without internet; a title exists in one canonical catalog no matter how many shelves display it; user can replace a default preset with a fully different interface.
+Implementation must retain every feature and acceptance criterion detailed in the source specifications below. When a source says “default,” “fixed,” “five destinations,” “Kodi owns” or “Isolde owns,” read it as the behavior of the cited template/adapter unless explicitly foundational, and expose all technically valid alternatives through settings.
+Configurable interpretation of conflicting statements
+Difference in source plans
+Required configuration
+Invariant
+Fixed one-screen Home vs scrollable dashboard
+User-selectable Home templates and per-page scrolling / section visibility
+Remote-accessible actions, no core feature hidden
+Five permanent tabs vs arbitrary pages
+Default five-tab preset; freely add/remove/rename tabs, pages and menus
+Home/return/recovery still accessible
+Separate Library/Borrowed pages vs blended rows
+Access-class filters on every shelf and optional example pages
+One catalog; multiple access paths
+Kodi/PseudoTV UI vs Isolde-native channel engine
+Per-channel source and optional native Kodi view / Isolde EPG
+Preserve schedules and existing data
+Poster shelves vs grids, hero, circles or lists
+Per-page and per-widget layout/skin presets
+Consistent D-pad focus and accessibility
+Kodi frontend vs Isolde frontend
+User-selectable page routes, full-mode option and add-on launch
+Use supported Kodi APIs, preserve data
+Locally stored vs streaming/service content
+Arbitrary source and availability filters
+Offline core never depends on streaming
+
+
+Part II — Complete source specifications
+The following sections preserve the detailed source plans in full, grouped by subsystem. In case of conflict, the full-customization configuration contract in Part I governs interpretation. Images from the source document are preserved in place.
+
+
+1. Interface and navigation
+Source file: Isolde_Interface_Design_Proposal(1).docx
+ISOLDE
+Unified Television Interface — Design Specification
+Version 0.0.1.1  |  October 2026
+Design direction
+Isolde is a clean, remote-first television interface inspired by Arctic Zephyr. Its Home screen is a functional launcher, not a streaming storefront: no advertising, compulsory recommendation feed, autoplay preview or enormous promotional billboard. The Library provides deeply curated, poster-focused shelves that remain intuitively browseable without relying on Search.
+1. Permanent navigation
+Destination
+Purpose
+Home
+Eight HDMI inputs, Desktop, favorite applications, All Apps and a TV Guide shortcut.
+Library
+Video categories and an unlimited number of custom shelves.
+TV Guide
+A full, clock-based personal television guide and channel selection.
+Music
+Artists, albums, playlists and custom music shelves.
+Games
+Installed PC and Steam games, favorites and game collections.
+Search and Settings occupy the upper-right corner consistently on all five destinations; neither becomes a sixth primary tab.
+2. Home screen
+Everything essential should fit on a single 16:9 television screen, without vertical scrolling. The layout is fixed in its default hierarchy but configurable in naming, icons, tile ordering and visibility.
+Header: Isolde identity at upper left; Search, Settings and unobtrusive clock at upper right.
+Navigation: Home | Library | TV Guide | Music | Games, with a clear focused state.
+Your Sources: tiles for HDMI 1–8 plus a separate Desktop tile. Every HDMI tile can be renamed and assigned a recognizable icon. Unused ports may be hidden.
+Favorite Apps: a short row of frequently used launchers; the final tile is All Apps, opening the complete application drawer.
+TV Guide shortcut: a compact, conspicuous button providing immediate access to the full guide.
+The source grid is the visual anchor of Home. Movies and TV shows do not appear there by default; they are found in the Library.
+3. Library: category navigator and poster shelves
+The Library uses two coordinated areas: a category navigator on the left and horizontal poster shelves on the right. Users move vertically between shelves, horizontally through posters and leftward from a shelf to the category navigator. The sidebar may collapse when browsing posters and reappear through leftward navigation.
+Default video categories
+Movies
+TV Shows
+Kids Programming
+Stand-Up Comedy
+Anime
+Cartoons
+Animated Movies
+International TV Shows
+International Movies
+Home Videos
+Additional categories can be created without a preset limit. Each category has a dedicated All Titles view alongside its shelves, so content remains discoverable even if it has not been curated.
+Organization hierarchy
+Library → Category → Shelf → Title. Examples: Library → Movies → Marvel Cinematic Universe → Iron Man (2008); Library → International TV Shows → Korean Dramas → selected series; Library → Home Videos → Vacations → selected recording.
+Categories are overlapping organizational views, not exclusive storage folders. A film may appear in Animated Movies, International Movies and a Studio Ghibli shelf without duplicating the media file.
+4. Shelf system
+There is no arbitrary maximum number of shelves per category. Virtualized scrolling and incremental artwork loading should keep navigation responsive as collections expand.
+Manual shelf: select titles and arrange them in a chosen sequence.
+Kodi collection / playlist shelf: show membership from an existing source.
+Smart shelf: select by genre, release year, studio, tags, watched status or combinations of filters.
+Folder-backed shelf: reflect a chosen local media directory.
+Pin as Shelf: add an existing collection through its context menu without opening a full editor.
+Every shelf supports renaming, ordering, show/hide, artwork style, sizing and editing of content rules. Long-press/select context menus expose advanced actions without placing editing buttons across the browsing interface.
+5. Visual system
+Arctic Zephyr is the stylistic reference: generous negative space, poster-first browsing, understated background fanart and a clear selected-item state. Isolde should resemble a curated personal library, not Amazon Prime.
+Use portrait posters as the default for film and television shelves, with roughly seven to nine posters visible per row at a standard television viewing size; offer adjustable density.
+Show one clear shelf heading; avoid duplicate explanations or labels under every poster.
+When a poster receives focus, reveal title and relevant metadata in an unobtrusive information area.
+Provide dimmed or blurred background fanart only as an optional enhancement.
+Keep Home focused on functional device and application tiles rather than poster carousels.
+Use a consistent muted-rose selection accent against a near-black/charcoal background, with accessible high-contrast options.
+6. Remote-first behavior
+Directional navigation operates every screen; mouse and keyboard are never required for everyday use.
+Home returns to Isolde, including from HDMI display or supported fullscreen applications.
+Back follows navigation history and restores the last focused card or shelf.
+Left from the first poster in a shelf opens or focuses the category navigator.
+Long-press Select opens context actions; focus position remains predictable.
+Selected items are identified by outline, size and contrast—not by color alone.
+Quick access to All Apps should not require scrolling through favorites or library rows.
+7. Separate destination behavior
+TV Guide
+Present the personal channel schedule as a proper electronic program guide: numbered channels, station labels, current-time marker, proportionally sized program blocks and clock-based playback position. The Home shortcut and permanent navigation tab open the same guide. The guide must function offline with locally retained schedules and media.
+Music
+A dedicated music experience accommodates albums, artists, playlists, favorites, local playback and user-created shelves without forcing audio into the video Library. Spotify and other applications remain available via the app launcher as appropriate.
+Games
+Show installed games, Steam titles, recent play and custom collections. Console inputs remain under Home → Sources, while desktop game launchers remain in Games; this avoids duplicating the main HDMI controls.
+8. Customization levels
+Everyday: Add, remove, rename and reorder categories, tabs and shelves.
+Layout: Adjust poster size, shelf density, sidebar behavior, backgrounds and spacing.
+Advanced: Define custom widgets, actions, animations, conditional visibility and reusable themes.
+Default appearance must be polished without configuration. Customization is powerful but hidden until requested, ensuring that the ordinary browsing experience stays clean.
+9. Offline-first requirements
+Home, local Kodi browsing and playback, stored artwork, library categories, shelves, personal television schedules, HDMI switching and capture, local music, navigation and settings remain functional without internet access. Online search and streaming are optional additions and must never block the local interface. Configuration and metadata should have local backup/export paths.
+10. Validation criteria
+All nine source choices (eight HDMI plus Desktop) remain accessible from Home.
+Home, Search, Settings, TV Guide and All Apps have unambiguous navigation paths.
+Users can reach a known movie through its category and shelf without Search.
+A title can appear in multiple categories and shelves without duplicate files.
+A category with hundreds of shelves remains smooth with directional navigation.
+TV Guide, local library and HDMI remain operational without internet.
+No normal task requires pointer hover, a mouse or a keyboard.
+The default Home layout fits within a 16:9 television display without scrolling.
+Design decision
+Commit to five permanent destinations: Home, Library, TV Guide, Music and Games. Home is a one-screen device-and-app launcher. Library is a navigable hierarchy of clearly named categories and effectively unlimited poster shelves. Search supplements this structure; it never replaces it. This keeps Isolde clean at first glance and extraordinarily organized in depth.
+
+
+2. Home, library and page-builder architecture
+Source file: Isolde_Master_Plan_Managed_Capture_Updated(1).docx
+ISOLDE
+Home Screen, Library & Customization Architecture
+Product design and implementation plan  |  Isolde 0.0.1.1  |  October 2026
+Guiding principle: Everything should be customizable, but nothing should require customization to work.
+Isolde must support a thoughtfully organized personal library and an unorganized one equally well. Kodi remains the media backend; Isolde owns the browsing, navigation, layouts and user experience.
+1. Default home screen
+Build a scrollable TV-first dashboard with persistent top navigation, eight HDMI inputs, an apps row, an expandable guide, Continue Watching, Movies, TV Shows, and optional custom collections. All sections are movable, hideable, resizable, and configurable.
+
+Figure 1. Proposed default Isolde home screen; all shown programming is illustrative.
+Default composition
+Top bar: Isolde identity, search, settings and clock.
+Tabs: Home, Live TV, Movies, Shows, My Library; all editable.
+Eight HDMI source tiles: named and icon-labeled, with hardware switching handled by the source-control layer.
+Applications row: YouTube, Spotify, Steam, Kodi and All Apps by default; user-configurable.
+Live TV preview: current programs, logos, progress bars and a Full Guide action.
+Library content: Continue Watching, Recently Added, Movies, TV Shows and curated shelves.
+2. Reusable home-screen component system
+Widget type
+Purpose
+Launcher
+HDMI sources, apps, shortcuts, favorites
+Media shelf
+Movies, series, playlists, collections, episodes
+Guide
+On Now, channels, scheduled programs
+Hero
+Featured content, large art, rotators
+Information
+Clock, weather, music, device status
+Each widget declares a data source, layout, sorting, item limit, visibility and focus behavior. Avoid separate source-specific widget implementations where a configurable widget can suffice.
+3. Tabs and navigation
+Create, rename, reorder, hide or delete tabs.
+Attach any widget layout or collection to a tab.
+Support submenus for large libraries rather than forcing fifteen top-level tabs.
+Offer poster grids, landscape cards, compact lists and hero arrangements.
+Persist remote focus and scroll position when returning from media playback.
+Keep settings and a route back to the Isolde dashboard accessible from all views.
+4. Collection engine: curated and automatic
+A collection is a reusable definition of what content belongs together; it is not tied to a particular widget or screen. One collection can power a home shelf, a submenu and a dedicated tab simultaneously.
+Collection type
+How it works
+Best suited for
+Manual
+Select Kodi tags, playlists, nodes or titles
+Carefully curated personal libraries
+Rules-based
+Use metadata, playcount, year, genre, tags, studio and other fields
+Automatically updated thematic categories
+Suggested
+Propose shelves using whatever reliable metadata exists
+Users without existing organization
+Exclusion rules
+Let a collection hide its members from selected general browse views without deleting them or modifying Kodi data. Hide from general Movies and Hide from general TV Shows are independent toggles. Exclusions do not implicitly apply to search, Continue Watching or Live TV. A title can remain in multiple curated collections.
+
+Figure 2. Example collection editor and category-exclusion controls.
+Classification precedence
+User-curated collections and explicit tags override automatic classification.
+Kodi metadata and genres provide initial automatic categories.
+Optional metadata enrichment can improve anime, cartoons and musicals categorization later.
+Uncertain items remain in general browsing instead of being silently misclassified.
+5. Setup experience for different libraries
+Automatic Library is the default: read existing Kodi metadata and produce immediately useful Movies, Shows, Continue Watching, recently added and genre shelves. Curated Library discovers playlists, tags, nodes and optional custom rules to import. These are onboarding templates, not separate feature tiers.
+For an uncle with a minimally organized library, usable genre and discovery shelves should appear with no manual sorting. For an advanced user, existing manually organized distinctions such as Musicals, Kids, Anime and Cartoons must be preserved.
+6. Live TV guide: three presentations
+Compact home widget: three to five channels, logos, now-playing titles and progress bars.
+Expanded overlay: navigable grid over the current screen; preserves background navigation state.
+Full-screen guide: cable-like EPG, channel groups, future schedule, program details and tune actions.
+
+Figure 3. Expanded program guide concept with example—not live—schedule data.
+Prefer Kodi PVR channels and broadcast interfaces when PseudoTV exposes its guide data there. Validate the user’s actual PseudoTV configuration before relying on any one implementation; provide a separately tested adapter for generated EPG and playlist output if needed.
+7. Visual customization editor
+Provide an Edit Home Screen mode rather than relying only on deeply nested settings. Focus outlines, remote-driven move operations, duplication, hide/show, resize, content-source selection, and appearance selection should be available in context. Mouse interaction can simplify initial setup on the host PC.
+Media shelf settings
+Source picker: Kodi playlist, tag, smart collection, library node or other provider.
+Layout picker: posters, landscape cards, grid, hero or compact list.
+Sort: recent, alphabetical, randomized, unwatched or last viewed.
+Item count, artwork choice, labels, filtering and default action.
+Home or tab placement, duplication and live preview.
+Named layout presets and a restore-defaults mechanism.
+8. Kodi frontend mode versus Isolde frontend mode
+Behavior
+Isolde frontend
+Kodi frontend
+Home interface
+Isolde dashboard
+Kodi skin
+Browsing
+Isolde screens
+Kodi browsing
+Playback
+Kodi playback engine
+Kodi playback engine
+PseudoTV
+Integrated guide, if supported
+Kodi-native interface
+Settings / add-ons
+Native Kodi when required
+Native Kodi
+HDMI / apps
+Isolde launchers
+Isolde shortcut or launcher
+Switching modes changes the primary interface, not Kodi’s content database. Maintain a direct Open Kodi option for administrative and unsupported workflows; avoid replacing Kodi’s internal settings and add-on dialogs unnecessarily.
+9. Architecture and separation of concerns
+Layer
+Responsibility
+Media sources
+Kodi libraries, PseudoTV / PVR, apps, HDMI devices
+Collections
+Membership, classification, filtering, exclusions
+Presentation
+Tabs, widgets, order, artwork, sizes and layout
+Interaction
+Remote focus, Back behavior, launcher actions, playback return
+Keep source adapters separate from collections, and collections separate from widgets. This lets one saved layout work across different libraries; unresolved playlists should be offered as editable missing-source mappings instead of breaking the screen.
+10. Optional library profiles
+Everyday: HDMI inputs, apps, Continue Watching, Live TV and favorites.
+Cinema: art-forward movie recommendations and genre shelves.
+Family: child-focused collections and simple navigation.
+Custom: unrestricted configuration and community-shared layout preset support.
+Profiles represent layout and filtering presets, not separate Kodi databases. Permissions and real parental controls would be a separate security feature, not guaranteed by a Family layout alone.
+11. Recommended development sequence
+1. Component framework
+Create tab, widget, focus and layout configuration infrastructure using dummy data.
+2. Default dashboard
+Implement eight HDMI launchers, apps row and media/guide placeholders.
+3. Kodi library adapter
+Read media, artwork, collection metadata, watch state and playback controls.
+4. Collection engine
+Implement manual, rule-based and automatic shelves plus view-specific exclusions.
+5. Guide integration
+Validate PseudoTV data and build compact, expanded and full-screen guide modes.
+6. Customization editor
+Add source picking, editing, placement, layout presets and import/export.
+7. Dual frontend support
+Add Isolde/Kodi mode setting and dependable return-to-frontend behavior.
+12. Design rules and acceptance tests
+The first boot is useful without any custom configuration.
+All features are navigable using a remote; keyboard and mouse are optional.
+Eight physical inputs remain easy to reach, without cluttering every browsing view.
+Kodi stays the source of truth for library content and playback history.
+Collection exclusions affect browsing only, not files on disk.
+Guide expansion and playback return preserve position and focus.
+Kodi failures do not crash Isolde’s home screen.
+Different users can map the same layout to different media sources.
+Open design decision
+Should the eight HDMI inputs remain pinned to the top of Home, or be reachable from a persistent source dock on every Isolde page? Support both in the underlying launcher component so this does not become an architectural constraint.
+Recommendation: design Isolde as a customizable dashboard framework backed by a separate collection engine. Borrow the polish of Arctic Zephyr while keeping Kodi as a replaceable integration behind Isolde’s interface.
+
+
+13. Universal search and watch availability
+Product requirement: Isolde offers one unified movie and television discovery experience, but the user can switch web discovery ON or OFF directly from the search screen. The search toggle is remembered between sessions. Web OFF strictly searches Kodi only.
+
+Figure 4. Universal Search and title detail concept. Titles and availability categories are illustrative, not verified live offers.
+13.1 Search modes: exact contract
+Capability
+Web OFF
+Web ON
+Kodi movies and shows
+Yes
+Yes
+Kodi playlists, collections, tags and metadata
+Yes
+Yes
+Online title discovery
+No
+Yes
+Non-library titles
+No
+Yes
+Streaming and rental availability
+No
+Yes
+Requests to third-party search/metadata/provider APIs
+None
+Allowed
+OFF is an enforced network boundary for search, not merely a results filter. A Web OFF query must neither contact external search, metadata, or provider APIs nor display previously cached online results. It uses only titles and metadata already available from Kodi. If nothing matches, show “Not found in your Kodi library.” This restriction applies to the search subsystem; it does not globally disable unrelated Kodi services or other Isolde networking.
+13.2 Search flow and results
+Search opens from any Isolde tab or screen, preserving the user’s current focus and position. A clearly labeled Web toggle is on the search page.
+Typing “Stardust” proposes distinct movie identities (e.g., Stardust (2007) and Stardust (1974)), each with title, year, media type and poster when available. Only Kodi matches are eligible while Web is OFF.
+With Web ON, merge Kodi and online matches into a single result per distinct title; match reliably using TMDB/IMDb IDs where known, and cautiously fall back to title/year. Never merge remakes or identically named films.
+Selecting a result opens one title detail page with synopsis, artwork, metadata and available viewing actions. Kodi remains the source of truth for ownership, playability and watch progress.
+13.3 Watch actions and their meanings
+Watch Locally: Show only when a playable matching item is present in Kodi. Opens playback directly in Kodi and returns correctly to Isolde.
+Watch on [connected service]: Show when Isolde recognizes the app/account integration, current regional title availability is reported, and a supported launch route exists. Do not equate an installed app with an active subscription or entitlement.
+Available on [service]: Show a reported subscription, free, rental or purchase offer when online discovery is enabled, even if the service is not connected. Distinguish offers from confirmed entitlements.
+Unknown or unavailable: Explain when an online offer cannot be verified; do not fabricate provider availability, account access or deep links.
+13.4 Discovery services and safeguards
+Kodi JSON-RPC adapter: query local movies, TV shows, Kodi playlists, tags, library nodes and IDs. Use Kodi artwork and watched/resume status where provided.
+Online discovery adapter: investigate TMDB title search, details and watch-provider information as a starting point. Provider offers must be checked for region, freshness, attribution and API terms; JustWatch or a licensed availability source may be considered later.
+Result-matching engine: correlate external IDs first, then carefully reconcile alternative titles, release dates and media types. Deduplicate per distinct work without losing multiple viewing options.
+Provider/launcher adapter: map available offers to installed or configured streaming apps only where a platform-supported deep link/launch method exists; otherwise provide an informational listing.
+Settings: remembered Web toggle; preferred country/region; prefer local playback; selected connected services; optional watchlist. Disable external searches immediately when switching Web OFF.
+Privacy and resilience: minimal search telemetry, no transmission of local library titles while Web OFF, graceful degradation on API outage, clear stale-availability labeling, and no assumption that provider availability guarantees user access.
+13.5 Suggested modules
+services/search/{search-controller,kodi-adapter,online-discovery,identity-matcher,availability,provider-launcher,watchlist,cache}. UI components: SearchOverlay, SearchResults, TitleDetails, ViewingOptions and WebSearchToggle. Search/controller must block online adapter requests when Web OFF.
+13.6 Implementation sequence and acceptance tests
+MVP: local-only Kodi search for titles, shows, playlists and tags; open a result and play a locally owned movie. Validate zero outbound search requests.
+Add the visible, persistent Web ON/OFF toggle; enforce OFF at service/request layer, including cached online result visibility.
+Add online movie/TV identification with year disambiguation; deduplicate local and online representations by identity.
+Add region-aware provider data and separate “Watch Locally,” “Watch on connected service,” and “Available on” states.
+Add supported app launch/deep-link integrations, error states, watchlist, and searches by person/genre later.
+Test example: With Web OFF, searching Stardust lists only matching Kodi entities and makes zero third-party search calls. With Web ON, independently identifiable Stardust releases may appear, but no provider entitlement is assumed.
+13.7 Non-negotiable experience rules
+Search must feel native to Isolde, be navigable by remote, preserve the current screen, work without internet while Web OFF, and never force the user through Kodi’s home screen for local playback. Search is a discovery and routing layer, not a duplicate media database.
+
+
+14. Isolde Linguist — Offline Subtitle System
+Offline transcription and translation for your personal media library.
+Purpose. Let people enjoy Japanese, Korean, Mandarin, Cantonese, and other foreign-language films and television even when English subtitles cannot be found. Linguist operates locally once its optional language packages have been installed; no account, subscription, video upload, or cloud API is required.
+14.1 Experience and product language
+Brand the feature “Isolde Linguist.” Use clear functional labels: Find Subtitles, Translate Subtitles, Generate Subtitles, Subtitle Queue, and Edit Subtitles.
+Describe the processing transparently as local speech recognition and machine translation. Avoid vague AI branding without falsely claiming that automated models are not involved.
+Show language, source, quality status, and whether subtitles were found, translated, or generated. Keep the system optional and never start processing an entire library without permission.
+14.2 Offline processing priority
+Priority
+Source
+Action
+1
+Existing English track/file
+Use it immediately in Kodi.
+2
+Existing original-language subtitle
+Translate to English offline, preserving or adjusting timestamps.
+3
+No usable subtitles
+Extract audio, transcribe speech locally, then translate to English.
+Optional
+Hardcoded text in picture
+Explore offline OCR as a later feature; accuracy and timing require testing.
+14.3 Default settings
+Use existing subtitle tracks: ON. Prefer human-created English subtitles where available.
+Offline translation of existing subtitle files: available after local language-pack installation.
+Generate subtitles from audio: OFF until explicitly enabled; show processing cost and language before starting.
+Online subtitle repositories: separate opt-in toggle, OFF by default. When OFF, do not query external providers.
+Save generated .srt beside the media when writable; otherwise use a managed subtitle cache and instruct Kodi to load that file.
+Retain original-language subtitles and do not overwrite user or downloaded files; generated output should be clearly marked.
+14.4 Proposed interface
+On a movie or episode detail page: Subtitles → Available tracks → Find locally → Translate existing track → Generate from audio. Display status, target language, source language (with manual override), and the location where the subtitle will be saved.
+For a series: offer subtitle coverage (for example, 6 of 24 episodes), selection of missing episodes, queueing, pausing, cancelling, retrying, and a per-episode review/edit screen. Scheduling may prioritize idle time and automatically pause when a game or demanding task is active.
+14.5 Technical design
+Discovery: check Kodi subtitle streams, external subtitle files, and configured local paths; identify missing English tracks.
+Audio: use FFmpeg to extract a speech-friendly track when transcription is requested.
+Speech recognition: evaluate local models such as faster-whisper against Japanese, Korean, Mandarin, and Cantonese sample episodes.
+Translation: evaluate installed offline language packs/translation engines such as Argos Translate; verify actual language-pair coverage and quality rather than assuming all variants work well.
+Timing: preserve subtitle timecodes when translating .srt/.ass; use word or segment alignment when transcribing speech.
+Storage: save Unicode .srt with language suffix (for example, Episode 04.en.srt), preserve provenance and status, and avoid modifying the video file.
+Kodi integration: select or load generated subtitle files through supported Kodi mechanisms, with read-only library support via a local cache.
+Privacy/network: subtitle generation does not send media, extracted audio, transcripts, or text off-device. Package downloads are a separate setup operation, not part of playback.
+14.6 Known limitations
+Machine transcription and translation can mishear names, mistake singing or music for speech, omit overlapping dialogue, and mishandle historical titles or idioms. Cantonese and other regional varieties need individual validation. Local processing can be slow on CPU-only machines, especially for long episodes. These outputs should be editable and identifiable as machine-generated; no promise of professional-subtitle quality.
+14.7 Roadmap
+Linguist 1.0 — Existing files: Detect subtitle coverage; translate existing source-language .srt subtitles offline; preview and save English .srt; select tracks in Kodi.
+Linguist 1.1 — Missing-subtitle generation: Add audio extraction, local speech recognition, translation, status/progress, and cancellation.
+Linguist 1.2 — Library-scale tools: Batch seasons, pause for active gaming, correct timestamps/text, manage naming glossaries and retain corrections.
+Linguist 1.3 — Optional enhancements: Assess OCR for burned-in Chinese/Japanese/Korean subtitles and quality improvements based on real-world testing.
+14.8 Acceptance tests
+With no network, an episode with an existing Chinese .srt can be translated and watched in Kodi with English subtitles.
+With no network, a subtitle-free episode can produce a playable English .srt using locally installed processing components.
+Online subtitle services remain inactive unless separately enabled.
+Original media and preexisting subtitle tracks stay unchanged.
+Kodi can load a generated .srt even if the source video folder is read-only.
+A queued job can be paused or cancelled without losing completed subtitle files.
+
+
+15. Founding principle: The Generator Test
+If the world goes dark, Isolde stays on.
+Isolde is offline-first. Internet connectivity enhances the experience; it must never be required for the core entertainment system to operate. The acceptance question for each feature is: If the internet disappeared permanently and the house had only generator power, would this still work?
+No mandatory cloud dependencies
+Core startup, local Kodi browsing and playback, HDMI switching, local app launching, navigation, settings, artwork and metadata caches, watch history, and Isolde Linguist must function without external servers.
+Graceful degradation
+Weather, internet discovery, streaming availability, web apps, and other online services may become unavailable independently without breaking offline features.
+Local ownership and restoration
+Store layouts, collection definitions, settings, essential metadata, subtitles, and model packages locally. Support backup/export and installation or disaster recovery using pre-prepared offline media.
+Third-party limitations
+Isolde cannot make external subscriptions, cloud authentication, DRM-dependent games, or internet streaming work offline. Clearly distinguish those from Isolde-owned local functions.
+Acceptance test
+Disconnect network connectivity completely, cold boot, browse and play Kodi media, change HDMI sources, navigate apps and tabs, use local search, load saved artwork, run installed subtitle language packages, and restore a backed-up layout.
+16. Direct Playback Principle and playback preference
+When locally available media is selected from Home, Movies, TV episode shelves, custom collections, playlists, or local-only search, Isolde plays or resumes it immediately through Kodi. Do not intercept the action with a provider chooser, subscription offer, or redundant confirmation.
+Selecting a television series opens the episode list unless the UI action explicitly means Continue Watching or Play Next. An intentional View Details/Other Ways to Watch command remains available through the context menu.
+Always Play Locally When Available
+Settings → Media → Playback Preferences. Default ON. When a title is selected from web-enabled universal search or discovery, a verified playable Kodi copy launches immediately and the streaming-choice page is skipped. When OFF, discovery results may open a viewing-options page; local-library items still play directly.
+Selection
+Default behavior
+Home movie shelf / custom playlist
+Play local movie immediately
+Continue Watching
+Resume directly
+Television series tile
+Open episodes
+Individual episode tile
+Play or resume episode
+Web ON search + local match + preference ON
+Play local immediately
+Web ON search + local match + preference OFF
+Show viewing choices
+Web ON search + no local match
+Show available streaming/rental options
+Web OFF search
+Search Kodi only; no external requests
+Playback acceptance tests
+A film available locally plays from a Home widget with one select action.
+A film available locally plays from universal search when Always Play Locally is ON.
+Turning the preference OFF does not change direct playback from ordinary library shelves.
+Playback retains resume, subtitle, and watched state through Kodi.
+Web OFF contacts no external discovery endpoints.
+17. Founding principle: Everything Is a Component
+Isolde is not merely a different Kodi skin. It is the customizable entertainment environment that unifies Kodi, personal collections, live TV, applications, gaming, automation, and external HDMI hardware. The home screen shown earlier in this document is a DEFAULT PRESET, never a hardcoded application structure.
+17.1 Component and action model
+Any page, tab, row, panel, dock, and tile is defined by layout data and component configuration. The same component can appear multiple times with different content and behavior. No category—including Movies, TV, apps, or HDMI—is privileged in the layout engine.
+Component
+Example data / behavior
+HDMI launcher
+User-selected input number, command, icon, label, focus behavior
+App launcher
+Launch Steam, YouTube, Spotify, Kodi or any configured application
+Media shelf / grid
+Any Kodi playlist, tag, library node, filtered collection, episodes
+Guide widget
+Mini EPG, expandable guide overlay, full-screen guide
+Hero / featured
+Rotating local movies, art, details, one-click playback
+Information widget
+Time, weather (online optional), system state, calendar
+Shortcut / automation
+Assigned actions or local command sequences
+Decorative
+Art, text, background, dividers, layout composition
+17.2 Universal action registry
+All interactive components bind to standardized actions: Play Media, Resume Media, View Details, Open Collection, Change Tab, Launch App, Switch HDMI, Expand Guide, Open Settings, Run Automation, and Back. Allow click/OK, long press, and context-menu variants without forcing each widget author to recreate device logic.
+17.3 Freedom of layout, navigation, visual style, and behavior
+Layout: reorder, resize, hide, duplicate, combine and nest horizontal shelves, grids, columns, split panels, collapsible areas, floating widgets and persistent docks.
+Navigation: create/rename/delete tabs, categories, submenus and shortcuts; configure focus order and Back behavior.
+Content: bind a widget to any compatible Kodi playlist, tag, smart collection, live channel, HDMI input or app.
+Appearance: select wallpaper, fanart, artwork sources, fonts, icon packs, accents, animations and focus effects; keep remote readability.
+Behavior: configure actions for select, long press and context menu; use conditional visibility where sensible.
+Portability: import/export layouts, themes and profiles separately from media and source mappings.
+17.4 Simple Mode and Advanced Mode
+Simple Mode: select, move, resize, choose a content source, duplicate, and remove widgets using a TV remote. Present friendly defaults for people with unorganized libraries.
+Advanced Mode: compose pages, docks, nested navigation, custom widget templates, action bindings, source mappings and visibility rules. Do not require manual XML editing or installing a different Kodi skin to change structure.
+17.5 Presets, profiles, and transferable layouts
+Ship an excellent default preset: eight configurable HDMI buttons, applications, an expandable TV guide, Continue Watching, Movies, TV, and optional custom collection shelves. Offer Cinema, Family, and Everyday presets. Imported layouts must be able to remap missing sources to the recipient’s apps, HDMI inputs and Kodi library; unmatched widgets stay configurable rather than failing the entire screen.
+17.6 Reliability and recovery
+Keep Settings and a safe reset/recovery gesture accessible even if the home screen has no working buttons.
+Autosave versioned local backups of configurations; allow undo and restore to defaults.
+Validate actions and layout schemas before applying changes; isolate widget failures.
+Load and render layouts without internet and without Kodi available; show graceful offline/error states.
+Keep external HDMI switching and fundamental remote navigation reliable regardless of the selected frontend.
+17.7 Implementation roadmap additions
+Build declarative JSON layout and widget schemas plus a versioned configuration store.
+Create component renderer, remote focus/navigation engine, and universal action dispatcher.
+Implement eight-input source widget and generic application-launcher widget using the same action framework.
+Implement media/guide adapters and reusable shelves without Kodi coupling in the widget layer.
+Build Simple edit mode and Advanced editor, then themes, import/export and profiles.
+Test with a curated media library and a poorly organized library: both must look coherent immediately.
+Run the Generator Test on every layout, widget, action and recovery workflow.
+17.8 Acceptance criteria
+No user-visible row or tab in the default layout is hardcoded against relocation or deletion.
+An HDMI button can be created, renamed, assigned a command, and placed on any page.
+The same Kodi playlist can appear as both a home shelf and a dedicated tab.
+Users can navigate and rearrange the interface using only the remote.
+Users can recover settings after removing every default launcher.
+Layout export/import succeeds without copying media files and handles missing sources gracefully.
+Basic layout and switching remain operational without internet, consistent with the Generator Test.
+
+
+18. Seamless HDMI launch and return transitions
+Design principle: switching to a captured HDMI input should feel like opening the content inside its Isolde launcher tile. No capture application window, Linux desktop, third-party player controls, or intermediate setup screen should appear during ordinary use.
+18.1 Default animation: Expand
+Select: the user focuses and selects an HDMI tile (for example, Nintendo Switch). Isolde immediately dispatches the configured input-switch action to the RS-232 switch.
+Expand: the tile enlarges from its on-screen position into a full-screen video surface. Its rounded corners straighten while the surrounding interface fades.
+Reveal: as soon as a valid captured signal is ready, show live video inside the expanding/full-screen surface. A subtle source label (for example, Nintendo Switch · HDMI 1) can appear briefly and fade away.
+Return: the Isolde Home command restores the dashboard, ideally shrinking the video surface toward the originating tile and returning focus to it.
+18.2 Timing, readiness, and responsiveness
+Target a short, configurable animation of approximately 200–350 ms, without delaying signal acquisition to match the animation. Start the hardware switch and capture pipeline in parallel with the visual transition. The full-screen surface must remain stable if HDMI handshake, resolution renegotiation, or capture readiness takes longer. Display the selected source icon or still artwork until video is ready; do not show raw capture errors or a flash of the desktop. Never hold an old input’s picture and misrepresent it as the new input.
+18.3 Seamless integration implementation
+Use an Isolde-owned video surface backed by the capture pipeline (initial candidate: GStreamer on Linux), rather than exposing the capture backend’s own UI.
+Keep capture pipeline, video rendering, audio routing, RS-232 switching, and remote input routing separate behind a Source Session Controller.
+Apply an explicit state machine: Idle → Switching → Awaiting Signal → Playing → Returning, with Timeout/Error and Recovery paths.
+Map Home/Back behavior carefully so gameplay controls go to the HDMI device where supported while the dedicated Isolde Home action always returns to Isolde.
+Test video frames, audio startup, frame pacing, resolution changes, and input lag on actual capture hardware. UI animation cannot fix hardware-induced latency.
+Handle protected HDCP content as a hardware/authorization compatibility limitation; do not promise all sources can be captured.
+18.4 Customization settings
+Transition style: Expand (default), Fade, Slide, or Instant.
+Duration: adjustable within sensible bounds; include a reduced-motion/animations-off option.
+Source label: show briefly, always show, or hide.
+Fallback visual: device icon, configured artwork, or neutral blank surface while waiting for a signal.
+Return behavior: restore the originating tile and scroll position; if the tile moved or was removed, return to a stable home location.
+18.5 Acceptance tests
+Selecting each of the eight configured HDMI launchers starts switching immediately and shows a coherent expand-to-video transition.
+Slow signal acquisition does not expose the desktop, old input, capture software, or misleading video.
+Pressing Isolde Home restores the previous dashboard position and focus.
+Fade, Slide, Instant and reduced-motion settings work without changing source logic.
+A disconnected/unavailable source shows a branded error with Retry and Back; Isolde remains fully navigable.
+All switching and transition behavior works with internet unplugged (Generator Test).
+19. Managed capture backend and automatic installation
+Managed Backend Principle: Isolde is responsible for provisioning, configuring, launching, monitoring, and recovering its essential media engines. Kodi is the required local-media backend; GStreamer is the default required capture framework. Users should not need to install or operate separate capture software just to use HDMI inputs.
+19.1 Bundled installation and offline recovery
+The standard Isolde installer provisions Kodi and the GStreamer runtime with the capture, decoding, audio, and video-output plugins required by the supported Linux distribution.
+Ship an offline installation or recovery image containing tested dependencies and compatible packages; no account, download, or live repository is required to restore core functionality (Generator Test).
+Record component versions, validate package integrity, and update only from tested compatible versions. Updates are optional, user-controlled, and never required to keep using existing media or inputs.
+Install the capture engine even when no capture hardware is attached. Show HDMI capture setup as Not configured rather than failing installation.
+19.2 First-run capture setup
+Discover supported video and audio devices using Linux facilities such as V4L2 and the local audio subsystem; display detected devices with clear names.
+Offer automatic selection of a compatible capture device and an advanced manual override. Probe formats, frame rates, and audio availability without making performance promises before testing.
+Test live picture, audio, frame pacing, and responsiveness; save a known-working pipeline configuration locally.
+Provide a guided mapping for the eight RS-232 HDMI switch inputs, including label, icon, switch command, and expected capture device. Do not confuse eight upstream HDMI inputs with eight physical capture devices.
+Detect missing or disconnected hardware and show Retry, Configure, and Return Home actions without exposing a third-party application window.
+19.3 Normal operation: invisible capture engine
+Pressing an HDMI launcher starts its RS-232 switching command and opens Isolde’s own capture-backed video surface using the Expand transition from Section 18. GStreamer performs video/audio capture beneath the interface; users see no OBS window, GStreamer controls, shell, or Linux desktop. Isolde manages the session, overlays, volume, source label, and Home-to-return behavior.
+19.4 Backend responsibility and limits
+Default backend: GStreamer. OBS may be a diagnostic/prototyping tool but is not required for the finished user experience.
+Keep the backend behind a replaceable capture adapter; future support for another Linux engine should not require rewriting the home screen or HDMI widgets.
+A software install does not imply that every capture card supports Linux or meets the desired latency and resolution. Maintain a tested hardware compatibility list.
+HDCP-protected source capture is constrained by hardware and authorization; do not promise that protected streams can always be captured.
+Keep Kodi and GStreamer independent: failure or restart of either must not crash Isolde’s shell or disable ordinary local navigation.
+19.5 Settings and acceptance tests
+Settings → System → Components displays Kodi and GStreamer status, version, health, and repair/reconfigure actions; default UI hides implementation complexity.
+Settings → Inputs → Capture provides automatic/manual device selection, signal test, audio routing, and eight-input mapping.
+Fresh offline installation on a supported Linux machine provides a functioning Isolde interface, Kodi integration, and installed capture engine with network disconnected.
+With no capture device present, Isolde installs successfully; plugging in a supported capture device later enables configuration without reinstalling.
+Selecting any configured HDMI tile reveals live feed through Isolde’s integrated transition; Home reliably returns to the originating dashboard position.
+A missing signal, backend crash, or incompatible format produces an Isolde error and recovery path without exposing underlying application windows.
+
+
+3. Media access, Borrowed, subscriptions and achievements
+Source file: Isolde_Plan-borrowed.docx
+Isolde — My Library, Borrowed & Unified TV Guide
+Status: Product and implementation plan
+Scope: Isolde's unified media catalog, cross-provider live television guide, source-aware recordings, recommendations, subscriptions, and achievements.
+Guiding idea: My Library is what stays when the internet goes out. Borrowed is everything you can enjoy while the doors are open.
+1. Product vision
+Isolde assigns media to two underlying access classifications, not two mandatory pages, tabs, or separate catalogs:
+My Library: User-controlled media and files accessible independently of a third-party streaming entitlement. Kodi-managed local movies, television, music, games, and home videos belong here; so do compatible files on removable drives or user-controlled LAN shares, with offline availability accurately indicated.
+Borrowed: Content accessible through outside services: active streaming subscriptions, free ad-supported services, authorized provider cloud DVR recordings, temporary catch-up programs, and titles saved for later through those services. Access depends on the provider, the user's entitlement, territory, and availability window.
+A title can have both a local copy and one or more Borrowed sources. It should appear as one logical title with multiple ways to play, rather than unnecessary duplicates. Borrowed does not mean downloaded, locally retained, or legally owned.
+Isolde does not interrogate where users obtained files placed in their watched folders. It does not market new streaming subscriptions or DRM-restricted purchases. It can use and display services a user has already connected, and answer explicit searches with informational availability across other services.
+2. Main navigation and presentation
+Users may create any page layout with Isolde's interface builder. Neither My Library nor Borrowed is a required page. The following are optional sample destinations and widgets, not a prescribed navigation structure:
+My Library — locally controlled movies, series, home videos, music, and games; custom categories and shelves.
+Borrowed — saved, recorded-in-provider, and recommended titles accessible via connected services.
+Live TV Guide — a consolidated electronic program guide (EPG) across supported services and personal PseudoTV channels.
+Recordings — scheduled, in progress, completed, failed, and provider-managed cloud recordings. Each carries a precise storage/access label.
+Search — unified search with local-first behavior and source availability details.
+Subscription Manager — renewal dates, user-entered prices, detected Isolde usage, cancellation help, and review decisions.
+Achievements — user-controlled, optional entertainment trophies and collection milestones.
+A shelf filtered to Borrowed can show widgets like Continue Watching, Cloud DVR, Saved for Later, From Your Active Subscriptions, Leaving Soon (when verified), and Airing This Week. None of these rows should require users to sign up for another service.
+2.1 Page-builder integration: access classes, not pages (required)
+Authoritative UX requirement: The unified title catalog, playback-source records, and access entitlements are independent of user-created pages and shelves. The terms My Library and Borrowed describe how a title is accessible, never where the title must be displayed. Users can mix both types in the same shelf or separate them into any arrangement.
+Every media shelf, carousel, poster grid, recommendation row, and dynamic collection widget must offer composable rules:
+Sources / access: all currently playable media, local only, Borrowed only, chosen providers, chosen folders, local recordings, provider DVR, or a combination.
+Content: movie / episode / show / music / other supported media; genre, tags, franchise, country, release period, studio, collection, user rating, watched state, and other available metadata.
+Availability: currently playable, offline-ready, included in an active subscription, provider-recorded, and other supported states.
+Organization: alphabetical, recently added, recently watched, random, user order, custom ranking, and recommendations; limits and exclusions.
+Placement: shelves can be reused on arbitrary user-defined pages, including a one-page all-in-one interface, separate Movies/TV/Music pages, or genre-specific pages. Navigation widgets link to pages without enforcing content classes.
+Example configurations:
+User layout
+Example shelf behavior
+One combined Movies page
+Show local films beside Netflix and provider-DVR films with no duplication
+Separate My Library and Borrowed pages
+Source-filter two otherwise identical poster grids
+Musicals page
+All available musicals regardless of source
+Kids page
+Only approved content from selected local folders and selected active providers
+Personal TV page
+PseudoTV channels plus user-selected supported live providers
+One title, multiple access paths: If the same title exists as a local file and on three streaming services, show a single catalog title in combined shelves, with its local source preferred for playback if configured. Source badges/details remain available, but need not clutter every poster.
+2.2 Graceful availability changes and offline behavior
+Internet disconnected: Titles accessible only through online Borrowed sources quietly disappear from dynamic shelves filtered to currently playable media. Local files and truly offline-ready material stay present. Do not show blank poster slots, dramatic alerts, or an unsolicited offline warning.
+Entitlement expired / service disconnected / title removed: Re-evaluate all access paths. A title remains visible if another playable source exists; otherwise it quietly falls out of currently available dynamic shelves.
+Connectivity or entitlement restored: Eligible Borrowed titles reappear automatically in their former rule-based shelf positions; no manual rebuild needed.
+Manual collections, watchlists, history, and achievements: Keep their saved title references and records even when access disappears. They may optionally display unavailable titles as unavailable, or use a configurable show available only filter. Never delete metadata, watch history, or user-created collections simply because access is lost.
+Stale access information: Do not pretend cached streaming availability is confirmed current. If access cannot be validated, use an honest status and avoid promising playback. When offline, exclude online-only content from playable shelves regardless of cached entitlement.
+No forced UI: The user can choose access labels on posters, hide them until details are opened, or filter by access class. No mandatory My Library/Borrowed home navigation.
+Required storage model: keep title, access_source, entitlement, shelf_definition, and saved_collection_membership as separate logical entities. Dynamic shelf results are calculated from source/availability and metadata; saved lists persist independently of access. Do not duplicate the underlying title merely because it belongs to multiple shelves.
+2.3 Core visual cues
+Use concise, factual labels:
+Label
+Meaning
+Local file
+Isolde can access a user-controlled playable file
+Offline ready
+File and playback dependencies are available without the internet
+Active subscription
+User has marked or verified current access; title is available within authorized region
+Provider DVR
+Recording is held by the provider, not a portable file
+Local recording
+Recording is a file on the user's storage, created from an eligible source
+Replay / catch-up
+Provider allows a time-limited replay, not a recording
+Saved for later
+Personal bookmark; does not guarantee future playback
+Unavailable
+No currently confirmed playable source
+Do not describe cloud DVR captures, DRM-bound purchases, or streaming access as user-owned files.
+3. Unified television guide
+3.1 Objective
+Build a Fire TV-style consolidated guide where users can browse channel schedules from supported connectors (for example, YouTube TV, Plex free channels, Roku's free channels where supported, live channels from other user-configured sources, OTA if installed, and Isolde's own PseudoTV channels).
+Important: Each provider's guide data and playback/recording controls depend on official or otherwise authorized interfaces. Do not assume that because a service offers a guide in its own app, Isolde can ingest that guide or automate its DVR. An app-launch-only connector is a valid fallback.
+3.2 Guide features
+Unified time grid, with channel logos, numbers/aliases, program metadata, and progress indicators.
+Sources and categories as filters; favorites, hidden channels, reordering, and custom groups.
+Individual channel time zones normalized to local time.
+Current and upcoming shows; up to seven days where source data permits, shorter otherwise.
+Movies-only view and Movies Airing This Week discovery shelf.
+Details panel for programs, including available episodes, rerun times, playback capabilities, and recording options.
+Search across guide listings, including cross-references to titles already held in My Library.
+Clear freshness timestamps and honest states when EPG feeds fail or become stale.
+Gamepad, television remote, keyboard, and accessibility-friendly focus navigation.
+3.3 Source capabilities contract
+Every connector must declare capabilities, not merely a provider name:
+source_id: example-provider
+capabilities:
+  live_playback: true
+  epg_read: true
+  epg_days: 7
+  deep_link_playback: true
+  cloud_dvr_schedule: false
+  cloud_dvr_list: false
+  catchup_playback: true
+  local_recording: false
+  entitlement_status: user_confirmed
+  title_availability: true
+These are example fields, not verified capability claims about any named provider. Connector implementations must substantiate support independently.
+4. Recording: one interface, multiple real capabilities
+The guide can present the concept of recording uniformly, but it must not promise a universal Record button on unsupported providers.
+Source supports...
+Isolde action
+Result location
+Eligible local recording from an authorized accessible stream/tuner
+Record to disk
+Local Recordings; optionally My Library after review/import
+Supported provider/cloud DVR API
+Record with provider
+Borrowed → Provider DVR
+Supported catch-up/replay
+Save replay
+Borrowed → Replay/Catch-up
+Only bookmarking/launching
+Save to Borrowed
+Borrowed → Saved for Later
+None of the above
+Watch in provider app when available; no record promise
+No recording created
+4.1 Scheduling and recording rules
+Schedule from a program details page only when a real, supported source action exists.
+Show whether the recording is local or provider-hosted before confirmation.
+For local recordings: run a background DVR service independently of the UI; allocate storage; handle overlap, missed starts, broken feeds, retention settings, and file-integrity checks.
+For cloud DVR: use provider-approved controls only. Show confirmation, expiration, and available playback handoffs where the provider exposes them.
+Do not silently treat a streaming watchlist as a recorded episode.
+If a recording is unavailable, explain the limitation and offer a supported action such as saving the title.
+Do not bypass DRM, intercept protected application streams, or infer permission to record from mere technical accessibility.
+Local recordings should retain their source and recording date metadata. Legal permissions for retention depend on the source and context; do not automatically equate a recording with unrestricted permanent ownership.
+4.2 Statuses
+scheduled, recording, complete, partial, failed, canceled, expired, access_lost, unsupported.
+A completed provider DVR entry still resides in Borrowed and should never be shown as a local video file.
+5. Shared title catalog and entitlement model
+A single canonical title can have several source records and separate playback entitlements. Model the following independently:
+Title: Metadata (ID, title, year, type, season/episode, external IDs, art).
+Source: Kodi location, provider name, channel, stream/app deep link, provider recording ID.
+Entitlement/access: Local playable file, active subscription, free authorized streaming, provider DVR, catch-up, expired, unknown.
+Availability: Region, verification timestamp, valid dates, subscription plan, quality, restrictions.
+User relationship: Watch progress, list membership, favorites, ratings, achievement events.
+Possible minimal schema:
+MediaTitle(id, media_type, title, year, external_ids, metadata)
+MediaSource(id, media_title_id, connector_id, source_type, locator, metadata)
+AccessState(id, media_source_id, state, region, valid_from, valid_until, checked_at)
+UserMediaState(user_id, media_title_id, progress, rating, watchlist, last_watched)
+Recording(id, source_id, media_title_id, kind, state, start, end, output_file, provider_recording_id)
+Subscription(id, provider_id, billing_provider, next_renewal, cycle, cost, status, user_verified_at)
+AchievementEvent(id, user_id, achievement_id, unlocked_at, evidence)
+Avoid automatic deletion of personal watch history or list entries when external entitlements expire. Preserve the title; update or hide its playable route.
+6. Playback routing
+Default priority, adjustable by user:
+Local playable copy, using Kodi or another selected local player.
+Existing active subscription with verified title inclusion in the user's normal authorized region.
+Existing accessible provider DVR/catch-up recording.
+Other supported free, authorized playback sources the user has elected to include.
+A title selected directly from My Library plays locally without showing an unnecessary provider chooser. Search can offer multiple playback methods and may obey Always play locally if I have it.
+If a provider connection expires or a title leaves a catalog, do not show a dead Watch button. Recheck availability where supported, indicate uncertainty where not, and offer saved-list retention rather than upselling.
+7. Recommendations and explicit search
+7.1 Passive recommendations
+Recommendation sources may include:
+The user's My Library, including forgotten and unwatched media.
+Titles included in their already-active streaming subscriptions, within their normal authorized region.
+Saved titles, cloud DVR programs, and catch-up content in Borrowed while access is active.
+Free services the user deliberately enables, when current availability can be verified.
+Do not proactively recommend a title solely because it requires a new subscription, premium upgrade, rental, or DRM-restricted purchase. Do not proactively suggest foreign-region VPN catalogs. The VPN manager remains separate and user-controlled.
+Use clear explanations like "In your library," "Included with your Netflix subscription," or "Saved in your provider DVR." Avoid optimizing for hours watched; emphasize relevance, discovery, and user-defined modes.
+7.2 Explicit search
+If the user actively searches for a title, provide factual availability wherever supported:
+Local file(s) and locally cataloged discs.
+Connected active subscriptions.
+Other streaming services.
+Rental and digital purchase options, informational only—no promotional or upsell treatment.
+Optionally foreign-region availability as reference information, without encouraging VPN circumvention.
+If web search is disabled, search local Kodi metadata and locally cached allowed data only. Availability claims must disclose when stale or unknown.
+8. Subscription Manager integration
+8.1 Core reminder
+When a renewal is within three days (configurable) and Isolde has detected zero uses through Isolde during the current billing period, show an optional reminder:
+You haven't opened [service] through Isolde during this billing period. Your subscription renews on [date]. Want to review it?
+Never claim that a service was unused on the user's phone or other TVs if Isolde cannot observe those devices. Streaming-app launches and playback may be trackable at different precision levels depending on the connector.
+8.2 Details and controls
+Subscription name, cost, billing cycle, renewal date, and billing party.
+Manual entry for billing information; supported integrations only where authorized.
+Clearly distinguished "not opened," "playback detected," and "usage unknown" states.
+View subscriptions together, estimate cost per detected use without moralizing, and surface upcoming renewals.
+Review/cancellation instructions tailored to billing provider; never assert cancellation without confirmation.
+Snooze, hide, mark intentionally retained, and adjust notification lead time.
+Optional celebratory achievement for a completed review or verified cancellation, without shaming someone who keeps a subscription.
+If an entitlement expires, remove affected titles from playable recommendations but retain saved titles in Borrowed history.
+9. Gamification and achievements
+This feature is playful, optional, local-first, and built to celebrate enjoyment rather than compulsive engagement. Do not use streak losses, pressure to watch before deadlines, or artificial urgency.
+9.1 My Library achievements
+Hidden Gem — Watch an overlooked local title for the first time.
+Shop Your Shelves — Watch ten previously unwatched local movies.
+The Dusty Shelf — Enjoy something added to the library at least a year ago.
+Cinephile — Watch 100 distinct films.
+Time Traveler — Watch movies from ten release decades.
+Auteur — Watch ten films from one director.
+The Completionist — Finish a complete locally available film series.
+Off the Grid — Enjoy multiple local titles while the internet is unavailable.
+Careful Curator — Verify a second backup of selected personal media.
+9.2 Borrowed achievements
+Worth the Admission — Enjoy ten distinct titles through a subscription that was already active.
+Cloud Collector — Save or schedule the first supported provider DVR recording.
+Just in Time — Watch saved content during a verified availability period; never pressure users with countdowns.
+Channel Surfer — Explore programming from a selection of connected channels.
+The Prudent Patron — Review a renewal and intentionally choose whether to keep or cancel.
+Good Value — Use an existing subscription to watch several personally saved titles without adding another service.
+9.3 Presentation
+Trophy Room with badges, tiers, milestone dates, progress, and favorite pinned achievements.
+Optional subtle unlock animation, such as Isolde's black rose blooming gold.
+Retroactive awards based on reliable Kodi history or imported history, with provenance noted.
+User-created challenges based on metadata, playlists, collections, and source types.
+Profile-specific achievements stored locally and exportable with the configuration.
+Source-dependent tracking: do not falsely award a "watched" achievement from a mere app launch.
+Gamification principle: Celebrate what users enjoyed or deliberately managed, not money spent, subscription accumulation, watch-time maximization, or daily-login streaks.
+10. Optional modules and settings
+Each item can be disabled independently:
+Show Borrowed on home screen.
+Include connected streaming titles in recommendations.
+Include selected free streaming providers in guide and recommendations.
+Show live TV guide.
+Show recording and cloud DVR controls.
+Show achievements and celebration animations.
+Enable subscription renewal notices and set reminder lead time.
+Show expired items in Borrowed history.
+Save and restore guide/source preferences across offline backups.
+No internet connection, subscription service, EPG feed, or cloud sign-in is required for Kodi local playback, navigation, custom layouts, personal channels, and local achievements.
+11. Offline-first and privacy requirements
+Treat all online integrations as optional enhancements; the OS and local library remain functional offline.
+Cache only information users elect to retain, and give users control over deletion and export.
+No mandatory Isolde account or telemetry.
+Minimize credentials, use OS-backed protected storage where available, and never store provider passwords in plaintext.
+Keep provider API keys separate from library metadata and exports.
+Explain precisely which viewing activities Isolde can observe and which it cannot.
+Don't inspect file provenance or demand purchase receipts for user-supplied files.
+Access and recording capabilities must follow actual provider APIs, terms, and permissions; never invent integrations.
+Respect source-specific content licensing and retention rules.
+12. Technical implementation architecture
+Suggested internal components:
+Isolde UI / Page Builder
+  ├── Unified Title Catalog ─ Kodi Library + Provider Catalog Adapters
+  ├── Shelf Query Engine ──── Source / Entitlement / Metadata Filters
+  ├── Optional Local View ─── Access filter: My Library
+  ├── Optional Borrowed View ─ Access filter: Borrowed
+  ├── Unified TV Guide ────── EPG Normalizer ← Provider Connectors / PseudoTV
+  ├── Program Details ─────── Recording Capability Router
+  ├── Recordings view ─────── Local DVR Adapter / Provider DVR Adapters
+  ├── Recommendations ─────── Local + Active-Entitlement Recommender
+  ├── Subscription Manager ─ Billing/Usage/Reminder Engine
+  └── Trophy Room ────────── Local Achievement Event Store
+Connector tiers:
+Tier A — Full integration: guide, reliable current entitlement/availability, supported playback links, cloud recording actions if available.
+Tier B — Read and launch: verified guide/catalog data and app handoff but no DVR controls.
+Tier C — Launch only: service can be opened from Isolde; no implied catalog or recording sync.
+Connectors should explicitly publish their tier, capabilities, permissions, known limitations, and latest successful synchronization time.
+13. Rollout plan
+Phase 1 — Honest unified catalog
+Implement shared title IDs, access classifications (My Library vs Borrowed), source labels, local-first playback, active-subscription declarations, and manual bookmarks. Build the unified shelf query engine and configurable per-widget filters first; My Library and Borrowed are optional preset filters, never mandatory pages. Include graceful offline removal/restoration of Borrowed titles in mixed shelves.
+Phase 2 — Guide foundation
+Integrate PseudoTV and one legally accessible guide feed; create EPG adapter contract and cross-provider guide UI. Add favorites, filters, movies-airing-this-week, and stale-guide warnings.
+Phase 3 — Recording capability router
+Integrate existing eligible local DVR backends and any confirmed official provider-DVR controls; expose appropriate record/save/replay actions only when supported. Add schedule tracking and result status.
+Phase 4 — Borrowed recommendations and subscription review
+Use confirmed active entitlements and watchlists, add billing-period activity tracking, renewal reminders, and verified availability handling.
+Phase 5 — Trophy Room and advanced personalization
+Ship retroactive local achievements, Borrowed-specific achievements where usage evidence exists, custom rules, profiles, celebrations, and exportable achievements.
+14. Acceptance criteria
+A Kodi-local movie works while disconnected from the internet even if its streaming-source record has expired.
+One title available locally and through multiple providers appears as one logical title with multiple clearly labeled sources.
+Borrowed never calls a cloud DVR item a local file.
+A channel with no supported recording interface does not show a misleading Record button.
+A connected provider with guide access but without recording support still contributes guide information if integration allows it.
+A canceled/expired subscription is removed from proactive playable recommendations without deleting the user's watchlist or history.
+Explicit search can show other services informationally; passive recommendations don't push new spending.
+"Unused this billing period" notifications describe only observable usage through Isolde and are fully configurable.
+Achievement unlocks are backed by actual history or evidence, not assumed from app launches.
+Offline operation preserves all core local library, PseudoTV, achievements, and UI behavior.
+Every integration accurately states its capabilities and constraints.
+Users can entirely hide Borrowed, guide, recording, and gamification sections without degrading local media playback.
+A user can put local, subscription, and cloud-DVR titles on one Movies page in a unified shelf; alternatively they can create separate access-specific or genre-specific pages with the same widget system.
+Disconnecting the internet removes online-only titles from available media shelves without gaps, warnings, deleting title records, or altering local items; reconnecting restores eligible titles automatically.
+Canceling a subscription removes only titles whose last playable source was that entitlement; films also available locally remain visible and playable.
+User-curated collections, watchlists, and history retain unavailable title references and can separately show or hide inaccessible media based on the collection's filters.
+The page builder never forces My Library or Borrowed navigation items, and every dynamic media widget can filter by source, genre, availability, and chosen providers.
+
+Product north star
+My Library is what stays when the internet goes out. Borrowed is everything you're enjoying while the doors are open.
+Isolde should make both enjoyable and convenient while always being honest about which media the user controls, which access is temporary, and which actions a connected service actually supports.
+
+
+4. Persistent Live TV engine
+Source file: Isolde_Live_TV_Engine_Implementation_Plan(1).docx
+ISOLDE
+Live TV Engine & Persistent Channel Guide
+Implementation specification  |  Isolde 0.0.1.1 planning  |  October 2026
+Purpose: Replace PseudoTV-style lengthy startup indexing and unstable schedules with a fast, offline-first, user-owned cable-TV experience. The electronic program guide (EPG) is both a viewer and the central management interface for building channels.
+1  Product principles
+Offline-first: local channels, guide, programming rules, playback, and schedule persistence work without internet.
+Guide-first: Add Channel is directly accessible from the EPG; no detour through Kodi playlist editors.
+Persistent broadcast clock: stopping Isolde never resets a real-time channel’s schedule.
+Instant-read design: a cached guide is visible without a scan or global schedule regeneration.
+User ownership: exportable channel definitions, custom artwork, lineup order, playlists, and schedules.
+Separation of concerns: Kodi may index/play media, but Isolde owns channel rules, schedules, and EPG state.
+2  TV Guide experience
+The guide displays station numbers, station logo and name, current/next programs, progress bars, and a horizontal timeline. A visible “+ Add Channel” row or button is available in the guide, and can be reached with a remote. Opening a program offers Watch, Details and context-sensitive options. Guide browsing must never trigger library indexing.
+2.1  Add Channel choices
+Guide action
+Destination
+Add Channel from Local
+Create a channel and open smart playlist rule editor immediately; creation of the playlist and channel is handled by Isolde.
+Add Channel from Service
+Choose IPTV/M3U, XMLTV-backed channel, network tuner, supported provider integration, or direct compatible stream.
+2.2  Remote and accessibility expectations
+D-pad navigable; Back always returns to the guide with focus preserved.
+Menu / long-press on a channel opens Edit Rules, Edit Schedule, Rename, Logo, Channel Number, Reorder, Duplicate, Disable and Delete.
+Clearly distinguish a channel context menu from the currently playing application’s menu.
+Large TV-distance labels, high contrast focus states, screen reader names and no mouse dependency.
+Drag-and-drop ordering may be available with pointer input, but remote-based Move Up/Down must also exist.
+3  Add Channel from Local: precise user flow
+1. Select local source: Choose Movies, TV Shows, Music Videos, Mixed Media or a saved playlist.
+2. Name and label: Set station name, preferred number, optional logo, color and description. Name can be prefilled and adjusted after channel creation.
+3. Open rule editor: Show smart playlist conditions immediately. A saved playlist is automatically created and attached to the channel; do not require the user to visit Kodi.
+4. Preview matches: Display count and sample titles; allow exclusions and logical groups before saving.
+5. Choose sequencing: Episode order, fixed schedule, seeded shuffle, continuous shuffle, rotation between series or custom blocks.
+6. Create and start guide: Save atomically, fill future unassigned schedule slots, then return to the channel in the guide.
+3.1  Smart playlist builder capabilities
+Rule fields: source, library path, media type, title/series, studio/network, genre, tags, year/range, rating, play count, watched state, duration, language, actor, director and custom metadata where available.
+Operators: is, is not, contains, does not contain, starts with, before, after, in range, one of, missing/present.
+Arbitrary nested AND/OR groups and negative exclusions.
+Saved templates, duplicate rule set, editable station presets, and live inclusion preview.
+Mixed movie/episode channels supported natively even when the backend cannot express them as one Kodi smart playlist.
+Rules stored in Isolde’s canonical format; import/export Kodi-compatible smart playlist representations when feasible; no silent data loss when incompatible.
+Smart playlist content changes trigger targeted refresh, not a destructive schedule rebuild.
+3.2  Example: Cartoon Network
+Field
+Example
+Channel
+Cartoon Network
+Media
+TV Shows
+Rule
+Studio / Network contains “Cartoon Network”
+Exclusions
+Optional: exclude watched shows, specific folders or tags
+Sequence
+Seeded shuffle once, then maintain generated order
+Schedule mode
+Real-time channel; continues advancing while Isolde is off
+4  Add Channel from Service
+Offer Live TV / IPTV (M3U playlist and optional XMLTV), tuner/PVR integration, supported streaming provider integration, and custom direct stream URL. Discover provider channels only through supported authorized interfaces and integrations. Respect stream DRM, entitlements, and provider terms. A live service with its own EPG should retain the source broadcast times rather than receive a synthetic local schedule.
+Provide channel mapping (stream source ID ↔ EPG ID), timezone handling, guide-refresh policy and channel lineup merging.
+Allow users to override logo, display number and display name without overwriting source identification.
+Present source failure, authentication failure and unavailable stream as distinct states.
+Offline: keep cached listings and lineup configuration, but do not promise live remote playback without connectivity.
+5  Schedule behavior: critical requirement
+A real-time local channel has an authoritative persisted schedule with timestamped program slots. If Isolde is switched off at 6:45 PM and reopened at 7:15 PM, a show scheduled at 7:00 PM begins approximately 15 minutes in (subject to actual player seek support and title duration), not at its beginning. No elapsed off-time requires simulated playback.
+Mode
+Behavior
+Real-time television (default)
+Wall-clock aligned; progresses when Isolde is off; tune into elapsed program position.
+Pause when off
+Store cursor and position; resume the virtual channel at its paused point.
+Fixed broadcast
+Time-of-day/day-of-week blocks; calendar-aligned programs.
+Continuous shuffle
+Generate future slots from an explicitly stored random seed; committed slots remain unchanged.
+5.1  Scheduling options
+Show-level episode order, season boundaries, next-unwatched versus full rerun cycles.
+Rotating show blocks, time-of-day/day-of-week restrictions, seasonal specials and holiday dates.
+Repetition cooldowns; blacklist and whitelist; filler/shorts; configurable movie/episode interleaving.
+Duration calculated from indexed runtime and optional bumpers/commercial breaks; never silently shift already committed slots without user action.
+Changing rules normally affects only unscheduled future slots; “Regenerate Future Schedule” intentionally replaces future slots after confirmation.
+Handle daylight saving changes using timezone-aware instants; display local civil time but store UTC timestamps.
+5.2  Missing and changed media
+When a scheduled file is removed, relocated or becomes temporarily inaccessible, repair only affected slot(s) with a clearly defined policy: substitute next eligible item, show an unavailable slate, or skip to the next valid slot. Preserve unaffected program IDs and times. If a file is found under a new path, reconcile by stable library identity or content fingerprint when available.
+5.3  Offline clocks and persistence
+Store all scheduled start/end instants and timezone identifiers in an embedded database. After startup, compare local wall clock with last-known shutdown time; if the system clock has moved substantially backward or forward, prompt for clock correction or permit manual schedule synchronization. Never require online time service for basic operation.
+6  Engine architecture
+Component
+Responsibility
+Media adapter
+Read Kodi local catalog and other supported media catalogs; incremental changes only.
+Canonical media index
+Normalized metadata, availability and stable IDs for filtering and matching.
+Rule engine
+Evaluate editable playlist conditions and preview matches.
+Channel registry
+Persist channel metadata, types, logos, numbers, rule references and ordering.
+Scheduler
+Append only future slots on rolling horizon; persist shuffle seeds and continuity state.
+EPG query service
+Read cached time-window entries quickly; independent of heavy scanning.
+Playback coordinator
+Resolve active slot and seek offset, handle tuning, transitions, errors and external players.
+Provider adapters
+Load live streams, provider catalogs and external EPG data where authorized.
+Backup/migration service
+Export/import versioned channels, rules, schedule snapshots and assets.
+6.1  Suggested data model
+Use SQLite in WAL mode as the default on-device store. Suggested core tables: media_items, media_sources, channels, channel_rules, channel_assets, channel_schedule_modes, schedule_slots, schedule_generation_state, guide_sources, guide_channels, service_auth_refs, channel_order, playback_positions, index_jobs and schema_migrations.
+Each schedule slot should include immutable ID, channel ID, media/provider item ID, UTC start/end timestamps, generation version, status, optional content metadata snapshot, optional bumper slots and source/origin. Unique constraints must prevent overlapping committed slots on a channel. Local secret tokens should be stored via OS secret storage, not in cleartext exports.
+6.2  Scheduling algorithm
+1. At creation, evaluate rules against cached catalog and produce a stable candidate set.
+2. Derive a per-channel seeded ordering and store its scheduling cursor.
+3. Write slots transactionally until the configurable rolling horizon (default proposal: 7 days) is filled.
+4. On subsequent starts, read existing slots directly; append only beyond the horizon or repair changed portions.
+5. On a channel tune, locate the slot whose [start, end) contains now; seek to now - start.
+6. On library update, record invalidation of affected candidate sets and future uncommitted slots rather than reindexing the full catalog.
+7. Use optimistic versioning/transactions to avoid two simultaneous scheduler workers changing the same channel.
+7  Performance and reliability targets
+These are proposed acceptance goals, not benchmarked results. Measure on the actual Isolde target PC and with realistic large media libraries.
+Measure
+Target
+Cached guide first paint
+≤ 1 second after guide view opens, under normal local hardware conditions
+Startup global playlist rebuilds
+0 in normal operation
+Index operation
+Incremental delta processing after initial import
+Guide browsing
+No blocking disk-wide scans; progressively render visible time window
+Recovery
+Clean restart after power loss with committed slots retained
+Scalability test
+Benchmark 100+ custom channels and tens of thousands of media items
+8  TV guide as a widget in the page builder
+Expose Live TV Guide, Now Playing on Channels, On TV Right Now carousel, Favorite Channels, Channel Preview, Mini Guide and Upcoming Programs as composable widgets. Every widget takes filters (channel IDs, tags, category, local/service), layout attributes, focus behavior and theme settings. Widgets share the same cached schedule store and should not independently regenerate EPG data.
+9  Backup, portability and privacy
+Export versioned portable package with channel metadata, rule definitions, scheduling policy, optional schedule snapshot and artwork; never require cloud sign-in.
+Import with missing-media remap flow and channel-number collision resolution.
+No telemetry requirement; no provider credentials in plaintext export.
+Maintain locally accessible diagnostics: last indexing delta, last schedule append, channel generation errors and missing media report.
+10  Acceptance tests
+Turn off Isolde for 12 hours: real-time guide advances correctly and tuning seeks into the current program.
+Repeated restarts: a shuffle channel’s already committed seven-day lineup does not change.
+Create Cartoon Network from the EPG without leaving the guide; playlist and schedule exist after one save.
+Remove one scheduled episode: only the affected slot(s) change, according to user repair policy.
+Create a mixed movie/TV station with nested AND/OR rules despite Kodi smart-playlist limitations.
+Disconnect internet: local guide, HDMI navigation and local channel playback still work.
+Import external M3U + XMLTV: map channel IDs, retain source times and show connection failures clearly.
+Move station number via remote and reorder channels without mouse.
+System-clock drift and daylight-saving change: no overlapping or duplicate UTC slots.
+Power loss during schedule extension: database rolls back partial changes cleanly.
+11  Delivery phases
+Phase
+Scope
+1 · Foundation
+Channel registry, SQLite, Kodi index adapter, persistent scheduler, fast EPG reads.
+2 · Guide creation
+Add Local, advanced smart rule builder, preview, guide context menu and reordering.
+3 · Scheduling depth
+Fixed blocks, rotations, cooldowns, seed persistence, gap repair, pause-when-off.
+4 · Services
+M3U/XMLTV, tuner/provider adapters, source status and EPG mapping.
+5 · Customization & portability
+Page-builder widgets, backup/import, themes, instrumentation and scalability tuning.
+12  Non-goals and design constraints
+Do not build the new engine as a thin PseudoTV wrapper, impose an always-online dependency, silently reset schedules on startup, treat catalog scan as a precondition of showing cached guide, require Kodi UI navigation for playlist creation, or assume every subscription service can supply embeddable live channels. Preserve lawful service access requirements and distinguish remote-provider availability from locally held media.
+Core promise: Isolde gives the viewer the practical experience of owning and operating their own television lineup, with stable schedules, flexible rules, and predictable performance.
+
+
+5. Kodi integration and playback
+Source file: Isolde_Kodi_Integration_Plan(1).txt
+PROJECT ISOLDE: KODI INTEGRATION PLAN
+Isolde 0.0.1.1 — Technical Roadmap
+October 2026
+ 
+OBJECTIVE
+Transform Kodi from a separate media application into the media infrastructure powering Isolde's entertainment features.
+ 
+Isolde owns browsing, navigation, home-screen widgets, and system controls. Kodi continues managing media, playback, watch history, artwork, PseudoTV, PVR, and add-ons.
+ 
+The target experience: users should not have to visit Kodi's home screen to enjoy their Kodi libraries. Preserve the option to open Kodi's native interface for advanced functions.
+ 
+1. ARCHITECTURE
+ 
+Isolde user interface
+  - Home, Movies, Television, Live TV, Widgets
+       |
+       v
+Isolde Media Bridge
+  - API client, data cache, artwork, playback coordinator, window management
+       |
+       v
+Kodi
+  - Media database, video player, PseudoTV, PVR, add-ons
+       |
+       v
+Local media / NAS / supported streams
+ 
+Kodi exposes a JSON-RPC API for library queries, playback, and GUI control, as well as notifications about state changes. The Media Bridge translates Kodi information into Isolde-friendly data and commands.
+ 
+2. DEVELOPMENT PHASES
+ 
+PHASE 1 — Establish the connection
+[ ] Enable Kodi's local JSON-RPC HTTP service.
+[ ] Build a reusable Isolde API client.
+[ ] Check connection and Kodi version.
+[ ] Handle disconnections and automatic reconnects.
+[ ] Keep the API restricted to localhost unless remote access is intentionally required; protect credentials.
+Milestone: Isolde can communicate reliably with Kodi without user intervention.
+ 
+PHASE 2 — Integrate the media library
+[ ] Retrieve movie and television metadata.
+[ ] Retrieve posters, fanart, and thumbnails.
+[ ] Build Continue Watching and Recently Added widgets.
+[ ] Add movie, show, and episode browsing.
+[ ] Cache metadata for responsive navigation.
+Milestone: Kodi's library can be browsed from Isolde.
+ 
+PHASE 3 — Unify playback
+[ ] Launch selected movies or episodes through Kodi.
+[ ] Bring Kodi's video window to the foreground.
+[ ] Coordinate play, pause, seek, and volume controls.
+[ ] Restore Isolde after playback ends or is stopped.
+[ ] Preserve resume positions and watched status.
+Milestone: Playing a movie feels native to Isolde.
+ 
+PHASE 4 — Bring in PseudoTV
+[ ] Determine whether the existing PseudoTV channels are exposed through Kodi's PVR API.
+[ ] Retrieve channel numbers, logos, and electronic program guide (EPG) data.
+[ ] Create an On Air Now widget.
+[ ] Create a full-screen remote-navigable TV guide.
+[ ] Implement channel switching.
+[ ] Test schedule synchronization across restarts.
+Milestone: Personalized live TV is navigable from Isolde.
+ 
+PHASE 5 — Polish and reliability
+[ ] Make the interface remote-friendly.
+[ ] Handle sleep, wake, crashes, and display changes.
+[ ] Conceal unnecessary Kodi interface transitions.
+[ ] Retain an Open Kodi option for settings and add-ons.
+[ ] Add diagnostics and recovery controls.
+Milestone: Kodi functions as a dependable Isolde subsystem.
+ 
+3. KODI JSON-RPC METHODS
+ 
+VideoLibrary.GetMovies       — Movies, recommendations, and metadata
+VideoLibrary.GetTVShows      — TV series library
+VideoLibrary.GetEpisodes     — Episode browsing and continue-watching data
+Player.Open                  — Start playback
+Player.GetProperties         — Playback progress and state
+Player.PlayPause             — Remote playback controls
+PVR.GetChannels              — Live TV channels
+PVR.GetBroadcasts            — EPG listings
+GUI.ActivateWindow           — Navigate Kodi GUI windows
+JSONRPC.Ping                 — Connection test
+ 
+Example backend JavaScript client (HTTP service assumed on localhost:8080):
+ 
+async function kodiRequest(method, params = {}) {
+  const response = await fetch("http://127.0.0.1:8080/jsonrpc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params })
+  });
+ 
+  if (!response.ok) {
+    throw new Error(`Kodi HTTP error: ${response.status}`);
+  }
+ 
+  const data = await response.json();
+  if (data.error) throw new Error(data.error.message);
+  return data.result;
+}
+ 
+const library = await kodiRequest("VideoLibrary.GetMovies", {
+  properties: ["title", "year", "art", "resume", "playcount", "runtime"],
+  limits: { start: 0, end: 50 }
+});
+console.log(library.movies);
+ 
+Run requests through Isolde's local backend rather than exposing credentials in an unrestricted web frontend. Adjust host, port, and authentication to the Kodi installation.
+ 
+4. PLAYBACK USER EXPERIENCE
+ 
+1. Browse movies inside Isolde.
+2. Select a movie with the remote.
+3. Isolde tells Kodi to start playback.
+4. Kodi's video player takes the foreground.
+5. Remote buttons control Kodi playback.
+6. On completion or explicit exit, Isolde regains focus at the previous screen and selection.
+ 
+Important: do not interpret every Back button press as a request to leave Kodi. Back can dismiss a menu or subtitle overlay. The input handler should distinguish navigation from stopping or exiting playback.
+ 
+Keep Kodi running between videos rather than launching and closing it for each title. This reduces start latency and leaves background services and add-ons available.
+ 
+Kodi JSON-RPC does not itself embed the Kodi renderer inside Isolde. Native-feeling integration can initially use Kodi's full-screen video window with managed focus and transitions. True embedded rendering is a substantially separate engineering problem.
+ 
+5. PSEUDOTV INTEGRATION
+ 
+Preferred path: read channels and program guide through Kodi's PVR JSON-RPC methods if the installed PseudoTV configuration exposes them. The documented PseudoTV Live setup can use IPTV Simple as a PVR backend, but the exact installed configuration must be tested.
+ 
+Fallback: implement a dedicated PseudoTV adapter reading generated playlist/guide data when accessible. Avoid direct changes to PseudoTV itself.
+ 
+Keep PseudoTV's channel definitions, schedules, and existing channel collection intact. Isolde replaces only the presentation layer.
+ 
+6. SUGGESTED SOURCE TREE
+ 
+isolde/
+├── core/
+│   ├── navigation/
+│   ├── input/
+│   └── window-manager/
+├── services/
+│   └── kodi/
+│       ├── client.ts
+│       ├── connection.ts
+│       ├── library.ts
+│       ├── playback.ts
+│       ├── artwork.ts
+│       ├── events.ts
+│       └── pseudotv.ts
+├── widgets/
+│   ├── ContinueWatching/
+│   ├── RecentlyAdded/
+│   ├── OnAirNow/
+│   └── FeaturedMovie/
+├── screens/
+│   ├── Movies/
+│   ├── Television/
+│   ├── LiveTV/
+│   └── MediaDetails/
+└── config/
+    └── kodi.json
+ 
+Assumption: Isolde is built with a JavaScript/TypeScript UI and a local backend. Adapt the directory structure to the actual technology stack.
+ 
+Widgets should call the Media Bridge, not Kodi directly, to centralize caching, authentication, reconnection, and compatibility.
+ 
+7. VERSION MILESTONES
+ 
+Isolde 0.0.1.1 — Foundation
+[ ] Connect Isolde to Kodi.
+[ ] Read movies and TV shows.
+[ ] Display posters and artwork.
+[ ] Launch playback from Isolde.
+[ ] Return to Isolde after playback.
+ 
+Isolde 0.0.1.2 — Library widgets
+[ ] Continue Watching widget.
+[ ] Recently Added widget.
+ 
+Isolde 0.0.1.3 — Live TV
+[ ] PseudoTV channel and EPG integration.
+ 
+Isolde 0.0.2.0 — Full media UI
+[ ] Complete Isolde media browsing experience.
+ 
+These are proposed scopes, not verified completion states or delivery dates.
+ 
+8. ENGINEERING RULES
+ 
+1. Do not fork Kodi unless unavoidable; preserve upstream compatibility.
+2. Do not modify Kodi's media database directly; use supported APIs.
+3. Kodi downtime or a crash must not disable the whole Isolde interface.
+4. Preserve an Open Kodi option for settings, add-ons, and troubleshooting.
+5. Check Kodi's API version at startup and handle version differences deliberately.
+6. Keep control services and credentials local and secured.
+ 
+9. FIRST PROOF OF CONCEPT — ISOLDE PLAYS A MOVIE
+ 
+[ ] Connection test: Kodi responds to JSONRPC.Ping.
+[ ] Fetch test: retrieve 10 movies and their artwork.
+[ ] Playback test: select a movie and start it in Kodi.
+[ ] Return test: stop playback and restore Isolde to the previous location.
+ 
+Success criterion:
+Launch Isolde, select a movie, watch it, and return to the same Isolde screen without navigating Kodi's home interface.
+ 
+RECOMMENDED IMPLEMENTATION ORDER
+ 
+Keep Kodi running behind Isolde. Communicate through the localhost JSON-RPC service. Use Kodi for full-screen playback, and Isolde for browsing and widgets. Validate the playback lifecycle first; implement PseudoTV and the full guide only after that foundation is dependable.
+ 
+END OF PLAN
+
+
+6. Unified games library
+Source file: Isolde_Games_Library_Plan(1).docx
+Isolde | Unified Games Library
+Product & implementation plan  •  October 2026
+Decision: Games should behave like Movies—a cover-art-driven, remote-friendly personal library—while hiding emulator complexity behind each Play action.
+1. Design principles
+Games are the primary objects; consoles, franchises, tags and collections are ways to browse them.
+One underlying catalog powers every shelf. Multiple appearances do not duplicate a game or its files.
+All essential discovery, art, metadata, launching and saves work offline. Internet enrichment is optional.
+Work equally well with five games or five thousand; never require the user to curate an empty shelf.
+Match Movies navigation: familiar page layout, Browse All, search, details, resume, and customizable rows.
+2. Proposed Games landing page
+Top navigation: Games  |  Search  |  Browse All  |  Collections  |  Settings (within Games).
+Shelf
+Behavior
+Continue Playing
+Only appears when played games exist; ordered by most recent session.
+Favorites
+Pinned manually; hidden if empty.
+PSP Games
+Platform-filtered shelf; user may rename, move or hide.
+All Games
+Cross-platform, deduplicated catalog; sorted by recently added, title, or custom order.
+Franchises / Series
+Rows or library view for e.g., Kingdom Hearts, Zelda, Final Fantasy.
+Tags / Smart shelves
+e.g., Couch Co-op, Cozy, RPG, Under 30 Minutes, Party Games.
+Recently Added
+Auto-populated; optional.
+Shelves are horizontal carousels navigable with D-pad; “View All” opens a full grid with sort/filter. The library starts with a compact default set and only displays shelves that have content. Let users reorder or disable shelves and add new ones.
+3. Organize by both console and intellectual property
+These dimensions solve different questions: “What can I play on PSP?” and “What games do I own in the Kingdom Hearts universe?” Neither should be the only hierarchy.
+Platform: original release platform / owned edition (PSP, GameCube, PS2, etc.).
+Franchise (IP): Kingdom Hearts; subseries optionally groups closely related titles.
+Genre & tags: RPG, rhythm, co-op, kids, short-session, favorites; user-defined tags.
+Collections: manual lists spanning platforms (e.g., “Play with Friends,” “Childhood Favorites”).
+Smart collections: saved rules combining fields (e.g., PSP + RPG + not completed).
+Treat “franchise,” “series,” and user tags as separate metadata. A game may belong to multiple collections but has one canonical catalog record per owned edition. Where multiple platform editions exist, group them on a single game-detail page with a “Choose Version” option—or allow separate cards as a preference.
+4. Game detail and launch experience
+Each cover opens a details view with large art, synopsis, franchise, platform(s), tags, play history, and a prominent Play button. If only one configured version exists, Play launches immediately; if multiple versions are installed, offer a default edition and a version selector.
+Isolde resolves game → edition → local file/installed PC title → launcher profile → emulator or native executable.
+On exit, return to the exact shelf and scroll position in Isolde.
+Display controller compatibility and configurable input profile before first launch; don’t force setup on every play.
+Distinguish resume (launch the game) from emulator save-state load; unsupported save states should not be assumed.
+5. Catalog data model (future-proof)
+Entity
+Fields / purpose
+Game
+Stable ID; title, sort title, summary, franchise, genre, custom tags, artwork IDs.
+Edition / installation
+Game ID; platform, region, release, executable/ROM path, emulator profile, availability, preferred flag.
+Franchise / collection
+Stable ID; display name, art, membership or filter rules.
+Play activity
+Game or edition ID; last played, playtime where reliable, favorite, completion status.
+Shelf definition
+Name, position, source query/filter, sort, limit, visibility and display style.
+Asset cache
+Local artwork, metadata provenance and fallbacks, stored without cloud dependency.
+Use a local SQLite database to index the library; keep game files in user-controlled folders. Paths can change without losing personal tags or play history by separating stable catalog IDs from installation locations. Store a backup/export of catalog metadata and settings.
+6. Import and metadata pipeline
+Add library folders per platform or PC launcher. Scan in the background on demand or at startup, with throttling.
+Detect files and propose game matches using platform + filename; never silently overwrite manual corrections.
+Resolve duplicates and variations (region, disc, revision); show a review queue for uncertain matches.
+Download metadata/cover art only when explicitly enabled; cache everything locally for offline use.
+Always allow manual game creation, cover upload, franchise assignment, tagging and editing.
+If artwork is missing, render a clean title tile rather than breaking a shelf.
+7. Ten-foot TV UX requirements
+Full controller/D-pad navigation with a visible focus state; no mouse required.
+Back consistently returns to prior view, retaining selected game and scroll position.
+Grid filters: platform, franchise, genre/tag, installed/not installed, favorites, completed; sorts: title, added, last played.
+Virtual keyboard search works offline across titles, alternate titles, franchises and tags.
+Progressive loading, thumbnail caching and virtualization for libraries with thousands of entries.
+Allow an optional “Show platform badge” so mixed shelves stay understandable.
+8. Rollout phases
+Phase
+Deliverable / success check
+1 — Prototype
+Static Games screen reusing Movies shell; configurable shelf definitions and TV focus/navigation.
+2 — Local catalog
+SQLite records, import and manual edits; working All Games, platform shelves and filters.
+3 — Launching
+Launcher adapters, emulator configuration, return-to-Isolde behavior and Xbox controller profiles.
+4 — Organization
+Franchise/series links, smart shelves, manual collections, mixed-platform editions, favorites.
+5 — Polish & scale
+Offline artwork cache, backup/restore, duplicate review, 5,000-item navigation/performance tests.
+9. Acceptance criteria
+A PSP game automatically appears in PSP Games and All Games, and in a franchise shelf if tagged, without multiple imports.
+Adding two editions of one title never loses edition-specific launch settings.
+A disconnected Isolde can search, browse, see covers, launch, and access local save data.
+Five games produce a nonempty, clean homepage; 5,000 remain fast enough for TV navigation.
+The user can create a “Kingdom Hearts” shelf and a “Couch Co-op” shelf without touching folder paths or emulator menus.
+10. Decisions to defer until PC hardware is known
+Which high-end emulators are practical; any Linux-specific capture or controller edge cases; playtime reporting where emulators do not expose it; and whether PC game storefronts should be indexed through plugins or manually linked. None of these should block the library UI or data model.
+Recommended default: launch the Games page with Continue Playing, Favorites, Recently Added, PSP Games (when populated), and All Games. Make Franchise and Tag shelves one-click additions. This avoids a wall of empty categories now without limiting growth later.
+
+
+7. Video services and downloaded files
+Source file: Isolde_Video_Services_Downloads_Plan(1).docx
+Isolde | Video Services & Download Support
+Implementation specification  •  Optional Linux apps  •  Offline-first local media
+DECISION: Support FreeTube as an optional YouTube-oriented Linux application, Parabolic as an optional advanced download manager, and native download-folder ingestion in Isolde. No custom YouTube client or fully integrated video-service interface is required for the initial release.
+1. Product goals
+Let the user choose whether and what to download; Isolde should not remove or discourage supported download controls.
+Use mature Linux applications instead of recreating a web-video service client.
+Store downloaded media as ordinary, user-accessible files in user-selected folders.
+Automatically bring completed downloads into Isolde’s indexed local library, custom pages and optional Live TV channels.
+Preserve Isolde’s offline-first design: previously saved compatible files remain playable without network, account login or the downloading application.
+Keep video service integrations optional; core media playback and library functions never depend on them.
+2. Supported application roles
+Component
+Role
+Required?
+FreeTube
+Optional browsing, subscriptions, history and ordinary in-app downloading. Linux desktop application, launched from Isolde.
+No
+Parabolic
+Optional dedicated Linux download manager with format, audio and batch workflows supported by the installed version.
+No
+Isolde Download Watcher
+Monitors configured folders, detects finished files, indexes them and exposes them to local collections.
+Core feature
+Kodi / selected playback backend
+Plays locally stored files via Isolde’s regular library path.
+Playback dependency as configured
+Integrations should be version-aware: application download behavior, paths, formats and Flatpak permissions can vary. Do not hardcode undocumented integrations or promise one-click handoff before it is tested.
+3. User experience
+3.1 Installing / launching
+In Settings → Apps → Supported Apps, display FreeTube and Parabolic as optional supported Linux programs.
+Where packaging is supported, provide an explicit install action, version/status indicator, and launch shortcut. Never silently install optional applications.
+Let users place either application anywhere in the page builder (app tiles, shortcut widgets, favorite apps, menu pages).
+Provide a simple Return to Isolde remote shortcut, consistent with other external apps.
+3.2 Download folders
+In Settings → Media → Watched Folders, let the user add arbitrary folders (including FreeTube or Parabolic download directories).
+Offer readable suggestions for common locations but let the user browse and choose; do not assume ~/Videos/FreeTube exists.
+For each folder: enable/disable watch, media category, recursive scan option, destination library/shelf, and optional automatic Live TV eligibility.
+Allow multiple paths, including external disks, with clear offline/unmounted status and no deletion of metadata merely because a drive is temporarily missing.
+3.3 Completed downloads
+Use filesystem notifications where available, plus a low-frequency reconciliation scan for missed events.
+Never index partial or still-growing files. Check temporary extensions, stable file size and successful media probing before publishing an item.
+Use ffprobe or equivalent to confirm file readability and extract duration, video/audio streams, language and subtitles.
+Deduplicate using stable file identity and optional hashes; avoid duplicate items if a file is moved or renamed.
+Expose newly added files in My Library, Recent Additions, arbitrary dynamic shelves and eligible personal television channels.
+4. Minimal integration architecture
+FreeTube / Parabolic → user-selected destination folders → Isolde filesystem watcher → completed-file validation → local media index → library shelves / page-builder widgets / Live TV Engine → playback.
+4.1 Data model
+Entity
+Suggested fields
+WatchedFolder
+id, path, recursive, enabled, source_label, media_category, on_missing, indexing_options
+LocalMediaItem
+id, canonical_path, fingerprint, title, duration, media_type, streams, source_folder_id, imported_at, status
+IngestionJob
+id, path, detected_at, last_size, probe_state, retries, error
+SourceApp
+app_id, display_name, launch_command, installation_status, optional_download_folder
+4.2 Privacy and security
+No Isolde account or service sign-in required just to manage local downloads.
+Never transmit local watch histories, file paths, or downloaded media lists as telemetry by default.
+For Flatpak installations, request access only to explicitly selected folders; display permission failures with actionable recovery steps.
+Do not run download utilities with elevated privileges or execute arbitrary commands derived from downloaded filenames.
+Handle untrusted metadata and filenames defensively; sandbox thumbnail/media parsing where feasible.
+Respect applicable copyright and service requirements while keeping local-library organization neutral toward file provenance.
+5. Download behavior and optional handoff
+Phase 1 should rely on each app’s built-in download interface. A user opens FreeTube, selects its own Download action, chooses a destination, and Isolde imports the finished file. Parabolic remains an optional separate app for advanced workflows.
+Future enhancement (not launch-blocking): a context action such as “Download with Parabolic” can be added only when a reliable supported URL handoff is verified. Avoid fragile screen scraping or assumptions about undocumented command-line interfaces.
+6. Offline-first behavior
+Previously downloaded videos remain in the same user-accessible directory even if the app is uninstalled.
+No internet or service API call is required to display or play indexed local media.
+Loss of internet hides or marks unavailable online views, not local downloads.
+Library index can rebuild from local files and backup files without FreeTube, Parabolic, Google sign-in or a third-party metadata endpoint.
+If the source file is removed by the user, surface the missing-file state without silently deleting watch history.
+7. Acceptance criteria
+Given a completed FreeTube video in a selected watched folder, Isolde discovers it and makes it playable in a local shelf without manual library rebuild.
+Given a partially downloading video, Isolde does not show a playable library item until the file is complete and valid.
+Given an external drive temporarily disconnected, Isolde preserves media metadata and restores availability when reconnected.
+Given no internet access, Isolde can launch, browse and play previously saved compatible files.
+Given two monitored applications depositing the same media file, Isolde does not create duplicate records for the same local asset.
+Given a channel driven by a watched folder, newly ingested content is eligible for future slots without resetting the channel’s established broadcast schedule.
+Given a user disabling watched-folder monitoring, Isolde stops indexing new files there without deleting them.
+8. Implementation phases
+Phase
+Deliverable
+1 — Baseline
+Supported-app launchers, app status, optional install guidance, folder selection UI.
+2 — Local intake
+Watcher, completion detection, media probing, metadata store, import error states.
+3 — Library connection
+Dynamic shelves, search, user metadata overrides and configurable library classification.
+4 — TV integration
+Allow downloads in Live TV smart-playlist rules without changing existing scheduled slots.
+5 — Convenience
+Optional validated Parabolic handoff, richer remote mapping, service-specific enhancements.
+9. Non-goals for initial release
+No native recreation of the FreeTube/LibreTube/NewPipe browsing user interface.
+No obligation to bundle Android compatibility or run LibreTube itself.
+No dependency on YouTube extraction backends for Isolde core services.
+No silent conversion of downloads into DRM-restricted, application-private storage.
+No automatic publishing, sharing or uploading of downloaded files.
+10. References / verification points
+Official application information: FreeTube — https://freetubeapp.io/ ; Parabolic — https://github.com/NickvisionApps/Parabolic . Confirm installation methods, download directory behavior, package permissions and supported command-line hooks against the versions adopted during implementation.

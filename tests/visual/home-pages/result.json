@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "profile": "d4f98a49-b961-457c-8ee1-5814de66b6bb",
+  "page_id": "page-794f27f1-df6e-474a-9e0c-27a7ab3c5b19",
+  "settings_only_creation_and_customization": true,
+  "home_tab": true,
+  "direct_launcher_destination": true,
+  "navigation_modes": [
+    "left",
+    "top",
+    "none"
+  ],
+  "real_kodi_episode_play_pause_stop_return": true,
+  "skin_includes_pages": true,
+  "media_unchanged": true,
+  "visual_review_required": true,
+  "executable": "/home/isolde-dev/.local/share/isolde-appliance/releases/161ea2e866cae3d1f982416e/bin/isolde"
+}

@@ -1,0 +1,318 @@
+{
+    "categories": [
+        {
+            "id": "widgets",
+            "name": "Widgets"
+        },
+        {
+            "id": "apps",
+            "name": "Apps"
+        },
+        {
+            "id": "music",
+            "name": "Music"
+        },
+        {
+            "id": "inputs",
+            "name": "Inputs"
+        },
+        {
+            "id": "system",
+            "name": "System"
+        }
+    ],
+    "components": [
+        {
+            "categoryId": "widgets",
+            "componentType": "clock",
+            "id": "clock",
+            "kind": "widget",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "kind": "clock",
+                "provider": "shell",
+                "schemaVersion": 1
+            },
+            "widgetType": "clock"
+        },
+        {
+            "action": {
+                "appId": "movies",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "movies",
+            "categoryId": "apps",
+            "componentType": "launcher",
+            "id": "movies",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "movies",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "shows",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "shows",
+            "categoryId": "apps",
+            "componentType": "launcher",
+            "id": "shows",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "shows",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "youtube",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "youtube",
+            "categoryId": "apps",
+            "componentType": "launcher",
+            "id": "youtube",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "youtube",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "switch",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "switch",
+            "categoryId": "inputs",
+            "componentType": "launcher",
+            "id": "switch",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "switch",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "switch2",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "switch2",
+            "categoryId": "inputs",
+            "componentType": "launcher",
+            "id": "switch2",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "switch2",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "steam-machine",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "steam-machine",
+            "categoryId": "inputs",
+            "componentType": "launcher",
+            "id": "steam-machine",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "steam-machine",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "app-store",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "app-store",
+            "categoryId": "system",
+            "componentType": "launcher",
+            "id": "app-store",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "app-store",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "desktop-mode",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "desktop-mode",
+            "categoryId": "system",
+            "componentType": "launcher",
+            "id": "desktop-mode",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "desktop-mode",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        },
+        {
+            "action": {
+                "appId": "settings",
+                "schemaVersion": 1,
+                "type": "launch-app"
+            },
+            "appId": "settings",
+            "categoryId": "system",
+            "componentType": "launcher",
+            "id": "settings",
+            "kind": "app",
+            "schemaVersion": 1,
+            "size": "standard",
+            "source": {
+                "id": "settings",
+                "kind": "app",
+                "provider": "apps",
+                "schemaVersion": 1
+            }
+        }
+    ],
+    "composition": {
+        "enabled": true,
+        "headerMode": "navigation",
+        "initialTab": "home",
+        "moviePage": "page-794f27f1-df6e-474a-9e0c-27a7ab3c5b19",
+        "navigation": [
+            {
+                "id": "home",
+                "name": "Home"
+            },
+            {
+                "action": {
+                    "pageId": "page-794f27f1-df6e-474a-9e0c-27a7ab3c5b19",
+                    "type": "open-page"
+                },
+                "id": "link-3557ccc1-f9d9-445e-a418-71cf02f494f2",
+                "name": "My page"
+            }
+        ],
+        "schemaVersion": 1
+    },
+    "pages": [
+        {
+            "id": "page-794f27f1-df6e-474a-9e0c-27a7ab3c5b19",
+            "layout": {
+                "categories": [
+                    {
+                        "id": "library",
+                        "name": "Shows",
+                        "presentation": {
+                            "height": 550,
+                            "libraryColumns": 4,
+                            "libraryKind": "shows",
+                            "libraryLayout": "grid",
+                            "libraryView": "all",
+                            "padding": 12,
+                            "panelOpacity": 0.3,
+                            "radius": 16,
+                            "variant": "library"
+                        }
+                    }
+                ],
+                "components": [
+                ],
+                "composition": {
+                    "columns": 1,
+                    "enabled": true,
+                    "fit": false,
+                    "gap": 16,
+                    "headerControls": [
+                        "settings",
+                        "edit"
+                    ],
+                    "headerMode": "identity",
+                    "identity": "My page",
+                    "margin": 24,
+                    "pageNavigation": "none",
+                    "schemaVersion": 1,
+                    "sidebarWidth": 200
+                },
+                "schemaVersion": 2,
+                "theme": {
+                    "backgroundEnd": "#101014",
+                    "backgroundStart": "#19191e",
+                    "brandVisible": false,
+                    "focusColor": "#c994a5",
+                    "fontFamily": "DejaVu Sans",
+                    "homeColumns": 3,
+                    "motionEnabled": true,
+                    "mutedColor": "#aaa5af",
+                    "selectedColor": "#353039",
+                    "spacing": 20,
+                    "surfaceColor": "#202126",
+                    "textColor": "#f5f1f3",
+                    "tileRoundness": 0.18,
+                    "typographyScale": 1
+                }
+            },
+            "name": "My page"
+        }
+    ],
+    "schemaVersion": 2,
+    "theme": {
+        "backgroundEnd": "#101014",
+        "backgroundStart": "#19191e",
+        "brandVisible": false,
+        "focusColor": "#c994a5",
+        "fontFamily": "DejaVu Sans",
+        "homeColumns": 3,
+        "motionEnabled": true,
+        "mutedColor": "#aaa5af",
+        "selectedColor": "#353039",
+        "spacing": 20,
+        "surfaceColor": "#202126",
+        "textColor": "#f5f1f3",
+        "tileRoundness": 0.18,
+        "typographyScale": 1
+    }
+}

@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "theme": {
+    "backgroundStart": "#0e1018", "backgroundEnd": "#0e1018", "brandVisible": false,
+    "surfaceColor": "#28262f", "selectedColor": "#48333f", "focusColor": "#bd8198",
+    "textColor": "#eeebf0", "mutedColor": "#aaa4b2", "typographyScale": 1,
+    "homeColumns": 4, "spacing": 16, "tileRoundness": 0.18, "motionEnabled": false
+  },
+  "composition": {
+    "schemaVersion": 1, "enabled": true, "columns": 2, "margin": 38, "gap": 24, "fit": true,
+    "showProfile": false, "initialTab": "home",
+    "navigation": [
+      { "id": "home", "name": "Home" },
+      { "id": "movies", "name": "Movies", "action": { "type": "launch-app", "appId": "movies" } },
+      { "id": "television", "name": "Television", "action": { "type": "launch-app", "appId": "shows" } },
+      { "id": "music", "name": "Music", "sections": ["sources"] },
+      { "id": "games", "name": "Games", "sections": ["sources"] },
+      { "id": "kids", "name": "Kids", "sections": ["continue"] }
+    ]
+  },
+  "categories": [
+    { "id": "banner", "name": "Featured", "presentation": {"variant":"banner", "columns":1, "height":300, "span":1, "showHeading":false} },
+    { "id": "continue", "name": "Continue Watching", "presentation": {"variant":"media", "columns":3, "height":265, "span":1, "subtitle":"Pick up where you left off"} },
+    { "id": "sources", "name": "Your Sources", "presentation": {"variant":"source", "columns":4, "height":170, "span":2} },
+    { "id": "tonight", "name": "On Tonight", "presentation": {"variant":"summary", "columns":1, "height":135, "span":2} }
+  ],
+  "items": [
+    { "id":"hero", "kind":"action", "name":"Featured artwork", "categoryId":"banner", "customLogo":"artwork/reference.jpg", "action":{"type":"launch-app","appId":"shows"}, "presentation":{"label":"adobe", "imageCrop":{"x":146,"y":205,"width":400,"height":219}} },
+    { "id":"once", "kind":"action", "name":"Once Upon a Time", "categoryId":"continue", "customLogo":"artwork/reference.jpg", "action":{"type":"launch-app","appId":"shows"}, "presentation":{"progress":0.64,"imageCrop":{"x":51,"y":539,"width":146,"height":94}} },
+    { "id":"glee", "kind":"action", "name":"Glee", "categoryId":"continue", "customLogo":"artwork/reference.jpg", "action":{"type":"launch-app","appId":"shows"}, "presentation":{"imageCrop":{"x":216,"y":534,"width":158,"height":104}} },
+    { "id":"ring", "kind":"action", "name":"The Fellowship of the Ring", "categoryId":"continue", "customLogo":"artwork/reference.jpg", "action":{"type":"launch-app","appId":"movies"}, "presentation":{"imageCrop":{"x":389,"y":534,"width":158,"height":104}} },
+    { "id":"switch", "kind":"action", "name":"Switch", "categoryId":"sources", "action":{"type":"launch-app","appId":"switch"}, "presentation":{"icon":"gamepad"} },
+    { "id":"switch2", "kind":"action", "name":"Switch 2", "categoryId":"sources", "action":{"type":"launch-app","appId":"switch2"}, "presentation":{"icon":"gamepad", "surfaceColor":"#693b50"} },
+    { "id":"steam", "kind":"action", "name":"Steam PC", "categoryId":"sources", "action":{"type":"launch-app","appId":"steam-machine"}, "presentation":{"icon":"display"} },
+    { "id":"hdmi4", "kind":"action", "name":"HDMI 4", "categoryId":"sources", "action":{"type":"settings","section":4}, "presentation":{"icon":"hdmi"} },
+    { "id":"guide", "kind":"action", "name":"Your Personal TV Guide", "categoryId":"tonight", "action":{"type":"settings","section":4}, "presentation":{"icon":"tv", "subtitle":"Browse channels and tonight's lineup"} }
+  ]
+}

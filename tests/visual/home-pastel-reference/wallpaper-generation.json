@@ -1,0 +1,9 @@
+{
+  "tool": "built-in image_gen.imagegen",
+  "operation": "edit",
+  "reference": "reference.jpg",
+  "saved_asset": "wallpaper.png",
+  "original_generated_filename": "exec-e4187aba-0a3a-4983-b930-763b968d7169.png",
+  "prompt": "Edit target: the provided 1280x720 interface reference. Produce ONLY a clean 16:9 landscape wallpaper, preserving its pastel pink peach lavender sunrise sky, warm sun low on the left, cloud sea, distant blue mountain ridges on the right, and foreground trees at lower left. Remove ALL user interface elements everywhere: every word, branding, icons, buttons, circles, panels, cards, logos and clock. Inpaint the underlying scenery naturally where these were. No text, no symbols, no borders, no UI whatsoever. Preserve the scene's soft luminous colors and composition closely. This image will be used as a wallpaper behind real configurable interface components.",
+  "inspection": "Visually inspected: clean scenery, no UI, no text; pastel sunrise and cloud/mountain composition retained. Generated pixels are a reconstruction, not a byte-exact extraction."
+}

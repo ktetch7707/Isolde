@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "packageId": "retro-arcade",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Retro Arcade",
+  "description": "A demonstration game-library integration.",
+  "category": "Games",
+  "publisher": "Isolde Curated",
+  "capabilities": ["input.gamepad"],
+  "app": { "id": "retro-arcade", "type": "mock", "presentationMode": "native-tv", "section": "Games", "accent": "#D59B3F", "symbol": "A" }
+}
