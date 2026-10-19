@@ -30,4 +30,11 @@
     - Atomicity: validate → write temp → fsync → rename → rollback on failure. Keep deterministic write-failure regression passing.
     - Tests before done: extend `tst_components` / `tst_kodi_media` / QML offscreen suites for each slice; run `ctest --test-dir build --output-on-failure` + task Verify tools; capture `/tmp/isolde-*` evidence.
     - No new dependencies, frameworks, or side services without task scope. Reuse `HomeLayout/ComponentSchema/HomePages/HomeSkins/PageData/ActionDispatcher`, `KodiMedia/KodiShelves/KodiService`, `InputManager`, `SessionManager`.
+12. Committing:
+    - One logical change per commit, prefixed with the task ID: `T05: description`.
+    - Branch: always commit to `agent-backlog-progress` (not `main`).
+    - After committing, push to `origin agent-backlog-progress` and verify: `git log -1 --oneline && git status`.
+    - Do not commit to `main`; it is the archived baseline.
+    - Never include build artifacts, IDE files, or binary artwork in commits.
+    - Keep commit messages short but descriptive; reference docs/task if relevant.
     - Accessibility/security: passwords masked, no credentialed URLs, no shell expansion of Exec lines, content-addressed managed artwork only, explicit consent for disk/install/update actions.
