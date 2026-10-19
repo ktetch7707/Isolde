@@ -15,8 +15,8 @@ SetupState::SetupState(const QString &path, QObject *parent) : QObject(parent),
     if (!file.open(QIODevice::ReadOnly)) { m_error = "Cannot read setup progress."; return; }
     const auto obj = QJsonDocument::fromJson(file.readAll()).object();
     const int saved = obj.value("step").toInt(-1);
-    if (obj.value("version").toInt() != 1 || saved < 0 || saved > 6
-        || !obj.value("complete").isBool() || (obj.value("complete").toBool() && saved != 6)) {
+    if (obj.value("version").toInt() != 1 || saved < 0 || saved > 7
+        || !obj.value("complete").isBool() || (obj.value("complete").toBool() && saved != 7)) {
         m_error = "Setup progress could not be read. Your profiles and settings are unchanged.";
         return;
     }
@@ -40,6 +40,6 @@ bool SetupState::store(int step, bool complete)
     emit changed();
     return true;
 }
-bool SetupState::advance() { return store(qMin(6, m_step + 1), m_step == 6); }
+bool SetupState::advance() { return store(qMin(7, m_step + 1), m_step == 7); }
 bool SetupState::back() { return store(qMax(0, m_step - 1), false); }
 bool SetupState::restart() { return store(0, false); }

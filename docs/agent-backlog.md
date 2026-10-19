@@ -1,4 +1,4 @@
-﻿# Isolde Agent Backlog â€” single source of truth
+# Isolde Agent Backlog â€” single source of truth
 Location: `docs/agent-backlog.md` (this file). Entrypoint: `AGENTS.md` at repo root points here.
 Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`.
 

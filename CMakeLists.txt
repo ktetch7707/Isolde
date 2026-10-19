@@ -32,6 +32,8 @@ add_library(isolde_core STATIC
     src/media/KodiShelves.h
     src/media/KodiService.cpp
     src/media/KodiService.h
+    src/media/KodiImporter.cpp
+    src/media/KodiImporter.h
     src/settings/SetupState.cpp
     src/settings/SetupState.h
     src/settings/ProfileManager.cpp
@@ -101,6 +103,7 @@ qt_add_qml_module(isolde
         qml/KodiLibraryView.qml
         qml/LibraryBrowseControls.qml
         qml/KodiSettingsView.qml
+        qml/KodiImportView.qml
         qml/MediaFoldersView.qml
         qml/SetupWizard.qml
         qml/HomeScreen.qml

@@ -18,6 +18,7 @@
 #include "media/CaptureController.h"
 #include "media/KodiArtwork.h"
 #include "media/KodiService.h"
+#include "media/KodiImporter.h"
 #include "sessions/SessionManager.h"
 #include "sources/SourceManager.h"
 #include "theme/ArtPackCatalog.h"
@@ -60,6 +61,7 @@ struct ProfileRuntime {
     KodiMedia searchShows{qApp->property("isoldeProfile").toString()};
     KodiMedia searchEpisodes{qApp->property("isoldeProfile").toString()};
     KodiService kodiService{qApp->property("isoldeProfile").toString()};
+    KodiImporter kodiImporter{qApp->property("isoldeProfile").toString()};
     KodiShelves kodiShelves{qApp->property("isoldeProfile").toString(), &kodi};
     KodiArtwork kodiArtwork{qApp->property("isoldeProfile").toString()};
     PageData pageData{qApp->property("isoldeProfile").toString(), &kodi};
@@ -74,6 +76,7 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("captureController"), &captureController);
     engine.rootContext()->setContextProperty(QStringLiteral("kodiMedia"), &kodi);
+    engine.rootContext()->setContextProperty(QStringLiteral("kodiImporter"), &kodiImporter);
     engine.rootContext()->setContextProperty(QStringLiteral("searchMovies"), &searchMovies);
     engine.rootContext()->setContextProperty(QStringLiteral("searchShows"), &searchShows);
     engine.rootContext()->setContextProperty(QStringLiteral("searchEpisodes"), &searchEpisodes);
