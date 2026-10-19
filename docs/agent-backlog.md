@@ -16,9 +16,9 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 |------|-------|---|--------|
 | T01 | Bootstrap + gate check | 100% | done |
 | T02 | ~~Finish curation~~ â€” OUT OF SCOPE (user curates via Kodi) | n/a | struck |
-| T03 | Local search: Kodi titles via bridge (no curation adapters) | 100% | in progress |
+| T03 | Local search: Kodi titles via bridge (no curation adapters) | 100% | done |
 | T04 | Kodi preservation + desktop import | 33% | in progress |
-| T05 | Studio grid renderer consumes placements | 100% | in progress |
+| T05 | Studio grid renderer consumes placements | 100% | done |
 | T06 | Remote + desktop grid editor | 0% | not started |
 | T07 | Preview/Apply/Undo + persistence | 0% | not started |
 | T08 | Templates / tokens / portability | 0% | not started |
