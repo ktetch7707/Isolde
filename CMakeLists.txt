@@ -44,6 +44,8 @@ add_library(isolde_core STATIC
     src/app/AppRegistry.cpp
     src/app/AppRegistry.h
     src/home/HomeLayout.cpp
+    src/home/StudioSession.cpp
+    src/home/StudioSession.h
     src/home/HomeSkins.cpp
     src/home/HomePages.cpp
     src/home/PageModel.cpp
@@ -129,6 +131,7 @@ qt_add_qml_module(isolde
         qml/PageManager.qml
         qml/PageSurface.qml
         qml/PageEditor.qml
+        qml/PageStudioView.qml
         qml/PageLibraryWidget.qml
         qml/ArtworkImage.qml
         qml/FrostedPanel.qml

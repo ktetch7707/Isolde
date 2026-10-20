@@ -32,7 +32,7 @@ Item {
     property string repairItemId: ""
     property var repairChoices: []
     property int repairIndex: 0
-    readonly property bool editing: pageManager.open || skinLibrary.open || designEditor.open || componentEditor.open || appearanceEditor.open || sourceRepairEditing || addTileEditing || artworkEditing || themePreviewEditing || opacityEditing || categoryEditing || roundnessEditing || spanEditing || gridCollisionEditing
+    readonly property bool editing: studio.open || pageManager.open || skinLibrary.open || designEditor.open || componentEditor.open || appearanceEditor.open || sourceRepairEditing || addTileEditing || artworkEditing || themePreviewEditing || opacityEditing || categoryEditing || roundnessEditing || spanEditing || gridCollisionEditing
     property int addTileActionIndex: 0
     property int addTileOpenWithIndex: 0
     property int addTileFieldIndex: 0
@@ -46,7 +46,7 @@ Item {
     property int themePreviewIndex: 0
     property bool themeApplyArtwork: false
     onVisibleChanged: if (!visible) { if (appearanceEditor.open) appearanceEditor.close(); componentEditor.open = false; skinLibrary.open = false; designEditor.open = false; pageManager.open = false; spanEditing = false; gridCollisionEditing = false }
-    readonly property var actions: ["Move earlier", "Move later", "Change size", "Remove item", "Show / hide title", "Show / hide type", "Show / hide logo", "Logo fills tile", "Choose built-in art", "Choose image", "Remove custom PNG", "Toggle Isolde name", "Preview/apply theme", "Assign category", "Manage categories", "Item opacity", "Tile roundness", "Add clock", "Add tile", "Restore defaults", "Repair / change source", "Make it yours", "Component layout", root.layoutModel.isPage ? "Page skins" : "Home skins", root.layoutModel.isPage ? "Design page" : "Design Home", "Pages", "Add Movies widget", "Add Shows widget", "Add text widget", "Add button", "Duplicate"]
+    readonly property var actions: ["Move earlier", "Move later", "Change size", "Remove item", "Show / hide title", "Show / hide type", "Show / hide logo", "Logo fills tile", "Choose built-in art", "Choose image", "Remove custom PNG", "Toggle Isolde name", "Preview/apply theme", "Assign category", "Manage categories", "Item opacity", "Tile roundness", "Add clock", "Add tile", "Restore defaults", "Repair / change source", "Make it yours", "Component layout", root.layoutModel.isPage ? "Page skins" : "Home skins", root.layoutModel.isPage ? "Design page" : "Design Home", "Pages", "Add Movies widget", "Add Shows widget", "Add text widget", "Add button", "Duplicate", "Page Studio (preview)"]
     readonly property var addTileActions: [
         { type: "open-folder", label: "Open folder", hint: "Folder path, e.g. /media/movies" },
         { type: "open-file", label: "Open file", hint: "File path, e.g. /media/trailers/movie.mp4" },
@@ -80,6 +80,7 @@ Item {
 
     onAddTileActionIndexChanged: addTileOpenWithIndex = 0
     function handleCommand(command) {
+        if (studio.open) { studio.handleCommand(command); return }
         if (pageManager.open) { pageManager.handleCommand(command); return }
         if (skinLibrary.open) { skinLibrary.handleCommand(command); return }
         if (designEditor.open) { designEditor.handleCommand(command); return }
@@ -194,6 +195,7 @@ Item {
     }
 
     function applyAction() {
+        if (actionIndex === 31) { studio.show("", items[selectedIndex] ? items[selectedIndex].id : ""); return }
         if(actionIndex === 26 || actionIndex === 27){root.layoutModel.addLibraryWidget(actionIndex === 26?"Movies":"Shows",actionIndex === 26?"movies":"shows");return}
         if(actionIndex === 29){root.layoutModel.addButton();return}
         if(actionIndex === 28){root.layoutModel.addWidget("text");return}
@@ -360,6 +362,8 @@ Item {
     SkinLibrary { id: skinLibrary; anchors.fill: parent; layoutModel: root.layoutModel; z: 52 }
     PageManager { id:pageManager; anchors.fill:parent; layoutModel:homeLayout; hostModel:root.layoutModel; availableApps:root.availableApps; artwork:root.artwork; themes:root.themes; z:54; onPageRequested:id => root.pageRequested(id) }
     HomeDesignEditor { id: designEditor; anchors.fill: parent; layoutModel: root.layoutModel; z: 53 }
+
+    PageStudioView { id: studio; anchors.fill: parent; layoutModel: homeLayout; z: 100 }
 
     FileDialog {
         id: logoPicker

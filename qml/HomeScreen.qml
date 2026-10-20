@@ -13,6 +13,8 @@ Item {
     property var composition: ({})
     property var grid: ({})
     property var placements: []
+    readonly property var gridMetrics: composed.placementCell
+    function placementRect(p) { return composed.placementRect(p) }
     property var setItemPlacement: null
     property var gridCollisions: null
     property var libraryProvider: null

@@ -8,6 +8,7 @@
 #include <QVariantList>
 
 class PageModel;
+class StudioSession;
 
 class HomeLayout final : public QObject {
     Q_OBJECT
@@ -102,6 +103,20 @@ public:
     Q_INVOKABLE bool setWallpaper(const QString &sourceUrl);
     Q_INVOKABLE bool setComposition(const QVariantMap &value);
 
+    // T16 Studio bridge: committed bytes + atomic draft apply + focus recap.
+    // committedDocument() exposes the current bytes for session.open();
+    // applyStudioDraft() validates the candidate, swaps it in memory, and
+    // persists through the existing atomic save() (temp → fsync → rename →
+    // rollback), restoring the previous model on failure. focusOrigin()
+    // restores the exact canvas origin after apply/recovery dialogs.
+    Q_INVOKABLE QByteArray committedDocument() const;
+    static bool validateStudioDocument(const QByteArray &data, QString *error = nullptr);
+    Q_INVOKABLE QObject *beginStudio();
+    Q_INVOKABLE bool applyStudioDraft(const QByteArray &draft,
+                                      const QString &focusComponentId = {});
+    Q_INVOKABLE QString focusOrigin() const { return m_focusOrigin; }
+    Q_INVOKABLE void setFocusOrigin(const QString &id) { m_focusOrigin = id; }
+
     [[nodiscard]] QString errorString() const;
     void setError(const QString &message);
 
@@ -112,6 +127,7 @@ signals:
 
 private:
     friend class PageModel;
+    friend class StudioSession;
     bool loadDocument(const QByteArray &data, bool userDocument);
     bool save();
     QByteArray documentData() const;
@@ -141,5 +157,8 @@ private:
     QVariantList m_collections;
     bool m_captureInputsReady = false;
     QByteArray m_legacyDocument;
+    QString m_focusOrigin;
+    bool m_draftOnly = false;
+    StudioSession *m_studio = nullptr;
 
 };

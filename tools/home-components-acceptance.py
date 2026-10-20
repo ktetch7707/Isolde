@@ -24,6 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("--inspect", action="store_true", help="Pause briefly on failure for a VM screenshot")
+    parser.add_argument("--studio", action="store_true", help="Exercise draft canvas, remote editing, history, preview and Apply")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
     args = parser.parse_args()
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a")
@@ -133,6 +134,48 @@ def main():
             focused = ctypes.c_ulong(); revert = ctypes.c_int()
             x11.XGetInputFocus(display, ctypes.byref(focused), ctypes.byref(revert))
             print(f"Acceptance window {window}, keyboard focus {focused.value:#x}", flush=True)
+            if args.studio:
+                def capture(phase):
+                    print(f"{phase.upper()}_READY {evidence}", flush=True)
+                    deadline = time.monotonic() + 60
+                    while not (evidence / f"{phase}-captured").exists():
+                        if time.monotonic() > deadline:
+                            raise RuntimeError("Capture acknowledgement timed out: " + phase)
+                        if process.poll() is not None:
+                            raise RuntimeError("Studio exited during capture")
+                        time.sleep(0.1)
+
+                key("Return")  # Existing missing source -> Home editor.
+                key("Right", 31); key("Return")  # Explicit provisional Studio entry.
+                assert layout.read_bytes() == original_bytes
+                key("Return"); key("Return"); key("Return")  # Add -> conversion preview -> accept into draft.
+                assert layout.read_bytes() == original_bytes
+                key("Return"); key("Return")  # Add -> Clock ghost.
+                key("Right"); key("Return")  # Free neighboring cell; one draft operation.
+                assert layout.read_bytes() == original_bytes
+                key("Up"); key("Right", 3); key("Return")  # Undo.
+                key("Right"); key("Return")  # Redo.
+                key("Right", 3); key("Return")  # Draft preview.
+                assert layout.read_bytes() == original_bytes
+                capture("studio")
+                key("Escape")
+                assert layout.read_bytes() == original_bytes
+                key("Right"); key("Return"); key("Return")  # Apply summary -> atomic Apply.
+                expect(lambda: len(json.loads(layout.read_text()).get("components", [])) == 2,
+                       "Studio remote Add/history/Preview/Apply passed")
+                applied = layout.read_bytes()
+                assert Path(str(layout) + ".v1.backup.json").read_bytes() == original_bytes
+                assert all("placement" in item for item in json.loads(applied)["components"])
+                key("Escape"); key("Return")  # Close and reopen Studio from the legacy entry.
+                assert layout.read_bytes() == applied
+                capture("applied")
+                (evidence / "result.json").write_text(json.dumps({
+                    "passed": True, "journey": "studio", "layout": str(layout),
+                    "executable": str(executable), "preview_cancel_preserved_bytes": True,
+                    "reopen_preserved_bytes": True, "user_usability_acceptance": "pending"
+                }, indent=2))
+                print("Evidence: " + str(evidence), flush=True)
+                return
             key("Return")  # Missing tile routes to the source editor.
             key("Right", 20)
             key("Return")  # Repair overlay.

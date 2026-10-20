@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge')][string]$Case = 'pages',
+    [ValidateSet('pages','pastel','lounge','studio')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation',
@@ -10,7 +10,9 @@ if ($SourceRoot -notmatch '^/[A-Za-z0-9/_.-]+$') { throw 'Use an absolute Linux 
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $outputPath = (Resolve-Path -LiteralPath $OutputDirectory).Path
 $executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde'
-$command = if ($Case -eq 'pages') {
+$command = if ($Case -eq 'studio') {
+    "python3 $SourceRoot/tools/home-components-acceptance.py $executable --studio --inspect"
+} elseif ($Case -eq 'pages') {
     "python3 $SourceRoot/tools/tv-library-acceptance.py $executable --pages --inspect"
 } else {
     $fixture = if ($Case -eq 'pastel') { 'home-pastel-reference' } else { 'home-reference' }
@@ -30,7 +32,7 @@ try {
     while (($line = $process.StandardOutput.ReadLine()) -ne $null) {
         Write-Output $line
         Add-Content -LiteralPath (Join-Path $outputPath "$Case-output.log") -Value $line
-        if ($line -match '^([A-Z]+)_READY (/tmp/isolde-(?:tv-acceptance|reference-config)-[A-Za-z0-9_-]+)$') {
+        if ($line -match '^([A-Z]+)_READY (/tmp/isolde-(?:tv-acceptance|reference-config|components-acceptance)-[A-Za-z0-9_-]+)$') {
             $phase = $Matches[1].ToLowerInvariant()
             $evidence = $Matches[2]
             $capture = Join-Path $outputPath "$Case-$phase.png"

@@ -23,7 +23,8 @@ Item {
     readonly property color accent: appearance.focusColor || "#BD8198"
     readonly property color selColor: root.selectionColor !== "" ? root.selectionColor : root.accent
     readonly property real textScale: (appearance.typographyScale || 1) * unit
-    readonly property real corner: Math.min((style.radius || 22) * unit, Math.min(width, height) * (appearance.tileRoundness === undefined ? 0.2 : appearance.tileRoundness))
+    readonly property real corner: Math.min((style.radius === undefined ? 22 : style.radius) * unit, Math.min(width, height) * (appearance.tileRoundness === undefined ? 0.2 : appearance.tileRoundness))
+    readonly property color surfaceInk: root.style.surfaceColor || root.appearance.surfaceColor || "#28262F"
     signal activated()
     signal selectionChanged(bool selected)
     onSelectedChanged: root.selectionChanged(root.selected)
@@ -33,7 +34,7 @@ Item {
         visible: root.kind !== "orb"
         width: parent.width; height: root.kind === "recent" ? Math.min(parent.height - 36*root.unit,(root.style.artHeight || 86)*root.unit) : root.kind === "media" ? Math.max(35, parent.height - 58 * root.unit) : parent.height
         radius: root.corner
-        color: root.style.surfaceColor || root.appearance.surfaceColor || "#28262F"
+        color: Qt.rgba(root.surfaceInk.r,root.surfaceInk.g,root.surfaceInk.b,root.style.surfaceOpacity === undefined ? 1 : root.style.surfaceOpacity)
         border.width: root.kind === "recent" ? 1 : 0; border.color: "#B0FFFFFF"
         ArtworkImage {
             objectName: "cardArtwork"

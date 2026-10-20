@@ -6,6 +6,7 @@
 #include "media/KodiMedia.h"
 #include "media/CaptureController.h"
 #include "media/KodiService.h"
+#include "home/StudioSession.h"
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QSettings>
@@ -43,6 +44,11 @@ private slots:
     void skinSnapshotsSurviveResetAndArtworkChanges();
     void skinsRejectInvalidAndFailedApplications();
     void pagesPersistAndRouteAndTravelWithSkins();
+    void studioSessionDraftUndoBoundsAndNoWrite();
+    void studioSessionCanonicalIdsAndRevisionConflict();
+    void studioApplyAtomicFailureAndFocusPreserved();
+    void studioCommandsAreAtomicAndProfileScoped();
+    void studioCollisionProposalsAndParity();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
@@ -516,6 +522,338 @@ void ComponentTests::failedEditRetainsProfileLayout()
     QVERIFY(QFile::rename(user + ".held", user));
     QVERIFY(home.rebindSource("my-app", "settings"));
     QCOMPARE(QJsonDocument::fromJson(readFile(user)).object()["schemaVersion"].toInt(), 2);
+}
+void ComponentTests::studioSessionDraftUndoBoundsAndNoWrite()
+{
+    // T16.1/T16.2: shared draft + bounded undo over a canonical document.
+    // StudioSession holds bytes only — opening/editing/undo must not touch
+    // the profile file; the applied pipeline (HomeLayout save) stays the
+    // sole disk writer (T16.3 covers that side).
+    QTemporaryDir dir;
+    const auto user = dir.filePath("profile.json");
+    writeFile(user, legacy);
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    HomeLayout home(&registry);
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    QVERIFY(home.load(defaults, user));
+    QFile committedFile(user);
+    QVERIFY(committedFile.open(QIODevice::ReadOnly));
+    const QByteArray committed = committedFile.readAll();
+    committedFile.close();
+
+    StudioSession session;
+    QVERIFY(session.open(committed));
+    QVERIFY(!session.isDirty());
+    QCOMPARE(session.changeCount(), 0);
+
+    QJsonDocument doc = QJsonDocument::fromJson(committed);
+    auto object = doc.object();
+    auto theme = object.value("theme").toObject();
+    theme["backgroundStart"] = "#aabbcc";
+    object["theme"] = theme;
+    const QByteArray edited = QJsonDocument(object).toJson();
+    QVERIFY(session.pushEdit(edited));
+    QVERIFY(session.isDirty());
+    QCOMPARE(session.changeCount(), 1);
+    // Draft churn must not write the applied profile document.
+    QCOMPARE(readFile(user), committed);
+
+    QVERIFY(session.undo());
+    QVERIFY(!session.isDirty());
+    QCOMPARE(session.draft(), committed);
+    QCOMPARE(readFile(user), committed);
+
+    QVERIFY(session.redo());
+    QVERIFY(session.isDirty());
+    QCOMPARE(readFile(user), committed);
+
+    session.revert();
+    QVERIFY(!session.isDirty());
+    QCOMPARE(session.draft(), committed);
+    QCOMPARE(readFile(user), committed);
+
+    // Bounds: oversize document refused, zero writes, prior draft kept.
+    QVERIFY(session.pushEdit(edited));
+    QByteArray huge = edited;
+    huge += QByteArray(5 * 1024 * 1024, ' ');
+    QVERIFY(!session.pushEdit(huge));
+    QVERIFY(!session.errorString().isEmpty());
+    QCOMPARE(session.draft(), edited);
+    QCOMPARE(readFile(user), committed);
+
+    // Invalid JSON refused with actionable error, draft intact.
+    QVERIFY(!session.pushEdit("not-json{{{"));
+    QVERIFY(!session.errorString().isEmpty());
+    QCOMPARE(session.draft(), edited);
+
+    // Unknown schema version refused, never clamped.
+    QJsonDocument vdoc = QJsonDocument::fromJson(edited);
+    auto vobject = vdoc.object();
+    vobject["schemaVersion"] = 99;
+    QVERIFY(!session.pushEdit(QJsonDocument(vobject).toJson()));
+    QCOMPARE(session.draft(), edited);
+    QCOMPARE(readFile(user), committed);
+
+    // Component-count bound enforced.
+    QJsonArray many;
+    for (int i = 0; i < 1025; ++i)
+        many.append(QJsonObject{{"id", QString("c%1").arg(i)}, {"kind", "widget"}, {"widgetType", "clock"}});
+    vobject = QJsonDocument::fromJson(edited).object();
+    vobject["components"] = many;
+    QVERIFY(!session.pushEdit(QJsonDocument(vobject).toJson()));
+    QCOMPARE(readFile(user), committed);
+
+    // History refuses overflow without silently losing undo or accepting the edit.
+    session.revert();
+    for (int i = 0; i < StudioSession::kMaxUndoSteps; ++i) {
+        QJsonDocument step = QJsonDocument::fromJson(session.draft());
+        auto stepObject = step.object();
+        auto stepTheme = stepObject.value("theme").toObject();
+        stepTheme["tileRoundness"] = 0.1 + 0.01 * (i % 80);
+        stepObject["theme"] = stepTheme;
+        QVERIFY(session.pushEdit(QJsonDocument(stepObject).toJson()));
+    }
+    QCOMPARE(session.changeCount(), StudioSession::kMaxUndoSteps);
+    const auto fullDraft = session.draft();
+    QVERIFY(!session.pushEdit(edited));
+    QCOMPARE(session.draft(), fullDraft);
+    session.continueWithNewHistoryBaseline();
+    QVERIFY(session.pushEdit(edited));
+    QCOMPARE(readFile(user), committed);
+
+    // markApplied adopts the draft as the new committed baseline.
+    const QByteArray finalDraft = session.draft();
+    session.markApplied();
+    QVERIFY(!session.isDirty());
+    QCOMPARE(session.committed(), finalDraft);
+    QCOMPARE(readFile(user), committed); // still no write — caller persists
+}
+void ComponentTests::studioSessionCanonicalIdsAndRevisionConflict()
+{
+    // T16.2: identical edits from different key orders canonicalize equal.
+    // T16.3: centrally allocated ids converge; unsafe ids refused.
+    // T16.4: dirty draft + moved applied doc = conflict; clean draft never is.
+    QTemporaryDir dir;
+    const auto user = dir.filePath("profile.json");
+    writeFile(user, legacy);
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    HomeLayout home(&registry);
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    QVERIFY(home.load(defaults, user));
+    const QByteArray committed = readFile(user);
+
+    StudioSession session;
+    QVERIFY(session.open(committed));
+
+    // allocateId: free base passes through, taken ids walk deterministically.
+    QCOMPARE(session.allocateId("brand-new-widget"), QString("brand-new-widget"));
+    QCOMPARE(session.allocateId("clock"), QString("clock-copy"));
+    QCOMPARE(session.allocateId("clock-copy"), QString("clock-copy"));
+    QVERIFY(session.allocateId("has spaces!").isEmpty());
+    QVERIFY(!session.errorString().isEmpty());
+
+    // canonicalize: same object, different key order → identical bytes.
+    const QByteArray a = R"({"schemaVersion":2,"theme":{"b":1,"a":2}})";
+    const QByteArray b = R"({"theme":{"a":2,"b":1},"schemaVersion":2})";
+    QByteArray aOut, bOut;
+    QVERIFY(session.canonicalize(a, b, aOut, bOut));
+    QCOMPARE(aOut, bOut);
+    QVERIFY(!session.canonicalize("not json", b, aOut, bOut));
+
+    // Revision conflict: clean draft is never stale, even against other bytes.
+    QVERIFY(!session.isStaleAgainst(committed + " "));
+    QJsonDocument doc = QJsonDocument::fromJson(committed);
+    auto object = doc.object();
+    auto changedTheme = object["theme"].toObject();
+    changedTheme["backgroundStart"] = "#112233";
+    object["theme"] = changedTheme;
+    QVERIFY(session.pushEdit(QJsonDocument(object).toJson()));
+    QVERIFY(session.isDirty());
+    QVERIFY(!session.isStaleAgainst(committed)); // applied doc unchanged
+    QJsonDocument other = QJsonDocument::fromJson(committed);
+    auto otherObject = other.object();
+    otherObject["theme"] = QJsonObject{{"backgroundStart", "#445566"}};
+    QVERIFY(session.isStaleAgainst(QJsonDocument(otherObject).toJson()));
+    QVERIFY(session.isStaleAgainst({})); // vanished applied doc = conflict
+
+    // Cross-profile isolation: a second profile's session is independent —
+    // edits in one never leak into the other's draft or the other file.
+    const auto user2 = dir.filePath("profile2.json");
+    writeFile(user2, legacy);
+    const QByteArray committed2 = readFile(user2);
+    StudioSession other2;
+    QVERIFY(other2.open(committed2));
+    QCOMPARE(other2.draft(), committed2);
+    QVERIFY(session.draft() != other2.draft());
+    QVERIFY(other2.pushEdit(QJsonDocument(object).toJson()));
+    QCOMPARE(readFile(user), committed); // no-write invariant holds for both
+    QCOMPARE(readFile(user2), committed2);
+    QVERIFY(!other2.isStaleAgainst(committed2));
+    QCOMPARE(session.allocateId("clock"), QString("clock-copy"));
+    other2.revert(); // teardown: drop draft, history and errors, no writes
+    QVERIFY(!other2.isDirty());
+    QCOMPARE(readFile(user2), committed2);
+}
+void ComponentTests::studioApplyAtomicFailureAndFocusPreserved()
+{
+    // T16.5: failed applies (invalid draft, then deterministic write failure)
+    // preserve original bytes, the applied model, the recoverable draft and
+    // the focus origin; success records the focus origin for canvas restore.
+    QTemporaryDir dir;
+    const auto user = dir.filePath("profile.json");
+    writeFile(user, legacy);
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    HomeLayout home(&registry);
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    QVERIFY(home.load(defaults, user));
+    const QByteArray committed = home.committedDocument();
+    const QByteArray originalFile = readFile(user);
+    const auto before = home.components();
+
+    StudioSession session;
+    QVERIFY(session.open(committed));
+    home.setFocusOrigin(QStringLiteral("clock"));
+
+    // Candidate edit: rename the first tile in the draft bytes.
+    QJsonDocument doc = QJsonDocument::fromJson(committed);
+    auto object = doc.object();
+    auto entries = object.value(QStringLiteral("components")).toArray();
+    if (entries.isEmpty()) entries = object.value(QStringLiteral("items")).toArray();
+    QVERIFY(!entries.isEmpty());
+    auto first = entries.first().toObject();
+    first[QStringLiteral("name")] = QStringLiteral("Studio clock");
+    entries[0] = first;
+    if (object.contains(QStringLiteral("components"))) object[QStringLiteral("components")] = entries;
+    else object[QStringLiteral("items")] = entries;
+    const QByteArray edited = QJsonDocument(object).toJson();
+    QVERIFY(session.pushEdit(edited));
+
+    // Invalid draft apply: bytes, model and draft all survive.
+    QVERIFY(!home.applyStudioDraft("not-json{{{", QStringLiteral("clock")));
+    QVERIFY(!home.errorString().isEmpty());
+    QCOMPARE(readFile(user), originalFile);
+    QCOMPARE(home.components(), before);
+    QCOMPARE(session.draft(), edited);
+    QCOMPARE(home.focusOrigin(), QStringLiteral("clock"));
+
+    // Deterministic write failure: user path blocked by a directory, so
+    // save() fails after in-memory adoption — the model must roll back.
+    QVERIFY(QFile::rename(user, user + ".held"));
+    QVERIFY(QDir().mkdir(user));
+    QVERIFY(!home.applyStudioDraft(edited, QStringLiteral("my-folder")));
+    QVERIFY(!home.errorString().isEmpty());
+    QCOMPARE(home.components(), before);
+    QCOMPARE(home.committedDocument(), committed);
+    QCOMPARE(session.draft(), edited); // recoverable draft stays with caller
+    QCOMPARE(home.focusOrigin(), QStringLiteral("clock")); // origin preserved
+    QVERIFY(QDir().rmdir(user));
+    QVERIFY(QFile::rename(user + ".held", user));
+
+    // Success path: model + file advance, focus origin records the canvas
+    // component the Studio passes for post-apply restoration.
+    QVERIFY(home.applyStudioDraft(edited, QStringLiteral("my-folder")));
+    QCOMPARE(home.focusOrigin(), QStringLiteral("my-folder"));
+    QVERIFY(readFile(user) != committed);
+    session.markApplied();
+    QVERIFY(!session.isDirty());
+}
+void ComponentTests::studioCommandsAreAtomicAndProfileScoped()
+{
+    QTemporaryDir dir;
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    const auto user = dir.filePath("one.json");
+    writeFile(user, legacy);
+    HomeLayout home(&registry); QVERIFY(home.load(defaults, user));
+    auto *session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    const auto file = readFile(user);
+    const auto baseline = session->draft();
+    QVERIFY(session->execute("rename", {{"id", "my-folder"}, {"name", "Draft name"}}));
+    QCOMPARE(readFile(user), file);
+    QVERIFY(home.items()[0].toMap()["name"] != QString("Draft name"));
+    QVERIFY(session->model()->property("items").toList()[0].toMap()["name"] == QString("Draft name"));
+    const auto renamed = session->draft();
+    QVERIFY(!session->execute("place", {{"placements", QVariantList{
+        QVariantMap{{"id", "clock"}, {"placement", QVariantMap{{"x", 0}, {"y", 0}, {"width", 1}, {"height", 1}}}},
+        QVariantMap{{"id", "missing"}, {"placement", QVariantMap{{"x", 1}, {"y", 0}, {"width", 1}, {"height", 1}}}}
+    }}}));
+    QCOMPARE(session->draft(), renamed);
+    QVERIFY(session->undo()); QCOMPARE(session->draft(), baseline);
+    QVERIFY(session->redo()); QCOMPARE(session->draft(), renamed);
+    QVERIFY(session->execute("newPage", {{"name", "Draft page"}}));
+    QCOMPARE(home.pages().size(), 0);
+    QCOMPARE(readFile(user), file);
+    QVERIFY(session->apply("clock"));
+    QCOMPARE(home.pages().size(), 1);
+    QVERIFY(readFile(user) != file);
+    QVERIFY(!session->isDirty());
+    QVERIFY(session->execute("rename", {{"id", "my-folder"}, {"name", "Unapplied"}}));
+    const auto saved = readFile(user), recoverable = session->draft();
+    writeFile(user,saved + "\n"); // Another process changed the file without updating the live model.
+    QVERIFY(!session->apply()); QCOMPARE(readFile(user),saved + "\n");
+    QCOMPARE(session->draft(),recoverable);
+    writeFile(user,saved);
+    QVERIFY(home.setItemName("my-folder", "Concurrent change"));
+    QVERIFY(!session->apply());
+    QVERIFY(session->errorString().contains("changed"));
+    const auto second = dir.filePath("two.json");
+    writeFile(second, legacy);
+    bool teardownAttempted = false, teardownAccepted = true;
+    connect(session,&StudioSession::changed,session,[&] {
+        if(teardownAttempted)return;
+        teardownAttempted=true;
+        teardownAccepted=session->execute("remove",{{"id","clock"}});
+    });
+    QVERIFY(home.load(defaults, second));
+    QVERIFY(teardownAttempted); QVERIFY(!teardownAccepted);
+    QVERIFY(!session->active());
+    QVERIFY(!session->apply());
+    QVERIFY(!session->execute("remove", {{"id", "clock"}}));
+    QCOMPARE(readFile(second), legacy);
+}
+void ComponentTests::studioCollisionProposalsAndParity()
+{
+    QTemporaryDir dir; AppRegistry registry;
+    HomeLayout home(&registry);
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    auto *session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    QVERIFY(session->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5}}}}));
+    const auto start = session->draft();
+    const auto history = session->changeCount();
+    QVERIFY(session->previewCommand("convertGrid",{{"value",QVariantMap{{"columns",4},{"rows",5}}}}));
+    QCOMPARE(session->draft(),start); QCOMPARE(session->changeCount(),history);
+    QVERIFY(session->proposalModel()); session->cancelPreview();
+    QCOMPARE(session->draft(),start);
+    const QVariantMap p{{"x",1},{"y",0},{"width",1},{"height",1}};
+    QVERIFY(!session->placementProposal("clock",p,"cancel").value("valid").toBool());
+    auto swap = session->placementProposal("clock",p,"swap");
+    QVERIFY2(swap["valid"].toBool(),qPrintable(swap["reason"].toString()));
+    QCOMPARE(swap["placements"].toList().size(),2);
+    QVERIFY(session->execute("place",{{"placements",swap["placements"]}}));
+    const auto swapped = session->draft();
+    QVERIFY(session->undo()); QCOMPARE(session->draft(),start);
+    QVERIFY(session->execute("place",{{"placements",session->placementProposal("clock",p,"swap")["placements"]}}));
+    QCOMPARE(session->draft(),swapped); // Same semantic drop via another input adapter.
+    QVERIFY(session->undo());
+    auto shift = session->placementProposal("clock",p,"shift");
+    QVERIFY2(shift["valid"].toBool(),qPrintable(shift["reason"].toString()));
+    QVERIFY(session->execute("place",{{"placements",shift["placements"]}}));
+    QVERIFY(session->undo()); QCOMPARE(session->draft(),start);
+    QVERIFY(!session->placementProposal("clock",{{"x",8},{"y",0},{"width",1},{"height",1}},"shift")["valid"].toBool());
+    QCOMPARE(session->draft(),start);
+    const auto addition = session->additionProposal("clock",p,"shift");
+    QVERIFY2(addition["valid"].toBool(),qPrintable(addition["reason"].toString()));
+    const auto beforeAdd = session->changeCount();
+    QVERIFY(session->execute("batch",{{"commands",addition["commands"]}}));
+    QCOMPARE(session->changeCount(),beforeAdd+1);
+    QVERIFY(session->undo()); QCOMPARE(session->draft(),start);
+    const auto beforeBatch = session->changeCount();
+    QVERIFY(session->execute("batch",{{"commands",QVariantList{
+        QVariantMap{{"operation","rename"},{"arguments",QVariantMap{{"id","clock"},{"name","Group rename"}}}},
+        QVariantMap{{"operation","rename"},{"arguments",QVariantMap{{"id","movies"},{"name","Library"}}}}
+    }}}));
+    QCOMPARE(session->changeCount(),beforeBatch+1);
+    QVERIFY(session->undo()); QCOMPARE(session->draft(),start);
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

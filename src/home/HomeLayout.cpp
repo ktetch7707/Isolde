@@ -1,5 +1,6 @@
 #include "home/HomeLayout.h"
 #include "home/ComponentSchema.h"
+#include "home/StudioSession.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -461,6 +462,7 @@ QString HomeLayout::errorString() const { return m_errorString; }
 
 bool HomeLayout::load(const QString &defaultPath, const QString &userPath)
 {
+    if (m_studio) m_studio->invalidate();
     m_legacyDocument.clear();
     m_defaultPath = defaultPath;
     if (m_defaultPath.isEmpty()) {
@@ -1016,6 +1018,12 @@ QByteArray HomeLayout::documentData() const
 
 bool HomeLayout::save()
 {
+    if (m_draftOnly) {
+        QString error;
+        const bool ok = validateStudioDocument(documentData(), &error);
+        setError(error);
+        return ok;
+    }
     if (m_owner) {
         const bool ok=m_owner->storePage(m_pageId,QJsonDocument::fromJson(documentData()).object());
         setError(ok?QString():m_owner->errorString());return ok;
@@ -1041,4 +1049,97 @@ void HomeLayout::setError(const QString &message)
 {
     if (m_errorString == message) return;
     m_errorString = message; emit errorStringChanged();
+}
+
+QByteArray HomeLayout::committedDocument() const
+{
+    return documentData();
+}
+
+bool HomeLayout::validateStudioDocument(const QByteArray &data, QString *error)
+{
+    const auto count = [](const QJsonObject &document) {
+        return document[document["schemaVersion"].toInt() == 1 ? "items" : "components"].toArray().size();
+    };
+    const auto document = QJsonDocument::fromJson(data).object();
+    qsizetype nodes = count(document);
+    for (const auto &page : document["pages"].toArray()) nodes += count(page.toObject()["layout"].toObject());
+    if (nodes > 1024) { if (error) *error = tr("The interface exceeds 1024 components across its pages."); return false; }
+    AppRegistry registry;
+    HomeLayout validator(&registry);
+    const bool ok = validator.loadDocument(data, false);
+    if (error) *error = validator.errorString();
+    return ok;
+}
+
+QObject *HomeLayout::beginStudio()
+{
+    if (m_studio) { m_studio->invalidate(); m_studio->deleteLater(); }
+    m_studio = new StudioSession(this);
+    m_studio->bind(this);
+    return m_studio;
+}
+
+bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusComponentId)
+{
+    // T16.5 — validate the candidate without touching the live model first.
+    // Snapshot live state; restore it byte-for-byte on any failure so the
+    // applied model, original file bytes and focus origin survive intact.
+    const QByteArray previousBytes = documentData();
+    const QJsonArray previousItems = m_items;
+    const QJsonArray previousCategories = m_categories;
+    const QJsonArray previousPages = m_pages;
+    const QVariantMap previousAppearance = m_appearance;
+    const QVariantMap previousComposition = m_composition;
+    const QString previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
+    const double previousRoundness = m_tileRoundness;
+    const bool previousBrand = m_brandVisible;
+    const QString previousFocus = m_focusOrigin;
+
+    HomeLayout probe(m_registry);
+    probe.m_owner = m_owner; // page-scoped drafts validate against the owner
+    if (!probe.loadDocument(draft, false)) {
+        setError(probe.errorString().isEmpty()
+                     ? tr("The draft could not be applied — nothing changed.")
+                     : probe.errorString());
+        return false;
+    }
+    // Adopt the validated in-memory state, then persist atomically.
+    m_items = probe.m_items;
+    m_categories = probe.m_categories;
+    if (!m_owner) m_pages = probe.m_pages;
+    m_appearance = probe.m_appearance;
+    m_composition = probe.m_composition;
+    m_backgroundStart = probe.m_backgroundStart;
+    m_backgroundEnd = probe.m_backgroundEnd;
+    m_tileRoundness = probe.m_tileRoundness;
+    m_brandVisible = probe.m_brandVisible;
+    if (!focusComponentId.isEmpty()) m_focusOrigin = focusComponentId;
+    if (!save()) {
+        // Atomic-save failure: restore every field and keep the draft alive
+        // in the caller (StudioSession still holds it) for retry.
+        m_items = previousItems;
+        m_categories = previousCategories;
+        m_pages = previousPages;
+        m_appearance = previousAppearance;
+        m_composition = previousComposition;
+        m_backgroundStart = previousStart;
+        m_backgroundEnd = previousEnd;
+        m_tileRoundness = previousRoundness;
+        m_brandVisible = previousBrand;
+        m_focusOrigin = previousFocus;
+        syncPages();
+        emit layoutChanged();
+        if (documentData() != previousBytes) {
+            // Last-resort guard: in-memory state failed to round-trip back.
+            // Reload from disk (no rewrite) so the model matches the file.
+            load(m_defaultPath, m_userPath);
+            m_focusOrigin = previousFocus;
+            emit layoutChanged();
+        }
+        return false; // save() already set the actionable error string
+    }
+    emit layoutChanged();
+    setError({});
+    return true;
 }

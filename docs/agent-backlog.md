@@ -27,7 +27,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | Task | Priority | Title | % | Status |
 |------|----------|-------|---|--------|
 | T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
-| T16 | 2 | Shared draft transactions, history and profile safety | 0% | planned |
+| T16 | 2 | Shared draft transactions, history and profile safety | 80% | verified foundation; full adapter parity pending |
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 0% | planned |
 | T18 | 4 | Unified Page Studio workspace and selection | 0% | planned |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 0% | planned |
@@ -54,7 +54,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **15%** | T15 provisional (75%); T16 in progress |
+| **Overall** | — | **average of 24 active tasks** | **18%** | T15 provisional (75%); T16 verified foundation (80%) |
 
 ## Highest priority: core Page Studio
 
@@ -67,19 +67,19 @@ Scope:
 - [x] T15.3 Walk through the complete D-pad/Confirm/Back/Menu state model, including field editing, focus restoration, error feedback and accessible movement alternatives.
 - [ ] T15.4 OPEN — genuine user/representative review; resolve confusing transitions and establish measurable acceptance journeys. Designer-only artifact walkthrough done (W1-W8 resolved in artifacts). Sequencing exception (user, 2026-10-19): proceed with this pack as provisional basis for T16-T24; genuine user usability acceptance deferred to T24. No review evidence invented.
 Done when: T15.1-T15.3 artifacts agree with the specifications; T15.4 user walkthrough deferred to T24 per sequencing exception; remote movement is understandable without a pointer, number keys or hidden gesture.
-Verify: design state-transition/feature-coverage review and recorded uncoached walkthrough; no application build is claimed by static mockups. Evidence: design pack under `docs/design/page-studio/` — `feature-map.md` (T15.1; every Customize Home action + PageManager operation + the four shell surfaces mapped with backend-path citations, labels not treated as proof), `wireframes.md` (T15.2; 12 TV+desktop screen states), `interaction-states.md` (T15.3; full D-pad/Confirm/Back/Menu table, focus restoration, error feedback, accessible movement alternatives), `review-and-acceptance.md` (T15.4 remains OPEN; designer-only walkthrough with 8 findings + 10 proposed acceptance journeys); static coverage gate `tools/verify-t15-design.py` 56/56 PASS, log in `docs/design/page-studio/verify-t15.log`. Uncoached installed walkthrough with the actual user remains T24's cutover gate per spec §10.
+Verify: design state-transition/feature-coverage review and recorded uncoached walkthrough; no application build is claimed by static mockups. Evidence: design pack under `docs/design/page-studio/` — `feature-map.md` (T15.1; every Customize Home action + PageManager operation + the four shell surfaces mapped with backend-path citations, labels not treated as proof), `wireframes.md` (T15.2; 12 TV+desktop screen states), `interaction-states.md` (T15.3; full D-pad/Confirm/Back/Menu table, focus restoration, error feedback, accessible movement alternatives), `review-and-acceptance.md` (T15.4 remains OPEN; designer-only walkthrough with 8 findings + 10 proposed acceptance journeys); static coverage gate `tools/verify-t15-design.py` 57/57 PASS, log in `docs/design/page-studio/verify-t15.log`. Uncoached installed walkthrough with the actual user remains T24's cutover gate per spec §10.
 
 ## T16 — Shared draft transactions, history and profile safety (L, depends: T15)
 Entry docs: `docs/page-studio-redesign.md` sections 3, 5, 7; `docs/components.md` persistence contracts.
 Entry files: `src/home/HomeLayout.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `src/home/HomePages.cpp`, `src/home/ComponentSchema.{h,cpp}`, `tests/tst_components.cpp`.
 Scope:
-- [ ] T16.1 Add one profile-scoped in-process edit session over the complete interface document, with baseline revision and live draft view; opening/cancel/undo do not write the applied document or profile assets.
-- [ ] T16.2 Introduce shared typed semantic edit commands and complete-result validation; multi-item/group/collision operations accept all affected changes or none, with one undo record.
+- [x] T16.1 Add one profile-scoped in-process edit session over the complete interface document, with baseline revision and live draft view; opening/cancel/undo do not write the applied document or profile assets.
+- [x] T16.2 Introduce shared typed semantic edit commands and complete-result validation; multi-item/group/collision operations accept all affected changes or none, with one undo record.
 - [ ] T16.3 Implement deterministic canonical serialization and centrally allocated identities; remote/pointer/inspector replays produce identical layout bytes from identical fixture identities.
-- [ ] T16.4 Implement bounded undo/redo, explicit history-budget handling, revision conflicts, dirty-exit semantics and profile teardown/client invalidation.
-- [ ] T16.5 Prove failed draft operations and atomic apply failures preserve original bytes, applied model, recoverable draft and focus origin; keep v1 backup and no-write-on-read behavior.
+- [x] T16.4 Implement bounded undo/redo, explicit history-budget handling, revision conflicts, dirty-exit semantics and profile teardown/client invalidation.
+- [x] T16.5 Prove failed draft operations and atomic apply failures preserve original bytes, applied model, recoverable draft and focus origin; keep v1 backup and no-write-on-read behavior.
 Done when: a minimal offscreen command-to-draft-rendering journey demonstrates move/property edit/undo/redo/cancel/error without persistence leakage; the new shell can consume the session without calling live setters.
-Verify: extend `component_contracts` for multi-node rollback, canonical parity, bounds, revision conflict and cross-profile cases; run `ctest --test-dir build --output-on-failure`. Evidence: pending; existing single-edit rollback tests do not satisfy draft transactions.
+Verify: extend `component_contracts` for multi-node rollback, canonical parity, bounds, revision conflict and cross-profile cases; run `ctest --test-dir build --output-on-failure`. Evidence: [page-studio-implementation-2026-10-19.md](page-studio-implementation-2026-10-19.md), frozen source `/home/isolde-dev/isolde-runs/studio-implementation-12/source`, sibling `ctest.log` (14/14), `install.log`, installed Studio `/tmp/isolde-components-acceptance-u7lfm2xd`, both fixture runs `/tmp/isolde-reference-config-enw44obb` and `/tmp/isolde-reference-config-xx0hwu86`; durable host logs/captures under `build/studio-installed-12/`. T16.3 stays open for full remote/pointer/inspector replay coverage. The provisional shell/geometry are test consumers of this foundation; T17-T24 are not marked delivered.
 
 ## T17 — Shared canvas geometry, grids and legacy compatibility (L, depends: T16)
 Entry docs: `docs/page-studio-redesign.md` sections 2, 5, 9; `docs/home-composition.md` Universal grid.

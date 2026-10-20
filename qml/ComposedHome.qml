@@ -36,16 +36,29 @@ Item {
     property var widgets: ({})
     readonly property var grid: host.grid || ({})
     readonly property var placements: host.placements || []
-    readonly property bool placementMode: Object.keys(root.grid || {}).length > 0 && Array.isArray(root.placements) && root.placements.length > 0
+    readonly property bool placementMode: !!root.config.grid
     readonly property var placementCell: {
         const g = root.grid || {}
         const columns = g.columns || 8
         const rows = g.rows || 5
         const gap = (g.gap === undefined ? 20 : g.gap) * root.unit
         const margin = (g.margin === undefined ? 40 : g.margin) * root.unit
-        const cellW = Math.max(1, (root.width - 2*margin - (columns-1)*gap) / columns)
-        const cellH = Math.max(1, (root.height - 2*margin - (rows-1)*gap) / rows)
+        const cellW = Math.max(1, (content.width - 2*margin - (columns-1)*gap) / columns)
+        const cellH = Math.max(1, (content.height - 2*margin - (rows-1)*gap) / rows)
         return { columns: columns, rows: rows, gap: gap, margin: margin, cellW: cellW, cellH: cellH }
+    }
+    function placementRect(p) {
+        const c = placementCell
+        const origin = placementGrid.mapToItem(host, c.margin, c.margin)
+        return {x: origin.x + p.x*(c.cellW+c.gap), y: origin.y + p.y*(c.cellH+c.gap),
+            width: p.width*c.cellW + (p.width-1)*c.gap,
+            height: p.height*c.cellH + (p.height-1)*c.gap}
+    }
+    function revealCard(card) {
+        if (!card || root.placementMode) return
+        const p = card.mapToItem(content.contentItem,0,0)
+        if(p.y<content.contentY)content.contentY=Math.max(0,p.y-6)
+        else if(p.y+card.height>content.contentY+content.height)content.contentY=Math.max(0,p.y+card.height-content.height+6)
     }
     readonly property var placedItems: {
         const map = {}
@@ -86,6 +99,7 @@ Item {
         return { entries: entries, rows: rows, factor: config.fit === false ? 1 : Math.min(1, available / Math.max(1,total)) }
     }
     function focusEntries() {
+        if (placementMode) return placedItems.map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2}))
         let entries = []
         for (let s = 0; s < visibleSections.length; s++) {
             const section = visibleSections[s], g = geometry.entries[s] || {row:s,column:0,span:columns}, style = section.presentation || {}
@@ -221,7 +235,7 @@ Item {
             }
         }
         Flickable {
-            id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode ? root.placementCell.rows * (root.placementCell.cellH + root.placementCell.gap) + 2*root.placementCell.margin : grid.implicitHeight; clip:true
+            id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode ? height : grid.implicitHeight; clip:true
             GridLayout {
                 id:grid; width:parent.width; columns:root.columns; columnSpacing:root.gap; rowSpacing:root.gap; visible:!root.placementMode
                 Repeater {
@@ -279,7 +293,7 @@ Item {
                                             -(Math.ceil(sectionView.modelData.items.length/parent.columns)-1)*parent.spacing)/Math.max(1,Math.ceil(sectionView.modelData.items.length/parent.columns)))
                                         selected:!root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.id)
                                         outsideColor:host.backgroundEnd
-                                        onSelectedChanged:if(selected) Qt.callLater(()=>{const p=mapToItem(grid,0,0);if(p.y<content.contentY)content.contentY=Math.max(0,p.y-6);else if(p.y+height>content.contentY+content.height)content.contentY=Math.max(0,p.y+height-content.height+6)})
+                                        onSelectedChanged:if(selected) Qt.callLater(root.revealCard,this)
                                         onActivated:{root.sectionActionId="";host.focusedIndex=host.itemIndex(modelData.id);root.navigationFocused=false;host.recoveryFocused=false;root.handleCommand(inputManager.confirm)}
                                     }
                                 }
@@ -301,30 +315,25 @@ Item {
                         }
                     }
                 }
+            }
                 Item {
                     visible: root.placementMode
                     width: parent.width
                     height: parent.height
-                    GridLayout {
+                    Item {
                         id: placementGrid
-                        columns: root.placementCell.columns
-                        rows: root.placementCell.rows
-                        columnSpacing: root.placementCell.gap
-                        rowSpacing: root.placementCell.gap
                         anchors.fill: parent
-                        anchors.margins: root.placementCell.margin
                         Repeater {
                             model: root.placedItems
                             delegate: Item {
                                 required property var modelData
                                 property int dragOriginX: modelData.placement.x
                                 property int dragOriginY: modelData.placement.y
-                                Layout.row: modelData.placement.y
-                                Layout.column: modelData.placement.x
-                                Layout.rowSpan: modelData.placement.height
-                                Layout.columnSpan: modelData.placement.width
-                                Layout.preferredWidth: root.placementCell.cellW * modelData.placement.width + root.placementCell.gap * Math.max(0, modelData.placement.width - 1)
-                                Layout.preferredHeight: root.placementCell.cellH * modelData.placement.height + root.placementCell.gap * Math.max(0, modelData.placement.height - 1)
+                                objectName: "placed-" + modelData.item.id
+                                x: root.placementCell.margin + modelData.placement.x*(root.placementCell.cellW+root.placementCell.gap)
+                                y: root.placementCell.margin + modelData.placement.y*(root.placementCell.cellH+root.placementCell.gap)
+                                width: root.placementCell.cellW * modelData.placement.width + root.placementCell.gap * Math.max(0, modelData.placement.width - 1)
+                                height: root.placementCell.cellH * modelData.placement.height + root.placementCell.gap * Math.max(0, modelData.placement.height - 1)
                                 Drag.active: dragArea.pressed
                                 Drag.source: dragArea
                                 MouseArea {
@@ -373,7 +382,6 @@ Item {
                         }
                     }
                 }
-            }
         }
     }
 }

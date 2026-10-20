@@ -5,6 +5,7 @@
 #include "media/KodiService.h"
 #include "home/PageData.h"
 #include "home/PageModel.h"
+#include "home/StudioSession.h"
 #include "settings/SearchSettings.h"
 #include "media/KodiImporter.h"
 #include <QBuffer>
@@ -30,6 +31,7 @@ class HomeNavigationTests : public QObject {
     Q_OBJECT
 private slots:
     void retainsExactOriginAndRecoversWithoutHomeButton();
+    void studioRemoteDraftApplyAndCancel();
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
@@ -261,6 +263,7 @@ void HomeNavigationTests::repairsSourceWithRemoteAndCanCancel()
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
     engine.rootContext()->setContextProperty("homeLayout", &home);
+    engine.rootContext()->setContextProperty("isoldeVersion", "test");
     QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items", home.items()}, {"availableApps", registry.apps()},
@@ -701,6 +704,100 @@ void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
     bool gammaFound = false;
     for (const auto &v : items()) if (v.toMap()["id"].toString() == "gamma") gammaFound = true;
     QVERIFY(!gammaFound);
+}
+void HomeNavigationTests::studioRemoteDraftApplyAndCancel()
+{
+    QTemporaryDir dir;
+    AppRegistry registry;
+    HomeLayout home(&registry);
+    const auto user = dir.filePath("home.json");
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), user));
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    engine.rootContext()->setContextProperty("homeLayout", &home);
+    const auto path = QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml");
+    engine.rootContext()->setContextProperty("isoldeVersion", "test");
+    QQmlComponent component(&engine, QUrl::fromLocalFile(path));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel", QVariant::fromValue(&home)}, {"width",1280}, {"height",720}}));
+    QVERIFY2(root, qPrintable(component.errorString()));
+    QQuickWindow window; window.resize(1280,720);
+    qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem()); window.show();
+    QVERIFY(QMetaObject::invokeMethod(root.get(), "show", Q_ARG(QVariant, QString()), Q_ARG(QVariant, QString())));
+    QTest::qWait(80);
+    auto command = [&](int key) { QVERIFY(QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant,key))); QCoreApplication::processEvents(); };
+    command(InputManager::Confirm); // Add on legacy page opens explicit conversion.
+    QCOMPARE(root->property("mode").toString(), QString("convert"));
+    command(InputManager::Confirm); // Preview consequences, still no write.
+    QCOMPARE(root->property("mode").toString(), QString("conversionPreview"));
+    QVERIFY(!QFile::exists(user));
+    command(InputManager::Confirm); // Accept into draft only.
+    QCOMPARE(root->property("mode").toString(), QString("canvas"));
+    QVERIFY(!QFile::exists(user));
+    auto *preview = root->findChild<QQuickItem *>("studioPreview"); QVERIFY(preview);
+    std::function<QQuickItem *(QQuickItem *,const QString &)> findVisual = [&](QQuickItem *item,const QString &name)->QQuickItem * {
+        if(item->objectName()==name)return item;
+        for(auto *child:item->childItems())if(auto *found=findVisual(child,name))return found;
+        return nullptr;
+    };
+    for (const auto &size : {QSize(1280,720),QSize(1920,1080),QSize(3840,2160),QSize(1280,800)}) {
+        root->setProperty("width",size.width()); root->setProperty("height",size.height());
+        QCoreApplication::processEvents();
+        auto *placed = findVisual(preview,"placed-clock"); QVERIFY(placed);
+        QVERIFY2(placed->isVisible(),qPrintable(QString("Studio visible=%1, grid=%2, preview visible=%3, composed grid=%4")
+            .arg(root->property("visible").toBool()).arg(root->property("gridMode").toBool()).arg(preview->isVisible())
+            .arg(preview->findChild<QObject *>("composedHome")->property("placementMode").toBool())));
+        QVariant result;
+        QVERIFY(QMetaObject::invokeMethod(preview,"placementRect",Q_RETURN_ARG(QVariant,result),
+            Q_ARG(QVariant,QVariantMap({{"x",0},{"y",0},{"width",1},{"height",1}}))));
+        const auto rect=result.metaType().id()==qMetaTypeId<QJSValue>() ? result.value<QJSValue>().toVariant().toMap():result.toMap();
+        const auto point=placed->mapToItem(preview,QPointF(0,0));
+        QVERIFY(qAbs(point.x()-rect["x"].toDouble())<0.01);
+        QVERIFY(qAbs(point.y()-rect["y"].toDouble())<0.01);
+        QVERIFY(qAbs(placed->width()-rect["width"].toDouble())<0.01);
+        QVERIFY(point.y()+placed->height()<=preview->height());
+        QVERIFY(placed->width()>0 && placed->height()>0);
+    }
+    root->setProperty("width",1280);root->setProperty("height",720);
+    QVERIFY(QMetaObject::invokeMethod(root.get(), "chooseTool", Q_ARG(QVariant,0)));
+    command(InputManager::Confirm); // Clock ghost.
+    QCOMPARE(root->property("mode").toString(), QString("move"));
+    command(InputManager::NavigateDown);
+    command(InputManager::NavigateDown);
+    command(InputManager::Confirm); // A free third-row cell beyond the default launchers.
+    QCOMPARE(root->property("mode").toString(), QString("canvas"));
+    QVERIFY(!QFile::exists(user));
+    auto *session = qobject_cast<StudioSession *>(root->property("session").value<QObject *>());
+    QVERIFY(session); QVERIFY(session->isDirty());
+    auto *keyboard = root->findChild<QObject *>("studioKeyboard"); QVERIFY(keyboard);
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"context",Q_ARG(QVariant,6)));
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("0"))));
+    QCoreApplication::processEvents();
+    auto *selected = findVisual(preview,"placed-"+root->property("selectedId").toString()); QVERIFY(selected);
+    auto *surface = findVisual(selected,"cardSurface"); QVERIFY(surface);
+    QCOMPARE(surface->property("color").value<QColor>().alpha(),0);
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"context",Q_ARG(QVariant,7)));
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("0"))));
+    QCoreApplication::processEvents();
+    selected = findVisual(preview,"placed-"+root->property("selectedId").toString()); QVERIFY(selected);
+    surface = findVisual(selected,"cardSurface"); QVERIFY(surface);
+    QCOMPARE(surface->property("radius").toReal(),0.0);
+    const auto changed = session->draft();
+    QVERIFY(session->undo()); QVERIFY(session->redo()); QCOMPARE(session->draft(), changed);
+    QVERIFY(QMetaObject::invokeMethod(root.get(), "chooseTool", Q_ARG(QVariant,7)));
+    QCOMPARE(root->property("mode").toString(), QString("preview"));
+    command(InputManager::Back);
+    QCOMPARE(root->property("mode").toString(), QString("canvas"));
+    QVERIFY(!QFile::exists(user));
+    QVERIFY(QMetaObject::invokeMethod(root.get(), "chooseTool", Q_ARG(QVariant,8)));
+    command(InputManager::Confirm);
+    QVERIFY2(!session->isDirty(), qPrintable(session->errorString()));
+    QVERIFY(QFile::exists(user));
+    HomeLayout restored(&registry); QVERIFY(restored.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
+    QCOMPARE(restored.committedDocument(), home.committedDocument());
+    command(InputManager::Back);
+    QVERIFY(!root->property("open").toBool());
 }
 QTEST_MAIN(HomeNavigationTests)
 #include "tst_home_navigation.moc"
