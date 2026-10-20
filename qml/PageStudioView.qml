@@ -263,6 +263,7 @@ Item {
                             readonly property var rect:preview.placementRect(modelData.placement)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId?4:1;border.color:studio.palette.focusColor
                             MouseArea {
+                                objectName:"studioHit-"+modelData.id
                                 anchors.fill:parent
                                 property point start
                                 onPressed:mouse=>{studio.selectedId=modelData.id;studio.toolbarFocus=false;studio.beginGesture(false);start=Qt.point(mouse.x,mouse.y)}

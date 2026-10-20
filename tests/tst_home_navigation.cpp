@@ -32,6 +32,7 @@ class HomeNavigationTests : public QObject {
 private slots:
     void retainsExactOriginAndRecoversWithoutHomeButton();
     void studioRemoteDraftApplyAndCancel();
+    void studioRemotePointerAndInspectorParity();
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
@@ -798,6 +799,61 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel()
     QCOMPARE(restored.committedDocument(), home.committedDocument());
     command(InputManager::Back);
     QVERIFY(!root->property("open").toBool());
+}
+void HomeNavigationTests::studioRemotePointerAndInspectorParity()
+{
+    QTemporaryDir dir; AppRegistry registry; HomeLayout home(&registry);
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    auto *setup=qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(setup);
+    QVERIFY(setup->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5}}}}));
+    QVERIFY(setup->apply());
+    const auto baseline=home.committedDocument();
+    InputManager input; QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager",&input);
+    engine.rootContext()->setContextProperty("homeLayout",&home);
+    engine.rootContext()->setContextProperty("isoldeVersion","test");
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));
+    QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));
+    QVERIFY2(root,qPrintable(component.errorString()));
+    QQuickWindow window; window.resize(1280,720); qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem()); window.show();
+    auto show=[&] { QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString("clock")))); QTest::qWait(80); };
+    auto command=[&](int key) { QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,key))); QCoreApplication::processEvents(); };
+    auto session=[&] {return qobject_cast<StudioSession *>(root->property("session").value<QObject *>());};
+    show(); command(InputManager::NavigateDown); command(InputManager::Confirm);
+    command(InputManager::NavigateDown); command(InputManager::NavigateDown); command(InputManager::Confirm);
+    QCOMPARE(root->property("mode").toString(),QString("canvas"));
+    QVERIFY(session()); const auto remote=session()->draft(); QVERIFY(remote!=baseline);
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"close"));
+
+    show();
+    auto *preview=root->findChild<QQuickItem *>("studioPreview"); QVERIFY(preview);
+    auto center=[&](int row) {
+        QVariant result;
+        QMetaObject::invokeMethod(preview,"placementRect",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,QVariantMap({{"x",0},{"y",row},{"width",1},{"height",1}})));
+        const auto rect=result.metaType().id()==qMetaTypeId<QJSValue>()?result.value<QJSValue>().toVariant().toMap():result.toMap();
+        return preview->mapToItem(window.contentItem(),QPointF(rect["x"].toDouble()+rect["width"].toDouble()/2,rect["y"].toDouble()+rect["height"].toDouble()/2)).toPoint();
+    };
+    const auto from=center(0), to=center(2);
+    QTest::mousePress(&window,Qt::LeftButton,Qt::NoModifier,from);
+    QTest::mouseMove(&window,to,60); QTest::qWait(80);
+    QTest::mouseRelease(&window,Qt::LeftButton,Qt::NoModifier,to);
+    QCoreApplication::processEvents();
+    QCOMPARE(root->property("mode").toString(),QString("canvas"));
+    QCOMPARE(session()->draft(),remote);
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"close"));
+
+    show(); command(InputManager::NavigateDown); command(InputManager::Menu);
+    for(int i=0;i<8;++i)command(InputManager::NavigateDown);
+    command(InputManager::Confirm); QCOMPARE(root->property("mode").toString(),QString("geometry"));
+    command(InputManager::NavigateDown); command(InputManager::Confirm);
+    auto *keyboard=root->findChild<QObject *>("studioKeyboard"); QVERIFY(keyboard);
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("3"))));
+    for(int i=0;i<3;++i)command(InputManager::NavigateDown);
+    command(InputManager::Confirm);
+    QCOMPARE(root->property("mode").toString(),QString("canvas"));
+    QCOMPARE(session()->draft(),remote);
+    QCOMPARE(home.committedDocument(),baseline);
 }
 QTEST_MAIN(HomeNavigationTests)
 #include "tst_home_navigation.moc"

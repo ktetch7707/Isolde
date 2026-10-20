@@ -27,7 +27,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | Task | Priority | Title | % | Status |
 |------|----------|-------|---|--------|
 | T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
-| T16 | 2 | Shared draft transactions, history and profile safety | 80% | verified foundation; full adapter parity pending |
+| T16 | 2 | Shared draft transactions, history and profile safety | 100% | task verification complete; T17 next |
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 0% | planned |
 | T18 | 4 | Unified Page Studio workspace and selection | 0% | planned |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 0% | planned |
@@ -54,7 +54,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **18%** | T15 provisional (75%); T16 verified foundation (80%) |
+| **Overall** | — | **average of 24 active tasks** | **19%** | T15 provisional (75%); T16 verified; T17 next |
 
 ## Highest priority: core Page Studio
 
@@ -75,11 +75,11 @@ Entry files: `src/home/HomeLayout.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `src/h
 Scope:
 - [x] T16.1 Add one profile-scoped in-process edit session over the complete interface document, with baseline revision and live draft view; opening/cancel/undo do not write the applied document or profile assets.
 - [x] T16.2 Introduce shared typed semantic edit commands and complete-result validation; multi-item/group/collision operations accept all affected changes or none, with one undo record.
-- [ ] T16.3 Implement deterministic canonical serialization and centrally allocated identities; remote/pointer/inspector replays produce identical layout bytes from identical fixture identities.
+- [x] T16.3 Implement deterministic canonical serialization and centrally allocated identities; remote/pointer/inspector replays produce identical layout bytes from identical fixture identities.
 - [x] T16.4 Implement bounded undo/redo, explicit history-budget handling, revision conflicts, dirty-exit semantics and profile teardown/client invalidation.
 - [x] T16.5 Prove failed draft operations and atomic apply failures preserve original bytes, applied model, recoverable draft and focus origin; keep v1 backup and no-write-on-read behavior.
 Done when: a minimal offscreen command-to-draft-rendering journey demonstrates move/property edit/undo/redo/cancel/error without persistence leakage; the new shell can consume the session without calling live setters.
-Verify: extend `component_contracts` for multi-node rollback, canonical parity, bounds, revision conflict and cross-profile cases; run `ctest --test-dir build --output-on-failure`. Evidence: [page-studio-implementation-2026-10-19.md](page-studio-implementation-2026-10-19.md), frozen source `/home/isolde-dev/isolde-runs/studio-implementation-12/source`, sibling `ctest.log` (14/14), `install.log`, installed Studio `/tmp/isolde-components-acceptance-u7lfm2xd`, both fixture runs `/tmp/isolde-reference-config-enw44obb` and `/tmp/isolde-reference-config-xx0hwu86`; durable host logs/captures under `build/studio-installed-12/`. T16.3 stays open for full remote/pointer/inspector replay coverage. The provisional shell/geometry are test consumers of this foundation; T17-T24 are not marked delivered.
+Verify: extend `component_contracts` for multi-node rollback, canonical parity, bounds, revision conflict and cross-profile cases; run `ctest --test-dir build --output-on-failure`. Evidence: [page-studio-implementation-2026-10-19.md](page-studio-implementation-2026-10-19.md), frozen source `/home/isolde-dev/isolde-runs/studio-implementation-12/source`, sibling `ctest.log` (14/14), `install.log`, installed Studio `/tmp/isolde-components-acceptance-u7lfm2xd`, both fixture runs `/tmp/isolde-reference-config-enw44obb` and `/tmp/isolde-reference-config-xx0hwu86`; durable host logs/captures under `build/studio-installed-12/`. T16.3 replay evidence: `/home/isolde-dev/isolde-runs/studio-implementation-13/targeted-tests.log` and sibling `ctest.log` (14/14); the actual pointer drag, remote keys and numeric inspector produce byte-identical drafts with no applied writes. Snapshot 13 archive SHA-256 `f61fc75fe0accc6cf6644e558a3ee8070d4a61ef686651515ca335249ebafd67`; its only application delta from installed snapshot 12 is a nonvisual MouseArea objectName for locating replay targets. Standing full-product Generator/cutover gates remain open in their owning tasks. The provisional shell/geometry are test consumers of this foundation; T17-T24 are not marked delivered.
 
 ## T17 — Shared canvas geometry, grids and legacy compatibility (L, depends: T16)
 Entry docs: `docs/page-studio-redesign.md` sections 2, 5, 9; `docs/home-composition.md` Universal grid.
