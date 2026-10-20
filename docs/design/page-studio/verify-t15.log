@@ -1,0 +1,57 @@
+PASS artifact exists: README.md
+PASS artifact exists: feature-map.md
+PASS artifact exists: wireframes.md
+PASS artifact exists: interaction-states.md
+PASS artifact exists: review-and-acceptance.md
+PASS T15.1 all 31 Customize Home action labels mapped ù missing: []
+PASS T15.1 all PageManager operations mapped ù missing: []
+PASS T15.1 shell surface mapped: source notices
+PASS T15.1 shell surface mapped: All Apps
+PASS T15.1 shell surface mapped: themed surfaces
+PASS T15.1 shell surface mapped: Web search switch
+PASS T15.1 backend evidence cited: moveItem
+PASS T15.1 backend evidence cited: setItemPlacement
+PASS T15.1 backend evidence cited: gridCollisions
+PASS T15.1 backend evidence cited: addActionTile
+PASS T15.1 backend evidence cited: rebindSource
+PASS T15.1 backend evidence cited: setAppearance
+PASS T15.1 backend evidence cited: applyTheme
+PASS T15.1 backend evidence cited: createPage
+PASS T15.1 backend evidence cited: drawerRequested
+PASS T15.1 backend evidence cited: searchToggle
+PASS T15.2 wireframe screen: Blank page
+PASS T15.2 wireframe screen: Existing page
+PASS T15.2 wireframe screen: Add (catalog)
+PASS T15.2 wireframe screen: Selection and inspector
+PASS T15.2 wireframe screen: Pick-up / drop
+PASS T15.2 wireframe screen: Resize
+PASS T15.2 wireframe screen: Collision
+PASS T15.2 wireframe screen: Dirty exit
+PASS T15.2 wireframe screen: Preview and Apply
+PASS T15.2 wireframe screen: Nested scope
+PASS T15.2 TV and desktop forms present
+PASS T15.3 state covered: Canvas browsing
+PASS T15.3 state covered: Moving
+PASS T15.3 state covered: Resizing
+PASS T15.3 state covered: Collision dialog
+PASS T15.3 state covered: Context menu
+PASS T15.3 state covered: Inspector sheet
+PASS T15.3 state covered: Field editing
+PASS T15.3 state covered: Add catalog
+PASS T15.3 state covered: Pages / Layers drawer
+PASS T15.3 state covered: Preview / try navigation
+PASS T15.3 state covered: Apply summary
+PASS T15.3 state covered: Apply error
+PASS T15.3 state covered: Dirty-exit dialog
+PASS T15.3 four input channels in the table
+PASS T15.3 focus restoration rules
+PASS T15.3 error feedback
+PASS T15.3 accessible movement alternatives
+PASS T15.3 remote-only constraint stated
+PASS T15.4 uncoached walkthrough recorded
+PASS T15.4 findings resolved
+PASS T15.4 measurable acceptance journeys
+PASS T15.4 no-build claim present
+PASS links resolve
+
+All T15 static checks pass.

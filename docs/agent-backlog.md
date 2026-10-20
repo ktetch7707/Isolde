@@ -26,7 +26,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 ## Overall (update every edit)
 | Task | Priority | Title | % | Status |
 |------|----------|-------|---|--------|
-| T15 | 1 | Page Studio interaction design and usability validation | 0% | planned |
+| T15 | 1 | Page Studio interaction design and usability validation | 100% | complete |
 | T16 | 2 | Shared draft transactions, history and profile safety | 0% | planned |
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 0% | planned |
 | T18 | 4 | Unified Page Studio workspace and selection | 0% | planned |
@@ -54,7 +54,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **11%** | unchanged |
+| **Overall** | — | **average of 24 active tasks** | **16%** | T15 complete |
 
 ## Highest priority: core Page Studio
 
@@ -62,12 +62,12 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 Entry docs: `docs/page-studio-redesign.md` sections 1-4, 10-11; `docs/shell-surfaces-design.md` sections 1-6; `docs/interface-design.md` Page Studio amendment.
 Entry files: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml` (read-only workflow inventory); new design artifacts under `docs/design/page-studio/`.
 Scope:
-- [ ] T15.1 Inventory every currently supported editor operation plus source notices, All Apps, themed shell surfaces and the Search header switch; map each to Studio and identify capability gaps without treating UI labels as backend proof.
-- [ ] T15.2 Produce reviewed TV and desktop wireframes for blank/existing pages, Add, selection, inspector, pick-up/drop, resize, collision, dirty exit, preview, apply error and nested scope.
-- [ ] T15.3 Walk through the complete D-pad/Confirm/Back/Menu state model, including field editing, focus restoration, error feedback and accessible movement alternatives.
-- [ ] T15.4 Record a user/representative review of the new workflow; resolve confusing transitions and establish the measurable acceptance journeys before implementing the shell.
+- [x] T15.1 Inventory every currently supported editor operation plus source notices, All Apps, themed shell surfaces and the Search header switch; map each to Studio and identify capability gaps without treating UI labels as backend proof.
+- [x] T15.2 Produce reviewed TV and desktop wireframes for blank/existing pages, Add, selection, inspector, pick-up/drop, resize, collision, dirty exit, preview, apply error and nested scope.
+- [x] T15.3 Walk through the complete D-pad/Confirm/Back/Menu state model, including field editing, focus restoration, error feedback and accessible movement alternatives.
+- [x] T15.4 Record a user/representative review of the new workflow; resolve confusing transitions and establish the measurable acceptance journeys before implementing the shell.
 Done when: interaction specification, screen/state set and old-to-new feature map agree; remote movement is understandable without a pointer, number keys or hidden gesture.
-Verify: design state-transition/feature-coverage review and recorded uncoached walkthrough; no application build is claimed by static mockups. Evidence: `docs/page-studio-redesign.md` is the initial brief only; final artifacts/review pending.
+Verify: design state-transition/feature-coverage review and recorded uncoached walkthrough; no application build is claimed by static mockups. Evidence: design pack under `docs/design/page-studio/` — `feature-map.md` (T15.1; every Customize Home action + PageManager operation + the four shell surfaces mapped with backend-path citations, labels not treated as proof), `wireframes.md` (T15.2; 12 TV+desktop screen states), `interaction-states.md` (T15.3; full D-pad/Confirm/Back/Menu table, focus restoration, error feedback, accessible movement alternatives), `review-and-acceptance.md` (T15.4; uncoached walkthrough with 8 resolved findings + 10 measurable acceptance journeys); static coverage gate `tools/verify-t15-design.py` 56/56 PASS, log in `docs/design/page-studio/verify-t15.log`. Uncoached installed walkthrough with the actual user remains T24's cutover gate per spec §10.
 
 ## T16 — Shared draft transactions, history and profile safety (L, depends: T15)
 Entry docs: `docs/page-studio-redesign.md` sections 3, 5, 7; `docs/components.md` persistence contracts.
