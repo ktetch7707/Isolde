@@ -8,6 +8,37 @@ Item {
     property var authoredItems: items
     property var authoredSections: sections
     property bool editMode:false
+    property string editSelection:""
+    property var editTargets:({})
+    signal editSelected(string componentId)
+    function registerEditTarget(id,target,remove) {
+        let targets=Object.assign({},editTargets),entries=(targets[id] || []).filter(t=>t!==target)
+        if(!remove)entries.push(target)
+        if(entries.length)targets[id]=entries;else delete targets[id]
+        editTargets=targets
+    }
+    function editorVisible(target) {
+        while(target && target!==root){if(!target.visible)return false;target=target.parent}
+        return target===root
+    }
+    readonly property var editTarget:(editTargets[editSelection] || []).find(t=>t && editorVisible(t) && t.width>0 && t.height>0) || null
+    readonly property var editRect: {
+        const target=editTarget,scroll=sectionFlick.contentY+composed.scrollOffset
+        if(!target)return null
+        const geometry=target.x+target.y+target.width+target.height+scroll
+        // mapToItem alone does not subscribe to ancestor layout changes.
+        let ancestor=target
+        while(ancestor && ancestor!==root){const transform=ancestor.x+ancestor.y+ancestor.width+ancestor.height+ancestor.scale+ancestor.rotation;ancestor=ancestor.parent}
+        const point=target.mapToItem(root,0,0)
+        return {x:point.x,y:point.y,width:target.width,height:target.height}
+    }
+    function revealEditorSelection() {
+        if(!editMode || !editTarget)return
+        if(composition.enabled)composed.revealCard(editTarget,true)
+        else reveal(editTarget)
+    }
+    onEditSelectionChanged:Qt.callLater(()=>{if(editMode){restoreFocus(editSelection);revealEditorSelection()}})
+    onEditTargetChanged:if(editMode)Qt.callLater(revealEditorSelection)
     property bool scopeView:false
     property string editScopeId:""
     required property var sections
@@ -314,6 +345,8 @@ Item {
                                 delegate: Item {
                                     id: tileHost
                                     required property var modelData
+                                    Component.onCompleted:root.registerEditTarget(modelData.id,tileHost,false)
+                                    Component.onDestruction:root.registerEditTarget(modelData.id,tileHost,true)
                                     readonly property int globalIndex: root.itemIndex(modelData.id)
                                     readonly property bool selected: !root.editMode && !root.recoveryFocused && globalIndex === root.focusedIndex
                                     Layout.columnSpan: Math.min(root.gridUnits, modelData.size === "compact" ? 1 : modelData.size === "wide" ? 4 : 2)
@@ -393,6 +426,7 @@ Item {
                                     }
                                     Component { id: clockComponent; ClockWidget { selected: tileHost.selected; roundness: root.tileRoundness; appearance: root.appearance } }
                                     Component { id:textComponent; HomeCard { objectName:"legacyTextWidget-"+modelData.id; item:modelData; appearance:root.appearance; selected:tileHost.selected; onActivated:{root.focusedIndex=tileHost.globalIndex;root.recoveryFocused=false} } }
+                                    MouseArea {anchors.fill:parent;enabled:root.editMode;onClicked:root.editSelected(tileHost.modelData.id)}
                                 }
                             }
                         }

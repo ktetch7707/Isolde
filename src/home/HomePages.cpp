@@ -5,6 +5,16 @@
 #include <QUuid>
 #include <functional>
 
+QString HomeLayout::rootPageName() const {
+    return m_rootPage.value("name").toString(studioOptions().value("rootPageName").toString());
+}
+QVariantList HomeLayout::studioPages() const {
+    QVariantList result;
+    for(const auto &entry:m_pages){const auto page=entry.toObject();result.append(QVariantMap{{"id",page["id"].toString()},{"name",page["name"].toString()}});}
+    if(rootPageVisible())result.insert(qMin(m_rootPage.value("position").toInt(),int(result.size())),QVariantMap{{"id",QString()},{"name",rootPageName()}});
+    return result;
+}
+
 QVariantMap HomeLayout::homeAppearance() const {
     if(m_owner)return m_owner->homeAppearance();
     for(const auto &entry:m_pages)if(entry.toObject()["id"]==m_homePageId) {
@@ -17,7 +27,7 @@ QVariantMap HomeLayout::homeAppearance() const {
 
 QString HomeLayout::createPage(const QString &name, const QString &preset) {
     if (m_owner) return m_owner->createPage(name,preset);
-    if (name.trimmed().isEmpty() || name.trimmed().size()>80 || m_pages.size()>=64 || !QStringList{"blank","movies","shows","standalone","home"}.contains(preset)) {
+    if (name.trimmed().isEmpty() || name.trimmed().size()>80 || m_pages.size()+(rootPageVisible()?1:0)>=64 || !QStringList{"blank","movies","shows","standalone","home"}.contains(preset)) {
         setError(tr("Choose a page name and template. Up to 64 pages are supported."));return {};
     }
     const auto id="page-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -27,7 +37,7 @@ QString HomeLayout::createPage(const QString &name, const QString &preset) {
     if(preset!="blank")sections.append(QJsonObject{{"id","library"},{"name",preset=="shows"?"Shows":"Movies"},{"presentation",QJsonObject{
         {"variant","library"},{"height",550},{"libraryKind",preset=="shows"?"shows":"movies"},{"libraryView","all"},{"libraryLayout","grid"},{"libraryColumns",4},{"padding",12},{"radius",16},{"panelOpacity",0.3}}}});
     QJsonObject document{{"schemaVersion",2},{"theme",QJsonObject::fromVariantMap(appearance())},{"composition",config},{"categories",sections},{"components",QJsonArray{}}};
-    if(preset=="home"){document=QJsonDocument::fromJson(documentData()).object();document.remove("pages");document.remove("homePageId");}
+    if(preset=="home"){document=QJsonDocument::fromJson(documentData()).object();document.remove("pages");document.remove("homePageId");document.remove("rootPage");document.remove("studioAppearance");}
     m_pages.append(QJsonObject{{"id",id},{"name",name.trimmed()},{"layout",document}});
     if(!save()){m_pages.removeLast();return {};}emit layoutChanged();return id;
 }

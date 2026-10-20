@@ -38,6 +38,7 @@ Item {
     readonly property var placements: host.placements || []
     readonly property bool sectionMode: !!root.config.grid && root.grid.mode==="sections"
     property var sectionSurfaces: ({})
+    readonly property real scrollOffset:content.contentY
     readonly property bool placementMode: {
         if(!root.config.grid)return false
         if(root.sectionMode)return true
@@ -95,8 +96,8 @@ Item {
         sectionActionId="";host.focusedIndex=host.itemIndex(item.id);navigationFocused=false;host.recoveryFocused=false
         handleCommand(inputManager.confirm)
     }
-    function revealCard(card) {
-        if (!card || host.editMode || root.placementMode && !root.sectionMode) return
+    function revealCard(card,editing) {
+        if (!card || host.editMode && !editing || root.placementMode && !root.sectionMode) return
         const p = card.mapToItem(content.contentItem,0,0)
         if(p.y<content.contentY)content.contentY=Math.max(0,p.y-6)
         else if(p.y+card.height>content.contentY+content.height)content.contentY=Math.max(0,p.y+card.height-content.height+6)
@@ -340,7 +341,10 @@ Item {
                                 Repeater {
                                     model:sectionView.modelData.items
                                     delegate:HomeCard {
+                                        id:authoredCard
                                         required property var modelData; required property int index
+                                        Component.onCompleted:host.registerEditTarget(modelData.id,authoredCard,false)
+                                        Component.onDestruction:host.registerEditTarget(modelData.id,authoredCard,true)
                                         objectName:"composedCard-"+modelData.id
                                         item:Object.assign({},modelData,{presentation:Object.assign({},sectionView.style,modelData.presentation || {})})
                                         variant:sectionView.style.variant || "source"; appearance:host.appearance; unit:root.unit
@@ -351,7 +355,8 @@ Item {
                                         selected:!host.editMode && !root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.id)
                                         outsideColor:host.backgroundEnd
                                         onSelectedChanged:if(selected) Qt.callLater(root.revealCard,this)
-                                        onActivated:{root.sectionActionId="";host.focusedIndex=host.itemIndex(modelData.id);root.navigationFocused=false;host.recoveryFocused=false;root.handleCommand(inputManager.confirm)}
+                                        onActivated:{if(host.editMode){host.editSelected(modelData.id);return}root.sectionActionId="";host.focusedIndex=host.itemIndex(modelData.id);root.navigationFocused=false;host.recoveryFocused=false;root.handleCommand(inputManager.confirm)}
+                                        MouseArea {anchors.fill:parent;enabled:host.editMode;onClicked:host.editSelected(authoredCard.modelData.id)}
                                     }
                                 }
                             }

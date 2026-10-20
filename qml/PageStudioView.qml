@@ -19,13 +19,17 @@ Item {
     property string message: ""
     property string addingType: ""
     property string resizeAxis:"both"
+    property string deletionReplacement:""
+    property bool deletionRemaps:false
+    property var duplicateBefore:[]
+    property var pageFocus:({})
     property var candidate: ({x:0,y:0,width:1,height:1})
     property var origin: ({})
     property var proposal: ({})
     property var gridDraft: ({})
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
-    property var palette: layoutModel ? layoutModel.appearance : ({})
+    property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
     readonly property var draftModel: session ? (mode==="conversionPreview" && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
@@ -44,7 +48,7 @@ Item {
         return true
     }
     readonly property var tools: ["Add", "Pages", "Layers", "Undo", "Redo", "Grid", "Fit", "Preview", "Apply", "Scope"]
-    readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size"]
+    readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size","Hide / show","Lock / unlock"]
     readonly property var names: ["Clock", "Text"]
     readonly property var current: items.find(i=>i.id===selectedId) || null
     readonly property var collisionPreview: {
@@ -54,14 +58,16 @@ Item {
     }
     readonly property real textScale: palette.typographyScale || 1
     readonly property real spacing: palette.spacing || 20
-    readonly property var pageEntries:draftModel?[{id:"",name:"Home"}].concat(draftModel.pages):[]
-    readonly property var menuEntries:[{label:"＋ Add page",action:"new"}].concat(pageEntries.map(p=>({label:p.name+(p.id===draftModel.homePageId?" · Home":""),action:"page",id:p.id}))).concat([
+    readonly property var pageEntries:draftModel?draftModel.studioPages:[]
+    readonly property var removalDestinations:pageEntries.filter(p=>p.id!==pageId)
+    readonly property string breadcrumb:((pageEntries.find(p=>p.id===pageId)||{}).name || "Page")+(sectionMode?" / "+(scopeOverview?"All sections":selectedSection?selectedSection.name:"Uncategorized"):"")
+    readonly property var menuEntries:[{label:"＋ Add page",action:"new"}].concat(pageEntries.map(p=>({label:(p.id===draftModel.homePageId?"⌂ ":"")+p.name,action:"page",id:p.id}))).concat([
         {label:"＋ Add component",action:"add"},{label:"Page appearance",action:"appearance"},{label:"More tools",action:"more"},{label:"Review & Apply",action:"apply"},{label:"Edit page →",action:"edit"}])
     function activateMenu(index) {
         menuIndex=index;const entry=menuEntries[index];if(!entry)return
         choice=0
         if(entry.action==="new")beginKeyboard("newPage","")
-        else if(entry.action==="page"){pageId=entry.id;selectedId="";mode="pageContext"}
+        else if(entry.action==="page"){pageFocus[pageId]=selectedId;pageId=entry.id;selectedId=pageFocus[pageId] || "";mode="pageContext"}
         else if(entry.action==="add")chooseTool(0)
         else if(entry.action==="appearance")mode="pageAppearance"
         else if(entry.action==="more")mode="more"
@@ -76,14 +82,14 @@ Item {
 
     function show(id, component) {
         session = layoutModel.beginStudio()
-        pageId = id || ""; selectedId = component || ""
+        pageId = id || (!session.model.rootPageVisible?session.model.homePageId:""); selectedId = component || "";pageFocus=({})
         mode = "canvas"; toolbarFocus = true; tool = 0;menuIndex=0; message = "Draft · Apply saves your interface"
         scopeOverview=false;scopeId=current?current.categoryId || "":page && page.sections.length?page.sections[0].id || "":""
         open = true
     }
     function close() { if(session) session.invalidate(); open=false; closed() }
     function command(op,args) {
-        if (!session || !session.execute(op,args || {},["newPage","renamePage","removePage","setHomePage"].indexOf(op)>=0 ? "" : pageId)) {
+        if (!session || !session.execute(op,args || {},["newPage","renamePage","duplicatePage","reorderPage","removePage","setHomePage","studioAppearance"].indexOf(op)>=0 ? "" : pageId)) {
             message = session ? session.errorString : "The edit session is closed."
             return false
         }
@@ -94,6 +100,7 @@ Item {
     function beginGesture(resize) {
         if (!gridMode) { beginGrid(); return }
         if (!current) { message="Choose a component in Layers first."; return }
+        if(current.locked){message="This component is locked. Choose Edit component → Lock / unlock first.";return}
         addingType=""; origin=position(current); candidate=Object.assign({},origin)
         resizeAxis="both"
         mode=resize ? "resize" : "move"; toolbarFocus=false
@@ -147,16 +154,20 @@ Item {
         else if(index===6) beginKeyboard("opacity",current && current.presentation && current.presentation.surfaceOpacity!==undefined ? String(current.presentation.surfaceOpacity) : "1")
         else if(index===7) beginKeyboard("corners",current && current.presentation ? String(current.presentation.radius || 0) : "0")
         else if(index===8) {beginGesture(false);if(mode==="move"){mode="geometry";choice=0}}
+        else if(index===9){if(command("state",{id:selectedId,key:"hidden",value:!current.hidden})){mode="canvas";toolbarFocus=false}}
+        else if(index===10){if(command("state",{id:selectedId,key:"locked",value:!current.locked})){mode="canvas";toolbarFocus=false}}
     }
     function dialogLabels() {
-        if(mode==="pageContext")return ["Edit page","Appearance","Rename page","Set as Home",pageId===draftModel.homePageId?"Delete unavailable · this is Home":"Delete page"]
+        if(mode==="pageContext")return ["Edit page","Appearance","Rename page","Duplicate page",pageId===draftModel.homePageId?"Current Home page":"Set as Home","Move page up","Move page down",pageId===draftModel.homePageId?"Delete unavailable · this is Home":"Delete page…"]
         if(mode==="setHome")return ["Set as Home in draft","Cancel"]
-        if(mode==="deletePage")return ["Cancel","Delete page from draft"]
+        if(mode==="deletePage")return ["Cancel","Delete if there are no incoming links"].concat(removalDestinations.map(p=>"Redirect incoming links to "+p.name))
+        if(mode==="confirmDeletePage")return ["Delete page in draft","Cancel"]
         if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
-        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope"]
+        if(mode==="editorAppearance")return ["Surface color","Selected surface","Text color","Supporting text","Focus color","Reset Studio colors"]
+        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance"]
         if(mode==="context") return ["Move","Width","Height","Edit component"]
         if(mode==="properties")return contextActions.slice(2)
-        if(mode==="layers") return items.map(i=>i.name || i.widgetType || i.id)
+        if(mode==="layers") return items.map(i=>(i.name || i.widgetType || i.id)+(i.hidden?" · Hidden":"")+(i.locked?" · Locked":""))
         if(mode==="pages") return ["Home"].concat(draftModel.pages.map(p=>p.name)).concat(["Create blank page"])
         if(mode==="add") return names
         if(mode==="collision") return ["Shift others", "Swap", "Cancel"]
@@ -173,19 +184,35 @@ Item {
     }
     function activateChoice() {
         if(mode==="pageContext") {
-            if(choice===0){mode="canvas";toolbarFocus=false;if(scopedItems.length)selectedId=scopedItems[0].id}
+            if(choice===0){mode="canvas";toolbarFocus=false;if(!current && scopedItems.length)selectedId=scopedItems[0].id}
             else if(choice===1){mode="pageAppearance";choice=0}
-            else if(choice===2){if(pageId)beginKeyboard("renamePage",(pageEntries.find(p=>p.id===pageId)||{}).name);else message="The original page name is currently Home."}
-            else if(choice===3){mode="setHome";choice=0;message="Home navigation and Settings colors will follow this page after Apply."}
+            else if(choice===2)beginKeyboard("renamePage",(pageEntries.find(p=>p.id===pageId)||{}).name)
+            else if(choice===3){duplicateBefore=pageEntries.map(p=>p.id);beginKeyboard("duplicatePage",(pageEntries.find(p=>p.id===pageId)||{}).name+" copy")}
+            else if(choice===4){mode="setHome";choice=0;message="Home navigation and Settings colors will follow this page after Apply."}
+            else if(choice===5 || choice===6)command("reorderPage",{id:pageId,offset:choice===5?-1:1})
             else if(pageId===draftModel.homePageId)message="Set another page as Home before deleting this page."
-            else if(!pageId)message="The original page cannot be deleted yet. Its components can be removed individually."
-            else {mode="deletePage";choice=0;message="Links to this page must be repaired before deletion."}
+            else {mode="deletePage";choice=0;message="Choose whether incoming links must be absent or redirect them to an existing page. The page and its contents are removed together; Undo restores them."}
             return
         }
         if(mode==="setHome"){if(choice===0)command("setHomePage",{id:pageId});mode="canvas";toolbarFocus=true;return}
-        if(mode==="deletePage"){if(choice===1 && command("removePage",{id:pageId})){pageId="";selectedId=""}mode="canvas";toolbarFocus=true;return}
+        if(mode==="deletePage") {
+            if(choice===0){mode="pageContext";choice=7;return}
+            deletionRemaps=choice>1;deletionReplacement=deletionRemaps?removalDestinations[choice-2].id:""
+            message="Delete "+(pageEntries.find(p=>p.id===pageId)||{}).name+" and all its components"+(deletionRemaps?", redirecting incoming links to "+(removalDestinations.find(p=>p.id===deletionReplacement)||{}).name:" only if no incoming links remain")+". This is one undoable draft change; Apply saves it."
+            mode="confirmDeletePage";choice=0;return
+        }
+        if(mode==="confirmDeletePage") {
+            if(choice===1){mode="deletePage";choice=0;return}
+            const args={id:pageId};if(deletionRemaps)args.replacementPageId=deletionReplacement
+            if(command("removePage",args)){pageId=draftModel.homePageId;selectedId=pageFocus[pageId] || "";mode="canvas";toolbarFocus=true;menuIndex=0}
+            return
+        }
         if(mode==="pageAppearance"){const key=["backgroundStart","backgroundEnd","surfaceColor","textColor","focusColor"][choice];beginKeyboard("pageColor:"+key,String(page.appearance[key] || ""));return}
-        if(mode==="more"){const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return}
+        if(mode==="more"){if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return}
+        if(mode==="editorAppearance") {
+            if(choice===5){command("studioAppearance",{value:{}});return}
+            const key=["surfaceColor","selectedColor","textColor","mutedColor","focusColor"][choice];beginKeyboard("studioColor:"+key,String(palette[key]));return
+        }
         if(mode==="context") {
             if(choice===0)beginGesture(false)
             else if(choice===1 || choice===2){const axis=choice===1?"width":"height";beginGesture(true);resizeAxis=axis}
@@ -280,7 +307,7 @@ Item {
                 const dy=c===inputManager.navigateDown?1:c===inputManager.navigateUp?-1:0
                 let best=null, score=Infinity
                 for(const item of scopedItems) {
-                    if(item.id===selectedId || !item.placement)continue
+                    if(item.id===selectedId || !item.placement || item.hidden)continue
                     const q=item.placement, x=q.x+q.width/2-cx, y=q.y+q.height/2-cy
                     if((dx && x*dx<=0) || (dy && y*dy<=0))continue
                     const distance=(dx?Math.abs(x):Math.abs(y))*1000+(dx?Math.abs(y):Math.abs(x))
@@ -332,11 +359,15 @@ Item {
                 transformOrigin:Item.TopLeft
                 x:(canvasArea.width-width*scale)/2;y:(canvasArea.height-height*scale)/2
                 HomeScreen {
-                    id:preview;objectName:"studioPreview";anchors.fill:parent
-                    items:studio.page?studio.page.items:[];sections:studio.page?studio.page.sections:[]
+                    id:preview;objectName:"studioPreview"
+                    x:draftNavigation.contentLeft;y:draftNavigation.contentTop;width:parent.width-x;height:parent.height-y
+                    items:studio.page?studio.page.items.filter(i=>!i.hidden || (studio.mode!=="preview" && i.id===studio.selectedId)):[]
+                    sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>!i.hidden || (studio.mode!=="preview" && i.id===studio.selectedId))})):[]
                     appearance:studio.page?studio.page.appearance:studio.palette;composition:studio.page?studio.page.composition:({})
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
+                    editSelection:studio.gridMode?"":studio.selectedId
+                    onEditSelected:componentId=>{studio.selectedId=componentId;studio.toolbarFocus=false;studio.mode="context";studio.choice=0}
                     brandVisible:studio.page?studio.page.brandVisible:false;tileRoundness:studio.page?studio.page.tileRoundness:0
                     backgroundStart:studio.page?studio.page.backgroundStart:studio.layoutModel.backgroundStart
                     backgroundEnd:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd
@@ -346,8 +377,23 @@ Item {
                     onSettingsRequested:section=>studio.message="Return to editing to change settings."
                     onSearchRequested:studio.message="Search is unavailable in draft preview."
                 }
+                PageNavigation {
+                    id:draftNavigation;anchors.fill:parent;enabledNavigation:studio.pageId!==""
+                    composition:studio.page?studio.page.composition:({});appearance:studio.page?studio.page.appearance:({})
+                    pages:studio.pageEntries;activeId:studio.pageId
+                    selectedPage:Math.max(0,studio.pageEntries.findIndex(p=>p.id===studio.pageId))
+                    onChosen:index=>{studio.message="Page navigation · use the Pages menu to choose an editing page."}
+                }
                 Item {
-                    anchors.fill:parent;visible:studio.mode!=="preview"
+                    x:preview.x;y:preview.y;width:preview.width;height:preview.height;visible:studio.mode!=="preview"
+                    Rectangle {
+                        visible:!studio.gridMode && !!preview.editRect && !studio.toolbarFocus
+                        x:preview.editRect?preview.editRect.x:0;y:preview.editRect?preview.editRect.y:0
+                        width:preview.editRect?preview.editRect.width:0;height:preview.editRect?preview.editRect.height:0
+                        color:"transparent";border.width:7;border.color:studio.palette.surfaceColor
+                        Rectangle {anchors.fill:parent;anchors.margins:2;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
+                        Text {anchors.bottom:parent.top;width:parent.width;text:studio.current?studio.current.name || studio.current.widgetType || studio.current.id:"";color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;elide:Text.ElideRight;font.pixelSize:16*studio.textScale}
+                    }
                     Repeater {
                         model:studio.gridMode && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry") ? studio.grid.columns*studio.grid.rows : 0
                         delegate:Rectangle {
@@ -357,11 +403,13 @@ Item {
                         }
                     }
                     Repeater {
-                        model:studio.gridMode ? studio.scopedItems.filter(i=>!!i.placement):[]
+                        model:studio.gridMode ? studio.scopedItems.filter(i=>!!i.placement && (!i.hidden || i.id===studio.selectedId)):[]
                         delegate:Rectangle {
                             required property var modelData
                             readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId || studio.scopeId)
-                            x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId && !studio.toolbarFocus?4:0;border.color:studio.palette.focusColor
+                            x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId && !studio.toolbarFocus?7:0;border.color:studio.palette.surfaceColor
+                            Rectangle {anchors.fill:parent;anchors.margins:2;visible:modelData.id===studio.selectedId && !studio.toolbarFocus;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
+                            Text {visible:modelData.id===studio.selectedId && !studio.toolbarFocus;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:(modelData.name || modelData.widgetType || "Component")+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
                             MouseArea {
                                 objectName:"studioHit-"+modelData.id
                                 anchors.fill:parent
@@ -370,7 +418,7 @@ Item {
                                 onPressed:mouse=>{studio.selectedId=modelData.id;studio.toolbarFocus=false;dragging=false;start=Qt.point(mouse.x,mouse.y)}
                                 onPositionChanged:mouse=>{
                                     if(!pressed)return
-                                    if(!dragging){if(Math.abs(mouse.x-start.x)+Math.abs(mouse.y-start.y)<Qt.styleHints.startDragDistance)return;studio.beginGesture(false);dragging=true}
+                                    if(!dragging){if(Math.abs(mouse.x-start.x)+Math.abs(mouse.y-start.y)<Qt.styleHints.startDragDistance)return;if(studio.current && studio.current.locked){studio.message="Unlock this component before moving it.";return}studio.beginGesture(false);dragging=true}
                                     let p=Object.assign({},studio.origin)
                                     p.x+=Math.round((mouse.x-start.x)/(preview.gridMetricsFor(studio.scopeId).cellW+preview.gridMetricsFor(studio.scopeId).gap))
                                     p.y+=Math.round((mouse.y-start.y)/(preview.gridMetricsFor(studio.scopeId).cellH+preview.gridMetricsFor(studio.scopeId).gap))
@@ -401,22 +449,23 @@ Item {
             }
             Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode!=="preview";text:"Empty page · Confirm to add a component";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
         }
-        Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview";text:studio.mode==="move"?"Moving · Arrows position · Confirm place · Back cancel":studio.mode==="resize"?"Sizing "+studio.resizeAxis+" · Left/Right adjust · Confirm accept · Back cancel":"Edit mode · Confirm select · Menu actions · Back pages";color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
+        Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview";text:studio.breadcrumb+" · "+(studio.mode==="move"?"Moving · Arrows position · Confirm place · Back cancel":studio.mode==="resize"?"Sizing "+studio.resizeAxis+" · Left/Right adjust · Confirm accept · Back cancel":"Edit mode · Confirm select · Menu actions · Back pages");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
     }
     Rectangle {
         visible:studio.mode!=="canvas" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="preview"
         z:3
         width:Math.min(parent.width-2*studio.spacing,560*studio.textScale);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
-        readonly property var selectionRect:studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId):null
+        readonly property var localSelection:studio.gridMode && studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId):preview.editRect
+        readonly property var selectionRect:localSelection?Object.assign({},localSelection,{x:preview.x+localSelection.x,y:preview.y+localSelection.y}):null
         x:selectionRect && (studio.mode==="context" || studio.mode==="properties")?(selectionRect.x+selectionRect.width+width+2*studio.spacing<=studio.width?selectionRect.x+selectionRect.width+studio.spacing:Math.max(studio.spacing,selectionRect.x-width-studio.spacing)):(parent.width-width)/2
         y:selectionRect && (studio.mode==="context" || studio.mode==="properties")?Math.max(studio.spacing,Math.min(parent.height-height-studio.spacing,selectionRect.y)):(parent.height-height)/2
         color:studio.palette.surfaceColor;border.width:3;border.color:studio.palette.focusColor;radius:studio.spacing
         Column {
             id:dialogColumn;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:studio.spacing;spacing:studio.spacing/2
-            Text {width:parent.width;text:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="more"?"More tools":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
-            Text {width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.selectedId+"? This stays undoable until Apply." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
+            Text {id:dialogHeading;width:parent.width;text:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="more"?"More tools":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
+            Text {id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.selectedId+"? This stays undoable until Apply." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
             ListView {
-                width:parent.width;height:Math.min(360*studio.textScale,Math.max(50,studio.height-220*studio.textScale))
+                width:parent.width;height:Math.min(studio.dialogLabels().length*42*studio.textScale,Math.max(42*studio.textScale,studio.height-dialogHeading.implicitHeight-dialogMessage.implicitHeight-6*studio.spacing))
                 clip:true;currentIndex:studio.choice;highlightRangeMode:ListView.ApplyRange
                 model:studio.mode==="keyboard" ? []:studio.dialogLabels()
                 delegate:Rectangle {
@@ -432,6 +481,18 @@ Item {
         id:keyboard;objectName:"studioKeyboard";visible:studio.mode==="keyboard";anchors.fill:parent;z:10;appearance:studio.palette;hint:studio.message
         onCanceled:studio.mode=studio.keyboardReturnMode
         onAccepted:text=>{
+            if(studio.keyboardAction.indexOf("studioColor:")===0) {
+                const key=studio.keyboardAction.slice(12),value=Object.assign({},studio.palette,{[key]:text})
+                if(studio.command("studioAppearance",{value:value}))studio.mode="editorAppearance"
+                return
+            }
+            if(studio.keyboardAction==="duplicatePage") {
+                if(studio.command("duplicatePage",{id:studio.pageId,name:text})){
+                    studio.pageId=studio.pageEntries.find(p=>studio.duplicateBefore.indexOf(p.id)<0).id
+                    studio.selectedId="";studio.mode="pageContext";studio.choice=0
+                }
+                return
+            }
             if(studio.keyboardAction==="renamePage") {
                 if(studio.command("renamePage",{id:studio.pageId,name:text}))studio.mode="pageContext"
                 return
@@ -475,7 +536,20 @@ Item {
             studio.mode="canvas"
         }
     }
-    Connections {target:studio.session;function onChanged(){if(studio.session && studio.session.errorString.indexOf("History budget")===0){studio.mode="history";studio.choice=0}}}
+    Connections {
+        target:studio.session
+        function onChanged(){
+            if(studio.session && studio.session.errorString.indexOf("History budget")===0){studio.mode="history";studio.choice=0}
+            Qt.callLater(()=>{
+                if(!studio.open || !studio.session || !studio.session.active)return
+                if(!studio.pageEntries.some(p=>p.id===studio.pageId)){
+                    studio.pageId=studio.draftModel.homePageId;studio.selectedId=studio.pageFocus[studio.pageId] || ""
+                    studio.toolbarFocus=true;studio.mode="canvas"
+                }
+                if(studio.selectedId && !studio.current)studio.selectedId=studio.scopedItems.length?studio.scopedItems[0].id:""
+            })
+        }
+    }
     Text {
         anchors.top:parent.top;anchors.horizontalCenter:parent.horizontalCenter;anchors.topMargin:studio.spacing
         visible:studio.mode==="preview";z:120

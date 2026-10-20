@@ -63,7 +63,11 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
     m_origin = originId;
     QScopedValueRollback<bool> dispatching(m_dispatching, true);
     bool accepted = false;
-    if (type == "open-page") {
+    if(type=="root-page") {
+        if(m_layout && m_layout->rootPageVisible()){emit pageRequested(QString(),originId);accepted=true;}
+        else emit rejected("This page was removed. Repair its link in Page Studio.");
+    }
+    else if (type == "open-page") {
         const auto id=value.value("pageId").toString();
         if(m_layout && m_layout->pageModel(id)){emit pageRequested(id,originId);accepted=true;}
         else emit rejected("This page was removed. Open Settings → Home → Pages to repair its link.");

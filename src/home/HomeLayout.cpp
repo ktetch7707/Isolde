@@ -52,6 +52,24 @@ bool normalizeAppearance(QVariantMap &values)
     return true;
 }
 
+double contrast(const QColor &a,const QColor &b) {
+    const auto luminance=[](const QColor &color) {
+        const auto linear=[](double channel){return channel<=0.04045?channel/12.92:qPow((channel+0.055)/1.055,2.4);};
+        return 0.2126*linear(color.redF())+0.7152*linear(color.greenF())+0.0722*linear(color.blueF());
+    };
+    const double x=luminance(a),y=luminance(b);return (qMax(x,y)+0.05)/(qMin(x,y)+0.05);
+}
+bool readableStudioAppearance(QVariantMap values) {
+    if(!normalizeAppearance(values))return false;
+    const auto surface=QColor(values.value("surfaceColor").toString()),selected=QColor(values.value("selectedColor").toString());
+    for(const auto &key:QStringList{"textColor","mutedColor"}) {
+        const auto ink=QColor(values.value(key).toString());
+        if(!ink.isValid() || !surface.isValid() || !selected.isValid() || contrast(ink,surface)<4.5 || contrast(ink,selected)<4.5)return false;
+    }
+    const auto focus=QColor(values.value("focusColor").toString());
+    return focus.isValid() && contrast(focus,surface)>=3 && contrast(focus,selected)>=3;
+}
+
 bool isSafeActionId(const QString &id)
 {
     return id.isEmpty() || ComponentSchema::safeId(id);
@@ -93,6 +111,7 @@ QVariantList HomeLayout::items() const
     QVariantList result;
     const auto appendItem = [this, &result](const QJsonValue &value) {
         const auto object = value.toObject();
+        if(!m_draftOnly && object.value("hidden").toBool())return;
         auto item = object.toVariantMap();
         const auto action = normalizedActionForItem(object);
         if (!action.isEmpty()) {
@@ -271,6 +290,7 @@ QVariantMap HomeLayout::studioOptions() const
     const auto object=QJsonDocument::fromJson(file.readAll()).object();
     if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
+    if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
     if(!object["menuWidth"].isDouble() || object["menuWidth"].toDouble()<200 || object["menuWidth"].toDouble()>480)return {};
     if(!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble()<60 || object["sectionHeight"].toDouble()>800)return {};
     QSet<QString> ids;
@@ -281,6 +301,14 @@ QVariantMap HomeLayout::studioOptions() const
     }
     if(ids.size()!=2 || !ids.contains(object["defaultGrid"].toObject()["mode"].toString()))return {};
     return object.toVariantMap();
+}
+
+QVariantMap HomeLayout::studioAppearance() const {
+    auto result=appearance();
+    const auto defaults=studioOptions().value("appearance").toMap();
+    for(auto it=defaults.cbegin();it!=defaults.cend();++it)result[it.key()]=it.value();
+    for(auto it=m_studioAppearance.cbegin();it!=m_studioAppearance.cend();++it)result[it.key()]=it.value();
+    return result;
 }
 bool HomeLayout::setGrid(const QVariantMap &value)
 {
@@ -512,6 +540,24 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         pageIds.insert(id); pages.append(page);
     }
     const auto homePage=object.value("homePageId");
+    const auto rootPage=object.value("rootPage").toObject();
+    const auto editorAppearance=object.value("studioAppearance").toObject().toVariantMap();
+    if(object.contains("studioAppearance")) {
+        auto effective=appearanceDefaults();const auto packaged=studioOptions().value("appearance").toMap();
+        for(auto it=packaged.cbegin();it!=packaged.cend();++it)effective[it.key()]=it.value();
+        for(auto it=editorAppearance.cbegin();it!=editorAppearance.cend();++it)effective[it.key()]=it.value();
+        if(m_owner || !object["studioAppearance"].isObject() || !readableStudioAppearance(effective)) {setError(tr("Studio colors must keep text and focus readable on normal and selected surfaces."));return false;}
+    }
+    if(object.contains("rootPage")) {
+        bool valid=!m_owner && object["rootPage"].isObject();
+        for(auto it=rootPage.begin();it!=rootPage.end();++it)if(!QStringList{"name","visible","position"}.contains(it.key()))valid=false;
+        const auto position=rootPage.value("position");
+        if(!rootPage.value("name").isString() || rootPage.value("name").toString().trimmed().isEmpty() || rootPage.value("name").toString().size()>80 || rootPage.value("name").toString().contains(QChar::Null)
+            || !rootPage.value("visible").isBool() || !position.isDouble() || position.toDouble()!=position.toInt() || position.toInt()<0 || position.toInt()>pages.size()
+            || (!rootPage.value("visible").toBool() && homePage.toString().isEmpty()) || pages.size()+(rootPage.value("visible").toBool()?1:0)>64)valid=false;
+        if(!valid){setError(tr("Root page metadata is invalid. Nothing changed."));return false;}
+    }
+    else if(!m_owner && pages.size()>=64){setError(tr("The interface exceeds the 64-page limit including Home."));return false;}
     if(object.contains("homePageId") && (m_owner || !homePage.isString() || (!homePage.toString().isEmpty() && !pageIds.contains(homePage.toString())))) {
         setError(tr("The designated Home page does not exist."));return false;
     }
@@ -567,6 +613,8 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
     m_items = components;
     m_pages = pages;
     m_homePageId = homePage.toString();
+    m_rootPage=rootPage;
+    m_studioAppearance=editorAppearance;
     m_composition = composition;
     m_appearance = presentation;
     if (userDocument && version == 1) m_legacyDocument = data;
@@ -1002,7 +1050,7 @@ QByteArray HomeLayout::documentData() const
         components.append(QJsonObject::fromVariantMap(normalized));
     }
     QJsonObject object{{"schemaVersion", 2}, {"theme", theme}, {"composition", QJsonObject::fromVariantMap(m_composition)}, {"categories", m_categories}, {"components", components}};
-    if (!m_owner) {object.insert("pages",m_pages);object.insert("homePageId",m_homePageId);}
+    if (!m_owner) {object.insert("pages",m_pages);object.insert("homePageId",m_homePageId);if(!m_rootPage.isEmpty())object.insert("rootPage",m_rootPage);if(!m_studioAppearance.isEmpty())object.insert("studioAppearance",QJsonObject::fromVariantMap(m_studioAppearance));}
     return QJsonDocument(object).toJson();
 }
 
@@ -1080,6 +1128,8 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
     const QJsonArray previousCategories = m_categories;
     const QJsonArray previousPages = m_pages;
     const QString previousHomePage=m_homePageId;
+    const auto previousRootPage=m_rootPage;
+    const auto previousStudioAppearance=m_studioAppearance;
     const QVariantMap previousAppearance = m_appearance;
     const QVariantMap previousComposition = m_composition;
     const QString previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
@@ -1098,7 +1148,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
     // Adopt the validated in-memory state, then persist atomically.
     m_items = probe.m_items;
     m_categories = probe.m_categories;
-    if (!m_owner) {m_pages = probe.m_pages;m_homePageId=probe.m_homePageId;}
+    if (!m_owner) {m_pages = probe.m_pages;m_homePageId=probe.m_homePageId;m_rootPage=probe.m_rootPage;m_studioAppearance=probe.m_studioAppearance;}
     m_appearance = probe.m_appearance;
     m_composition = probe.m_composition;
     m_backgroundStart = probe.m_backgroundStart;
@@ -1113,6 +1163,8 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
         m_categories = previousCategories;
         m_pages = previousPages;
         m_homePageId=previousHomePage;
+        m_rootPage=previousRootPage;
+        m_studioAppearance=previousStudioAppearance;
         m_appearance = previousAppearance;
         m_composition = previousComposition;
         m_backgroundStart = previousStart;

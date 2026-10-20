@@ -240,7 +240,7 @@ Window {
                 id:pageSurface;anchors.fill:parent;visible:open && !sessionManager.active
                 layoutModel:homeLayout;provider:pageData;availableApps:appRegistry.apps;artwork:artPacks.artwork;themes:artPacks.themes
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
-                onClosed:origin=>home.restoreFocus(origin)
+                onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}
                 onSearchRequested:window.openSearchFromPage()
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
             }
@@ -424,7 +424,7 @@ Window {
             if (kodiLibrary.returnToSearchAfterPlayback) return
             if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
         }
-        function onPageRequested(id,originId) {commandCenter.open=false;pageSurface.showPage(id,originId,false)}
+        function onPageRequested(id,originId) {commandCenter.open=false;if(id)pageSurface.showPage(id,originId,false);else{sessionManager.goHome();pageSurface.closeAll();home.restoreFocus(originId)}}
         function onRejected(reason) { window.launchErrorAppId = ""; window.launchErrorText = reason }
         function onLibraryRequested(returnHome) {
             commandCenter.open = false

@@ -129,6 +129,7 @@ qt_add_qml_module(isolde
         qml/SkinLibrary.qml
         qml/HomeDesignEditor.qml
         qml/PageManager.qml
+        qml/PageNavigation.qml
         qml/PageSurface.qml
         qml/PageEditor.qml
         qml/PageStudioView.qml

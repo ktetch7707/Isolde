@@ -26,10 +26,18 @@ class HomeLayout final : public QObject {
     Q_PROPERTY(QVariantList placements READ placements NOTIFY layoutChanged)
     Q_PROPERTY(QVariantMap studioOptions READ studioOptions CONSTANT)
     Q_PROPERTY(QString homePageId READ homePageId NOTIFY layoutChanged)
+    Q_PROPERTY(QString rootPageName READ rootPageName NOTIFY layoutChanged)
+    Q_PROPERTY(bool rootPageVisible READ rootPageVisible NOTIFY layoutChanged)
+    Q_PROPERTY(QVariantList studioPages READ studioPages NOTIFY layoutChanged)
+    Q_PROPERTY(QVariantMap studioAppearance READ studioAppearance NOTIFY layoutChanged)
     Q_PROPERTY(QVariantMap homeAppearance READ homeAppearance NOTIFY layoutChanged)
 
 public:
     QString homePageId() const { return m_homePageId; }
+    QString rootPageName() const;
+    bool rootPageVisible() const { return m_rootPage.value("visible").toBool(true); }
+    QVariantList studioPages() const;
+    QVariantMap studioAppearance() const;
     QVariantMap homeAppearance() const;
     bool load(const QString &defaultPath = {}, const QString &userPath = {});
     Q_INVOKABLE bool addAppTile(const QString &appId);
@@ -145,6 +153,8 @@ private:
     bool isPageId(const QString &id) const;
     QJsonArray m_pages;
     QString m_homePageId;
+    QJsonObject m_rootPage;
+    QVariantMap m_studioAppearance;
     QHash<QString, PageModel *> m_pageModels;
     HomeLayout *m_owner = nullptr;
     QString m_pageId;

@@ -7,6 +7,7 @@
 #include <QSet>
 #include <QFile>
 #include <algorithm>
+#include <functional>
 
 StudioSession::StudioSession(QObject *parent)
     : QObject(parent)
@@ -95,6 +96,7 @@ void StudioSession::invalidate()
         m_model->m_collections = {};
         m_model->m_composition.clear();
         m_model->m_homePageId.clear();
+        m_model->m_rootPage={};m_model->m_studioAppearance.clear();
         m_model->m_userPath.clear();
         m_model->m_defaultPath.clear();
         m_model->syncPages();
@@ -134,9 +136,117 @@ bool StudioSession::apply(const QString &focusId)
 bool StudioSession::execute(const QString &operation, const QVariantMap &a, const QString &pageId)
 {
     if (!m_active || !m_live) { setError(QStringLiteral("Reopen Page Studio before editing.")); return false; }
+    if(operation=="studioAppearance") {
+        auto document=QJsonDocument::fromJson(m_draft).object();
+        const auto value=a.value("value").toMap();
+        if(value.isEmpty())document.remove("studioAppearance");else document["studioAppearance"]=QJsonObject::fromVariantMap(value);
+        return pushEdit(QJsonDocument(document).toJson());
+    }
+    if(QStringList{"renamePage","duplicatePage","reorderPage","removePage"}.contains(operation)) {
+        auto document=QJsonDocument::fromJson(m_draft).object();auto pages=document["pages"].toArray();
+        const QString id=a.value("id").toString();int index=-1;
+        for(int i=0;i<pages.size();++i)if(pages[i].toObject()["id"]==id)index=i;
+        auto rootMeta=document["rootPage"].toObject();
+        if(rootMeta.isEmpty())rootMeta={{"name",m_model->rootPageName()},{"visible",true},{"position",0}};
+        if((id.isEmpty() && !rootMeta.value("visible").toBool()) || (!id.isEmpty() && index<0)){setError(tr("This page no longer exists."));return false;}
+        QStringList order;for(const auto &entry:m_model->studioPages())order.append(entry.toMap()["id"].toString());
+        const auto storeOrder=[&] {
+            QJsonArray sorted;
+            for(const auto &key:order)if(!key.isEmpty())for(const auto &entry:pages)if(entry.toObject()["id"]==key)sorted.append(entry);
+            pages=sorted;rootMeta["position"]=qMax(0,int(order.indexOf(QString())));
+        };
+        if(operation=="renamePage" || operation=="duplicatePage") {
+            const auto name=a.value("name").toString().trimmed();
+            if(name.isEmpty() || name.size()>80 || name.contains(QChar::Null)){setError(tr("Use a page name of 1–80 characters."));return false;}
+            if(operation=="renamePage") {
+                if(id.isEmpty())rootMeta["name"]=name;
+                else{auto entry=pages[index].toObject();entry["name"]=name;pages[index]=entry;}
+            } else {
+                if(order.size()>=64){setError(tr("Up to 64 pages are supported per profile."));return false;}
+                auto layout=id.isEmpty()?document:pages[index].toObject()["layout"].toObject();
+                layout.remove("pages");layout.remove("homePageId");layout.remove("rootPage");layout.remove("studioAppearance");
+                QHash<QString,QString> copiedIds;QSet<QString> allocated;
+                auto composition=layout["composition"].toObject();
+                const auto remapIdentity=[&](const QString &old)->QString {
+                    if(copiedIds.contains(old))return copiedIds[old];
+                    auto fresh=allocateId(old);if(fresh.isEmpty())return {};
+                    const auto base=fresh;int suffix=2;
+                    while(allocated.contains(fresh))fresh=base+QString::number(suffix++);
+                    if(!ComponentSchema::safeId(fresh))return {};
+                    copiedIds[old]=fresh;allocated.insert(fresh);return fresh;
+                };
+                for(const auto &key:QStringList{"categories","components"}) {
+                    auto values=layout[key].toArray();
+                    for(int i=0;i<values.size();++i){auto entry=values[i].toObject();const auto fresh=remapIdentity(entry["id"].toString());if(fresh.isEmpty())return false;entry["id"]=fresh;values[i]=entry;}
+                    layout[key]=values;
+                }
+                auto components=layout["components"].toArray();
+                for(int i=0;i<components.size();++i){auto item=components[i].toObject();const auto category=item.value("categoryId").toString();if(copiedIds.contains(category))item["categoryId"]=copiedIds[category];components[i]=item;}
+                layout["components"]=components;
+                auto tabs=composition.value("navigation").toArray();
+                for(int i=0;i<tabs.size();++i){auto tab=tabs[i].toObject();const auto old=tab["id"].toString(),fresh=remapIdentity(old);if(fresh.isEmpty())return false;tab["id"]=fresh;
+                    auto sections=tab.value("sections").toArray();for(int j=0;j<sections.size();++j)if(copiedIds.contains(sections[j].toString()))sections[j]=copiedIds[sections[j].toString()];
+                    if(tab.contains("sections"))tab["sections"]=sections;tabs[i]=tab;}
+                if(composition.contains("navigation"))composition["navigation"]=tabs;
+                const auto initial=composition.value("initialTab").toString();if(copiedIds.contains(initial))composition["initialTab"]=copiedIds[initial];
+                layout["composition"]=composition;
+                // Only local identities/references change; page/app/media links
+                // retain their original destinations until explicitly edited.
+                auto copyId=allocateId("page");if(copyId.isEmpty())return false;
+                const auto copyBase=copyId;int copySuffix=2;
+                while(allocated.contains(copyId))copyId=copyBase+QString::number(copySuffix++);
+                if(!ComponentSchema::safeId(copyId)){setError(tr("The duplicated page identity exceeds its limit."));return false;}
+                pages.append(QJsonObject{{"id",copyId},{"name",name},{"layout",layout}});
+                order.insert(order.indexOf(id)+1,copyId);storeOrder();
+            }
+        } else if(operation=="reorderPage") {
+            const int from=order.indexOf(id),offset=a.value("offset").toInt(),to=from+offset;
+            if((offset!=1 && offset!=-1) || to<0 || to>=order.size()){setError(tr("This page is already at the edge of the page list."));return false;}
+            order.move(from,to);storeOrder();
+        } else {
+            if(document["homePageId"].toString()==id){setError(tr("Set another page as Home before deleting this page."));return false;}
+            const bool remap=a.contains("replacementPageId");const QString replacement=a.value("replacementPageId").toString();
+            bool validReplacement=replacement.isEmpty()?rootMeta.value("visible").toBool():false;
+            for(const auto &entry:pages)if(entry.toObject()["id"]==replacement)validReplacement=true;
+            if(remap && (!validReplacement || replacement==id)){setError(tr("Choose another existing page for incoming links."));return false;}
+            if(id.isEmpty()) {
+                document["components"]=QJsonArray{};document["categories"]=QJsonArray{};document["composition"]=QJsonObject{};rootMeta["visible"]=false;
+            } else pages.removeAt(index);
+            document["pages"]=pages;
+            int links=0;bool invalidOverride=false;
+            std::function<QJsonValue(QJsonValue)> repair=[&](QJsonValue value)->QJsonValue {
+                if(value.isArray()){auto values=value.toArray();for(int i=0;i<values.size();++i)values[i]=repair(values[i]);return values;}
+                if(!value.isObject())return value;
+                auto object=value.toObject();
+                if((!id.isEmpty() && object.value("type")=="open-page" && object.value("pageId")==id) || (id.isEmpty() && object.value("type")=="root-page")) {
+                    ++links;
+                    if(remap){object["type"]=replacement.isEmpty()?"root-page":"open-page";if(replacement.isEmpty())object.remove("pageId");else object["pageId"]=replacement;}
+                }
+                for(auto it=object.begin();it!=object.end();++it) {
+                    if(!id.isEmpty() && QStringList{"moviePage","showsPage"}.contains(it.key()) && it.value()==id) {
+                        ++links;if(remap){if(replacement.isEmpty())invalidOverride=true;else it.value()=replacement;}
+                    } else it.value()=repair(it.value());
+                }
+                return object;
+            };
+            document=repair(document).toObject();
+            if((links && !remap) || invalidOverride){setError(tr("%1 incoming links require a named replacement page before deletion.").arg(links));return false;}
+            pages=document["pages"].toArray();order.removeAll(id);storeOrder();
+        }
+        const auto normalizeComponents=[](QJsonObject layout) {
+            const auto key=layout.value("schemaVersion").toInt()==1?QStringLiteral("items"):QStringLiteral("components");
+            auto components=layout.value(key).toArray();
+            for(int i=0;i<components.size();++i)components[i]=QJsonObject::fromVariantMap(ComponentSchema::component(components[i].toObject().toVariantMap(),true));
+            layout[key]=components;return layout;
+        };
+        document=normalizeComponents(document);
+        for(int i=0;i<pages.size();++i){auto entry=pages[i].toObject();entry["layout"]=normalizeComponents(entry["layout"].toObject());pages[i]=entry;}
+        document["pages"]=pages;document["rootPage"]=rootMeta;
+        return pushEdit(QJsonDocument(document).toJson());
+    }
     if(operation=="setHomePage") {
         auto document=QJsonDocument::fromJson(m_draft).object();
-        const auto id=a.value("id").toString();bool found=id.isEmpty();
+        const auto id=a.value("id").toString();bool found=id.isEmpty() && m_model->rootPageVisible();
         for(const auto &entry:document["pages"].toArray())if(entry.toObject()["id"]==id)found=true;
         if(!found){setError(QStringLiteral("Choose an existing page as Home."));return false;}
         document["homePageId"]=id;return pushEdit(QJsonDocument(document).toJson());
@@ -192,6 +302,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
             for (int i = 0; i < entries.size(); ++i) {
                 auto entry = entries[i].toObject();
                 if (entry["id"] != target) continue;
+                if(entry.value("locked").toBool() && entry["placement"].toObject()!=QJsonObject::fromVariantMap(change.value("placement").toMap())) {setError(tr("Unlock the component before moving or resizing it."));return false;}
                 entry["placement"] = QJsonObject::fromVariantMap(change.value("placement").toMap());
                 entries[i] = entry; found = true;
             }
@@ -235,6 +346,13 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
             worker.m_items[i] = item;
         }
         ok = worker.save();
+    } else if(operation=="state") {
+        const auto key=a.value("key").toString();
+        if(!QStringList{"hidden","locked"}.contains(key) || a.value("value").metaType().id()!=QMetaType::Bool){setError(tr("Choose a valid visibility or lock state."));return false;}
+        auto entries=document["components"].toArray();bool found=false;
+        for(int i=0;i<entries.size();++i)if(entries[i].toObject()["id"]==id){auto item=entries[i].toObject();item[key]=QJsonValue::fromVariant(a.value("value"));entries[i]=item;found=true;}
+        if(!found){setError(tr("Choose an existing component."));return false;}
+        document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if (operation == "rename") ok = worker.setItemName(id, a.value("name").toString());
     else if (operation == "remove") ok = worker.removeItem(id);
     else if (operation == "duplicate") {
@@ -297,6 +415,8 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     if (pageIndex >= 0) {
         result.remove("pages"); // A page document cannot recursively contain the interface page collection.
         result.remove("homePageId");
+        result.remove("rootPage");
+        result.remove("studioAppearance");
         auto entry = pages[pageIndex].toObject(); entry["layout"] = result; pages[pageIndex] = entry; root["pages"] = pages;
     } else root = result;
     return pushEdit(QJsonDocument(root).toJson());
@@ -529,7 +649,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     }
     auto entries = doc["components"].toArray();
     QString category;bool selectedFound=false;
-    for(const auto &entry:entries)if(entry.toObject()["id"]==id){category=entry.toObject()["categoryId"].toString();selectedFound=true;}
+    for(const auto &entry:entries)if(entry.toObject()["id"]==id){if(entry.toObject().value("locked").toBool())return fail(tr("Unlock the component before moving or resizing it."));category=entry.toObject()["categoryId"].toString();selectedFound=true;}
     if(!selectedFound)return fail(QStringLiteral("The component no longer exists."));
     const auto composition=doc["composition"].toObject().toVariantMap();
     const bool sections=composition.value("grid").toMap().value("mode")=="sections";
@@ -545,6 +665,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
         else if ((!sections || item["categoryId"].toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement)) colliders.append(i);
     }
     if (selected < 0) return fail(QStringLiteral("The component no longer exists."));
+    for(const int index:colliders)if(entries[index].toObject().value("locked").toBool())return fail(tr("A locked component occupies this region. Unlock it or choose another position."));
     QVariantList changes{QVariantMap{{"id", id}, {"placement", placement}}};
     auto moving = entries[selected].toObject(); moving["placement"] = QJsonObject::fromVariantMap(placement); entries[selected] = moving;
     if (!colliders.isEmpty() && strategy == "cancel") return fail(QStringLiteral("Occupied cells: choose Shift, Swap or Cancel."));

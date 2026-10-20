@@ -52,6 +52,9 @@ private slots:
     void studioSectionGridsAreIndependentAndAtomic();
     void studioHomeDesignationIsAtomicAndProtected();
     void studioArtworkUsesActiveProfileAndExpires();
+    void studioPageLifecycleRepairsLinksAndPreservesRoot();
+    void studioChromeRemainsReadableAndProfileLocal();
+    void studioHiddenAndLockedStatesAreRecoverable();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
@@ -933,6 +936,79 @@ void ComponentTests::studioArtworkUsesActiveProfileAndExpires()
     QCOMPARE(model->components().first().toMap()["logoSource"],home.components().first().toMap()["logoSource"]);
     QVERIFY(!QFile::exists(dir.filePath("home.json")));
     session->invalidate();QVERIFY(model->wallpaperSource().isEmpty());QVERIFY(model->components().isEmpty());
+}
+void ComponentTests::studioPageLifecycleRepairsLinksAndPreservesRoot()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");
+    QVERIFY(home.load(defaults,user));auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY2(session->execute("renamePage",{{"id",""},{"name","Landing"}}),qPrintable(session->errorString()));
+    QVERIFY2(session->execute("duplicatePage",{{"id",""},{"name","Library"}}),qPrintable(session->errorString()));
+    auto document=QJsonDocument::fromJson(session->draft()).object();
+    const auto page=document["pages"].toArray().last().toObject();const auto id=page["id"].toString();
+    QVERIFY(page["layout"].toObject()["components"].toArray().first().toObject()["id"]!=document["components"].toArray().first().toObject()["id"]);
+    QVERIFY(session->execute("reorderPage",{{"id",""},{"offset",1}}));
+    auto *draft=qobject_cast<HomeLayout *>(session->model());QVERIFY(draft);QCOMPARE(draft->studioPages().last().toMap()["name"].toString(),QString("Landing"));
+    QVERIFY(session->execute("addButton",{},id));
+    document=QJsonDocument::fromJson(session->draft()).object();
+    const auto button=document["pages"].toArray().first().toObject()["layout"].toObject()["components"].toArray().last().toObject()["id"].toString();
+    QVERIFY2(session->execute("action",{{"id",button},{"value",QVariantMap{{"type","root-page"}}}},id),qPrintable(session->errorString()));
+    QVERIFY(session->execute("setHomePage",{{"id",id}}));const auto before=session->draft();
+    QVERIFY(!session->execute("removePage",{{"id",""}}));QCOMPARE(session->draft(),before);
+    QVERIFY2(session->execute("removePage",{{"id",""},{"replacementPageId",id}}),qPrintable(session->errorString()));
+    const auto removed=session->draft();QVERIFY(!draft->rootPageVisible());QCOMPARE(draft->studioPages().size(),1);
+    document=QJsonDocument::fromJson(removed).object();QVERIFY(document["components"].toArray().isEmpty());
+    const auto action=document["pages"].toArray().first().toObject()["layout"].toObject()["components"].toArray().last().toObject()["action"].toObject();
+    QCOMPARE(action["type"].toString(),QString("open-page"));QCOMPARE(action["pageId"].toString(),id);
+    QVERIFY(!session->execute("setHomePage",{{"id",""}}));QCOMPARE(session->draft(),removed);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),before);QVERIFY(session->redo());QCOMPARE(session->draft(),removed);
+    QVERIFY(!QFile::exists(user));QVERIFY(session->apply());
+    HomeLayout restored(&registry);QVERIFY(restored.load(defaults,user));QVERIFY(!restored.rootPageVisible());QCOMPARE(restored.homePageId(),id);
+    // A legacy single-page preset applies to the designated Home, not to a deleted root.
+    QVERIFY2(restored.applySkin("builtin-default"),qPrintable(restored.errorString()));QVERIFY(!restored.rootPageVisible());QCOMPARE(restored.homePageId(),id);
+    auto *homePage=qobject_cast<PageModel *>(restored.pageModel(id));QVERIFY(homePage);QVERIFY(!homePage->items().isEmpty());
+    HomeLayout visibleRoot(&registry);QVERIFY(visibleRoot.load(defaults,dir.filePath("visible-root.json")));
+    const auto another=visibleRoot.createPage("Another Home","blank");QVERIFY(!another.isEmpty());
+    auto *changeHome=qobject_cast<StudioSession *>(visibleRoot.beginStudio());QVERIFY(changeHome);
+    QVERIFY(changeHome->execute("setHomePage",{{"id",another}}));QVERIFY(changeHome->apply());
+    const auto rootComponents=QJsonDocument::fromJson(visibleRoot.committedDocument()).object().value("components");
+    QVERIFY2(visibleRoot.applySkin("builtin-default"),qPrintable(visibleRoot.errorString()));QVERIFY(visibleRoot.rootPageVisible());
+    QCOMPARE(QJsonDocument::fromJson(visibleRoot.committedDocument()).object().value("components"),rootComponents);
+    QVERIFY(!qobject_cast<PageModel *>(visibleRoot.pageModel(another))->items().isEmpty());
+}
+void ComponentTests::studioChromeRemainsReadableAndProfileLocal()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");QVERIFY(home.load(defaults,user));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY(session->execute("appearance",{{"value",QVariantMap{{"surfaceColor","#ffffff"},{"textColor","#ffffff"}}}}));
+    auto *draft=qobject_cast<HomeLayout *>(session->model());QVERIFY(draft);
+    QVERIFY(draft->studioAppearance()["surfaceColor"]!=draft->studioAppearance()["textColor"]);
+    const auto baseline=session->draft();
+    QVERIFY(!session->execute("studioAppearance",{{"value",QVariantMap{{"textColor","#202126"}}}}));QCOMPARE(session->draft(),baseline);
+    QVERIFY2(session->execute("studioAppearance",{{"value",QVariantMap{{"focusColor","#ffffff"}}}}),qPrintable(session->errorString()));
+    QVERIFY(session->apply());QCOMPARE(home.studioAppearance()["focusColor"].toString(),QString("#ffffff"));
+    QVERIFY(home.load(defaults,dir.filePath("other.json")));QVERIFY(!session->active());
+    QVERIFY(home.studioAppearance()["focusColor"].toString()!=QString("#ffffff"));
+}
+void ComponentTests::studioHiddenAndLockedStatesAreRecoverable()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");
+    QVERIFY(home.load(defaults,user));auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY(session->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5}}}}));
+    QVERIFY(session->execute("state",{{"id","clock"},{"key","hidden"},{"value",true}}));
+    QVERIFY(session->execute("state",{{"id","clock"},{"key","locked"},{"value",true}}));
+    const auto before=session->draft();const QVariantMap target{{"x",0},{"y",3},{"width",1},{"height",1}};
+    QVERIFY(!session->placementProposal("clock",target,"shift")["valid"].toBool());
+    QVERIFY(!session->execute("place",{{"placements",QVariantList{QVariantMap{{"id","clock"},{"placement",target}}}}}));QCOMPARE(session->draft(),before);
+    QVERIFY(!session->execute("state",{{"id","clock"},{"key","hidden"},{"value","yes"}}));QCOMPARE(session->draft(),before);
+    auto *model=qobject_cast<HomeLayout *>(session->model());QVERIFY(model);QCOMPARE(model->items().size(),home.items().size());
+    QVERIFY(session->apply());QVERIFY(!home.items().isEmpty());
+    for(const auto &entry:home.items())QVERIFY(entry.toMap()["id"]!="clock");
+    QVERIFY(session->execute("state",{{"id","clock"},{"key","hidden"},{"value",false}}));
+    QVERIFY(session->execute("state",{{"id","clock"},{"key","locked"},{"value",false}}));
+    QVERIFY(session->execute("place",{{"placements",QVariantList{QVariantMap{{"id","clock"},{"placement",target}}}}}));QVERIFY(session->apply());
+    bool found=false;for(const auto &entry:home.items())if(entry.toMap()["id"]=="clock")found=true;QVERIFY(found);
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

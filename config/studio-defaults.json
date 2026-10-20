@@ -1,5 +1,10 @@
 {
   "schemaVersion": 1,
+  "rootPageName": "Home",
+  "appearance": {
+    "surfaceColor": "#202126", "selectedColor": "#353039", "textColor": "#f5f1f3",
+    "mutedColor": "#aaa5af", "focusColor": "#c994a5", "tileRoundness": 0.25
+  },
   "menuWidth": 280,
   "defaultGrid": {
     "columns": 8,

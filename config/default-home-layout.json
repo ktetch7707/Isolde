@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "rootPage": {"name": "Home", "visible": true, "position": 0},
   "theme": {
     "brandVisible": false,
     "backgroundStart": "#19191E",

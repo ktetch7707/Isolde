@@ -262,6 +262,7 @@ QVariantList PageModel::items() const
     QJsonArray components;
     if (m_pageDocument.contains("components"))
         components = m_pageDocument.value("components").toArray();
+    if(m_owner && !m_owner->m_draftOnly){QJsonArray visible;for(const auto &entry:components)if(!entry.toObject().value("hidden").toBool())visible.append(entry);components=visible;}
     return resolveItems(components);
 }
 

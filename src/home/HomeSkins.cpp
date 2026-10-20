@@ -88,11 +88,27 @@ QString HomeLayout::saveSkin(const QString &name) {
     setError({}); emit skinsChanged(); return id;
 }
 bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &assets) {
-    if (!m_owner && !document.contains("pages")) {document.insert("pages",m_pages);document.insert("homePageId",m_homePageId);}
     const auto previous = documentData();
     const auto legacy = m_legacyDocument;
+    const bool singlePage=!m_owner && !document.contains("pages");
+    const auto wrap=[&](QJsonObject page) {
+        if(!singlePage)return page;
+        if(m_homePageId.isEmpty()) {
+            page["pages"]=m_pages;page["homePageId"]=m_homePageId;
+            if(!m_rootPage.isEmpty())page["rootPage"]=m_rootPage;
+            if(!m_studioAppearance.isEmpty())page["studioAppearance"]=QJsonObject::fromVariantMap(m_studioAppearance);
+            return page;
+        }
+        page.remove("rootPage");page.remove("homePageId");page.remove("studioAppearance");
+        HomeLayout converted(m_registry);converted.m_owner=this;
+        if(!converted.loadDocument(QJsonDocument(page).toJson(),false))return QJsonObject{};
+        page=QJsonDocument::fromJson(converted.documentData()).object();
+        auto root=QJsonDocument::fromJson(previous).object();auto pages=root["pages"].toArray();
+        for(int i=0;i<pages.size();++i)if(pages[i].toObject()["id"]==m_homePageId){auto entry=pages[i].toObject();entry["layout"]=page;pages[i]=entry;}
+        root["pages"]=pages;return root;
+    };
     // Validate the entire document before importing artwork or replacing the current layout.
-    if (!loadDocument(QJsonDocument(document).toJson(), false)) return false;
+    if (!loadDocument(QJsonDocument(wrap(document)).toJson(), false)) return false;
     loadDocument(previous, false); m_legacyDocument = legacy;
     bool valid = true;
     document = artwork(document, [&](const QString &path) {
@@ -108,6 +124,7 @@ bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &asse
         return relative;
     }).toObject();
     if (!valid) { setError(tr("This skin has missing or invalid artwork. Your Home has not changed.")); return false; }
+    document=wrap(document);
     if (!loadDocument(QJsonDocument(document).toJson(), false) || !save()) {
         const auto error = m_errorString; loadDocument(previous, false); m_legacyDocument = legacy; setError(error); return false;
     }

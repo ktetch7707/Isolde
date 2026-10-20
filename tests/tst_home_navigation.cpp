@@ -36,6 +36,7 @@ private slots:
     void studioPreservesLegacyGridMetadataWithoutConversion();
     void studioSectionGeometryMatchesRuntime();
     void studioPageMenuCreatesAndDesignatesHome();
+    void studioNamedPageViewportMatchesRuntime();
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
@@ -726,16 +727,62 @@ void HomeNavigationTests::studioPageMenuCreatesAndDesignatesHome()
     QCOMPARE(root->property("mode").toString(),QString("canvas"));QVERIFY(!root->property("toolbarFocus").toBool());
     command(InputManager::Back);command(InputManager::NavigateDown);command(InputManager::NavigateDown);command(InputManager::Confirm);
     QCOMPARE(root->property("mode").toString(),QString("pageContext"));
-    for(int i=0;i<3;++i)command(InputManager::NavigateDown);
+    for(int i=0;i<4;++i)command(InputManager::NavigateDown);
     command(InputManager::Confirm);QCOMPARE(root->property("mode").toString(),QString("setHome"));
     command(InputManager::Confirm);
     auto *session=qobject_cast<StudioSession *>(root->property("session").value<QObject *>());QVERIFY(session);
     QCOMPARE(QJsonDocument::fromJson(session->draft()).object()["homePageId"].toString(),id);
     QVERIFY(!QFile::exists(user));QCOMPARE(home.homePageId(),QString());
     command(InputManager::Confirm);QCOMPARE(root->property("mode").toString(),QString("pageContext"));
-    for(int i=0;i<4;++i)command(InputManager::NavigateDown);
+    for(int i=0;i<7;++i)command(InputManager::NavigateDown);
     const auto before=session->draft();command(InputManager::Confirm);QCOMPARE(session->draft(),before);
     QVERIFY(root->property("message").toString().contains("another page"));
+    command(InputManager::Back);command(InputManager::NavigateUp);command(InputManager::Confirm);
+    QCOMPARE(root->property("pageId").toString(),QString());
+    command(InputManager::NavigateDown);command(InputManager::NavigateDown);command(InputManager::Confirm);
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("Landing"))));QCoreApplication::processEvents();
+    QCOMPARE(qobject_cast<HomeLayout *>(session->model())->rootPageName(),QString("Landing"));
+    command(InputManager::NavigateDown);command(InputManager::Confirm); // Duplicate page.
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("Landing copy"))));QCoreApplication::processEvents();
+    QVERIFY(root->property("pageId").toString()!=id);QVERIFY(!root->property("pageId").toString().isEmpty());
+    command(InputManager::Back);command(InputManager::Confirm); // Root page menu origin restored.
+    for(int i=0;i<7;++i)command(InputManager::NavigateDown);
+    command(InputManager::Confirm);QCOMPARE(root->property("mode").toString(),QString("deletePage"));
+    command(InputManager::NavigateDown);command(InputManager::Confirm);QCOMPARE(root->property("mode").toString(),QString("confirmDeletePage"));
+    command(InputManager::Confirm);QVERIFY(!qobject_cast<HomeLayout *>(session->model())->rootPageVisible());
+    QCOMPARE(root->property("pageId").toString(),id);QVERIFY(!QFile::exists(user));
+    QVERIFY(session->undo());QVERIFY(qobject_cast<HomeLayout *>(session->model())->rootPageVisible());
+}
+void HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);InputManager input;
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    const auto id=home.createPage("Library","blank");QVERIFY(!id.isEmpty());
+    auto *page=qobject_cast<PageModel *>(home.pageModel(id));QVERIFY(page);
+    QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
+    const auto qmlDir=QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir();
+    QQmlComponent runtime(&engine,QUrl::fromLocalFile(qmlDir.filePath("PageSurface.qml")));
+    QQmlComponent editor(&engine,QUrl::fromLocalFile(qmlDir.filePath("PageStudioView.qml")));
+    QVERIFY2(runtime.isReady(),qPrintable(runtime.errorString()));QVERIFY2(editor.isReady(),qPrintable(editor.errorString()));
+    for(const auto &navigation:QStringList{"left","top","none"}) {
+        auto composition=page->composition();composition["pageNavigation"]=navigation;composition["sidebarWidth"]=260;
+        QVERIFY(page->setComposition(composition));
+        std::unique_ptr<QObject> live(runtime.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},
+            {"provider",QVariant::fromValue(static_cast<QObject *>(nullptr))},{"availableApps",QVariantList{}},{"artwork",QVariantList{}},{"themes",QVariantList{}}}));
+        std::unique_ptr<QObject> draft(editor.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)}}));
+        QVERIFY(live);QVERIFY(draft);
+        QVERIFY(QMetaObject::invokeMethod(live.get(),"showPage",Q_ARG(QVariant,id),Q_ARG(QVariant,QString()),Q_ARG(QVariant,false)));
+        QVERIFY(QMetaObject::invokeMethod(draft.get(),"show",Q_ARG(QVariant,id),Q_ARG(QVariant,QString())));
+        auto *content=live->findChild<QQuickItem *>("pageContent"),*preview=draft->findChild<QQuickItem *>("studioPreview");QVERIFY(content);QVERIFY(preview);
+        for(const auto size:{QSize(1280,720),QSize(1920,1080),QSize(3840,2160)}) {
+            for(auto *view:{live.get(),draft.get()}){view->setProperty("width",size.width());view->setProperty("height",size.height());}
+            QCoreApplication::processEvents();
+            QCOMPARE(preview->x(),content->x());QCOMPARE(preview->y(),content->y());
+            QCOMPARE(preview->width(),content->width());QCOMPARE(preview->height(),content->height());
+        }
+        qobject_cast<StudioSession *>(draft->property("session").value<QObject *>())->invalidate();
+    }
 }
 void HomeNavigationTests::studioSectionGeometryMatchesRuntime()
 {
@@ -851,6 +898,14 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel()
     selected = findVisual(preview,"placed-"+root->property("selectedId").toString()); QVERIFY(selected);
     surface = findVisual(selected,"cardSurface"); QVERIFY(surface);
     QCOMPARE(surface->property("radius").toReal(),0.0);
+    const auto selectedId=root->property("selectedId").toString();
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"context",Q_ARG(QVariant,9))); // Hide, but keep reachable in Layers.
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"chooseTool",Q_ARG(QVariant,2)));
+    QVariant labels;QVERIFY(QMetaObject::invokeMethod(root.get(),"dialogLabels",Q_RETURN_ARG(QVariant,labels)));
+    const auto layerLabels=(labels.metaType().id()==qMetaTypeId<QJSValue>()?labels.value<QJSValue>().toVariant():labels).toStringList();QVERIFY(!layerLabels.isEmpty());QVERIFY(layerLabels.last().contains("Hidden"));
+    for(int i=1;i<layerLabels.size();++i)command(InputManager::NavigateDown);
+    command(InputManager::Confirm);QCOMPARE(root->property("selectedId").toString(),selectedId);
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"context",Q_ARG(QVariant,9))); // Show again.
     const auto changed = session->draft();
     QVERIFY(session->undo()); QVERIFY(session->redo()); QCOMPARE(session->draft(), changed);
     QVERIFY(QMetaObject::invokeMethod(root.get(), "chooseTool", Q_ARG(QVariant,7)));
@@ -953,6 +1008,23 @@ void HomeNavigationTests::studioPreservesLegacyGridMetadataWithoutConversion()
         auto *preview=root->findChild<QQuickItem *>("studioPreview");QVERIFY(preview);
         auto *composed=preview->findChild<QObject *>("composedHome");QVERIFY(composed);
         QVERIFY(!composed->property("placementMode").toBool());
+        QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,InputManager::NavigateRight)));
+        QCoreApplication::processEvents();QVERIFY(!root->property("toolbarFocus").toBool());
+        auto rectValue=preview->property("editRect");
+        const auto rect=(rectValue.metaType().id()==qMetaTypeId<QJSValue>()?rectValue.value<QJSValue>().toVariant():rectValue).toMap();
+        QVERIFY(rect["width"].toDouble()>0);QVERIFY(rect["height"].toDouble()>0);
+        QSignalSpy activated(preview,SIGNAL(actionActivated(QVariant,QString)));QVERIFY(activated.isValid());
+        const auto center=preview->mapToScene(QPointF(rect["x"].toDouble()+rect["width"].toDouble()/2,rect["y"].toDouble()+rect["height"].toDouble()/2));
+        const auto targetValue=preview->property("editTarget");
+        auto *target=qobject_cast<QQuickItem *>(targetValue.metaType().id()==qMetaTypeId<QJSValue>()?targetValue.value<QJSValue>().toQObject():targetValue.value<QObject *>());QVERIFY(target);
+        const auto actualCenter=target->mapToScene(QPointF(target->width()/2,target->height()/2));
+        QVERIFY2(QLineF(center,actualCenter).length()<1,qPrintable(QString("Outline %1,%2 differs from %3 center %4,%5").arg(center.x()).arg(center.y()).arg(target->objectName()).arg(actualCenter.x()).arg(actualCenter.y())));
+        QVERIFY2(window.contentItem()->contains(center),qPrintable(QString("Legacy selection outside viewport: %1,%2").arg(center.x()).arg(center.y())));
+        QTest::mouseClick(&window,Qt::LeftButton,Qt::NoModifier,center.toPoint());
+        QTRY_COMPARE(root->property("mode").toString(),QString("context"));QCOMPARE(root->property("selectedId").toString(),QString("clock"));QCOMPARE(activated.count(),0);
+        QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,InputManager::Back)));
+        QCOMPARE(root->property("mode").toString(),QString("canvas"));QCOMPARE(root->property("selectedId").toString(),QString("clock"));
+        QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,InputManager::Back)));
         QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,InputManager::Back)));
         QVERIFY(!root->property("open").toBool());
         QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),original);file.close();

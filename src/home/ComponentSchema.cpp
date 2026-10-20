@@ -205,7 +205,7 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
         const auto id=input.value("pageId").toString();
         if(!safeId(id))return reject(error,"Choose a valid page.");
         result["pageId"]=id;
-    } else if (type == "app-drawer") {
+    } else if (type == "app-drawer" || type == "root-page") {
         // Shell-owned drawer, never a command or provider URL.
     } else if (type == "settings") {
         const double section = input.value("section", -1).toDouble();
@@ -248,6 +248,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         const auto opacity = input.value("opacity").toDouble();
         if (!std::isfinite(opacity) || opacity < 0 || opacity > 1) return reject(error, "Invalid component opacity.");
     }
+    for(const auto &key:QStringList{"hidden","locked"})if(input.contains(key) && input.value(key).metaType().id()!=QMetaType::Bool)return reject(error,"Visibility and lock must be boolean values.");
     if (input.contains("placement")) {
         // Shape-only bounds here; the layout validates against its actual grid and neighbors.
         const auto placement = input.value("placement");
