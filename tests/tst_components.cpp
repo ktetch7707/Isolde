@@ -55,6 +55,8 @@ private slots:
     void studioPageLifecycleRepairsLinksAndPreservesRoot();
     void studioChromeRemainsReadableAndProfileLocal();
     void studioHiddenAndLockedStatesAreRecoverable();
+    void studioShiftCascadesAreBoundedAndAtomic();
+    void studioSectionTransfersDuplicationAndOrdering();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
@@ -1009,6 +1011,71 @@ void ComponentTests::studioHiddenAndLockedStatesAreRecoverable()
     QVERIFY(session->execute("state",{{"id","clock"},{"key","locked"},{"value",false}}));
     QVERIFY(session->execute("place",{{"placements",QVariantList{QVariantMap{{"id","clock"},{"placement",target}}}}}));QVERIFY(session->apply());
     bool found=false;for(const auto &entry:home.items())if(entry.toMap()["id"]=="clock")found=true;QVERIFY(found);
+}
+void ComponentTests::studioShiftCascadesAreBoundedAndAtomic()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");QVERIFY(home.load(defaults,user));
+    auto document=QJsonDocument::fromJson(home.committedDocument()).object();document["categories"]=QJsonArray{};
+    document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",4},{"rows",3},{"mode","screen"}}}};
+    const auto node=[](QString id,int x,int y,int width=1){return QJsonObject::fromVariantMap(ComponentSchema::component(QVariantMap{{"id",id},{"kind","widget"},{"widgetType","text"},{"name",id},{"placement",QVariantMap{{"x",x},{"y",y},{"width",width},{"height",1}}}},true));};
+    QJsonArray entries{node("moving",0,0),node("wide",1,0,2)};
+    for(int y=0;y<3;++y)for(int x=0;x<4;++x)if(!(y==0 && x<3) && !(x==3 && y==2))entries.append(node(QString("cell-%1-%2").arg(y).arg(x),x,y));
+    document["components"]=entries;writeFile(user,QJsonDocument(document).toJson());QVERIFY(home.load(defaults,user));QVERIFY2(home.errorString().isEmpty(),qPrintable(home.errorString()));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto original=session->draft(),disk=readFile(user);const auto count=session->changeCount();
+    const QVariantMap target{{"x",1},{"y",0},{"width",2},{"height",1}};
+    QVERIFY(!session->placementProposal("moving",target,"cancel")["valid"].toBool());
+    QVERIFY(!session->placementProposal("moving",target,"swap")["valid"].toBool());
+    QVERIFY(!session->placementProposal("moving",target,"unknown")["valid"].toBool());
+    const auto shift=session->placementProposal("moving",target,"shift");
+    QVERIFY2(shift["valid"].toBool(),qPrintable(shift["reason"].toString()));
+    QVERIFY(shift["placements"].toList().size()>2); // No free 2x1 region: an indirect neighbor must move.
+    QCOMPARE(session->placementProposal("moving",target,"shift"),shift);QCOMPARE(session->draft(),original);QCOMPARE(session->changeCount(),count);
+    QVERIFY2(session->execute("place",{{"placements",shift["placements"]}}),qPrintable(session->errorString()));QCOMPARE(session->changeCount(),count+1);QCOMPARE(readFile(user),disk);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),original);
+    QVERIFY(!session->execute("duplicate",{{"id","wide"}}));QCOMPARE(session->draft(),original);QCOMPARE(session->changeCount(),count);
+    const auto fill=session->additionProposal("text",{{"x",3},{"y",2},{"width",1},{"height",1}},"cancel");QVERIFY2(fill["valid"].toBool(),qPrintable(fill["reason"].toString()));
+    QVERIFY(session->execute("batch",{{"commands",fill["commands"]}}));const auto full=session->draft();const auto fullCount=session->changeCount();
+    QVERIFY(!session->additionProposal("clock",{{"x",0},{"y",0},{"width",1},{"height",1}},"shift")["valid"].toBool());QCOMPARE(session->draft(),full);QCOMPARE(session->changeCount(),fullCount);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),original);
+    QVERIFY(!session->placementProposal("moving",{{"x",1},{"y",0},{"width",3},{"height",1}},"shift")["valid"].toBool());QCOMPARE(session->draft(),original);QCOMPARE(session->changeCount(),count);
+    QVERIFY(session->execute("state",{{"id","wide"},{"key","locked"},{"value",true}}));
+    const auto locked=session->draft();QVERIFY(!session->placementProposal("moving",target,"shift")["valid"].toBool());QCOMPARE(session->draft(),locked);
+    session->invalidate();
+    document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",16},{"rows",10},{"mode","screen"}}}};
+    entries=QJsonArray{node("moving",15,9)};for(int y=0;y<8;++y)for(int x=0;x<8;++x)entries.append(node(QString("node-%1-%2").arg(y).arg(x),x,y));
+    document["components"]=entries;writeFile(user,QJsonDocument(document).toJson());QVERIFY(home.load(defaults,user));
+    session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto bounded=session->draft();
+    const auto tooMany=session->placementProposal("moving",{{"x",0},{"y",0},{"width",8},{"height",8}},"shift");
+    QVERIFY(!tooMany["valid"].toBool());QVERIFY(tooMany["reason"].toString().contains("64"));QCOMPARE(session->draft(),bounded);
+}
+void ComponentTests::studioSectionTransfersDuplicationAndOrdering()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");QVERIFY(home.load(defaults,user));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY(session->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5},{"mode","sections"}}},{"sectionHeight",560}}));
+    const auto beforeDuplicate=session->draft();const auto count=session->changeCount();
+    QVERIFY2(session->execute("duplicate",{{"id","clock"}}),qPrintable(session->errorString()));QCOMPARE(session->changeCount(),count+1);
+    const auto copy=QJsonDocument::fromJson(session->draft()).object()["components"].toArray().last().toObject();
+    QCOMPARE(copy["categoryId"].toString(),QString("widgets"));QCOMPARE(copy["id"].toString(),QString("clock-copy"));QVERIFY(copy["placement"].isObject());
+    QVERIFY(session->undo());QCOMPARE(session->draft(),beforeDuplicate);
+    const auto start=session->draft();const QVariantMap target{{"x",0},{"y",4},{"width",1},{"height",1}};
+    const auto transfer=session->placementProposal("clock",target,"cancel",{},{{"categoryId","inputs"}});QVERIFY2(transfer["valid"].toBool(),qPrintable(transfer["reason"].toString()));QCOMPARE(session->draft(),start);
+    QVERIFY(session->execute("place",{{"placements",transfer["placements"]}}));
+    const auto moved=QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject();QCOMPARE(moved["categoryId"].toString(),QString("inputs"));QCOMPARE(moved["placement"].toObject()["y"].toInt(),4);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),start);
+    const auto swap=session->placementProposal("clock",{{"x",0},{"y",0},{"width",1},{"height",1}},"swap",{},{{"categoryId","inputs"}});QVERIFY2(swap["valid"].toBool(),qPrintable(swap["reason"].toString()));
+    QVERIFY(session->execute("place",{{"placements",swap["placements"]}}));QVERIFY(session->undo());QCOMPARE(session->draft(),start);
+    QVERIFY(!session->placementProposal("clock",target,"shift",{},{{"categoryId","missing"}})["valid"].toBool());
+    QVERIFY(!session->execute("place",{{"placements",QVariantList{QVariantMap{{"id","clock"},{"placement",target},{"categoryId","missing"}}}}}));QCOMPARE(session->draft(),start);
+    QVERIFY(session->execute("orderRelative",{{"id","movies"},{"relativeId","shows"},{"before",false}}));
+    const auto ordered=QJsonDocument::fromJson(session->draft()).object()["components"].toArray();int movies=-1,shows=-1;
+    for(int i=0;i<ordered.size();++i){const auto item=ordered[i].toObject();if(item["id"]=="movies")movies=i;if(item["id"]=="shows")shows=i;}
+    QVERIFY(movies>shows);QCOMPARE(ordered[movies].toObject()["placement"].toObject()["x"].toInt(),0);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),start);
+    QVERIFY(!session->execute("orderRelative",{{"id","clock"},{"relativeId","shows"},{"before",true}}));QCOMPARE(session->draft(),start);QVERIFY(!QFile::exists(user));
+    QVERIFY(session->execute("state",{{"id","movies"},{"key","locked"},{"value",true}}));const auto locked=session->draft();
+    QVERIFY(!session->execute("orderRelative",{{"id","movies"},{"relativeId","shows"},{"before",false}}));QCOMPARE(session->draft(),locked);
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

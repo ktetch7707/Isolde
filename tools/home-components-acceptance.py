@@ -154,6 +154,27 @@ def main():
                 key("Right"); key("Return")  # Free neighboring cell; one draft operation.
                 assert layout.read_bytes() == original_bytes
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
+
+                def undo_operation():
+                    key("Escape"); key("Down", 2); key("Return"); key("Return")  # More -> Undo.
+                    key("Up", 2); key("Right")  # Restore Add menu origin and the selected canvas item.
+                    assert layout.read_bytes() == original_bytes
+
+                key("Return"); key("Return"); key("Left"); key("Return")  # Move Clock onto the existing source.
+                key("Down")  # Inspect the complete Swap proposal; no implicit drop.
+                capture("collision")
+                key("Down"); key("Return")  # Cancel keeps both original cells.
+                assert layout.read_bytes() == original_bytes
+                key("Return"); key("Return"); key("Left"); key("Return"); key("Down"); key("Return")
+                undo_operation()  # Accepted Swap is one undoable draft operation.
+                key("Return"); key("Down"); key("Return"); key("Right")  # Width: 1 -> 2 cells.
+                capture("resize")
+                key("Escape")  # Cancel size without a history entry.
+                key("Return"); key("Down"); key("Return"); key("Right"); key("Return")
+                undo_operation()  # Accepted resize also restores in one undo.
+                key("Return"); key("Return"); key("Right", 20); key("Escape")  # Repeat stops at the bounded edge; cancel.
+                assert layout.read_bytes() == original_bytes
+
                 key("Escape"); key("Down", 2); key("Return"); key("Return")  # Pages -> More -> Undo.
                 key("Return"); key("Down"); key("Return")  # More -> Redo.
                 key("Return"); key("Down", 4); key("Return")  # Optional Try interaction.
@@ -167,13 +188,18 @@ def main():
                 applied = layout.read_bytes()
                 assert Path(str(layout) + ".v1.backup.json").read_bytes() == original_bytes
                 assert all("placement" in item for item in json.loads(applied)["components"])
+                placed = {item["id"]: item["placement"] for item in json.loads(applied)["components"]}
+                assert placed["personal-source"] == {"x": 0, "y": 0, "width": 1, "height": 1}
+                assert placed["clock"] == {"x": 1, "y": 0, "width": 1, "height": 1}
                 key("Escape"); key("Return")  # Close and reopen Studio from the legacy entry.
                 assert layout.read_bytes() == applied
                 capture("applied")
                 (evidence / "result.json").write_text(json.dumps({
                     "passed": True, "journey": "studio", "layout": str(layout),
                     "executable": str(executable), "preview_cancel_preserved_bytes": True,
-                    "reopen_preserved_bytes": True, "user_usability_acceptance": "pending"
+                    "reopen_preserved_bytes": True, "user_usability_acceptance": "pending",
+                    "remote_collision_cancel_swap_undo": True, "remote_resize_cancel_accept_undo": True,
+                    "bounded_repeat_cancel": True
                 }, indent=2))
                 print("Evidence: " + str(evidence), flush=True)
                 return

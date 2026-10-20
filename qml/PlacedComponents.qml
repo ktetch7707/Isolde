@@ -13,6 +13,7 @@ Item {
         delegate:Item {
             id:node
             required property var modelData
+            visible:!surface.host.editMode || (surface.host.suppressedComponentIds || []).indexOf(modelData.item.id)<0
             objectName:"placed-"+modelData.item.id
             x:surface.metrics.margin+modelData.placement.x*(surface.metrics.cellW+surface.metrics.gap)
             y:surface.metrics.margin+modelData.placement.y*(surface.metrics.cellH+surface.metrics.gap)

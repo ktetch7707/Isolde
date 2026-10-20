@@ -63,7 +63,7 @@ public:
     Q_INVOKABLE bool execute(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
     Q_INVOKABLE bool apply(const QString &focusId = {});
     Q_INVOKABLE QVariantMap placementProposal(const QString &id, const QVariantMap &placement,
-                                               const QString &strategy, const QString &pageId = {});
+                                               const QString &strategy, const QString &pageId = {}, const QVariantMap &options = {});
     Q_INVOKABLE QVariantMap additionProposal(const QString &type, const QVariantMap &placement,
                                               const QString &strategy, const QString &pageId = {}, const QString &categoryId = {});
 

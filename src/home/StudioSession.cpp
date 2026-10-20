@@ -302,8 +302,15 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
             for (int i = 0; i < entries.size(); ++i) {
                 auto entry = entries[i].toObject();
                 if (entry["id"] != target) continue;
-                if(entry.value("locked").toBool() && entry["placement"].toObject()!=QJsonObject::fromVariantMap(change.value("placement").toMap())) {setError(tr("Unlock the component before moving or resizing it."));return false;}
+                if(change.contains("categoryId") && change.value("categoryId").metaType().id()!=QMetaType::QString){setError(tr("Choose a named destination section."));return false;}
+                if(change.contains("categoryId") && entry.value("categoryId").toString()!=change.value("categoryId").toString()) {
+                    const auto destination=change.value("categoryId").toString();bool eligible=destination.isEmpty();
+                    for(const auto &value:worker.m_categories){const auto category=value.toObject();if(category["id"]==destination)eligible=category["presentation"].toObject().value("variant")!="library";}
+                    if(worker.grid().value("mode")!="sections" || !eligible){setError(tr("Choose an existing component section in a scrolling layout."));return false;}
+                }
+                if(entry.value("locked").toBool() && (entry["placement"].toObject()!=QJsonObject::fromVariantMap(change.value("placement").toMap()) || (change.contains("categoryId") && entry.value("categoryId").toString()!=change.value("categoryId").toString()))) {setError(tr("Unlock the component before moving or resizing it."));return false;}
                 entry["placement"] = QJsonObject::fromVariantMap(change.value("placement").toMap());
+                if(change.contains("categoryId")){const auto category=change.value("categoryId").toString();if(category.isEmpty())entry.remove("categoryId");else entry["categoryId"]=category;}
                 entries[i] = entry; found = true;
             }
             if (!found) { setError(QStringLiteral("The component no longer exists.")); return false; }
@@ -311,6 +318,17 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         }
         document["components"] = entries;
         ok = worker.loadDocument(QJsonDocument(document).toJson(), false);
+    } else if(operation=="orderRelative") {
+        const auto relative=a.value("relativeId").toString();
+        if(a.value("before").metaType().id()!=QMetaType::Bool || relative==id){setError(tr("Choose another component and an ordering direction."));return false;}
+        auto entries=document["components"].toArray();int from=-1,to=-1;
+        for(int i=0;i<entries.size();++i){if(entries[i].toObject()["id"]==id)from=i;if(entries[i].toObject()["id"]==relative)to=i;}
+        if(from<0 || to<0 || entries[from].toObject().value("categoryId")!=entries[to].toObject().value("categoryId")){setError(tr("Choose a component in the same section."));return false;}
+        const QJsonValue moving=entries.at(from);
+        for(int i=qMin(from,to);i<=qMax(from,to);++i)if(entries[i].toObject().value("locked").toBool()){setError(tr("Unlock the affected components before changing their order."));return false;}
+        entries.removeAt(from);if(from<to)--to;
+        entries.insert(to+(a.value("before").toBool()?0:1),moving);document["components"]=entries;
+        ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if (operation == "convertGrid") {
         const auto grid = ComponentSchema::normalizedGrid(a.value("value").toMap());
         if (!ComponentSchema::validGrid(grid)) {
@@ -356,20 +374,24 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     } else if (operation == "rename") ok = worker.setItemName(id, a.value("name").toString());
     else if (operation == "remove") ok = worker.removeItem(id);
     else if (operation == "duplicate") {
-        ok = worker.duplicateItem(id);
-        if (ok && worker.m_composition.contains("grid")) {
-            auto copy = worker.m_items.last().toObject();
-            QVariantMap shape;
-            for (const auto &entry : worker.m_items) if (entry.toObject()["id"] == id) shape = entry.toObject()["placement"].toObject().toVariantMap();
+        auto entries=document["components"].toArray();QJsonObject copy;
+        for(const auto &entry:entries)if(entry.toObject()["id"]==id)copy=entry.toObject();
+        if(copy.isEmpty()){setError(tr("Choose an existing component to duplicate."));return false;}
+        const auto identity=allocateId(id+"-copy");if(identity.isEmpty())return false;copy["id"]=identity;
+        if(worker.m_composition.contains("grid")) {
+            auto shape=copy["placement"].toObject().toVariantMap();
             if (shape.isEmpty()) shape = {{"x",0},{"y",0},{"width",1},{"height",1}};
-            const auto grid = worker.grid(); bool free = false;
+            const auto category=copy.value("categoryId").toString();const bool sections=worker.grid().value("mode")=="sections";
+            const auto grid=ComponentSchema::sectionGrid(worker.m_composition,worker.m_categories,category);bool free=false;
             for (int row=0; row<grid["rows"].toInt() && !free; ++row) for (int col=0; col<grid["columns"].toInt() && !free; ++col) {
                 shape["x"]=col; shape["y"]=row;
-                if (ComponentSchema::validPlacement(shape,grid["columns"].toInt(),grid["rows"].toInt()) && worker.gridCollisions(copy["id"].toString(),shape).isEmpty()) free=true;
+                if(!ComponentSchema::validPlacement(shape,grid["columns"].toInt(),grid["rows"].toInt()))continue;
+                free=true;for(const auto &entry:entries){const auto item=entry.toObject();if((!sections || item.value("categoryId").toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(),shape)){free=false;break;}}
             }
-            ok = free && worker.setItemPlacement(copy["id"].toString(),shape);
-            if (!ok) worker.setError(QStringLiteral("There is no free region for the duplicate. Nothing changed."));
+            if(!free){setError(tr("There is no free region for the duplicate. Nothing changed."));return false;}
+            copy["placement"]=QJsonObject::fromVariantMap(shape);
         }
+        entries.append(copy);document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     }
     else if (operation == "reorder") ok = worker.moveItem(id, a.value("offset").toInt());
     else if (operation == "presentation") ok = worker.setItemPresentation(id, a.value("value").toMap());
@@ -635,10 +657,12 @@ void StudioSession::setError(const QString &message)
 }
 
 QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMap &placement,
-                                            const QString &strategy, const QString &pageId)
+                                            const QString &strategy, const QString &pageId, const QVariantMap &options)
 {
     const auto fail = [](const QString &reason) { return QVariantMap{{"valid", false}, {"reason", reason}}; };
     if (!m_active) return fail(QStringLiteral("The edit session has closed."));
+    if(!QStringList{"cancel","shift","swap"}.contains(strategy))return fail(tr("Choose Shift, Swap or Cancel."));
+    for(auto it=options.cbegin();it!=options.cend();++it)if(it.key()!="categoryId" || it.value().metaType().id()!=QMetaType::QString)return fail(tr("Choose a valid destination section."));
     auto doc = QJsonDocument::fromJson(m_draft).object();
     if (!pageId.isEmpty()) {
         bool found = false;
@@ -653,6 +677,13 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     if(!selectedFound)return fail(QStringLiteral("The component no longer exists."));
     const auto composition=doc["composition"].toObject().toVariantMap();
     const bool sections=composition.value("grid").toMap().value("mode")=="sections";
+    const auto sourceCategory=category;
+    if(options.contains("categoryId")) {
+        if(!sections)return fail(tr("Moving between sections requires a scrolling section layout."));
+        category=options.value("categoryId").toString();bool found=category.isEmpty();
+        for(const auto &entry:doc["categories"].toArray())if(entry.toObject()["id"]==category){found=true;if(entry.toObject()["presentation"].toObject().value("variant")=="library")return fail(tr("A media shelf manages its own contents. Choose a component section."));}
+        if(!found)return fail(tr("The destination section no longer exists."));
+    }
     const auto grid = ComponentSchema::sectionGrid(composition,doc["categories"].toArray(),category);
     const int cols = grid["columns"].toInt(), rows = grid["rows"].toInt();
     if (!ComponentSchema::validPlacement(placement, cols, rows)) return fail(QStringLiteral("The candidate is outside the grid."));
@@ -666,44 +697,69 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     }
     if (selected < 0) return fail(QStringLiteral("The component no longer exists."));
     for(const int index:colliders)if(entries[index].toObject().value("locked").toBool())return fail(tr("A locked component occupies this region. Unlock it or choose another position."));
-    QVariantList changes{QVariantMap{{"id", id}, {"placement", placement}}};
-    auto moving = entries[selected].toObject(); moving["placement"] = QJsonObject::fromVariantMap(placement); entries[selected] = moving;
+    QVariantList changes;
+    auto moving = entries[selected].toObject(); moving["placement"] = QJsonObject::fromVariantMap(placement);
+    if(sourceCategory!=category){if(category.isEmpty())moving.remove("categoryId");else moving["categoryId"]=category;}
+    entries[selected] = moving;
     if (!colliders.isEmpty() && strategy == "cancel") return fail(QStringLiteral("Occupied cells: choose Shift, Swap or Cancel."));
     if (!colliders.isEmpty() && strategy == "swap") {
         if (colliders.size() != 1 || origin.isEmpty()) return fail(QStringLiteral("Swap needs one occupant and an existing origin."));
         auto other = entries[colliders.first()].toObject();
         auto replacement = other["placement"].toObject().toVariantMap();
         replacement["x"] = origin["x"]; replacement["y"] = origin["y"];
+        if(sourceCategory!=category){if(sourceCategory.isEmpty())other.remove("categoryId");else other["categoryId"]=sourceCategory;}
         other["placement"] = QJsonObject::fromVariantMap(replacement); entries[colliders.first()] = other;
-        changes.append(QVariantMap{{"id", other["id"].toString()}, {"placement", replacement}});
     } else if (!colliders.isEmpty() && strategy == "shift") {
-        std::sort(colliders.begin(), colliders.end(), [&entries](int a, int b) {
-            const auto x = entries[a].toObject(), y = entries[b].toObject();
+        const auto originalEntries=doc["components"].toArray();
+        const auto stableOrder=[&originalEntries](int a,int b) {
+            const auto x = originalEntries[a].toObject(), y = originalEntries[b].toObject();
             const auto p = x["placement"].toObject(), q = y["placement"].toObject();
             if (p["y"] != q["y"]) return p["y"].toInt() < q["y"].toInt();
             if (p["x"] != q["x"]) return p["x"].toInt() < q["x"].toInt();
             return x["id"].toString() < y["id"].toString();
-        });
+        };
+        std::sort(colliders.begin(),colliders.end(),stableOrder);
         if (colliders.size() >= 64) return fail(QStringLiteral("The shift exceeds 64 affected components."));
-        // Reserve unaffected cells and the candidate first; place affected nodes in deterministic order.
-        for (int index : colliders) { auto item = entries[index].toObject(); item.remove("placement"); entries[index] = item; }
-        for (int index : colliders) {
-            const auto original = doc["components"].toArray()[index].toObject()["placement"].toObject().toVariantMap();
-            auto target = original;
-            bool fits = false;
-            for (int row = 0; row < rows && !fits; ++row) for (int col = 0; col < cols && !fits; ++col) {
-                target["x"] = col; target["y"] = row;
-                if (!ComponentSchema::validPlacement(target, cols, rows)) continue;
-                bool free = true;
-                for (int j = 0; j < entries.size(); ++j) if (j != index && (!sections || entries[j].toObject()["categoryId"].toString()==category) && entries[j].toObject().contains("placement") &&
-                    ComponentSchema::placementsOverlap(entries[j].toObject()["placement"].toObject().toVariantMap(), target)) { free = false; break; }
-                if (free) fits = true;
+        QSet<int> fixed{selected};int attempts=0;bool affectedLimit=false;
+        // Prefer empty regions, then try bounded deterministic cascades. Each
+        // branch owns its complete result; failed branches publish nothing.
+        std::function<bool(QList<int>)> solve=[&](QList<int> pending)->bool {
+            pending.erase(std::remove_if(pending.begin(),pending.end(),[&](int i){return fixed.contains(i);}),pending.end());
+            std::sort(pending.begin(),pending.end(),stableOrder);pending.erase(std::unique(pending.begin(),pending.end()),pending.end());
+            if(pending.isEmpty())return true;
+            const int index=pending.takeFirst();
+            if(fixed.size()>=64){affectedLimit=true;return false;}
+            if(originalEntries[index].toObject().value("locked").toBool())return false;
+            const auto baseline=entries;const auto fixedBefore=fixed;
+            auto item=entries[index].toObject();auto target=originalEntries[index].toObject()["placement"].toObject().toVariantMap();
+            item.remove("placement");entries[index]=item;
+            const auto vacant=entries;
+            for(int pass=0;pass<2;++pass)for(int row=0;row<rows;++row)for(int col=0;col<cols;++col) {
+                if(++attempts>4096){entries=baseline;fixed=fixedBefore;return false;}
+                target["x"]=col;target["y"]=row;
+                if(!ComponentSchema::validPlacement(target,cols,rows))continue;
+                QList<int> displaced;bool blocked=false;
+                for(int j=0;j<entries.size();++j) {
+                    const auto other=entries[j].toObject();
+                    if(j==index || (sections && other.value("categoryId").toString()!=category) || !other.contains("placement") || !ComponentSchema::placementsOverlap(other["placement"].toObject().toVariantMap(),target))continue;
+                    if(fixed.contains(j) || other.value("locked").toBool()){blocked=true;break;}
+                    displaced.append(j);
+                }
+                if(blocked || (pass==0 && !displaced.isEmpty()) || (pass==1 && displaced.isEmpty()))continue;
+                auto placed=item;placed["placement"]=QJsonObject::fromVariantMap(target);entries[index]=placed;fixed.insert(index);
+                auto next=pending;next.append(displaced);
+                if(solve(next))return true;
+                entries=vacant;fixed=fixedBefore;
+                if(attempts>4096){entries=baseline;return false;}
             }
-            if (!fits) return fail(QStringLiteral("No complete shift fits. Cancel or choose another cell."));
-            auto item = entries[index].toObject(); item["placement"] = QJsonObject::fromVariantMap(target); entries[index] = item;
-            changes.append(QVariantMap{{"id", item["id"].toString()}, {"placement", target}});
-        }
+            entries=baseline;fixed=fixedBefore;return false;
+        };
+        if(!solve(colliders))return fail(attempts>4096?tr("Shift reached its 4096-proposal search limit. Choose another cell or Swap."):affectedLimit?tr("The shift exceeds 64 affected components."):tr("No complete shift fits. Cancel or choose another cell."));
     } else if (!colliders.isEmpty()) return fail(QStringLiteral("Choose a collision strategy."));
+    const auto originalEntries=doc["components"].toArray();
+    const auto appendChange=[&](int index) {const auto item=entries[index].toObject();changes.append(QVariantMap{{"id",item["id"].toString()},{"placement",item["placement"].toObject().toVariantMap()},{"categoryId",item.value("categoryId").toString()}});};
+    appendChange(selected);
+    for(int i=0;i<entries.size();++i)if(i!=selected && (entries[i].toObject().value("placement")!=originalEntries[i].toObject().value("placement") || entries[i].toObject().value("categoryId")!=originalEntries[i].toObject().value("categoryId")))appendChange(i);
     doc["components"] = entries;
     QString error;
     if (!HomeLayout::validateStudioDocument(QJsonDocument(doc).toJson(), &error)) return fail(error);

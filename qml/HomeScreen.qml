@@ -8,6 +8,7 @@ Item {
     property var authoredItems: items
     property var authoredSections: sections
     property bool editMode:false
+    property var suppressedComponentIds:[]
     property string editSelection:""
     property var editTargets:({})
     signal editSelected(string componentId)
@@ -51,6 +52,7 @@ Item {
     property var grid: ({})
     property var placements: []
     readonly property var gridMetrics: composed.placementCell
+    readonly property real componentUnit:composed.unit
     readonly property string layoutError: composed.layoutError
     function placementRect(p) { return composed.placementRect(p,"") }
     function placementRectFor(p,scope) { return composed.placementRect(p,scope) }
