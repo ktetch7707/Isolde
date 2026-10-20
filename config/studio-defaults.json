@@ -16,6 +16,29 @@
     "mode": "screen"
   },
   "sectionHeight": 560,
+  "widgetSpans": {"clock": {"width": 1, "height": 1}, "text": {"width": 1, "height": 1}},
+  "groupPreset": {
+    "id": "group", "name": "Group", "kind": "widget", "widgetType": "container", "componentType": "container",
+    "placement": {"x": 0, "y": 0, "width": 4, "height": 2},
+    "presentation": {"showHeading": false, "surfaceOpacity": 0, "radius": 0, "layout": {"schemaVersion": 1, "mode": "grid", "columns": 4, "rows": 2, "gap": 12, "padding": 0}}
+  },
+  "inputPanelPreset": {
+    "root": {
+      "id": "inputs-panel", "name": "Input slots", "kind": "widget", "widgetType": "container", "componentType": "container", "requiredCapability": "capture-inputs",
+      "placement": {"x": 0, "y": 0, "width": 4, "height": 3},
+      "presentation": {"showHeading": true, "headingSize": 24, "surfaceOpacity": 0.18, "radius": 18, "layout": {"schemaVersion": 1, "mode": "grid", "columns": 4, "rows": 2, "gap": 12, "padding": 12}}
+    },
+    "children": [
+      {"id": "input-1", "parentId": "inputs-panel", "name": "HDMI 1", "kind": "action", "symbol": "1", "action": {"type": "switch-input", "input": 1}, "placement": {"x": 0, "y": 0, "width": 1, "height": 1}},
+      {"id": "input-2", "parentId": "inputs-panel", "name": "HDMI 2", "kind": "action", "symbol": "2", "action": {"type": "switch-input", "input": 2}, "placement": {"x": 1, "y": 0, "width": 1, "height": 1}},
+      {"id": "input-3", "parentId": "inputs-panel", "name": "HDMI 3", "kind": "action", "symbol": "3", "action": {"type": "switch-input", "input": 3}, "placement": {"x": 2, "y": 0, "width": 1, "height": 1}},
+      {"id": "input-4", "parentId": "inputs-panel", "name": "HDMI 4", "kind": "action", "symbol": "4", "action": {"type": "switch-input", "input": 4}, "placement": {"x": 3, "y": 0, "width": 1, "height": 1}},
+      {"id": "input-5", "parentId": "inputs-panel", "name": "HDMI 5", "kind": "action", "symbol": "5", "action": {"type": "switch-input", "input": 5}, "placement": {"x": 0, "y": 1, "width": 1, "height": 1}},
+      {"id": "input-6", "parentId": "inputs-panel", "name": "HDMI 6", "kind": "action", "symbol": "6", "action": {"type": "switch-input", "input": 6}, "placement": {"x": 1, "y": 1, "width": 1, "height": 1}},
+      {"id": "input-7", "parentId": "inputs-panel", "name": "HDMI 7", "kind": "action", "symbol": "7", "action": {"type": "switch-input", "input": 7}, "placement": {"x": 2, "y": 1, "width": 1, "height": 1}},
+      {"id": "input-8", "parentId": "inputs-panel", "name": "HDMI 8", "kind": "action", "symbol": "8", "action": {"type": "switch-input", "input": 8}, "placement": {"x": 3, "y": 1, "width": 1, "height": 1}}
+    ]
+  },
   "gridModes": [
     {"id": "screen", "name": "One screen"},
     {"id": "sections", "name": "Scrolling sections"}

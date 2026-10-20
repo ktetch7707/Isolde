@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QSet>
 #include <QUuid>
 #include <QUrl>
 #include <QtMath>
@@ -144,12 +145,13 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
             item.insert("networkRequirement", networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
         }
         const auto logoFile = item.value("customLogo").toString();
-        item.insert("logoSource", logoFile.isEmpty() ? QString()
-            : QUrl::fromLocalFile(QDir(QFileInfo(QString()).absolutePath()).filePath(logoFile)).toString());
-        auto unavailable = ComponentSchema::unavailable(action, registry, QVariantList{});
-        if (unavailable.isEmpty() && action.value("type").toString() == QStringLiteral("switch-input")) {
+        item.insert("logoSource", logoFile.isEmpty() || !m_owner || m_owner->m_userPath.isEmpty() ? QString()
+            : QUrl::fromLocalFile(QDir(QFileInfo(m_owner->m_userPath).absolutePath()).filePath(logoFile)).toString());
+        auto unavailable = ComponentSchema::unavailable(action, registry, m_owner?m_owner->m_collections:QVariantList{});
+        if (unavailable.isEmpty() && action.value("type").toString() == QStringLiteral("switch-input") && (!m_owner || !m_owner->m_captureInputsReady)) {
             unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
         }
+        if(object.value("requiredCapability")=="capture-inputs" && (!m_owner || !m_owner->m_captureInputsReady))unavailable=QCoreApplication::translate("PageModel","HDMI capture unavailable · configure inputs in Settings");
         item.insert("unavailableReason", unavailable);
         result.append(ComponentSchema::component(item, true));
     }
@@ -262,7 +264,11 @@ QVariantList PageModel::items() const
     QJsonArray components;
     if (m_pageDocument.contains("components"))
         components = m_pageDocument.value("components").toArray();
-    if(m_owner && !m_owner->m_draftOnly){QJsonArray visible;for(const auto &entry:components)if(!entry.toObject().value("hidden").toBool())visible.append(entry);components=visible;}
+    if(m_owner && !m_owner->m_draftOnly){
+        QSet<QString> hidden;for(const auto &entry:components)if(entry.toObject().value("hidden").toBool())hidden.insert(entry.toObject()["id"].toString());
+        for(int depth=0;depth<4;++depth)for(const auto &entry:components){const auto item=entry.toObject();if(hidden.contains(item.value("parentId").toString()))hidden.insert(item["id"].toString());}
+        QJsonArray visible;for(const auto &entry:components)if(!hidden.contains(entry.toObject()["id"].toString()))visible.append(entry);components=visible;
+    }
     return resolveItems(components);
 }
 
@@ -278,7 +284,7 @@ QVariantList PageModel::sections() const
         const auto category = categoryValue.toObject();
         QVariantList categoryItems;
         for (const auto &itemValue : resolved)
-            if (itemValue.toMap().value("categoryId").toString() == category.value("id").toString())
+            if (itemValue.toMap().value("parentId").toString().isEmpty() && itemValue.toMap().value("categoryId").toString() == category.value("id").toString())
                 categoryItems.append(itemValue);
         if (!categoryItems.isEmpty() || category.value("presentation").toObject().value("variant").toString() == QStringLiteral("library") || grid().value("mode")=="sections") {
             auto section = category.toVariantMap();
@@ -288,7 +294,7 @@ QVariantList PageModel::sections() const
     }
     QVariantList uncategorized;
     for (const auto &itemValue : resolved)
-        if (itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
+        if (itemValue.toMap().value("parentId").toString().isEmpty() && itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
     if (!uncategorized.isEmpty() || grid().value("mode")=="sections")
         result.append(QVariantMap{{"id", ""}, {"name", QCoreApplication::translate("PageModel", "Uncategorized")}, {"items", uncategorized}});
     return result;

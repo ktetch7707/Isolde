@@ -22,11 +22,57 @@ StudioSession::StudioSession(QObject *parent)
 
 QObject *StudioSession::model() const { return m_model; }
 QObject *StudioSession::proposalModel() const { return m_proposalModel; }
+void StudioSession::configureWorker(HomeLayout &worker,bool assetPaths) const
+{
+    worker.m_draftOnly=true;
+    if(!m_live)return;
+    worker.m_defaultPath=m_live->m_defaultPath;
+    worker.m_collections=m_live->m_collections;
+    worker.m_captureInputsReady=m_live->m_captureInputsReady;
+    if(assetPaths)worker.m_userPath=m_live->m_userPath;
+}
+QVariantMap StudioSession::componentPrototype(const QString &type)
+{
+    if(!m_active || !m_live){setError(tr("Reopen Page Studio before adding components."));return {};}
+    const auto options=m_live->studioOptions();QJsonArray nodes;
+    if(type=="container")nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
+    else if(type=="input-panel"){
+        const auto preset=options.value("inputPanelPreset").toMap();nodes.append(QJsonObject::fromVariantMap(preset.value("root").toMap()));
+        for(const auto &entry:preset.value("children").toList())nodes.append(QJsonObject::fromVariantMap(entry.toMap()));
+    } else if(type=="clock" || type=="text"){
+        HomeLayout factory(m_live->registry());configureWorker(factory);
+        if(!factory.addWidget(type)){setError(factory.errorString());return {};}
+        auto item=factory.m_items.last().toObject();
+        const auto span=options.value("widgetSpans").toMap().value(type).toMap();
+        item["placement"]=QJsonObject::fromVariantMap({{"x",0},{"y",0},{"width",span.value("width")},{"height",span.value("height")}});
+        nodes.append(item);
+    } else {setError(tr("Choose a registered component type."));return {};}
+    if(nodes.isEmpty() || nodes.size()>33){setError(tr("The packaged component preset is invalid."));return {};}
+    QHash<QString,QString> remap;QSet<QString> allocated;
+    for(int i=0;i<nodes.size();++i){
+        QString error;const auto canonical=ComponentSchema::component(nodes[i].toObject().toVariantMap(),true,&error);
+        if(canonical.isEmpty()){setError(error);return {};}
+        auto item=QJsonObject::fromVariantMap(canonical);const auto oldId=item["id"].toString();
+        if(remap.contains(oldId)){setError(tr("The preset contains duplicate identities."));return {};}
+        auto identity=allocateId((type=="clock" || type=="text")?type:oldId);if(identity.isEmpty())return {};
+        const auto base=identity;int suffix=2;while(allocated.contains(identity))identity=base+QString::number(suffix++);
+        if(!ComponentSchema::safeId(identity)){setError(tr("The component identity exceeds its limit."));return {};}
+        allocated.insert(identity);remap[oldId]=identity;item["id"]=identity;nodes[i]=item;
+    }
+    for(int i=0;i<nodes.size();++i){auto item=nodes[i].toObject();const auto parent=item.value("parentId").toString();if(!parent.isEmpty()){
+        if(!remap.contains(parent)){setError(tr("The preset refers to an external parent."));return {};}
+        item["parentId"]=remap[parent];nodes[i]=item;
+    }}
+    const auto root=nodes.first().toObject();
+    if(!root.value("parentId").toString().isEmpty()){setError(tr("The preset root cannot have an external parent."));return {};}
+    HomeLayout view(m_live->registry());configureWorker(view,true);view.m_items=nodes;
+    return {{"type",type},{"rootId",root["id"].toString()},{"root",root.toVariantMap()},{"components",nodes.toVariantList()},{"viewItems",view.items()}};
+}
 
 bool StudioSession::previewCommand(const QString &operation, const QVariantMap &arguments, const QString &pageId)
 {
     if (!m_active || !m_live) return false;
-    HomeLayout temporary(m_live->registry()); temporary.m_draftOnly = true;
+    HomeLayout temporary(m_live->registry()); configureWorker(temporary);
     if (!temporary.loadDocument(m_draft, false)) return false;
     StudioSession transaction;
     if (!transaction.bind(&temporary) || !transaction.execute(operation, arguments, pageId)) {
@@ -34,8 +80,8 @@ bool StudioSession::previewCommand(const QString &operation, const QVariantMap &
     }
     m_proposed = transaction.draft();
     m_proposalBaseline = m_draft;
-    if (!m_proposalModel) { m_proposalModel = new HomeLayout(m_live->registry(),this); m_proposalModel->m_draftOnly = true; }
-    m_proposalModel->m_userPath=m_live->m_userPath;
+    if (!m_proposalModel) m_proposalModel = new HomeLayout(m_live->registry(),this);
+    configureWorker(*m_proposalModel,true);
     m_proposalModel->loadDocument(m_proposed,false);
     emit m_proposalModel->layoutChanged(); emit changed();
     return true;
@@ -181,7 +227,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
                     layout[key]=values;
                 }
                 auto components=layout["components"].toArray();
-                for(int i=0;i<components.size();++i){auto item=components[i].toObject();const auto category=item.value("categoryId").toString();if(copiedIds.contains(category))item["categoryId"]=copiedIds[category];components[i]=item;}
+                for(int i=0;i<components.size();++i){auto item=components[i].toObject();for(const auto &key:QStringList{"categoryId","parentId"}){const auto reference=item.value(key).toString();if(copiedIds.contains(reference))item[key]=copiedIds[reference];}components[i]=item;}
                 layout["components"]=components;
                 auto tabs=composition.value("navigation").toArray();
                 for(int i=0;i<tabs.size();++i){auto tab=tabs[i].toObject();const auto old=tab["id"].toString(),fresh=remapIdentity(old);if(fresh.isEmpty())return false;tab["id"]=fresh;
@@ -253,14 +299,14 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     }
     if(operation=="addResolved" || operation=="addPlaced") {
         const auto proposal=additionProposal(a.value("type").toString(),a.value("placement").toMap(),
-            a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString());
+            a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString(),a.value("parentId").toString());
         if(!proposal.value("valid").toBool()){setError(proposal.value("reason").toString());return false;}
         return pushEdit(QJsonDocument(QJsonObject::fromVariantMap(proposal.value("document").toMap())).toJson());
     }
     if (operation == "batch") {
         const auto commands = a.value("commands").toList();
         if (commands.isEmpty() || commands.size() > 32) { setError(QStringLiteral("Choose between 1 and 32 grouped edits.")); return false; }
-        HomeLayout temporary(m_live->registry()); temporary.m_draftOnly = true;
+        HomeLayout temporary(m_live->registry()); configureWorker(temporary);
         if (!temporary.loadDocument(m_draft, false)) { setError(temporary.errorString()); return false; }
         StudioSession transaction;
         if (!transaction.bind(&temporary)) { setError(transaction.errorString()); return false; }
@@ -284,11 +330,100 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         document = pages[pageIndex].toObject()["layout"].toObject();
     }
     HomeLayout worker(m_live->registry());
-    worker.m_draftOnly = true;
+    configureWorker(worker);
     if (!worker.loadDocument(QJsonDocument(document).toJson(), false)) { setError(worker.errorString()); return false; }
     const auto id = a.value("id").toString();
     bool ok = false;
-    if (operation == "place") {
+    if(operation=="arrange") {
+        const auto selection=a.value("ids").toList();const auto mode=a.value("mode").toString();
+        if(selection.size()<2 || selection.size()>32 || !QStringList{"left","center-x","right","top","center-y","bottom","distribute-x","distribute-y"}.contains(mode)){setError(tr("Choose an alignment and between 2 and 32 components."));return false;}
+        auto entries=document["components"].toArray();QList<int> indices;QSet<QString> ids;QString parent,category;int low=16,high=0,total=0;
+        const bool horizontal=QStringList{"left","center-x","right","distribute-x"}.contains(mode);const QString axis=horizontal?"x":"y",span=horizontal?"width":"height";
+        for(const auto &value:selection){const auto identity=value.toString();if(value.metaType().id()!=QMetaType::QString || ids.contains(identity)){setError(tr("Choose distinct component identities."));return false;}ids.insert(identity);}
+        for(int i=0;i<entries.size();++i){const auto item=entries[i].toObject();if(!ids.contains(item["id"].toString()))continue;
+            if(ComponentSchema::positionLocked(entries,item["id"].toString()) || !item.contains("placement")){setError(tr("Unlock the selected components and choose a grid layout."));return false;}
+            if(indices.isEmpty()){parent=item.value("parentId").toString();category=item.value("categoryId").toString();}
+            if(parent!=item.value("parentId").toString() || category!=item.value("categoryId").toString()){setError(tr("Arrange components in the same group or section."));return false;}
+            indices.append(i);const auto p=item["placement"].toObject();low=qMin(low,p[axis].toInt());high=qMax(high,p[axis].toInt()+p[span].toInt());total+=p[span].toInt();
+        }
+        if(indices.size()!=ids.size()){setError(tr("A selected component no longer exists."));return false;}
+        const bool distribute=mode.startsWith("distribute");int gap=0;
+        if(distribute){const int space=high-low-total;if(space<0 || space%(indices.size()-1)){setError(tr("Equal spacing requires whole cells. Adjust the outer positions first."));return false;}gap=space/(indices.size()-1);
+            std::stable_sort(indices.begin(),indices.end(),[&](int x,int y){return entries[x].toObject()["placement"].toObject()[axis].toInt()<entries[y].toObject()["placement"].toObject()[axis].toInt();});}
+        int cursor=low;
+        for(int index:indices){auto item=entries[index].toObject();auto p=item["placement"].toObject();const int size=p[span].toInt();int position=low;
+            if(distribute){position=cursor;cursor+=size+gap;}
+            else if(mode.startsWith("center")){if((low+high-size)%2){setError(tr("Center alignment falls between grid cells. Adjust the sizes or outer positions first."));return false;}position=(low+high-size)/2;}
+            else if(mode=="right" || mode=="bottom")position=high-size;
+            p[axis]=position;item["placement"]=p;entries[index]=item;
+        }
+        document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="group") {
+        const auto selection=a.value("ids").toList();QSet<QString> ids;
+        if(selection.size()<2 || selection.size()>32){setError(tr("Select between 2 and 32 components to group."));return false;}
+        for(const auto &value:selection){if(value.metaType().id()!=QMetaType::QString || ids.contains(value.toString())){setError(tr("Choose distinct component identities."));return false;}ids.insert(value.toString());}
+        auto entries=document["components"].toArray();QString parent,category;bool first=true;int left=16,top=10,right=0,bottom=0,found=0;
+        for(const auto &value:entries){const auto item=value.toObject();if(!ids.contains(item["id"].toString()))continue;
+            if(ComponentSchema::positionLocked(entries,item["id"].toString()) || !item.contains("placement")){setError(tr("Unlock the selected components and use a page grid before grouping."));return false;}
+            if(first){parent=item.value("parentId").toString();category=item.value("categoryId").toString();first=false;}
+            if(item.value("parentId").toString()!=parent || item.value("categoryId").toString()!=category){setError(tr("Select components in the same group or section."));return false;}
+            const auto p=item["placement"].toObject();left=qMin(left,p["x"].toInt());top=qMin(top,p["y"].toInt());right=qMax(right,p["x"].toInt()+p["width"].toInt());bottom=qMax(bottom,p["y"].toInt()+p["height"].toInt());++found;
+        }
+        if(found!=ids.size()){setError(tr("A selected component no longer exists."));return false;}
+        const QVariantMap bounds{{"x",left},{"y",top},{"width",right-left},{"height",bottom-top}};
+        for(const auto &value:entries){const auto item=value.toObject();if(ids.contains(item["id"].toString()) || item.value("parentId").toString()!=parent || item.value("categoryId").toString()!=category)continue;
+            if(ComponentSchema::placementsOverlap(bounds,item["placement"].toObject().toVariantMap())){setError(tr("The group bounds include another component. Select it too or move it first."));return false;}}
+        const auto prototype=componentPrototype("container");if(prototype.isEmpty())return false;
+        auto group=QJsonObject::fromVariantMap(prototype.value("root").toMap());const auto identity=group["id"].toString();
+        group["placement"]=QJsonObject::fromVariantMap(bounds);if(!parent.isEmpty())group["parentId"]=parent;if(!category.isEmpty())group["categoryId"]=category;
+        auto presentation=group["presentation"].toObject();auto layout=presentation["layout"].toObject();
+        layout["columns"]=right-left;layout["rows"]=bottom-top;layout["padding"]=0;
+        layout["gap"]=ComponentSchema::componentGrid(entries,document["composition"].toObject().toVariantMap(),document["categories"].toArray(),parent,category).value("gap").toDouble();
+        presentation["layout"]=layout;presentation["showHeading"]=false;group["presentation"]=presentation;
+        QJsonArray result;bool inserted=false;
+        for(const auto &value:entries){auto item=value.toObject();if(ids.contains(item["id"].toString())){
+            if(!inserted){result.append(group);inserted=true;}
+            auto placement=item["placement"].toObject();placement["x"]=placement["x"].toInt()-left;placement["y"]=placement["y"].toInt()-top;
+            item["placement"]=placement;item["parentId"]=identity;item.remove("categoryId");
+        }result.append(item);}
+        document["components"]=result;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="ungroup") {
+        auto entries=document["components"].toArray();QJsonObject group;
+        for(const auto &value:entries)if(value.toObject()["id"]==id)group=value.toObject();
+        if(group["componentType"]!="container" || ComponentSchema::positionLocked(entries,id)){setError(tr("Choose an unlocked group to ungroup."));return false;}
+        const auto parent=group.value("parentId").toString(),category=group.value("categoryId").toString();
+        const auto outer=group["placement"].toObject(),style=group["presentation"].toObject(),inner=style["layout"].toObject();
+        const auto parentGrid=ComponentSchema::componentGrid(entries,document["composition"].toObject().toVariantMap(),document["categories"].toArray(),parent,category);
+        if(inner["columns"].toInt()!=outer["width"].toInt() || inner["rows"].toInt()!=outer["height"].toInt() || inner["padding"].toDouble()!=0 || inner["gap"].toDouble()!=parentGrid.value("gap").toDouble() || style.value("showHeading").toBool()){
+            setError(tr("This group's internal grid differs from its parent. Move its children out explicitly to preserve their sizes."));return false;
+        }
+        QJsonArray result;
+        for(const auto &value:entries){auto item=value.toObject();if(item["id"]==id)continue;
+            if(item.value("parentId").toString()==id){
+                if(ComponentSchema::positionLocked(entries,item["id"].toString())){setError(tr("Unlock the group's contents before ungrouping."));return false;}
+                auto placement=item["placement"].toObject();placement["x"]=placement["x"].toInt()+outer["x"].toInt();placement["y"]=placement["y"].toInt()+outer["y"].toInt();item["placement"]=placement;
+                if(parent.isEmpty())item.remove("parentId");else item["parentId"]=parent;
+                if(category.isEmpty())item.remove("categoryId");else item["categoryId"]=category;
+            }result.append(item);
+        }
+        document["components"]=result;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="childLayout") {
+        const auto layout=a.value("value").toMap();if(!ComponentSchema::validChildLayout(layout)){setError(tr("Choose a bounded group layout."));return false;}
+        auto entries=document["components"].toArray();bool found=false;
+        if(ComponentSchema::positionLocked(entries,id)){setError(tr("Unlock this group before arranging it."));return false;}
+        for(int i=0;i<entries.size();++i){auto item=entries[i].toObject();if(item["id"]==id && item["componentType"]=="container"){
+            auto style=item["presentation"].toObject();style["layout"]=QJsonObject::fromVariantMap(layout);item["presentation"]=style;entries[i]=item;found=true;
+        }}
+        if(!found){setError(tr("Choose an existing group."));return false;}
+        if(layout.value("mode")!="grid"){
+            int cursor=0;const bool row=layout.value("mode")=="row";
+            for(int i=0;i<entries.size();++i){auto item=entries[i].toObject();if(item.value("parentId").toString()!=id)continue;
+                if(ComponentSchema::positionLocked(entries,item["id"].toString())){setError(tr("Unlock the group's contents before arranging them."));return false;}
+                auto p=item["placement"].toObject();p["x"]=row?cursor:0;p["y"]=row?0:cursor;cursor+=p[row?"width":"height"].toInt();item["placement"]=p;entries[i]=item;
+            }
+        }
+        document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if (operation == "place") {
         // Validate the complete result once: swaps/groups must not fail on an intermediate collision.
         auto entries = document["components"].toArray();
         const auto changes = a.value("placements").toList();
@@ -302,15 +437,19 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
             for (int i = 0; i < entries.size(); ++i) {
                 auto entry = entries[i].toObject();
                 if (entry["id"] != target) continue;
+                if(change.contains("parentId") && change.value("parentId").metaType().id()!=QMetaType::QString){setError(tr("Choose a named destination group."));return false;}
+                const auto parent=change.value("parentId",entry.value("parentId").toString()).toString();
+                if(!parent.isEmpty() && ComponentSchema::positionLocked(worker.m_items,parent)){setError(tr("Choose an unlocked destination group."));return false;}
                 if(change.contains("categoryId") && change.value("categoryId").metaType().id()!=QMetaType::QString){setError(tr("Choose a named destination section."));return false;}
                 if(change.contains("categoryId") && entry.value("categoryId").toString()!=change.value("categoryId").toString()) {
                     const auto destination=change.value("categoryId").toString();bool eligible=destination.isEmpty();
                     for(const auto &value:worker.m_categories){const auto category=value.toObject();if(category["id"]==destination)eligible=category["presentation"].toObject().value("variant")!="library";}
-                    if(worker.grid().value("mode")!="sections" || !eligible){setError(tr("Choose an existing component section in a scrolling layout."));return false;}
+                    if((!destination.isEmpty() && worker.grid().value("mode")!="sections") || !eligible){setError(tr("Choose an existing component section in a scrolling layout."));return false;}
                 }
-                if(entry.value("locked").toBool() && (entry["placement"].toObject()!=QJsonObject::fromVariantMap(change.value("placement").toMap()) || (change.contains("categoryId") && entry.value("categoryId").toString()!=change.value("categoryId").toString()))) {setError(tr("Unlock the component before moving or resizing it."));return false;}
+                if(ComponentSchema::positionLocked(worker.m_items,target) && (entry["placement"].toObject()!=QJsonObject::fromVariantMap(change.value("placement").toMap()) || parent!=entry.value("parentId").toString() || (change.contains("categoryId") && entry.value("categoryId").toString()!=change.value("categoryId").toString()))) {setError(tr("Unlock the component and its containing groups before moving or resizing it."));return false;}
                 entry["placement"] = QJsonObject::fromVariantMap(change.value("placement").toMap());
                 if(change.contains("categoryId")){const auto category=change.value("categoryId").toString();if(category.isEmpty())entry.remove("categoryId");else entry["categoryId"]=category;}
+                if(parent.isEmpty())entry.remove("parentId");else entry["parentId"]=parent;
                 entries[i] = entry; found = true;
             }
             if (!found) { setError(QStringLiteral("The component no longer exists.")); return false; }
@@ -323,13 +462,16 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         if(a.value("before").metaType().id()!=QMetaType::Bool || relative==id){setError(tr("Choose another component and an ordering direction."));return false;}
         auto entries=document["components"].toArray();int from=-1,to=-1;
         for(int i=0;i<entries.size();++i){if(entries[i].toObject()["id"]==id)from=i;if(entries[i].toObject()["id"]==relative)to=i;}
-        if(from<0 || to<0 || entries[from].toObject().value("categoryId")!=entries[to].toObject().value("categoryId")){setError(tr("Choose a component in the same section."));return false;}
+        if(from<0 || to<0 || entries[from].toObject().value("categoryId")!=entries[to].toObject().value("categoryId") || entries[from].toObject().value("parentId")!=entries[to].toObject().value("parentId")){setError(tr("Choose a component in the same section or group."));return false;}
         const QJsonValue moving=entries.at(from);
         for(int i=qMin(from,to);i<=qMax(from,to);++i)if(entries[i].toObject().value("locked").toBool()){setError(tr("Unlock the affected components before changing their order."));return false;}
         entries.removeAt(from);if(from<to)--to;
         entries.insert(to+(a.value("before").toBool()?0:1),moving);document["components"]=entries;
         ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if (operation == "convertGrid") {
+        for(const auto &entry:worker.m_items)if(entry.toObject()["componentType"]=="container"){
+            setError(tr("This page already contains groups. Edit its grid without converting its components."));return false;
+        }
         const auto grid = ComponentSchema::normalizedGrid(a.value("value").toMap());
         if (!ComponentSchema::validGrid(grid)) {
             setError(QStringLiteral("The chosen grid cannot contain this page. Choose a larger grid or cancel.")); return false;
@@ -372,7 +514,15 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         if(!found){setError(tr("Choose an existing component."));return false;}
         document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if (operation == "rename") ok = worker.setItemName(id, a.value("name").toString());
-    else if (operation == "remove") ok = worker.removeItem(id);
+    else if (operation == "remove") {
+        auto entries=document["components"].toArray();QSet<QString> removed{id};bool found=false;
+        for(const auto &entry:entries)if(entry.toObject()["id"]==id)found=true;
+        if(!found || ComponentSchema::positionLocked(entries,id)){setError(tr("Choose an unlocked component to remove."));return false;}
+        for(int depth=0;depth<4;++depth)for(const auto &entry:entries)if(removed.contains(entry.toObject()["parentId"].toString()))removed.insert(entry.toObject()["id"].toString());
+        for(const auto &entry:entries)if(removed.contains(entry.toObject()["id"].toString()) && entry.toObject().value("locked").toBool()){setError(tr("Unlock the group's contents before removing it."));return false;}
+        QJsonArray result;for(const auto &entry:entries)if(!removed.contains(entry.toObject()["id"].toString()))result.append(entry);
+        document["components"]=result;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    }
     else if (operation == "duplicate") {
         auto entries=document["components"].toArray();QJsonObject copy;
         for(const auto &entry:entries)if(entry.toObject()["id"]==id)copy=entry.toObject();
@@ -381,17 +531,26 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         if(worker.m_composition.contains("grid")) {
             auto shape=copy["placement"].toObject().toVariantMap();
             if (shape.isEmpty()) shape = {{"x",0},{"y",0},{"width",1},{"height",1}};
-            const auto category=copy.value("categoryId").toString();const bool sections=worker.grid().value("mode")=="sections";
-            const auto grid=ComponentSchema::sectionGrid(worker.m_composition,worker.m_categories,category);bool free=false;
+            const auto category=copy.value("categoryId").toString(),parent=copy.value("parentId").toString();const bool sections=worker.grid().value("mode")=="sections";
+            if(!parent.isEmpty() && ComponentSchema::positionLocked(entries,parent)){setError(tr("Unlock the containing group before adding a duplicate."));return false;}
+            const auto grid=ComponentSchema::componentGrid(entries,worker.m_composition,worker.m_categories,parent,category);bool free=false;
             for (int row=0; row<grid["rows"].toInt() && !free; ++row) for (int col=0; col<grid["columns"].toInt() && !free; ++col) {
                 shape["x"]=col; shape["y"]=row;
                 if(!ComponentSchema::validPlacement(shape,grid["columns"].toInt(),grid["rows"].toInt()))continue;
-                free=true;for(const auto &entry:entries){const auto item=entry.toObject();if((!sections || item.value("categoryId").toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(),shape)){free=false;break;}}
+                free=true;for(const auto &entry:entries){const auto item=entry.toObject();if(item.value("parentId").toString()==parent && (!sections || !parent.isEmpty() || item.value("categoryId").toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(),shape)){free=false;break;}}
             }
             if(!free){setError(tr("There is no free region for the duplicate. Nothing changed."));return false;}
             copy["placement"]=QJsonObject::fromVariantMap(shape);
         }
-        entries.append(copy);document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+        QHash<QString,QString> remap{{id,identity}};QSet<QString> allocated{identity};
+        for(int depth=0;depth<4;++depth)for(const auto &entry:entries){const auto item=entry.toObject();const auto child=item["id"].toString();if(remap.contains(child) || !remap.contains(item["parentId"].toString()))continue;
+            auto fresh=allocateId(child+"-copy");if(fresh.isEmpty())return false;const auto base=fresh;int suffix=2;while(allocated.contains(fresh))fresh=base+QString::number(suffix++);
+            if(!ComponentSchema::safeId(fresh)){setError(tr("The copied identity exceeds its limit."));return false;}allocated.insert(fresh);remap[child]=fresh;
+        }
+        QJsonArray copies;copies.append(copy);
+        for(const auto &entry:entries){auto item=entry.toObject();const auto child=item["id"].toString();if(child==id || !remap.contains(child))continue;item["id"]=remap[child];item["parentId"]=remap[item["parentId"].toString()];copies.append(item);}
+        for(const auto &entry:copies)entries.append(entry);
+        document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     }
     else if (operation == "reorder") ok = worker.moveItem(id, a.value("offset").toInt());
     else if (operation == "presentation") ok = worker.setItemPresentation(id, a.value("value").toMap());
@@ -424,7 +583,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         }
         entries[entries.size() - 1] = entry;
         result["pages"] = entries;
-    } else if (operation == "addButton" || operation == "addWidget" || operation == "addPlaced" || operation == "duplicate") {
+    } else if (operation == "addButton" || operation == "addWidget" || operation == "addPlaced") {
         auto entries = result["components"].toArray();
         auto entry = entries.last().toObject();
         const auto base = operation == "addButton" ? QStringLiteral("button") : operation == "duplicate" ? id + QStringLiteral("-copy") : a.value("type").toString();
@@ -662,7 +821,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     const auto fail = [](const QString &reason) { return QVariantMap{{"valid", false}, {"reason", reason}}; };
     if (!m_active) return fail(QStringLiteral("The edit session has closed."));
     if(!QStringList{"cancel","shift","swap"}.contains(strategy))return fail(tr("Choose Shift, Swap or Cancel."));
-    for(auto it=options.cbegin();it!=options.cend();++it)if(it.key()!="categoryId" || it.value().metaType().id()!=QMetaType::QString)return fail(tr("Choose a valid destination section."));
+    for(auto it=options.cbegin();it!=options.cend();++it)if((it.key()!="categoryId" && it.key()!="parentId") || it.value().metaType().id()!=QMetaType::QString)return fail(tr("Choose a valid destination section or group."));
     auto doc = QJsonDocument::fromJson(m_draft).object();
     if (!pageId.isEmpty()) {
         bool found = false;
@@ -672,19 +831,32 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
         if (!found) return fail(QStringLiteral("The page no longer exists."));
     }
     auto entries = doc["components"].toArray();
-    QString category;bool selectedFound=false;
-    for(const auto &entry:entries)if(entry.toObject()["id"]==id){if(entry.toObject().value("locked").toBool())return fail(tr("Unlock the component before moving or resizing it."));category=entry.toObject()["categoryId"].toString();selectedFound=true;}
+    QString category,parent;bool selectedFound=false;
+    for(const auto &entry:entries)if(entry.toObject()["id"]==id){if(ComponentSchema::positionLocked(entries,id))return fail(tr("Unlock the component and its containing groups before moving or resizing it."));category=entry.toObject()["categoryId"].toString();parent=entry.toObject()["parentId"].toString();selectedFound=true;}
     if(!selectedFound)return fail(QStringLiteral("The component no longer exists."));
     const auto composition=doc["composition"].toObject().toVariantMap();
     const bool sections=composition.value("grid").toMap().value("mode")=="sections";
-    const auto sourceCategory=category;
+    const auto sourceCategory=category;const auto sourceParent=parent;
+    if(options.contains("parentId"))parent=options.value("parentId").toString();
+    if(!parent.isEmpty()) {
+        bool found=false;QString ancestor=parent;
+        for(const auto &entry:entries)if(entry.toObject()["id"]==parent)found=entry.toObject()["componentType"]=="container";
+        if(!found || ComponentSchema::positionLocked(entries,parent))return fail(tr("Choose an unlocked destination group."));
+        for(int depth=0;!ancestor.isEmpty() && depth<6;++depth) {
+            if(ancestor==id)return fail(tr("A group cannot contain itself or its ancestors."));
+            QString next;for(const auto &entry:entries)if(entry.toObject()["id"]==ancestor)next=entry.toObject()["parentId"].toString();
+            ancestor=next;
+        }
+        category.clear();
+    } else if(!sourceParent.isEmpty())category=ComponentSchema::effectiveCategory(entries,id);
     if(options.contains("categoryId")) {
-        if(!sections)return fail(tr("Moving between sections requires a scrolling section layout."));
+        if(!parent.isEmpty() && !options.value("categoryId").toString().isEmpty())return fail(tr("Group contents inherit their section."));
+        if(!sections && !options.value("categoryId").toString().isEmpty())return fail(tr("Moving between sections requires a scrolling section layout."));
         category=options.value("categoryId").toString();bool found=category.isEmpty();
         for(const auto &entry:doc["categories"].toArray())if(entry.toObject()["id"]==category){found=true;if(entry.toObject()["presentation"].toObject().value("variant")=="library")return fail(tr("A media shelf manages its own contents. Choose a component section."));}
         if(!found)return fail(tr("The destination section no longer exists."));
     }
-    const auto grid = ComponentSchema::sectionGrid(composition,doc["categories"].toArray(),category);
+    const auto grid = ComponentSchema::componentGrid(entries,composition,doc["categories"].toArray(),parent,category);
     const int cols = grid["columns"].toInt(), rows = grid["rows"].toInt();
     if (!ComponentSchema::validPlacement(placement, cols, rows)) return fail(QStringLiteral("The candidate is outside the grid."));
     int selected = -1;
@@ -693,13 +865,14 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     for (int i = 0; i < entries.size(); ++i) {
         const auto item = entries[i].toObject();
         if (item["id"] == id) { selected = i; origin = item["placement"].toObject().toVariantMap(); }
-        else if ((!sections || item["categoryId"].toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement)) colliders.append(i);
+        else if (item["parentId"].toString()==parent && (!sections || !parent.isEmpty() || item["categoryId"].toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement)) colliders.append(i);
     }
     if (selected < 0) return fail(QStringLiteral("The component no longer exists."));
     for(const int index:colliders)if(entries[index].toObject().value("locked").toBool())return fail(tr("A locked component occupies this region. Unlock it or choose another position."));
     QVariantList changes;
     auto moving = entries[selected].toObject(); moving["placement"] = QJsonObject::fromVariantMap(placement);
-    if(sourceCategory!=category){if(category.isEmpty())moving.remove("categoryId");else moving["categoryId"]=category;}
+    if(category.isEmpty())moving.remove("categoryId");else moving["categoryId"]=category;
+    if(parent.isEmpty())moving.remove("parentId");else moving["parentId"]=parent;
     entries[selected] = moving;
     if (!colliders.isEmpty() && strategy == "cancel") return fail(QStringLiteral("Occupied cells: choose Shift, Swap or Cancel."));
     if (!colliders.isEmpty() && strategy == "swap") {
@@ -708,6 +881,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
         auto replacement = other["placement"].toObject().toVariantMap();
         replacement["x"] = origin["x"]; replacement["y"] = origin["y"];
         if(sourceCategory!=category){if(sourceCategory.isEmpty())other.remove("categoryId");else other["categoryId"]=sourceCategory;}
+        if(sourceParent.isEmpty())other.remove("parentId");else other["parentId"]=sourceParent;
         other["placement"] = QJsonObject::fromVariantMap(replacement); entries[colliders.first()] = other;
     } else if (!colliders.isEmpty() && strategy == "shift") {
         const auto originalEntries=doc["components"].toArray();
@@ -741,7 +915,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
                 QList<int> displaced;bool blocked=false;
                 for(int j=0;j<entries.size();++j) {
                     const auto other=entries[j].toObject();
-                    if(j==index || (sections && other.value("categoryId").toString()!=category) || !other.contains("placement") || !ComponentSchema::placementsOverlap(other["placement"].toObject().toVariantMap(),target))continue;
+                    if(j==index || other.value("parentId").toString()!=parent || (sections && parent.isEmpty() && other.value("categoryId").toString()!=category) || !other.contains("placement") || !ComponentSchema::placementsOverlap(other["placement"].toObject().toVariantMap(),target))continue;
                     if(fixed.contains(j) || other.value("locked").toBool()){blocked=true;break;}
                     displaced.append(j);
                 }
@@ -757,9 +931,9 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
         if(!solve(colliders))return fail(attempts>4096?tr("Shift reached its 4096-proposal search limit. Choose another cell or Swap."):affectedLimit?tr("The shift exceeds 64 affected components."):tr("No complete shift fits. Cancel or choose another cell."));
     } else if (!colliders.isEmpty()) return fail(QStringLiteral("Choose a collision strategy."));
     const auto originalEntries=doc["components"].toArray();
-    const auto appendChange=[&](int index) {const auto item=entries[index].toObject();changes.append(QVariantMap{{"id",item["id"].toString()},{"placement",item["placement"].toObject().toVariantMap()},{"categoryId",item.value("categoryId").toString()}});};
+    const auto appendChange=[&](int index) {const auto item=entries[index].toObject();changes.append(QVariantMap{{"id",item["id"].toString()},{"placement",item["placement"].toObject().toVariantMap()},{"categoryId",item.value("categoryId").toString()},{"parentId",item.value("parentId").toString()}});};
     appendChange(selected);
-    for(int i=0;i<entries.size();++i)if(i!=selected && (entries[i].toObject().value("placement")!=originalEntries[i].toObject().value("placement") || entries[i].toObject().value("categoryId")!=originalEntries[i].toObject().value("categoryId")))appendChange(i);
+    for(int i=0;i<entries.size();++i)if(i!=selected && (entries[i].toObject().value("placement")!=originalEntries[i].toObject().value("placement") || entries[i].toObject().value("categoryId")!=originalEntries[i].toObject().value("categoryId") || entries[i].toObject().value("parentId")!=originalEntries[i].toObject().value("parentId")))appendChange(i);
     doc["components"] = entries;
     QString error;
     if (!HomeLayout::validateStudioDocument(QJsonDocument(doc).toJson(), &error)) return fail(error);
@@ -767,50 +941,54 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
 }
 
 QVariantMap StudioSession::additionProposal(const QString &type, const QVariantMap &placement,
-                                           const QString &strategy, const QString &pageId, const QString &categoryId)
+                                           const QString &strategy, const QString &pageId, const QString &categoryId, const QString &parentId)
 {
     if (!m_active || !m_live) return {{"valid",false},{"reason",QStringLiteral("The edit session has closed.")}};
-    HomeLayout temporary(m_live->registry()); temporary.m_draftOnly = true;
+    HomeLayout temporary(m_live->registry()); configureWorker(temporary);
     if (!temporary.loadDocument(m_draft,false)) return {{"valid",false},{"reason",temporary.errorString()}};
     StudioSession transaction;
     if (!transaction.bind(&temporary)) return {{"valid",false},{"reason",transaction.errorString()}};
-    const auto identity = transaction.allocateId(type);
-    if(identity.isEmpty())return {{"valid",false},{"reason",transaction.errorString()}};
+    const auto prototype=componentPrototype(type);
+    if(prototype.isEmpty())return {{"valid",false},{"reason",errorString()}};
+    const auto identity=prototype.value("rootId").toString();
     auto root=QJsonDocument::fromJson(m_draft).object();auto pages=root["pages"].toArray();auto document=root;int pageIndex=-1;
     if(!pageId.isEmpty()) {
         for(int i=0;i<pages.size();++i)if(pages[i].toObject()["id"]==pageId)pageIndex=i;
         if(pageIndex<0)return {{"valid",false},{"reason",QStringLiteral("The page no longer exists.")}};
         document=pages[pageIndex].toObject()["layout"].toObject();
     }
-    // Obtain registered defaults from HomeLayout, then validate the complete
-    // addition/collision result together. No invalid intermediate is published.
-    temporary.m_composition.clear();temporary.m_items={};temporary.m_categories={};temporary.m_pages={};temporary.m_homePageId.clear();
-    if(!temporary.addWidget(type))return {{"valid",false},{"reason",QStringLiteral("Choose a supported widget.")}};
-    QString componentError;
-    auto item=QJsonObject::fromVariantMap(ComponentSchema::component(temporary.m_items.last().toObject().toVariantMap(),true,&componentError));
-    if(item.isEmpty())return {{"valid",false},{"reason",componentError}};
-    item["id"]=identity;
-    if(!categoryId.isEmpty())item["categoryId"]=categoryId;
-    auto entries=document["components"].toArray();entries.append(item);document["components"]=entries;
+    auto entries=document["components"].toArray();
+    for(const auto &value:prototype.value("components").toList()) {
+        auto item=QJsonObject::fromVariantMap(value.toMap());
+        if(item["id"]==identity) {
+            item.remove("placement");
+            if(!parentId.isEmpty())item["parentId"]=parentId;
+            else if(!categoryId.isEmpty())item["categoryId"]=categoryId;
+        }
+        entries.append(item);
+    }
+    document["components"]=entries;
     const auto store=[&] {
         if(pageIndex>=0){auto entry=pages[pageIndex].toObject();entry["layout"]=document;pages[pageIndex]=entry;root["pages"]=pages;}
         else root=document;
     };
     store();transaction.m_draft=QJsonDocument(root).toJson();
-    auto proposal = transaction.placementProposal(identity,placement,strategy,pageId);
+    auto proposal = transaction.placementProposal(identity,placement,strategy,pageId,QVariantMap{{"parentId",parentId},{"categoryId",categoryId}});
     if (!proposal.value("valid").toBool()) return proposal;
     proposal["id"] = identity;
     for(const auto &change:proposal["placements"].toList()) {
         const auto value=change.toMap();
         for(int i=0;i<entries.size();++i)if(entries[i].toObject()["id"]==value["id"].toString()) {
-            auto entry=entries[i].toObject();entry["placement"]=QJsonObject::fromVariantMap(value["placement"].toMap());entries[i]=entry;
+            auto entry=entries[i].toObject();entry["placement"]=QJsonObject::fromVariantMap(value["placement"].toMap());
+            for(const auto &key:QStringList{"parentId","categoryId"}){const auto destination=value.value(key).toString();if(destination.isEmpty())entry.remove(key);else entry[key]=destination;}
+            entries[i]=entry;
         }
     }
     document["components"]=entries;store();QString error;
     if(!HomeLayout::validateStudioDocument(QJsonDocument(root).toJson(),&error))return {{"valid",false},{"reason",error}};
     proposal["document"]=root.toVariantMap();
     proposal["commands"] = QVariantList{
-        QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId}}},{"pageId",pageId}}
+        QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId},{"parentId",parentId}}},{"pageId",pageId}}
     };
     return proposal;
 }

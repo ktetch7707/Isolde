@@ -62,10 +62,11 @@ public:
     Q_INVOKABLE void cancelPreview();
     Q_INVOKABLE bool execute(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
     Q_INVOKABLE bool apply(const QString &focusId = {});
+    Q_INVOKABLE QVariantMap componentPrototype(const QString &type);
     Q_INVOKABLE QVariantMap placementProposal(const QString &id, const QVariantMap &placement,
                                                const QString &strategy, const QString &pageId = {}, const QVariantMap &options = {});
     Q_INVOKABLE QVariantMap additionProposal(const QString &type, const QVariantMap &placement,
-                                              const QString &strategy, const QString &pageId = {}, const QString &categoryId = {});
+                                              const QString &strategy, const QString &pageId = {}, const QString &categoryId = {}, const QString &parentId = {});
 
     /** Capture the live committed document. Clears undo/redo history. */
     Q_INVOKABLE bool open(const QByteArray &committedDocument);
@@ -117,6 +118,7 @@ signals:
     void changed();
 
 private:
+    void configureWorker(HomeLayout &worker, bool assetPaths = false) const;
     bool validDraft(const QByteArray &data);
     void setError(const QString &message);
 

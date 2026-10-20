@@ -12,6 +12,7 @@
 #include <QBuffer>
 #include <QImage>
 #include <functional>
+#include <algorithm>
 #include "sessions/SessionManager.h"
 #include <QLocalServer>
 #include <QJsonDocument>
@@ -34,6 +35,7 @@ private slots:
     void retainsExactOriginAndRecoversWithoutHomeButton();
     void studioRemoteDraftApplyAndCancel();
     void studioRemotePointerAndInspectorParity();
+    void studioRemotePointerAndInspectorParity_data();
     void studioPreservesLegacyGridMetadataWithoutConversion();
     void studioSectionGeometryMatchesRuntime();
     void studioPageMenuCreatesAndDesignatesHome();
@@ -52,6 +54,7 @@ private slots:
     void skinsAndDesignAreReachableFromSettings();
     void pageComposerAndIndependentKodiWidgets();
     void gridEditorMoveResizeDuplicateRemove();
+    void studioNestedGroupCanvasAndRemoteScope();
 };
 void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
 {
@@ -937,7 +940,7 @@ void HomeNavigationTests::studioSectionGeometryMatchesRuntime()
         root->setProperty("width",size.width());root->setProperty("height",size.height());QTest::qWait(60);
         auto *placed=find(preview);QVERIFY(placed);QVERIFY(placed->isVisible());
         QVariant result;QVERIFY(QMetaObject::invokeMethod(preview,"placementRectFor",Q_RETURN_ARG(QVariant,result),
-            Q_ARG(QVariant,QVariantMap({{"x",0},{"y",0},{"width",1},{"height",1}})),Q_ARG(QVariant,QString("widgets"))));
+            Q_ARG(QVariant,QVariantMap({{"x",0},{"y",0},{"width",1},{"height",1}})),Q_ARG(QVariant,QString("widgets")),Q_ARG(QVariant,QString())));
         const auto rect=result.value<QJSValue>().toVariant().toMap();
         const auto point=placed->mapToItem(preview,QPointF(0,0));
         QVERIFY(qAbs(point.x()-rect["x"].toDouble())<0.01);QVERIFY(qAbs(point.y()-rect["y"].toDouble())<0.01);
@@ -1028,8 +1031,9 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel()
     QVERIFY(QMetaObject::invokeMethod(root.get(),"context",Q_ARG(QVariant,9))); // Hide, but keep reachable in Layers.
     QVERIFY(QMetaObject::invokeMethod(root.get(),"chooseTool",Q_ARG(QVariant,2)));
     QVariant labels;QVERIFY(QMetaObject::invokeMethod(root.get(),"dialogLabels",Q_RETURN_ARG(QVariant,labels)));
-    const auto layerLabels=(labels.metaType().id()==qMetaTypeId<QJSValue>()?labels.value<QJSValue>().toVariant():labels).toStringList();QVERIFY(!layerLabels.isEmpty());QVERIFY(layerLabels.last().contains("Hidden"));
-    for(int i=1;i<layerLabels.size();++i)command(InputManager::NavigateDown);
+    const auto layerLabels=(labels.metaType().id()==qMetaTypeId<QJSValue>()?labels.value<QJSValue>().toVariant():labels).toStringList();QVERIFY(!layerLabels.isEmpty());
+    const auto hidden=std::find_if(layerLabels.cbegin(),layerLabels.cend(),[](const QString &label){return label.contains("Hidden");});QVERIFY(hidden!=layerLabels.cend());
+    for(int i=0;i<std::distance(layerLabels.cbegin(),hidden);++i)command(InputManager::NavigateDown);
     command(InputManager::Confirm);QCOMPARE(root->property("selectedId").toString(),selectedId);
     QVERIFY(QMetaObject::invokeMethod(root.get(),"context",Q_ARG(QVariant,9))); // Show again.
     const auto changed = session->draft();
@@ -1049,12 +1053,24 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel()
     command(InputManager::Back); // First Back restores the page menu; second exits.
     QVERIFY(!root->property("open").toBool());
 }
+void HomeNavigationTests::studioRemotePointerAndInspectorParity_data()
+{
+    QTest::addColumn<bool>("nested");QTest::newRow("page")<<false;QTest::newRow("group")<<true;
+}
 void HomeNavigationTests::studioRemotePointerAndInspectorParity()
 {
+    QFETCH(bool,nested);
     QTemporaryDir dir; AppRegistry registry; HomeLayout home(&registry);
     QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
     auto *setup=qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(setup);
     QVERIFY(setup->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5}}}}));
+    if(nested){
+        auto doc=QJsonDocument::fromJson(setup->draft()).object();auto group=QJsonObject::fromVariantMap(setup->componentPrototype("container")["root"].toMap());
+        group["placement"]=QJsonObject{{"x",0},{"y",0},{"width",4},{"height",4}};auto style=group["presentation"].toObject();auto local=style["layout"].toObject();local["rows"]=4;style["layout"]=local;group["presentation"]=style;
+        QJsonArray entries;entries.append(group);
+        for(const auto &type:QStringList{"clock","text"}){auto child=QJsonObject::fromVariantMap(setup->componentPrototype(type)["root"].toMap());child["id"]=type;child["parentId"]=group["id"];child["placement"]=QJsonObject{{"x",type=="clock"?0:3},{"y",0},{"width",1},{"height",1}};entries.append(child);}
+        doc["components"]=entries;doc["categories"]=QJsonArray{};QVERIFY2(setup->pushEdit(QJsonDocument(doc).toJson()),qPrintable(setup->errorString()));
+    }
     QVERIFY(setup->apply());
     const auto baseline=home.committedDocument();
     InputManager input; QQmlEngine engine;
@@ -1079,7 +1095,7 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity()
     auto *preview=root->findChild<QQuickItem *>("studioPreview"); QVERIFY(preview);
     auto center=[&](int row) {
         QVariant result;
-        QMetaObject::invokeMethod(preview,"placementRect",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,QVariantMap({{"x",0},{"y",row},{"width",1},{"height",1}})));
+        QMetaObject::invokeMethod(preview,"placementRectFor",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,QVariantMap({{"x",0},{"y",row},{"width",1},{"height",1}})),Q_ARG(QVariant,QString()),Q_ARG(QVariant,nested?QString("group"):QString()));
         const auto rect=result.metaType().id()==qMetaTypeId<QJSValue>()?result.value<QJSValue>().toVariant().toMap():result.toMap();
         return preview->mapToItem(window.contentItem(),QPointF(rect["x"].toDouble()+rect["width"].toDouble()/2,rect["y"].toDouble()+rect["height"].toDouble()/2)).toPoint();
     };
@@ -1169,6 +1185,48 @@ void HomeNavigationTests::studioPreservesLegacyGridMetadataWithoutConversion()
     const auto value=composed->property("placedItems");
     const auto rendered=value.metaType().id()==qMetaTypeId<QJSValue>()?value.value<QJSValue>().toVariant().toList():value.toList();
     QCOMPARE(rendered.size(),home.items().size());
+}
+void HomeNavigationTests::studioNestedGroupCanvasAndRemoteScope()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    auto *setup=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(setup);
+    auto doc=QJsonDocument::fromJson(setup->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
+    doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(home.studioOptions()["defaultGrid"].toMap())}};
+    QVERIFY(setup->pushEdit(QJsonDocument(doc).toJson()));QVERIFY(setup->execute("addResolved",{{"type","input-panel"},{"placement",QVariantMap{{"x",0},{"y",0},{"width",4},{"height",3}}}}));QVERIFY(setup->apply());
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("isoldeVersion","test");
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(HOME_QML)).dir().filePath("PageStudioView.qml")));QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));QVERIFY2(root,qPrintable(component.errorString()));
+    QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString("inputs-panel"))));
+    auto *session=qobject_cast<StudioSession *>(root->property("session").value<QObject *>());QVERIFY(session);const auto baseline=session->draft();
+    auto key=[&](int value){return QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,value));};
+    std::function<QQuickItem *(QQuickItem *,const QString &)> find=[&](QQuickItem *parent,const QString &name)->QQuickItem *{if(parent->objectName()==name)return parent;for(auto *child:parent->childItems())if(auto *result=find(child,name))return result;return nullptr;};
+    auto *visual=qobject_cast<QQuickItem *>(root.get());QTRY_VERIFY(find(visual,"placed-input-8"));auto *last=find(visual,"placed-input-8");QVERIFY(last->width()>0);QVERIFY(last->height()>0);
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"context",Q_ARG(QVariant,14)));QCOMPARE(root->property("parentScopeId").toString(),QString("inputs-panel"));QCOMPARE(root->property("selectedId").toString(),QString("input-1"));
+    QTRY_VERIFY(find(visual,"studioSelectionName-input-1"));QVERIFY(!find(visual,"studioSelectionName-input-1")->isVisible());QVERIFY(root->property("footerText").toString().contains("HDMI 1"));
+    QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));QVERIFY(key(InputManager::NavigateRight));QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),baseline);QCOMPARE(session->changeCount(),0);
+    QVERIFY(key(InputManager::Back));QCOMPARE(root->property("selectedId").toString(),QString("inputs-panel"));QCOMPARE(root->property("parentScopeId").toString(),QString());QVERIFY(!session->isDirty());
+    root->setProperty("mode","view");root->setProperty("choice",0);QVERIFY(key(InputManager::Confirm));QCOMPARE(session->draft(),baseline);QCOMPARE(session->changeCount(),0);
+    root->setProperty("choice",6);QVERIFY(key(InputManager::Confirm));QCOMPARE(session->draft(),baseline);QVERIFY(key(InputManager::Back));
+    const QVariantMap narrowPlacement{{"x",0},{"y",0},{"width",1},{"height",3}};
+    const QVariantList narrowChanges{QVariantMap{{"id","inputs-panel"},{"placement",narrowPlacement}}};
+    QVERIFY(session->execute("place",{{"placements",narrowChanges}}));
+    const auto panel=QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject();auto internal=panel["presentation"].toObject()["layout"].toObject().toVariantMap();internal["gap"]=100;
+    QVERIFY(session->execute("childLayout",{{"id","inputs-panel"},{"value",internal}}));
+    auto *preview=root->findChild<QObject *>("studioPreview");QVERIFY(preview);QTRY_VERIFY(!preview->property("layoutError").toString().isEmpty());
+    QVERIFY(session->undo());QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);QTRY_VERIFY(preview->property("layoutError").toString().isEmpty());
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"close"));
+    auto *named=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(named);auto interface=QJsonDocument::fromJson(named->draft()).object();auto page=interface;
+    for(const auto &key:QStringList{"pages","homePageId","rootPage","studioAppearance"})page.remove(key);
+    interface["pages"]=QJsonArray{QJsonObject{{"id","nested-page"},{"name","Nested page"},{"layout",page}}};
+    QVERIFY2(named->pushEdit(QJsonDocument(interface).toJson()),qPrintable(named->errorString()));QVERIFY(named->apply());
+    QQmlComponent runtime(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(HOME_QML)).dir().filePath("PageSurface.qml")));QVERIFY2(runtime.isReady(),qPrintable(runtime.errorString()));
+    std::unique_ptr<QObject> surface(runtime.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"provider",QVariant::fromValue<QObject *>(nullptr)},{"availableApps",QVariantList{}},{"artwork",QVariantList{}},{"themes",QVariantList{}},{"width",1280},{"height",720}}));QVERIFY2(surface,qPrintable(runtime.errorString()));
+    qobject_cast<QQuickItem *>(surface.get())->setParentItem(window.contentItem());
+    QVERIFY(QMetaObject::invokeMethod(surface.get(),"showPage",Q_ARG(QVariant,QString("nested-page")),Q_ARG(QVariant,QString()),Q_ARG(QVariant,true)));
+    auto *content=surface->findChild<QObject *>("pageContent");QVERIFY(content);
+    QVERIFY(QMetaObject::invokeMethod(surface.get(),"handleCommand",Q_ARG(QVariant,InputManager::Confirm)));QVERIFY(content->property("groupActive").toBool());
+    QVERIFY(QMetaObject::invokeMethod(surface.get(),"handleCommand",Q_ARG(QVariant,InputManager::Back)));QVERIFY(!content->property("groupActive").toBool());QCOMPARE(surface->property("activeId").toString(),QString("nested-page"));QCOMPARE(content->property("focusedItemId").toString(),QString("inputs-panel"));
 }
 QTEST_MAIN(HomeNavigationTests)
 #include "tst_home_navigation.moc"

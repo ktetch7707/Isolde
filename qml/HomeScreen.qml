@@ -11,6 +11,14 @@ Item {
     property var suppressedComponentIds:[]
     property string editSelection:""
     property var editTargets:({})
+    property var groupSurfaces:({})
+    function registerGroupSurface(id,surface,remove) {
+        let groups=Object.assign({},groupSurfaces),entries=(groups[id] || []).filter(item=>item!==surface)
+        if(!remove)entries.push(surface)
+        if(entries.length)groups[id]=entries;else delete groups[id]
+        groupSurfaces=groups
+    }
+    function groupSurface(id){return (groupSurfaces[id || ""] || []).find(surface=>surface && editorVisible(surface) && surface.item) || null}
     signal editSelected(string componentId)
     function registerEditTarget(id,target,remove) {
         let targets=Object.assign({},editTargets),entries=(targets[id] || []).filter(t=>t!==target)
@@ -53,10 +61,21 @@ Item {
     property var placements: []
     readonly property var gridMetrics: composed.placementCell
     readonly property real componentUnit:composed.unit
-    readonly property string layoutError: composed.layoutError
+    readonly property string layoutError: {
+        if(composed.layoutError)return composed.layoutError
+        for(const id of Object.keys(groupSurfaces)){const surface=groupSurface(id);if(surface && surface.item.metrics.valid===false)return "A group's spacing leaves no room for its children. Edit its internal layout or increase its size."}
+        return ""
+    }
     function placementRect(p) { return composed.placementRect(p,"") }
-    function placementRectFor(p,scope) { return composed.placementRect(p,scope) }
-    function gridMetricsFor(scope) { return composed.gridMetricsFor(scope) }
+    function placementRectFor(p,scope,parentId) {
+        const surface=groupSurface(parentId)
+        if(!surface || !surface.item)return composed.placementRect(p,scope)
+        const c=surface.item.metrics,scroll=composed.scrollOffset
+        let ancestor=surface;while(ancestor && ancestor!==root){const geometry=ancestor.x+ancestor.y+ancestor.width+ancestor.height+ancestor.scale;ancestor=ancestor.parent}
+        const origin=surface.mapToItem(root,0,0)
+        return {x:origin.x+p.x*(c.cellW+c.gap),y:origin.y+p.y*(c.cellH+c.gap),width:p.width*c.cellW+(p.width-1)*c.gap,height:p.height*c.cellH+(p.height-1)*c.gap}
+    }
+    function gridMetricsFor(scope,parentId) { const surface=groupSurface(parentId);return surface && surface.item?surface.item.metrics:composed.gridMetricsFor(scope) }
     function revealScope(scope) { composed.revealScope(scope) }
     function revealPlacement(p,scope) { composed.revealPlacement(p,scope) }
     property var setItemPlacement: null
@@ -69,6 +88,7 @@ Item {
     property string selectAction: "navigate"
     property string selectionColor: ""
     readonly property bool widgetActive: composed.activeWidget !== ""
+    readonly property bool groupActive: composed.activeGroup !== ""
     property string wallpaperSource: ""
     property var wallpaperItem: null
     readonly property var backdropItem: wallpaperItem || localWallpaper

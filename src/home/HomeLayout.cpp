@@ -109,9 +109,14 @@ HomeLayout::HomeLayout(AppRegistry *registry, QObject *parent) : QObject(parent)
 QVariantList HomeLayout::items() const
 {
     QVariantList result;
-    const auto appendItem = [this, &result](const QJsonValue &value) {
+    QSet<QString> hidden;
+    if(!m_draftOnly){
+        for(const auto &entry:m_items)if(entry.toObject().value("hidden").toBool())hidden.insert(entry.toObject()["id"].toString());
+        for(int depth=0;depth<4;++depth)for(const auto &entry:m_items){const auto item=entry.toObject();if(hidden.contains(item.value("parentId").toString()))hidden.insert(item["id"].toString());}
+    }
+    const auto appendItem = [this, &result,&hidden](const QJsonValue &value) {
         const auto object = value.toObject();
-        if(!m_draftOnly && object.value("hidden").toBool())return;
+        if(hidden.contains(object["id"].toString()))return;
         auto item = object.toVariantMap();
         const auto action = normalizedActionForItem(object);
         if (!action.isEmpty()) {
@@ -145,6 +150,7 @@ QVariantList HomeLayout::items() const
         auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), m_registry, m_collections);
         if (unavailable.isEmpty() && action.value("type").toString() == "switch-input" && !m_captureInputsReady)
             unavailable = "Configure Settings → System → HDMI Inputs";
+        if(object.value("requiredCapability")=="capture-inputs" && !m_captureInputsReady)unavailable=tr("HDMI capture unavailable · configure inputs in Settings");
         item.insert("unavailableReason", unavailable);
         result.append(ComponentSchema::component(item, true));
     };
@@ -229,12 +235,12 @@ QVariantList HomeLayout::sections() const
         const auto category = categoryValue.toObject();
         QVariantList categoryItems;
         for (const auto &itemValue : resolved)
-            if (itemValue.toMap().value("categoryId").toString() == category.value("id").toString()) categoryItems.append(itemValue);
+            if (itemValue.toMap().value("parentId").toString().isEmpty() && itemValue.toMap().value("categoryId").toString() == category.value("id").toString()) categoryItems.append(itemValue);
         if (!categoryItems.isEmpty() || category["presentation"].toObject()["variant"] == "library" || grid().value("mode")=="sections") { auto section = category.toVariantMap(); section["items"] = categoryItems; result.append(section); }
     }
     QVariantList uncategorized;
     for (const auto &itemValue : resolved)
-        if (itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
+        if (itemValue.toMap().value("parentId").toString().isEmpty() && itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
     if (!uncategorized.isEmpty() || grid().value("mode")=="sections") result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
     return result;
 }
@@ -293,6 +299,16 @@ QVariantMap HomeLayout::studioOptions() const
     if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
     if(!object["menuWidth"].isDouble() || object["menuWidth"].toDouble()<200 || object["menuWidth"].toDouble()>480)return {};
     if(!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble()<60 || object["sectionHeight"].toDouble()>800)return {};
+    for(const auto &type:QStringList{"clock","text"}){const auto span=object["widgetSpans"].toObject()[type].toObject().toVariantMap();if(span.size()!=2 || !ComponentSchema::validPlacement({{"x",0},{"y",0},{"width",span.value("width")},{"height",span.value("height")}},16,10))return {};}
+    const auto group=ComponentSchema::component(object["groupPreset"].toObject().toVariantMap(),true);
+    if(group.isEmpty() || group.value("componentType")!="container")return {};
+    const auto panel=object["inputPanelPreset"].toObject();
+    if(!panel["children"].isArray() || panel["children"].toArray().size()>32)return {};
+    QJsonArray panelItems;
+    const auto panelRoot=ComponentSchema::component(panel["root"].toObject().toVariantMap(),true);if(panelRoot.isEmpty() || panelRoot.value("componentType")!="container")return {};
+    panelItems.append(QJsonObject::fromVariantMap(panelRoot));
+    for(const auto &entry:panel["children"].toArray()){const auto child=ComponentSchema::component(entry.toObject().toVariantMap(),true);if(child.isEmpty())return {};panelItems.append(QJsonObject::fromVariantMap(child));}
+    if(!ComponentSchema::hierarchyFits(panelItems,{{"schemaVersion",1},{"enabled",true},{"grid",object["defaultGrid"].toObject().toVariantMap()}},{}))return {};
     QSet<QString> ids;
     for(const auto &entry:object["gridModes"].toArray()) {
         const auto mode=entry.toObject();const auto id=mode["id"].toString(),name=mode["name"].toString();
@@ -407,16 +423,16 @@ QVariantList HomeLayout::placements() const
 }
 QVariantList HomeLayout::gridCollisions(const QString &itemId, const QVariantMap &placement) const{
     QVariantList result;
-    QString category;
-    for(const auto &entry:m_items)if(entry.toObject()["id"]==itemId)category=entry.toObject()["categoryId"].toString();
-    const auto configured = ComponentSchema::sectionGrid(m_composition,m_categories,category);
+    QString category,parent;
+    for(const auto &entry:m_items)if(entry.toObject()["id"]==itemId){category=entry.toObject()["categoryId"].toString();parent=entry.toObject().value("parentId").toString();}
+    const auto configured = ComponentSchema::componentGrid(m_items,m_composition,m_categories,parent,category);
     if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt()))
         return result;
     const auto placed = m_items;
     for (const auto &entry : placed) {
         const auto item = entry.toObject();
         if (item.value("id").toString() == itemId || !item.contains("placement")) continue;
-        if(grid().value("mode")=="sections" && item["categoryId"].toString()!=category)continue;
+        if(item.value("parentId").toString()!=parent || (parent.isEmpty() && grid().value("mode")=="sections" && item["categoryId"].toString()!=category))continue;
         if (!ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap())) continue;
         QString name = item.value("name").toString();
         if (item.value("kind").toString() == QStringLiteral("app")) {
@@ -452,9 +468,9 @@ bool HomeLayout::setWallpaper(const QString &sourceUrl)
 }
 bool HomeLayout::setItemPresentation(const QString &id, const QVariantMap &value)
 {
-    if (!ComponentSchema::validPresentation(value)) return false;
     for (qsizetype i = 0; i < m_items.size(); ++i) {
         auto item = m_items[i].toObject(); if (item["id"] != id) continue;
+        if(!ComponentSchema::validPresentation(value,false,item["componentType"]=="container")){setError(tr("Choose supported presentation choices for this component."));return false;}
         const auto previous = item; item["presentation"] = QJsonObject::fromVariantMap(value); m_items[i] = item;
         if (!save()) { m_items[i] = previous; return false; }
         emit layoutChanged(); return true;
@@ -607,8 +623,9 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         ids.insert(id);
         components.append(item);
     }
-    if (!ComponentSchema::layoutPlacementsFit(components, composition, categoryArray)) {
-        setError(tr("Home layout contains widget placements that do not fit its grid.")); return false;
+    QString hierarchyError;
+    if (!ComponentSchema::hierarchyFits(components, composition, categoryArray,&hierarchyError)) {
+        setError(hierarchyError); return false;
     }
     m_items = components;
     m_pages = pages;

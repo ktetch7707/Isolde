@@ -92,6 +92,8 @@ Window {
         } else if (command === inputManager.back) {
             if (sessionManager.active)
                 sessionManager.exitCurrent()
+            else if(home.groupActive || home.widgetActive)
+                home.handleCommand(command)
         } else if (command === inputManager.home) {
             sessionManager.goHome()
         } else if (sessionManager.active && sessionManager.currentAppType === "store") {

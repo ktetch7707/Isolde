@@ -57,6 +57,7 @@ private slots:
     void studioHiddenAndLockedStatesAreRecoverable();
     void studioShiftCascadesAreBoundedAndAtomic();
     void studioSectionTransfersDuplicationAndOrdering();
+    void studioNestedGroupsValidateAndReparentAtomically();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
@@ -1076,6 +1077,60 @@ void ComponentTests::studioSectionTransfersDuplicationAndOrdering()
     QVERIFY(!session->execute("orderRelative",{{"id","clock"},{"relativeId","shows"},{"before",true}}));QCOMPARE(session->draft(),start);QVERIFY(!QFile::exists(user));
     QVERIFY(session->execute("state",{{"id","movies"},{"key","locked"},{"value",true}}));const auto locked=session->draft();
     QVERIFY(!session->execute("orderRelative",{{"id","movies"},{"relativeId","shows"},{"before",false}}));QCOMPARE(session->draft(),locked);
+}
+void ComponentTests::studioNestedGroupsValidateAndReparentAtomically()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto user=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
+    doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(home.studioOptions()["defaultGrid"].toMap())}};
+    QVERIFY2(session->pushEdit(QJsonDocument(doc).toJson()),qPrintable(session->errorString()));
+    const auto empty=session->draft();
+    const auto panel=session->additionProposal("input-panel",{{"x",0},{"y",0},{"width",4},{"height",3}},"cancel");
+    QVERIFY2(panel["valid"].toBool(),qPrintable(panel["reason"].toString()));QCOMPARE(session->draft(),empty);
+    QVERIFY(session->execute("addResolved",{{"type","input-panel"},{"placement",QVariantMap{{"x",0},{"y",0},{"width",4},{"height",3}}}}));
+    const auto added=session->draft();const auto entries=QJsonDocument::fromJson(added).object()["components"].toArray();QCOMPARE(entries.size(),9);
+    QVERIFY2(session->execute("duplicatePage",{{"id",""},{"name","Nested copy"}}),qPrintable(session->errorString()));
+    const auto copied=QJsonDocument::fromJson(session->draft()).object()["pages"].toArray().last().toObject()["layout"].toObject()["components"].toArray();QCOMPARE(copied.size(),9);
+    QVERIFY(copied.first().toObject()["id"]!=entries.first().toObject()["id"]);QCOMPARE(copied[1].toObject()["parentId"].toString(),copied[0].toObject()["id"].toString());QVERIFY(session->undo());QCOMPARE(session->draft(),added);
+    const auto parent=entries.first().toObject()["id"].toString();const auto child=entries[1].toObject()["id"].toString();
+    QCOMPARE(ComponentSchema::componentGrid(entries,doc["composition"].toObject().toVariantMap(),{},parent,{})["columns"].toInt(),4);
+    const auto transfer=session->placementProposal(child,{{"x",5},{"y",0},{"width",1},{"height",1}},"cancel",{},{{"parentId",""}});
+    QVERIFY2(transfer["valid"].toBool(),qPrintable(transfer["reason"].toString()));
+    QVERIFY2(session->execute("place",{{"placements",transfer["placements"]}}),qPrintable(session->errorString()));
+    QVERIFY(session->undo());QCOMPARE(session->draft(),added);
+    QVERIFY(!session->placementProposal(parent,{{"x",0},{"y",0},{"width",1},{"height",1}},"cancel",{},{{"parentId",parent}})["valid"].toBool());QCOMPARE(session->draft(),added);
+    auto broken=QJsonDocument::fromJson(added).object();auto badEntries=entries;auto root=badEntries[0].toObject();root["parentId"]=child;badEntries[0]=root;broken["components"]=badEntries;
+    QVERIFY(!session->pushEdit(QJsonDocument(broken).toJson()));QCOMPARE(session->draft(),added);
+    QVERIFY(session->execute("state",{{"id",parent},{"key","locked"},{"value",true}}));const auto locked=session->draft();
+    QVERIFY(!session->placementProposal(child,{{"x",0},{"y",0},{"width",1},{"height",1}},"shift")["valid"].toBool());
+    QVERIFY(!session->execute("place",{{"placements",QVariantList{QVariantMap{{"id",child},{"placement",QVariantMap{{"x",5},{"y",0},{"width",1},{"height",1}}},{"parentId",""}}}}}));QCOMPARE(session->draft(),locked);
+    QVERIFY(session->undo());QVERIFY(session->undo());QCOMPARE(session->draft(),empty);QVERIFY(!QFile::exists(user));
+    QVERIFY(session->execute("addResolved",{{"type","text"},{"placement",QVariantMap{{"x",1},{"y",1},{"width",1},{"height",1}}}}));
+    QVERIFY(session->execute("addResolved",{{"type","clock"},{"placement",QVariantMap{{"x",2},{"y",1},{"width",1},{"height",1}}}}));
+    const auto beforeGroup=session->draft();const auto count=session->changeCount();
+    QVERIFY(!session->execute("arrange",{{"ids",QVariantList{"text","clock"}},{"mode","left"}}));QCOMPARE(session->draft(),beforeGroup);
+    QVERIFY(!session->execute("group",{{"ids",QVariantList{"text","text"}}}));QCOMPARE(session->draft(),beforeGroup);
+    QVERIFY2(session->execute("group",{{"ids",QVariantList{"text","clock"}}}),qPrintable(session->errorString()));QCOMPARE(session->changeCount(),count+1);
+    const auto grouped=QJsonDocument::fromJson(session->draft()).object()["components"].toArray();QCOMPARE(grouped.size(),3);
+    QCOMPARE(grouped[0].toObject()["componentType"].toString(),QString("container"));QCOMPARE(grouped[1].toObject()["parentId"].toString(),grouped[0].toObject()["id"].toString());
+    QCOMPARE(grouped[1].toObject()["placement"].toObject()["x"].toInt(),0);QCOMPARE(grouped[2].toObject()["placement"].toObject()["x"].toInt(),1);
+    const auto groupId=grouped[0].toObject()["id"].toString();const auto groupedBytes=session->draft();
+    QVERIFY2(session->execute("duplicate",{{"id",groupId}}),qPrintable(session->errorString()));
+    const auto duplicated=QJsonDocument::fromJson(session->draft()).object()["components"].toArray();QCOMPARE(duplicated.size(),6);
+    QCOMPARE(duplicated[4].toObject()["parentId"].toString(),duplicated[3].toObject()["id"].toString());QVERIFY(session->undo());QCOMPARE(session->draft(),groupedBytes);
+    QVERIFY2(session->execute("remove",{{"id",groupId}}),qPrintable(session->errorString()));QVERIFY(QJsonDocument::fromJson(session->draft()).object()["components"].toArray().isEmpty());QVERIFY(session->undo());QCOMPARE(session->draft(),groupedBytes);
+    QVERIFY2(session->execute("ungroup",{{"id",groupId}}),qPrintable(session->errorString()));QCOMPARE(session->draft(),beforeGroup);QVERIFY(session->undo());QCOMPARE(session->draft(),groupedBytes);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),beforeGroup);QVERIFY(!QFile::exists(user));
+    auto group=QJsonObject::fromVariantMap(session->componentPrototype("container")["root"].toMap());
+    group["placement"]=QJsonObject{{"x",0},{"y",0},{"width",1},{"height",1}};
+    auto style=group["presentation"].toObject(),local=style["layout"].toObject();local["columns"]=1;local["rows"]=1;style["layout"]=local;group["presentation"]=style;
+    QJsonArray deep;for(int level=0;level<4;++level){auto node=group;node["id"]=QString("depth-%1").arg(level);if(level)node["parentId"]=QString("depth-%1").arg(level-1);deep.append(node);}
+    QString error;QVERIFY2(ComponentSchema::hierarchyFits(deep,doc["composition"].toObject().toVariantMap(),{},&error),qPrintable(error));
+    auto fifth=group;fifth["id"]="depth-4";fifth["parentId"]="depth-3";deep.append(fifth);
+    QVERIFY(!ComponentSchema::hierarchyFits(deep,doc["composition"].toObject().toVariantMap(),{},&error));QVERIFY(error.contains("four"));
+    auto invalid=local.toVariantMap();invalid["columns"]=17;QVERIFY(!ComponentSchema::validChildLayout(invalid));invalid=local.toVariantMap();invalid["mode"]="script";QVERIFY(!ComponentSchema::validChildLayout(invalid));
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

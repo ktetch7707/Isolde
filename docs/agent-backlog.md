@@ -15,7 +15,7 @@ Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-u
 
 ## Execution priority — Page Studio first (user, 2026-10-19)
 
-Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T19 remote editing verification is complete; T20 is next; T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
+Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T20 nested/group editing verification is complete; T21 is next; T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
 
 Next complete the related shell improvements: **T27 → T25 → T26 → T28** (shared theme, contained source notices, All Apps gallery, genuine Web switch). These extend the accepted Studio and no longer block its templates, Preview/Apply or core cutover. Then follow the remaining ranked rows for evidence repair, media preservation, input/system polish, playback, hardware/guide, appliance distribution and optional online work.
 
@@ -31,7 +31,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 100% | geometry checkpoint verified; T18 next |
 | T18 | 4 | Unified Page Studio workspace and selection | 100% | workspace/lifecycle/selection verified; T19 next |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 100% | remote/gesture/collision verification complete; T20 next |
-| T20 | 6 | Desktop parity, layers and nested/group editing | 0% | planned |
+| T20 | 6 | Desktop parity, layers and nested/group editing | 100% | desktop/nested/group verification complete; T21 next |
 | T21 | 7 | Contextual inspector, catalog and capability binding | 0% | planned |
 | T22 | 8 | Templates, tokens, reusable sections and portability | 0% | planned |
 | T23 | 9 | Preview, Apply, restore and navigation safety | 0% | planned |
@@ -54,7 +54,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **31%** | T15 provisional (75%); T16-T19 verified; T20 next |
+| **Overall** | — | **average of 24 active tasks** | **35%** | T15 provisional (75%); T16-T20 verified; T21 next |
 
 ## Highest priority: core Page Studio
 
@@ -124,12 +124,12 @@ Verify: extended native remote state sequences and transaction/boundary failures
 Entry docs: `docs/page-studio-redesign.md` sections 2, 4-7; T15 desktop and scope wireframes.
 Entry files: Studio/shared canvas/edit-session files from T16-T19, `src/home/ComponentSchema.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `tests/tst_components.cpp`, `tests/tst_home_navigation.cpp`.
 Scope:
-- [ ] T20.1 Implement pointer drag/drop/resize/snap indicators and inspector position entry through the same proposal/transaction path; pan/zoom/fit never alter page content.
-- [ ] T20.2 Implement synchronized Layers with expand/collapse, reorder/reparent, parent breadcrumbs, hidden reveal, locks and separately inspectable focus/reading order.
-- [ ] T20.3 Implement remote and pointer multi-selection/group actions, nested-container editing and widget-local sub-grids, including an honest unavailable eight-input 4x2 presentation; bound depth/selection and refuse invalid parents.
-- [ ] T20.4 Prove remote, mouse and numeric inspector operations produce identical serialized layouts and identical collision/error/undo outcomes; keyboard shortcuts are optional accelerators.
+- [x] T20.1 Implement pointer drag/drop/resize/snap indicators and inspector position entry through the same proposal/transaction path; pan/zoom/fit never alter page content.
+- [x] T20.2 Implement synchronized Layers with expand/collapse, reorder/reparent, parent breadcrumbs, hidden reveal, locks and separately inspectable focus/reading order.
+- [x] T20.3 Implement remote and pointer multi-selection/group actions, nested-container editing and widget-local sub-grids, including an honest unavailable eight-input 4x2 presentation; bound depth/selection and refuse invalid parents.
+- [x] T20.4 Prove remote, mouse and numeric inspector operations produce identical serialized layouts and identical collision/error/undo outcomes; keyboard shortcuts are optional accelerators.
 Done when: the same nested/group arrangement can be authored entirely by remote or desktop with byte-identical output; no desktop-only operation or small-handle requirement blocks remote parity.
-Verify: parity replay fixtures in `component_contracts`, pointer plus remote focus tests in `home_component_navigation`, installed TV/desktop captures and both standing fixtures. Evidence: pending; no physical HDMI/audio claim.
+Verify: parity replay fixtures in `component_contracts`, pointer plus remote focus tests in `home_component_navigation`, installed TV/desktop captures and both standing fixtures. Evidence: [studio-nested-editing-2026-10-20.md](studio-nested-editing-2026-10-20.md). Frozen snapshot 48, archive `3e349c473149ae6ad53e056fdb895296755e68ea6be43e73925042fbdae238cd`; native component and navigation suites pass, including nested remote/pointer/numeric byte parity, hierarchy/cycle/depth/lock/refusal, atomic subtree/group/page-copy/undo, named-page Back recovery, camera no-write and internal-spacing repair. Full CTest 14/14 passed (64.50 seconds). Installed release `a4120c77640b16fbae8b0756`; expanded Studio journey `/tmp/isolde-components-acceptance-c1qahjv0`, dark `/tmp/isolde-reference-config-obl_i1qy`, pastel `/tmp/isolde-reference-config-m59s6p9b`; all twelve screenshots explicitly reviewed. Durable evidence `build/studio-installed-48/`. Normal Household service/executable restored active/running, zero restarts. No physical HDMI/audio qualification, full-product offline Generator or genuine user/cutover acceptance is claimed; those remain their owning tasks.
 
 ## T21 — Contextual inspector, catalog and capability binding (L, depends: T20)
 Entry docs: `docs/page-studio-redesign.md` sections 6-8; T15 operation-to-control coverage map; `docs/components.md` action/source contracts.

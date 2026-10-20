@@ -8,6 +8,10 @@ Item {
     property bool open: false
     property string pageId: ""
     property string scopeId:""
+    property string parentScopeId:""
+    property string originParentId:""
+    property var expandedGroups:({})
+    property var multiSelection:[]
     property bool scopeOverview:false
     property real sectionHeightDraft:0
     property string selectedId: ""
@@ -31,6 +35,7 @@ Item {
     property var origin: ({})
     property var proposal: ({})
     property var gridDraft: ({})
+    property var childLayoutDraft:({})
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
     property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
@@ -40,8 +45,14 @@ Item {
     readonly property var pageGrid:page?page.grid:({})
     readonly property bool sectionMode:gridMode && pageGrid.mode==="sections"
     readonly property var selectedSection:page?(page.sections || []).find(s=>(s.id || "")===scopeId):null
-    readonly property var grid:sectionMode && selectedSection?Object.assign({},pageGrid,(selectedSection.presentation || {}).grid || {}):pageGrid
-    readonly property var scopedItems:sectionMode && !scopeOverview?items.filter(i=>(i.categoryId || "")===scopeId):items
+    readonly property var parentGroup:items.find(i=>i.id===parentScopeId) || null
+    readonly property var grid:parentGroup?Object.assign({},parentGroup.presentation.layout,{margin:parentGroup.presentation.layout.padding}):sectionMode && selectedSection?Object.assign({},pageGrid,(selectedSection.presentation || {}).grid || {}):pageGrid
+    readonly property var scopedItems:items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId))
+    readonly property var layerRows: {
+        const rows=[]
+        function append(parent,depth){for(const item of items.filter(i=>(i.parentId || "")===parent)){rows.push({item:item,depth:depth});if(item.componentType==="container" && expandedGroups[item.id])append(item.id,depth+1)}}
+        append("",0);return rows
+    }
     readonly property var gridModes:layoutModel && layoutModel.studioOptions?layoutModel.studioOptions.gridModes || []:[]
     readonly property bool gridMode: {
         if(!page || !page.composition.enabled || !page.composition.grid)return false
@@ -52,28 +63,31 @@ Item {
         return true
     }
     readonly property var tools: ["Add", "Pages", "Layers", "Undo", "Redo", "Grid", "Fit", "Preview", "Apply", "Scope"]
-    readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size","Hide / show","Lock / unlock",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…","Move to section…"]
-    readonly property var names: ["Clock", "Text"]
+    readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size","Hide / show","Lock / unlock",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…","Move to section…","Edit group contents","Ungroup","Move to group…","Select / deselect for grouping","Group internal layout…"]
+    readonly property var names: ["Clock", "Text", "Group", "Input slots (4 × 2)"]
     readonly property var current: items.find(i=>i.id===selectedId) || null
+    readonly property var addPrototype:addingType && session?session.componentPrototype(addingType):({})
     readonly property bool manipulating:["move","resize","collision","collisionDetails","geometry"].indexOf(mode)>=0
     function componentName(item) {
         if(!item)return addingType?addingType.charAt(0).toUpperCase()+addingType.slice(1):"Component"
         return item.name || (item.widgetType?item.widgetType.charAt(0).toUpperCase()+item.widgetType.slice(1):item.id)
     }
+    function editorReveals(item){if(!item.hidden)return true;if(mode==="preview")return false;let id=selectedId;for(let depth=0;id && depth<=4;++depth){if(id===item.id)return true;const node=items.find(i=>i.id===id);id=node?node.parentId || "":""}return false}
     readonly property string operationSummary:componentName(addingType?null:current)+" · row "+(candidate.y+1)+", column "+(candidate.x+1)+" · "+candidate.width+" × "+candidate.height+" cells"
     readonly property string operationTitle:({flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size"})[mode] || ""
     readonly property string footerText: {
         if(mode==="move" || mode==="resize")return breadcrumb+" · "+(mode==="move"?"Moving · Arrows position · Confirm place · Back cancel · Menu more":"Sizing "+resizeAxis+" · "+resizeAnchor+" anchor · Left/Right adjust · Confirm accept · Back cancel")+"\n"+operationSummary+(message?" · "+message:"")
         if(mode==="collision")return breadcrumb+" · Resolve overlap · Choose a proposal or Cancel · Back cancels"
         if(mode==="collisionDetails")return breadcrumb+" · Proposed positions only · Back returns to the choices"
-        return breadcrumb+" · Edit mode · Confirm select · Menu actions · Back pages"
+        return breadcrumb+(current?" · Selected "+componentName(current):"")+" · Edit mode · Confirm select · Menu actions · Back pages"
     }
-    readonly property var relativeItems:current?items.filter(i=>i.id!==selectedId && (i.categoryId || "")===(current.categoryId || "")):[]
+    readonly property var relativeItems:current?items.filter(i=>i.id!==selectedId && (i.parentId || "")===(current.parentId || "") && (i.categoryId || "")===(current.categoryId || "")):[]
     readonly property var destinationSections:sectionMode?page.sections.filter(s=>(s.presentation || {}).variant!=="library"):[]
-    readonly property var placementOptions:sectionMode?({categoryId:scopeId}):({})
+    readonly property var destinationGroups:[{id:"",name:"Page / current section"}].concat(items.filter(i=>i.componentType==="container" && i.id!==selectedId && !i.locked))
+    readonly property var placementOptions:parentScopeId?({parentId:parentScopeId,categoryId:""}):sectionMode?({parentId:"",categoryId:scopeId}):({parentId:""})
     function collisionProposal(strategy) {
         if((mode!=="collision" && mode!=="collisionDetails") || !session)return ({})
-        return addingType?session.additionProposal(addingType,candidate,strategy,pageId,sectionMode?scopeId:"")
+        return addingType?session.additionProposal(addingType,candidate,strategy,pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId)
                          :session.placementProposal(selectedId,candidate,strategy,pageId,placementOptions)
     }
     readonly property var shiftPreview:collisionProposal("shift")
@@ -87,6 +101,8 @@ Item {
     readonly property var pageEntries:draftModel?draftModel.studioPages:[]
     readonly property var removalDestinations:pageEntries.filter(p=>p.id!==pageId)
     readonly property string breadcrumb:((pageEntries.find(p=>p.id===pageId)||{}).name || "Page")+(sectionMode?" / "+(scopeOverview?"All sections":selectedSection?selectedSection.name:"Uncategorized"):"")
+        +groupBreadcrumb()
+    function groupBreadcrumb(){let result=[],id=parentScopeId;for(let depth=0;id && depth<4;++depth){const group=items.find(i=>i.id===id);if(!group)break;result.unshift(group.name || group.id);id=group.parentId || ""}return result.length?" / "+result.join(" / "):""}
     readonly property var menuEntries:[{label:"＋ Add page",action:"new"}].concat(pageEntries.map(p=>({label:(p.id===draftModel.homePageId?"⌂ ":"")+p.name,action:"page",id:p.id}))).concat([
         {label:"＋ Add component",action:"add"},{label:"Page appearance",action:"appearance"},{label:"More tools",action:"more"},{label:"Review & Apply",action:"apply"},{label:"Edit page →",action:"edit"}])
     function activateMenu(index) {
@@ -103,7 +119,7 @@ Item {
     signal closed()
     visible: open
     z: 100
-    onSelectedIdChanged:if(current && sectionMode)scopeId=current.categoryId || ""
+    onCurrentChanged:if(current){parentScopeId=current.parentId || "";if(sectionMode){let root=current;for(let depth=0;root.parentId && depth<4;++depth)root=items.find(i=>i.id===root.parentId) || root;scopeId=root.categoryId || ""}}
     onChoiceChanged:if(mode==="collision" && choice<2)collisionStrategy=choice===0?"shift":"swap"
     onScopeIdChanged:if(open && sectionMode && !scopeOverview)Qt.callLater(()=>{if(open && sectionMode)preview.revealScope(scopeId)})
 
@@ -129,19 +145,19 @@ Item {
         if(current.locked){message="This component is locked. Choose Edit component → Lock / unlock first.";return}
         if(!gridMode){if(resize)beginGrid();else{mode="flowMove";choice=0;toolbarFocus=false;message="This page uses an ordered layout. Move before/after preserves it; grid conversion is an explicit preview."}return}
         addingType=""; origin=position(current); candidate=Object.assign({},origin)
-        originScopeId=current.categoryId || "";scopeId=originScopeId;resizeAxis="both";resizeAnchor="top-left"
+        originParentId=current.parentId || "";originScopeId=scopeId;resizeAxis="both";resizeAnchor="top-left"
         gestureMode=resize?"resize":"move"
         message=""
         mode=resize ? "resize" : "move"; toolbarFocus=false
     }
     function cancelGesture() {
-        if(!addingType && current){scopeId=originScopeId;candidate=Object.assign({},origin);Qt.callLater(()=>preview.revealPlacement(origin,originScopeId))}
+        if(!addingType && current){parentScopeId=originParentId;scopeId=originScopeId;candidate=Object.assign({},origin);Qt.callLater(()=>preview.revealPlacement(origin,originScopeId))}
         addingType="";mode="canvas";message="Canceled · no draft or history changes."
     }
     function beginRelative(before) {
         if(!current || addingType){message="Place the new component before changing its reading order.";return}
         if(current.locked){message="Unlock this component before changing its order.";return}
-        scopeId=current.categoryId || "";candidate=position(current)
+        parentScopeId=current.parentId || "";candidate=position(current)
         mode=before?"orderBefore":"orderAfter";choice=0
         message=gridMode?"Change reading order. Grid positions remain as authored.":"Choose the neighboring component in this section."
     }
@@ -160,7 +176,7 @@ Item {
     }
     function acceptCandidate(strategy) {
         if (addingType) {
-            proposal=session.additionProposal(addingType,candidate,strategy || "cancel",pageId,sectionMode?scopeId:"")
+            proposal=session.additionProposal(addingType,candidate,strategy || "cancel",pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId)
             if(!proposal.valid){message=proposal.reason;const previous=mode;mode="collision";if(previous!=="collision"){collisionStrategy="shift";choice=0}return}
             if(command("batch",{commands:proposal.commands})){selectedId=proposal.id;addingType="";mode="canvas"}
             return
@@ -188,7 +204,7 @@ Item {
         if(index===0) beginGesture(false)
         else if(index===1) beginGesture(true)
         else if(index===2) beginKeyboard("rename",current ? current.name || current.id : "")
-        else if(index===3) { if(command("duplicate",{id:selectedId})) {selectedId=items[items.length-1].id;mode="canvas"} }
+        else if(index===3) {const identities=items.map(i=>i.id),parent=current.parentId || "";if(command("duplicate",{id:selectedId})){const copy=items.find(i=>identities.indexOf(i.id)<0 && (i.parentId || "")===parent);selectedId=copy?copy.id:"";mode="canvas"}}
         else if(index===4) { mode="remove";choice=0 }
         else if(index===5) beginKeyboard("text",current && current.presentation ? current.presentation.subtitle : "")
         else if(index===6) beginKeyboard("opacity",current && current.presentation && current.presentation.surfaceOpacity!==undefined ? String(current.presentation.surfaceOpacity) : "1")
@@ -198,6 +214,11 @@ Item {
         else if(index===10){if(command("state",{id:selectedId,key:"locked",value:!current.locked})){mode="canvas";toolbarFocus=false}}
         else if(index===11 || index===12)beginRelative(index===11)
         else if(index===13){beginGesture(false);if(mode==="move"){mode="destination";choice=0}}
+        else if(index===14){if(current.componentType!=="container"){message="Choose a group to edit its contents.";return}parentScopeId=current.id;const children=items.filter(i=>(i.parentId || "")===parentScopeId);selectedId=children.length?children[0].id:"";mode="canvas";toolbarFocus=false}
+        else if(index===15){if(command("ungroup",{id:selectedId})){selectedId="";mode="canvas";toolbarFocus=false}}
+        else if(index===16){beginGesture(false);if(mode==="move"){mode="groupDestination";choice=0}}
+        else if(index===18){if(current.componentType!=="container"){message="Choose a group first.";return}childLayoutDraft=Object.assign({},current.presentation.layout);mode="childLayout";choice=0;message="Left / Right changes a field. Arrange validates the complete result; Back cancels."}
+        else if(index===17){let selection=multiSelection.slice();const index=selection.indexOf(selectedId);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(selectedId);else{message="Select at most 32 components.";return}multiSelection=selection;mode="layers";choice=0;message="Choose Group selected at the end of Layers. Right expands; Left collapses."}
     }
     function dialogLabels() {
         if(mode==="pageContext")return ["Edit page","Appearance","Rename page","Duplicate page",pageId===draftModel.homePageId?"Current Home page":"Set as Home","Move page up","Move page down",pageId===draftModel.homePageId?"Delete unavailable · this is Home":"Delete page…"]
@@ -206,15 +227,20 @@ Item {
         if(mode==="confirmDeletePage")return ["Delete page in draft","Cancel"]
         if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
         if(mode==="editorAppearance")return ["Surface color","Selected surface","Text color","Supporting text","Focus color","Reset Studio colors"]
-        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance"]
+        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance","Canvas view"]
         if(mode==="context") return ["Move","Width","Height","Edit component"]
         if(mode==="flowMove")return ["Move before…","Move after…","Convert to a grid…","Cancel"]
         if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Return to "+gestureMode]
         if(mode==="anchors")return ["Top left","Top right","Bottom left","Bottom right"]
         if(mode==="destination")return destinationSections.map(s=>s.name+(s.id===originScopeId?" · Current section":""))
+        if(mode==="groupDestination")return destinationGroups.map(g=>g.name)
         if(mode==="orderBefore" || mode==="orderAfter")return relativeItems.length?relativeItems.map(i=>i.name || i.widgetType || i.id):["No other components in this section · Back returns"]
         if(mode==="properties")return contextActions.slice(2)
-        if(mode==="layers") return items.map(i=>(i.name || i.widgetType || i.id)+(i.hidden?" · Hidden":"")+(i.locked?" · Locked":""))
+        if(mode==="layers") return layerRows.map(row=>"  ".repeat(row.depth)+(row.item.componentType==="container"?(expandedGroups[row.item.id]?"▾ ":"▸ "):"  ")+(multiSelection.indexOf(row.item.id)>=0?"✓ ":"")+(row.item.name || row.item.widgetType || row.item.id)+(row.item.hidden?" · Hidden":"")+(row.item.locked?" · Locked":"")).concat(multiSelection.length>=2?["Group "+multiSelection.length+" selected components","Align / distribute selected…"]:[]).concat(["Inspect reading order / directional focus"])
+        if(mode==="view")return ["Zoom in · "+Math.round(camera.zoom*100)+"%","Zoom out","Pan left","Pan right","Pan up","Pan down","Fit / reset view"]
+        if(mode==="childLayout")return ["Layout: "+childLayoutDraft.mode,"Columns: "+childLayoutDraft.columns,"Rows: "+childLayoutDraft.rows,"Gap: "+childLayoutDraft.gap,"Padding: "+childLayoutDraft.padding,"Arrange children in draft","Cancel"]
+        if(mode==="arrange")return ["Align left","Center horizontally","Align right","Align top","Center vertically","Align bottom","Distribute horizontally","Distribute vertically"]
+        if(mode==="navigationOrder")return scopedItems.map((item,index)=>(index+1)+" · "+componentName(item)+(item.placement?" · row "+(item.placement.y+1)+", column "+(item.placement.x+1):""))
         if(mode==="pages") return ["Home"].concat(draftModel.pages.map(p=>p.name)).concat(["Create blank page"])
         if(mode==="add") return names
         if(mode==="collision") return ["Shift others"+(shiftPreview.valid?"":" · Unavailable"),"Swap"+(swapPreview.valid?"":" · Unavailable"),"Cancel","Review affected items…"]
@@ -259,7 +285,7 @@ Item {
             return
         }
         if(mode==="pageAppearance"){const key=["backgroundStart","backgroundEnd","surfaceColor","textColor","focusColor"][choice];beginKeyboard("pageColor:"+key,String(page.appearance[key] || ""));return}
-        if(mode==="more"){if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return}
+        if(mode==="more"){if(choice===7){mode="view";choice=0;return}if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return}
         if(mode==="editorAppearance") {
             if(choice===5){command("studioAppearance",{value:{}});return}
             const key=["surfaceColor","selectedColor","textColor","mutedColor","focusColor"][choice];beginKeyboard("studioColor:"+key,String(palette[key]));return
@@ -277,12 +303,24 @@ Item {
             if(choice>0){scopeId=page.sections[choice-1].id || "";const item=items.find(i=>(i.categoryId || "")===scopeId);selectedId=item?item.id:""}
             mode="canvas";toolbarFocus=false;Qt.callLater(()=>preview.revealScope(scopeId));return
         }
-        if(mode==="layers") {if(items[choice]) selectedId=items[choice].id;mode="canvas";toolbarFocus=false;return}
+        if(mode==="layers") {if(choice===layerRows.length+(multiSelection.length>=2?2:0)){mode="navigationOrder";choice=0;message="Reading order follows this list. D-pad movement uses the displayed row and column in the current scope.";return}if(choice===layerRows.length){if(command("group",{ids:multiSelection})){multiSelection=[];mode="canvas";toolbarFocus=false}return}if(choice===layerRows.length+1){mode="arrange";choice=0;return}if(layerRows[choice])selectedId=layerRows[choice].item.id;mode="canvas";toolbarFocus=false;return}
+        if(mode==="view"){
+            if(choice===0)camera.zoom=Math.min(2,camera.zoom+0.1)
+            else if(choice===1)camera.zoom=Math.max(0.5,camera.zoom-0.1)
+            else if(choice===2)camera.panX=Math.max(-width,camera.panX-40)
+            else if(choice===3)camera.panX=Math.min(width,camera.panX+40)
+            else if(choice===4)camera.panY=Math.max(-height,camera.panY-40)
+            else if(choice===5)camera.panY=Math.min(height,camera.panY+40)
+            else {camera.zoom=1;camera.panX=0;camera.panY=0}
+            message="View only. Layout unchanged.";return
+        }
+        if(mode==="childLayout"){if(choice===6){mode="canvas";return}if(choice===5 && command("childLayout",{id:selectedId,value:childLayoutDraft})){mode="canvas";toolbarFocus=false}return}
+        if(mode==="arrange"){if(command("arrange",{ids:multiSelection,mode:["left","center-x","right","top","center-y","bottom","distribute-x","distribute-y"][choice]})){mode="canvas";toolbarFocus=false}return}
         if(mode==="pages") {
             if(choice===draftModel.pages.length+1) {beginKeyboard("newPage","");return}
             pageId=choice===0 ? "" : draftModel.pages[choice-1].id;selectedId="";mode="canvas";return
         }
-        if(mode==="add") {addingType=choice===0 ? "clock" : "text";origin={};originScopeId=scopeId;gestureMode="move";candidate={x:0,y:0,width:1,height:1};mode="move";toolbarFocus=false;return}
+        if(mode==="add") {addingType=["clock","text","container","input-panel"][choice];const prototype=session.componentPrototype(addingType);if(!prototype.root){message=session.errorString;return}origin={};originScopeId=scopeId;originParentId=parentScopeId;gestureMode="move";candidate=Object.assign({},prototype.root.placement,{x:0,y:0});mode="move";toolbarFocus=false;return}
         if(mode==="collision") {if(choice===2)cancelGesture();else if(choice===3){if(collisionPreview.valid){mode="collisionDetails";choice=0;message="Proposed positions only · Back returns to Shift / Swap / Cancel. Nothing has changed."}else message=collisionPreview.reason}else if(collisionPreview.valid)acceptCandidate(choice===0 ? "shift":"swap");else message=collisionPreview.reason;return}
         if(mode==="collisionDetails")return
         if(mode==="moveOptions") {
@@ -296,10 +334,11 @@ Item {
         if(mode==="anchors"){resizeAnchor=["top-left","top-right","bottom-left","bottom-right"][choice];mode="resize";message="";return}
         if(mode==="destination") {
             if(!destinationSections[choice])return
-            scopeId=destinationSections[choice].id || "";scopeOverview=false;candidate=Object.assign({},candidate,{x:0,y:0});mode="move"
+            parentScopeId="";scopeId=destinationSections[choice].id || "";scopeOverview=false;candidate=Object.assign({},candidate,{x:0,y:0});mode="move"
             message="Move to "+destinationSections[choice].name+" · choose a cell, then Confirm. Back restores the original section."
             Qt.callLater(()=>preview.revealScope(scopeId));return
         }
+        if(mode==="groupDestination"){if(destinationGroups[choice]){parentScopeId=destinationGroups[choice].id;candidate=Object.assign({},candidate,{x:0,y:0});mode="move";message="Choose a cell in the destination. Confirm places; Back restores the original group."}return}
         if(mode==="orderBefore" || mode==="orderAfter") {
             if(relativeItems[choice] && command("orderRelative",{id:selectedId,relativeId:relativeItems[choice].id,before:mode==="orderBefore"})){mode="canvas";toolbarFocus=false}
             return
@@ -331,8 +370,9 @@ Item {
         if(mode==="preview") {if(c===inputManager.back)mode="canvas";else preview.handleCommand(c);return}
         if(c===inputManager.back) {
             if(mode==="collisionDetails"){mode="collision";choice=collisionStrategy==="shift"?0:1;return}
-            if(["move","resize","collision","geometry","moveOptions","destination","anchors"].indexOf(mode)>=0){cancelGesture();return}
+            if(["move","resize","collision","geometry","moveOptions","destination","groupDestination","anchors"].indexOf(mode)>=0){cancelGesture();return}
             if(mode!=="canvas") {if(mode==="conversionPreview")session.cancelPreview();mode="canvas";addingType="";return}
+            if(!toolbarFocus && parentScopeId){const id=parentScopeId;parentScopeId="";selectedId=id;return}
             if(!toolbarFocus){toolbarFocus=true;return}
             if(session.dirty){mode="dirty";choice=0}else close()
             return
@@ -356,6 +396,17 @@ Item {
         }
         if(mode!=="canvas") {
             const labels=dialogLabels()
+            if(mode==="childLayout" && choice<5 && (c===inputManager.navigateLeft || c===inputManager.navigateRight)){
+                const direction=c===inputManager.navigateRight?1:-1;let layout=Object.assign({},childLayoutDraft)
+                if(choice===0){const modes=["grid","row","column"],index=modes.indexOf(layout.mode)+direction;if(index>=0 && index<modes.length)layout.mode=modes[index]}
+                else{const key=["","columns","rows","gap","padding"][choice],value=layout[key]+direction,minimum=choice<3?1:0,maximum=choice===1?16:choice===2?10:100;if(value<minimum || value>maximum){message="Choose "+minimum+"–"+maximum+".";return}layout[key]=value}
+                childLayoutDraft=layout;return
+            }
+            if(mode==="layers" && layerRows[choice]){
+                const item=layerRows[choice].item
+                if(c===inputManager.menu){const selection=multiSelection.slice(),index=selection.indexOf(item.id);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(item.id);else{message="Select at most 32 components.";return}multiSelection=selection;message="Menu toggles selection · Right expands · Left collapses · Group selected appears at the end.";return}
+                if((c===inputManager.navigateLeft || c===inputManager.navigateRight) && item.componentType==="container"){let expanded=Object.assign({},expandedGroups);expanded[item.id]=c===inputManager.navigateRight;expandedGroups=expanded;return}
+            }
             if(mode==="convert" && choice<6 && (c===inputManager.navigateLeft || c===inputManager.navigateRight)) {
                 const direction=c===inputManager.navigateRight?1:-1
                 if(choice===0){const index=gridModes.findIndex(m=>m.id===gridDraft.mode);const next=index+direction;if(next>=0 && next<gridModes.length)gridDraft=Object.assign({},gridDraft,{mode:gridModes[next].id});return}
@@ -431,16 +482,16 @@ Item {
         Item {
             id:canvasArea;parent:studio;anchors.fill:parent;clip:true
             Item {
-                id:camera;property real zoom:1
+                id:camera;property real zoom:1;property real panX:0;property real panY:0
                 width:studio.width;height:studio.height
                 scale:Math.min(canvasArea.width/width,canvasArea.height/height)*zoom
                 transformOrigin:Item.TopLeft
-                x:(canvasArea.width-width*scale)/2;y:(canvasArea.height-height*scale)/2
+                x:(canvasArea.width-width*scale)/2+panX;y:(canvasArea.height-height*scale)/2+panY
                 HomeScreen {
                     id:preview;objectName:"studioPreview"
                     x:draftNavigation.contentLeft;y:draftNavigation.contentTop;width:parent.width-x;height:parent.height-y
-                    items:studio.page?studio.page.items.filter(i=>!i.hidden || (studio.mode!=="preview" && i.id===studio.selectedId)):[]
-                    sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>!i.hidden || (studio.mode!=="preview" && i.id===studio.selectedId))})):[]
+                    items:studio.page?studio.page.items.filter(i=>studio.editorReveals(i)):[]
+                    sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>studio.editorReveals(i))})):[]
                     appearance:studio.page?studio.page.appearance:studio.palette;composition:studio.page?studio.page.composition:({})
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
@@ -477,7 +528,7 @@ Item {
                         model:studio.gridMode && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry") ? studio.grid.columns*studio.grid.rows : 0
                         delegate:Rectangle {
                             required property int index
-                            readonly property var rect:preview.placementRectFor({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns),width:1,height:1},studio.scopeId)
+                            readonly property var rect:preview.placementRectFor({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns),width:1,height:1},studio.scopeId,studio.parentScopeId)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:1;border.color:studio.palette.mutedColor;opacity:0.35
                         }
                     }
@@ -485,10 +536,10 @@ Item {
                         model:studio.gridMode ? studio.scopedItems.filter(i=>!!i.placement && (!i.hidden || i.id===studio.selectedId)):[]
                         delegate:Rectangle {
                             required property var modelData
-                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId || studio.scopeId)
+                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || "")
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating?7:0;border.color:studio.palette.surfaceColor
                             Rectangle {anchors.fill:parent;anchors.margins:2;visible:modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
-                            Text {visible:modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
+                            Text {objectName:"studioSelectionName-"+modelData.id;visible:!modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
                             MouseArea {
                                 objectName:"studioHit-"+modelData.id
                                 anchors.fill:parent
@@ -499,28 +550,50 @@ Item {
                                     if(!pressed)return
                                     if(!dragging){if(Math.abs(mouse.x-start.x)+Math.abs(mouse.y-start.y)<Qt.styleHints.startDragDistance)return;if(studio.current && studio.current.locked){studio.message="Unlock this component before moving it.";return}studio.beginGesture(false);dragging=true}
                                     let p=Object.assign({},studio.origin)
-                                    p.x+=Math.round((mouse.x-start.x)/(preview.gridMetricsFor(studio.scopeId).cellW+preview.gridMetricsFor(studio.scopeId).gap))
-                                    p.y+=Math.round((mouse.y-start.y)/(preview.gridMetricsFor(studio.scopeId).cellH+preview.gridMetricsFor(studio.scopeId).gap))
+                                    p.x+=Math.round((mouse.x-start.x)/(preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).cellW+preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).gap))
+                                    p.y+=Math.round((mouse.y-start.y)/(preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).cellH+preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).gap))
                                     if(p.x>=0 && p.y>=0 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.grid.rows)studio.candidate=p
                                 }
                                 onReleased:{if(dragging)studio.acceptCandidate();else{studio.mode="context";studio.choice=0}}
                                 onCanceled:studio.mode="canvas"
+                            }
+                            Rectangle {
+                                objectName:"studioResize-"+modelData.id
+                                visible:modelData.id===studio.selectedId && !studio.toolbarFocus && !modelData.locked && (studio.mode==="canvas" || studio.mode==="resize")
+                                width:30*studio.textScale;height:width;anchors.right:parent.right;anchors.bottom:parent.bottom
+                                radius:5*studio.textScale;color:studio.palette.focusColor;border.width:2;border.color:studio.palette.surfaceColor
+                                Text {anchors.centerIn:parent;text:"↘";color:studio.palette.surfaceColor;font.pixelSize:22*studio.textScale}
+                                MouseArea {
+                                    anchors.fill:parent;property point start
+                                    onPressed:mouse=>{start=Qt.point(mouse.x,mouse.y);studio.beginGesture(true)}
+                                    onPositionChanged:mouse=>{if(!pressed)return;const metrics=preview.gridMetricsFor(studio.scopeId,studio.parentScopeId);let p=Object.assign({},studio.origin);p.width+=Math.round((mouse.x-start.x)/(metrics.cellW+metrics.gap));p.height+=Math.round((mouse.y-start.y)/(metrics.cellH+metrics.gap));if(p.width>=1 && p.height>=1 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.grid.rows)studio.candidate=p;else studio.message="Grid boundary: choose a size inside the grid."}
+                                    onReleased:studio.acceptCandidate()
+                                    onCanceled:studio.cancelGesture()
+                                }
                             }
                         }
                     }
                     Rectangle {
                         objectName:"studioOrigin"
                         visible:!studio.addingType && !!studio.current && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="collision" || studio.mode==="geometry")
-                        readonly property var rect:studio.origin.x!==undefined?preview.placementRectFor(studio.origin,studio.originScopeId):({x:0,y:0,width:0,height:0})
+                        readonly property var rect:studio.origin.x!==undefined?preview.placementRectFor(studio.origin,studio.originScopeId,studio.originParentId):({x:0,y:0,width:0,height:0})
                         x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:2;border.color:studio.palette.mutedColor
                     }
                     Rectangle {
                         objectName:"studioGhost"
                         visible:studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry" || (studio.mode==="collision" && !studio.collisionPreview.valid)
-                        readonly property var rect:preview.placementRectFor(studio.candidate,studio.scopeId)
+                        readonly property var rect:preview.placementRectFor(studio.candidate,studio.scopeId,studio.parentScopeId)
                         x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:4;border.color:studio.palette.focusColor
                         readonly property var sourceSection:studio.page?(studio.page.sections || []).find(s=>(s.id || "")===studio.scopeId):null
-                        HomeCard {objectName:"studioGhostCard";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd;item:Object.assign({},studio.addingType?{kind:"widget",widgetType:studio.addingType,name:studio.addingType}:studio.current || {},{presentation:Object.assign({},parent.sourceSection?parent.sourceSection.presentation || {}:{},studio.current && !studio.addingType?studio.current.presentation || {}:{})});appearance:studio.page?studio.page.appearance:studio.palette;selected:true;opacity:studio.current && !studio.addingType && studio.current.opacity!==undefined?studio.current.opacity:1}
+                        HomeCard {visible:!((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType || ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="container";objectName:"studioGhostCard";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd;item:Object.assign({},studio.addingType?{kind:"widget",widgetType:studio.addingType,name:studio.addingType}:studio.current || {},{presentation:Object.assign({},parent.sourceSection?parent.sourceSection.presentation || {}:{},studio.current && !studio.addingType?studio.current.presentation || {}:{})});appearance:studio.page?studio.page.appearance:studio.palette;selected:true;opacity:studio.current && !studio.addingType && studio.current.opacity!==undefined?studio.current.opacity:1}
+                        PlacedComponents {
+                            anchors.fill:parent;enabled:false
+                            readonly property var component:studio.addingType?studio.addPrototype.root:studio.current
+                            visible:!!component && component.componentType==="container"
+                            items:visible?[{item:component,placement:{x:0,y:0,width:1,height:1}}]:[]
+                            metrics:({valid:true,margin:0,gap:0,cellW:width,cellH:height});host:preview;unit:preview.componentUnit
+                            catalog:studio.addingType?studio.addPrototype.viewItems:studio.items
+                        }
                         Text {anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));x:Math.max(studio.spacing-preview.x-parent.x,Math.min(0,studio.width-preview.x-parent.x-width-studio.spacing));text:(studio.mode==="resize"?"Sizing "+studio.resizeAxis:"Moving")+" · "+studio.componentName(studio.addingType?null:studio.current);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight;Accessible.role:Accessible.StaticText;Accessible.name:studio.operationSummary}
                     }
                     Repeater {
@@ -531,7 +604,7 @@ Item {
                             readonly property var previewItem:studio.items.find(i=>i.id===modelData.id) || {id:modelData.id,kind:"widget",widgetType:studio.addingType,name:studio.addingType}
                             objectName:"studioProposal-"+modelData.id
                             readonly property var section:studio.page.sections.find(s=>(s.id || "")===(modelData.categoryId || ""))
-                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId!==undefined?modelData.categoryId:studio.scopeId)
+                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId!==undefined?modelData.categoryId:studio.scopeId,modelData.parentId || "")
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent"
                             HomeCard {objectName:"studioProposedCard-"+parent.modelData.id;anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page.backgroundEnd;item:Object.assign({},parent.previewItem,{presentation:Object.assign({},parent.section?parent.section.presentation || {}:{},parent.previewItem.presentation || {})});appearance:studio.page.appearance;opacity:parent.previewItem.opacity===undefined?1:parent.previewItem.opacity}
                             Rectangle {anchors.fill:parent;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
@@ -540,7 +613,7 @@ Item {
                     }
                 }
             }
-            Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode!=="preview";text:"Empty page · Confirm to add a component";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
+            Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode==="canvas";text:"Empty page · Confirm to add a component";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
         }
         Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview";text:studio.footerText;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
     }
@@ -548,7 +621,7 @@ Item {
         visible:studio.mode!=="canvas" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="preview"
         z:3
         width:Math.min(parent.width-2*studio.spacing,560*studio.textScale);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
-        readonly property var localSelection:studio.gridMode && studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId):preview.editRect
+        readonly property var localSelection:studio.gridMode && studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || ""):preview.editRect
         readonly property var selectionRect:localSelection?Object.assign({},localSelection,{x:preview.x+localSelection.x,y:preview.y+localSelection.y}):null
         x:selectionRect && (studio.mode==="context" || studio.mode==="properties")?(selectionRect.x+selectionRect.width+width+2*studio.spacing<=studio.width?selectionRect.x+selectionRect.width+studio.spacing:Math.max(studio.spacing,selectionRect.x-width-studio.spacing)):(parent.width-width)/2
         y:selectionRect && (studio.mode==="context" || studio.mode==="properties")?Math.max(studio.spacing,Math.min(parent.height-height-studio.spacing,selectionRect.y)):(parent.height-height)/2
@@ -642,7 +715,7 @@ Item {
                     studio.toolbarFocus=true;studio.mode="canvas"
                 }
                 if(studio.selectedId && !studio.current)studio.selectedId=studio.scopedItems.length?studio.scopedItems[0].id:""
-                if(studio.mode==="canvas" && studio.sectionMode && studio.current && !studio.scopeOverview){studio.scopeId=studio.current.categoryId || "";preview.revealPlacement(studio.current.placement,studio.scopeId)}
+                if(studio.mode==="canvas" && studio.sectionMode && studio.current && !studio.scopeOverview){if(!studio.current.parentId)studio.scopeId=studio.current.categoryId || "";preview.revealPlacement(studio.current.placement,studio.scopeId)}
             })
         }
     }

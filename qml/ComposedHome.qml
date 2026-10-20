@@ -33,6 +33,7 @@ Item {
     property date now: new Date()
     property string sectionActionId: ""
     property string activeWidget: ""
+    property string activeGroup: ""
     property var widgets: ({})
     readonly property var grid: host.grid || ({})
     readonly property var placements: host.placements || []
@@ -93,6 +94,7 @@ Item {
         else if(point.y+height>content.contentY+content.height)content.contentY=Math.min(Math.max(0,content.contentHeight-content.height),point.y+height-content.height+c.gap)
     }
     function activatePlaced(item) {
+        activeGroup=item.parentId || ""
         sectionActionId="";host.focusedIndex=host.itemIndex(item.id);navigationFocused=false;host.recoveryFocused=false
         handleCommand(inputManager.confirm)
     }
@@ -112,6 +114,7 @@ Item {
         for(const category of host.authoredSections || host.sections || [])inheritedById[category.id || ""]=category.presentation || {}
         const tab=tabs[activeTab]
         for (const item of items) {
+            if(item.parentId)continue
             if(tab && tab.sections && tab.sections.indexOf(item.categoryId || "")<0)continue
             const placement = map[item.id]
             const inherited=inheritedById[item.categoryId || ""] || {}
@@ -149,6 +152,7 @@ Item {
         return { entries: entries, rows: rows, factor: config.fit === false ? 1 : Math.min(1, available / Math.max(1,total)) }
     }
     function focusEntries() {
+        if(activeGroup)return (host.items || []).filter(i=>(i.parentId || "")===activeGroup && !!i.placement).map(i=>({id:i.id,row:i.placement.y,x:i.placement.x+i.placement.width/2}))
         if (placementMode && !sectionMode) {
             const tab=tabs[activeTab]
             return placedItems.filter(e=>!tab || !tab.sections || tab.sections.indexOf(e.item.categoryId || "")>=0).map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2}))
@@ -180,6 +184,7 @@ Item {
         else { activeTabId = tab.id; const first = focusEntries()[0]; if (first) host.focusedIndex = host.itemIndex(first.id) }
     }
     function restoreFocus(id) {
+        const component=(host.items || []).find(i=>i.id===id);activeGroup=component?component.parentId || "":""
         sectionActionId = id.startsWith("section-") ? id : ""
         navigationFocused = id.startsWith("tab-")
         if (navigationFocused) { const i = tabs.findIndex(t => "tab-" + t.id === id); if (i >= 0) focusedTab = i }
@@ -194,6 +199,7 @@ Item {
         else host.settingsRequested(control === "edit" ? 1 : -1)
     }
     function handleCommand(command) {
+        if(activeGroup && command===inputManager.back){const group=(host.items || []).find(i=>i.id===activeGroup);if(group){host.focusedIndex=host.itemIndex(group.id);activeGroup=group.parentId || ""}else activeGroup="";return}
         if (activeWidget) {
             const widget = widgets[activeWidget]
             if (widget && widget.handleCommand(command)) return
@@ -221,6 +227,11 @@ Item {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
             if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) host.actionActivated(section.presentation.trailingAction,current.id); return }
             const item = host.items[host.itemIndex(current.id)]
+            if(item && item.componentType==="container"){
+                const children=(host.items || []).filter(i=>(i.parentId || "")===item.id)
+                if(children.length){activeGroup=item.id;host.focusedIndex=host.itemIndex(children[0].id)}
+                return
+            }
             if (host.unavailableReason(item)) host.settingsRequested(1)
             else if (item.action) host.actionActivated(item.action, item.id)
             return

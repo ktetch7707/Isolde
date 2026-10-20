@@ -44,7 +44,7 @@ Item {
     function handleCommand(command){
         if(editing){if(root.model && pageEditor.visible){if(command===inputManager.back){pageEditor.open=false;editing=false;return}else pageEditor.handleCommand(command);return}if(command===inputManager.back && !editor.editing)editing=false;else editor.handleCommand(command);return}
         if(command===inputManager.home){closeAll();return}
-        if(command===inputManager.back){if(content.widgetActive)content.handleCommand(command);else if(navigationFocused)navigationFocused=false;else back();return}
+        if(command===inputManager.back){if(content.widgetActive || content.groupActive)content.handleCommand(command);else if(navigationFocused)navigationFocused=false;else back();return}
         if(command===inputManager.menu && !content.widgetActive && navigation!=="none"){navigationFocused=!navigationFocused;return}
         if(command===inputManager.search){searchRequested();return}
         if(navigationFocused){
@@ -55,7 +55,7 @@ Item {
             else if(command===inputManager.navigateDown || command===inputManager.navigateRight)selectedPage=Math.min(pageEntries.length-1,selectedPage+1)
             return
         }
-        if(command===inputManager.navigateLeft && navigation==="left" && !content.widgetActive && content.focusedIndex===0){navigationFocused=true;return}
+        if(command===inputManager.navigateLeft && navigation==="left" && !content.widgetActive && !content.groupActive && content.focusedIndex===0){navigationFocused=true;return}
         content.handleCommand(command)
     }
     Connections { target:root.layoutModel;function onLayoutChanged(){if(root.activeId && !root.model)root.closeAll()} }

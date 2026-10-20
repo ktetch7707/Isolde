@@ -194,12 +194,35 @@ def main():
                 key("Escape"); key("Return")  # Close and reopen Studio from the legacy entry.
                 assert layout.read_bytes() == applied
                 capture("applied")
+                key("Down", 2); key("Return"); key("Down", 3); key("Return")  # Add the packaged eight-slot group.
+                key("Down"); key("Return")  # Place below the original components.
+                assert layout.read_bytes() == applied
+                capture("group")
+                key("Return"); key("Down", 3); key("Return"); key("Down", 12); key("Return")  # Edit group contents.
+                assert layout.read_bytes() == applied
+                capture("inside")
+                key("Escape")  # Exact containing group selection.
+                key("Escape"); key("Down", 2); key("Return"); key("Down", 2); key("Return")  # More -> Layers.
+                key("Down", 2); key("Right")  # Expand the group without changing its data.
+                capture("layers")
+                assert layout.read_bytes() == applied
+                key("Escape"); key("Down"); key("Return"); key("Return")  # Layers returns to the still-open page menu.
+                expect(lambda: len(json.loads(layout.read_text()).get("components", [])) == 11,
+                       "Nested input slots render and apply atomically")
+                grouped = json.loads(layout.read_text())["components"]
+                panel = next(item for item in grouped if item.get("componentType") == "container")
+                children = [item for item in grouped if item.get("parentId") == panel["id"]]
+                assert len(children) == 8 and panel["requiredCapability"] == "capture-inputs"
+                assert panel["presentation"]["layout"]["columns"] == 4
+                assert panel["presentation"]["layout"]["rows"] == 2
+                assert {(item["placement"]["x"], item["placement"]["y"]) for item in children} == {(x, y) for y in range(2) for x in range(4)}
                 (evidence / "result.json").write_text(json.dumps({
                     "passed": True, "journey": "studio", "layout": str(layout),
                     "executable": str(executable), "preview_cancel_preserved_bytes": True,
                     "reopen_preserved_bytes": True, "user_usability_acceptance": "pending",
                     "remote_collision_cancel_swap_undo": True, "remote_resize_cancel_accept_undo": True,
-                    "bounded_repeat_cancel": True
+                    "bounded_repeat_cancel": True, "nested_group_remote_layers_apply": True,
+                    "eight_slot_layout_only": True, "physical_input_qualification": "not claimed"
                 }, indent=2))
                 print("Evidence: " + str(evidence), flush=True)
                 return

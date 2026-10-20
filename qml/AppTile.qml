@@ -25,7 +25,7 @@ Rectangle {
     readonly property bool showType: app.showType === undefined ? true : app.showType
     readonly property bool showLogo: app.showLogo === undefined ? true : app.showLogo
     readonly property bool logoFill: app.logoFill === undefined ? false : app.logoFill
-    readonly property string sectionLabel: app.contextual === true && app.sourceType ? app.sourceType.toUpperCase().replace("-", " ") : app.section.toUpperCase()
+    readonly property string sectionLabel: app.contextual === true && app.sourceType ? app.sourceType.toUpperCase().replace("-", " ") : (app.section || "").toUpperCase()
 
     Behavior on scale { enabled: root.appearance.motionEnabled !== false; NumberAnimation { duration: 100 } }
     Behavior on color { enabled: root.appearance.motionEnabled !== false; ColorAnimation { duration: 100 } }
@@ -39,10 +39,10 @@ Rectangle {
         width: root.logoFill ? parent.width : compact ? 52 : 70
         height: root.logoFill ? parent.height : compact ? 52 : 70
         radius: root.logoFill ? root.radius : Math.min(width, height) * 0.25 * root.roundness
-        color: root.app.accent
+        color: root.app.accent || root.appearance.focusColor || root.color
         Text {
             anchors.centerIn: parent
-            text: root.app.symbol
+            text: root.app.symbol || ""
             color: "white"
             font.pixelSize: root.compact ? 23 : 30
             font.weight: Font.Bold
