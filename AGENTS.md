@@ -5,7 +5,7 @@
 1. On session start, read `docs/agent-backlog.md` — it is the single source of truth for sequencing and percent completion.
 Before VM actions, read `docs/vm-oracle.md`. Explicit user-requested architecture/planning/testing reviews may inspect relevant plans and evidence without implementing the next feature. Preserve unrelated working-tree changes.
 
-2. Follow an explicit user-selected priority track in `docs/agent-backlog.md` first (currently Page Studio plus shell-surface corrections; exact order is in the backlog); otherwise pick the lowest-numbered ACTIVE task below 100%. Exclude struck/superseded tasks and require the selected task's Depends tasks to be 100%. A planning-only request does not authorize application implementation.
+2. Follow the execution-priority table in `docs/agent-backlog.md`: core Page Studio T15-T24 first, related shell fixes next, then remaining work. Task IDs are stable identifiers, not priority. Select the first unfinished ACTIVE row with completed Depends tasks; exclude struck/superseded tasks and report blockers rather than silently switching features. A planning-only request does not authorize application implementation.
 3. Within a task, read ONLY its `Entry docs` + `Entry files`. Do not re-read the entire codebase or all planning docs.
 4. Implement its `Scope` to satisfy its `Done when` gate, preserving standing gates (both visual fixtures, profile isolation, atomic save/rollback, Kodi media ownership, offline Generator Test).
 5. Before finishing, run its `Verify` commands/tests and update `docs/agent-backlog.md`: check off sub-boxes, recompute that task's `%`, recompute `Overall %`.
@@ -25,7 +25,7 @@ Before VM actions, read `docs/vm-oracle.md`. Explicit user-requested architectur
     - TV-distance legibility: readable type, contrast, safe-area margins, no obscured field, no autoplay/ads/feeds in default. Reduced-motion and contrast options respected.
     - Editor UX: selected item, operation, edit mode, preview vs applied state, and consequences of remove must always be unambiguous. Collision = shift/swap/cancel dialog, never silent overwrite.
 11. Engineering best practices (must obey):
-    - Small vertical slices: remote input → data → visible result → error/retry → focus restored → test. One task at a time, selected priority track first, otherwise lowest-numbered ACTIVE.
+    - Small vertical slices: remote input → data → visible result → error/retry → focus restored → test. One task at a time, ranked backlog priority, never task-number order.
     - Profile isolation: edits affect active profile only. No cross-profile reads/writes. Teardown invalidates clients.
     - Kodi owns media/progress/playback/artwork; Isolde owns presentation/navigation. No parallel media DB, no scraper, no Kodi DB/skin writes, no fake playback claims. Bounded read-only bridge calls (50/page).
     - Offline-first: Generator Test (cold boot, local media, saved art, local search, layouts, recovery) passes disconnected. Online features degrade independently; Web OFF issues zero external requests.

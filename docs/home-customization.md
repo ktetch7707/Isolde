@@ -2,7 +2,7 @@
 
 ## Planned source and theme corrections
 
-[shell-surfaces-design.md](shell-surfaces-design.md) supersedes fixed Detected Sources placement and incomplete cross-surface appearance. T25 adds profile-owned policy, configurable notice slots/contained widgets, per-page visibility/lifetime and presentation controls; existing automatic/hide/keep choices remain compatible. T27 defines Home/profile/page theme inheritance through Search, Settings and all Isolde-owned Kodi views/dialogs/keyboards, with validated explicit overrides and no native Kodi skin changes. These integrate with Page Studio draft/Apply and T24 acceptance. The existing workflows below describe implementation history, not proof that these new requirements are complete.
+[shell-surfaces-design.md](shell-surfaces-design.md) supersedes fixed Detected Sources placement and incomplete cross-surface appearance. T25 adds profile-owned policy, configurable notice slots/contained widgets, per-page visibility/lifetime and presentation controls; existing automatic/hide/keep choices remain compatible. T27 defines Home/profile/page theme inheritance through Search, Settings and all Isolde-owned Kodi views/dialogs/keyboards, with validated explicit overrides and no native Kodi skin changes. These extend the accepted Page Studio draft/Apply system after core T24 cutover, with their own integration acceptance. The existing workflows below describe implementation history, not proof that these new requirements are complete.
 
 Isolde 0.0.1.2 treats the Home screen as user-owned state. The built-in layout is only the safe first-run and recovery default.
 
