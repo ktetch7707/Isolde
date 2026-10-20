@@ -50,6 +50,8 @@ private slots:
     void studioCommandsAreAtomicAndProfileScoped();
     void studioCollisionProposalsAndParity();
     void studioSectionGridsAreIndependentAndAtomic();
+    void studioHomeDesignationIsAtomicAndProtected();
+    void studioArtworkUsesActiveProfileAndExpires();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
@@ -118,6 +120,9 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     QCOMPARE(restoredPage->appearance()["focusColor"].toString(),QString("#123456"));
     const auto snapshot=layout.saveSkin("Whole interface");QVERIFY(!snapshot.isEmpty());
     QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),2); // Home presets preserve authored pages.
+    const auto linkedState=layout.committedDocument();
+    QVERIFY(!layout.removePage(shows));QCOMPARE(layout.committedDocument(),linkedState);
+    QVERIFY(page->setItemAction(button,{{"type","open-page"},{"pageId",movies}})); // Explicitly repair the incoming link.
     QVERIFY(layout.removePage(shows));QVERIFY(!layout.pageModel(shows));
     QVERIFY(layout.applySkin(snapshot));QCOMPARE(layout.pages().size(),2);
     QCOMPARE(layout.pageModel(movies),page); // Existing bindings survive a skin switch.
@@ -889,6 +894,45 @@ void ComponentTests::studioSectionGridsAreIndependentAndAtomic()
     section["presentation"]=QJsonObject{{"grid",QJsonObject{{"columns",4},{"rows",3}}}}; modified[0]=section;
     QCOMPARE(ComponentSchema::sectionGrid(composition,modified,category)["columns"].toInt(),4);
     QVERIFY(!ComponentSchema::validPresentation({{"grid",QVariantMap{{"mode","sections"}}}},true));
+}
+void ComponentTests::studioHomeDesignationIsAtomicAndProtected()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto user=dir.filePath("home.json"),defaults=QFINDTESTDATA("../config/default-home-layout.json");
+    QVERIFY(home.load(defaults,user));QCOMPARE(home.homePageId(),QString());
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY2(session->execute("newPage",{{"name","Library"}}),qPrintable(session->errorString()));
+    const auto document=QJsonDocument::fromJson(session->draft()).object();
+    const auto id=document["pages"].toArray().last().toObject()["id"].toString();QVERIFY(!id.isEmpty());
+    QVERIFY(session->execute("appearance",{{"value",QVariantMap{{"focusColor","#123456"}}}},id));
+    QVERIFY(session->execute("setHomePage",{{"id",id}}));
+    const auto designated=session->draft();
+    QVERIFY(!session->execute("removePage",{{"id",id}}));QCOMPARE(session->draft(),designated);
+    QVERIFY(!session->execute("setHomePage",{{"id","missing"}}));QCOMPARE(session->draft(),designated);
+    QVERIFY(!QFile::exists(user));QCOMPARE(home.homePageId(),QString());
+    QVERIFY(session->undo());QVERIFY(session->redo());QCOMPARE(session->draft(),designated);
+    QVERIFY2(session->apply(),qPrintable(session->errorString()));
+    QCOMPARE(home.homePageId(),id);QCOMPARE(home.homeAppearance()["focusColor"].toString(),QString("#123456"));
+    HomeLayout restored(&registry);QVERIFY(restored.load(defaults,user));QCOMPARE(restored.homePageId(),id);
+    // Page edits and widget insertion keep the interface-level designation intact.
+    QVERIFY2(session->execute("addPlaced",{{"type","clock"},{"placement",QVariantMap{{"x",0},{"y",0},{"width",1},{"height",1}}}},id),qPrintable(session->errorString()));
+    QVERIFY(session->execute("setHomePage",{{"id",""}}));
+    QVERIFY(session->execute("removePage",{{"id",id}}));
+    QVERIFY(session->undo());QCOMPARE(QJsonDocument::fromJson(session->draft()).object()["pages"].toArray().size(),1);
+}
+void ComponentTests::studioArtworkUsesActiveProfileAndExpires()
+{
+    QTemporaryDir dir;AppRegistry registry;
+    auto document=QJsonDocument::fromJson(legacy).object();
+    document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"wallpaper","artwork/scene.png"}};
+    writeFile(dir.filePath("default.json"),QJsonDocument(document).toJson());
+    HomeLayout home(&registry);QVERIFY(home.load(dir.filePath("default.json"),dir.filePath("home.json")));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    auto *model=qobject_cast<HomeLayout *>(session->model());QVERIFY(model);
+    QCOMPARE(model->wallpaperSource(),home.wallpaperSource());
+    QCOMPARE(model->components().first().toMap()["logoSource"],home.components().first().toMap()["logoSource"]);
+    QVERIFY(!QFile::exists(dir.filePath("home.json")));
+    session->invalidate();QVERIFY(model->wallpaperSource().isEmpty());QVERIFY(model->components().isEmpty());
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

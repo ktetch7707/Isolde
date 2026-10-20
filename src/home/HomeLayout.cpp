@@ -271,6 +271,7 @@ QVariantMap HomeLayout::studioOptions() const
     const auto object=QJsonDocument::fromJson(file.readAll()).object();
     if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
+    if(!object["menuWidth"].isDouble() || object["menuWidth"].toDouble()<200 || object["menuWidth"].toDouble()>480)return {};
     if(!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble()<60 || object["sectionHeight"].toDouble()>800)return {};
     QSet<QString> ids;
     for(const auto &entry:object["gridModes"].toArray()) {
@@ -510,6 +511,10 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         }
         pageIds.insert(id); pages.append(page);
     }
+    const auto homePage=object.value("homePageId");
+    if(object.contains("homePageId") && (m_owner || !homePage.isString() || (!homePage.toString().isEmpty() && !pageIds.contains(homePage.toString())))) {
+        setError(tr("The designated Home page does not exist."));return false;
+    }
     const auto theme = object.value("theme").toObject();
     const auto composition = object.value("composition").toObject().toVariantMap();
     if ((object.contains("composition") && !object["composition"].isObject()) || !ComponentSchema::validComposition(composition)) {
@@ -561,6 +566,7 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
     }
     m_items = components;
     m_pages = pages;
+    m_homePageId = homePage.toString();
     m_composition = composition;
     m_appearance = presentation;
     if (userDocument && version == 1) m_legacyDocument = data;
@@ -996,7 +1002,7 @@ QByteArray HomeLayout::documentData() const
         components.append(QJsonObject::fromVariantMap(normalized));
     }
     QJsonObject object{{"schemaVersion", 2}, {"theme", theme}, {"composition", QJsonObject::fromVariantMap(m_composition)}, {"categories", m_categories}, {"components", components}};
-    if (!m_owner) object.insert("pages",m_pages);
+    if (!m_owner) {object.insert("pages",m_pages);object.insert("homePageId",m_homePageId);}
     return QJsonDocument(object).toJson();
 }
 
@@ -1073,6 +1079,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
     const QJsonArray previousItems = m_items;
     const QJsonArray previousCategories = m_categories;
     const QJsonArray previousPages = m_pages;
+    const QString previousHomePage=m_homePageId;
     const QVariantMap previousAppearance = m_appearance;
     const QVariantMap previousComposition = m_composition;
     const QString previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
@@ -1091,7 +1098,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
     // Adopt the validated in-memory state, then persist atomically.
     m_items = probe.m_items;
     m_categories = probe.m_categories;
-    if (!m_owner) m_pages = probe.m_pages;
+    if (!m_owner) {m_pages = probe.m_pages;m_homePageId=probe.m_homePageId;}
     m_appearance = probe.m_appearance;
     m_composition = probe.m_composition;
     m_backgroundStart = probe.m_backgroundStart;
@@ -1105,6 +1112,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
         m_items = previousItems;
         m_categories = previousCategories;
         m_pages = previousPages;
+        m_homePageId=previousHomePage;
         m_appearance = previousAppearance;
         m_composition = previousComposition;
         m_backgroundStart = previousStart;

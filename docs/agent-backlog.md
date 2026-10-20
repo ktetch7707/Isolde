@@ -15,7 +15,7 @@ Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-u
 
 ## Execution priority — Page Studio first (user, 2026-10-19)
 
-Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T17 geometry verification is complete; T18 is next; T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
+Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T17 geometry verification is complete; T18 is in progress; T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
 
 Next complete the related shell improvements: **T27 → T25 → T26 → T28** (shared theme, contained source notices, All Apps gallery, genuine Web switch). These extend the accepted Studio and no longer block its templates, Preview/Apply or core cutover. Then follow the remaining ranked rows for evidence repair, media preservation, input/system polish, playback, hardware/guide, appliance distribution and optional online work.
 
@@ -29,7 +29,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
 | T16 | 2 | Shared draft transactions, history and profile safety | 100% | task verification complete; T17 next |
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 100% | geometry checkpoint verified; T18 next |
-| T18 | 4 | Unified Page Studio workspace and selection | 0% | planned |
+| T18 | 4 | Unified Page Studio workspace and selection | 25% | in progress; native left-menu checkpoint, lifecycle/selection gates open |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 0% | planned |
 | T20 | 6 | Desktop parity, layers and nested/group editing | 0% | planned |
 | T21 | 7 | Contextual inspector, catalog and capability binding | 0% | planned |
@@ -54,7 +54,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **23%** | T15 provisional (75%); T16-T17 verified; T18 next |
+| **Overall** | — | **average of 24 active tasks** | **24%** | T15 provisional (75%); T16-T17 verified; T18 in progress |
 
 ## Highest priority: core Page Studio
 
@@ -103,12 +103,12 @@ Verify: extend `universalGridValidatesAndPersists` and `home_component_navigatio
 Entry docs: `docs/page-studio-redesign.md` sections 2-4, 6; T15 approved wireframes and feature map.
 Entry files: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml`, `qml/PageSurface.qml`, `qml/Main.qml`, `src/home/HomePages.cpp`, `tests/tst_home_navigation.cpp`; new native Studio view files only as needed.
 Scope:
-- [ ] T18.1 Add the page-first shell: full-size page, collapsible overlay left page menu, Add page, draft status, contextual tools, Preview/Apply and secondary history/guides; no permanent top ribbon or forced miniature preview.
+- [x] T18.1 Add the page-first shell: full-size page, collapsible overlay left page menu, Add page, draft status, contextual tools, Preview/Apply and secondary history/guides; no permanent top ribbon or forced miniature preview.
 - [ ] T18.2 Implement one contextual window at a time, page-list Confirm actions, deterministic selection/hit-testing, named outlines, breadcrumbs and exact focus restoration; desktop pinning is optional and never reflows the page.
 - [ ] T18.3 Implement page create/duplicate/name/reorder and validated profile-scoped Home designation. Protect designated Home from deletion, preview startup/routes/Settings-theme consequences, repair incoming links before deleting other pages, and apply all affected changes atomically with undo and page limits.
 - [ ] T18.4 Make blank, empty, hidden, missing-source and unreadable-draft states recoverable using remote commands and independently readable editor chrome.
 Done when: remote-only entry -> page selection/create -> component selection -> panel edit -> Back returns to the exact canvas origin; no live saves or accidental playback.
-Verify: offscreen workspace/focus/empty-state tests in `home_component_navigation`, page draft/isolation tests in `component_contracts`, and installed screenshot/key journey on the VM. Evidence: pending; developer flag only until T24 cutover.
+Verify: offscreen workspace/focus/empty-state tests in `home_component_navigation`, page draft/isolation tests in `component_contracts`, and installed screenshot/key journey on the VM. Evidence: [studio-workspace-2026-10-20.md](studio-workspace-2026-10-20.md), frozen source snapshot 23, archive d1db5303c2f3e70d2b46ac9231a00be5498bcdec09adb83064d32d9098f30cba; full 14/14 CTest (39.40 seconds), installed direct-edit/menu/history/Apply/reopen journey under /tmp/isolde-components-acceptance-292d6iun, durable host build/studio-installed-23/. Only T18.1 is closed: original-root identity/deletion, page duplicate/reorder/remap, complete focus/scopes and inaccessible-draft recovery remain open. Developer flag remains until T24 cutover.
 
 ## T19 — Remote pick-up/drop, resize and collision workflows (L, depends: T18)
 Entry docs: `docs/page-studio-redesign.md` sections 4-5; T15 movement/collision wireframes.

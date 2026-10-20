@@ -3,6 +3,17 @@
 #include "ComponentSchema.h"
 #include <QJsonDocument>
 #include <QUuid>
+#include <functional>
+
+QVariantMap HomeLayout::homeAppearance() const {
+    if(m_owner)return m_owner->homeAppearance();
+    for(const auto &entry:m_pages)if(entry.toObject()["id"]==m_homePageId) {
+        auto result=appearance();const auto overrides=entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap();
+        for(auto it=overrides.cbegin();it!=overrides.cend();++it)result[it.key()]=it.value();
+        return result;
+    }
+    return appearance();
+}
 
 QString HomeLayout::createPage(const QString &name, const QString &preset) {
     if (m_owner) return m_owner->createPage(name,preset);
@@ -16,7 +27,7 @@ QString HomeLayout::createPage(const QString &name, const QString &preset) {
     if(preset!="blank")sections.append(QJsonObject{{"id","library"},{"name",preset=="shows"?"Shows":"Movies"},{"presentation",QJsonObject{
         {"variant","library"},{"height",550},{"libraryKind",preset=="shows"?"shows":"movies"},{"libraryView","all"},{"libraryLayout","grid"},{"libraryColumns",4},{"padding",12},{"radius",16},{"panelOpacity",0.3}}}});
     QJsonObject document{{"schemaVersion",2},{"theme",QJsonObject::fromVariantMap(appearance())},{"composition",config},{"categories",sections},{"components",QJsonArray{}}};
-    if(preset=="home"){document=QJsonDocument::fromJson(documentData()).object();document.remove("pages");}
+    if(preset=="home"){document=QJsonDocument::fromJson(documentData()).object();document.remove("pages");document.remove("homePageId");}
     m_pages.append(QJsonObject{{"id",id},{"name",name.trimmed()},{"layout",document}});
     if(!save()){m_pages.removeLast();return {};}emit layoutChanged();return id;
 }
@@ -30,6 +41,19 @@ bool HomeLayout::renamePage(const QString &id,const QString &name) {
 }
 bool HomeLayout::removePage(const QString &id) {
     if(m_owner)return m_owner->removePage(id);
+    if(id==m_homePageId){setError(tr("Set another page as Home before deleting this page."));return false;}
+    std::function<bool(const QJsonValue &)> linksToPage=[&](const QJsonValue &value) {
+        if(value.isArray()){for(const auto &child:value.toArray())if(linksToPage(child))return true;}
+        if(value.isObject()) {
+            const auto object=value.toObject();
+            if(object["type"]=="open-page" && object["pageId"]==id)return true;
+            for(auto it=object.begin();it!=object.end();++it)if(linksToPage(it.value()))return true;
+        }
+        return false;
+    };
+    if(linksToPage(QJsonDocument::fromJson(documentData()).object())) {
+        setError(tr("This page has incoming links. Change or remove its links before deleting it."));return false;
+    }
     for(qsizetype i=0;i<m_pages.size();++i)if(m_pages[i].toObject()["id"]==id){const auto previous=m_pages;m_pages.removeAt(i);
 
         if(!save()){m_pages=previous;return false;}emit layoutChanged();return true;}

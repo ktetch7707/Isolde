@@ -32,6 +32,13 @@ Window {
         commandCenter.open = true
     }
 
+    function showDesignatedHome() {
+        sessionManager.goHome()
+        if(homeLayout.homePageId)pageSurface.showPage(homeLayout.homePageId,"",true)
+        else if(pageSurface.open)pageSurface.closeAll()
+    }
+    Component.onCompleted:Qt.callLater(()=>{if(setupState.complete && homeLayout.homePageId)window.showDesignatedHome()})
+
     function handleCommand(command) {
         idleTimer.restart()
         if (kodiMedia.playbackActive) {
@@ -72,6 +79,7 @@ Window {
             return
         }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
+        if(command===inputManager.home){window.showDesignatedHome();return}
         if (kodiLibrary.open) { kodiLibrary.handleCommand(command); return }
         if (launchErrorOverlay.visible) {
             launchErrorOverlay.handleCommand(command)
@@ -223,7 +231,7 @@ Window {
                 availableApps: appRegistry.apps
                 artwork: artPacks.artwork
                 themes: artPacks.themes
-                appearance: homeLayout.appearance
+                appearance: homeLayout.homeAppearance
                 onPreviewAmbientRequested: window.ambientActive = true
                 onPageRequested:id=>{ sessionManager.goHome(); actionDispatcher.dispatch({type:"open-page",pageId:id},"") }
             }

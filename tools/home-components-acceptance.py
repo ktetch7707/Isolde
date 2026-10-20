@@ -148,21 +148,22 @@ def main():
                 key("Return")  # Existing missing source -> Home editor.
                 key("Right", 31); key("Return")  # Explicit provisional Studio entry.
                 assert layout.read_bytes() == original_bytes
-                key("Return"); key("Return"); key("Return")  # Add -> conversion preview -> accept into draft.
+                key("Down", 2); key("Return"); key("Return"); key("Return")  # Page menu Add -> conversion preview -> accept.
                 assert layout.read_bytes() == original_bytes
                 key("Return"); key("Return")  # Add -> Clock ghost.
                 key("Right"); key("Return")  # Free neighboring cell; one draft operation.
                 assert layout.read_bytes() == original_bytes
-                key("Up"); key("Right", 3); key("Return")  # Undo.
-                key("Right"); key("Return")  # Redo.
-                key("Right", 3); key("Return")  # Draft preview.
+                capture("edit")  # Actual full-size editing surface, without a Preview step.
+                key("Escape"); key("Down", 2); key("Return"); key("Return")  # Pages -> More -> Undo.
+                key("Return"); key("Down"); key("Return")  # More -> Redo.
+                key("Return"); key("Down", 4); key("Return")  # Optional Try interaction.
                 assert layout.read_bytes() == original_bytes
                 capture("studio")
                 key("Escape")
                 assert layout.read_bytes() == original_bytes
-                key("Right"); key("Return"); key("Return")  # Apply summary -> atomic Apply.
+                key("Down"); key("Return"); key("Return")  # Apply summary -> atomic Apply.
                 expect(lambda: len(json.loads(layout.read_text()).get("components", [])) == 2,
-                       "Studio remote Add/history/Preview/Apply passed")
+                       "Studio page menu/direct editing/history/Try interaction/Apply passed")
                 applied = layout.read_bytes()
                 assert Path(str(layout) + ".v1.backup.json").read_bytes() == original_bytes
                 assert all("placement" in item for item in json.loads(applied)["components"])

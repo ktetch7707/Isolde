@@ -14,9 +14,11 @@ Item {
     property string mode: "canvas"
     property bool toolbarFocus: true
     property int tool: 0
+    property int menuIndex:0
     property int choice: 0
     property string message: ""
     property string addingType: ""
+    property string resizeAxis:"both"
     property var candidate: ({x:0,y:0,width:1,height:1})
     property var origin: ({})
     property var proposal: ({})
@@ -52,6 +54,20 @@ Item {
     }
     readonly property real textScale: palette.typographyScale || 1
     readonly property real spacing: palette.spacing || 20
+    readonly property var pageEntries:draftModel?[{id:"",name:"Home"}].concat(draftModel.pages):[]
+    readonly property var menuEntries:[{label:"＋ Add page",action:"new"}].concat(pageEntries.map(p=>({label:p.name+(p.id===draftModel.homePageId?" · Home":""),action:"page",id:p.id}))).concat([
+        {label:"＋ Add component",action:"add"},{label:"Page appearance",action:"appearance"},{label:"More tools",action:"more"},{label:"Review & Apply",action:"apply"},{label:"Edit page →",action:"edit"}])
+    function activateMenu(index) {
+        menuIndex=index;const entry=menuEntries[index];if(!entry)return
+        choice=0
+        if(entry.action==="new")beginKeyboard("newPage","")
+        else if(entry.action==="page"){pageId=entry.id;selectedId="";mode="pageContext"}
+        else if(entry.action==="add")chooseTool(0)
+        else if(entry.action==="appearance")mode="pageAppearance"
+        else if(entry.action==="more")mode="more"
+        else if(entry.action==="apply")mode="apply"
+        else {toolbarFocus=false;mode="canvas";if(!current && scopedItems.length)selectedId=scopedItems[0].id}
+    }
     signal closed()
     visible: open
     z: 100
@@ -61,13 +77,13 @@ Item {
     function show(id, component) {
         session = layoutModel.beginStudio()
         pageId = id || ""; selectedId = component || ""
-        mode = "canvas"; toolbarFocus = true; tool = 0; message = "Draft only. Apply saves all changed pages."
+        mode = "canvas"; toolbarFocus = true; tool = 0;menuIndex=0; message = "Draft · Apply saves your interface"
         scopeOverview=false;scopeId=current?current.categoryId || "":page && page.sections.length?page.sections[0].id || "":""
         open = true
     }
     function close() { if(session) session.invalidate(); open=false; closed() }
     function command(op,args) {
-        if (!session || !session.execute(op,args || {},op==="newPage" || op==="renamePage" ? "" : pageId)) {
+        if (!session || !session.execute(op,args || {},["newPage","renamePage","removePage","setHomePage"].indexOf(op)>=0 ? "" : pageId)) {
             message = session ? session.errorString : "The edit session is closed."
             return false
         }
@@ -79,6 +95,7 @@ Item {
         if (!gridMode) { beginGrid(); return }
         if (!current) { message="Choose a component in Layers first."; return }
         addingType=""; origin=position(current); candidate=Object.assign({},origin)
+        resizeAxis="both"
         mode=resize ? "resize" : "move"; toolbarFocus=false
     }
     function beginGrid() {
@@ -132,7 +149,13 @@ Item {
         else if(index===8) {beginGesture(false);if(mode==="move"){mode="geometry";choice=0}}
     }
     function dialogLabels() {
-        if(mode==="context") return contextActions
+        if(mode==="pageContext")return ["Edit page","Appearance","Rename page","Set as Home",pageId===draftModel.homePageId?"Delete unavailable · this is Home":"Delete page"]
+        if(mode==="setHome")return ["Set as Home in draft","Cancel"]
+        if(mode==="deletePage")return ["Cancel","Delete page from draft"]
+        if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
+        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope"]
+        if(mode==="context") return ["Move","Width","Height","Edit component"]
+        if(mode==="properties")return contextActions.slice(2)
         if(mode==="layers") return items.map(i=>i.name || i.widgetType || i.id)
         if(mode==="pages") return ["Home"].concat(draftModel.pages.map(p=>p.name)).concat(["Create blank page"])
         if(mode==="add") return names
@@ -149,7 +172,27 @@ Item {
         return []
     }
     function activateChoice() {
-        if(mode==="context") {context(choice);return}
+        if(mode==="pageContext") {
+            if(choice===0){mode="canvas";toolbarFocus=false;if(scopedItems.length)selectedId=scopedItems[0].id}
+            else if(choice===1){mode="pageAppearance";choice=0}
+            else if(choice===2){if(pageId)beginKeyboard("renamePage",(pageEntries.find(p=>p.id===pageId)||{}).name);else message="The original page name is currently Home."}
+            else if(choice===3){mode="setHome";choice=0;message="Home navigation and Settings colors will follow this page after Apply."}
+            else if(pageId===draftModel.homePageId)message="Set another page as Home before deleting this page."
+            else if(!pageId)message="The original page cannot be deleted yet. Its components can be removed individually."
+            else {mode="deletePage";choice=0;message="Links to this page must be repaired before deletion."}
+            return
+        }
+        if(mode==="setHome"){if(choice===0)command("setHomePage",{id:pageId});mode="canvas";toolbarFocus=true;return}
+        if(mode==="deletePage"){if(choice===1 && command("removePage",{id:pageId})){pageId="";selectedId=""}mode="canvas";toolbarFocus=true;return}
+        if(mode==="pageAppearance"){const key=["backgroundStart","backgroundEnd","surfaceColor","textColor","focusColor"][choice];beginKeyboard("pageColor:"+key,String(page.appearance[key] || ""));return}
+        if(mode==="more"){const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return}
+        if(mode==="context") {
+            if(choice===0)beginGesture(false)
+            else if(choice===1 || choice===2){const axis=choice===1?"width":"height";beginGesture(true);resizeAxis=axis}
+            else {mode="properties";choice=0}
+            return
+        }
+        if(mode==="properties"){context(choice+2);return}
         if(mode==="scopes") {
             scopeOverview=choice===0
             if(choice>0){scopeId=page.sections[choice-1].id || "";const item=items.find(i=>(i.categoryId || "")===scopeId);selectedId=item?item.id:""}
@@ -189,6 +232,7 @@ Item {
         if(mode==="preview") {if(c===inputManager.back)mode="canvas";else preview.handleCommand(c);return}
         if(c===inputManager.back) {
             if(mode!=="canvas") {if(mode==="conversionPreview")session.cancelPreview();mode="canvas";addingType="";return}
+            if(!toolbarFocus){toolbarFocus=true;return}
             if(session.dirty){mode="dirty";choice=0}else close()
             return
         }
@@ -198,7 +242,10 @@ Item {
             const dx=c===inputManager.navigateRight?1:c===inputManager.navigateLeft?-1:0
             const dy=c===inputManager.navigateDown?1:c===inputManager.navigateUp?-1:0
             let p=Object.assign({},candidate)
-            if(mode==="move"){p.x+=dx;p.y+=dy}else{p.width+=dx;p.height+=dy}
+            if(mode==="move"){p.x+=dx;p.y+=dy}
+            else if(resizeAxis==="width")p.width+=dx
+            else if(resizeAxis==="height")p.height+=dx
+            else{p.width+=dx;p.height+=dy}
             if(p.x<0 || p.y<0 || p.width<1 || p.height<1 || p.x+p.width>grid.columns || p.y+p.height>grid.rows){message="Grid boundary: choose a position or size inside the grid.";return}
             candidate=p;preview.revealPlacement(p,scopeId);message="Row "+(p.y+1)+", column "+(p.x+1)+", "+p.width+" × "+p.height;return
         }
@@ -217,15 +264,15 @@ Item {
             else if(c===inputManager.confirm)activateChoice()
             return
         }
-        if(c===inputManager.menu){mode="context";choice=0;return}
+        if(c===inputManager.menu){if(current){mode="context";choice=0}else toolbarFocus=true;return}
         if(c===inputManager.search){chooseTool(0);return}
         if(toolbarFocus) {
-            if(c===inputManager.navigateLeft)tool=Math.max(0,tool-1)
-            else if(c===inputManager.navigateRight)tool=Math.min(tools.length-1,tool+1)
-            else if(c===inputManager.navigateDown){toolbarFocus=false;if(!current && items.length)selectedId=items[0].id}
-            else if(c===inputManager.confirm)chooseTool(tool)
+            if(c===inputManager.navigateUp)menuIndex=Math.max(0,menuIndex-1)
+            else if(c===inputManager.navigateDown)menuIndex=Math.min(menuEntries.length-1,menuIndex+1)
+            else if(c===inputManager.navigateRight){toolbarFocus=false;if(!current && scopedItems.length)selectedId=scopedItems[0].id}
+            else if(c===inputManager.confirm)activateMenu(menuIndex)
         } else {
-            if(c===inputManager.confirm){beginGesture(false);return}
+            if(c===inputManager.confirm){if(current){mode="context";choice=0}else chooseTool(0);return}
             const index=items.findIndex(i=>i.id===selectedId)
             if(gridMode && current && current.placement) {
                 const p=current.placement, cx=p.x+p.width/2, cy=p.y+p.height/2
@@ -252,17 +299,27 @@ Item {
         id:editorColumn
         z:1
         anchors.fill:parent;anchors.margins:studio.spacing;spacing:studio.spacing/2
-        Text {width:parent.width;elide:Text.ElideRight;text:"Page Studio  ·  "+(studio.pageId ? (studio.draftModel.pages.find(p=>p.id===studio.pageId)||{}).name:"Home")+"  ·  "+(session && session.dirty ? "Draft: "+session.changeCount+" changes":"Applied baseline");color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
-        Row {
-            spacing:studio.spacing/3
-            Repeater {
-                model:studio.tools
-                delegate:Rectangle {
-                    required property int index;required property string modelData
-                    width:Math.max(65, (studio.width-3*studio.spacing)/studio.tools.length-studio.spacing/3);height:44*studio.textScale;radius:studio.palette.tileRoundness*30
-                    color:studio.palette.selectedColor;border.width:studio.toolbarFocus && studio.tool===index?3:0;border.color:studio.palette.focusColor
-                    Text {anchors.centerIn:parent;text:modelData;color:studio.palette.textColor;font.pixelSize:17*studio.textScale}
-                    MouseArea {anchors.fill:parent;onClicked:{studio.toolbarFocus=true;studio.chooseTool(index)}}
+        Rectangle {
+            id:pageRail;objectName:"studioPageMenu"
+            width:Math.min(studio.width-studio.spacing*2,studio.layoutModel.studioOptions.menuWidth*studio.textScale)
+            height:editorColumn.height
+            visible:studio.toolbarFocus && studio.mode==="canvas"
+            color:studio.palette.surfaceColor;radius:studio.spacing/2
+            Column {
+                anchors.fill:parent;anchors.margins:studio.spacing;spacing:studio.spacing/2
+                Text {text:"Page Studio";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
+                Text {id:menuStatus;width:parent.width;text:session && session.errorString?"Edit refused: "+session.errorString:session && session.dirty?"Draft · "+session.changeCount+" changes":"Your interface";wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+                ListView {
+                    width:parent.width;height:Math.max(100,pageRail.height-150*studio.textScale-menuStatus.implicitHeight);clip:true
+                    model:studio.menuEntries;currentIndex:studio.menuIndex;highlightRangeMode:ListView.ApplyRange
+                    delegate:Rectangle {
+                        required property int index;required property var modelData
+                        width:ListView.view.width;height:48*studio.textScale;radius:studio.spacing/3
+                        color:studio.menuIndex===index?studio.palette.selectedColor:"transparent"
+                        border.width:studio.menuIndex===index?2:0;border.color:studio.palette.focusColor
+                        Text {anchors.fill:parent;anchors.margins:studio.spacing/2;verticalAlignment:Text.AlignVCenter;text:modelData.label;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+                        MouseArea {anchors.fill:parent;onClicked:studio.activateMenu(index)}
+                    }
                 }
             }
         }
@@ -279,10 +336,11 @@ Item {
                     items:studio.page?studio.page.items:[];sections:studio.page?studio.page.sections:[]
                     appearance:studio.page?studio.page.appearance:studio.palette;composition:studio.page?studio.page.composition:({})
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
-                    editMode:true;scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
+                    editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
                     brandVisible:studio.page?studio.page.brandVisible:false;tileRoundness:studio.page?studio.page.tileRoundness:0
                     backgroundStart:studio.page?studio.page.backgroundStart:studio.layoutModel.backgroundStart
                     backgroundEnd:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd
+                    wallpaperSource:studio.page?studio.page.wallpaperSource:""
                     internetAvailable:false;localNetworkAvailable:false;hasContextualSources:false
                     onActionActivated:(action,originId)=>studio.message="Preview only: would invoke "+action.type
                     onSettingsRequested:section=>studio.message="Return to editing to change settings."
@@ -291,7 +349,7 @@ Item {
                 Item {
                     anchors.fill:parent;visible:studio.mode!=="preview"
                     Repeater {
-                        model:studio.gridMode ? studio.grid.columns*studio.grid.rows : 0
+                        model:studio.gridMode && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry") ? studio.grid.columns*studio.grid.rows : 0
                         delegate:Rectangle {
                             required property int index
                             readonly property var rect:preview.placementRectFor({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns),width:1,height:1},studio.scopeId)
@@ -303,20 +361,22 @@ Item {
                         delegate:Rectangle {
                             required property var modelData
                             readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId || studio.scopeId)
-                            x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId?4:1;border.color:studio.palette.focusColor
+                            x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId && !studio.toolbarFocus?4:0;border.color:studio.palette.focusColor
                             MouseArea {
                                 objectName:"studioHit-"+modelData.id
                                 anchors.fill:parent
                                 property point start
-                                onPressed:mouse=>{studio.selectedId=modelData.id;studio.toolbarFocus=false;studio.beginGesture(false);start=Qt.point(mouse.x,mouse.y)}
+                                property bool dragging:false
+                                onPressed:mouse=>{studio.selectedId=modelData.id;studio.toolbarFocus=false;dragging=false;start=Qt.point(mouse.x,mouse.y)}
                                 onPositionChanged:mouse=>{
                                     if(!pressed)return
+                                    if(!dragging){if(Math.abs(mouse.x-start.x)+Math.abs(mouse.y-start.y)<Qt.styleHints.startDragDistance)return;studio.beginGesture(false);dragging=true}
                                     let p=Object.assign({},studio.origin)
                                     p.x+=Math.round((mouse.x-start.x)/(preview.gridMetricsFor(studio.scopeId).cellW+preview.gridMetricsFor(studio.scopeId).gap))
                                     p.y+=Math.round((mouse.y-start.y)/(preview.gridMetricsFor(studio.scopeId).cellH+preview.gridMetricsFor(studio.scopeId).gap))
                                     if(p.x>=0 && p.y>=0 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.grid.rows)studio.candidate=p
                                 }
-                                onReleased:studio.acceptCandidate()
+                                onReleased:{if(dragging)studio.acceptCandidate();else{studio.mode="context";studio.choice=0}}
                                 onCanceled:studio.mode="canvas"
                             }
                         }
@@ -325,7 +385,8 @@ Item {
                         visible:studio.mode==="move" || studio.mode==="resize" || studio.mode==="collision" || studio.mode==="geometry"
                         readonly property var rect:preview.placementRectFor(studio.candidate,studio.scopeId)
                         x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:studio.palette.selectedColor;opacity:0.8;border.width:4;border.color:studio.palette.focusColor
-                        Text {anchors.centerIn:parent;text:studio.mode.toUpperCase()+"\n"+(studio.addingType || studio.selectedId);color:studio.palette.textColor;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter;font.pixelSize:20*studio.textScale}
+                        HomeCard {anchors.fill:parent;item:studio.current || {kind:"widget",widgetType:studio.addingType,name:studio.addingType};appearance:studio.page?studio.page.appearance:studio.palette;selected:true}
+                        Text {anchors.bottom:parent.top;text:(studio.mode==="resize"?"Sizing "+studio.resizeAxis:"Moving")+" · "+(studio.current?studio.current.name || studio.current.widgetType:studio.addingType);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale}
                     }
                     Repeater {
                         model:studio.collisionPreview.valid ? studio.collisionPreview.placements : []
@@ -338,18 +399,21 @@ Item {
                     }
                 }
             }
-            Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode!=="preview";text:"Empty page · Add a widget from the toolbar";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
+            Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode!=="preview";text:"Empty page · Confirm to add a component";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
         }
-        Text {width:parent.width;text:studio.message+"  ·  OK pick up · Menu edit · Back cancel/exit";color:studio.palette.textColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
+        Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview";text:studio.mode==="move"?"Moving · Arrows position · Confirm place · Back cancel":studio.mode==="resize"?"Sizing "+studio.resizeAxis+" · Left/Right adjust · Confirm accept · Back cancel":"Edit mode · Confirm select · Menu actions · Back pages";color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
     }
     Rectangle {
         visible:studio.mode!=="canvas" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="preview"
         z:3
-        anchors.centerIn:parent;width:Math.min(parent.width-2*studio.spacing,680);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
+        width:Math.min(parent.width-2*studio.spacing,560*studio.textScale);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
+        readonly property var selectionRect:studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId):null
+        x:selectionRect && (studio.mode==="context" || studio.mode==="properties")?(selectionRect.x+selectionRect.width+width+2*studio.spacing<=studio.width?selectionRect.x+selectionRect.width+studio.spacing:Math.max(studio.spacing,selectionRect.x-width-studio.spacing)):(parent.width-width)/2
+        y:selectionRect && (studio.mode==="context" || studio.mode==="properties")?Math.max(studio.spacing,Math.min(parent.height-height-studio.spacing,selectionRect.y)):(parent.height-height)/2
         color:studio.palette.surfaceColor;border.width:3;border.color:studio.palette.focusColor;radius:studio.spacing
         Column {
             id:dialogColumn;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:studio.spacing;spacing:studio.spacing/2
-            Text {text:studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale}
+            Text {width:parent.width;text:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="more"?"More tools":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
             Text {width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.selectedId+"? This stays undoable until Apply." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
             ListView {
                 width:parent.width;height:Math.min(360*studio.textScale,Math.max(50,studio.height-220*studio.textScale))
@@ -368,6 +432,15 @@ Item {
         id:keyboard;objectName:"studioKeyboard";visible:studio.mode==="keyboard";anchors.fill:parent;z:10;appearance:studio.palette;hint:studio.message
         onCanceled:studio.mode=studio.keyboardReturnMode
         onAccepted:text=>{
+            if(studio.keyboardAction==="renamePage") {
+                if(studio.command("renamePage",{id:studio.pageId,name:text}))studio.mode="pageContext"
+                return
+            }
+            if(studio.keyboardAction.indexOf("pageColor:")===0) {
+                const key=studio.keyboardAction.slice(10),value=Object.assign({},studio.page.appearance,{[key]:text})
+                if(studio.command("appearance",{value:value}))studio.mode="pageAppearance"
+                return
+            }
             if(studio.keyboardAction.indexOf("grid:")===0) {
                 const key=studio.keyboardAction.slice(5),field=studio.gridField(studio.choice),number=Number(text)
                 if(!text.trim() || !Number.isFinite(number) || (field.integer && !Number.isInteger(number)) || number<field.min || number>field.max){studio.message="Enter a value between "+field.min+" and "+field.max+".";return}
@@ -387,7 +460,11 @@ Item {
                 studio.candidate=p;studio.mode="geometry";return
             }
             if(studio.keyboardAction==="rename")studio.command("rename",{id:studio.selectedId,name:text})
-            else if(studio.keyboardAction==="newPage")studio.command("newPage",{name:text})
+            else if(studio.keyboardAction==="newPage"){
+                if(!studio.command("newPage",{name:text}))return
+                studio.pageId=studio.draftModel.pages[studio.draftModel.pages.length-1].id
+                studio.selectedId="";studio.toolbarFocus=false
+            }
             else {
                 let p=Object.assign({},studio.current?studio.current.presentation || {}:{})
                 if(studio.keyboardAction==="text"){p.variant="text";p.subtitle=text}

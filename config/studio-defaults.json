@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "menuWidth": 280,
   "defaultGrid": {
     "columns": 8,
     "rows": 5,

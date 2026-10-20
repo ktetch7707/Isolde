@@ -88,7 +88,7 @@ QString HomeLayout::saveSkin(const QString &name) {
     setError({}); emit skinsChanged(); return id;
 }
 bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &assets) {
-    if (!m_owner && !document.contains("pages")) document.insert("pages",m_pages);
+    if (!m_owner && !document.contains("pages")) {document.insert("pages",m_pages);document.insert("homePageId",m_homePageId);}
     const auto previous = documentData();
     const auto legacy = m_legacyDocument;
     // Validate the entire document before importing artwork or replacing the current layout.

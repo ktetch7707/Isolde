@@ -34,6 +34,7 @@ bool StudioSession::previewCommand(const QString &operation, const QVariantMap &
     m_proposed = transaction.draft();
     m_proposalBaseline = m_draft;
     if (!m_proposalModel) { m_proposalModel = new HomeLayout(m_live->registry(),this); m_proposalModel->m_draftOnly = true; }
+    m_proposalModel->m_userPath=m_live->m_userPath;
     m_proposalModel->loadDocument(m_proposed,false);
     emit m_proposalModel->layoutChanged(); emit changed();
     return true;
@@ -67,6 +68,8 @@ bool StudioSession::bind(HomeLayout *layout)
     m_diskBaseline = m_diskReadable && m_diskExisted ? disk.readAll() : QByteArray();
     m_model = new HomeLayout(layout->registry(), this);
     m_model->m_draftOnly = true;
+    m_model->m_userPath=layout->m_userPath;
+    m_model->m_defaultPath=layout->m_defaultPath;
     m_model->m_collections = layout->m_collections;
     m_model->m_captureInputsReady = layout->m_captureInputsReady;
     m_active = open(layout->committedDocument());
@@ -90,6 +93,10 @@ void StudioSession::invalidate()
         m_model->m_categories = {};
         m_model->m_pages = {};
         m_model->m_collections = {};
+        m_model->m_composition.clear();
+        m_model->m_homePageId.clear();
+        m_model->m_userPath.clear();
+        m_model->m_defaultPath.clear();
         m_model->syncPages();
         emit m_model->layoutChanged();
     }
@@ -127,6 +134,13 @@ bool StudioSession::apply(const QString &focusId)
 bool StudioSession::execute(const QString &operation, const QVariantMap &a, const QString &pageId)
 {
     if (!m_active || !m_live) { setError(QStringLiteral("Reopen Page Studio before editing.")); return false; }
+    if(operation=="setHomePage") {
+        auto document=QJsonDocument::fromJson(m_draft).object();
+        const auto id=a.value("id").toString();bool found=id.isEmpty();
+        for(const auto &entry:document["pages"].toArray())if(entry.toObject()["id"]==id)found=true;
+        if(!found){setError(QStringLiteral("Choose an existing page as Home."));return false;}
+        document["homePageId"]=id;return pushEdit(QJsonDocument(document).toJson());
+    }
     if(operation=="addResolved" || operation=="addPlaced") {
         const auto proposal=additionProposal(a.value("type").toString(),a.value("placement").toMap(),
             a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString());
@@ -255,6 +269,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     else if (operation == "addButton") ok = worker.addButton();
     else if (operation == "newPage" && pageId.isEmpty()) ok = !worker.createPage(a.value("name").toString(), a.value("preset", "blank").toString()).isEmpty();
     else if (operation == "renamePage" && pageId.isEmpty()) ok = worker.renamePage(id, a.value("name").toString());
+    else if (operation == "removePage" && pageId.isEmpty()) ok = worker.removePage(id);
     else { setError(QStringLiteral("Unknown or unavailable edit command.")); return false; }
     if (!ok) { setError(worker.errorString().isEmpty() ? QStringLiteral("The edit was refused; nothing changed.") : worker.errorString()); return false; }
     auto result = QJsonDocument::fromJson(worker.documentData()).object();
@@ -262,6 +277,11 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         auto entries = result["pages"].toArray();
         auto entry = entries.last().toObject();
         entry["id"] = allocateId("page");
+        if(a.value("preset","blank")=="blank") {
+            auto layout=entry["layout"].toObject();auto composition=layout["composition"].toObject();
+            composition["grid"]=QJsonObject::fromVariantMap(m_live->studioOptions().value("defaultGrid").toMap());
+            layout["composition"]=composition;entry["layout"]=layout;
+        }
         entries[entries.size() - 1] = entry;
         result["pages"] = entries;
     } else if (operation == "addButton" || operation == "addWidget" || operation == "addPlaced" || operation == "duplicate") {
@@ -276,6 +296,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     }
     if (pageIndex >= 0) {
         result.remove("pages"); // A page document cannot recursively contain the interface page collection.
+        result.remove("homePageId");
         auto entry = pages[pageIndex].toObject(); entry["layout"] = result; pages[pageIndex] = entry; root["pages"] = pages;
     } else root = result;
     return pushEdit(QJsonDocument(root).toJson());
@@ -586,7 +607,7 @@ QVariantMap StudioSession::additionProposal(const QString &type, const QVariantM
     }
     // Obtain registered defaults from HomeLayout, then validate the complete
     // addition/collision result together. No invalid intermediate is published.
-    temporary.m_composition.clear();temporary.m_items={};temporary.m_categories={};temporary.m_pages={};
+    temporary.m_composition.clear();temporary.m_items={};temporary.m_categories={};temporary.m_pages={};temporary.m_homePageId.clear();
     if(!temporary.addWidget(type))return {{"valid",false},{"reason",QStringLiteral("Choose a supported widget.")}};
     QString componentError;
     auto item=QJsonObject::fromVariantMap(ComponentSchema::component(temporary.m_items.last().toObject().toVariantMap(),true,&componentError));
