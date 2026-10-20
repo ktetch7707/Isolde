@@ -151,6 +151,7 @@ Window {
                 anchors.fill: parent
                 visible: !sessionManager.active && !pageSurface.open
                 items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
+                authoredItems: homeLayout.components
                 sections: sourceManager.sections.concat(homeLayout.sections).concat(kodiShelves.sections)
                 brandVisible: homeLayout.brandVisible
                 backgroundStart: homeLayout.backgroundStart

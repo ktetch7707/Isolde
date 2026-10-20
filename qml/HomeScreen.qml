@@ -4,6 +4,8 @@ import QtQuick.Layouts
 Item {
     id: root
     required property var items
+    // Profile-authored components are distinct from transient provider notices.
+    property var authoredItems: items
     required property var sections
     required property bool brandVisible
     required property color backgroundStart

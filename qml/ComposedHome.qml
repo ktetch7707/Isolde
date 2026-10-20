@@ -36,7 +36,13 @@ Item {
     property var widgets: ({})
     readonly property var grid: host.grid || ({})
     readonly property var placements: host.placements || []
-    readonly property bool placementMode: !!root.config.grid
+    readonly property bool placementMode: {
+        if(!root.config.grid)return false
+        const authored=host.authoredItems || host.items || []
+        if(!authored.length)return false
+        for(const item of authored)if(!item.placement)return false
+        return true
+    }
     readonly property var placementCell: {
         const g = root.grid || {}
         const columns = g.columns || 8
@@ -62,7 +68,7 @@ Item {
     }
     readonly property var placedItems: {
         const map = {}
-        const items = host.items || []
+        const items = host.authoredItems || host.items || []
         const placements = root.placements || []
         for (const p of placements) map[p.id] = p.placement
         const result = []

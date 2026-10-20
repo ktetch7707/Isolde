@@ -33,6 +33,7 @@ private slots:
     void retainsExactOriginAndRecoversWithoutHomeButton();
     void studioRemoteDraftApplyAndCancel();
     void studioRemotePointerAndInspectorParity();
+    void studioPreservesLegacyGridMetadataWithoutConversion();
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
@@ -854,6 +855,53 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity()
     QCOMPARE(root->property("mode").toString(),QString("canvas"));
     QCOMPARE(session()->draft(),remote);
     QCOMPARE(home.committedDocument(),baseline);
+}
+void HomeNavigationTests::studioPreservesLegacyGridMetadataWithoutConversion()
+{
+    QTemporaryDir dir; AppRegistry registry; HomeLayout home(&registry); InputManager input;
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");
+    QVERIFY(home.load(defaults,user));
+    const auto baseline=QJsonDocument::fromJson(home.committedDocument()).object();
+    QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));
+    QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    for(int placedCount : {0,1}) {
+        auto document=baseline;
+        document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",8},{"rows",5}}}};
+        if(placedCount) {
+            auto entries=document["components"].toArray();auto first=entries[0].toObject();
+            first["placement"]=QJsonObject{{"x",0},{"y",0},{"width",1},{"height",1}};entries[0]=first;document["components"]=entries;
+        }
+        const auto original=QJsonDocument(document).toJson();
+        QFile file(user);QVERIFY(file.open(QIODevice::WriteOnly));QCOMPARE(file.write(original),original.size());file.close();
+        QVERIFY(home.load(defaults,user));
+        std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));
+        QVERIFY2(root,qPrintable(component.errorString()));
+        QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
+        QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString("clock"))));QTest::qWait(40);
+        QVERIFY(!root->property("gridMode").toBool());
+        auto *preview=root->findChild<QQuickItem *>("studioPreview");QVERIFY(preview);
+        auto *composed=preview->findChild<QObject *>("composedHome");QVERIFY(composed);
+        QVERIFY(!composed->property("placementMode").toBool());
+        QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,InputManager::Back)));
+        QVERIFY(!root->property("open").toBool());
+        QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),original);file.close();
+    }
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY(session->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5}}}}));QVERIFY(session->apply());
+    auto combined=home.items();combined.append(QVariantMap{{"id","transient-notice"},{"name","Notice"}});
+    QQmlComponent runtime(&engine,QUrl::fromLocalFile(QStringLiteral(HOME_QML)));
+    std::unique_ptr<QObject> root(runtime.createWithInitialProperties({{"items",combined},{"authoredItems",home.items()},{"sections",home.sections()},
+        {"composition",home.composition()},{"grid",home.grid()},{"placements",home.placements()},{"appearance",home.appearance()},
+        {"brandVisible",false},{"backgroundStart",QColor(home.backgroundStart())},{"backgroundEnd",QColor(home.backgroundEnd())},{"tileRoundness",0.18},
+        {"internetAvailable",false},{"localNetworkAvailable",false},{"hasContextualSources",true},{"width",1280},{"height",720}}));
+    QVERIFY2(root,qPrintable(runtime.errorString()));
+    auto *composed=root->findChild<QObject *>("composedHome");QVERIFY(composed);
+    QVERIFY(composed->property("placementMode").toBool());
+    const auto value=composed->property("placedItems");
+    const auto rendered=value.metaType().id()==qMetaTypeId<QJSValue>()?value.value<QJSValue>().toVariant().toList():value.toList();
+    QCOMPARE(rendered.size(),home.items().size());
 }
 QTEST_MAIN(HomeNavigationTests)
 #include "tst_home_navigation.moc"

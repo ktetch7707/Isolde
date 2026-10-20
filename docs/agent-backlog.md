@@ -28,7 +28,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 |------|----------|-------|---|--------|
 | T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
 | T16 | 2 | Shared draft transactions, history and profile safety | 100% | task verification complete; T17 next |
-| T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 0% | planned |
+| T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 0% | in progress; legacy flow checkpoint verified |
 | T18 | 4 | Unified Page Studio workspace and selection | 0% | planned |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 0% | planned |
 | T20 | 6 | Desktop parity, layers and nested/group editing | 0% | planned |

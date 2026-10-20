@@ -25,7 +25,11 @@ Item {
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
     readonly property var grid: page ? page.grid : ({})
-    readonly property bool gridMode: !!page && !!page.composition.grid
+    readonly property bool gridMode: {
+        if(!page || !page.composition.grid)return false
+        for(const item of items)if(!item.placement)return false
+        return true
+    }
     readonly property var tools: ["Add", "Pages", "Layers", "Undo", "Redo", "Grid", "Fit", "Preview", "Apply"]
     readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size"]
     readonly property var names: ["Clock", "Text"]
