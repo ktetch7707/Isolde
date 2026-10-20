@@ -12,8 +12,9 @@ Checks (design state-transition/feature-coverage review for backlog T15):
         editing, focus restoration, error feedback and accessible movement
         alternatives; remote-only constraint stated (no pointer/number keys/
         hidden gestures).
-  T15.4 review records an uncoached walkthrough with resolved findings and
-        measurable acceptance journeys.
+  T15.4 review records a designer-executed artifact walkthrough (no user
+        present) with resolved findings and measurable acceptance journeys;
+        user review explicitly deferred to T24 (no invented review evidence).
   Link check: every relative Markdown link in the pack resolves.
 Exit 0 = all checks pass. Prints PASS/FAIL per check.
 """
@@ -50,7 +51,7 @@ chv = (ROOT / "qml" / "CustomizeHomeView.qml").read_text(encoding="utf-8")
 actions_block = chv.split("readonly property var actions: [", 1)[1].split("]", 1)[0]
 labels = set(re.findall(r'"([^"]+)"', actions_block))
 missing = sorted(l for l in labels if l not in fmap)
-check("T15.1 all 31 Customize Home action labels mapped", not missing, f"missing: {missing}")
+check(f"T15.1 all {len(labels)} Customize Home action labels mapped", not missing, f"missing: {missing}")
 
 pm = (ROOT / "qml" / "PageManager.qml").read_text(encoding="utf-8")
 ops_block = pm.split("operations:[", 1)[1].split("]", 1)[0]
@@ -92,8 +93,12 @@ check("T15.3 accessible movement alternatives",
 check("T15.3 remote-only constraint stated",
       "No long press" in states and "number keys" in states and "hidden" in states)
 
-# T15.4 — review + journeys.
-check("T15.4 uncoached walkthrough recorded", "Uncoached walkthrough record" in review)
+# T15.4 — designer walkthrough + journeys (user review deferred to T24).
+check("T15.4 designer walkthrough recorded (no user present)", "Designer walkthrough record" in review)
+check("T15.4 explicitly states no user review yet",
+      "No user or representative review has taken place" in review)
+check("T15.4 T15.4 open/deferred-to-T24 stated",
+      "T15.4 user review is OPEN" in review or "deferred to T24" in review)
 check("T15.4 findings resolved", re.search(r"\| W\d+ \|.*\| (High|Medium|Low) \|", review) is not None)
 check("T15.4 measurable acceptance journeys", all(f"| A{i} |" in review for i in range(1, 11)))
 check("T15.4 no-build claim present", "No application build is claimed" in review)

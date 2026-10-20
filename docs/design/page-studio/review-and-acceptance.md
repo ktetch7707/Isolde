@@ -1,14 +1,22 @@
 # Page Studio review and acceptance journeys (T15.4)
 
-Status: recorded design review, 2026-10-19. Records (a) the uncoached walkthrough of the
-[wireframes](wireframes.md) and [state model](interaction-states.md), (b) the confusing
-transitions it exposed and how they were resolved, and (c) the measurable acceptance journeys that
-gate implementation (T24 cutover). No application build is claimed by these static mockups;
+Status: provisional designer review, 2026-10-19 — T15.4 user review is OPEN (no genuine user
+usability acceptance has occurred; deferred to T24 per the sequencing exception below).
+Records (a) a designer-executed walkthrough of the static [wireframes](wireframes.md) and
+[state model](interaction-states.md) following the uncoached script (no user present), (b) the
+confusing transitions it exposed and how they were resolved in the artifacts, and (c) the
+measurable acceptance journeys that gate implementation (T24 cutover).
+No application build is claimed by these static mockups;
 installed acceptance remains T24's own gate.
 
-## 1. Uncoached walkthrough record
+Sequencing exception (user, 2026-10-19): the user authorized proceeding with this pack as the
+provisional design basis for T16–T24; genuine user usability acceptance is deferred to T24,
+where journey A1 and the repeated walkthrough require uncoached completion by the actual user.
 
-Walkthrough script (performed against the artifacts, remote keys only, no pointer): open Studio on
+## 1. Designer walkthrough record (uncoached script, no user present)
+
+Walkthrough script (designer-executed against the static artifacts only — no user present, no
+build; remote keys only, no pointer): open Studio on
 an existing Home; inspect a component; add a widget to a blank page; move it across occupied cells;
 resize it; trigger a collision; preview; attempt to leave with a dirty draft; apply; recover from an
 induced apply error; enter a nested container and return. Findings:
@@ -24,15 +32,15 @@ induced apply error; enter a nested container and return. Findings:
 | W7 | Add-tile "Open with" empty state is informative but buried under a numbered action grid | Low | Add catalog tiles carry availability state directly (wireframes §4); honest unavailable states remain |
 | W8 | Search-as-catalog-search could be confused with global Search | Medium | interaction-states binds canvas Search to the Add catalog filter only; global Search stays the shell destination; T26 keeps the two distinct |
 
-All eight findings are resolved in the artifacts; none requires a spec change. The walkthrough
-confirmed the done-when gate: every operation completes with D-pad + Confirm + Back + Menu/Search;
-no step needs a pointer, number keys or a hidden gesture; movement is one cell per press with
-visible origin/ghost/candidate at all times.
+All eight findings are resolved in the artifacts; none requires a spec change. This static
+walkthrough does not confirm the done-when gate — whether every operation completes with D-pad +
+Confirm + Back + Menu/Search on the installed build is verified per slice in T16–T24 and gated at
+T24 (journeys A1–A10).
 
-## 2. User review
+## 2. User review — OUTSTANDING (deferred to T24)
 
-The recorded user/representative review of this workflow is referenced in the backlog T15 evidence
-line at commit time. Standing rule from spec §10: the workspace is not accepted merely because its
+No user or representative review has taken place; no review evidence is claimed here.
+Standing rule from spec §10: the workspace is not accepted merely because its
 author can operate it — T24 repeats this walkthrough with the actual user on the installed build,
 uncoached, and a failed walkthrough requires iteration before cutover.
 

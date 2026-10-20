@@ -15,18 +15,18 @@ Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-u
 
 ## Execution priority — Page Studio first (user, 2026-10-19)
 
-Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T15 is next.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
+Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T16 is in progress; T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
 
 Next complete the related shell improvements: **T27 → T25 → T26 → T28** (shared theme, contained source notices, All Apps gallery, genuine Web switch). These extend the accepted Studio and no longer block its templates, Preview/Apply or core cutover. Then follow the remaining ranked rows for evidence repair, media preservation, input/system polish, playback, hardware/guide, appliance distribution and optional online work.
 
-The table AND task sections are physically in execution order. Task IDs remain stable for commit/evidence references; their numeric values are not priority. Struck/superseded rows are archived at the end. T17 supplies T05's remaining geometry evidence; when reviewing that later ledger task, reuse valid current-source evidence rather than repeating implementation. A blocker must be reported/resolved, not used to silently switch to a lower-priority feature. This request changes planning only; no application implementation or VM change is authorized in this turn.
+The table AND task sections are physically in execution order. Task IDs remain stable for commit/evidence references; their numeric values are not priority. Struck/superseded rows are archived at the end. T17 supplies T05's remaining geometry evidence; when reviewing that later ledger task, reuse valid current-source evidence rather than repeating implementation. A blocker must be reported/resolved, not used to silently switch to a lower-priority feature. The planning-only restriction applied to the priority-edit request. The subsequent user request explicitly authorizes application implementation and VM deployment using the design provisionally.
 
 The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This additive revision adds four zero-percent tasks, giving 24 active tasks and **11% overall** (275/24 rounded). Existing implementation credit is unchanged. Planning/specification work is not delivery of the new system.
 
 ## Overall (update every edit)
 | Task | Priority | Title | % | Status |
 |------|----------|-------|---|--------|
-| T15 | 1 | Page Studio interaction design and usability validation | 100% | complete |
+| T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
 | T16 | 2 | Shared draft transactions, history and profile safety | 0% | planned |
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 0% | planned |
 | T18 | 4 | Unified Page Studio workspace and selection | 0% | planned |
@@ -54,7 +54,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **16%** | T15 complete |
+| **Overall** | — | **average of 24 active tasks** | **15%** | T15 provisional (75%); T16 in progress |
 
 ## Highest priority: core Page Studio
 
@@ -65,9 +65,9 @@ Scope:
 - [x] T15.1 Inventory every currently supported editor operation plus source notices, All Apps, themed shell surfaces and the Search header switch; map each to Studio and identify capability gaps without treating UI labels as backend proof.
 - [x] T15.2 Produce reviewed TV and desktop wireframes for blank/existing pages, Add, selection, inspector, pick-up/drop, resize, collision, dirty exit, preview, apply error and nested scope.
 - [x] T15.3 Walk through the complete D-pad/Confirm/Back/Menu state model, including field editing, focus restoration, error feedback and accessible movement alternatives.
-- [x] T15.4 Record a user/representative review of the new workflow; resolve confusing transitions and establish the measurable acceptance journeys before implementing the shell.
-Done when: interaction specification, screen/state set and old-to-new feature map agree; remote movement is understandable without a pointer, number keys or hidden gesture.
-Verify: design state-transition/feature-coverage review and recorded uncoached walkthrough; no application build is claimed by static mockups. Evidence: design pack under `docs/design/page-studio/` — `feature-map.md` (T15.1; every Customize Home action + PageManager operation + the four shell surfaces mapped with backend-path citations, labels not treated as proof), `wireframes.md` (T15.2; 12 TV+desktop screen states), `interaction-states.md` (T15.3; full D-pad/Confirm/Back/Menu table, focus restoration, error feedback, accessible movement alternatives), `review-and-acceptance.md` (T15.4; uncoached walkthrough with 8 resolved findings + 10 measurable acceptance journeys); static coverage gate `tools/verify-t15-design.py` 56/56 PASS, log in `docs/design/page-studio/verify-t15.log`. Uncoached installed walkthrough with the actual user remains T24's cutover gate per spec §10.
+- [ ] T15.4 OPEN — genuine user/representative review; resolve confusing transitions and establish measurable acceptance journeys. Designer-only artifact walkthrough done (W1-W8 resolved in artifacts). Sequencing exception (user, 2026-10-19): proceed with this pack as provisional basis for T16-T24; genuine user usability acceptance deferred to T24. No review evidence invented.
+Done when: T15.1-T15.3 artifacts agree with the specifications; T15.4 user walkthrough deferred to T24 per sequencing exception; remote movement is understandable without a pointer, number keys or hidden gesture.
+Verify: design state-transition/feature-coverage review and recorded uncoached walkthrough; no application build is claimed by static mockups. Evidence: design pack under `docs/design/page-studio/` — `feature-map.md` (T15.1; every Customize Home action + PageManager operation + the four shell surfaces mapped with backend-path citations, labels not treated as proof), `wireframes.md` (T15.2; 12 TV+desktop screen states), `interaction-states.md` (T15.3; full D-pad/Confirm/Back/Menu table, focus restoration, error feedback, accessible movement alternatives), `review-and-acceptance.md` (T15.4 remains OPEN; designer-only walkthrough with 8 findings + 10 proposed acceptance journeys); static coverage gate `tools/verify-t15-design.py` 56/56 PASS, log in `docs/design/page-studio/verify-t15.log`. Uncoached installed walkthrough with the actual user remains T24's cutover gate per spec §10.
 
 ## T16 — Shared draft transactions, history and profile safety (L, depends: T15)
 Entry docs: `docs/page-studio-redesign.md` sections 3, 5, 7; `docs/components.md` persistence contracts.

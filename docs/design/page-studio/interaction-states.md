@@ -1,6 +1,7 @@
 # Page Studio interaction states — remote state model (T15.3)
 
-Status: reviewed state model, 2026-10-19, extending
+Status: provisional state model (designer self-review only; user acceptance deferred to T24),
+2026-10-19, extending
 [page-studio-redesign.md](../../page-studio-redesign.md) §4 into a complete walk-through. Remote
 keys are the InputManager commands: `navigateUp/Down/Left/Right` (D-pad), `confirm` (OK/Enter),
 `back` (Back/Escape), `menu` and `search` (Menu and Search; on remotes without dedicated keys these

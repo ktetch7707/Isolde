@@ -3,8 +3,8 @@ PASS artifact exists: feature-map.md
 PASS artifact exists: wireframes.md
 PASS artifact exists: interaction-states.md
 PASS artifact exists: review-and-acceptance.md
-PASS T15.1 all 31 Customize Home action labels mapped ù missing: []
-PASS T15.1 all PageManager operations mapped ù missing: []
+PASS T15.1 all 34 Customize Home action labels mapped — missing: []
+PASS T15.1 all PageManager operations mapped — missing: []
 PASS T15.1 shell surface mapped: source notices
 PASS T15.1 shell surface mapped: All Apps
 PASS T15.1 shell surface mapped: themed surfaces
@@ -48,7 +48,9 @@ PASS T15.3 focus restoration rules
 PASS T15.3 error feedback
 PASS T15.3 accessible movement alternatives
 PASS T15.3 remote-only constraint stated
-PASS T15.4 uncoached walkthrough recorded
+PASS T15.4 designer walkthrough recorded (no user present)
+PASS T15.4 explicitly states no user review yet
+PASS T15.4 T15.4 open/deferred-to-T24 stated
 PASS T15.4 findings resolved
 PASS T15.4 measurable acceptance journeys
 PASS T15.4 no-build claim present

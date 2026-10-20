@@ -1,6 +1,7 @@
 # Page Studio wireframes — TV and desktop (T15.2)
 
-Status: reviewed wireframe set, 2026-10-19, satisfying the screens listed in backlog T15.2 and
+Status: provisional wireframe set (designer self-review only; user acceptance deferred to T24),
+2026-10-19, covering the screens listed in backlog T15.2 and
 consistent with [page-studio-redesign.md](../../page-studio-redesign.md) §2-§4. ASCII labels
 illustrate configurable content; no packaged app, entitlement or media claim is implied. Every
 state below exists twice: a TV/remote form (one drawer or sheet at a time, canvas always visible)
