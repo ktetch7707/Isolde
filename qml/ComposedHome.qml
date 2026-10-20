@@ -36,32 +36,67 @@ Item {
     property var widgets: ({})
     readonly property var grid: host.grid || ({})
     readonly property var placements: host.placements || []
+    readonly property bool sectionMode: !!root.config.grid && root.grid.mode==="sections"
+    property var sectionSurfaces: ({})
     readonly property bool placementMode: {
         if(!root.config.grid)return false
+        if(root.sectionMode)return true
         const authored=host.authoredItems || host.items || []
-        if(!authored.length)return false
+        if(!authored.length)return root.config.grid.mode==="screen"
         for(const item of authored)if(!item.placement)return false
+        if(root.config.grid.mode===undefined)for(const section of host.authoredSections || host.sections || []) {
+            const style=section.presentation || {}
+            if(style.variant==="library" || style.trailingAction)return false
+        }
         return true
     }
-    readonly property var placementCell: {
-        const g = root.grid || {}
+    function measureGrid(w,h,g) {
         const columns = g.columns || 8
         const rows = g.rows || 5
         const gap = (g.gap === undefined ? 20 : g.gap) * root.unit
         const margin = (g.margin === undefined ? 40 : g.margin) * root.unit
-        const cellW = Math.max(1, (content.width - 2*margin - (columns-1)*gap) / columns)
-        const cellH = Math.max(1, (content.height - 2*margin - (rows-1)*gap) / rows)
-        return { columns: columns, rows: rows, gap: gap, margin: margin, cellW: cellW, cellH: cellH }
+        const valid=w>2*margin+(columns-1)*gap && h>2*margin+(rows-1)*gap
+        const cellW = valid ? (w - 2*margin - (columns-1)*gap) / columns : 0
+        const cellH = valid ? (h - 2*margin - (rows-1)*gap) / rows : 0
+        return { columns: columns, rows: rows, gap: gap, margin: margin, cellW: cellW, cellH: cellH,valid:valid }
     }
-    function placementRect(p) {
-        const c = placementCell
-        const origin = placementGrid.mapToItem(host, c.margin, c.margin)
+    readonly property var placementCell:measureGrid(content.width,content.height,root.grid || {})
+    readonly property string layoutError: {
+        if(!placementMode)return ""
+        if(!sectionMode)return placementCell.valid?"":"Grid spacing or margins leave no room for cells. Edit Grid to repair."
+        for(const key of Object.keys(sectionSurfaces)) {
+            const surface=sectionSurfaces[key]
+            if(surface && surface.editableGrid && !surface.metrics.valid)return "Grid spacing or margins leave no room in "+surface.sectionName+". Edit Grid to repair."
+        }
+        return ""
+    }
+    function gridMetricsFor(scope) { const surface=sectionMode?sectionSurfaces[scope || ""]:null;return surface?surface.metrics:placementCell }
+    function placementRect(p,scope) {
+        const surface=sectionMode?sectionSurfaces[scope || ""]:placementGrid
+        const c = gridMetricsFor(scope)
+        const origin = (surface || placementGrid).mapToItem(host, c.margin, c.margin)
         return {x: origin.x + p.x*(c.cellW+c.gap), y: origin.y + p.y*(c.cellH+c.gap),
             width: p.width*c.cellW + (p.width-1)*c.gap,
             height: p.height*c.cellH + (p.height-1)*c.gap}
     }
+    function revealScope(scope) {
+        const surface=sectionSurfaces[scope || ""];if(!sectionMode || !surface)return
+        const point=surface.mapToItem(content.contentItem,0,0)
+        content.contentY=Math.max(0,Math.min(content.contentHeight-content.height,point.y))
+    }
+    function revealPlacement(p,scope) {
+        const surface=sectionSurfaces[scope || ""];if(!sectionMode || !surface)return
+        const c=surface.metrics,point=surface.mapToItem(content.contentItem,c.margin+p.x*(c.cellW+c.gap),c.margin+p.y*(c.cellH+c.gap))
+        const height=p.height*c.cellH+(p.height-1)*c.gap
+        if(point.y<content.contentY)content.contentY=Math.max(0,point.y-c.gap)
+        else if(point.y+height>content.contentY+content.height)content.contentY=Math.min(Math.max(0,content.contentHeight-content.height),point.y+height-content.height+c.gap)
+    }
+    function activatePlaced(item) {
+        sectionActionId="";host.focusedIndex=host.itemIndex(item.id);navigationFocused=false;host.recoveryFocused=false
+        handleCommand(inputManager.confirm)
+    }
     function revealCard(card) {
-        if (!card || root.placementMode) return
+        if (!card || host.editMode || root.placementMode && !root.sectionMode) return
         const p = card.mapToItem(content.contentItem,0,0)
         if(p.y<content.contentY)content.contentY=Math.max(0,p.y-6)
         else if(p.y+card.height>content.contentY+content.height)content.contentY=Math.max(0,p.y+card.height-content.height+6)
@@ -72,9 +107,14 @@ Item {
         const placements = root.placements || []
         for (const p of placements) map[p.id] = p.placement
         const result = []
+        const inheritedById={}
+        for(const category of host.authoredSections || host.sections || [])inheritedById[category.id || ""]=category.presentation || {}
+        const tab=tabs[activeTab]
         for (const item of items) {
+            if(tab && tab.sections && tab.sections.indexOf(item.categoryId || "")<0)continue
             const placement = map[item.id]
-            if (placement) result.push({ item: item, placement: placement })
+            const inherited=inheritedById[item.categoryId || ""] || {}
+            if (placement) result.push({ item:Object.assign({},item,{presentation:Object.assign({},inherited,item.presentation || {})}), placement: placement })
         }
         return result
     }
@@ -86,15 +126,18 @@ Item {
     readonly property var visibleSections: {
         if (!config.enabled) return []
         const tab = tabs[activeTab]
-        return !tab || !tab.sections ? host.sections : tab.sections.map(id => host.sections.find(s => s.id === id)).filter(s => !!s)
+        const sections=sectionMode?(host.authoredSections || host.sections):host.sections
+        if(sectionMode && host.editMode && host.scopeView)return sections.filter(s=>(s.id || "")===host.editScopeId)
+        return !tab || !tab.sections ? sections : tab.sections.map(id => sections.find(s => s.id === id)).filter(s => !!s)
     }
+    function sectionHeight(style) { return (style.height===undefined ? (sectionMode?config.sectionHeight:180):style.height)*unit }
     readonly property var geometry: {
         let rows = [], entries = [], column = 0, row = 0
         for (const section of visibleSections) {
             const style = section.presentation || {}
             const span = Math.min(columns, style.span || columns)
             if (column + span > columns) { row++; column = 0 }
-            const height = (style.height || 180) * unit
+            const height = sectionHeight(style)
             rows[row] = Math.max(rows[row] || 0, height)
             entries.push({row: row, column: column, span: span})
             column += span
@@ -105,13 +148,21 @@ Item {
         return { entries: entries, rows: rows, factor: config.fit === false ? 1 : Math.min(1, available / Math.max(1,total)) }
     }
     function focusEntries() {
-        if (placementMode) return placedItems.map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2}))
+        if (placementMode && !sectionMode) {
+            const tab=tabs[activeTab]
+            return placedItems.filter(e=>!tab || !tab.sections || tab.sections.indexOf(e.item.categoryId || "")>=0).map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2}))
+        }
         let entries = []
         for (let s = 0; s < visibleSections.length; s++) {
             const section = visibleSections[s], g = geometry.entries[s] || {row:s,column:0,span:columns}, style = section.presentation || {}
             const cards = style.columns || (style.variant === "banner" || style.variant === "summary" ? 1 : 4)
             const values = section.items || []
             if (style.variant === "library") entries.push({id:"widget-"+section.id,widget:true,row:g.row*100,x:g.column+g.span/2})
+            if(sectionMode && style.variant!=="library") {
+                for(const item of values)if(item.placement)entries.push({id:item.id,row:g.row*100+item.placement.y,x:item.placement.x+item.placement.width/2})
+                if(style.trailingAction)entries.push({id:"section-"+section.id,sectionAction:true,row:g.row*100,x:0})
+                continue
+            }
             const sectionWidth = (content.width - gap*(columns-1))*g.span/columns + (g.span-1)*gap
             const innerWidth = Math.min(sectionWidth,(style.contentWidth || 3840)*unit) - 2*(style.padding || 0)*unit
             const left = g.column*(content.width+gap)/columns + (sectionWidth-innerWidth)/2
@@ -225,7 +276,7 @@ Item {
                             required property int index; required property string modelData
                             width:(root.identityHeader ? 120 : 100)*root.unit; height:parent.height; radius:root.identityHeader ? 26*root.unit : 12*root.unit
                             color:root.identityHeader ? "transparent" : host.appearance.surfaceColor || "#28262F"
-                            border.width:host.recoveryFocused && host.recoveryIndex === index ? 2 : 0; border.color:host.appearance.focusColor || "#BD8198"
+                            border.width:!host.editMode && host.recoveryFocused && host.recoveryIndex === index ? 2 : 0; border.color:host.appearance.focusColor || "#BD8198"
                             LineIcon { visible:root.identityHeader; x:16*root.unit; anchors.verticalCenter:parent.verticalCenter; width:23*root.unit; height:width; name:modelData === "search" ? "search" : "settings"; ink:host.appearance.textColor || "#514B67" }
                             Text { anchors.verticalCenter:parent.verticalCenter; x:root.identityHeader ? 47*root.unit : (parent.width-width)/2
                                 text:modelData === "edit" ? host.editLabel : modelData === "search" ? "Search" : "Settings"; color:host.appearance.textColor || "#EEEAF0"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.identityHeader ? 14 : 15)*root.unit }
@@ -241,9 +292,9 @@ Item {
             }
         }
         Flickable {
-            id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode ? height : grid.implicitHeight; clip:true
+            id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode && !root.sectionMode ? height : grid.implicitHeight; clip:true
             GridLayout {
-                id:grid; width:parent.width; columns:root.columns; columnSpacing:root.gap; rowSpacing:root.gap; visible:!root.placementMode
+                id:grid; width:parent.width; columns:root.columns; columnSpacing:root.gap; rowSpacing:root.gap; visible:!root.placementMode || root.sectionMode
                 Repeater {
                     model:root.visibleSections
                     delegate:Item {
@@ -254,7 +305,7 @@ Item {
                         readonly property real padding:(style.padding || 0)*root.unit
                         Layout.fillWidth:true; Layout.columnSpan:metrics.span
                         Layout.preferredWidth:(content.width-root.gap*(root.columns-1))*metrics.span/root.columns
-                        Layout.preferredHeight:(style.height || 180)*root.unit*root.geometry.factor
+                        Layout.preferredHeight:root.sectionHeight(style)*root.geometry.factor
                         Layout.maximumHeight:Layout.preferredHeight; Layout.alignment:Qt.AlignTop
                         FrostedPanel {
                             objectName:"sectionPanel-"+sectionView.modelData.id
@@ -284,7 +335,7 @@ Item {
                             }
                             Text { id:subtitle; visible:!!sectionView.style.subtitle; height:visible ? 24*root.unit : 0; text:sectionView.style.subtitle || ""; color:host.appearance.mutedColor || "#AAA4B2"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:17*root.unit*host.textScale; width:parent.width; elide:Text.ElideRight }
                             Grid {
-                                visible: sectionView.style.variant !== "library"
+                                visible: sectionView.style.variant !== "library" && !root.sectionMode
                                 width:parent.width; columns:sectionView.style.columns || 1; spacing:(sectionView.style.cardGap === undefined ? 16 : sectionView.style.cardGap)*root.unit
                                 Repeater {
                                     model:sectionView.modelData.items
@@ -297,12 +348,32 @@ Item {
                                         width:(parent.width-(parent.columns-1)*parent.spacing)/parent.columns
                                         height:Math.max(40,(sectionView.Layout.preferredHeight-2*sectionView.padding-(heading.visible ? heading.height+sectionBody.spacing : 0)-(subtitle.visible ? subtitle.height+sectionBody.spacing : 0)
                                             -(Math.ceil(sectionView.modelData.items.length/parent.columns)-1)*parent.spacing)/Math.max(1,Math.ceil(sectionView.modelData.items.length/parent.columns)))
-                                        selected:!root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.id)
+                                        selected:!host.editMode && !root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.id)
                                         outsideColor:host.backgroundEnd
                                         onSelectedChanged:if(selected) Qt.callLater(root.revealCard,this)
                                         onActivated:{root.sectionActionId="";host.focusedIndex=host.itemIndex(modelData.id);root.navigationFocused=false;host.recoveryFocused=false;root.handleCommand(inputManager.confirm)}
                                     }
                                 }
+                            }
+                            PlacedComponents {
+                                id:sectionPlacement
+                                property string sectionId:sectionView.modelData.id || ""
+                                property string sectionName:sectionView.modelData.name || ""
+                                property bool editableGrid:sectionView.style.variant!=="library"
+                                width:parent.width;height:Math.max(0,parent.height-heading.height-subtitle.height-2*sectionBody.spacing)
+                                visible:root.sectionMode && editableGrid
+                                metrics:root.measureGrid(width,height,Object.assign({},root.grid,sectionView.style.grid || {}))
+                                items:visible?(sectionView.modelData.items || []).filter(i=>!!i.placement).map(i=>({item:Object.assign({},i,{presentation:Object.assign({},sectionView.style,i.presentation || {})}),placement:i.placement})):[]
+                                host:root.host;unit:root.unit
+                                onActivated:item=>root.activatePlaced(item)
+                                onFocused:card=>root.revealCard(card)
+                                Component.onCompleted:{let surfaces=Object.assign({},root.sectionSurfaces);surfaces[sectionId]=sectionPlacement;root.sectionSurfaces=surfaces}
+                                Component.onDestruction:{let surfaces=Object.assign({},root.sectionSurfaces);delete surfaces[sectionId];root.sectionSurfaces=surfaces}
+                            }
+                            Text {
+                                visible:sectionView.style.variant==="library" && !host.libraryProvider
+                                width:parent.width;wrapMode:Text.Wrap;text:"Library preview unavailable · choose or configure its source in Content."
+                                color:host.appearance.mutedColor;font.pixelSize:18*root.unit
                             }
                             Loader {
                                 width:parent.width; height:Math.max(80,parent.height-heading.height-subtitle.height-2*sectionBody.spacing)
@@ -312,7 +383,7 @@ Item {
                                     provider:host.libraryProvider; widgetKey:host.pageKey+"."+sectionView.modelData.id
                                     style:sectionView.style; appearance:host.appearance
                                     engaged:root.activeWidget === "widget-"+sectionView.modelData.id
-                                    highlighted:!host.recoveryFocused && !root.navigationFocused && (root.sectionActionId==="widget-"+sectionView.modelData.id || !root.sectionActionId && !!root.focusEntries()[0] && root.focusEntries()[0].id==="widget-"+sectionView.modelData.id)
+                                    highlighted:!host.editMode && !host.recoveryFocused && !root.navigationFocused && (root.sectionActionId==="widget-"+sectionView.modelData.id || !root.sectionActionId && !!root.focusEntries()[0] && root.focusEntries()[0].id==="widget-"+sectionView.modelData.id)
                                     onEngage: { root.activeWidget="widget-"+sectionView.modelData.id; root.sectionActionId=root.activeWidget; host.recoveryFocused=false; root.navigationFocused=false }
                                     Component.onCompleted:root.widgets["widget-"+sectionView.modelData.id]=this
                                     Component.onDestruction:delete root.widgets["widget-"+sectionView.modelData.id]
@@ -322,72 +393,14 @@ Item {
                     }
                 }
             }
-                Item {
-                    visible: root.placementMode
-                    width: parent.width
-                    height: parent.height
-                    Item {
-                        id: placementGrid
-                        anchors.fill: parent
-                        Repeater {
-                            model: root.placedItems
-                            delegate: Item {
-                                required property var modelData
-                                property int dragOriginX: modelData.placement.x
-                                property int dragOriginY: modelData.placement.y
-                                objectName: "placed-" + modelData.item.id
-                                x: root.placementCell.margin + modelData.placement.x*(root.placementCell.cellW+root.placementCell.gap)
-                                y: root.placementCell.margin + modelData.placement.y*(root.placementCell.cellH+root.placementCell.gap)
-                                width: root.placementCell.cellW * modelData.placement.width + root.placementCell.gap * Math.max(0, modelData.placement.width - 1)
-                                height: root.placementCell.cellH * modelData.placement.height + root.placementCell.gap * Math.max(0, modelData.placement.height - 1)
-                                Drag.active: dragArea.pressed
-                                Drag.source: dragArea
-                                MouseArea {
-                                    id: dragArea
-                                    anchors.fill: parent
-                                    z: 2
-                                    property real pressX: 0
-                                    property real pressY: 0
-                                    onPressed: mouse => { pressX = mouse.x; pressY = mouse.y }
-                                    onClicked: mouse => { mouse.accepted = false }
-                                    propagateComposedEvents: true
-                                    onReleased: mouse => {
-                                        if (!root.host.gridCollisions || !root.host.setItemPlacement) return
-                                        const cell = root.placementCell
-                                        const newX = modelData.placement.x + Math.round((mouse.x - pressX) / (cell.cellW + cell.gap))
-                                        const newY = modelData.placement.y + Math.round((mouse.y - pressY) / (cell.cellH + cell.gap))
-                                        if (newX === modelData.placement.x && newY === modelData.placement.y) return
-                                        const placement = { x: newX, y: newY, width: modelData.placement.width, height: modelData.placement.height }
-                                        const collisions = root.host.gridCollisions(modelData.item.id, placement)
-                                        if (collisions.length > 0) return // never silently overwrite
-                                        if (root.host.setItemPlacement(modelData.item.id, placement)) {
-                                            // placement applied
-                                        }
-                                    }
-                                }
-                                HomeCard {
-                                    anchors.fill: parent
-                                    item: modelData.item
-                                    appearance: host.appearance
-                                    unit: root.unit
-                                    selectMode: root.selectMode
-                                    selectTrigger: root.selectTrigger
-                                    selectAction: root.selectAction
-                                    selectionColor: root.selectionColor
-                                    selected: !root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.item.id)
-                                    outsideColor: host.backgroundEnd
-                                    onActivated: {
-                                        root.sectionActionId = ""
-                                        host.focusedIndex = host.itemIndex(modelData.item.id)
-                                        root.navigationFocused = false
-                                        host.recoveryFocused = false
-                                        root.handleCommand(inputManager.confirm)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            PlacedComponents {
+                id:placementGrid
+                visible:root.placementMode && !root.sectionMode
+                width:content.width;height:content.height
+                items:visible?root.placedItems:[];metrics:root.placementCell;host:root.host;unit:root.unit
+                onActivated:item=>root.activatePlaced(item)
+                onFocused:card=>root.revealCard(card)
+            }
         }
     }
 }

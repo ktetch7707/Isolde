@@ -153,6 +153,7 @@ Window {
                 items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
                 authoredItems: homeLayout.components
                 sections: sourceManager.sections.concat(homeLayout.sections).concat(kodiShelves.sections)
+                authoredSections: homeLayout.sections
                 brandVisible: homeLayout.brandVisible
                 backgroundStart: homeLayout.backgroundStart
                 backgroundEnd: homeLayout.backgroundEnd

@@ -65,7 +65,7 @@ public:
     Q_INVOKABLE QVariantMap placementProposal(const QString &id, const QVariantMap &placement,
                                                const QString &strategy, const QString &pageId = {});
     Q_INVOKABLE QVariantMap additionProposal(const QString &type, const QVariantMap &placement,
-                                              const QString &strategy, const QString &pageId = {});
+                                              const QString &strategy, const QString &pageId = {}, const QString &categoryId = {});
 
     /** Capture the live committed document. Clears undo/redo history. */
     Q_INVOKABLE bool open(const QByteArray &committedDocument);

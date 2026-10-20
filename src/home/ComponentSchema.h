@@ -12,6 +12,8 @@ QVariantMap normalizedGrid(const QVariantMap &value);
 bool validPlacement(const QVariantMap &value, int maxColumns, int maxRows);
 bool placementsOverlap(const QVariantMap &a, const QVariantMap &b);
 bool placementsFit(const QJsonArray &items, const QVariantMap &grid);
+QVariantMap sectionGrid(const QVariantMap &composition, const QJsonArray &categories, const QString &categoryId);
+bool layoutPlacementsFit(const QJsonArray &items, const QVariantMap &composition, const QJsonArray &categories);
 bool safeId(const QString &id);
 QVariantMap action(const QVariantMap &input, QString *error = nullptr);
 QVariantMap component(const QVariantMap &input, bool legacy, QString *error = nullptr);

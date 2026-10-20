@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "defaultGrid": {
+    "columns": 8,
+    "rows": 5,
+    "gap": 12,
+    "margin": 20,
+    "snap": true,
+    "overlap": false,
+    "mode": "screen"
+  },
+  "sectionHeight": 560,
+  "gridModes": [
+    {"id": "screen", "name": "One screen"},
+    {"id": "sections", "name": "Scrolling sections"}
+  ]
+}

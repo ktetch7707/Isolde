@@ -34,6 +34,7 @@ private slots:
     void studioRemoteDraftApplyAndCancel();
     void studioRemotePointerAndInspectorParity();
     void studioPreservesLegacyGridMetadataWithoutConversion();
+    void studioSectionGeometryMatchesRuntime();
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
@@ -706,6 +707,41 @@ void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
     bool gammaFound = false;
     for (const auto &v : items()) if (v.toMap()["id"].toString() == "gamma") gammaFound = true;
     QVERIFY(!gammaFound);
+}
+void HomeNavigationTests::studioSectionGeometryMatchesRuntime()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    auto *setup=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(setup);
+    QVERIFY2(setup->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5},{"mode","sections"}}},{"sectionHeight",560}}),qPrintable(setup->errorString()));
+    QVERIFY(setup->apply());
+    InputManager input;QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager",&input);
+    engine.rootContext()->setContextProperty("homeLayout",&home);
+    engine.rootContext()->setContextProperty("isoldeVersion","test");
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));
+    QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));
+    QVERIFY2(root,qPrintable(component.errorString()));
+    QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString("clock"))));
+    auto *preview=root->findChild<QQuickItem *>("studioPreview");QVERIFY(preview);
+    std::function<QQuickItem *(QQuickItem *)> find=[&](QQuickItem *parent)->QQuickItem *{
+        if(parent->objectName()=="placed-clock")return parent;
+        for(auto *child:parent->childItems())if(auto *found=find(child))return found;
+        return nullptr;
+    };
+    for(const auto size:{QSize(1280,720),QSize(1920,1080),QSize(3840,2160),QSize(1280,800)}) {
+        root->setProperty("width",size.width());root->setProperty("height",size.height());QTest::qWait(60);
+        auto *placed=find(preview);QVERIFY(placed);QVERIFY(placed->isVisible());
+        QVariant result;QVERIFY(QMetaObject::invokeMethod(preview,"placementRectFor",Q_RETURN_ARG(QVariant,result),
+            Q_ARG(QVariant,QVariantMap({{"x",0},{"y",0},{"width",1},{"height",1}})),Q_ARG(QVariant,QString("widgets"))));
+        const auto rect=result.value<QJSValue>().toVariant().toMap();
+        const auto point=placed->mapToItem(preview,QPointF(0,0));
+        QVERIFY(qAbs(point.x()-rect["x"].toDouble())<0.01);QVERIFY(qAbs(point.y()-rect["y"].toDouble())<0.01);
+        QVERIFY(qAbs(placed->height()-rect["height"].toDouble())<0.01);
+        QCOMPARE(preview->width(),qreal(size.width()));QCOMPARE(preview->height(),qreal(size.height()));
+    }
 }
 void HomeNavigationTests::studioRemoteDraftApplyAndCancel()
 {

@@ -132,6 +132,7 @@ qt_add_qml_module(isolde
         qml/PageSurface.qml
         qml/PageEditor.qml
         qml/PageStudioView.qml
+        qml/PlacedComponents.qml
         qml/PageLibraryWidget.qml
         qml/ArtworkImage.qml
         qml/FrostedPanel.qml
@@ -154,6 +155,7 @@ qt_add_resources(isolde "isolde_config"
         config/art-packs.json
         config/catalog.json
         config/default-home-layout.json
+        config/studio-defaults.json
         config/skins/lounge.json
         config/skins/pastel.json
         config/packages/ambient-weather/manifest.json
@@ -177,6 +179,7 @@ configure_file(config/apps.json "${CMAKE_CURRENT_BINARY_DIR}/config/apps.json" C
 configure_file(config/art-packs.json "${CMAKE_CURRENT_BINARY_DIR}/config/art-packs.json" COPYONLY)
 configure_file(config/catalog.json "${CMAKE_CURRENT_BINARY_DIR}/config/catalog.json" COPYONLY)
 configure_file(config/default-home-layout.json "${CMAKE_CURRENT_BINARY_DIR}/config/default-home-layout.json" COPYONLY)
+configure_file(config/studio-defaults.json "${CMAKE_CURRENT_BINARY_DIR}/config/studio-defaults.json" COPYONLY)
 file(COPY config/skins DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/config")
 set(ISOLDE_PACKAGE_MANIFESTS
     config/packages/ambient-weather/manifest.json
@@ -205,6 +208,7 @@ install(FILES config/native-session-bus.conf DESTINATION bin/config)
 install(FILES config/art-packs.json DESTINATION bin/config)
 install(FILES config/catalog.json DESTINATION bin/config)
 install(FILES config/default-home-layout.json DESTINATION bin/config)
+install(FILES config/studio-defaults.json DESTINATION bin/config)
 install(DIRECTORY config/packages DESTINATION bin/config)
 install(DIRECTORY config/skins DESTINATION bin/config)
 install(DIRECTORY kodi/service.isolde.bridge DESTINATION share/isolde/kodi PATTERN "__pycache__" EXCLUDE)

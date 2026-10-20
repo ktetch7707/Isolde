@@ -15,7 +15,7 @@ Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-u
 
 ## Execution priority — Page Studio first (user, 2026-10-19)
 
-Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T16 is in progress; T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
+Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **T17 geometry verification is complete; T18 is next; T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
 
 Next complete the related shell improvements: **T27 → T25 → T26 → T28** (shared theme, contained source notices, All Apps gallery, genuine Web switch). These extend the accepted Studio and no longer block its templates, Preview/Apply or core cutover. Then follow the remaining ranked rows for evidence repair, media preservation, input/system polish, playback, hardware/guide, appliance distribution and optional online work.
 
@@ -28,7 +28,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 |------|----------|-------|---|--------|
 | T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
 | T16 | 2 | Shared draft transactions, history and profile safety | 100% | task verification complete; T17 next |
-| T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 0% | in progress; legacy flow checkpoint verified |
+| T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 100% | geometry checkpoint verified; T18 next |
 | T18 | 4 | Unified Page Studio workspace and selection | 0% | planned |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 0% | planned |
 | T20 | 6 | Desktop parity, layers and nested/group editing | 0% | planned |
@@ -54,7 +54,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **19%** | T15 provisional (75%); T16 verified; T17 next |
+| **Overall** | — | **average of 24 active tasks** | **23%** | T15 provisional (75%); T16-T17 verified; T18 next |
 
 ## Highest priority: core Page Studio
 
@@ -91,13 +91,13 @@ Verify: extend `component_contracts` for multi-node rollback, canonical parity, 
 Entry docs: `docs/page-studio-redesign.md` sections 2, 5, 9; `docs/home-composition.md` Universal grid.
 Entry files: `qml/ComposedHome.qml`, `qml/HomeScreen.qml`, `qml/PageSurface.qml`, `src/home/ComponentSchema.{h,cpp}`, `src/home/HomeLayout.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `tests/tst_home_navigation.cpp`.
 Scope:
-- [ ] T17.1 Establish shared measured geometry for runtime rendering, canvas, hit-testing and spatial focus; include safe area, reserved header, cell spans, real empty cells and out-of-bounds refusal.
-- [ ] T17.2 Default to the full-size authored viewport with overlay tools; fitted/zoomed/panned views are optional. Opening/closing tools never changes page geometry, layout data or runtime aspect.
-- [ ] T17.3 Add validated one-screen root and scrolling section-grid modes plus bounded nested/internal grids; no implicit row growth or placement overwrite.
-- [ ] T17.4 Open legacy flow/no-grid pages unchanged through the canvas contract; explicit conversion previews differences and preserves IDs/routes/artwork, with no startup/read/cancel migration write.
-- [ ] T17.5 Add placement-specific geometry/focus tests at 720p, 1080p, 4K and the legacy 1280x800 fixture viewport; rerun and review both real fixture recreation/reset pairs.
+- [x] T17.1 Establish shared measured geometry for runtime rendering, canvas, hit-testing and spatial focus; include safe area, reserved header, cell spans, real empty cells and out-of-bounds refusal.
+- [x] T17.2 Default to the full-size authored viewport with overlay tools; fitted/zoomed/panned views are optional. Opening/closing tools never changes page geometry, layout data or runtime aspect.
+- [x] T17.3 Add validated one-screen root and scrolling section-grid modes plus bounded nested/internal grids; no implicit row growth or placement overwrite.
+- [x] T17.4 Open legacy flow/no-grid pages unchanged through the canvas contract; explicit conversion previews differences and preserves IDs/routes/artwork, with no startup/read/cancel migration write.
+- [x] T17.5 Add placement-specific geometry/focus tests at 720p, 1080p, 4K and the legacy 1280x800 fixture viewport; rerun and review both real fixture recreation/reset pairs.
 Done when: canvas-to-runtime geometry agrees at cell boundaries and scaling extremes; legacy fixtures remain generic; T05's remaining placement gate has concrete evidence and is updated separately.
-Verify: extend `universalGridValidatesAndPersists` and `home_component_navigation` with actual placed widgets, holes/header offsets/scroll containers; full CTest and both VM visual fixtures. Evidence: pending; historical no-grid fixture screenshots alone do not close this task.
+Verify: extend `universalGridValidatesAndPersists` and `home_component_navigation` with actual placed widgets, holes/header offsets/scroll containers; full CTest and both VM visual fixtures. Evidence: [studio-geometry-2026-10-20.md](studio-geometry-2026-10-20.md), source snapshot 18 (archive aae05fd1d9dcc9877878543074309a32e4b1717558fe3068265c8dcdc17b6d69), full 14/14 CTest, installed release d30eff6291f378d0fd37b276, both recreation/reset pairs and Studio Apply/reopen; durable logs/config/captures under build/studio-installed-18/. Full nested editing, precision appearance controls and accepted editor chrome remain T18-T24.
 
 ## T18 — Unified Page Studio workspace and selection (M, depends: T17)
 Entry docs: `docs/page-studio-redesign.md` sections 2-4, 6; T15 approved wireframes and feature map.

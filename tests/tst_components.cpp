@@ -49,6 +49,7 @@ private slots:
     void studioApplyAtomicFailureAndFocusPreserved();
     void studioCommandsAreAtomicAndProfileScoped();
     void studioCollisionProposalsAndParity();
+    void studioSectionGridsAreIndependentAndAtomic();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
@@ -854,6 +855,40 @@ void ComponentTests::studioCollisionProposalsAndParity()
     }}}));
     QCOMPARE(session->changeCount(),beforeBatch+1);
     QVERIFY(session->undo()); QCOMPARE(session->draft(),start);
+}
+void ComponentTests::studioSectionGridsAreIndependentAndAtomic()
+{
+    QTemporaryDir dir; AppRegistry registry;
+    HomeLayout home(&registry);
+    const auto user=dir.filePath("home.json");
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    const QVariantMap grid{{"columns",8},{"rows",5},{"mode","sections"}};
+    QVERIFY2(session->execute("convertGrid",{{"value",grid},{"sectionHeight",560}}),qPrintable(session->errorString()));
+    const auto document=QJsonDocument::fromJson(session->draft()).object();
+    const auto categories=document["categories"].toArray(); QVERIFY(!categories.isEmpty());
+    const auto category=categories.first().toObject()["id"].toString(); QVERIFY(!category.isEmpty());
+    const QVariantMap cell{{"x",0},{"y",4},{"width",1},{"height",1}};
+    QVERIFY2(session->execute("addPlaced",{{"type","text"},{"placement",cell},{"categoryId",category}}),qPrintable(session->errorString()));
+    // The same coordinates in another section do not collide.
+    QVERIFY2(session->execute("addPlaced",{{"type","clock"},{"placement",cell}}),qPrintable(session->errorString()));
+    const auto before=session->draft(); const auto count=session->changeCount();
+    // A collision in the same section refuses the entire operation.
+    QVERIFY(!session->execute("addPlaced",{{"type","text"},{"placement",cell},{"categoryId",category}}));
+    QCOMPARE(session->draft(),before); QCOMPARE(session->changeCount(),count);
+    QVERIFY(!session->execute("convertGrid",{{"value",grid},{"sectionHeight",59}}));
+    QCOMPARE(session->draft(),before);
+    QVERIFY(!QFile::exists(user));
+    QVERIFY(session->undo()); QVERIFY(session->redo()); QCOMPARE(session->draft(),before);
+    QVERIFY2(session->apply(),qPrintable(session->errorString()));
+    HomeLayout restored(&registry); QVERIFY(restored.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
+    QCOMPARE(restored.committedDocument(),home.committedDocument());
+    // Section grid overrides use their own bounds and reject unknown modes.
+    auto composition=document["composition"].toObject().toVariantMap();
+    auto modified=categories;auto section=modified.first().toObject();
+    section["presentation"]=QJsonObject{{"grid",QJsonObject{{"columns",4},{"rows",3}}}}; modified[0]=section;
+    QCOMPARE(ComponentSchema::sectionGrid(composition,modified,category)["columns"].toInt(),4);
+    QVERIFY(!ComponentSchema::validPresentation({{"grid",QVariantMap{{"mode","sections"}}}},true));
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

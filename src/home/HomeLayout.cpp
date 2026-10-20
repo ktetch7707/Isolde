@@ -56,29 +56,6 @@ bool isSafeActionId(const QString &id)
 {
     return id.isEmpty() || ComponentSchema::safeId(id);
 }
-bool placementsFit(const QJsonArray &items, const QVariantMap &grid)
-{
-    const int columns = grid.value("columns").toInt(), rows = grid.value("rows").toInt();
-    for (const auto &entry : items) {
-        const auto item = entry.toObject();
-        if (!item.contains("placement")) continue;
-        if (!ComponentSchema::validPlacement(item.value("placement").toObject().toVariantMap(), columns, rows))
-            return false;
-    }
-    if (grid.value("overlap").toBool()) return true;
-    for (qsizetype i = 0; i < items.size(); ++i) {
-        const auto first = items[i].toObject();
-        if (!first.contains("placement")) continue;
-        for (qsizetype j = i + 1; j < items.size(); ++j) {
-            const auto second = items[j].toObject();
-            if (second.contains("placement") && ComponentSchema::placementsOverlap(
-                    first.value("placement").toObject().toVariantMap(),
-                    second.value("placement").toObject().toVariantMap())) return false;
-        }
-    }
-    return true;
-}
-
 bool isSupportedActionType(const QString &type)
 {
     static const QSet<QString> actionTypes{QStringLiteral("launch-app"), QStringLiteral("open-folder"),
@@ -234,12 +211,12 @@ QVariantList HomeLayout::sections() const
         QVariantList categoryItems;
         for (const auto &itemValue : resolved)
             if (itemValue.toMap().value("categoryId").toString() == category.value("id").toString()) categoryItems.append(itemValue);
-        if (!categoryItems.isEmpty() || category["presentation"].toObject()["variant"] == "library") { auto section = category.toVariantMap(); section["items"] = categoryItems; result.append(section); }
+        if (!categoryItems.isEmpty() || category["presentation"].toObject()["variant"] == "library" || grid().value("mode")=="sections") { auto section = category.toVariantMap(); section["items"] = categoryItems; result.append(section); }
     }
     QVariantList uncategorized;
     for (const auto &itemValue : resolved)
         if (itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
-    if (!uncategorized.isEmpty()) result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
+    if (!uncategorized.isEmpty() || grid().value("mode")=="sections") result.append(QVariantMap{{"id", ""}, {"name", tr("Uncategorized")}, {"items", uncategorized}});
     return result;
 }
 
@@ -275,7 +252,7 @@ bool HomeLayout::setAppearance(const QVariantMap &changes)
 bool HomeLayout::setComposition(const QVariantMap &value)
 {
     if (!ComponentSchema::validComposition(value)) { setError(tr("Invalid Home composition.")); return false; }
-    if (!placementsFit(m_items, ComponentSchema::normalizedGrid(value.value("grid").toMap()))) {
+    if (!ComponentSchema::layoutPlacementsFit(m_items,value,m_categories)) {
         setError(tr("Placed widgets do not fit this composition's grid.")); return false;
     }
     const auto previous = m_composition; m_composition = value;
@@ -286,15 +263,29 @@ QVariantMap HomeLayout::grid() const
 {
     return ComponentSchema::normalizedGrid(m_composition.value("grid").toMap());
 }
+QVariantMap HomeLayout::studioOptions() const
+{
+    QFile file(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath("studio-defaults.json"));
+    if(!file.open(QIODevice::ReadOnly)) {file.setFileName(":/config/studio-defaults.json");if(!file.open(QIODevice::ReadOnly))return {};}
+    if(file.size()>64*1024)return {};
+    const auto object=QJsonDocument::fromJson(file.readAll()).object();
+    if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
+        || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
+    if(!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble()<60 || object["sectionHeight"].toDouble()>800)return {};
+    QSet<QString> ids;
+    for(const auto &entry:object["gridModes"].toArray()) {
+        const auto mode=entry.toObject();const auto id=mode["id"].toString(),name=mode["name"].toString();
+        if(!QStringList{"screen","sections"}.contains(id) || ids.contains(id) || name.trimmed().isEmpty() || name.size()>80)return {};
+        ids.insert(id);
+    }
+    if(ids.size()!=2 || !ids.contains(object["defaultGrid"].toObject()["mode"].toString()))return {};
+    return object.toVariantMap();
+}
 bool HomeLayout::setGrid(const QVariantMap &value)
 {
     if (!ComponentSchema::validGrid(value)) { setError(tr("Invalid Home grid.")); return false; }
     auto updated = grid();
     for (auto it = value.cbegin(); it != value.cend(); ++it) updated.insert(it.key(), it.value());
-    // A grid change may not strand or newly overlap widgets that are already placed.
-    if (!placementsFit(m_items, updated)) {
-        setError(tr("This grid would move placed widgets outside its bounds.")); return false;
-    }
     auto config = m_composition;
     if (config.isEmpty()) config = {{"schemaVersion", 1}, {"enabled", true}};
     config["grid"] = updated;
@@ -302,24 +293,15 @@ bool HomeLayout::setGrid(const QVariantMap &value)
 }
 bool HomeLayout::setItemPlacement(const QString &id, const QVariantMap &placement)
 {
-    const auto configured = grid();
-    if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt())) {
-        setError(tr("This placement does not fit inside the grid.")); return false;
-    }
-    if (!configured.value("overlap").toBool()) {
-        const auto placed = m_items;
-        for (const auto &entry : placed) {
-            const auto item = entry.toObject();
-            if (item.value("id").toString() == id || !item.contains("placement")) continue;
-            if (ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap())) {
-                setError(tr("Another widget already occupies those cells.")); return false;
-            }
-        }
-    }
     for (qsizetype i = 0; i < m_items.size(); ++i) {
         auto item = m_items[i].toObject(); if (item["id"] != id) continue;
         const auto previous = item;
-        item["placement"] = QJsonObject::fromVariantMap(placement); m_items[i] = item;
+        item["placement"] = QJsonObject::fromVariantMap(placement);
+        auto proposed=m_items;proposed[i]=item;
+        if(!ComponentSchema::layoutPlacementsFit(proposed,m_composition,m_categories)) {
+            setError(tr("The placement exceeds its grid or overlaps another component in that section."));return false;
+        }
+        m_items[i] = item;
         if (!save()) { m_items[i] = previous; return false; }
         emit layoutChanged(); setError({}); return true;
     }
@@ -396,13 +378,16 @@ QVariantList HomeLayout::placements() const
 }
 QVariantList HomeLayout::gridCollisions(const QString &itemId, const QVariantMap &placement) const{
     QVariantList result;
-    const auto configured = grid();
+    QString category;
+    for(const auto &entry:m_items)if(entry.toObject()["id"]==itemId)category=entry.toObject()["categoryId"].toString();
+    const auto configured = ComponentSchema::sectionGrid(m_composition,m_categories,category);
     if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt()))
         return result;
     const auto placed = m_items;
     for (const auto &entry : placed) {
         const auto item = entry.toObject();
         if (item.value("id").toString() == itemId || !item.contains("placement")) continue;
+        if(grid().value("mode")=="sections" && item["categoryId"].toString()!=category)continue;
         if (!ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap())) continue;
         QString name = item.value("name").toString();
         if (item.value("kind").toString() == QStringLiteral("app")) {
@@ -571,8 +556,7 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         ids.insert(id);
         components.append(item);
     }
-    const auto grid = ComponentSchema::normalizedGrid(composition.value("grid").toMap());
-    if (!placementsFit(components, grid)) {
+    if (!ComponentSchema::layoutPlacementsFit(components, composition, categoryArray)) {
         setError(tr("Home layout contains widget placements that do not fit its grid.")); return false;
     }
     m_items = components;

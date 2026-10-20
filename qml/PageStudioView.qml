@@ -7,6 +7,9 @@ Item {
     property var session: null
     property bool open: false
     property string pageId: ""
+    property string scopeId:""
+    property bool scopeOverview:false
+    property real sectionHeightDraft:0
     property string selectedId: ""
     property string mode: "canvas"
     property bool toolbarFocus: true
@@ -24,19 +27,27 @@ Item {
     readonly property var draftModel: session ? (mode==="conversionPreview" && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
-    readonly property var grid: page ? page.grid : ({})
+    readonly property var pageGrid:page?page.grid:({})
+    readonly property bool sectionMode:gridMode && pageGrid.mode==="sections"
+    readonly property var selectedSection:page?(page.sections || []).find(s=>(s.id || "")===scopeId):null
+    readonly property var grid:sectionMode && selectedSection?Object.assign({},pageGrid,(selectedSection.presentation || {}).grid || {}):pageGrid
+    readonly property var scopedItems:sectionMode && !scopeOverview?items.filter(i=>(i.categoryId || "")===scopeId):items
+    readonly property var gridModes:layoutModel && layoutModel.studioOptions?layoutModel.studioOptions.gridModes || []:[]
     readonly property bool gridMode: {
         if(!page || !page.composition.grid)return false
         for(const item of items)if(!item.placement)return false
+        if(page.composition.grid.mode===undefined)for(const section of page.sections || []) {
+            const style=section.presentation || {};if(style.variant==="library" || style.trailingAction)return false
+        }
         return true
     }
-    readonly property var tools: ["Add", "Pages", "Layers", "Undo", "Redo", "Grid", "Fit", "Preview", "Apply"]
+    readonly property var tools: ["Add", "Pages", "Layers", "Undo", "Redo", "Grid", "Fit", "Preview", "Apply", "Scope"]
     readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size"]
     readonly property var names: ["Clock", "Text"]
     readonly property var current: items.find(i=>i.id===selectedId) || null
     readonly property var collisionPreview: {
         if(mode!=="collision" || choice===2 || !session)return ({})
-        return addingType ? session.additionProposal(addingType,candidate,choice===0?"shift":"swap",pageId)
+        return addingType ? session.additionProposal(addingType,candidate,choice===0?"shift":"swap",pageId,sectionMode?scopeId:"")
                           : session.placementProposal(selectedId,candidate,choice===0?"shift":"swap",pageId)
     }
     readonly property real textScale: palette.typographyScale || 1
@@ -44,11 +55,14 @@ Item {
     signal closed()
     visible: open
     z: 100
+    onSelectedIdChanged:if(current && sectionMode)scopeId=current.categoryId || ""
+    onScopeIdChanged:if(open && sectionMode && !scopeOverview)Qt.callLater(()=>{if(open && sectionMode)preview.revealScope(scopeId)})
 
     function show(id, component) {
         session = layoutModel.beginStudio()
         pageId = id || ""; selectedId = component || ""
         mode = "canvas"; toolbarFocus = true; tool = 0; message = "Draft only. Apply saves all changed pages."
+        scopeOverview=false;scopeId=current?current.categoryId || "":page && page.sections.length?page.sections[0].id || "":""
         open = true
     }
     function close() { if(session) session.invalidate(); open=false; closed() }
@@ -67,10 +81,22 @@ Item {
         addingType=""; origin=position(current); candidate=Object.assign({},origin)
         mode=resize ? "resize" : "move"; toolbarFocus=false
     }
-    function beginGrid() {gridDraft=Object.assign({},grid);mode="convert";choice=2}
+    function beginGrid() {
+        if(!gridModes.length){message="Packaged Studio defaults are missing or invalid.";return}
+        gridDraft=Object.assign({},layoutModel.studioOptions.defaultGrid,pageGrid)
+        sectionHeightDraft=page && page.composition.sectionHeight!==undefined?page.composition.sectionHeight:layoutModel.studioOptions.sectionHeight
+        mode="convert";choice=6
+    }
+    function gridField(index) {
+        if(index===1)return {key:"columns",min:4,max:16,integer:true,step:1}
+        if(index===2)return {key:"rows",min:3,max:10,integer:true,step:1}
+        if(index===3)return {key:"gap",min:0,max:100,integer:false,step:1}
+        if(index===4)return {key:"margin",min:0,max:100,integer:false,step:1}
+        return {key:"sectionHeight",min:60,max:800,integer:false,step:20}
+    }
     function acceptCandidate(strategy) {
         if (addingType) {
-            proposal=session.additionProposal(addingType,candidate,strategy || "cancel",pageId)
+            proposal=session.additionProposal(addingType,candidate,strategy || "cancel",pageId,sectionMode?scopeId:"")
             if(!proposal.valid){message=proposal.reason;const previous=mode;mode="collision";if(previous!=="collision")choice=0;return}
             if(command("batch",{commands:proposal.commands})){selectedId=proposal.id;addingType="";mode="canvas"}
             return
@@ -91,6 +117,7 @@ Item {
         else if(index===6) { camera.zoom=1; message="Canvas fitted to the current device aspect." }
         else if(index===7) { preview.restoreFocus(selectedId); mode="preview"; message="Draft preview: external actions are intercepted. Back returns to editing." }
         else if(index===8) mode="apply"
+        else if(index===9){if(sectionMode)mode="scopes";else message="Section scopes are available in scrolling section layouts."}
     }
     function context(index) {
         choice=index
@@ -111,7 +138,8 @@ Item {
         if(mode==="add") return names
         if(mode==="collision") return ["Shift others", "Swap", "Cancel"]
         if(mode==="geometry") return ["Column: "+(candidate.x+1), "Row: "+(candidate.y+1), "Width: "+candidate.width, "Height: "+candidate.height, "Accept placement", "Cancel"]
-        if(mode==="convert") return ["Columns: "+gridDraft.columns, "Rows: "+gridDraft.rows, "Preview arrangement", "Cancel"]
+        if(mode==="scopes")return ["Whole page overview"].concat((page.sections || []).map(s=>s.name))
+        if(mode==="convert") return ["Layout: "+((gridModes.find(m=>m.id===gridDraft.mode)||{}).name || "Unavailable"),"Columns: "+gridDraft.columns,"Rows: "+gridDraft.rows,"Gap: "+gridDraft.gap,"Margin: "+gridDraft.margin,"Section height: "+sectionHeightDraft,"Preview arrangement","Cancel"]
         if(mode==="conversionPreview") return ["Use this arrangement in draft", "Cancel"]
         if(mode==="dirty") return ["Keep editing", "Discard draft…", "Review & Apply"]
         if(mode==="discard") return ["Keep editing", "Discard all draft pages"]
@@ -122,6 +150,11 @@ Item {
     }
     function activateChoice() {
         if(mode==="context") {context(choice);return}
+        if(mode==="scopes") {
+            scopeOverview=choice===0
+            if(choice>0){scopeId=page.sections[choice-1].id || "";const item=items.find(i=>(i.categoryId || "")===scopeId);selectedId=item?item.id:""}
+            mode="canvas";toolbarFocus=false;Qt.callLater(()=>preview.revealScope(scopeId));return
+        }
         if(mode==="layers") {if(items[choice]) selectedId=items[choice].id;mode="canvas";toolbarFocus=false;return}
         if(mode==="pages") {
             if(choice===draftModel.pages.length+1) {beginKeyboard("newPage","");return}
@@ -136,16 +169,17 @@ Item {
             return
         }
         if(mode==="convert") {
-            if(choice===3)mode="canvas"
-            else if(choice<2)beginKeyboard(choice===0?"gridColumns":"gridRows",String(choice===0?gridDraft.columns:gridDraft.rows))
-            else if(session.previewCommand("convertGrid",{value:gridDraft},pageId)){mode="conversionPreview";choice=0;message="Preview: row-order grid arrangement. Category sections are retained in data; the grid replaces their flow presentation. Apply remains a separate step."}else message=session.errorString
+            if(choice===7)mode="canvas"
+            else if(choice===0){const index=gridModes.findIndex(m=>m.id===gridDraft.mode);gridDraft=Object.assign({},gridDraft,{mode:gridModes[(index+1)%gridModes.length].id})}
+            else if(choice<6){const field=gridField(choice);beginKeyboard("grid:"+field.key,String(field.key==="sectionHeight"?sectionHeightDraft:gridDraft[field.key]))}
+            else if(session.previewCommand("convertGrid",{value:gridDraft,sectionHeight:sectionHeightDraft},pageId)){mode="conversionPreview";choice=0;message="Preview the complete grid arrangement. Section layouts retain named sections, library widgets and section actions. Apply remains a separate step."}else message=session.errorString
             return
         }
         if(mode==="conversionPreview") {if(choice===0)session.acceptPreview();else session.cancelPreview();mode="canvas";return}
         if(mode==="dirty") {mode=choice===0 ? "canvas" : choice===1 ? "discard":"apply";choice=0;return}
         if(mode==="discard") {if(choice===1)close();else mode="canvas";return}
         if(mode==="remove") {if(choice===1 && command("remove",{id:selectedId}))selectedId=items.length ? items[0].id:"";mode="canvas";return}
-        if(mode==="apply") {if(choice===1)mode="canvas";else if(session.apply(selectedId)){mode="canvas";message="Applied successfully. All pages saved."}else message=session.errorString;return}
+        if(mode==="apply") {if(choice===1)mode="canvas";else if(preview.layoutError)message=preview.layoutError;else if(session.apply(selectedId)){mode="canvas";message="Applied successfully. All pages saved."}else message=session.errorString;return}
         if(mode==="history") {if(choice===1)session.continueWithNewHistoryBaseline();mode="canvas"}
     }
     function handleCommand(c) {
@@ -166,15 +200,17 @@ Item {
             let p=Object.assign({},candidate)
             if(mode==="move"){p.x+=dx;p.y+=dy}else{p.width+=dx;p.height+=dy}
             if(p.x<0 || p.y<0 || p.width<1 || p.height<1 || p.x+p.width>grid.columns || p.y+p.height>grid.rows){message="Grid boundary: choose a position or size inside the grid.";return}
-            candidate=p;message="Row "+(p.y+1)+", column "+(p.x+1)+", "+p.width+" × "+p.height;return
+            candidate=p;preview.revealPlacement(p,scopeId);message="Row "+(p.y+1)+", column "+(p.x+1)+", "+p.width+" × "+p.height;return
         }
         if(mode!=="canvas") {
             const labels=dialogLabels()
-            if(mode==="convert" && choice<2 && (c===inputManager.navigateLeft || c===inputManager.navigateRight)) {
-                const key=choice===0?"columns":"rows", minimum=choice===0?4:3, maximum=choice===0?16:10
-                let next=Object.assign({},gridDraft), number=next[key]+(c===inputManager.navigateRight?1:-1)
-                if(number<minimum || number>maximum){message="Choose "+minimum+"–"+maximum+" "+key+".";return}
-                next[key]=number;gridDraft=next;return
+            if(mode==="convert" && choice<6 && (c===inputManager.navigateLeft || c===inputManager.navigateRight)) {
+                const direction=c===inputManager.navigateRight?1:-1
+                if(choice===0){const index=gridModes.findIndex(m=>m.id===gridDraft.mode);const next=index+direction;if(next>=0 && next<gridModes.length)gridDraft=Object.assign({},gridDraft,{mode:gridModes[next].id});return}
+                const field=gridField(choice),current=field.key==="sectionHeight"?sectionHeightDraft:gridDraft[field.key],number=current+direction*field.step
+                if(number<field.min || number>field.max){message="Choose "+field.min+"–"+field.max+" for "+field.key+".";return}
+                if(field.key==="sectionHeight")sectionHeightDraft=number
+                else {let next=Object.assign({},gridDraft);next[field.key]=number;gridDraft=next}return
             }
             if(c===inputManager.navigateDown || c===inputManager.navigateRight)choice=Math.min(labels.length-1,choice+1)
             else if(c===inputManager.navigateUp || c===inputManager.navigateLeft)choice=Math.max(0,choice-1)
@@ -196,7 +232,7 @@ Item {
                 const dx=c===inputManager.navigateRight?1:c===inputManager.navigateLeft?-1:0
                 const dy=c===inputManager.navigateDown?1:c===inputManager.navigateUp?-1:0
                 let best=null, score=Infinity
-                for(const item of items) {
+                for(const item of scopedItems) {
                     if(item.id===selectedId || !item.placement)continue
                     const q=item.placement, x=q.x+q.width/2-cx, y=q.y+q.height/2-cy
                     if((dx && x*dx<=0) || (dy && y*dy<=0))continue
@@ -214,6 +250,7 @@ Item {
     Rectangle {anchors.fill:parent;color:palette.surfaceColor || layoutModel.backgroundEnd}
     Column {
         id:editorColumn
+        z:1
         anchors.fill:parent;anchors.margins:studio.spacing;spacing:studio.spacing/2
         Text {width:parent.width;elide:Text.ElideRight;text:"Page Studio  ·  "+(studio.pageId ? (studio.draftModel.pages.find(p=>p.id===studio.pageId)||{}).name:"Home")+"  ·  "+(session && session.dirty ? "Draft: "+session.changeCount+" changes":"Applied baseline");color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
         Row {
@@ -230,7 +267,7 @@ Item {
             }
         }
         Item {
-            id:canvasArea;width:parent.width;height:Math.max(100,studio.height-180*studio.textScale-2*studio.spacing);clip:true
+            id:canvasArea;parent:studio;anchors.fill:parent;clip:true
             Item {
                 id:camera;property real zoom:1
                 width:studio.width;height:studio.height
@@ -241,7 +278,8 @@ Item {
                     id:preview;objectName:"studioPreview";anchors.fill:parent
                     items:studio.page?studio.page.items:[];sections:studio.page?studio.page.sections:[]
                     appearance:studio.page?studio.page.appearance:studio.palette;composition:studio.page?studio.page.composition:({})
-                    grid:studio.grid;placements:studio.page?studio.page.placements:[]
+                    grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
+                    editMode:true;scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
                     brandVisible:studio.page?studio.page.brandVisible:false;tileRoundness:studio.page?studio.page.tileRoundness:0
                     backgroundStart:studio.page?studio.page.backgroundStart:studio.layoutModel.backgroundStart
                     backgroundEnd:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd
@@ -256,15 +294,15 @@ Item {
                         model:studio.gridMode ? studio.grid.columns*studio.grid.rows : 0
                         delegate:Rectangle {
                             required property int index
-                            readonly property var rect:preview.placementRect({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns),width:1,height:1})
+                            readonly property var rect:preview.placementRectFor({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns),width:1,height:1},studio.scopeId)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:1;border.color:studio.palette.mutedColor;opacity:0.35
                         }
                     }
                     Repeater {
-                        model:studio.gridMode ? studio.items.filter(i=>!!i.placement):[]
+                        model:studio.gridMode ? studio.scopedItems.filter(i=>!!i.placement):[]
                         delegate:Rectangle {
                             required property var modelData
-                            readonly property var rect:preview.placementRect(modelData.placement)
+                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId || studio.scopeId)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId?4:1;border.color:studio.palette.focusColor
                             MouseArea {
                                 objectName:"studioHit-"+modelData.id
@@ -274,8 +312,8 @@ Item {
                                 onPositionChanged:mouse=>{
                                     if(!pressed)return
                                     let p=Object.assign({},studio.origin)
-                                    p.x+=Math.round((mouse.x-start.x)/(preview.gridMetrics.cellW+preview.gridMetrics.gap))
-                                    p.y+=Math.round((mouse.y-start.y)/(preview.gridMetrics.cellH+preview.gridMetrics.gap))
+                                    p.x+=Math.round((mouse.x-start.x)/(preview.gridMetricsFor(studio.scopeId).cellW+preview.gridMetricsFor(studio.scopeId).gap))
+                                    p.y+=Math.round((mouse.y-start.y)/(preview.gridMetricsFor(studio.scopeId).cellH+preview.gridMetricsFor(studio.scopeId).gap))
                                     if(p.x>=0 && p.y>=0 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.grid.rows)studio.candidate=p
                                 }
                                 onReleased:studio.acceptCandidate()
@@ -285,7 +323,7 @@ Item {
                     }
                     Rectangle {
                         visible:studio.mode==="move" || studio.mode==="resize" || studio.mode==="collision" || studio.mode==="geometry"
-                        readonly property var rect:preview.placementRect(studio.candidate)
+                        readonly property var rect:preview.placementRectFor(studio.candidate,studio.scopeId)
                         x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:studio.palette.selectedColor;opacity:0.8;border.width:4;border.color:studio.palette.focusColor
                         Text {anchors.centerIn:parent;text:studio.mode.toUpperCase()+"\n"+(studio.addingType || studio.selectedId);color:studio.palette.textColor;wrapMode:Text.Wrap;width:parent.width;horizontalAlignment:Text.AlignHCenter;font.pixelSize:20*studio.textScale}
                     }
@@ -293,7 +331,7 @@ Item {
                         model:studio.collisionPreview.valid ? studio.collisionPreview.placements : []
                         delegate:Rectangle {
                             required property var modelData
-                            readonly property var rect:preview.placementRect(modelData.placement)
+                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId || studio.scopeId)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:3;border.color:studio.palette.focusColor
                             Text {anchors.centerIn:parent;text:modelData.id+" → "+(modelData.placement.y+1)+", "+(modelData.placement.x+1);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale}
                         }
@@ -306,6 +344,7 @@ Item {
     }
     Rectangle {
         visible:studio.mode!=="canvas" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="preview"
+        z:3
         anchors.centerIn:parent;width:Math.min(parent.width-2*studio.spacing,680);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
         color:studio.palette.surfaceColor;border.width:3;border.color:studio.palette.focusColor;radius:studio.spacing
         Column {
@@ -329,11 +368,12 @@ Item {
         id:keyboard;objectName:"studioKeyboard";visible:studio.mode==="keyboard";anchors.fill:parent;z:10;appearance:studio.palette;hint:studio.message
         onCanceled:studio.mode=studio.keyboardReturnMode
         onAccepted:text=>{
-            if(studio.keyboardAction==="gridColumns" || studio.keyboardAction==="gridRows") {
-                const columns=studio.keyboardAction==="gridColumns",number=Number(text)
-                if(!Number.isInteger(number) || number<(columns?4:3) || number>(columns?16:10)){studio.message="Grid bounds: 4–16 columns and 3–10 rows.";return}
-                let grid=Object.assign({},studio.gridDraft);grid[columns?"columns":"rows"]=number
-                studio.gridDraft=grid;studio.mode="convert";return
+            if(studio.keyboardAction.indexOf("grid:")===0) {
+                const key=studio.keyboardAction.slice(5),field=studio.gridField(studio.choice),number=Number(text)
+                if(!text.trim() || !Number.isFinite(number) || (field.integer && !Number.isInteger(number)) || number<field.min || number>field.max){studio.message="Enter a value between "+field.min+" and "+field.max+".";return}
+                if(key==="sectionHeight")studio.sectionHeightDraft=number
+                else studio.gridDraft=Object.assign({},studio.gridDraft,{[key]:number})
+                studio.mode="convert";return
             }
             if(studio.keyboardAction.indexOf("geometry")===0) {
                 const field=Number(studio.keyboardAction.slice(8)), number=Number(text)

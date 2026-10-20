@@ -127,6 +127,12 @@ bool StudioSession::apply(const QString &focusId)
 bool StudioSession::execute(const QString &operation, const QVariantMap &a, const QString &pageId)
 {
     if (!m_active || !m_live) { setError(QStringLiteral("Reopen Page Studio before editing.")); return false; }
+    if(operation=="addResolved" || operation=="addPlaced") {
+        const auto proposal=additionProposal(a.value("type").toString(),a.value("placement").toMap(),
+            a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString());
+        if(!proposal.value("valid").toBool()){setError(proposal.value("reason").toString());return false;}
+        return pushEdit(QJsonDocument(QJsonObject::fromVariantMap(proposal.value("document").toMap())).toJson());
+    }
     if (operation == "batch") {
         const auto commands = a.value("commands").toList();
         if (commands.isEmpty() || commands.size() > 32) { setError(QStringLiteral("Choose between 1 and 32 grouped edits.")); return false; }
@@ -182,17 +188,36 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         ok = worker.loadDocument(QJsonDocument(document).toJson(), false);
     } else if (operation == "convertGrid") {
         const auto grid = ComponentSchema::normalizedGrid(a.value("value").toMap());
-        const int columns = grid.value("columns").toInt(), rows = grid.value("rows").toInt();
-        if (!ComponentSchema::validGrid(grid) || worker.m_items.size() > columns*rows) {
+        if (!ComponentSchema::validGrid(grid)) {
             setError(QStringLiteral("The chosen grid cannot contain this page. Choose a larger grid or cancel.")); return false;
         }
         auto composition = worker.m_composition;
         composition["schemaVersion"] = 1; composition["enabled"] = true;
         composition["grid"] = grid;
+        if(grid.value("mode")=="sections") {
+            composition["columns"]=1;composition["fit"]=false;
+            composition["sectionHeight"]=a.value("sectionHeight",m_live->studioOptions().value("sectionHeight"));
+            for(int i=0;i<worker.m_categories.size();++i) {
+                auto category=worker.m_categories[i].toObject();auto style=category["presentation"].toObject();
+                if(style.value("variant")!="library"){style["height"]=QJsonValue::fromVariant(composition["sectionHeight"]);category["presentation"]=style;worker.m_categories[i]=category;}
+            }
+        } else {
+            for(const auto &entry:worker.m_categories) {
+                const auto style=entry.toObject()["presentation"].toObject();
+                if(style["variant"]=="library" || style.contains("trailingAction")) {
+                    setError(QStringLiteral("Choose scrolling sections to preserve this page's library or section actions."));return false;
+                }
+            }
+        }
         worker.m_composition = composition;
+        QHash<QString,int> nextCell;
         for (int i = 0; i < worker.m_items.size(); ++i) {
             auto item = worker.m_items[i].toObject();
-            item["placement"] = QJsonObject{{"x", i%columns}, {"y", i/columns}, {"width", 1}, {"height", 1}};
+            const auto category=grid.value("mode")=="sections"?item["categoryId"].toString():QString();
+            const auto local=ComponentSchema::sectionGrid(composition,worker.m_categories,category);
+            const int columns=local["columns"].toInt(),rows=local["rows"].toInt(),cell=nextCell[category]++;
+            if(cell>=columns*rows){setError(QStringLiteral("A section cannot contain its components in the chosen grid. Nothing changed."));return false;}
+            item["placement"] = QJsonObject{{"x", cell%columns}, {"y", cell/columns}, {"width", 1}, {"height", 1}};
             worker.m_items[i] = item;
         }
         ok = worker.save();
@@ -250,6 +275,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         result["components"] = entries;
     }
     if (pageIndex >= 0) {
+        result.remove("pages"); // A page document cannot recursively contain the interface page collection.
         auto entry = pages[pageIndex].toObject(); entry["layout"] = result; pages[pageIndex] = entry; root["pages"] = pages;
     } else root = result;
     return pushEdit(QJsonDocument(root).toJson());
@@ -480,17 +506,22 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
         }
         if (!found) return fail(QStringLiteral("The page no longer exists."));
     }
-    const auto grid = ComponentSchema::normalizedGrid(doc["composition"].toObject()["grid"].toObject().toVariantMap());
+    auto entries = doc["components"].toArray();
+    QString category;bool selectedFound=false;
+    for(const auto &entry:entries)if(entry.toObject()["id"]==id){category=entry.toObject()["categoryId"].toString();selectedFound=true;}
+    if(!selectedFound)return fail(QStringLiteral("The component no longer exists."));
+    const auto composition=doc["composition"].toObject().toVariantMap();
+    const bool sections=composition.value("grid").toMap().value("mode")=="sections";
+    const auto grid = ComponentSchema::sectionGrid(composition,doc["categories"].toArray(),category);
     const int cols = grid["columns"].toInt(), rows = grid["rows"].toInt();
     if (!ComponentSchema::validPlacement(placement, cols, rows)) return fail(QStringLiteral("The candidate is outside the grid."));
-    auto entries = doc["components"].toArray();
     int selected = -1;
     QVariantMap origin;
     QList<int> colliders;
     for (int i = 0; i < entries.size(); ++i) {
         const auto item = entries[i].toObject();
         if (item["id"] == id) { selected = i; origin = item["placement"].toObject().toVariantMap(); }
-        else if (item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement)) colliders.append(i);
+        else if ((!sections || item["categoryId"].toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement)) colliders.append(i);
     }
     if (selected < 0) return fail(QStringLiteral("The component no longer exists."));
     QVariantList changes{QVariantMap{{"id", id}, {"placement", placement}}};
@@ -522,7 +553,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
                 target["x"] = col; target["y"] = row;
                 if (!ComponentSchema::validPlacement(target, cols, rows)) continue;
                 bool free = true;
-                for (int j = 0; j < entries.size(); ++j) if (j != index && entries[j].toObject().contains("placement") &&
+                for (int j = 0; j < entries.size(); ++j) if (j != index && (!sections || entries[j].toObject()["categoryId"].toString()==category) && entries[j].toObject().contains("placement") &&
                     ComponentSchema::placementsOverlap(entries[j].toObject()["placement"].toObject().toVariantMap(), target)) { free = false; break; }
                 if (free) fits = true;
             }
@@ -538,7 +569,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
 }
 
 QVariantMap StudioSession::additionProposal(const QString &type, const QVariantMap &placement,
-                                           const QString &strategy, const QString &pageId)
+                                           const QString &strategy, const QString &pageId, const QString &categoryId)
 {
     if (!m_active || !m_live) return {{"valid",false},{"reason",QStringLiteral("The edit session has closed.")}};
     HomeLayout temporary(m_live->registry()); temporary.m_draftOnly = true;
@@ -546,13 +577,42 @@ QVariantMap StudioSession::additionProposal(const QString &type, const QVariantM
     StudioSession transaction;
     if (!transaction.bind(&temporary)) return {{"valid",false},{"reason",transaction.errorString()}};
     const auto identity = transaction.allocateId(type);
-    if (!transaction.execute("addWidget",{{"type",type}},pageId)) return {{"valid",false},{"reason",transaction.errorString()}};
+    if(identity.isEmpty())return {{"valid",false},{"reason",transaction.errorString()}};
+    auto root=QJsonDocument::fromJson(m_draft).object();auto pages=root["pages"].toArray();auto document=root;int pageIndex=-1;
+    if(!pageId.isEmpty()) {
+        for(int i=0;i<pages.size();++i)if(pages[i].toObject()["id"]==pageId)pageIndex=i;
+        if(pageIndex<0)return {{"valid",false},{"reason",QStringLiteral("The page no longer exists.")}};
+        document=pages[pageIndex].toObject()["layout"].toObject();
+    }
+    // Obtain registered defaults from HomeLayout, then validate the complete
+    // addition/collision result together. No invalid intermediate is published.
+    temporary.m_composition.clear();temporary.m_items={};temporary.m_categories={};temporary.m_pages={};
+    if(!temporary.addWidget(type))return {{"valid",false},{"reason",QStringLiteral("Choose a supported widget.")}};
+    QString componentError;
+    auto item=QJsonObject::fromVariantMap(ComponentSchema::component(temporary.m_items.last().toObject().toVariantMap(),true,&componentError));
+    if(item.isEmpty())return {{"valid",false},{"reason",componentError}};
+    item["id"]=identity;
+    if(!categoryId.isEmpty())item["categoryId"]=categoryId;
+    auto entries=document["components"].toArray();entries.append(item);document["components"]=entries;
+    const auto store=[&] {
+        if(pageIndex>=0){auto entry=pages[pageIndex].toObject();entry["layout"]=document;pages[pageIndex]=entry;root["pages"]=pages;}
+        else root=document;
+    };
+    store();transaction.m_draft=QJsonDocument(root).toJson();
     auto proposal = transaction.placementProposal(identity,placement,strategy,pageId);
     if (!proposal.value("valid").toBool()) return proposal;
     proposal["id"] = identity;
+    for(const auto &change:proposal["placements"].toList()) {
+        const auto value=change.toMap();
+        for(int i=0;i<entries.size();++i)if(entries[i].toObject()["id"]==value["id"].toString()) {
+            auto entry=entries[i].toObject();entry["placement"]=QJsonObject::fromVariantMap(value["placement"].toMap());entries[i]=entry;
+        }
+    }
+    document["components"]=entries;store();QString error;
+    if(!HomeLayout::validateStudioDocument(QJsonDocument(root).toJson(),&error))return {{"valid",false},{"reason",error}};
+    proposal["document"]=root.toVariantMap();
     proposal["commands"] = QVariantList{
-        QVariantMap{{"operation","addWidget"},{"arguments",QVariantMap{{"type",type}}},{"pageId",pageId}},
-        QVariantMap{{"operation","place"},{"arguments",QVariantMap{{"placements",proposal["placements"]}}},{"pageId",pageId}}
+        QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId}}},{"pageId",pageId}}
     };
     return proposal;
 }

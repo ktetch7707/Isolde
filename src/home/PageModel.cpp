@@ -175,7 +175,7 @@ bool PageModel::setComposition(const QVariantMap &value)
     const auto components = m_pageDocument.value("components").toArray();
     QJsonArray itemsForFit;
     for (const auto &v : components) itemsForFit.append(v);
-    if (!ComponentSchema::placementsFit(itemsForFit, grid)) {
+    if (!ComponentSchema::layoutPlacementsFit(itemsForFit,value,m_pageDocument["categories"].toArray())) {
         m_owner->setError(tr("Placed widgets do not fit this page composition's grid."));
         return false;
     }
@@ -212,7 +212,8 @@ bool PageModel::setGrid(const QVariantMap &value)
     const auto components = m_pageDocument.value("components").toArray();
     QJsonArray itemsForFit;
     for (const auto &v : components) itemsForFit.append(v);
-    if (!ComponentSchema::placementsFit(itemsForFit, updated)) {
+    auto proposed=composition();proposed["grid"]=updated;
+    if (!ComponentSchema::layoutPlacementsFit(itemsForFit, proposed,m_pageDocument["categories"].toArray())) {
         m_owner->setError(tr("This grid would move placed widgets outside its bounds."));
         return false;
     }
@@ -278,7 +279,7 @@ QVariantList PageModel::sections() const
         for (const auto &itemValue : resolved)
             if (itemValue.toMap().value("categoryId").toString() == category.value("id").toString())
                 categoryItems.append(itemValue);
-        if (!categoryItems.isEmpty() || category.value("presentation").toObject().value("variant").toString() == QStringLiteral("library")) {
+        if (!categoryItems.isEmpty() || category.value("presentation").toObject().value("variant").toString() == QStringLiteral("library") || grid().value("mode")=="sections") {
             auto section = category.toVariantMap();
             section["items"] = categoryItems;
             result.append(section);
@@ -287,7 +288,7 @@ QVariantList PageModel::sections() const
     QVariantList uncategorized;
     for (const auto &itemValue : resolved)
         if (itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
-    if (!uncategorized.isEmpty())
+    if (!uncategorized.isEmpty() || grid().value("mode")=="sections")
         result.append(QVariantMap{{"id", ""}, {"name", QCoreApplication::translate("PageModel", "Uncategorized")}, {"items", uncategorized}});
     return result;
 }
@@ -539,21 +540,11 @@ QString PageModel::addLibraryWidget(const QString &name, const QString &kind)
 bool PageModel::setItemPlacement(const QString &id, const QVariantMap &placement)
 {
     if (!m_owner) return false;
-    const auto configured = grid();
-    if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt())) {
-        m_owner->setError(tr("This placement does not fit inside the grid."));
-        return false;
-    }
-    if (!configured.value("overlap").toBool()) {
-        const auto placed = m_pageDocument.value("components").toArray();
-        for (const auto &entry : placed) {
-            const auto item = entry.toObject();
-            if (item.value("id").toString() == id || !item.contains("placement")) continue;
-            if (ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap())) {
-                m_owner->setError(tr("Another widget already occupies those cells."));
-                return false;
-            }
-        }
+    auto proposed=m_pageDocument["components"].toArray();bool found=false;
+    for(int i=0;i<proposed.size();++i){auto item=proposed[i].toObject();if(item["id"]!=id)continue;item["placement"]=QJsonObject::fromVariantMap(placement);proposed[i]=item;found=true;}
+    if(!found)return false;
+    if(!ComponentSchema::layoutPlacementsFit(proposed,composition(),m_pageDocument["categories"].toArray())) {
+        m_owner->setError(tr("The placement exceeds its grid or overlaps another component in that section."));return false;
     }
     return setItemField(id, [placement](QJsonObject &item) {
         item.insert("placement", QJsonObject::fromVariantMap(placement));
@@ -563,6 +554,7 @@ bool PageModel::setItemPlacement(const QString &id, const QVariantMap &placement
 bool PageModel::clearItemPlacement(const QString &id)
 {
     if (!m_owner) return false;
+    const auto previous = m_pageDocument;
     bool found = false;
     if (m_pageDocument.contains("components")) {
         QJsonArray components;
@@ -577,7 +569,6 @@ bool PageModel::clearItemPlacement(const QString &id)
         m_pageDocument["components"] = components;
     }
     if (!found) return false;
-    const auto previous = m_pageDocument;
     if (!storePage()) { m_pageDocument = previous; return false; }
     emit placementsChanged();
     return true;
@@ -611,6 +602,7 @@ QVariantList PageModel::pageSearchSources() const
 bool PageModel::setItemField(const QString &id, std::function<void(QJsonObject &)> mutate)
 {
     if (!m_owner) return false;
+    const auto previousDoc = m_pageDocument;
     bool found = false;
     if (m_pageDocument.contains("components")) {
         QJsonArray components;
@@ -631,7 +623,6 @@ bool PageModel::setItemField(const QString &id, std::function<void(QJsonObject &
     } else {
         return false;
     }
-    const auto previousDoc = m_pageDocument;
     if (!storePage()) { m_pageDocument = previousDoc; return false; }
     emit placementsChanged();
     return true;

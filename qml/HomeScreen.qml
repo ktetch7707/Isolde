@@ -6,6 +6,10 @@ Item {
     required property var items
     // Profile-authored components are distinct from transient provider notices.
     property var authoredItems: items
+    property var authoredSections: sections
+    property bool editMode:false
+    property bool scopeView:false
+    property string editScopeId:""
     required property var sections
     required property bool brandVisible
     required property color backgroundStart
@@ -16,7 +20,12 @@ Item {
     property var grid: ({})
     property var placements: []
     readonly property var gridMetrics: composed.placementCell
-    function placementRect(p) { return composed.placementRect(p) }
+    readonly property string layoutError: composed.layoutError
+    function placementRect(p) { return composed.placementRect(p,"") }
+    function placementRectFor(p,scope) { return composed.placementRect(p,scope) }
+    function gridMetricsFor(scope) { return composed.gridMetricsFor(scope) }
+    function revealScope(scope) { composed.revealScope(scope) }
+    function revealPlacement(p,scope) { composed.revealPlacement(p,scope) }
     property var setItemPlacement: null
     property var gridCollisions: null
     property var libraryProvider: null
@@ -238,7 +247,7 @@ Item {
                 delegate: Rectangle {
                     required property int index; required property string modelData
                     width: 150; height: 42; radius: 12; color: root.appearance.surfaceColor || "#202126"
-                    border.width: (root.recoveryFocused || !root.items.length) && root.recoveryIndex === index ? 3 : 0
+                    border.width: !root.editMode && (root.recoveryFocused || !root.items.length) && root.recoveryIndex === index ? 3 : 0
                     border.color: root.appearance.focusColor || "#C994A5"
                     Text { anchors.centerIn: parent; text: modelData; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 19 * root.textScale }
                     MouseArea { anchors.fill: parent; onClicked: { root.recoveryFocused = true; root.recoveryIndex = index; root.settingsRequested(index === 0 ? -1 : 1) } }
@@ -306,7 +315,7 @@ Item {
                                     id: tileHost
                                     required property var modelData
                                     readonly property int globalIndex: root.itemIndex(modelData.id)
-                                    readonly property bool selected: !root.recoveryFocused && globalIndex === root.focusedIndex
+                                    readonly property bool selected: !root.editMode && !root.recoveryFocused && globalIndex === root.focusedIndex
                                     Layout.columnSpan: Math.min(root.gridUnits, modelData.size === "compact" ? 1 : modelData.size === "wide" ? 4 : 2)
                                     Layout.fillWidth: true
                                     height: 150

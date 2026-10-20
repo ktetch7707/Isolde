@@ -24,7 +24,10 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section)
 {
     for (auto it = value.cbegin(); it != value.cend(); ++it) {
         const auto key = it.key();
-        if (key == "variant") {
+        if (key == "grid") {
+            if (!section || it.value().metaType().id()!=QMetaType::QVariantMap || !validGrid(it.value().toMap())
+                || it.value().toMap().value("mode","screen")!="screen") return false;
+        } else if (key == "variant") {
             if (!QStringList{"banner", "media", "source", "summary", "launcher", "orb", "recent", "library", "text"}.contains(it.value().toString())) return false;
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
@@ -67,7 +70,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section)
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
     if (value.contains("pageNavigation") && !QStringList{"left","top","none"}.contains(value["pageNavigation"].toString())) return false;
     if (value.contains("sidebarWidth") && (value["sidebarWidth"].metaType().id()==QMetaType::QString || value["sidebarWidth"].toDouble()<120 || value["sidebarWidth"].toDouble()>400)) return false;
@@ -75,6 +78,11 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
     if (value.value("schemaVersion" ).toDouble() != 1) return false;
     if (value.contains("columns") && value["columns"].toDouble() != 1 && value["columns"].toDouble() != 2) return false;
     if (value.contains("grid") && (value["grid"].metaType().id() != QMetaType::QVariantMap || !validGrid(value["grid"].toMap()))) return false;
+    if(value.value("grid").toMap().value("mode")=="sections"
+        && (value.value("columns",1).toInt()!=1 || value.value("fit",false).toBool() || !value.contains("sectionHeight")))return false;
+    if(value.contains("sectionHeight") && (value["sectionHeight"].metaType().id()==QMetaType::QString
+        || value["sectionHeight"].metaType().id()==QMetaType::Bool || !std::isfinite(value["sectionHeight"].toDouble())
+        || value["sectionHeight"].toDouble()<60 || value["sectionHeight"].toDouble()>800))return false;
     if (value.contains("wallpaper") && !QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg)$").match(value["wallpaper"].toString()).hasMatch()) return false;
     if (value.contains("headerMode") && !QStringList{"navigation", "identity"}.contains(value["headerMode"].toString())) return false;
     if (value.contains("identity") && (value["identity"].metaType().id() != QMetaType::QString || value["identity"].toString().size() > 80)) return false;
@@ -114,8 +122,9 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
 bool ComponentSchema::validGrid(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"columns", "rows", "gap", "margin", "snap", "overlap"};
+    static const QSet<QString> keys{"columns", "rows", "gap", "margin", "snap", "overlap", "mode"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
+    if(value.contains("mode") && !QStringList{"screen","sections"}.contains(value["mode"].toString()))return false;
     if (value.contains("columns")) {
         bool ok; const double number = value.value("columns").toDouble(&ok);
         if (!ok || value.value("columns").metaType().id() == QMetaType::QString || value.value("columns").metaType().id() == QMetaType::Bool
@@ -137,7 +146,7 @@ bool ComponentSchema::validGrid(const QVariantMap &value)
 }
 QVariantMap ComponentSchema::normalizedGrid(const QVariantMap &value)
 {
-    QVariantMap grid{{"columns", 8}, {"rows", 5}, {"gap", 12}, {"margin", 20}, {"snap", true}, {"overlap", false}};
+    QVariantMap grid{{"columns", 8}, {"rows", 5}, {"gap", 12}, {"margin", 20}, {"snap", true}, {"overlap", false}, {"mode","screen"}};
     for (auto it = value.cbegin(); it != value.cend(); ++it) grid[it.key()] = it.value();
     return grid;
 }
@@ -328,5 +337,34 @@ bool ComponentSchema::placementsFit(const QJsonArray &items, const QVariantMap &
                     second.value("placement").toObject().toVariantMap())) return false;
         }
     }
+    return true;
+}
+
+QVariantMap ComponentSchema::sectionGrid(const QVariantMap &composition, const QJsonArray &categories, const QString &categoryId)
+{
+    auto grid=normalizedGrid(composition.value("grid").toMap());
+    if(grid.value("mode")!="sections")return grid;
+    for(const auto &entry:categories) {
+        const auto category=entry.toObject();
+        if(category["id"]!=categoryId)continue;
+        const auto override=category["presentation"].toObject()["grid"].toObject().toVariantMap();
+        for(auto it=override.cbegin();it!=override.cend();++it)grid[it.key()]=it.value();
+    }
+    return grid;
+}
+
+bool ComponentSchema::layoutPlacementsFit(const QJsonArray &items, const QVariantMap &composition, const QJsonArray &categories)
+{
+    const auto grid=normalizedGrid(composition.value("grid").toMap());
+    if(grid.value("mode")!="sections")return placementsFit(items,grid);
+    QHash<QString,QJsonArray> groups;
+    for(const auto &entry:items) {
+        if(!entry.toObject().contains("placement"))return false;
+        groups[entry.toObject()["categoryId"].toString()].append(entry);
+    }
+    for(const auto &entry:categories)if(entry.toObject()["presentation"].toObject()["variant"]=="library"
+        && !groups.value(entry.toObject()["id"].toString()).isEmpty())return false;
+    for(auto it=groups.cbegin();it!=groups.cend();++it)
+        if(!placementsFit(it.value(),sectionGrid(composition,categories,it.key())))return false;
     return true;
 }

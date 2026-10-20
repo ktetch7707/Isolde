@@ -24,6 +24,7 @@ class HomeLayout final : public QObject {
     Q_PROPERTY(QVariantMap composition READ composition NOTIFY layoutChanged)
     Q_PROPERTY(QVariantMap grid READ grid NOTIFY layoutChanged)
     Q_PROPERTY(QVariantList placements READ placements NOTIFY layoutChanged)
+    Q_PROPERTY(QVariantMap studioOptions READ studioOptions CONSTANT)
 
 public:
     bool load(const QString &defaultPath = {}, const QString &userPath = {});
@@ -92,6 +93,7 @@ public:
     [[nodiscard]] QVariantMap composition() const { return m_composition; }
     [[nodiscard]] QVariantList placements() const;
     Q_INVOKABLE QVariantMap grid() const;
+    [[nodiscard]] QVariantMap studioOptions() const;
     Q_INVOKABLE bool setGrid(const QVariantMap &value);
     Q_INVOKABLE bool setItemPlacement(const QString &id, const QVariantMap &placement);
     Q_INVOKABLE bool clearItemPlacement(const QString &id);
