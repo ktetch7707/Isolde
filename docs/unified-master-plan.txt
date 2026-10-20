@@ -1,4 +1,5 @@
 AUDIT OVERRIDES — 2026-10-19
+Page editor amendment (user, 2026-10-19): docs/page-studio-redesign.md governs the new canvas-first page builder. T15-T24 replace superseded T06-T08; drafts/transactions precede remote manipulation, and no editing gesture saves until explicit Apply. docs/agent-backlog.md records the selected priority and active task count. This planning revision changes no application code.
 This consolidated source contains conflicting proposals, not verified implementation facts. docs/agent-backlog.md controls work; docs/planning-audit.md records conflicts. These overrides govern the retained source excerpts:
 - Limits: 64 pages/profile; 4 MiB layouts, 1024 components, 128 categories; grids 4–16 columns by 3–10 rows. Unlimited means flexible within validated bounds, never unbounded allocation.
 - Kodi owns media metadata, artwork, watched/resume and playback. A future SQLite schedule store owns schedules only; media references/caches are disposable Kodi-derived data, never a second canonical media/progress database.

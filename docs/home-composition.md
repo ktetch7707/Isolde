@@ -1,5 +1,7 @@
 # Configurable Home composition
 
+Planned editor replacement: [Page Studio](page-studio-redesign.md), backlog T15-T24, supersedes the immediate-save editing workflow described below once accepted. This document describes the existing composition contract; Studio extends it through validated data and a shared draft/geometry model, preserving legacy layouts and both visual fixtures. No editor replacement is implemented by this documentation change.
+
 Home supports an optional composed layout alongside existing grid layouts. Existing profiles are not rewritten or switched on startup. [The reference fixture](../tests/visual/home-reference/recreation-config.json) demonstrates a complete configuration. Its artwork and media/progress values are visual test data, not the user's library.
 
 ## Layout data
@@ -23,7 +25,7 @@ Composition fields:
 
 ## Universal grid (Studio M1, October 17)
 
-An optional `grid` map inside `composition` declares the universal screen grid, and an optional `placement` rectangle on any component assigns it cells. Both are validated data contracts; no renderer consumes them yet, and layouts without them keep the established flow behavior.
+An optional `grid` map inside `composition` declares the universal screen grid, and an optional `placement` rectangle on any component assigns it cells. The renderer now contains placement handling, but placement-specific geometry/scale acceptance remains open in T05 and is assigned to T17. Layouts without placements keep their established flow behavior.
 
 | Field | Behavior |
 | --- | --- |

@@ -1,5 +1,13 @@
 # Isolde Studio — Home Screen Studio and universal grid builder
 
+## Page Studio replacement — user decision, 2026-10-19
+
+The user rejected the current Customize Home workflow and requested a new intuitive visual page builder inspired by web design tools. [page-studio-redesign.md](page-studio-redesign.md) is the normative interaction, workspace, transaction and acceptance specification. This is a native Qt canvas-first system: visual grid/ghost placement, remote pick-up/drop, contextual inspector, Pages/Layers, shared semantic commands, draft/undo before manipulation, and explicit Preview/Apply. Extend existing schemas/models/adapters; do not bolt another list of actions onto the rejected editor or introduce a second layout store.
+
+The backlog replaces T06-T08 with T15-T24 and excludes the superseded rows from percentages. Selected priority is T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24. This overrides older curation-first, immediate-save and numbered-package sequencing below. Unfinished T01/T03/T04/product gates stay active, but do not block this explicitly selected editor track; existing verified foundations are reused. T17 supplies T05's unfinished placement-geometry evidence. T09/T10/T11 now depend on completed Studio T24; T10 hardware qualification remains mandatory for actual device editors. Product release still requires its full backlog and hardware/offline gates.
+
+This chat authorizes plan/backlog changes only. No new editor code, VM deployment or dependency change is part of this revision. The existing verified build stays the implementation baseline until future tasks meet their acceptance gates.
+
 > Current authority (2026-10-19 audit): [agent-backlog.md](agent-backlog.md) selects the next task and records completion; this document supplies requirements/dependency rationale. Older dated next-action and not-started statements below are historical. T02 curation extensions are out of scope; existing movie/show collections remain unchanged. Source presence is not acceptance. See [planning audit](planning-audit.md) and [VM oracle](vm-oracle.md).
 
 Incorporated October 17, 2026 from the user-supplied **Isolde Studio** document (Version 5, 17 October 2026; three parts: the Home Screen Studio plan (sections 1–11), the Universal Interface Builder expansion (sections 12–22), and the build-ready implementation specification (sections 23–41)). The original attachment remains the source design reference; this document consolidates it for the repository. Everything below is a requirement, not a claim of implemented capability. The current milestone remains **0.0.1.2**; sequencing is governed by [implementation-order.md](implementation-order.md).

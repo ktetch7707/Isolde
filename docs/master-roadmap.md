@@ -1,5 +1,7 @@
 # Isolde master roadmap
 
+October 19 Page Studio amendment: the user rejects the existing Customize Home interaction. [Page Studio redesign](page-studio-redesign.md) now governs the replacement page editor; T15-T24 replace T06-T08 and have explicit priority in the backlog. Reuse native rendering and existing data ownership while replacing fragmented immediate-save tools with a canvas-first draft workspace. This amendment does not reopen T02 curation, qualify hardware, or authorize implementation during the planning-only request.
+
 > Current authority (2026-10-19 audit): [agent-backlog.md](agent-backlog.md) selects the next task and records completion; this document supplies requirements/dependency rationale. Older dated next-action and not-started statements below are historical. T02 curation extensions are out of scope; existing movie/show collections remain unchanged. Source presence is not acceptance. See [planning audit](planning-audit.md) and [VM oracle](vm-oracle.md).
 
 See [implementation-order.md](implementation-order.md) for the current dependency-ordered execution plan and codebase assessment. This document remains the full requirements reference.

@@ -5,11 +5,11 @@
 1. On session start, read `docs/agent-backlog.md` — it is the single source of truth for sequencing and percent completion.
 Before VM actions, read `docs/vm-oracle.md`. Explicit user-requested architecture/planning/testing reviews may inspect relevant plans and evidence without implementing the next feature. Preserve unrelated working-tree changes.
 
-2. Pick the lowest-numbered task whose `status` is not `100%`. Do not skip ahead unless its `Depends` tasks are `100%`.
+2. Follow an explicit user-selected priority track in `docs/agent-backlog.md` first (currently Page Studio T15-T24); otherwise pick the lowest-numbered ACTIVE task below 100%. Exclude struck/superseded tasks and require the selected task's Depends tasks to be 100%. A planning-only request does not authorize application implementation.
 3. Within a task, read ONLY its `Entry docs` + `Entry files`. Do not re-read the entire codebase or all planning docs.
 4. Implement its `Scope` to satisfy its `Done when` gate, preserving standing gates (both visual fixtures, profile isolation, atomic save/rollback, Kodi media ownership, offline Generator Test).
 5. Before finishing, run its `Verify` commands/tests and update `docs/agent-backlog.md`: check off sub-boxes, recompute that task's `%`, recompute `Overall %`.
-6. Never mark `100%` without evidence paths (test logs, fixture screenshots, `/tmp/...` evidence). `100% x 13 active (T02 struck) = plan implemented`.
+6. Never mark `100%` without evidence paths (test logs, fixture screenshots, `/tmp/...` evidence). `100% x 20 active = current backlog implemented`; T02 is struck and T06-T08 are superseded/excluded. Keep the active count synchronized with the backlog.
 7. Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`.
 8. Core thesis — configurability + UI. Everything is configurable; nothing requires configuration. The default must be polished and TV-ready, and every tab, shelf, widget, color, density, and navigation choice must be rearrangeable via validated data. Layout is data, never executable QML/JS/shell. A theme/skin is declarative data, never code.
 9. Configurability commands (must obey):
@@ -25,7 +25,7 @@ Before VM actions, read `docs/vm-oracle.md`. Explicit user-requested architectur
     - TV-distance legibility: readable type, contrast, safe-area margins, no obscured field, no autoplay/ads/feeds in default. Reduced-motion and contrast options respected.
     - Editor UX: selected item, operation, edit mode, preview vs applied state, and consequences of remove must always be unambiguous. Collision = shift/swap/cancel dialog, never silent overwrite.
 11. Engineering best practices (must obey):
-    - Small vertical slices: remote input → data → visible result → error/retry → focus restored → test. One task at a time, lowest-numbered ACTIVE first.
+    - Small vertical slices: remote input → data → visible result → error/retry → focus restored → test. One task at a time, selected priority track first, otherwise lowest-numbered ACTIVE.
     - Profile isolation: edits affect active profile only. No cross-profile reads/writes. Teardown invalidates clients.
     - Kodi owns media/progress/playback/artwork; Isolde owns presentation/navigation. No parallel media DB, no scraper, no Kodi DB/skin writes, no fake playback claims. Bounded read-only bridge calls (50/page).
     - Offline-first: Generator Test (cold boot, local media, saved art, local search, layouts, recovery) passes disconnected. Online features degrade independently; Web OFF issues zero external requests.

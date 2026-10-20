@@ -1,5 +1,9 @@
 # Interface design and customization
 
+## Current editing direction — Page Studio
+
+User decision, 2026-10-19: replace Customize Home's item/action-grid workflow with [Page Studio](page-studio-redesign.md), a visual page canvas with remote pick-up/drop, Pages/Layers, a contextual inspector, undo and draft-only editing until Apply. The specification includes TV/desktop wireframes, remote state rules, collision proposals, compatibility and usability acceptance. Backlog T15-T24 is the selected execution track; T06-T08 are superseded. Old editing/implementation-sequence descriptions below remain historical where they conflict. Content curation extensions remain out of scope; resource bounds remain enforced.
+
 A second standing reference now covers a pastel wallpaper/glass/orb layout: [pastel acceptance case](../tests/visual/home-pastel-reference/README.md). Keep both visual cases passing as shared features change. Their opposing appearances must come from configuration, not separate hard-coded screens.
 
 October 16, 2026. The supplied *Isolde Unified Television Interface Design Specification* is the reference for a polished default preset. The user's subsequent instruction takes precedence: users should be able to change arbitrary presentation and organization choices. The proposal's permanent destinations, fixed Home hierarchy, accent and category names are defaults, not restrictions. This document governs interface work alongside the master roadmap.
@@ -18,14 +22,14 @@ These are targets, not a claim that the current grid/list implementation already
 | --- | --- |
 | Navigation | Add, rename, reorder, hide and remove tabs; choose icons, destinations and initial tab; customize header/clock placement and visibility. Keep Settings/recovery reachable through remote commands even when hidden visually. |
 | Home | Add/remove/reorder sections, sources, favorites, shelves and widgets; name and map inputs; choose grid/rows, tile size, density, spacing and alignment; choose a compact one-screen preset or a scrolling personal layout. |
-| Library | Add/rename/reorder/hide categories and shelves; overlapping membership; All Titles view; manual, smart, Kodi playlist/collection and folder-backed sources; contextual Pin as Shelf; per-view sorting and exclusions. |
+| Library | Add/rename/reorder/hide categories and shelves; overlapping membership; All Titles view; existing Kodi-backed views/collections and folder access; contextual source binding and per-view sorting. T02 manual/smart/tag/playlist/exclusion curation expansion remains excluded. |
 | Cards and shelves | Choose poster, landscape, logo or text presentation; art source/crop, size, labels, metadata placement, opacity, corners and focus treatment. Reuse content independently of placement. |
 | Visuals | Arbitrary colors, backgrounds/images, optional dimmed fanart, typography, spacing, density, focus effects and motion. Offer coherent presets and accessible contrast/reduced-motion options. |
 | Advanced | Widgets and their configuration, validated actions, conditional visibility, reusable themes/layouts, undo, local backup and portable import/export. |
 
 Every new visual component must expose meaningful presentation choices through a shared model rather than scattering fixed values across screens. Backend capabilities and recovery behavior remain validated. A theme is declarative data, not executable QML or shell code. Kodi continues to own library metadata, artwork acquisition/cache, progress and playback. Categories and shelves reference Kodi identities/rules; they do not duplicate media files or build a competing database.
 
-“Unlimited” categories and shelves means no arbitrary product quota. Virtualize lists, load artwork incrementally and page data. Retain documented resource/validation bounds against malformed input, and show an actionable explanation if a bound is reached. The current 64-collection and 128-Home-category bounds are implementation constraints to replace as the virtualized model lands, not permanent product policy.
+“Unlimited” categories and shelves means no arbitrary product quota. Virtualize lists, load artwork incrementally and page data. Retain documented resource/validation bounds against malformed input, and show an actionable explanation if a bound is reached. Current validated category/component/page bounds remain mandatory; virtualization does not authorize increasing or bypassing them. Any later limits change needs a separately reviewed schema/resource proposal.
 
 Customization stays hidden during ordinary browsing. Context actions and a dedicated editor provide remote-operated editing with live preview, explicit Apply/Cancel, stable focus and a recoverable default. Bad color choices must not make the editor or recovery controls unreadable. A high-contrast editor is allowed to retain its own stable palette while the preview displays the user's draft.
 
