@@ -58,6 +58,8 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 
 ## Highest priority: core Page Studio
 
+Direct-edit refinement (user, 2026-10-19): the latest section of [Page-first Studio](design/page-studio/page-first-design.md#latest-refinement-direct-screen-editing) supersedes Confirm-picks-up and primary Preview controls. The actual runtime-rendered screen is edited live in a draft. Confirm selects; context offers Move, Width, Height and Edit component. Buttons and images share None/Open page/Supported action links. Optional Try interaction is secondary; Apply remains explicit. T18/T19/T21/T23/T24 must verify these journeys; no task credit changes from this planning refinement.
+
 UX revision (user feedback, 2026-10-19): read [Page-first Studio](design/page-studio/page-first-design.md) before T17-T24/T27. Full-size page, overlaying left page menu, single context windows and protected movable Home designation replace the provisional toolbar/fitted-preview shell. T16 backend evidence remains valid; neither the revised design nor the interactive concept is implemented acceptance. Percentages remain unchanged. Minimum Settings/Home theme inheritance is required before T24 cutover; T27's remaining shell adoption follows T24.
 
 ## T15 — Page Studio interaction design and usability validation (M, depends: none; selected priority)
@@ -110,7 +112,7 @@ Verify: offscreen workspace/focus/empty-state tests in `home_component_navigatio
 Entry docs: `docs/page-studio-redesign.md` sections 4-5; T15 movement/collision wireframes.
 Entry files: `src/input/InputManager.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, shared edit session from T16, shared canvas from T17, Studio views from T18, `tests/tst_home_navigation.cpp`.
 Scope:
-- [ ] T19.1 Implement Confirm pick-up, one-cell D-pad ghost movement, valid drop and Back cancel; show original rectangle, row/column/span, invalid reason and accessible non-color feedback.
+- [ ] T19.1 Implement Confirm selection with Move/Width/Height/Edit component context; Move picks up for one-cell D-pad movement, Confirm drop and Back cancel. Render the actual component ghost, origin, dimensions and invalid reason; never launch its action in edit mode.
 - [ ] T19.2 Implement anchored remote resize, numeric row/column/span entry with on-screen keyboard and Move before/after/to-cell alternatives; reject overflow without clamping.
 - [ ] T19.3 Implement explicit Shift/Swap/Cancel proposal dialogs, full affected-item preview, deterministic bounded cascade solving, disabled impossible choices and one atomic draft transaction/undo record.
 - [ ] T19.4 Support insertion, duplicate, hide, lock, removal consequences, edge auto-scroll, empty layouts and movement between named eligible container scopes; prevent cycles or hidden overwrites.
@@ -135,7 +137,7 @@ Entry files: `qml/AppearanceEditor.qml`, `qml/HomeDesignEditor.qml`, `qml/Compon
 Scope:
 - [ ] T21.1 Implement a visual catalog starting with Button, Button carousel, Media shelf, App bar, Image and Widgets, backed by registered schema/renderer/editor contracts and honest unavailable states; content choice then full-page ghost placement is draft-only.
 - [ ] T21.2 Implement contextual Content/Appearance/Layout/Actions/Accessibility windows, basic/advanced disclosure, inherited versus overridden values, reset and mixed states. Include page colors, solid/gradient/managed-image background, dimming/crop and readable contrast feedback; no permanent inspector shrinking the page.
-- [ ] T21.3 Provide remote artwork browsing/import/crop/focal controls, text entry, density/labels/opacity/corners/focus/spacing and valid named source/action/page pickers; no raw IDs or required file chooser.
+- [ ] T21.3 Provide remote artwork/crop/focal, text, appearance and named source/action/page pickers. Buttons and images share On select: None/Open page/Supported action with Change/Clear, accessible interactive-image labels/focus and decorative-image focus exclusion. Validate stable page IDs and registered dispatcher capabilities; no raw IDs, executable links or required file chooser.
 - [ ] T21.4 Bind real bounded Kodi data through existing adapters, freeze preview data during gestures, avoid appearance-driven refetches and keep clearly labeled sample/unavailable states separate from real progress/playback.
 - [ ] T21.5 Cover every supported legacy edit in the T15 feature map; reject unknown versions/types/actions/unsafe assets and provide repair links without adding T02 curation or claiming new device backends.
 Done when: selecting a component exposes relevant understandable controls and a live visible draft result, with complete remote error/retry/focus paths and no live profile writes.
@@ -156,7 +158,7 @@ Verify: skin/page round-trip, token inheritance, symbol-cycle/propagation rollba
 Entry docs: `docs/page-studio-redesign.md` sections 3, 7-9; `docs/components.md` atomic failure contract.
 Entry files: shared edit-session/Studio/renderer files from T16-T22, `src/home/HomeLayout.cpp`, `src/home/HomeSkins.cpp`, `src/home/ActionDispatcher.cpp`, `qml/Main.qml`, `tests/tst_components.cpp`, `tests/tst_home_navigation.cpp`.
 Scope:
-- [ ] T23.1 Implement full-viewport real-renderer Draft preview and Try navigation, with exact editor return; intercept playback/apps/device/install/network/live-settings side effects honestly.
+- [ ] T23.1 Edit the actual full-viewport runtime-rendered draft with immediate visual feedback and no primary Preview button. Optional More -> Try interaction tests internal draft navigation, then Back restores exact selection/edit state; intercept external apps/playback/device/install/network/live-settings side effects honestly.
 - [ ] T23.2 Implement complete change summary, changed-page list, error-to-widget focus, baseline conflict handling, single atomic Apply, retained draft on failure and Retry/Discard/Continue choices.
 - [ ] T23.3 Integrate bounded versioned backups, restore previous/default scope and original downgrade backup; retain apps/accounts/device settings/Kodi media and never uninstall on reset.
 - [ ] T23.4 Verify dirty exit, profile switch, import/template application and empty/removed origin restore exact focus or permanent recovery; preview/cancel/undo leave applied bytes and profile assets unchanged.

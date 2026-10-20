@@ -2,6 +2,34 @@
 
 Status: proposed design, 2026-10-19. Based on direct user feedback rejecting the current screenshots; not an implemented interface or a successful usability test. This revision supersedes conflicting toolbar, fitted-canvas, permanent inspector and page-context instructions in the earlier design pack. Persistence, validation, ownership and accessibility gates remain in force.
 
+## Latest refinement: direct screen editing
+
+User clarification: use the mobile Home-screen mental model—actual components on the actual screen, directly selected and rearranged. No Preview button in the primary interface and no separate preview needed to see an edit. This section supersedes older Preview and Confirm-picks-up wording below and in earlier specifications.
+
+**The everyday loop is Add component → select → Move / Width / Height / Edit component → Done.** Entering Studio reveals selection affordances on the real page without resizing it. Component colors, artwork, content, dimensions and background update immediately in the draft through the runtime renderer. Done closes the current operation; it does not save. Apply remains the explicit atomic save for the whole interface. Avoid a perpetual wobble animation: a stable selection outline, component name and operation label communicate edit mode at TV distance.
+
+### Selection and movement
+
+In edit mode D-pad focuses an item; Confirm selects it and opens a compact context window: **Move, Width, Height, Edit component**, with Duplicate and Remove under More. Focus is a navigation target; selection is the item being edited. The window names that selection. Confirm never launches its assigned action in edit mode. Back dismisses the context to the exact item.
+
+Choose Move to pick up the item. Close the window so the screen is visible; show the actual component as the moving ghost and a quiet outline at its original location. D-pad moves one grid cell; Confirm drops; Back cancels. Pointer drag is an accelerator for exactly the same transaction. Invalid drops explain the obstruction and offer Shift / Swap / Cancel; never silently rearrange neighbors. This deliberate Move step is preferred over Confirm immediately picking up an item: selection and editing are easier to discover and accidental movement is less likely.
+
+Width and Height each open one small stepper, showing both grid span and its visible effect. Left/Right decreases/increases the chosen dimension with a fixed, visible anchor; Confirm accepts and Back restores the previous dimension without a history entry. Offer direct size entry via the on-screen keyboard as a secondary control. An invalid candidate remains a clearly marked ghost; no silent clamping or committing overlapping geometry. A successful dimension change is one undo record, not one record per key repeat.
+
+Add component places its real default appearance under the placement ghost immediately; optional source/action configuration follows in Edit component. Where required content is missing, use an honest editable placeholder. Add, position, width and height do not require completing a long configuration wizard. Empty canvas exposes Add component and Page appearance; the left page menu remains available but collapses during direct editing.
+
+### Buttons and images share one link control
+
+Both expose **On select → None / Open page / Supported action** in Edit component. Open page offers current-profile pages by readable name and stores validated stable identities; Supported action uses the existing registered ActionDispatcher capability catalog (for example a supported app launch or search destination). Never accept executable snippets, arbitrary shell commands or unvalidated routes. An image can be decoration with None, or a fully focusable image button with a page/action link. A button may remain unassigned while drafting, but must visibly identify that state and cannot pretend to execute an action.
+
+The editor shows the destination beside the link field, with Change and Clear. Interactive images require an accessible label and visible focus style; decorative images are omitted from runtime focus order. Broken/deleted destinations are identified at the field and included in page deletion/remap review. Image art/crop and its link are independent properties. Image and button links use identical dispatch, profile isolation, focus-return and error contracts.
+
+### Seeing versus trying
+
+There is no visual preview mode: the edit view already shows the result. An optional **Try interaction** command under More temporarily removes edit affordances and enables draft internal navigation so links and focus routes can be checked. It is not a required design step or a primary toolbar button. External apps, playback and live-setting writes remain intercepted during this draft test. Back restores the exact selection and edit state. Leaving Studio after Apply resumes ordinary use, where Confirm activates the assigned link. Hiding controls alone must never silently switch between editing and executing actions.
+
+Acceptance additions: edit appearance without visiting Preview; select without launching or moving; move/drop/cancel with remote and pointer parity; resize each dimension with live visible feedback and cancellation; assign/change/clear a page link on both a button and an image; verify decorative versus interactive focus; delete a linked page with atomic repair; Try interaction and return to the exact edit origin. These are proposed gates, not completed tests.
+
 ## Product and diagnosis
 
 Isolde is a studio for designing a personal TV interface on the TV. The authored interface is the workspace. The current provisional shell gives equal prominence to nine tools, shrinks the page into a framed preview, and exposes technical identifiers. It makes editing feel separate from the result. A full-screen Preview does not solve a cramped editing experience.
