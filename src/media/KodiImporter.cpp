@@ -41,8 +41,9 @@ bool KodiImporter::loadImportState() {
     auto obj = doc.object();
     m_backupAvailable = obj.value(QStringLiteral("backupAvailable")).toBool();
     m_backupPath = obj.value(QStringLiteral("backupPath")).toString();
-    m_conflicts = obj.value(QStringLiteral("conflicts")).toArray().toVariantList()
-        .value<QStringList>();
+    m_conflicts.clear();
+    for (const auto &conflict : obj.value(QStringLiteral("conflicts")).toArray())
+        m_conflicts.append(conflict.toString());
     m_previewText = obj.value(QStringLiteral("previewText")).toString();
     m_canImport = obj.value(QStringLiteral("canImport")).toBool();
     m_canRollback = obj.value(QStringLiteral("canRollback")).toBool();

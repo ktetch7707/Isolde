@@ -65,9 +65,37 @@ bool PageModel::loadDocument(const QByteArray &data, bool /*userDocument*/)
 bool PageModel::storePage()
 {
     if (!m_owner) return false;
-    const bool ok = m_owner->storePage(m_pageId, m_pageDocument);
+    auto document = m_pageDocument;
+    QJsonArray components;
+    for (const auto &entry : document.value("components").toArray()) {
+        QString error;
+        const auto normalized = ComponentSchema::component(entry.toObject().toVariantMap(), true, &error);
+        if (normalized.isEmpty()) { m_owner->setError(error); return false; }
+        components.append(QJsonObject::fromVariantMap(normalized));
+    }
+    document["components"] = components;
+    document["schemaVersion"] = 2;
+    const bool ok = m_owner->storePage(m_pageId, document);
     if (!ok) m_owner->setError(m_owner->errorString());
     return ok;
+}
+
+bool PageModel::setSectionPresentation(const QString &id, const QVariantMap &value)
+{
+    if (!ComponentSchema::validPresentation(value, true)) return false;
+    const auto previous = m_pageDocument;
+    auto categories = m_pageDocument.value("categories").toArray();
+    for (qsizetype i = 0; i < categories.size(); ++i) {
+        auto category = categories[i].toObject();
+        if (category.value("id").toString() != id) continue;
+        category["presentation"] = QJsonObject::fromVariantMap(value);
+        categories[i] = category;
+        m_pageDocument["categories"] = categories;
+        if (!storePage()) { m_pageDocument = previous; return false; }
+        emit placementsChanged();
+        return true;
+    }
+    return false;
 }
 
 QVariantMap PageModel::document() const
@@ -92,7 +120,7 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
         const auto action = normalizedActionForItem(object);
         if (!action.isEmpty()) {
             item.insert("actionType", action.value(QStringLiteral("type")).toString());
-            item.insert("action", action.toVariantMap());
+            item.insert("action", action);
         }
         if (item.value("kind") == QStringLiteral("app")) {
             const auto appId = item.value("appId").toString();
@@ -118,7 +146,7 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
         const auto logoFile = item.value("customLogo").toString();
         item.insert("logoSource", logoFile.isEmpty() ? QString()
             : QUrl::fromLocalFile(QDir(QFileInfo(QString()).absolutePath()).filePath(logoFile)).toString());
-        auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), registry, QVariantList{});
+        auto unavailable = ComponentSchema::unavailable(action, registry, QVariantList{});
         if (unavailable.isEmpty() && action.value("type").toString() == QStringLiteral("switch-input")) {
             unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
         }
@@ -496,15 +524,12 @@ QString PageModel::addLibraryWidget(const QString &name, const QString &kind)
         m_pageDocument["composition"] = comp;
     }
     const auto id = QStringLiteral("library-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QJsonObject item{{"id", id}, {"name", name.trimmed().left(60)}, {"kind", "widget"}, {"widgetType", "media-shelf"},
-                     {"size", "standard"},
-                     {"presentation", QJsonObject{{"variant", "library"}, {"height", 500}, {"libraryKind", kind},
-                                                  {"libraryView", "all"}, {"libraryLayout", "grid"}, {"libraryColumns", 4}}}};
     const auto previous = m_pageDocument;
-    QJsonArray components;
-    if (m_pageDocument.contains("components")) components = m_pageDocument.value("components").toArray();
-    components.append(item);
-    m_pageDocument["components"] = components;
+    auto categories = m_pageDocument.value("categories").toArray();
+    categories.append(QJsonObject{{"id", id}, {"name", name.trimmed().left(60)},
+        {"presentation", QJsonObject{{"variant", "library"}, {"height", 500}, {"libraryKind", kind},
+                                    {"libraryView", "all"}, {"libraryLayout", "grid"}, {"libraryColumns", 4}}}});
+    m_pageDocument["categories"] = categories;
     if (!storePage()) { m_pageDocument = previous; return QString(); }
     m_documentLoaded = true;
     emit placementsChanged();

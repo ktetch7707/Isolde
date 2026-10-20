@@ -158,6 +158,8 @@ Window {
                 tileRoundness: homeLayout.tileRoundness
                 appearance: homeLayout.appearance
                 composition: homeLayout.composition
+                setItemPlacement: homeLayout.setItemPlacement
+                gridCollisions: homeLayout.gridCollisions
                 libraryProvider: pageData
                 wallpaperSource: homeLayout.wallpaperSource
                 wallpaperItem: windowWallpaper

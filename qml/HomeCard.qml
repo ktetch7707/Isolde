@@ -9,13 +9,13 @@ Item {
     property string selectMode: "single"
     property string selectTrigger: "click"
     property string selectAction: "navigate"
-    property color selectionColor: ""
+    property string selectionColor: ""
     property color outsideColor: "#0e1018"
     property real unit: 1
     property date now: new Date()
     readonly property string title: item.name || (item.widgetType === "clock" ? Qt.formatTime(now,"h:mm") : "")
     Timer { interval: 1000; running: root.visible && root.item.widgetType === "clock"; repeat: true; onTriggered: root.now = new Date() }
-    Timer { id: dwellTimer; interval: 700; repeat: false; running: root.selectTrigger === "dwell" && root.selected === false && root.mouseArea.containsMouse; onTriggered: root.mouseArea.forceActiveFocus(); root.activated() }
+    Timer { id: dwellTimer; interval: 700; repeat: false; running: root.selectTrigger === "dwell" && root.selected === false && mouseArea.containsMouse; onTriggered: { mouseArea.forceActiveFocus(); root.activated() } }
     readonly property var style: item.presentation || ({})
     readonly property string kind: item.widgetType === "text" ? "text" : (style.variant || variant) === "launcher" ? "source" : (style.variant || variant)
     readonly property color ink: appearance.textColor || "#EEEAF0"

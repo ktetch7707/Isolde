@@ -24,6 +24,7 @@ class HomeLayout final : public QObject {
     Q_PROPERTY(QVariantMap grid READ grid NOTIFY layoutChanged)
     Q_PROPERTY(QVariantList placements READ placements NOTIFY layoutChanged)
 
+public:
     bool load(const QString &defaultPath = {}, const QString &userPath = {});
     Q_INVOKABLE bool addAppTile(const QString &appId);
     Q_INVOKABLE bool addActionTile(const QString &name, const QString &actionType, const QString &target, const QString &categoryId = {}, const QString &openWith = {});
@@ -93,13 +94,15 @@ public:
     Q_INVOKABLE bool setGrid(const QVariantMap &value);
     Q_INVOKABLE bool setItemPlacement(const QString &id, const QVariantMap &placement);
     Q_INVOKABLE bool clearItemPlacement(const QString &id);
+    Q_INVOKABLE bool duplicateItem(const QString &id);
     Q_INVOKABLE bool setItemPresentation(const QString &id, const QVariantMap &value);
+    Q_INVOKABLE bool setSectionPresentation(const QString &id, const QVariantMap &value);
     Q_INVOKABLE QVariantList gridCollisions(const QString &itemId, const QVariantMap &placement) const;
     [[nodiscard]] QString wallpaperSource() const;
     Q_INVOKABLE bool setWallpaper(const QString &sourceUrl);
     Q_INVOKABLE bool setComposition(const QVariantMap &value);
 
-    [[nodiscard]] QString errorString() const { return m_errorString; }
+    [[nodiscard]] QString errorString() const;
     void setError(const QString &message);
 
 signals:
@@ -108,6 +111,7 @@ signals:
     void errorStringChanged();
 
 private:
+    friend class PageModel;
     bool loadDocument(const QByteArray &data, bool userDocument);
     bool save();
     QByteArray documentData() const;

@@ -64,7 +64,7 @@ Item {
         id:content;objectName:"pageContent"
         x:root.navigation==="left"?(root.config.sidebarWidth || 200):0;y:root.navigation==="top"?70:0;width:parent.width-x;height:parent.height-y
         items:root.model?root.model.items:[];sections:root.model?root.model.sections:[];composition:model?model.composition:({});grid:root.grid;placements:root.placements;pageKey:root.activeId;libraryProvider:root.provider
-        selectMode:model?model.selectMode:"single"; selectTrigger:model?model.selectTrigger:"click"; selectAction:model?model.selectAction:"navigate"; selectionColor:model?model.selectionColor:""
+        selectMode:model && model.selectMode || "single"; selectTrigger:model && model.selectTrigger || "click"; selectAction:model && model.selectAction || "navigate"; selectionColor:model && model.selectionColor || ""
         editLabel:"Edit page"
         appearance:root.model?root.model.appearance:({});brandVisible:root.model?root.model.brandVisible:false
         backgroundStart:root.model?root.model.backgroundStart:"#101014";backgroundEnd:root.model?root.model.backgroundEnd:"#101014";tileRoundness:root.model?root.model.tileRoundness:0.18

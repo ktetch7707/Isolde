@@ -336,6 +336,52 @@ bool HomeLayout::clearItemPlacement(const QString &id)
     }
     return false;
 }
+bool HomeLayout::duplicateItem(const QString &id)
+{
+    for (qsizetype i = 0; i < m_items.size(); ++i) {
+        const auto original = m_items.at(i).toObject();
+        if (original.value("id").toString() != id) continue;
+        auto copy = original;
+        QString baseId = id + QStringLiteral("-copy");
+        QString newId = baseId;
+        int suffix = 2;
+        const auto idExists = [this](const QString &candidate) {
+            for (const auto &value : m_items)
+                if (value.toObject().value("id").toString() == candidate) return true;
+            return false;
+        };
+        while (idExists(newId)) newId = baseId + QString::number(suffix++);
+        copy.insert("id", newId);
+        const auto configured = grid();
+        const auto columns = configured.value("columns").toInt();
+        const auto rows = configured.value("rows").toInt();
+        if (copy.contains("placement")) {
+            const auto placement = copy.value("placement").toObject().toVariantMap();
+            // Keep the placement only if it still fits and does not collide; otherwise drop it
+            // and let the user place the duplicate via the grid editor.
+            if (!ComponentSchema::validPlacement(placement, columns, rows)) {
+                copy.remove("placement");
+            } else {
+                bool collides = false;
+                for (const auto &entry : m_items) {
+                    const auto other = entry.toObject();
+                    if (!other.contains("placement")) continue;
+                    if (ComponentSchema::placementsOverlap(placement,
+                            other.value("placement").toObject().toVariantMap())) {
+                        collides = true;
+                        break;
+                    }
+                }
+                if (collides) copy.remove("placement");
+            }
+        }
+        m_items.append(copy);
+        if (!save()) { m_items.removeLast(); return false; }
+        emit layoutChanged(); return true;
+    }
+    return false;
+}
+
 QVariantList HomeLayout::placements() const
 {
     QVariantList result;

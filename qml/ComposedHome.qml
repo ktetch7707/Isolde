@@ -20,8 +20,14 @@ Item {
     property string selectMode: host.selectMode || "single"
     property string selectTrigger: host.selectTrigger || "click"
     property string selectAction: host.selectAction || "navigate"
-    property color selectionColor: host.selectionColor || ""
-    readonly property real unit: Math.min(width / 1280, height / (config.designHeight || 800))
+    property string selectionColor: host.selectionColor || ""
+    property real zoom: 1.0
+    readonly property real unit: Math.min(width / 1280, height / (config.designHeight || 800)) * zoom
+    Keys.onPressed: {
+        if (event.key === Qt.Key_Plus || event.key === Qt.Key_Equal) { zoom = Math.min(2.0, zoom + 0.1); event.accepted = true }
+        else if (event.key === Qt.Key_Minus) { zoom = Math.max(0.5, zoom - 0.1); event.accepted = true }
+        else if (event.key === Qt.Key_0) { zoom = 1.0; event.accepted = true }
+    }
     readonly property var headerControls: config.headerControls || (config.headerMode === "identity" ? ["search", "settings"] : ["settings", "edit"])
     readonly property bool identityHeader: config.headerMode === "identity"
     property date now: new Date()
@@ -30,7 +36,7 @@ Item {
     property var widgets: ({})
     readonly property var grid: host.grid || ({})
     readonly property var placements: host.placements || []
-    readonly property bool placementMode: Object.keys(grid || {}).length > 0 && Array.isArray(placements) && placements.length > 0
+    readonly property bool placementMode: Object.keys(root.grid || {}).length > 0 && Array.isArray(root.placements) && root.placements.length > 0
     readonly property var placementCell: {
         const g = root.grid || {}
         const columns = g.columns || 8
@@ -311,12 +317,39 @@ Item {
                             model: root.placedItems
                             delegate: Item {
                                 required property var modelData
+                                property int dragOriginX: modelData.placement.x
+                                property int dragOriginY: modelData.placement.y
                                 Layout.row: modelData.placement.y
                                 Layout.column: modelData.placement.x
                                 Layout.rowSpan: modelData.placement.height
                                 Layout.columnSpan: modelData.placement.width
                                 Layout.preferredWidth: root.placementCell.cellW * modelData.placement.width + root.placementCell.gap * Math.max(0, modelData.placement.width - 1)
                                 Layout.preferredHeight: root.placementCell.cellH * modelData.placement.height + root.placementCell.gap * Math.max(0, modelData.placement.height - 1)
+                                Drag.active: dragArea.pressed
+                                Drag.source: dragArea
+                                MouseArea {
+                                    id: dragArea
+                                    anchors.fill: parent
+                                    z: 2
+                                    property real pressX: 0
+                                    property real pressY: 0
+                                    onPressed: mouse => { pressX = mouse.x; pressY = mouse.y }
+                                    onClicked: mouse => { mouse.accepted = false }
+                                    propagateComposedEvents: true
+                                    onReleased: mouse => {
+                                        if (!root.host.gridCollisions || !root.host.setItemPlacement) return
+                                        const cell = root.placementCell
+                                        const newX = modelData.placement.x + Math.round((mouse.x - pressX) / (cell.cellW + cell.gap))
+                                        const newY = modelData.placement.y + Math.round((mouse.y - pressY) / (cell.cellH + cell.gap))
+                                        if (newX === modelData.placement.x && newY === modelData.placement.y) return
+                                        const placement = { x: newX, y: newY, width: modelData.placement.width, height: modelData.placement.height }
+                                        const collisions = root.host.gridCollisions(modelData.item.id, placement)
+                                        if (collisions.length > 0) return // never silently overwrite
+                                        if (root.host.setItemPlacement(modelData.item.id, placement)) {
+                                            // placement applied
+                                        }
+                                    }
+                                }
                                 HomeCard {
                                     anchors.fill: parent
                                     item: modelData.item

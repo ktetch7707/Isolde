@@ -65,7 +65,7 @@ void IsoldeTests::setupProgressPersistsAndHandlesFailure()
     QVERIFY(state.advance());
     SetupState resumed(path);
     QCOMPARE(resumed.step(), 1);
-    for (int i = 1; i < 6; ++i) QVERIFY(resumed.advance());
+    for (int i = 1; i < 7; ++i) QVERIFY(resumed.advance());
     QVERIFY(!resumed.complete());
     QVERIFY(resumed.advance());
     QVERIFY(SetupState(path).complete());
@@ -81,6 +81,16 @@ void IsoldeTests::setupProgressPersistsAndHandlesFailure()
     SetupState invalid(path);
     QVERIFY(!invalid.complete());
     QVERIFY(!invalid.error().isEmpty());
+    QVERIFY(malformed.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray legacy = "{\"version\":1,\"step\":6,\"complete\":true}";
+    QCOMPARE(malformed.write(legacy), legacy.size());
+    malformed.close();
+    SetupState legacyCompleted(path);
+    QVERIFY(legacyCompleted.complete());
+    QCOMPARE(legacyCompleted.step(), 7);
+    QVERIFY(malformed.open(QIODevice::ReadOnly));
+    QCOMPARE(malformed.readAll(), legacy); // Compatibility load must not rewrite.
+    malformed.close();
     SetupState blocked(path + "/not-a-directory.json");
     QVERIFY(!blocked.advance());
     QCOMPARE(blocked.step(), 0);

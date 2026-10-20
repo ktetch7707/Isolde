@@ -9,7 +9,7 @@ Rectangle {
     property string selectMode: "single"
     property string selectTrigger: "click"
     property string selectAction: "navigate"
-    property color selectionColor: ""
+    property string selectionColor: ""
     readonly property real textScale: appearance.typographyScale || 1
     readonly property bool compact: height < 180
     signal activated()

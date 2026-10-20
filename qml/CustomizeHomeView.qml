@@ -20,10 +20,19 @@ Item {
     property bool artworkEditing: false
     property bool themePreviewEditing: false
     property bool sourceRepairEditing: false
+    property bool spanEditing: false
+    property bool gridCollisionEditing: false
+    property string message: ""
+    property string spanTargetId: ""
+    property int spanWidth: 1
+    property int spanHeight: 1
+    property var collisionPlacement: ({})
+    property var collisionTargets: []
+    property int collisionChoice: 0
     property string repairItemId: ""
     property var repairChoices: []
     property int repairIndex: 0
-    readonly property bool editing: pageManager.open || skinLibrary.open || designEditor.open || componentEditor.open || appearanceEditor.open || sourceRepairEditing || addTileEditing || artworkEditing || themePreviewEditing || opacityEditing || categoryEditing || roundnessEditing
+    readonly property bool editing: pageManager.open || skinLibrary.open || designEditor.open || componentEditor.open || appearanceEditor.open || sourceRepairEditing || addTileEditing || artworkEditing || themePreviewEditing || opacityEditing || categoryEditing || roundnessEditing || spanEditing || gridCollisionEditing
     property int addTileActionIndex: 0
     property int addTileOpenWithIndex: 0
     property int addTileFieldIndex: 0
@@ -36,8 +45,8 @@ Item {
     property int artworkIndex: 0
     property int themePreviewIndex: 0
     property bool themeApplyArtwork: false
-    onVisibleChanged: if (!visible) { if (appearanceEditor.open) appearanceEditor.close(); componentEditor.open = false; skinLibrary.open = false; designEditor.open = false; pageManager.open = false }
-    readonly property var actions: ["Move earlier", "Move later", "Change size", "Remove item", "Show / hide title", "Show / hide type", "Show / hide logo", "Logo fills tile", "Choose built-in art", "Choose image", "Remove custom PNG", "Toggle Isolde name", "Preview/apply theme", "Assign category", "Manage categories", "Item opacity", "Tile roundness", "Add clock", "Add tile", "Restore defaults", "Repair / change source", "Make it yours", "Component layout", root.layoutModel.isPage ? "Page skins" : "Home skins", root.layoutModel.isPage ? "Design page" : "Design Home", "Pages", "Add Movies widget", "Add Shows widget", "Add text widget", "Add button"]
+    onVisibleChanged: if (!visible) { if (appearanceEditor.open) appearanceEditor.close(); componentEditor.open = false; skinLibrary.open = false; designEditor.open = false; pageManager.open = false; spanEditing = false; gridCollisionEditing = false }
+    readonly property var actions: ["Move earlier", "Move later", "Change size", "Remove item", "Show / hide title", "Show / hide type", "Show / hide logo", "Logo fills tile", "Choose built-in art", "Choose image", "Remove custom PNG", "Toggle Isolde name", "Preview/apply theme", "Assign category", "Manage categories", "Item opacity", "Tile roundness", "Add clock", "Add tile", "Restore defaults", "Repair / change source", "Make it yours", "Component layout", root.layoutModel.isPage ? "Page skins" : "Home skins", root.layoutModel.isPage ? "Design page" : "Design Home", "Pages", "Add Movies widget", "Add Shows widget", "Add text widget", "Add button", "Duplicate"]
     readonly property var addTileActions: [
         { type: "open-folder", label: "Open folder", hint: "Folder path, e.g. /media/movies" },
         { type: "open-file", label: "Open file", hint: "File path, e.g. /media/trailers/movie.mp4" },
@@ -138,6 +147,40 @@ Item {
                 roundnessEditing = false
             return
         }
+        if (spanEditing) {
+            const grid = root.layoutModel.grid
+            if (command === inputManager.navigateUp) { spanHeight = Math.max(1, spanHeight - 1); spanHeight = Math.min(spanHeight, grid.rows) }
+            else if (command === inputManager.navigateDown) { spanHeight = Math.min(grid.rows, spanHeight + 1) }
+            else if (command === inputManager.navigateLeft) { spanWidth = Math.max(1, spanWidth - 1); spanWidth = Math.min(spanWidth, grid.columns) }
+            else if (command === inputManager.navigateRight) { spanWidth = Math.min(grid.columns, spanWidth + 1) }
+            else if (command === inputManager.confirm) {
+                const placement = { x: 0, y: 0, width: spanWidth, height: spanHeight }
+                if (placement.width < 1 || placement.height < 1 || placement.width > grid.columns || placement.height > grid.rows) { root.message = "Span exceeds grid bounds."; return }
+                const collisions = root.layoutModel.gridCollisions(spanTargetId, placement)
+                if (collisions.length > 0) {
+                    root.collisionPlacement = placement
+                    root.collisionTargets = collisions
+                    root.gridCollisionEditing = true
+                    root.spanEditing = false
+                    return
+                }
+                if (!root.layoutModel.setItemPlacement(spanTargetId, placement)) { root.message = root.layoutModel.errorString; return }
+                root.spanEditing = false; root.message = ""
+            }
+            else if (command === inputManager.back) spanEditing = false
+            return
+        }
+        if (gridCollisionEditing) {
+            if (command === inputManager.navigateLeft) collisionChoice = Math.max(0, collisionChoice - 1)
+            else if (command === inputManager.navigateRight) collisionChoice = Math.min(2, collisionChoice + 1)
+            else if (command === inputManager.confirm) {
+                if (collisionChoice === 0) root.applySpanWithShift()
+                else if (collisionChoice === 1) root.applySpanWithSwap()
+                else { root.gridCollisionEditing = false; root.spanEditing = false; root.message = "" }
+            }
+            else if (command === inputManager.back) { root.gridCollisionEditing = false; root.spanEditing = false; root.message = "" }
+            return
+        }
         if (command === inputManager.navigateUp)
             selectedIndex = Math.max(0, selectedIndex - 1)
         else if (command === inputManager.navigateDown)
@@ -151,7 +194,7 @@ Item {
     }
 
     function applyAction() {
-        if(actionIndex === 26 || actionIndex === 27){root.layoutModel.addLibraryWidget(actionIndex===26?"Movies":"Shows",actionIndex===26?"movies":"shows");return}
+        if(actionIndex === 26 || actionIndex === 27){root.layoutModel.addLibraryWidget(actionIndex === 26?"Movies":"Shows",actionIndex === 26?"movies":"shows");return}
         if(actionIndex === 29){root.layoutModel.addButton();return}
         if(actionIndex === 28){root.layoutModel.addWidget("text");return}
         if (actionIndex === 25) { pageManager.begin(); return }
@@ -176,8 +219,15 @@ Item {
         if (actionIndex === 0) { root.layoutModel.moveItem(item.id, -1); selectedIndex = Math.max(0, selectedIndex - 1) }
         else if (actionIndex === 1) { root.layoutModel.moveItem(item.id, 1); selectedIndex = Math.min(items.length - 1, selectedIndex + 1) }
         else if (actionIndex === 2) {
-            const next = item.size === "compact" ? "standard" : item.size === "standard" ? "wide" : "compact"
-            root.layoutModel.setItemSize(item.id, next)
+            spanTargetId = item.id
+            const grid = root.layoutModel.grid
+            const current = item.placement || ({})
+            spanWidth = current.width || 1
+            spanHeight = current.height || 1
+            spanEditing = true
+        } else if (actionIndex === 30) {
+            if (!root.layoutModel.duplicateItem(item.id)) { root.message = root.layoutModel.errorString; return }
+            selectedIndex = Math.min(selectedIndex + 1, items.length - 1)
         } else if (actionIndex === 3) { root.layoutModel.removeItem(item.id); selectedIndex = Math.max(0, Math.min(selectedIndex, items.length - 2)) }
         else if (actionIndex === 4 && item.kind !== "widget") root.layoutModel.setTileOption(item.id, "showTitle", item.showTitle === false)
         else if (actionIndex === 5 && item.kind !== "widget") root.layoutModel.setTileOption(item.id, "showType", item.showType === false)
@@ -240,6 +290,69 @@ Item {
         if (categoryAction === 0) root.layoutModel.addCategory(categoryName.text)
         else if (categoryAction === 1 && selectedCategory > 0) root.layoutModel.renameCategory(root.layoutModel.categories[selectedCategory - 1].id, categoryName.text)
         categoryName.focus = false
+    }
+
+    function findEmptyCell(width, height, excludeId, reserved) {
+        const grid = root.layoutModel.grid
+        const columns = grid.columns, rows = grid.rows
+        for (let y = 0; y + height <= rows; ++y) {
+            for (let x = 0; x + width <= columns; ++x) {
+                const trial = { x: x, y: y, width: width, height: height }
+                if (reserved && x < reserved.x + reserved.width && reserved.x < x + width
+                    && y < reserved.y + reserved.height && reserved.y < y + height) continue
+                let ok = true
+                for (let i = 0; i < root.items.length; ++i) {
+                    const it = root.items[i]
+                    if (it.id === excludeId || !it.placement) continue
+                    const p = it.placement
+                    if (x < p.x + p.width && p.x < x + width && y < p.y + p.height && p.y < y + height) { ok = false; break }
+                }
+                if (ok) return trial
+            }
+        }
+        return null
+    }
+
+    function applySpanWithShift() {
+        const placement = root.collisionPlacement
+        const targetId = root.spanTargetId
+        const collidingId = root.collisionTargets[0] ? root.collisionTargets[0].id : ""
+        if (!collidingId) { root.gridCollisionEditing = false; root.spanEditing = false; root.message = ""; return }
+        // Move the colliding item to the target's old placement if that cell is free
+        let targetOld = null
+        for (let i = 0; i < root.items.length; ++i) {
+            if (root.items[i].id === targetId) { targetOld = root.items[i].placement || {x:0,y:0,width:1,height:1}; break }
+        }
+        if (targetOld && root.layoutModel.gridCollisions(collidingId, targetOld).length === 0) {
+            root.layoutModel.setItemPlacement(collidingId, targetOld)
+        } else {
+            // Try any empty cell that fits the colliding item
+            const ci = root.items.find(i => i.id === collidingId)
+            const oldP = ci ? ci.placement : null
+            if (oldP) {
+                const empty = findEmptyCell(oldP.width, oldP.height, collidingId, placement)
+                if (empty) root.layoutModel.setItemPlacement(collidingId, empty)
+            }
+        }
+        if (!root.layoutModel.setItemPlacement(targetId, placement)) { root.message = root.layoutModel.errorString; return }
+        root.gridCollisionEditing = false; root.spanEditing = false; root.message = ""
+    }
+
+    function applySpanWithSwap() {
+        const placement = root.collisionPlacement
+        const targetId = root.spanTargetId
+        const collidingId = root.collisionTargets[0] ? root.collisionTargets[0].id : ""
+        if (!collidingId) { root.gridCollisionEditing = false; root.spanEditing = false; root.message = ""; return }
+        // Swap: target takes colliding's old placement, colliding gets the desired new placement
+        let collidingOld = null
+        for (let i = 0; i < root.items.length; ++i) {
+            if (root.items[i].id === collidingId) { collidingOld = root.items[i].placement || {x:0,y:0,width:1,height:1}; break }
+        }
+        if (collidingOld) {
+            root.layoutModel.setItemPlacement(targetId, collidingOld)
+        }
+        if (!root.layoutModel.setItemPlacement(collidingId, placement)) { root.message = root.layoutModel.errorString; return }
+        root.gridCollisionEditing = false; root.spanEditing = false; root.message = ""
     }
 
     AppearanceEditor { id: appearanceEditor; anchors.fill: parent; layoutModel: root.layoutModel; z: 50 }
@@ -620,6 +733,95 @@ Item {
                     }
                 }
                 Text { text: "↑ ↓ category    ← → action    Enter apply    Type names with keyboard"; color: "#91A0BC"; font.pixelSize: 15 }
+            }
+        }
+    }
+
+    Rectangle {
+        visible: root.spanEditing
+        anchors.fill: parent; color: "#CC050812"; z: 22
+        Rectangle {
+            anchors.centerIn: parent; width: Math.min(600, parent.width - 120); height: 340
+            radius: 24; color: "#151E32"; border.width: 2; border.color: "#D58A45"
+            Column {
+                anchors.fill: parent; anchors.margins: 34; spacing: 20
+                Text { text: "TILE SPAN (WIDTH × HEIGHT)"; color: "white"; font.pixelSize: 26; font.weight: Font.DemiBold }
+                Text { text: "Enter cells for the selected tile. Grid: " + root.layoutModel.grid.columns + " × " + root.layoutModel.grid.rows + "."; color: "#91A0BC"; font.pixelSize: 15; wrapMode: Text.WordWrap }
+                Row { spacing: 16
+                    Text { text: "Width"; width: 100; color: "white"; font.pixelSize: 17 }
+                    TextField { id: spanWidthField; width: 120; height: 44; color: "white"; font.pixelSize: 18; text: root.spanWidth
+                        background: Rectangle { radius: 9; color: "#0E1628"; border.color: spanWidthField.activeFocus ? "#FFFFFF" : "#354462" }
+                        onAccepted: root.spanWidth = Math.max(1, Math.min(root.layoutModel.grid.columns, Number(text) || 1)) }
+                }
+                Row { spacing: 16
+                    Text { text: "Height"; width: 100; color: "white"; font.pixelSize: 17 }
+                    TextField { id: spanHeightField; width: 120; height: 44; color: "white"; font.pixelSize: 18; text: root.spanHeight
+                        background: Rectangle { radius: 9; color: "#0E1628"; border.color: spanHeightField.activeFocus ? "#FFFFFF" : "#354462" }
+                        onAccepted: root.spanHeight = Math.max(1, Math.min(root.layoutModel.grid.rows, Number(text) || 1)) }
+                }
+                Text { text: root.message; color: "#F88273"; font.pixelSize: 15; wrapMode: Text.WordWrap }
+                Row { spacing: 12
+                    Rectangle { width: 140; height: 46; radius: 9; color: "#D58A45"; border.width: 1; border.color: "white"
+                        Text { anchors.centerIn: parent; text: "APPLY SPAN"; color: "white"; font.pixelSize: 16; font.weight: Font.Bold }
+                        MouseArea { anchors.fill: parent; onClicked: {
+                            const placement = { x: 0, y: 0, width: root.spanWidth, height: root.spanHeight }
+                            const grid = root.layoutModel.grid
+                            if (placement.width < 1 || placement.height < 1 || placement.width > grid.columns || placement.height > grid.rows) { root.message = "Span exceeds grid bounds."; return }
+                            const collisions = root.layoutModel.gridCollisions(root.spanTargetId, placement)
+                            if (collisions.length > 0) {
+                                root.collisionPlacement = placement
+                                root.collisionTargets = collisions
+                                root.gridCollisionEditing = true
+                                root.spanEditing = false
+                                return
+                            }
+                            if (!root.layoutModel.setItemPlacement(root.spanTargetId, placement)) { root.message = root.layoutModel.errorString; return }
+                            root.spanEditing = false; root.message = ""
+                        } }
+                    }
+                    Rectangle { width: 140; height: 46; radius: 9; color: "#35435A"; border.width: 1; border.color: "white"
+                        Text { anchors.centerIn: parent; text: "CANCEL"; color: "white"; font.pixelSize: 16 }
+                        MouseArea { anchors.fill: parent; onClicked: root.spanEditing = false } }
+                }
+                Text { text: "← → adjust    Enter apply    Back cancel"; color: "#91A0BC"; font.pixelSize: 15 }
+            }
+        }
+    }
+    Rectangle {
+        visible: root.gridCollisionEditing
+        anchors.fill: parent; color: "#CC050812"; z: 23
+        Rectangle {
+            anchors.centerIn: parent; width: Math.min(700, parent.width - 120); height: 360
+            radius: 24; color: "#151E32"; border.width: 2; border.color: "#F88273"
+            Column {
+                anchors.fill: parent; anchors.margins: 34; spacing: 20
+                Text { text: "CELLS OCCUPIED"; color: "white"; font.pixelSize: 26; font.weight: Font.DemiBold }
+                Text { text: "Another widget occupies those cells. Choose how to resolve:"; color: "#91A0BC"; font.pixelSize: 15; wrapMode: Text.WordWrap }
+                ListView {
+                    width: parent.width; height: 180; spacing: 8; clip: true
+                    model: root.collisionTargets
+                    delegate: Rectangle {
+                        required property int index; required property var modelData
+                        width: ListView.view.width; height: 44; radius: 8; color: "#202D47"
+                        Text { anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 14; text: modelData.name || modelData.id; color: "white"; font.pixelSize: 17 }
+                    }
+                }
+                Grid { width: parent.width; columns: 3; spacing: 10
+                    Repeater {
+                        model: ["Shift other", "Swap places", "Cancel"]
+                        delegate: Rectangle {
+                            required property int index; required property string modelData
+                            width: (parent.width - 20) / 3; height: 48; radius: 9; color: "#35435A"; border.width: 1; border.color: "#2B3853"
+                            Text { anchors.centerIn: parent; text: modelData; color: "white"; font.pixelSize: 16 }
+                            MouseArea { anchors.fill: parent; onClicked: {
+                                if (index === 0) { root.applySpanWithShift(); return }
+                                if (index === 1) { root.applySpanWithSwap(); return }
+                                root.gridCollisionEditing = false; root.spanEditing = false; root.message = ""
+                            } }
+                        }
+                    }
+                }
+                Text { text: "↑ ↓ choose    Enter apply    Back cancel"; color: "#91A0BC"; font.pixelSize: 15 }
             }
         }
     }

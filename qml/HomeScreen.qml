@@ -13,13 +13,15 @@ Item {
     property var composition: ({})
     property var grid: ({})
     property var placements: []
+    property var setItemPlacement: null
+    property var gridCollisions: null
     property var libraryProvider: null
     property string pageKey: "home"
     property string editLabel: "Edit Home"
     property string selectMode: "single"
     property string selectTrigger: "click"
     property string selectAction: "navigate"
-    property color selectionColor: ""
+    property string selectionColor: ""
     readonly property bool widgetActive: composed.activeWidget !== ""
     property string wallpaperSource: ""
     property var wallpaperItem: null

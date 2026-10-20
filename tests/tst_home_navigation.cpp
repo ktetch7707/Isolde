@@ -4,6 +4,9 @@
 #include "media/KodiArtwork.h"
 #include "media/KodiService.h"
 #include "home/PageData.h"
+#include "home/PageModel.h"
+#include "settings/SearchSettings.h"
+#include "media/KodiImporter.h"
 #include <QBuffer>
 #include <QImage>
 #include <functional>
@@ -37,6 +40,7 @@ private slots:
     void pastelReferenceNavigationAndGeometry();
     void skinsAndDesignAreReachableFromSettings();
     void pageComposerAndIndependentKodiWidgets();
+    void gridEditorMoveResizeDuplicateRemove();
 };
 void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
 {
@@ -68,7 +72,7 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     controls->setProperty("actionIndex",25);QVERIFY(control(InputManager::Confirm));
     auto *manager=controls->findChild<QObject *>("pageManager");QVERIFY(manager);manager->setProperty("operation",3);QVERIFY(control(InputManager::Confirm));
     auto *keyboard=manager->findChild<QObject *>("pageNameKeyboard");QVERIFY(keyboard);QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("My cinema"))));
-    QCOMPARE(home.pages().size(),1);const auto pageId=home.pages()[0].toMap()["id"].toString();auto *page=qobject_cast<HomeLayout *>(home.pageModel(pageId));QVERIFY(page);
+    QCOMPARE(home.pages().size(),1);const auto pageId=home.pages()[0].toMap()["id"].toString();auto *page=qobject_cast<PageModel *>(home.pageModel(pageId));QVERIFY(page);
     manager->setProperty("operation",1);QVERIFY(control(InputManager::Confirm));QTRY_VERIFY(manager->property("editModel").value<QObject *>());
     QVERIFY(control(InputManager::Back));QVERIFY(control(InputManager::Back));
     const auto second=page->addLibraryWidget("Keep watching","movies");QVERIFY(!second.isEmpty());QVERIFY(page->setSectionPresentation(second,{{"variant","library"},{"height",300},{"libraryView","continue"},{"libraryLayout","row"},{"libraryColumns",3}}));
@@ -401,6 +405,9 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme()
     engine.rootContext()->setContextProperty("kodiService", &service);
     engine.rootContext()->setContextProperty("kodiMedia", &media);
     engine.rootContext()->setContextProperty("sessionManager", &sessions);
+    SearchSettings searchPreferences; KodiImporter importer("theme-test");
+    engine.rootContext()->setContextProperty("searchPreferences", &searchPreferences);
+    engine.rootContext()->setContextProperty("kodiImporter", &importer);
     engine.rootContext()->setContextProperty("profileManager", QVariantMap{{"activeName", "Theme test"}});
     const QVariantMap appearance{{"focusColor", "#E65D8F"}, {"surfaceColor", "#334455"},
         {"selectedColor", "#123456"}, {"textColor", "#E0E0E0"}, {"mutedColor", "#AAAAAA"},
@@ -621,6 +628,79 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QCOMPARE(media.viewKind(), QString("recent")); QCOMPARE(media.mediaKind(), QString("episodes"));
     QVERIFY(command(InputManager::Back)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("shows"));
     QVERIFY(command(InputManager::Back)); QVERIFY(!root->property("open").toBool());
+}
+void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
+{
+    QTemporaryDir dir;
+    QFile defaults(dir.filePath("default.json"));
+    QVERIFY(defaults.open(QIODevice::WriteOnly));
+    defaults.write(R"({"schemaVersion":1,"theme":{"backgroundStart":"#111111","backgroundEnd":"#222222"},"grid":{"columns":8,"rows":5},"items":[
+        {"id":"alpha","kind":"app","appId":"app-a","name":"Alpha","placement":{"x":0,"y":0,"width":2,"height":1}},
+        {"id":"beta","kind":"app","appId":"app-b","name":"Beta","placement":{"x":2,"y":0,"width":2,"height":1}},
+        {"id":"gamma","kind":"app","appId":"app-c","name":"Gamma","placement":{"x":4,"y":0,"width":2,"height":1}}
+    ]})");
+    defaults.close();
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(R"([{"id":"app-a","name":"App A","type":"mock","section":"Apps","accent":"#556677"},{"id":"app-b","name":"App B","type":"mock","section":"Apps","accent":"#556677"},{"id":"app-c","name":"App C","type":"mock","section":"Apps","accent":"#556677"}] )"));
+    HomeLayout home(&registry);
+    QVERIFY(home.load(defaults.fileName(), dir.filePath("user.json")));
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    engine.rootContext()->setContextProperty("homeLayout", &home);
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items", home.items()}, {"availableApps", QVariantList{}},
+        {"artwork", QVariantList{}}, {"themes", QVariantList{}}, {"width", 1280}, {"height", 720}}));
+    QVERIFY2(root, qPrintable(component.errorString()));
+    connect(&home, &HomeLayout::layoutChanged, root.get(), [&] { root->setProperty("items", home.items()); });
+    auto command = [&](int value) { return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value)); };
+    auto items = [&]() { return root->property("items").toList(); };
+
+    // Select "Alpha" (index 0), then choose "Change size" (actionIndex 2)
+    root->setProperty("selectedIndex", 0);
+    root->setProperty("actionIndex", 2);
+    QVERIFY(command(InputManager::Confirm));
+    QVERIFY(root->property("spanEditing").toBool());
+    QCOMPARE(root->property("spanTargetId").toString(), QString("alpha"));
+
+    // Increase width from 2 to 3 through one remote step.
+    QVERIFY(command(InputManager::NavigateRight));
+    QCOMPARE(root->property("spanWidth").toInt(), 3);
+
+    // Apply span (confirm) - should collide with "beta" at x=2
+    QVERIFY(command(InputManager::Confirm));
+    QVERIFY(root->property("gridCollisionEditing").toBool());
+    QCOMPARE(root->property("collisionTargets").toList().size(), 1);
+
+    // Choose "Shift other" (collisionChoice 0), confirm
+    root->setProperty("collisionChoice", 0);
+    QVERIFY(command(InputManager::Confirm));
+    QVERIFY(!root->property("gridCollisionEditing").toBool());
+    QVERIFY(!root->property("spanEditing").toBool());
+
+    // Alpha should now span x=0..3, beta should have been shifted
+    auto alpha = items()[0].toMap();
+    QCOMPARE(alpha["id"].toString(), QString("alpha"));
+    auto alphaPlace = alpha["placement"].toMap();
+    QCOMPARE(alphaPlace["width"].toInt(), 3);
+
+    // Select "Beta" (index 1), choose "Duplicate" (actionIndex 3)
+    root->setProperty("selectedIndex", 1);
+    root->setProperty("actionIndex", 30);
+    QVERIFY(command(InputManager::Confirm));
+    QVERIFY(root->property("editing").toBool() == false); // duplicate completes immediately
+    auto duplicated = items().last().toMap();
+    QVERIFY(duplicated["id"].toString().startsWith("beta-copy"));
+
+    // Select "Gamma" (index 2), choose "Remove item" (actionIndex 4)
+    root->setProperty("selectedIndex", 2);
+    root->setProperty("actionIndex", 3);
+    QVERIFY(command(InputManager::Confirm));
+    QCOMPARE(items().size(), 3); // alpha, beta, beta-copy (gamma removed)
+    bool gammaFound = false;
+    for (const auto &v : items()) if (v.toMap()["id"].toString() == "gamma") gammaFound = true;
+    QVERIFY(!gammaFound);
 }
 QTEST_MAIN(HomeNavigationTests)
 #include "tst_home_navigation.moc"

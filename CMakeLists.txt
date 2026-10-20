@@ -46,6 +46,8 @@ add_library(isolde_core STATIC
     src/home/HomeLayout.cpp
     src/home/HomeSkins.cpp
     src/home/HomePages.cpp
+    src/home/PageModel.cpp
+    src/home/PageModel.h
     src/home/PageData.cpp
     src/home/PageData.h
     src/home/HomeLayout.h

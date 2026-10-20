@@ -10,7 +10,7 @@ Rectangle {
     property string naming: ""
     property bool confirming: false
     property string message: ""
-    readonly property var entries: layoutModel.skins
+    readonly property var entries: layoutModel.skins || []
     readonly property var choice: entries[selected] || ({})
     readonly property var operations: ["Apply skin", "Save current as new skin", "Rename saved skin", "Delete saved skin"]
     color: "#101014"; visible: open

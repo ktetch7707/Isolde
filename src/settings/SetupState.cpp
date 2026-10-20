@@ -16,11 +16,13 @@ SetupState::SetupState(const QString &path, QObject *parent) : QObject(parent),
     const auto obj = QJsonDocument::fromJson(file.readAll()).object();
     const int saved = obj.value("step").toInt(-1);
     if (obj.value("version").toInt() != 1 || saved < 0 || saved > 7
-        || !obj.value("complete").isBool() || (obj.value("complete").toBool() && saved != 7)) {
+        || !obj.value("complete").isBool() || (obj.value("complete").toBool() && saved != 6 && saved != 7)) {
         m_error = "Setup progress could not be read. Your profiles and settings are unchanged.";
         return;
     }
-    m_step = saved;
+    // Completed seven-step v1 setups stay complete after adding library setup.
+    // Compatibility is in memory only; loading never rewrites the user's file.
+    m_step = obj.value("complete").toBool() ? 7 : saved;
     m_complete = obj.value("complete").toBool();
 }
 

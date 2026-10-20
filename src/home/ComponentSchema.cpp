@@ -1,6 +1,7 @@
 #include "ComponentSchema.h"
 #include "app/AppRegistry.h"
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QDir>
 #include <QUrl>

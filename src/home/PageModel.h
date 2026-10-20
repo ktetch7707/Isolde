@@ -2,7 +2,9 @@
 
 #include <QObject>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QVariantMap>
+#include <functional>
 
 class HomeLayout;
 
@@ -25,12 +27,22 @@ class PageModel final : public QObject {
     Q_PROPERTY(QVariantList placements READ placements NOTIFY placementsChanged)
     Q_PROPERTY(QVariantMap presentation READ presentation WRITE setPresentation NOTIFY presentationChanged)
     Q_PROPERTY(bool isPage READ isPage NOTIFY isPageChanged)
+    Q_PROPERTY(QVariantList items READ items NOTIFY placementsChanged)
+    Q_PROPERTY(QVariantList sections READ sections NOTIFY placementsChanged)
+    Q_PROPERTY(QVariantList categories READ categories NOTIFY placementsChanged)
+    Q_PROPERTY(QVariantMap appearance READ appearance NOTIFY presentationChanged)
+    Q_PROPERTY(QString backgroundStart READ backgroundStart NOTIFY presentationChanged)
+    Q_PROPERTY(QString backgroundEnd READ backgroundEnd NOTIFY presentationChanged)
+    Q_PROPERTY(QString wallpaperSource READ wallpaperSource NOTIFY presentationChanged)
+    Q_PROPERTY(double tileRoundness READ tileRoundness NOTIFY presentationChanged)
+    Q_PROPERTY(bool brandVisible READ brandVisible NOTIFY presentationChanged)
+    Q_PROPERTY(QString errorString READ errorString NOTIFY documentLoaded)
 
 public:
     explicit PageModel(HomeLayout *owner, const QString &id, QObject *parent = nullptr);
     [[nodiscard]] HomeLayout *owner() const { return m_owner; }
     [[nodiscard]] QString id() const { return m_pageId; }
-    [[nodiscard]] bool isPage() const { return m_pageId.startsWith(m_owner->pageKey(m_pageId)); }
+    [[nodiscard]] bool isPage() const { return m_owner && !m_pageId.isEmpty(); }
 
     [[nodiscard]] QVariantMap composition() const;
     bool setComposition(const QVariantMap &value);
@@ -41,6 +53,8 @@ public:
     bool setPresentation(const QVariantMap &value);
     [[nodiscard]] QVariantList items() const;
     [[nodiscard]] QVariantList sections() const;
+    [[nodiscard]] QVariantList categories() const { return m_pageDocument.value("categories").toArray().toVariantList(); }
+    Q_INVOKABLE bool setSectionPresentation(const QString &id, const QVariantMap &value);
     [[nodiscard]] QString backgroundStart() const;
     [[nodiscard]] QString backgroundEnd() const;
     [[nodiscard]] QVariantMap appearance() const;
@@ -82,4 +96,5 @@ private:
 
     [[nodiscard]] QVariantList resolveItems(const QJsonArray &components) const;
     [[nodiscard]] QVariantMap themeDefaults() const;
+    bool setItemField(const QString &id, std::function<void(QJsonObject &)> mutate);
 };
