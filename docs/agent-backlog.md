@@ -58,6 +58,8 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 
 ## Highest priority: core Page Studio
 
+UX revision (user feedback, 2026-10-19): read [Page-first Studio](design/page-studio/page-first-design.md) before T17-T24/T27. Full-size page, overlaying left page menu, single context windows and protected movable Home designation replace the provisional toolbar/fitted-preview shell. T16 backend evidence remains valid; neither the revised design nor the interactive concept is implemented acceptance. Percentages remain unchanged. Minimum Settings/Home theme inheritance is required before T24 cutover; T27's remaining shell adoption follows T24.
+
 ## T15 — Page Studio interaction design and usability validation (M, depends: none; selected priority)
 Entry docs: `docs/page-studio-redesign.md` sections 1-4, 10-11; `docs/shell-surfaces-design.md` sections 1-6; `docs/interface-design.md` Page Studio amendment.
 Entry files: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml` (read-only workflow inventory); new design artifacts under `docs/design/page-studio/`.
@@ -86,7 +88,7 @@ Entry docs: `docs/page-studio-redesign.md` sections 2, 5, 9; `docs/home-composit
 Entry files: `qml/ComposedHome.qml`, `qml/HomeScreen.qml`, `qml/PageSurface.qml`, `src/home/ComponentSchema.{h,cpp}`, `src/home/HomeLayout.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `tests/tst_home_navigation.cpp`.
 Scope:
 - [ ] T17.1 Establish shared measured geometry for runtime rendering, canvas, hit-testing and spatial focus; include safe area, reserved header, cell spans, real empty cells and out-of-bounds refusal.
-- [ ] T17.2 Render the same draft at fitted/zoomed/panned editor views and actual device aspects; camera/panel changes never change layout data or reflow the page.
+- [ ] T17.2 Default to the full-size authored viewport with overlay tools; fitted/zoomed/panned views are optional. Opening/closing tools never changes page geometry, layout data or runtime aspect.
 - [ ] T17.3 Add validated one-screen root and scrolling section-grid modes plus bounded nested/internal grids; no implicit row growth or placement overwrite.
 - [ ] T17.4 Open legacy flow/no-grid pages unchanged through the canvas contract; explicit conversion previews differences and preserves IDs/routes/artwork, with no startup/read/cancel migration write.
 - [ ] T17.5 Add placement-specific geometry/focus tests at 720p, 1080p, 4K and the legacy 1280x800 fixture viewport; rerun and review both real fixture recreation/reset pairs.
@@ -97,9 +99,9 @@ Verify: extend `universalGridValidatesAndPersists` and `home_component_navigatio
 Entry docs: `docs/page-studio-redesign.md` sections 2-4, 6; T15 approved wireframes and feature map.
 Entry files: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml`, `qml/PageSurface.qml`, `qml/Main.qml`, `src/home/HomePages.cpp`, `tests/tst_home_navigation.cpp`; new native Studio view files only as needed.
 Scope:
-- [ ] T18.1 Add the canvas-first shell: named profile/page/scope, draft indicator, contextual toolbar, Add, Pages/Layers, Undo/Redo, Fit/Grid, Preview and Apply; all bind to the shared draft session.
-- [ ] T18.2 Implement TV one-panel-at-a-time drawers and wide-screen rails, deterministic selection/hit-testing, named outlines, breadcrumbs and exact focus restoration.
-- [ ] T18.3 Implement page create/duplicate/name/reorder/Home/route choices in the draft, with thumbnails, searchable names, incoming-link removal/remap preview and page limits.
+- [ ] T18.1 Add the page-first shell: full-size page, collapsible overlay left page menu, Add page, draft status, contextual tools, Preview/Apply and secondary history/guides; no permanent top ribbon or forced miniature preview.
+- [ ] T18.2 Implement one contextual window at a time, page-list Confirm actions, deterministic selection/hit-testing, named outlines, breadcrumbs and exact focus restoration; desktop pinning is optional and never reflows the page.
+- [ ] T18.3 Implement page create/duplicate/name/reorder and validated profile-scoped Home designation. Protect designated Home from deletion, preview startup/routes/Settings-theme consequences, repair incoming links before deleting other pages, and apply all affected changes atomically with undo and page limits.
 - [ ] T18.4 Make blank, empty, hidden, missing-source and unreadable-draft states recoverable using remote commands and independently readable editor chrome.
 Done when: remote-only entry -> page selection/create -> component selection -> panel edit -> Back returns to the exact canvas origin; no live saves or accidental playback.
 Verify: offscreen workspace/focus/empty-state tests in `home_component_navigation`, page draft/isolation tests in `component_contracts`, and installed screenshot/key journey on the VM. Evidence: pending; developer flag only until T24 cutover.
@@ -131,8 +133,8 @@ Verify: parity replay fixtures in `component_contracts`, pointer plus remote foc
 Entry docs: `docs/page-studio-redesign.md` sections 6-8; T15 operation-to-control coverage map; `docs/components.md` action/source contracts.
 Entry files: `qml/AppearanceEditor.qml`, `qml/HomeDesignEditor.qml`, `qml/ComponentLayoutEditor.qml`, `src/home/ComponentSchema.{h,cpp}`, `src/home/ActionDispatcher.{h,cpp}`, `src/home/PageData.{h,cpp}`, `src/home/PageModel.{h,cpp}`, shared Studio/edit-session files.
 Scope:
-- [ ] T21.1 Implement searchable visual catalog backed by registered component schema/renderer/editor contracts, useful variants and clear capability/unavailable states; add-to-cell preview is draft-only.
-- [ ] T21.2 Implement Layout/Content/Appearance/Actions/Accessibility inspector groups, basic/advanced disclosure, inherited versus overridden values, reset override and multi-selection mixed states.
+- [ ] T21.1 Implement a visual catalog starting with Button, Button carousel, Media shelf, App bar, Image and Widgets, backed by registered schema/renderer/editor contracts and honest unavailable states; content choice then full-page ghost placement is draft-only.
+- [ ] T21.2 Implement contextual Content/Appearance/Layout/Actions/Accessibility windows, basic/advanced disclosure, inherited versus overridden values, reset and mixed states. Include page colors, solid/gradient/managed-image background, dimming/crop and readable contrast feedback; no permanent inspector shrinking the page.
 - [ ] T21.3 Provide remote artwork browsing/import/crop/focal controls, text entry, density/labels/opacity/corners/focus/spacing and valid named source/action/page pickers; no raw IDs or required file chooser.
 - [ ] T21.4 Bind real bounded Kodi data through existing adapters, freeze preview data during gestures, avoid appearance-driven refetches and keep clearly labeled sample/unavailable states separate from real progress/playback.
 - [ ] T21.5 Cover every supported legacy edit in the T15 feature map; reject unknown versions/types/actions/unsafe assets and provide repair links without adding T02 curation or claiming new device backends.
@@ -144,7 +146,7 @@ Entry docs: `docs/page-studio-redesign.md` sections 6-9; `docs/skins.md` existin
 Entry files: `src/home/HomeSkins.cpp`, `src/home/HomePages.cpp`, `src/home/HomeLayout.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, `config/skins/`, Studio catalog/inspector/edit-session files, `tests/tst_components.cpp`.
 Scope:
 - [ ] T22.1 Ship editable compact launcher, scrolling dashboard, poster/sidebar library and minimal/pastel templates; preview current-page versus whole-interface scope and preserve existing pages by default.
-- [ ] T22.2 Add shared tokens and reusable sections/symbols with inheritance, instance overrides, named linked-instance impact preview, Edit all/Detach choice and atomic propagation.
+- [ ] T22.2 Add shared tokens and reusable sections/symbols with Home -> page -> component inheritance, explicit overrides/reset, named linked-instance impact preview, Edit all/Detach and atomic propagation. Implement minimum Settings/subpage/dialog/keyboard inheritance from designated Home before T24, isolated from draft previews and other profiles; T27 completes remaining shell adoption.
 - [ ] T22.3 Implement page/interface import/export with version/action/path/art validation, scope preview and missing-source remap; placeholders stay editable and unknown executable content is rejected.
 - [ ] T22.4 Exclude accounts, credentials, media, Kodi databases, machine-specific grants and private absolute paths from portable exports; preserve existing personal skins and source ownership on round trip.
 Done when: all four templates can be customized with remote controls; linked changes and portable round trips pass without accidental replacement, privacy leakage or required online access.
@@ -179,8 +181,8 @@ Verify: `ctest --test-dir build --output-on-failure` plus installed remote/point
 Entry docs: `docs/shell-surfaces-design.md` sections 1, 4, 6; `docs/page-studio-redesign.md` sections 2, 6-8; `docs/home-customization.md` planned theme amendment.
 Entry files: `src/home/HomeLayout.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, `qml/Main.qml`, `qml/CommandCenter.qml`, `qml/SettingsView.qml`, `qml/KodiLibraryView.qml`, `qml/KodiSettingsView.qml`, `qml/KodiImportView.qml`, `qml/MediaFoldersView.qml`, `qml/OnScreenKeyboard.qml`, their child dialogs/views and shared appearance helpers, `tests/tst_home_navigation.cpp`.
 Scope:
-- [ ] T27.1 Implement one effective theme context/resolver: packaged semantic defaults -> active profile/Home compatibility theme -> originating page inheritance -> explicit surface/component override; no migration write or stale previous-profile tokens.
-- [ ] T27.2 Expose Inherit page/Use profile theme/Custom override plus reset and draft preview in Studio; validate shared state, text, focus, input, scrim, status and accessibility roles without scattered QML palette constants.
+- [ ] T27.1 Complete the T22 effective theme resolver: packaged defaults -> designated Home theme -> explicit page/surface/component override. Settings always uses designated Home regardless of entry origin; no migration writes or stale previous-profile tokens. Verify T22 Settings baseline rather than implementing a competing resolver.
+- [ ] T27.2 Expose Use Home theme/Custom override plus reset and isolated draft preview where applicable; Settings identifies its Home source. Validate text, focus, input, scrim, status and accessibility roles without scattered palette constants.
 - [ ] T27.3 Apply the context to Search/All Apps, Settings navigation/subpages/dialogs/keyboards and every Isolde-owned Kodi browse/details/media-configuration/error/loading surface; inventory child controls so parent-background theming alone cannot pass.
 - [ ] T27.4 Preserve query/selection/focus and Kodi request counts across appearance changes; isolate preview versus applied contexts, profile switches and destination/origin overrides; respect high contrast, reduced motion, art and semantic error readability.
 - [ ] T27.5 Capture dark, pastel and arbitrary custom palettes across affected surfaces and assert resolved token/state values, accessibility and unchanged native Kodi skin/settings/media state.

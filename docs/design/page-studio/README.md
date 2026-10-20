@@ -1,5 +1,7 @@
 # Page Studio design pack (T15)
 
+**Current direction:** [Page-first Studio](page-first-design.md), revised after the user's direct rejection of the provisional screenshots. Read it first. It supersedes conflicting workspace schematics and interaction transitions in this pack. The earlier artifact walkthrough and static coverage log do not validate this revised design; user acceptance remains open.
+
 Status: provisional interaction design, 2026-10-19 (designer self-review only; no genuine user
 usability acceptance yet — deferred to T24). The user authorized proceeding with this pack as the
 provisional basis for T16–T24 on 2026-10-19. These artifacts cover backlog task T15

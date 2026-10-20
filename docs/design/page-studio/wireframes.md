@@ -1,5 +1,7 @@
 # Page Studio wireframes — TV and desktop (T15.2)
 
+**Superseded workspace proposal:** use [Page-first Studio](page-first-design.md) for the current full-page layout, left page menu and contextual windows. The top ribbon, permanently fitted canvas and parallel desktop panels below must not be implemented as the default. Remaining state coverage is a historical checklist, subject to the revised contract.
+
 Status: provisional wireframe set (designer self-review only; user acceptance deferred to T24),
 2026-10-19, covering the screens listed in backlog T15.2 and
 consistent with [page-studio-redesign.md](../../page-studio-redesign.md) §2-§4. ASCII labels

@@ -1,3 +1,7 @@
+# Home-theme UX revision — 2026-10-19
+
+[Page-first Studio](design/page-studio/page-first-design.md) is the current theme contract: Settings, its children, dialogs and keyboard always inherit the designated Home page's semantic theme, regardless of entry origin. Other authored pages inherit Home unless explicitly overridden. Draft Home/theme changes cannot affect live Settings before atomic Apply. Any originating-page precedence below is superseded for Settings. T18 establishes designation and its consequences; T22 establishes inheritance; T27 completes all shell surfaces. Minimum Settings inheritance is a T24 cutover gate, not work deferred until after cutover. Native Kodi remains untouched.
+
 # Configurable shell surfaces — sources, All Apps, themes and Search
 
 Status: additive design specification, 2026-10-19. User observations require four corrections, implemented later as T25-T28. This revision changes plans only. It extends [Page Studio](page-studio-redesign.md), including its draft/apply, declarative layout, focus, compatibility and evidence rules. Priority revision (user): these capabilities follow the complete core Studio T15-T24 package; they must not delay its templates, Preview/Apply or core cutover.

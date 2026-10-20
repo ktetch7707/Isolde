@@ -1,3 +1,7 @@
+# Revised interaction authority
+
+[Page-first Studio](page-first-design.md) supersedes conflicting toolbar focus, page selection, modal stacking and exit transitions below. Canvas Confirm picks up; component Menu opens actions; page-list Confirm opens page actions. Back cancels field/gesture, closes context, returns to page menu, then offers dirty exit. Empty canvas and first-row Up always reach Pages/recovery. This revision requires fresh remote walkthrough evidence.
+
 # Page Studio interaction states — remote state model (T15.3)
 
 Status: provisional state model (designer self-review only; user acceptance deferred to T24),
@@ -103,4 +107,3 @@ the spec:
 
 Reduced-motion and high-contrast settings are respected in all states; the focus ring, ghost and
 candidate hatch have validated contrast against both dark and pastel drafts.
-

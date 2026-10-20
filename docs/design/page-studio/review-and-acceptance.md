@@ -1,3 +1,7 @@
+# Direct user feedback — revised design, 2026-10-19
+
+The user found the provisional screenshots ugly and asked for full view of the interface, a left page menu with Add page, contextual page actions, protected designated Home, six component families, page colors/background and Settings colors inherited from Home. [Page-first Studio](page-first-design.md) responds with a revised proposal and acceptance journeys. This is real design feedback, not evidence of an uncoached installed walkthrough. Earlier designer review does not approve the new proposal; T15.4/T24 acceptance remains open.
+
 # Page Studio review and acceptance journeys (T15.4)
 
 Status: provisional designer review, 2026-10-19 — T15.4 user review is OPEN (no genuine user
@@ -61,4 +65,3 @@ uncoached, and a failed walkthrough requires iteration before cutover.
 
 Targets adapted from spec §10. Both standing visual fixture pairs must also pass after every
 Studio slice that touches rendering, with no fixture special-casing.
-

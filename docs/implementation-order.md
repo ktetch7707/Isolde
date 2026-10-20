@@ -1,5 +1,7 @@
 # Product implementation order
 
+**Latest UX authority:** [Page-first Studio](design/page-studio/page-first-design.md) supersedes conflicting toolbar/fitted-canvas proposals. Sequence remains T15-T24 then T27/T25/T26/T28. Exception to older wording below: T18 establishes movable protected Home designation; T21 includes page colors/background; T22 implements the shared inheritance contract and minimum Settings/Home theme adoption before T24. T27 then completes the remaining shell surfaces. User feedback rejected the provisional screenshots; design acceptance is still pending. Backlog percentages, not historical arithmetic below, are current.
+
 Additive shell-surface requirements (user, 2026-10-19): [shell-surfaces-design.md](shell-surfaces-design.md) governs configurable contained source notices (T25), a dedicated All Apps gallery distinct from Search (T26), shared Home/page theme inheritance through Search/Settings/Isolde Kodi screens (T27), and a genuine default-top-right Search header switch (T28). Priority revision (user): finish the complete core Studio T15-T24 first. T22 depends on T21; the four shell fixes no longer block templates, Preview/Apply or core cutover. Then T27 depends on T24; T25/T26 consume T27; T28 depends on T25/T26/T27 and verifies their combined integration with the accepted Studio. This adds four zero-percent tasks: 24 active tasks, 11% overall. No application or VM change is part of this planning revision.
 
 ## Page Studio replacement — user decision, 2026-10-19
