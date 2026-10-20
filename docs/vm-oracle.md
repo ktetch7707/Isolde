@@ -1,6 +1,6 @@
 # Oracle VirtualBox test runbook
 
-Verified read-only on 2026-10-19. This is the existing developer oracle, not a disposable VM or a hardware certification environment. Preserve its normal Household profile, Kodi data, service and release links. Read this before any guest test. Run only one graphical acceptance at a time; all three Python harnesses share `/tmp/isolde-home-components-acceptance.lock`. Do not delete that lock to bypass an active test.
+Verified by deployment, restart, full CTest and both visual fixture runs on 2026-10-19; see the linked execution record. This is the existing developer oracle, not a disposable VM or a hardware certification environment. Preserve its normal Household profile, Kodi data, service and release links. Read this before any guest test. Run only one graphical acceptance at a time; all three Python harnesses share `/tmp/isolde-home-components-acceptance.lock`. Do not delete that lock to bypass an active test.
 
 ## Known machine and preflight
 
@@ -13,7 +13,7 @@ Verified read-only on 2026-10-19. This is the existing developer oracle, not a d
 | Private key location | `C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation` |
 | Normal executable | `/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde` |
 | Normal service | `systemctl --user`, `isolde.service` |
-| Observed baseline | active/running, NRestarts=0; current release `161ea2e866cae3d1f982416e` |
+| Observed baseline | updated release `deacfc0b6d02d96d759303da`; previous `161ea2e866cae3d1f982416e`; active/running, NRestarts=0 |
 
 The release is an observation, not a permanently approved baseline. Record it afresh for each run. Never print/copy the key contents. In PowerShell:
 
@@ -30,9 +30,13 @@ Do not paste the entire service environment into reports; retain only display/ru
 
 ## Freeze the source being tested
 
+Use `./tools/package-vm-source.ps1 -OutputDirectory <NEW-absolute-host-directory>` from the repository root. It packages tracked working-tree bytes (including staged/unstaged edits), records HEAD/status/diff, produces `files.sha256` and `archive.sha256`, and refuses an existing output directory or missing tracked file. Review untracked files first: required new code/assets must be explicitly tracked; scratch files stay excluded. Stop other writers while packaging. Transfer archive and manifests; verify `sha256sum -c archive.sha256` before extraction and `sha256sum -c ../files.sha256` inside the extracted source. A failed check means stop and take a new snapshot.
+
+For an executed example with the failures and corrections retained, see [the October 19 update record](vm-update-2026-10-19.md).
+
 Record Windows `git rev-parse HEAD`, `git status --short` and the tracked diff. A commit ID alone does not identify a dirty tree. Preserve existing edits; do not reset/stash/clean them. Transfer the chosen source to a NEW guest directory with a unique run ID. Exclude `.git`, build directories, temporary dot-files, credentials and unrelated untracked files. Use an explicit reviewed file list/archive and retain its SHA-256; include required fixture artwork. A `git archive HEAD` omits uncommitted changes and cannot test them. Do not synchronize over an old source tree or the installed payload. Record archive hash, guest source path, diff and build path in the evidence manifest.
 
-`/tmp/isolde-order-vsDgGY` exists on this VM and is the old default in the PowerShell screenshot wrapper. It is NOT automatically the current source. Always supply `-SourceRoot` explicitly. Guest `/tmp` evidence can disappear on reboot; copy results/logs/screenshots to a durable per-run location before closing a gate.
+`/tmp/isolde-order-vsDgGY` is a stale source tree from earlier runs. It is NOT the current source. The PowerShell screenshot wrapper now requires `-SourceRoot` explicitly; its unsafe historical default was removed. Guest `/tmp` evidence can disappear on reboot; copy results/logs/screenshots to a durable per-run location before closing a gate.
 
 ## Linux automated oracle (does not deploy)
 
@@ -99,3 +103,5 @@ If the harness left the previously active service stopped, confirm its test chil
 ## Evidence required to close a gate
 
 Keep exact source/archive hash and dirty diff, executable/release path, build/test commands and exit codes, test counts, guest result JSON/config/logs, both fixture screenshot pairs, human visual verdict with limitations, fixture hashes and service restoration evidence. Offline Generator Test needs a separately recorded disconnected cold boot; this runbook's online SSH preflight is not that test. Physical RS-232, capture, audio sync, latency, hotplug and CEC still require target hardware. A VM pass never closes those gates.
+
+Display troubleshooting verified during this run: a black framebuffer became GDM after a Shift press; the already-running Isolde desktop was on a different VT. Inspect `loginctl list-sessions` and each session's Name/Type/Class/Active/VTNr/LockedHint. Use the normal console Ctrl+Alt+F-key for the observed existing desktop VT when unlocked; do not change autologin or bypass a lock/password prompt. Over SSH, `loginctl activate` can require interactive authorization even for an existing session. Check its own exit code immediately. Source paths, VTs, session IDs and Xauthority filenames are observations, not constants.

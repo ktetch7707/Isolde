@@ -70,9 +70,9 @@ Entry files: `src/home/HomeLayout.h`, `src/home/ComponentSchema.h`, `qml/Compose
 Scope:
 - [x] T05.1 Render `composition.grid` + per-widget `placement` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only) via `PageModel.grid/placements`
 - [x] T05.2 Legacy no-grid layouts unchanged; invalid stored placements fallback to packaged defaults without rewriting file
-- [ ] T05.3 Both visual fixtures pass against the placement-renderer source with explicit review and reset captures
+- [ ] T05.3 Both visual fixtures plus placement-specific QML geometry evidence pass against the renderer source
 Done when: renderer consumes grid, no new schema file, fixtures green.
-Verify: `universalGridValidatesAndPersists` + QML geometry tests + fixture pair. Evidence: data contract `HomeLayout::grid()/setGrid()/setItemPlacement()/gridCollisions()` + `ComponentSchema::validGrid()/validPlacement()` + `universalGridValidatesAndPersists` test; QML renderer `ComposedHome.qml` consumes grid via `placementMode`, `placementCell`, `placedItems`, `placementGrid` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only). Source credit only for T05.1/T05.2; current-source geometry/CTest logs and both fixture pairs are still required. Historical pre-grid fixture passes do not close T05.3.
+Verify: `universalGridValidatesAndPersists` + QML geometry tests + fixture pair. Evidence: data contract `HomeLayout::grid()/setGrid()/setItemPlacement()/gridCollisions()` + `ComponentSchema::validGrid()/validPlacement()` + `universalGridValidatesAndPersists` test; QML renderer `ComposedHome.qml` consumes grid via `placementMode`, `placementCell`, `placedItems`, `placementGrid` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only). Source credit only for T05.1/T05.2; current-source geometry/CTest logs and both fixture pairs are still required. Current installed release `deacfc0b6d02d96d759303da` passes 14/14 suites and both reviewed recreation/reset pairs; see `docs/vm-update-2026-10-19.md`. Placement-specific geometry/empty-cell/scale acceptance remains open, so T05.3 stays unchecked.
 
 ## T06 â€” Remote + desktop grid editor (L, depends: T05)
 Entry docs: `docs/studio-builder.md` Editing modes, `docs/interface-design.md` User ownership.

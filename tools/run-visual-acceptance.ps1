@@ -1,7 +1,7 @@
 param(
     [ValidateSet('pages','pastel','lounge')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
-    [string]$SourceRoot = '/tmp/isolde-order-vsDgGY',
+    [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation',
     [string]$VmName = 'Isolde-Test'
 )
