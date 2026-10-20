@@ -1,5 +1,9 @@
 # Home customization
 
+## Planned source and theme corrections
+
+[shell-surfaces-design.md](shell-surfaces-design.md) supersedes fixed Detected Sources placement and incomplete cross-surface appearance. T25 adds profile-owned policy, configurable notice slots/contained widgets, per-page visibility/lifetime and presentation controls; existing automatic/hide/keep choices remain compatible. T27 defines Home/profile/page theme inheritance through Search, Settings and all Isolde-owned Kodi views/dialogs/keyboards, with validated explicit overrides and no native Kodi skin changes. These integrate with Page Studio draft/Apply and T24 acceptance. The existing workflows below describe implementation history, not proof that these new requirements are complete.
+
 Isolde 0.0.1.2 treats the Home screen as user-owned state. The built-in layout is only the safe first-run and recovery default.
 
 The supplied interface proposal now guides the default preset, with broader customization governed by [interface-design.md](interface-design.md). Permanent tabs, the proposed Home hierarchy and library category names are editable defaults. The current implementation is still the grid Home/list Library; the poster-shelf/navigation composition is the next implementation package.

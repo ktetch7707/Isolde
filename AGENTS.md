@@ -5,11 +5,11 @@
 1. On session start, read `docs/agent-backlog.md` — it is the single source of truth for sequencing and percent completion.
 Before VM actions, read `docs/vm-oracle.md`. Explicit user-requested architecture/planning/testing reviews may inspect relevant plans and evidence without implementing the next feature. Preserve unrelated working-tree changes.
 
-2. Follow an explicit user-selected priority track in `docs/agent-backlog.md` first (currently Page Studio T15-T24); otherwise pick the lowest-numbered ACTIVE task below 100%. Exclude struck/superseded tasks and require the selected task's Depends tasks to be 100%. A planning-only request does not authorize application implementation.
+2. Follow an explicit user-selected priority track in `docs/agent-backlog.md` first (currently Page Studio plus shell-surface corrections; exact order is in the backlog); otherwise pick the lowest-numbered ACTIVE task below 100%. Exclude struck/superseded tasks and require the selected task's Depends tasks to be 100%. A planning-only request does not authorize application implementation.
 3. Within a task, read ONLY its `Entry docs` + `Entry files`. Do not re-read the entire codebase or all planning docs.
 4. Implement its `Scope` to satisfy its `Done when` gate, preserving standing gates (both visual fixtures, profile isolation, atomic save/rollback, Kodi media ownership, offline Generator Test).
 5. Before finishing, run its `Verify` commands/tests and update `docs/agent-backlog.md`: check off sub-boxes, recompute that task's `%`, recompute `Overall %`.
-6. Never mark `100%` without evidence paths (test logs, fixture screenshots, `/tmp/...` evidence). `100% x 20 active = current backlog implemented`; T02 is struck and T06-T08 are superseded/excluded. Keep the active count synchronized with the backlog.
+6. Never mark `100%` without evidence paths (test logs, fixture screenshots, `/tmp/...` evidence). `100% x 24 active = current backlog implemented`; T02 is struck and T06-T08 are superseded/excluded. Keep the active count synchronized with the backlog.
 7. Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`.
 8. Core thesis — configurability + UI. Everything is configurable; nothing requires configuration. The default must be polished and TV-ready, and every tab, shelf, widget, color, density, and navigation choice must be rearrangeable via validated data. Layout is data, never executable QML/JS/shell. A theme/skin is declarative data, never code.
 9. Configurability commands (must obey):

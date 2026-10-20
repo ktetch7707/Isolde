@@ -1,5 +1,7 @@
 # Interface design and customization
 
+Additive shell-surface requirements (user, 2026-10-19): [shell-surfaces-design.md](shell-surfaces-design.md) governs configurable contained source notices (T25), a dedicated All Apps gallery distinct from Search (T26), shared Home/page theme inheritance through Search/Settings/Isolde Kodi screens (T27), and a genuine default-top-right Search header switch (T28). These must land before T22/T23/T24 integration and cutover. T27 depends on T21; T25/T26 consume T27; T28 consumes T26/T27; T22 depends on T25/T26/T28. This adds four zero-percent tasks: 24 active tasks, 11% overall. No application or VM change is part of this planning revision.
+
 ## Current editing direction — Page Studio
 
 User decision, 2026-10-19: replace Customize Home's item/action-grid workflow with [Page Studio](page-studio-redesign.md), a visual page canvas with remote pick-up/drop, Pages/Layers, a contextual inspector, undo and draft-only editing until Apply. The specification includes TV/desktop wireframes, remote state rules, collision proposals, compatibility and usability acceptance. Backlog T15-T24 is the selected execution track; T06-T08 are superseded. Old editing/implementation-sequence descriptions below remain historical where they conflict. Content curation extensions remain out of scope; resource bounds remain enforced.

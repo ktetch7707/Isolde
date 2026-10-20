@@ -1,5 +1,9 @@
 # Navigation
 
+## Planned route correction — All Apps versus Search
+
+[shell-surfaces-design.md](shell-surfaces-design.md) section 3 and T26 define a dedicated themed installed-app gallery. All Apps/More Apps and legacy `app-drawer` actions resolve to that destination; universal Search is a separate explicit route. Keep compatible reads without rewriting layouts. Preserve the full Home/page → gallery → app → gallery → origin focus/scroll chain. The HOME/SESSION prototype description below is historical, not a complete inventory of current overlays/pages or permission to route All Apps into Command Center. T28 places the Web switch in Search's header, outside results.
+
 The prototype has two explicit shell states: HOME and SESSION.
 
 - HOME accepts directional and Confirm commands.

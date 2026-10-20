@@ -1,5 +1,7 @@
 # Page Studio — visual page builder
 
+Additive requirement: [shell-surfaces-design.md](shell-surfaces-design.md) adds T25-T28 before final Studio integration: configurable detected-source containment/policy, dedicated All Apps routing, shared cross-surface theme inheritance, and a genuine top-right Web search header switch. See the backlog for execution order. Current active count is 24 (11%); the section 12 check below records the earlier 20-task revision, not current arithmetic.
+
 Status: implementation specification, 2026-10-19; no application code changed by this planning revision. The user rejected the current Customize Home workflow and requested a powerful, intuitive replacement inspired by visual web builders. This specification governs the replacement editor in Home and authored pages. It supersedes the old T06–T08 editor work packages and the old scattered immediate-save editing workflow. The remaining Studio requirements still apply unless explicitly narrowed here.
 
 ## 1. Product decision and inspiration
@@ -183,12 +185,12 @@ Usability acceptance observes the user or representative users completing add/mo
 
 ## 11. Delivery map and scope boundaries
 
-The executable backlog is T15–T24 in [agent-backlog.md](agent-backlog.md): design validation; draft transactions/history; common canvas geometry; workspace shell; remote manipulation; desktop/nesting parity; inspector/capability binding; templates/tokens/portability; preview/apply/restore UX; integrated acceptance/cutover. Draft safety precedes manipulation. Each task has its own entry documents/files and verification gate; do not read/rewrite the whole product as an editor implementation strategy.
+The core backlog is T15–T24, integrated with T25–T28 from the additive shell-surfaces specification, in [agent-backlog.md](agent-backlog.md): design validation; draft transactions/history; common canvas geometry; workspace shell; remote manipulation; desktop/nesting parity; inspector/capability binding; templates/tokens/portability; preview/apply/restore UX; integrated acceptance/cutover. Draft safety precedes manipulation. Each task has its own entry documents/files and verification gate; do not read/rewrite the whole product as an editor implementation strategy.
 
 Old T06 maps to T17–T21/T24; T07 maps to T16/T23/T24; T08 maps to T22/T23/T24. T05's remaining placement geometry gate is verified during T17, not assumed complete. T01/T03/T04 and remaining product/hardware/release work stay active outside the user-selected Studio priority track. T10 still owns actual device configuration and hardware qualification; Studio may expose unavailable controls honestly but cannot manufacture support. Optional advanced runtime families from the older Studio proposal (for example new guide/recording backends, a general variable/action-sequence engine, or new decoder-dependent backgrounds) need their own capability tasks before entering the catalog; they are not implied by implementing a generic editor.
 
 This revision authorizes planning only in this chat. No VM update, deployment, application implementation or new dependency is part of the planning change.
 
-## 12. Planning revision verification
+## 12. Original Page Studio planning revision verification (historical)
 
 Checked the documentation-only diff, local Markdown links, scope mappings, active-task checkbox percentages and dependency graph. There are 20 active tasks with percentage sum 275, giving 14% overall; T15-T24 remain 0%. No active dependency points to struck/superseded work and the graph has no cycles. Every new task has entry documents/files, scope, a completion gate and verification/evidence requirements. Check log: `C:/Users/kketc/.codex/visualizations/2026/10/19/01a15691-1cd3-77d0-928f-854e1c7a566b/page-studio-planning-20261019.log`. Application tests and VM runs were not repeated for this documentation-only revision. These checks verify the plan's consistency, not editor implementation or usability.

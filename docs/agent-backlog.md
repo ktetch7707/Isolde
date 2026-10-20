@@ -3,10 +3,10 @@ Location: `docs/agent-backlog.md` (this file). Entrypoint: `AGENTS.md` at repo r
 Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`.
 
 ## How percent completion works (agent must follow)
-- Active tasks are T01,T03-T05,T09-T24 (20 tasks). T02 is out of scope; T06-T08 are superseded by the Page Studio tasks and excluded from math. Each active task uses equally weighted checkboxes.
+- Active tasks are T01,T03-T05,T09-T28 (24 tasks). T02 is out of scope; T06-T08 are superseded by the Page Studio tasks and excluded from math. Each active task uses equally weighted checkboxes.
 - Task % = round(checked / total * 100). Update `| % |` cell when you check a box.
-- Overall % = round(average of the 20 ACTIVE task %s). Recompute on every edit.
-- `100% x 20 = active backlog implemented` ONLY if every active box is `[x]` AND `Evidence` has log/screenshot paths. No evidence = max 90%.
+- Overall % = round(average of the 24 ACTIVE task %s). Recompute on every edit.
+- `100% x 24 = active backlog implemented` ONLY if every active box is `[x]` AND `Evidence` has log/screenshot paths. No evidence = max 90%.
 - Workflow: follow the selected priority track below; otherwise choose the lowest-numbered eligible ACTIVE task below 100%. Read only its Entry docs/files, implement its Scope, run Verify, then update checked evidence and percentages.
 - Standing gates for every task: `tests/visual/home-reference/` + `tests/visual/home-pastel-reference/` recreation+reset pass; profile isolation; atomic save+rollback; Kodi owns media/progress/playback (no parallel DB/player); offline Generator Test; Settings/Edit Home always reachable.
 - Scope decision (user, 2026-10-19): collection curation is the USER's responsibility via Kodi. Isolde does not build episode/tag/playlist/exclusion/template curation. T02 struck. Existing movie/show manual-collection code stays as-is (no removal, no extension).
@@ -15,11 +15,11 @@ Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-u
 
 ## Selected priority — Page Studio (user, 2026-10-19)
 
-This user-requested planning revision replaces the rejected Customize Home interaction, not the application's data/backend foundations. Implement **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24**, one task at a time after its dependencies reach 100%. T15 is the next implementation/design-validation task. This explicit priority overrides lowest-numbered selection and old instructions to finish curation/search/capture first. No implementation is authorized by the planning-only request in the current chat.
+This user-requested planning revision replaces the rejected Customize Home interaction, not the application's data/backend foundations. Implement **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T27 → T25 → T26 → T28 → T22 → T23 → T24**, one task at a time after its dependencies reach 100%. T15 is the next implementation/design-validation task. This explicit priority overrides lowest-numbered selection and old instructions to finish curation/search/capture first. No implementation is authorized by the planning-only request in the current chat.
 
-T01/T03/T04 and other unfinished product work remain active and must pass their gates before product completion/release; they are not prerequisites for this selected editor track. The verified current Linux build is the baseline. T17 supplies T05's remaining geometry evidence; T24 cannot claim hardware/backend readiness. After T24, return to the lowest-numbered remaining active task. T06-T08 are archived scope mappings, not additional work to implement or count twice. Normative design: [page-studio-redesign.md](page-studio-redesign.md).
+T01/T03/T04 and other unfinished product work remain active and must pass their gates before product completion/release; they are not prerequisites for this selected editor track. The verified current Linux build is the baseline. T17 supplies T05's remaining geometry evidence; T24 cannot claim hardware/backend readiness. After T24, return to the lowest-numbered remaining active task. T25-T28 add contained detected-source presentation, a real All Apps destination, shared surface theming and a genuine Search header switch; see [shell-surfaces-design.md](shell-surfaces-design.md). T06-T08 are archived scope mappings, not additional work to implement or count twice. Normative design: [page-studio-redesign.md](page-studio-redesign.md).
 
-Overall falls from 21% to **14%** because three zero-percent editor packages are replaced by ten explicit packages: 13 - 3 + 10 = 20 active tasks. Existing checked implementation credit is unchanged; the new specification is not evidence that its system is implemented.
+The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This additive revision adds four zero-percent tasks, giving 24 active tasks and **11% overall** (275/24 rounded). Existing implementation credit is unchanged. Planning/specification work is not delivery of the new system.
 
 ## Overall (update every edit)
 | Task | Title | % | Status |
@@ -48,7 +48,11 @@ Overall falls from 21% to **14%** because three zero-percent editor packages are
 | T22 | Templates, tokens, reusable sections and portability | 0% | planned |
 | T23 | Preview, Apply, restore and navigation safety | 0% | planned |
 | T24 | Installed acceptance, usability and editor cutover | 0% | planned |
-| **Overall** | **average of 20 active tasks** | **14%** | planning expansion |
+| T25 | Detected-source policy, styling and containment | 0% | planned |
+| T26 | Dedicated configurable All Apps destination | 0% | planned |
+| T27 | Shared theme inheritance across shell surfaces | 0% | planned |
+| T28 | Genuine top-right Web search toggle | 0% | planned |
+| **Overall** | **average of 24 active tasks** | **11%** | planning expansion |
 
 ## T01 â€” Bootstrap + gate check (S, depends: none)
 Entry docs: `README.md`, `docs/implementation-order.md:19-38`, `tests/visual/home-reference/README.md`.
@@ -145,7 +149,7 @@ Scope:
 Done when: keyboard + polish acceptance passes without breaking fixtures.
 Verify: input/a11y tests + installed remote run. Evidence: InputManager commands + AudioSettings/RemoteSettings/NetworkSettings/DisplaySettings pages + mixer doubles + volume/remote acceptance exist; `qml/OnScreenKeyboard.qml` exists and is used by Network Settings and Store; remote journey/masking/visibility/focus evidence remains required; a11y/l10n/reduced-motion incomplete. All boxes open.
 
-## T13 — Appliance + release distribution (L, depends: T01,T03-T05,T09-T12,T15-T24; T14 optional before release)
+## T13 — Appliance + release distribution (L, depends: T01,T03-T05,T09-T12,T15-T28; T14 optional before release)
 Entry docs: `docs/install.md`, `docs/packages.md`, `docs/architecture.md` appliance.
 Entry files: `tests/test_appliance_install.py`, `tests/test_recovery.py`, `src/recovery/Recovery.qml`.
 Scope:
@@ -162,13 +166,13 @@ Scope:
 - [ ] T14.1 Online discovery opt-in: regional freshness/attribution, provider launch routes, OFF cancels late/cached results, remakes distinct, installed app never = entitlement (requires provider/terms decision first)
 - [ ] T14.2 Linguist: SRT translate/generate/queue/review/cancel, offline, non-overwriting Unicode, provenance, no library-wide auto jobs or implicit downloads
 Done when: OFF-silent + provenance tests pass; provider gate documented.
-Verify: network-denial + subtitle provenance tests. Evidence: none â€” Web OFF label informational only, no discovery endpoint; no linguist/SRT in tree per docs/implementation-order.md:53-54. All open.
+Verify: network-denial + subtitle provenance tests. Evidence: persisted Web preference exists and ON remains an unavailable provider stub; T28 owns its header-switch UX, not a provider implementation. No linguist/SRT implementation evidence; T14 remains open.
 
 ## T15 — Page Studio interaction design and usability validation (M, depends: none; selected priority)
-Entry docs: `docs/page-studio-redesign.md` sections 1-4, 10-11; `docs/interface-design.md` Page Studio amendment.
+Entry docs: `docs/page-studio-redesign.md` sections 1-4, 10-11; `docs/shell-surfaces-design.md` sections 1-6; `docs/interface-design.md` Page Studio amendment.
 Entry files: `qml/CustomizeHomeView.qml`, `qml/PageManager.qml` (read-only workflow inventory); new design artifacts under `docs/design/page-studio/`.
 Scope:
-- [ ] T15.1 Inventory every currently supported editor operation; map each to Studio and identify capability gaps without treating UI labels as backend proof.
+- [ ] T15.1 Inventory every currently supported editor operation plus source notices, All Apps, themed shell surfaces and the Search header switch; map each to Studio and identify capability gaps without treating UI labels as backend proof.
 - [ ] T15.2 Produce reviewed TV and desktop wireframes for blank/existing pages, Add, selection, inspector, pick-up/drop, resize, collision, dirty exit, preview, apply error and nested scope.
 - [ ] T15.3 Walk through the complete D-pad/Confirm/Back/Menu state model, including field editing, focus restoration, error feedback and accessible movement alternatives.
 - [ ] T15.4 Record a user/representative review of the new workflow; resolve confusing transitions and establish the measurable acceptance journeys before implementing the shell.
@@ -245,7 +249,7 @@ Scope:
 Done when: selecting a component exposes relevant understandable controls and a live visible draft result, with complete remote error/retry/focus paths and no live profile writes.
 Verify: schema rejection and inspector coverage/parity tests, `kodi_media_client` request-count regressions, `home_component_navigation`, full CTest and both VM fixtures. Evidence: pending; T10 still owns qualified hardware editors.
 
-## T22 — Templates, tokens, reusable sections and portability (L, depends: T21)
+## T22 — Templates, tokens, reusable sections and portability (L, depends: T25,T26,T28)
 Entry docs: `docs/page-studio-redesign.md` sections 6-9; `docs/skins.md` existing snapshot/asset bounds.
 Entry files: `src/home/HomeSkins.cpp`, `src/home/HomePages.cpp`, `src/home/HomeLayout.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, `config/skins/`, Studio catalog/inspector/edit-session files, `tests/tst_components.cpp`.
 Scope:
@@ -271,14 +275,62 @@ Verify: transaction/write-failure/backup/revision/profile tests in `component_co
 Entry docs: `docs/page-studio-redesign.md` sections 9-11; T15 feature map/wireframes; `docs/vm-oracle.md`; both visual fixture READMEs.
 Entry files: `qml/Main.qml`, `qml/SettingsView.qml`, `qml/CustomizeHomeView.qml`, `qml/PageSurface.qml`, Studio files from T18-T23, `tests/tst_components.cpp`, `tests/tst_home_navigation.cpp`, `tests/tst_kodi_media.cpp`, `tools/home-components-acceptance.py`, `tools/run-visual-acceptance.ps1`.
 Scope:
-- [ ] T24.1 Run the complete acceptance matrix: blank/existing/multiple/nested pages; remote and desktop parity; collisions/full grid; history; profile isolation; invalid docs; asset/route repair; atomic failure and recovery.
-- [ ] T24.2 Capture and explicitly review both recreation/reset pairs on the exact installed source; verify legacy conversion/read preservation, 720p/1080p/4K scaling and real-Kodi page-source integration without personal-library mutation.
+- [ ] T24.1 Include T25-T28 source containment, All Apps routing, cross-surface themes and header-toggle journeys in the complete acceptance matrix: blank/existing/multiple/nested pages; remote and desktop parity; collisions/full grid; history; profile isolation; invalid docs; asset/route repair; atomic failure and recovery.
+- [ ] T24.2 Capture themed Search/All Apps/Settings/Isolde Kodi subviews and source notices; explicitly review both recreation/reset pairs on the exact installed source; verify legacy conversion/read preservation, 720p/1080p/4K scaling and real-Kodi page-source integration without personal-library mutation.
 - [ ] T24.3 Measure remote-response/frame/large-layout/client-history targets and accessibility/contrast/reduced-motion/long-label behavior; run offline editor/network-denial and recorded uncoached user/representative journeys, iterating failures.
 - [ ] T24.4 Route all normal Edit Home/Edit page/context/Settings paths to Studio, verify the legacy feature map, then retire duplicate action-grid editing flows and temporary developer flag without stranding layouts/recovery.
 - [ ] T24.5 Publish source/release hashes, logs, actual captures, usability/performance results, outstanding hardware/product limitations and service-restoration proof; update dependent gate evidence without inventing completion.
 Done when: the new workspace is the default usable editor, every supported operation is discoverable and remote-complete, both fixtures and rollback pass, and a representative can create/customize/preview/apply a page without coaching or accidental launches.
 Verify: `ctest --test-dir build --output-on-failure` plus installed remote/pointer journeys, both visual wrappers with explicit SourceRoot, isolated real-Kodi pages test, offline denial, failure injection, profiling and usability report using the VM runbook. Evidence: pending. Physical hardware and full appliance Generator Test remain separate product gates.
 
+## T25 — Detected-source policy, styling and containment (M, depends: T27)
+Entry docs: `docs/shell-surfaces-design.md` sections 1-2, 6; `docs/page-studio-redesign.md` sections 5-8.
+Entry files: `src/sources/SourceManager.{h,cpp}`, `qml/SourceSettingsView.qml`, `qml/Main.qml`, `qml/HomeScreen.qml`, `qml/ComposedHome.qml`, `src/home/ComponentSchema.{h,cpp}`, Studio/edit-session files from T16-T21, `tests/tst_isolde.cpp`, `tests/tst_home_navigation.cpp`.
+Scope:
+- [ ] T25.1 Separate discovery facts from active-profile display policy and presentation; retain existing enable/hide/keep/handler choices and introduce allowed-page/slot/event/lifetime/suppression controls without broader scans or new media grants.
+- [ ] T25.2 Register contained Detected sources and Source notice slot components with layout, variants, maximum visible items, typography/art/labels/colors/opacity/corners/focus/spacing and bounded region controls in Studio/Settings.
+- [ ] T25.3 Replace unconditional section prepending with validated region projection; default to a compact Home status notice, contain overflow with View all, and never cover/reflow unrelated layout or steal focus. Missing slots route to Sources rather than floating injection.
+- [ ] T25.4 Implement remote source actions, repeat-scan deduplication, reconnect/dismiss/hidden restore, unplugged-origin focus and safe idempotent promotion/error retry; cancel/draft changes leave applied policy/layout intact.
+- [ ] T25.5 Prove per-profile persistence/rollback and fixture isolation with injected roots; no test-folder name special cases, deletion/unmount, Kodi writes, unsolicited launch or automatic entitlement/permission.
+Done when: a user can configure what appears, where, when and how; multiple detections stay inside a declared themed container and every action/error/empty state remains remote-accessible.
+Verify: extend source-policy/probe tests in `isolde_tests` and schema/draft tests in `component_contracts`; QML containment/focus/remote/unplug tests; full CTest plus actual dark/pastel multi-source captures and both standing fixtures using the VM oracle. Evidence: pending; existing global toggle/hide controls do not satisfy presentation/placement acceptance.
+
+## T26 — Dedicated configurable All Apps destination (M, depends: T27)
+Entry docs: `docs/shell-surfaces-design.md` sections 1, 3-4, 6; `docs/navigation.md` planned route amendment; `docs/page-studio-redesign.md` sections 6-9.
+Entry files: `src/home/ActionDispatcher.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, `src/app/AppRegistry.{h,cpp}`, `src/app/AppCatalog.{h,cpp}`, `src/home/HomePages.cpp`, `src/home/PageModel.{h,cpp}`, `qml/Main.qml`, `qml/CommandCenter.qml`, shared page/Studio views, `tests/tst_components.cpp`, `tests/tst_home_navigation.cpp`.
+Scope:
+- [ ] T26.1 Define distinct typed All Apps and Search routes; resolve legacy app-drawer to the gallery without rewriting stored layouts/skins and audit every More Apps/card/header/page entry point.
+- [ ] T26.2 Register an app-catalog adapter and themed gallery page preset using existing page/layout machinery, stable deduplicated app IDs and real installed/registered states; exclude uninstalled Store offers and internal navigation from app counts.
+- [ ] T26.3 Expose gallery layout/grid/list/density/art/labels/sort/favorites/local-filter controls through Studio; preserve packaged fallback and profile/page/document limits, with no parallel persisted app library or layout file.
+- [ ] T26.4 Implement remote browsing, first/remembered selection, empty-state Store/Settings, real launch/failure/retry and exact gallery/origin focus+scroll restoration; local filtering never opens universal Search or triggers web requests.
+- [ ] T26.5 Test legacy/current/custom-page/skin routes, duplicate entries, offline/needs-setup/failed states and registry changes/uninstall of selected app; gallery opening requires neither a query nor automatic keyboard focus.
+Done when: All Apps/More Apps reliably opens a configurable installed-app page, and opening Search is a separate explicit action; app launches and Back preserve the complete origin chain.
+Verify: action-dispatch/legacy-read tests in `component_contracts`, app registry/catalog state tests, QML gallery launch/return/filter/empty tests and an assertion that app-drawer never opens Command Center; full CTest, installed remote journey and both visual fixtures. Evidence: pending; changing only the All Apps label is insufficient.
+
+## T27 — Shared theme inheritance across shell surfaces (M, depends: T21)
+Entry docs: `docs/shell-surfaces-design.md` sections 1, 4, 6; `docs/page-studio-redesign.md` sections 2, 6-8; `docs/home-customization.md` planned theme amendment.
+Entry files: `src/home/HomeLayout.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, `qml/Main.qml`, `qml/CommandCenter.qml`, `qml/SettingsView.qml`, `qml/KodiLibraryView.qml`, `qml/KodiSettingsView.qml`, `qml/KodiImportView.qml`, `qml/MediaFoldersView.qml`, `qml/OnScreenKeyboard.qml`, their child dialogs/views and shared appearance helpers, `tests/tst_home_navigation.cpp`.
+Scope:
+- [ ] T27.1 Implement one effective theme context/resolver: packaged semantic defaults -> active profile/Home compatibility theme -> originating page inheritance -> explicit surface/component override; no migration write or stale previous-profile tokens.
+- [ ] T27.2 Expose Inherit page/Use profile theme/Custom override plus reset and draft preview in Studio; validate shared state, text, focus, input, scrim, status and accessibility roles without scattered QML palette constants.
+- [ ] T27.3 Apply the context to Search/All Apps, Settings navigation/subpages/dialogs/keyboards and every Isolde-owned Kodi browse/details/media-configuration/error/loading surface; inventory child controls so parent-background theming alone cannot pass.
+- [ ] T27.4 Preserve query/selection/focus and Kodi request counts across appearance changes; isolate preview versus applied contexts, profile switches and destination/origin overrides; respect high contrast, reduced motion, art and semantic error readability.
+- [ ] T27.5 Capture dark, pastel and arbitrary custom palettes across affected surfaces and assert resolved token/state values, accessibility and unchanged native Kodi skin/settings/media state.
+Done when: opening Search, Settings or Isolde's Kodi pages from Home/custom pages follows the documented theme hierarchy throughout the interaction and nested controls; native Kodi remains untouched.
+Verify: token precedence/profile/invalid-override tests in `component_contracts`, expanded `kodiSettingsFollowUserTheme` plus Search/Settings/keyboard/detail/error QML tests, Kodi request-count regressions, full CTest and real themed surface/fixture captures. Evidence: pending; existing partial appearance bindings are baseline only. T22 extends the token editor, not a second resolver.
+
+## T28 — Genuine top-right Web search toggle (S, depends: T26,T27)
+Entry docs: `docs/shell-surfaces-design.md` sections 1, 5-6; `docs/unified-master-plan.txt` Section 13 Web OFF boundary.
+Entry files: `qml/CommandCenter.qml`, `qml/Main.qml`, `src/settings/SearchSettings.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, shared search-header/presentation/edit-session helpers, `tests/tst_home_navigation.cpp`, `tests/tst_components.cpp`, `tools/verify-t03-search.py`.
+Scope:
+- [ ] T28.1 Remove the searchToggle pseudo-result and render one genuine labeled On/Off switch in the header's top-right default slot, with themed/stylable presentation, accessible checked state and no result-count/index participation.
+- [ ] T28.2 Implement query/header/switch/results/keyboard D-pad focus transitions, Confirm/click activation, empty/late-result stability and exact Back origin; no arrow-driven accidental toggle or forced mouse/Tab usage.
+- [ ] T28.3 Use the existing single SearchSettings authority with default OFF, active-profile persistence and atomic rollback on failure; retain query, selection and visible state, and clear old profile context on switch.
+- [ ] T28.4 Preserve request-generation cancellation/network denial when switched OFF, suppress late/cached online matches and distinguish ON from actual provider availability; no provider shows honest header status and local results, not fake result rows.
+- [ ] T28.5 Replace string-pattern-only toggle checks with state/focus/results/persistence tests and verify dark/pastel/custom palette, reduced-motion, long-label and offline/no-provider behavior on the installed build.
+Done when: Web search is visibly and behaviorally a real top-right header switch, its persisted state is truthful and accessible, and its control never masquerades as a search result or enables unintended external requests.
+Verify: QML header-switch/query/results/empty/keyboard/late-callback tests in `home_component_navigation`, preference/profile/write-failure tests, runtime network-denial regression plus updated static helper, full CTest and installed themed remote captures. Evidence: pending; T14 still owns real provider implementation/terms, and T03's existing preference model is not header-control acceptance.
+
 ## Completion rule
 
-Overall = round(sum(active task percentages)/20). Active set: T01,T03-T05,T09-T24. Exclude T02 (struck) and T06-T08 (superseded). When every active checkbox and Done when gate has specific evidence and all 20 active tasks read 100%, this active backlog is implemented. Documentation, mockups, source presence and old-release screenshots do not count as delivery of a replacement editor. If an active task lacks required evidence, it cannot read 100%; the existing 90% no-evidence cap also applies. Adding tasks requires updating this active count, the table, dependencies and AGENTS.md consistently.
+Overall = round(sum(active task percentages)/24). Active set: T01,T03-T05,T09-T28. Exclude T02 (struck) and T06-T08 (superseded). When every active checkbox and Done when gate has specific evidence and all 24 active tasks read 100%, this active backlog is implemented. Documentation, mockups, source presence and old-release screenshots do not count as delivery. If an active task lacks required evidence, it cannot read 100%; the existing 90% no-evidence cap also applies. Adding tasks requires updating the active count, table, dependencies and AGENTS.md consistently.
