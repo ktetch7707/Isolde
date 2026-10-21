@@ -1,5 +1,7 @@
 # Product implementation order
 
+Optional scrolling pages (user, 2026-10-21): [scrolling requirements](design/page-studio/scrolling-pages-2026-10-21.md) extend open T19–T24 gates with a per-page checkbox, downward content growth, no-room Add recovery and safe disable/cancel behavior. Existing viewport-grid bounds remain distinct from the proposed bounded document extent. Preserve backlog order and completion credit.
+
 Approved usability expansion (user, 2026-10-21): [selected feature requirements](design/page-studio/usability-expansion-2026-10-21.md) extend existing open T21–T24 gates. Preserve T19.6 → T20.5 → T21 → T22 → T23 → T24 sequencing; integrate each requirement into its owning gate before closing it. This planning addition changes neither task count nor completion credit.
 
 Latest UX audit (user, 2026-10-20): [usability audit](design/page-studio/usability-audit-2026-10-20.md) reopens T19.6 → T20.5 → T21.6-T21.14 before T22. Deliver direct visual movement/reflow, a compact Move/Edit/Duplicate/Delete context, visual color selection with a wheel and size within Edit component. This supersedes older context/Shift-dialog/hex-first guidance; the backlog records current percentages.

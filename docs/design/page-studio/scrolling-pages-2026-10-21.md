@@ -1,0 +1,33 @@
+# Optional vertically scrolling pages
+
+User decision, 2026-10-21: a page may contain more rows than fit on the TV, controlled by a per-page checkbox. Users can keep a one-screen interface or put their interface on one long page. This document defines pending implementation, not current installed behavior.
+
+## User-facing behavior
+
+Page appearance → Layout exposes one genuine **Allow vertical scrolling** checkbox, operable by remote and pointer. It is off for new blank pages unless the chosen template explicitly enables it; existing page behavior is preserved. No technical grid-mode selection or row-count entry is required to enable scrolling.
+
+- **Off:** the page has a fixed one-screen content area. Add/Move/Resize cannot grow it. A failed placement stays visible with a concise No room reason and relevant choices: change size, choose another location/section, enable scrolling, or add a page. Preserve the configured component while making that choice. Do not force a Shift/Swap dialog for ordinary occupied targets.
+- **On:** additional rows extend below the TV viewport instead of shrinking existing components. Add, Move and Resize may preview extending the bottom of the page, with neighbors making room through the same validated reflow transaction. Confirm accepts the complete placement and extension once; Back restores content extent, all affected placements, selection and viewport. Empty rows needed for a candidate are visible in the editing canvas. Do not add permanent rows merely from hovering, scrolling or opening Studio.
+- The page grows to its authored content; users do not need to preallocate a giant grid. Appending a component targets the next suitable location in stable reading order, without moving unrelated components unnecessarily. A full page with scrolling off offers enabling it while retaining the in-progress component; returning from that option restores the exact placement workflow.
+- Remote Down/Up brings the next focused component fully into view; wheel/touchpad scrolling and pointer edge auto-scroll use the same viewport. Move can reach a new bottom row using the D-pad. Avoid endless growth from idle edge hovering: require an actual candidate movement/add/resize. Show a quiet scroll-position indicator when content extends offscreen. Returning from apps/playback restores exact component and scroll origin.
+- Changing the checkbox previews the result without writing. Turning it off with content below the first screen must offer an explicit one-screen rearrangement preview or Cancel. If it cannot fit, keep scrolling enabled and the original content intact; users can resize, relocate or remove content themselves. Never hide, delete, shrink, overlap or move components to another page automatically.
+- Header behavior remains authored and configurable; default Search/Settings/header recovery remains reachable. Page scrolling and a carousel's internal horizontal scrolling are distinct. Entering/exiting a collection retains both its position and the page position; decorating a page must not trap focus.
+
+## Geometry and data contract
+
+Separate **viewport density** from **document extent**. Existing 4–16 columns and 3–10 visible grid rows remain the screen-density bounds; enabling scrolling must not squeeze 30 content rows into one screen. Component Width still ranges from one cell to full content width. The primary Height slider ranges from one cell to one viewport height (or the current bounded container span); page length is independent and grows with content. Tall sections use their own supported bounded layout rather than an unintentionally enormous size slider.
+
+Persist the per-page scrolling policy as validated declarative layout data through the existing schema/session/page authorities. Bound logical document rows separately (maximum 10,240: enough for 1,024 components each ten rows tall), retain 1,024 components / 128 categories / 4 MiB and existing nested-grid limits, and refuse candidates at a limit with an honest explanation. This proposed scrolling extent does not relax one-screen or nested grid bounds. Do not simply raise `grid.rows` and alter its existing meaning. Derive content extent from validated placements/section heights, with no second layout store or startup migration.
+
+Reuse the shared renderer/geometry/reflow paths for runtime, Studio, focus, hit-testing, sections and groups. Adapt existing scrolling-section behavior; do not implement a parallel page renderer. Root scrolling is the page policy; nested scroll containers remain independently bounded and cannot silently change it. Keep decorative layers' authored overlap policy and fixed component sizes. Use bounded viewport rendering/provider work for long pages; enabling scrolling must not request every offscreen Kodi item or create another media database.
+
+Legacy layouts retain their existing flow/scroll behavior when the new policy is absent. Showing a checkbox for a legacy layout must reflect effective behavior; an explicit change may require a conversion preview, never a rewrite on read. Save/apply/import/export/undo remain profile-isolated, deterministic, atomic and compatible with the existing backup/rollback contract.
+
+## Backlog ownership and acceptance
+
+- **T19.6:** no-room Add retains component configuration; enabled scrolling previews candidate growth/reflow; remote bottom-edge placement, blocked limits, one-step undo and complete cancellation. No ordinary occupied-target dialog.
+- **T20.5:** pointer edge scrolling and extension match remote data byte-for-byte; handle nested collection/page scrolling, scoped targets and reduced motion without accidental growth.
+- **T21.11:** validated page scrolling policy, shared extent/geometry/rendering support and the real checkbox in Page appearance → Layout; honest enabled/disabled states, old-layout compatibility and safe disable preview. Existing completed T17 geometry credit is a historical foundation, not delivery of this extension.
+- **T23.4 / T24.1–T24.3:** exact navigation/launch/back/scroll restoration, both checkbox states, disabling with offscreen content, empty/full/locked/mixed-size/nested layouts, bottom-of-page add/move/resize, bounds, provider-call budgets and long-page performance. Test preview/cancel/undo, write failure, profiles, old-document reads and remote/pointer parity; full native suite and both installed visual fixtures. Include an installed journey creating and browsing a page longer than three TV viewports.
+
+This extends existing unchecked gates without adding task IDs or completion credit. Execution order and current percentages remain unchanged. No application implementation or VM deployment is claimed by this document.
