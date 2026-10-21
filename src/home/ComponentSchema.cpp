@@ -16,11 +16,73 @@ bool versionOne(const QVariantMap &map) {
     const auto version=map.value("schemaVersion");
     return version.metaType().id()!=QMetaType::QString && version.metaType().id()!=QMetaType::Bool && version.toDouble()==1.0;
 }
+
+// Identity, text and cache bounds shared by the schema validator and its
+// clients. Changing a bound changes the accepted document format; keep
+// docs/components.md in sync with any change here.
+constexpr int MaxComponentIdLength = 160;      // safeId allows 1 leading + 159 trail characters
+constexpr int MaxNameLength = 80;              // display names, labels, tab names
+constexpr int MaxAccessibleTextLength = 160;   // accessibility name / hint
+constexpr int MaxComponentNameLength = 160;    // component display name
+constexpr int MaxSymbolLength = 80;            // tile symbol text
+constexpr int MaxActionTargetSize = 4096;      // open-folder / open-file / open-disc / open-url target
+
+// Child layout grid bounds. The home grid itself is 4-16 columns by 3-10 rows;
+// nested child layouts may start at a single column or row.
+constexpr int MinChildColumns = 1;
+constexpr int MaxChildColumns = 16;
+constexpr int MinChildRows = 1;
+constexpr int MaxChildRows = 10;
+constexpr int MinChildGapOrPadding = 0;
+constexpr int MaxChildGapOrPadding = 100;
+
+// Default home grid (screen mode): 8 columns x 5 rows, 12 gap, 20 margin.
+constexpr int DefaultGridColumns = 8;
+constexpr int DefaultGridRows = 5;
+constexpr int DefaultGridGap = 12;
+constexpr int DefaultGridMargin = 20;
+
+// PageData runtime caches, per active profile.
+constexpr int MaxPageDataClientKeySize = 330;      // full client key length
+constexpr int MaxPageDataClientIdLength = 160;     // id prefix validated with safeId
+constexpr int MaxPageDataClients = 128;            // library clients
+constexpr int MaxPageDataArtwork = 512;            // artwork items
+
+// Action payload limits.
+constexpr int MinMediaId = 1;                      // media ids are 1-based
+constexpr int MaxMediaId = 2147483647;             // INT_MAX, bounded for safe JSON double decoding
+constexpr int MinSettingsSection = -1;             // "no section" sentinel
+constexpr int MaxSettingsSection = 5;
+
+// HDMI input bounds are declared in ComponentSchema.h (shared with the shell).
+
+// Home grid bounds (stricter than child layout bounds).
+constexpr int MinGridColumns = 4;
+constexpr int MaxGridColumns = 16;
+constexpr int MinGridRows = 3;
+constexpr int MaxGridRows = 10;
+
+// Home layout columns: a page composition is single or dual column.
+constexpr int MinHomeLayoutColumns = 1;
+constexpr int MaxHomeLayoutColumns = 2;
+
+// Opacity bounds are declared in ComponentSchema.h (shared with the shell).
+// MaxComponentNestingDepth is declared in ComponentSchema.h (shared with HomeLayout).
+
+// Page composition bounds.
+constexpr int MaxNavigationTabs = 64;
+constexpr int MaxHeaderControls = 3;
+// Min/MaxSidebarWidth, Min/MaxSectionHeight, Min/MaxDesignHeight are declared
+// in ComponentSchema.h (shared with HomeLayout).
 }
 bool ComponentSchema::safeId(const QString &id)
 {
-    static const QRegularExpression pattern("^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$");
-    return id != "." && id != ".." && pattern.match(id).hasMatch();
+    // A valid id starts with an alphanumeric and holds up to
+    // MaxComponentIdLength characters total. "." and ".." are rejected even
+    // though the pattern would otherwise admit them.
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._-]{0,%1}$")
+                                            .arg(MaxComponentIdLength - 1));
+    return id != QLatin1String(".") && id != QLatin1String("..") && pattern.match(id).hasMatch();
 }
 bool ComponentSchema::validChildLayout(const QVariantMap &value)
 {
@@ -28,15 +90,20 @@ bool ComponentSchema::validChildLayout(const QVariantMap &value)
     for(auto it=value.cbegin();it!=value.cend();++it)if(!keys.contains(it.key()))return false;
     if(value.value("schemaVersion").metaType().id()==QMetaType::QString || value.value("schemaVersion").metaType().id()==QMetaType::Bool || value.value("schemaVersion").toDouble()!=1)return false;
     if(!QStringList{"grid","row","column"}.contains(value.value("mode").toString()))return false;
-    for(const auto &key:QStringList{"columns","rows","gap","padding"}){
+    for(const auto &key:QStringList{"columns","rows","gap","padding"}) {
         if(!value.contains(key) || value[key].metaType().id()==QMetaType::QString || value[key].metaType().id()==QMetaType::Bool)return false;
         bool ok=false;const auto number=value[key].toDouble(&ok);
-        const double maximum=key=="columns"?16:key=="rows"?10:100,minimum=(key=="columns" || key=="rows")?1:0;
+        const double maximum = key == "columns" ? MaxChildColumns
+                            : key == "rows" ? MaxChildRows
+                            : MaxChildGapOrPadding;
+        const double minimum = key == "columns" ? MinChildColumns
+                            : key == "rows" ? MinChildRows
+                            : MinChildGapOrPadding;
         if(!ok || !std::isfinite(number) || number<minimum || number>maximum || ((key=="columns" || key=="rows") && std::floor(number)!=number))return false;
     }
     if(value.contains("wrap") && value["wrap"].metaType().id()!=QMetaType::Bool)return false;
     if(value.contains("visibleColumns")){
-        const auto n=value["visibleColumns"];if(value["mode"]!="row" || n.metaType().id()==QMetaType::QString || n.metaType().id()==QMetaType::Bool || !std::isfinite(n.toDouble()) || std::floor(n.toDouble())!=n.toDouble() || n.toInt()<1 || n.toInt()>value["columns"].toInt())return false;
+        const auto n=value["visibleColumns"];if(value["mode"]!="row" || n.metaType().id()==QMetaType::QString || n.metaType().id()==QMetaType::Bool || !std::isfinite(n.toDouble()) || std::floor(n.toDouble())!=n.toDouble() || n.toInt()<MinChildColumns || n.toInt()>value["columns"].toInt())return false;
     }
     return !(value["mode"]=="row" && value["rows"].toInt()!=1) && !(value["mode"]=="column" && value["columns"].toInt()!=1);
 }
@@ -127,22 +194,23 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
     if (value.value("schemaVersion" ).toDouble() != 1) return false;
     if (value.contains("columns") && value["columns"].toDouble() != 1 && value["columns"].toDouble() != 2) return false;
     if (value.contains("grid") && (value["grid"].metaType().id() != QMetaType::QVariantMap || !validGrid(value["grid"].toMap()))) return false;
+    // A sections grid needs exactly one column, no fit scaling and an explicit section height.
     if(value.value("grid").toMap().value("mode")=="sections"
-        && (value.value("columns",1).toInt()!=1 || value.value("fit",false).toBool() || !value.contains("sectionHeight")))return false;
+        && (value.value("columns",1).toInt()!=MinHomeLayoutColumns || value.value("fit",false).toBool() || !value.contains("sectionHeight")))return false;
     if(value.contains("sectionHeight") && (value["sectionHeight"].metaType().id()==QMetaType::QString
         || value["sectionHeight"].metaType().id()==QMetaType::Bool || !std::isfinite(value["sectionHeight"].toDouble())
-        || value["sectionHeight"].toDouble()<60 || value["sectionHeight"].toDouble()>800))return false;
+        || value["sectionHeight"].toDouble()<MinSectionHeight || value["sectionHeight"].toDouble()>MaxSectionHeight))return false;
     if (value.contains("wallpaper") && !QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg)$").match(value["wallpaper"].toString()).hasMatch()) return false;
     if (value.contains("headerMode") && !QStringList{"navigation", "identity"}.contains(value["headerMode"].toString())) return false;
-    if (value.contains("identity") && (value["identity"].metaType().id() != QMetaType::QString || value["identity"].toString().size() > 80)) return false;
+    if (value.contains("identity") && (value["identity"].metaType().id() != QMetaType::QString || value["identity"].toString().size() > MaxNameLength)) return false;
     if (value.contains("designHeight")) {
         bool ok; const double height = value["designHeight"].toDouble(&ok);
         if (!ok || !std::isfinite(height) || value["designHeight"].metaType().id() == QMetaType::QString
-            || value["designHeight"].metaType().id() == QMetaType::Bool || height < 480 || height > 1440) return false;
+            || value["designHeight"].metaType().id() == QMetaType::Bool || height < MinDesignHeight || height > MaxDesignHeight) return false;
     }
     if (value.contains("headerControls")) {
         const auto controls = value["headerControls"].toList(); QSet<QString> unique;
-        if (controls.isEmpty() || controls.size() > 3 || value["headerControls"].metaType().id() != QMetaType::QVariantList) return false;
+        if (controls.isEmpty() || controls.size() > MaxHeaderControls || value["headerControls"].metaType().id() != QMetaType::QVariantList) return false;
         for (const auto &control : controls) { const auto id = control.toString(); if (!QStringList{"search", "settings", "edit"}.contains(id) || unique.contains(id)) return false; unique.insert(id); }
         if (!unique.contains("settings") && !unique.contains("edit")) return false;
     }
@@ -150,14 +218,14 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
         if (value.contains(key) && value[key].metaType().id() != QMetaType::Bool) return false;
     for (const auto &key : {"margin", "gap"}) if (value.contains(key)) {
         bool ok; const double number = value[key].toDouble(&ok);
-        if (!ok || !std::isfinite(number) || number < 0 || number > 100) return false;
+        if (!ok || !std::isfinite(number) || number < MinChildGapOrPadding || number > MaxChildGapOrPadding) return false;
     }
     const auto tabs = value.value("navigation").toList();
-    if (tabs.size() > 64 || (value.contains("navigation") && value["navigation"].metaType().id() != QMetaType::QVariantList)) return false;
+    if (tabs.size() > MaxNavigationTabs || (value.contains("navigation") && value["navigation"].metaType().id() != QMetaType::QVariantList)) return false;
     QSet<QString> ids;
     for (const auto &entry : tabs) {
         const auto tab = entry.toMap(); const auto id = tab.value("id").toString();
-        if (!safeId(id) || ids.contains(id) || tab.value("name").toString().trimmed().isEmpty() || tab.value("name").toString().size() > 80) return false;
+        if (!safeId(id) || ids.contains(id) || tab.value("name").toString().trimmed().isEmpty() || tab.value("name").toString().size() > MaxNameLength) return false;
         ids.insert(id);
         for (auto it = tab.cbegin(); it != tab.cend(); ++it) if (!QStringList{"id", "name", "action", "sections"}.contains(it.key())) return false;
         if (tab.contains("action") && action(tab["action"].toMap()).isEmpty()) return false;
@@ -177,17 +245,17 @@ bool ComponentSchema::validGrid(const QVariantMap &value)
     if (value.contains("columns")) {
         bool ok; const double number = value.value("columns").toDouble(&ok);
         if (!ok || value.value("columns").metaType().id() == QMetaType::QString || value.value("columns").metaType().id() == QMetaType::Bool
-            || number < 4 || number > 16 || std::floor(number) != number) return false;
+            || number < MinGridColumns || number > MaxGridColumns || std::floor(number) != number) return false;
     }
     if (value.contains("rows")) {
         bool ok; const double number = value.value("rows").toDouble(&ok);
         if (!ok || value.value("rows").metaType().id() == QMetaType::QString || value.value("rows").metaType().id() == QMetaType::Bool
-            || number < 3 || number > 10 || std::floor(number) != number) return false;
+            || number < MinGridRows || number > MaxGridRows || std::floor(number) != number) return false;
     }
     for (const auto &key : {"gap", "margin"}) if (value.contains(key)) {
         bool ok; const double number = value.value(key).toDouble(&ok);
         if (!ok || !std::isfinite(number) || value.value(key).metaType().id() == QMetaType::QString
-            || value.value(key).metaType().id() == QMetaType::Bool || number < 0 || number > 100) return false;
+            || value.value(key).metaType().id() == QMetaType::Bool || number < MinChildGapOrPadding || number > MaxChildGapOrPadding) return false;
     }
     for (const auto &key : {"snap", "overlap"})
         if (value.contains(key) && value.value(key).metaType().id() != QMetaType::Bool) return false;
@@ -195,7 +263,8 @@ bool ComponentSchema::validGrid(const QVariantMap &value)
 }
 QVariantMap ComponentSchema::normalizedGrid(const QVariantMap &value)
 {
-    QVariantMap grid{{"columns", 8}, {"rows", 5}, {"gap", 12}, {"margin", 20}, {"snap", true}, {"overlap", false}, {"mode","screen"}};
+    // Screen-mode default grid: 8 x 5 cells with a 12 gap and 20 margin.
+    QVariantMap grid{{"columns", DefaultGridColumns}, {"rows", DefaultGridRows}, {"gap", DefaultGridGap}, {"margin", DefaultGridMargin}, {"snap", true}, {"overlap", false}, {"mode","screen"}};
     for (auto it = value.cbegin(); it != value.cend(); ++it) grid[it.key()] = it.value();
     return grid;
 }
@@ -240,13 +309,13 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
         result["collectionId"] = id;
         if (type == "play-movie") {
             const double movie = input.value("movieId").toDouble();
-            if (!std::isfinite(movie) || movie < 1 || movie > 2147483647 || std::floor(movie) != movie)
+            if (!std::isfinite(movie) || movie < MinMediaId || movie > MaxMediaId || std::floor(movie) != movie)
                 return reject(error, "Choose a valid movie.");
             result["movieId"] = static_cast<int>(movie);
         }
         if (type == "open-show") {
             const double show = input.value("tvShowId").toDouble();
-            if (!std::isfinite(show) || show < 1 || show > 2147483647 || std::floor(show) != show)
+            if (!std::isfinite(show) || show < MinMediaId || show > MaxMediaId || std::floor(show) != show)
                 return reject(error, "Choose a valid TV show.");
             result["tvShowId"] = static_cast<int>(show);
         }
@@ -257,20 +326,20 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
     } else if (type == "app-drawer" || type == "root-page") {
         // Shell-owned drawer, never a command or provider URL.
     } else if (type == "settings") {
-        const double section = input.value("section", -1).toDouble();
-        if (section < -1 || section > 5 || std::floor(section) != section) return reject(error, "Invalid Settings section.");
+        const double section = input.value("section", MinSettingsSection).toDouble();
+        if (section < MinSettingsSection || section > MaxSettingsSection || std::floor(section) != section) return reject(error, "Invalid Settings section.");
         result["section"] = static_cast<int>(section);
     } else if (type == "switch-input") {
         const double inputNumber = input.value("input").toDouble();
-        if (!std::isfinite(inputNumber) || inputNumber < 1 || inputNumber > 8 || std::floor(inputNumber) != inputNumber)
+        if (!std::isfinite(inputNumber) || inputNumber < MinHdmiInput || inputNumber > MaxHdmiInput || std::floor(inputNumber) != inputNumber)
             return reject(error, "Choose an HDMI input from 1 to 8.");
         result["input"] = static_cast<int>(inputNumber);
     } else if (type == "desktop-mode") {
-        result["label"] = input.value("label", "Desktop Mode").toString().left(80);
+        result["label"] = input.value("label", "Desktop Mode").toString().left(MaxNameLength);
     } else if (QStringList{"open-folder", "open-file", "open-disc", "open-url"}.contains(type)) {
         const auto target = input.value("target").toString().trimmed();
         const auto handler = input.value("openWith").toString();
-        if (target.isEmpty() || target.size() > 4096 || target.contains(QChar::Null)
+        if (target.isEmpty() || target.size() > MaxActionTargetSize || target.contains(QChar::Null)
             || (!handler.isEmpty() && !safeId(handler))) return reject(error, "Invalid target or Open With app.");
         if (type == "open-url") {
             const QUrl url(target, QUrl::StrictMode);
@@ -291,11 +360,11 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     auto type = input.value("componentType").toString();
     if (type.isEmpty() && legacy) type = kind == "widget" ? (QStringList{"clock","text","container"}.contains(input.value("widgetType").toString())?input.value("widgetType").toString():"clock") : "launcher";
     if (!QStringList{"launcher", "clock", "text", "media-shelf","container","button","image","library"}.contains(type)) return reject(error, "Unsupported component type.");
-    if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>160 || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
+    if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>MaxComponentNameLength || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
     if(input.contains("family") && (type!="container" || !QStringList{"carousel","app-bar"}.contains(input["family"].toString())))return reject(error,"Unsupported group family.");
     if(input.contains("accessibility")){
         if(input["accessibility"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Invalid accessible description.");
-        const auto a=input["accessibility"].toMap();for(auto it=a.cbegin();it!=a.cend();++it)if(!QStringList{"name","hint"}.contains(it.key()) || it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>160 || it.value().toString().contains(QChar::Null))return reject(error,"Use bounded accessible text.");
+        const auto a=input["accessibility"].toMap();for(auto it=a.cbegin();it!=a.cend();++it)if(!QStringList{"name","hint"}.contains(it.key()) || it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>MaxAccessibleTextLength || it.value().toString().contains(QChar::Null))return reject(error,"Use bounded accessible text.");
     }
     if(input.contains("parentId")) {
         if(input["parentId"].metaType().id()!=QMetaType::QString || (!input["parentId"].toString().isEmpty() && !safeId(input["parentId"].toString())))return reject(error,"Invalid parent identity.");
@@ -308,17 +377,17 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     if (input.contains("opacity")) {
         if(input["opacity"].metaType().id()==QMetaType::QString || input["opacity"].metaType().id()==QMetaType::Bool)return reject(error,"Opacity must be numeric.");
         const auto opacity = input.value("opacity").toDouble();
-        if (!std::isfinite(opacity) || opacity < 0 || opacity > 1) return reject(error, "Invalid component opacity.");
+        if (!std::isfinite(opacity) || opacity < MinOpacity || opacity > MaxOpacity) return reject(error, "Invalid component opacity.");
     }
     for(const auto &key:QStringList{"hidden","locked"})if(input.contains(key) && input.value(key).metaType().id()!=QMetaType::Bool)return reject(error,"Visibility and lock must be boolean values.");
     for(const auto &key:QStringList{"showTitle","showType","showLogo","logoFill"})if(input.contains(key) && input[key].metaType().id()!=QMetaType::Bool)return reject(error,"Presentation toggles must be boolean values.");
     if(input.contains("accent") && (input["accent"].metaType().id()!=QMetaType::QString || !QColor(input["accent"].toString()).isValid() || QColor(input["accent"].toString()).alpha()!=255))return reject(error,"Choose an opaque accent color.");
-    if(input.contains("symbol") && (input["symbol"].metaType().id()!=QMetaType::QString || input["symbol"].toString().size()>80))return reject(error,"Use a short symbol.");
+    if(input.contains("symbol") && (input["symbol"].metaType().id()!=QMetaType::QString || input["symbol"].toString().size()>MaxSymbolLength))return reject(error,"Use a short symbol.");
     if (input.contains("placement")) {
         // Shape-only bounds here; the layout validates against its actual grid and neighbors.
         const auto placement = input.value("placement");
         if (placement.metaType().id() != QMetaType::QVariantMap
-            || !validPlacement(placement.toMap(), 16, 10)) return reject(error, "Invalid component placement.");
+            || !validPlacement(placement.toMap(), MaxChildColumns, MaxChildRows)) return reject(error, "Invalid component placement.");
         result["placement"] = placement;
     }
     if (input.contains("presentation") && (input.value("presentation").metaType().id() != QMetaType::QVariantMap
@@ -346,7 +415,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         }
     } else if (type == "clock" || type == "text" || type=="container") {
         if (kind != "widget" || input.value("widgetType") != type) return reject(error, "Unsupported widget.");
-        if(type=="container" && (input.value("name").toString().trimmed().isEmpty() || input.value("name").toString().size()>80 || input.value("name").toString().contains(QChar::Null) || !validChildLayout(input.value("presentation").toMap().value("layout").toMap())))return reject(error,"A group needs a name and a bounded internal layout.");
+        if(type=="container" && (input.value("name").toString().trimmed().isEmpty() || input.value("name").toString().size()>MaxNameLength || input.value("name").toString().contains(QChar::Null) || !validChildLayout(input.value("presentation").toMap().value("layout").toMap())))return reject(error,"A group needs a name and a bounded internal layout.");
         source = {{"schemaVersion", 1}, {"provider", "shell"}, {"kind", type}};
         result.remove("action");
     } else {
@@ -447,7 +516,7 @@ QVariantMap ComponentSchema::componentGrid(const QJsonArray &items,const QVarian
 QString ComponentSchema::effectiveCategory(const QJsonArray &items,const QString &id)
 {
     auto current=id;QSet<QString> visited;
-    for(int depth=0;depth<=4 && !current.isEmpty();++depth){
+    for(int depth=0;depth<=MaxComponentNestingDepth && !current.isEmpty();++depth){
         if(visited.contains(current))return {};visited.insert(current);bool found=false;
         for(const auto &entry:items){const auto item=entry.toObject();if(item["id"]!=current)continue;found=true;const auto parent=item.value("parentId").toString();if(parent.isEmpty())return item.value("categoryId").toString();current=parent;break;}
         if(!found)return {};
@@ -457,7 +526,7 @@ QString ComponentSchema::effectiveCategory(const QJsonArray &items,const QString
 bool ComponentSchema::positionLocked(const QJsonArray &items,const QString &id)
 {
     auto current=id;QSet<QString> visited;
-    for(int depth=0;depth<=4 && !current.isEmpty();++depth){
+    for(int depth=0;depth<=MaxComponentNestingDepth && !current.isEmpty();++depth){
         if(visited.contains(current))return true;visited.insert(current);bool found=false;
         for(const auto &entry:items){const auto item=entry.toObject();if(item["id"]!=current)continue;found=true;if(item.value("locked").toBool())return true;current=item.value("parentId").toString();break;}
         if(!found)return true;
@@ -482,7 +551,7 @@ bool ComponentSchema::hierarchyFits(const QJsonArray &items,const QVariantMap &c
         while(!ancestor.isEmpty()){
             if(visited.contains(ancestor))return fail("A group cannot contain itself or one of its parents.");
             if(!byId.contains(ancestor) || byId[ancestor]["componentType"]!="container")return fail("Choose an existing group as the parent.");
-            visited.insert(ancestor);if(++depth>4)return fail("Groups support at most four nested container levels.");
+            visited.insert(ancestor);if(++depth>MaxComponentNestingDepth)return fail("Groups support at most four nested container levels.");
             ancestor=byId[ancestor].value("parentId").toString();
         }
     }

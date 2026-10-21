@@ -6,14 +6,18 @@ PageData::PageData(const QString &profile,KodiMedia *player,QObject *parent,cons
     :QObject(parent),m_profile(profile),m_directory(directory),m_player(player){}
 QObject *PageData::client(const QString &key,const QVariantMap &source) {
     if(!m_valid)return nullptr;
-    if(key.size()>330 || !ComponentSchema::safeId(key.left(160)) || key.contains('/') || key.contains('\\'))return nullptr;
+    // The key is bounded and its id prefix must be a safe component id; path
+    // separators are rejected so keys can never address arbitrary files.
+    if(key.size()>ComponentSchema::MaxPageDataClientKeySize
+       || !ComponentSchema::safeId(key.left(ComponentSchema::MaxPageDataClientIdLength))
+       || key.contains(QLatin1String("/")) || key.contains('\\'))return nullptr;
     if(!ComponentSchema::validPresentation(source,true))return nullptr;
     QVariantMap query{{"libraryKind",source.value("libraryKind","movies")},{"libraryView",source.value("libraryView","all")},{"libraryValue",source.value("libraryValue","")}};
     const auto kind=query["libraryKind"].toString(),view=query["libraryView"].toString(),value=query["libraryValue"].toString();
     if((view=="tag"||view=="genre")&&(kind!="movies"||value.trimmed().isEmpty()))return nullptr;
     if(view=="collection"&&!ComponentSchema::safeId(value))return nullptr;
     if(!m_clients.contains(key)) {
-        if(m_clients.size()>=128)return nullptr;
+        if(m_clients.size()>=ComponentSchema::MaxPageDataClients)return nullptr;
         m_clients.insert(key,{new KodiMedia(m_profile,this,m_directory),{}});
     }
     auto &entry=m_clients[key];
@@ -25,7 +29,7 @@ QObject *PageData::artwork(const QString &kind,int id) {
     if(!QStringList{"movie","episode","tvshow","season"}.contains(kind)||id<1)return nullptr;
     const auto key=kind+":"+QString::number(id);
     if(!m_artwork.contains(key)) {
-        if(m_artwork.size()>=512)return nullptr;
+        if(m_artwork.size()>=ComponentSchema::MaxPageDataArtwork)return nullptr;
         auto *art=new KodiArtwork(m_profile,this,m_directory);m_artwork[key]=art;art->load(kind,id);
     }
     return m_artwork[key];

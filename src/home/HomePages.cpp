@@ -27,15 +27,15 @@ QVariantMap HomeLayout::homeAppearance() const {
 
 QString HomeLayout::createPage(const QString &name, const QString &preset) {
     if (m_owner) return m_owner->createPage(name,preset);
-    if (name.trimmed().isEmpty() || name.trimmed().size()>80 || m_pages.size()+(rootPageVisible()?1:0)>=64 || !QStringList{"blank","movies","shows","standalone","home"}.contains(preset)) {
-        setError(tr("Choose a page name and template. Up to 64 pages are supported."));return {};
+    if (name.trimmed().isEmpty() || name.trimmed().size()>MaxPageNameLength || m_pages.size()+(rootPageVisible()?1:0)>=MaxPages || !QStringList{"blank","movies","shows","standalone","home"}.contains(preset)) {
+        setError(tr("Choose a page name and template. Up to %1 pages are supported.").arg(MaxPages));return {};
     }
     const auto id="page-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QJsonObject config{{"schemaVersion",1},{"enabled",true},{"fit",false},{"columns",1},{"margin",24},{"gap",16},{"headerMode","identity"},
-        {"identity",name.trimmed()},{"headerControls",QJsonArray{"settings","edit"}},{"pageNavigation",preset=="standalone"?"none":"left"},{"sidebarWidth",200}};
+    QJsonObject config{{"schemaVersion",1},{"enabled",true},{"fit",false},{"columns",1},{"margin",DefaultHomeMargin},{"gap",DefaultHomeGap},{"headerMode","identity"},
+        {"identity",name.trimmed()},{"headerControls",QJsonArray{"settings","edit"}},{"pageNavigation",preset=="standalone"?"none":"left"},{"sidebarWidth",DefaultSidebarWidth}};
     QJsonArray sections;
     if(preset!="blank")sections.append(QJsonObject{{"id","library"},{"name",preset=="shows"?"Shows":"Movies"},{"presentation",QJsonObject{
-        {"variant","library"},{"height",550},{"libraryKind",preset=="shows"?"shows":"movies"},{"libraryView","all"},{"libraryLayout","grid"},{"libraryColumns",4},{"padding",12},{"radius",16},{"panelOpacity",0.3}}}});
+        {"variant","library"},{"height",PresetLibrarySectionHeight},{"libraryKind",preset=="shows"?"shows":"movies"},{"libraryView","all"},{"libraryLayout","grid"},{"libraryColumns",DefaultLibraryColumns},{"padding",DefaultLibraryPadding},{"radius",DefaultLibraryRadius},{"panelOpacity",DefaultPanelOpacity}}}});
     QJsonObject document{{"schemaVersion",2},{"theme",QJsonObject::fromVariantMap(appearance())},{"composition",config},{"categories",sections},{"components",QJsonArray{}}};
     if(preset=="home"){document=QJsonDocument::fromJson(documentData()).object();document.remove("pages");document.remove("homePageId");document.remove("rootPage");document.remove("studioAppearance");}
     m_pages.append(QJsonObject{{"id",id},{"name",name.trimmed()},{"layout",document}});

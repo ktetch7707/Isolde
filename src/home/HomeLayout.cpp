@@ -35,15 +35,21 @@ bool normalizeAppearance(QVariantMap &values)
             it.value() = color.name();
         } else if (key == "fontFamily") {
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty()
-                || it.value().toString().size() > 80 || it.value().toString().contains(QChar::Null)) return false;
+                || it.value().toString().size() > HomeLayout::MaxPageNameLength || it.value().toString().contains(QChar::Null)) return false;
         } else if (key == "motionEnabled") {
             if (it.value().metaType().id() != QMetaType::Bool) return false;
         } else {
             if (!defaults.contains(key) && key != "tileRoundness") return false;
             if (it.value().metaType().id() == QMetaType::QString || it.value().metaType().id() == QMetaType::Bool) return false;
             bool ok = false; const double number = it.value().toDouble(&ok);
-            const double low = key == "typographyScale" ? 0.8 : key == "homeColumns" ? 2 : key == "spacing" ? 8 : 0;
-            const double high = key == "typographyScale" ? 1.3 : key == "homeColumns" ? 6 : key == "spacing" ? 40 : 1;
+            const double low = key == "typographyScale" ? HomeLayout::MinTypographyScale
+                            : key == "homeColumns" ? HomeLayout::MinHomeColumns
+                            : key == "spacing" ? HomeLayout::MinSpacing
+                            : 0;
+            const double high = key == "typographyScale" ? HomeLayout::MaxTypographyScale
+                             : key == "homeColumns" ? HomeLayout::MaxHomeColumns
+                             : key == "spacing" ? HomeLayout::MaxSpacing
+                             : 1;
             if (!ok || !qIsFinite(number) || number < low || number > high
                 || ((key == "homeColumns" || key == "spacing") && number != qFloor(number))) return false;
         }
@@ -64,10 +70,10 @@ bool readableStudioAppearance(QVariantMap values) {
     const auto surface=QColor(values.value("surfaceColor").toString()),selected=QColor(values.value("selectedColor").toString());
     for(const auto &key:QStringList{"textColor","mutedColor"}) {
         const auto ink=QColor(values.value(key).toString());
-        if(!ink.isValid() || !surface.isValid() || !selected.isValid() || contrast(ink,surface)<4.5 || contrast(ink,selected)<4.5)return false;
+        if(!ink.isValid() || !surface.isValid() || !selected.isValid() || contrast(ink,surface)<HomeLayout::MinTextContrast || contrast(ink,selected)<HomeLayout::MinTextContrast)return false;
     }
     const auto focus=QColor(values.value("focusColor").toString());
-    return focus.isValid() && contrast(focus,surface)>=3 && contrast(focus,selected)>=3;
+    return focus.isValid() && contrast(focus,surface)>=HomeLayout::MinFocusContrast && contrast(focus,selected)>=HomeLayout::MinFocusContrast;
 }
 
 bool isSafeActionId(const QString &id)
@@ -112,7 +118,9 @@ QVariantList HomeLayout::items() const
     QSet<QString> hidden;
     if(!m_draftOnly){
         for(const auto &entry:m_items)if(entry.toObject().value("hidden").toBool())hidden.insert(entry.toObject()["id"].toString());
-        for(int depth=0;depth<4;++depth)for(const auto &entry:m_items){const auto item=entry.toObject();if(hidden.contains(item.value("parentId").toString()))hidden.insert(item["id"].toString());}
+        // Parent-chain walks are bounded at MaxComponentNestingDepth levels so
+        // hidden state cannot cascade forever through nested items.
+        for(int depth=0;depth<ComponentSchema::MaxComponentNestingDepth;++depth)for(const auto &entry:m_items){const auto item=entry.toObject();if(hidden.contains(item.value("parentId").toString()))hidden.insert(item["id"].toString());}
     }
     const auto appendItem = [this, &result,&hidden](const QJsonValue &value) {
         const auto object = value.toObject();
@@ -184,7 +192,8 @@ QVariantList HomeLayout::sourceChoices(const QString &itemId) const
         const auto action = normalizedActionForItem(item);
         const auto type = action.value("type").toString();
         if (type == "switch-input") {
-            for (int input = 1; input <= 8; ++input)
+            // HDMI inputs are numbered 1..ComponentSchema::MaxHdmiInput.
+            for (int input = ComponentSchema::MinHdmiInput; input <= ComponentSchema::MaxHdmiInput; ++input)
                 choices.append(QVariantMap{{"id", QString::number(input)}, {"name", QString("HDMI %1").arg(input)}});
         } else if (type == "open-collection" || type == "play-movie" || type == "open-show") {
             for (const auto &entry : m_collections) choices.append(QVariantMap{{"id", entry.toMap().value("id")}, {"name", entry.toMap().value("name")}});
@@ -468,7 +477,7 @@ bool HomeLayout::setWallpaper(const QString &sourceUrl)
     const QUrl url(sourceUrl);
     if (!url.isLocalFile()) { setError(tr("Choose a local PNG or JPEG wallpaper.")); return false; }
     QFile source(url.toLocalFile());
-    if (!source.open(QIODevice::ReadOnly) || source.size() > 20*1024*1024) return false;
+    if (!source.open(QIODevice::ReadOnly) || source.size() > HomeLayout::MaxArtworkSize) return false;
     const auto data = source.readAll(); const bool png = data.startsWith(QByteArray::fromHex("89504e470d0a1a0a"));
     if (!png && !data.startsWith(QByteArray::fromHex("ffd8ff"))) return false;
     const auto relative = "artwork/wallpaper-" + QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex()) + (png ? ".png" : ".jpg");
@@ -520,7 +529,7 @@ bool HomeLayout::load(const QString &defaultPath, const QString &userPath)
 
     QFile defaults(m_defaultPath);
     m_defaultTheme.clear();
-    if (!defaults.open(QIODevice::ReadOnly) || !loadDocument(defaults.read(4 * 1024 * 1024 + 1), false)) return false;
+    if (!defaults.open(QIODevice::ReadOnly) || !loadDocument(defaults.read(HomeLayout::MaxLayoutSize + 1), false)) return false;
     m_defaultTheme=appearance();
     QFile user(m_userPath);
     if (user.exists() && user.open(QIODevice::ReadOnly)) {
@@ -530,7 +539,7 @@ bool HomeLayout::load(const QString &defaultPath, const QString &userPath)
         const auto defaultStart = m_backgroundStart;
         const auto defaultEnd = m_backgroundEnd;
         const auto defaultRoundness = m_tileRoundness;
-        if (!loadDocument(user.read(4 * 1024 * 1024 + 1), true)) {
+        if (!loadDocument(user.read(HomeLayout::MaxLayoutSize + 1), true)) {
             m_items = defaultItems; m_brandVisible = defaultBrand;
             m_categories = defaultCategories;
             m_backgroundStart = defaultStart; m_backgroundEnd = defaultEnd;
@@ -610,7 +619,7 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
     QSet<QString> ids;
     QSet<QString> categoryIds;
     const auto categoryArray = object.value("categories").toArray();
-    if (categoryArray.size() > 128) { setError(tr("Too many Home categories.")); return false; }
+    if (categoryArray.size() > HomeLayout::MaxLayoutCategories) { setError(tr("Too many Home categories.")); return false; }
     for (const auto &value : categoryArray) {
         const auto category = value.toObject();
         const auto id = category.value("id").toString();
@@ -812,7 +821,7 @@ bool HomeLayout::setItemSize(const QString &id, const QString &size)
 bool HomeLayout::setItemOpacity(const QString &id, double opacity)
 {
     if (!qIsFinite(opacity)) return false;
-    opacity = qBound(0.0, opacity, 1.0);
+    opacity = qBound(ComponentSchema::MinOpacity, opacity, ComponentSchema::MaxOpacity);
     for (qsizetype i = 0; i < m_items.size(); ++i) {
         auto item = m_items.at(i).toObject(); if (item.value("id").toString() != id) continue;
         const auto previous = item.value("opacity"); item.insert("opacity", opacity); m_items.replace(i, item);
@@ -841,7 +850,7 @@ bool HomeLayout::setTileOption(const QString &id, const QString &option, bool en
 
 bool HomeLayout::setTileAppearance(const QString &id, const QString &symbol, const QString &accent)
 {
-    const auto cleanSymbol = symbol.trimmed().left(3);
+    const auto cleanSymbol = symbol.trimmed().left(HomeLayout::MaxTileSymbolLength);
     const QColor accentColor(accent);
     if (cleanSymbol.isEmpty() || !accentColor.isValid())
         return false;
@@ -874,7 +883,7 @@ bool HomeLayout::setTileLogo(const QString &id, const QString &sourceUrl)
 {
     const auto sourcePath = QUrl(sourceUrl).isLocalFile() ? QUrl(sourceUrl).toLocalFile() : sourceUrl;
     QFile source(sourcePath);
-    if (!source.open(QIODevice::ReadOnly) || source.size() > 20 * 1024 * 1024) return false;
+    if (!source.open(QIODevice::ReadOnly) || source.size() > HomeLayout::MaxArtworkSize) return false;
     const auto data = source.readAll();
     const bool png = data.startsWith(QByteArray::fromHex("89504e470d0a1a0a"));
     const bool jpeg = data.startsWith(QByteArray::fromHex("ffd8ff"));

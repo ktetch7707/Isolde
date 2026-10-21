@@ -34,6 +34,46 @@ class HomeLayout final : public QObject {
     Q_PROPERTY(QVariantMap homeAppearance READ homeAppearance NOTIFY layoutChanged)
 
 public:
+    // Layout, presentation and studio bounds (AGENTS.md: bound everything,
+    // never clamp silently). Shared between HomeLayout.cpp and HomePages.cpp.
+    static constexpr int MaxPages = 64;                       // pages per profile
+    static constexpr int MaxPageNameLength = 80;              // page / card name characters
+    static constexpr int MaxCategoryNameLength = 60;          // category name characters
+    static constexpr int DefaultHomeMargin = 24;              // default home grid margin
+    static constexpr int DefaultHomeGap = 16;                 // default home grid gap
+    static constexpr int DefaultSidebarWidth = 200;           // default sidebar width (px)
+    static constexpr int PresetLibrarySectionHeight = 550;    // preset library section height (px)
+    static constexpr int AddLibrarySectionHeight = 500;       // add-widget library section height (px)
+    static constexpr int DefaultLibraryColumns = 4;           // default library grid columns
+    static constexpr int DefaultLibraryPadding = 12;          // default library section padding (px)
+    static constexpr int DefaultLibraryRadius = 16;           // default library section radius (px)
+    static constexpr double DefaultPanelOpacity = 0.3;        // default library panel opacity
+    static constexpr int MaxTileSymbolLength = 3;             // tile symbol characters
+    static constexpr int FirstIdSuffix = 2;                   // first suffix for generated unique ids
+    static constexpr qint64 MaxLayoutSize = 4LL * 1024 * 1024; // 4 MiB layout document cap
+    static constexpr qint64 MaxArtworkSize = 20LL * 1024 * 1024; // 20 MiB artwork/file cap
+    static constexpr int MaxLayoutCategories = 128;           // categories per layout
+    static constexpr double MinTileOpacity = 0.2;             // theme-applied tile opacity floor
+    static constexpr double MaxTileOpacity = 1.0;             // theme-applied tile opacity ceiling
+    static constexpr double RoundnessNotSet = -1.0;           // sentinel: theme leaves roundness untouched
+    static constexpr int MaxStudioDefaultsFileSize = 64 * 1024; // studio-defaults.json cap
+    static constexpr int MinMenuWidth = 200;                  // studio menu width floor (px)
+    static constexpr int MaxMenuWidth = 480;                  // studio menu width ceiling (px)
+    static constexpr int MaxPanelChildren = 32;               // studio input panel child cap
+    static constexpr int RequiredComponentPresets = 5;        // studio component presets (button, image, library, carousel, app-bar)
+    static constexpr int RequiredCatalogEntries = 6;          // studio catalog entries
+    static constexpr int MaxInspectorFields = 160;            // studio inspector field cap
+    // Appearance value ranges (displayed to the user in Settings / Page Studio).
+    static constexpr double MinTypographyScale = 0.8;
+    static constexpr double MaxTypographyScale = 1.3;
+    static constexpr int MinHomeColumns = 2;
+    static constexpr int MaxHomeColumns = 6;
+    static constexpr int MinSpacing = 8;
+    static constexpr int MaxSpacing = 40;
+    static constexpr double MinTextContrast = 4.5;
+    static constexpr double MinFocusContrast = 3.0;
+
+public:
     QString homePageId() const { return m_homePageId; }
     QString rootPageName() const;
     bool rootPageVisible() const { return m_rootPage.value("visible").toBool(true); }
