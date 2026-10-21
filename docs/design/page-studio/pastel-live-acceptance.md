@@ -1,0 +1,24 @@
+# Pastel Home with live carousels — acceptance gate
+
+User acceptance criteria, 2026-10-21:
+
+> Isolde home displays the pastel skin with an app carousel containing real apps and a recently watched carousel with the seeded recently watched videos.
+
+This is an installed Home acceptance gate for T21.6/T21.7, packaged preset adoption and T24.2. Seeded data, a Studio preview, passing bridge queries or a similar-looking screenshot alone do not satisfy it. Status: **NOT MET**; no new completion credit.
+
+## Required result
+
+1. **Normal Home:** Launch Isolde in the VM's Studio Demo profile. Its designated Home page displays the Pastel sky design, including the pastel background, circular launchers and themed collection surfaces. Both carousels are visible in normal Home, outside the editor. Do not change Household or alex, or rewrite any stored layout on startup; applying/converting the preset is explicit and reversible.
+2. **Real app carousel:** Favorite Apps is one editable collection component bound to actual eligible installed application IDs. Its displayed names/artwork come from those apps, and selecting a card launches its real supported application. No illustrated Netflix/Disney+/other placeholder qualifies unless that application is actually installed and launchable. Curated membership/order, visible capacity and More apps retain the same collection; Back/return restores the originating card. Lack of eligible apps is an honest empty state, not a passing demo.
+3. **Real Recently watched carousel:** One editable collection component reads the seeded Kodi viewing history, sorted newest `lastplayed` first. Include partially watched and completed videos; exclude never-watched videos. Recently Added and Continue Watching are separate sources and cannot substitute for this row. Card titles, artwork, destinations and any progress come from Kodi; no authored one-button-per-title list or editor sample mode.
+4. **Concrete movie baseline:** With the untouched Studio Demo seed, a movie-only Recently watched collection contains the six viewed movies: Moonlit Harbor, The Glass Garden, Beyond the Clouds, Postcards from June, A Quiet Orbit and The Last Lighthouse, in descending seeded last-played order. Wildflower Road and Sunday in the City are excluded. Showing only the four resumable movies fails. Configured visible capacity may show fewer at once, but all six must remain reachable within that collection. TV history, when selected, must use the seeded episode history rather than show date-added dates.
+5. **Live behavior and editing:** After playing/stopping a seeded video, the row reflects Kodi's updated history/progress on refresh without hand-editing the layout. Include a test where viewing order differs from date-added order. Both rows support remote navigation, overflow, launch/playback and exact focus return. In Studio each row is selectable/configurable as one carousel and remains visually faithful to Home. Editing membership, count/capacity, placement and appearance uses validated data and existing Undo/Apply behavior.
+6. **Persistence and proof:** After explicit Apply, restart the same installed release and confirm the pastel Home and both live collections remain. Record installed source/release identity, profile, screenshots of normal Home, persisted component/source definitions, actual registry IDs, Kodi query results and remote launch/playback/return results. Inspect screenshots explicitly. Preserve the existing fixture, atomicity, profile-isolation and offline gates; neither this acceptance statement nor seed setup closes them.
+
+## Current gap, verified by source inspection
+
+- `config/skins/pastel.json` still contains authored illustration cards for the recent category; those are not a history collection.
+- `src/media/KodiMedia.cpp` maps `recent` to `dateadded`; `continue` filters in-progress items. Neither implements the full Recently watched requirement above.
+- The separate Studio Demo library is ready: eight movies, two shows/six episodes, local artwork, watched state and resume points. Its bridge-query checks establish the data prerequisite only. See [demo setup/evidence](../../studio-demo-library.md).
+
+Implement the missing real collection/preset behavior through the existing generic component/provider pipeline. Keep T21.6/T21.7 open until their full contracts pass, including any separately blocked app-provider integration. This local installed gate does not require claiming streaming-service watch-history access.

@@ -62,6 +62,7 @@ uncoached, and a failed walkthrough requires iteration before cutover.
 | A8 | Offline + missing backends | Designer, catalog, local artwork, draft/apply/recovery all work disconnected; Web OFF issues zero external requests; honest unavailable states |
 | A9 | Entrances and recovery | Enter movement within two confirmations from a selected component; zero accidental media/app launches; Settings/Edit Home reachable from every state including empty Home; no lost edit or focus across launch/playback/dialog returns |
 | A10 | Performance on documented VM baseline (1280x720 and 1920x1080) | Remote step visible < 100 ms at p95; ≥ 30 fps moving 100 visible widgets; 1024-node document editable via virtualized layers; no input wait > 250 ms without feedback; repeated open/cancel/preview/profile switches do not grow clients/history unbounded |
+| A11 | Installed pastel Home with real app and watched-history carousels | Meet [the user-defined live pastel gate](pastel-live-acceptance.md): real installed app launch/return, six viewed seeded movies including completed titles and excluding never-watched titles, Kodi last-played ordering, real artwork/playback, collection editing, explicit Apply/restart persistence and inspected normal-Home evidence. Seeded data or Studio preview alone does not pass. |
 
 Targets adapted from spec §10. Both standing visual fixture pairs must also pass after every
 Studio slice that touches rendering, with no fixture special-casing.

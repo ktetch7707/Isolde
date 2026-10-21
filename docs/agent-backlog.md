@@ -58,6 +58,8 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 
 ## Highest priority: core Page Studio
 
+User acceptance gate (2026-10-21): [Pastel Home with live carousels](design/page-studio/pastel-live-acceptance.md) requires normal installed Home to show the pastel skin, a real installed-app collection and seeded Kodi Recently watched history including completed and partial videos. Recently Added, Continue Watching alone, static illustration buttons and editor-only previews fail. Applies to existing T21.6/T21.7/preset adoption/T24.2; currently NOT MET. No new weighted task, priority change or completion credit: T21 36%; Overall round(849/24) = 35% across 24 active tasks.
+
 User-requested Kodi demo data (2026-10-21): [persistent Studio Demo library](studio-demo-library.md) provides eight movies, two shows/six episodes, local artwork and verified Kodi watch/resume state in a separate active VM profile. Actual bridge queries and clip decoding pass; Household layout and installed release are unchanged. No page migration, application build, selection/slider acceptance or task credit is claimed. T21 36%; Overall round(849/24) = 35% across 24 active tasks.
 
 Optional long pages (user, 2026-10-21): [scrolling-page contract](design/page-studio/scrolling-pages-2026-10-21.md) adds a per-page Allow vertical scrolling checkbox. Off preserves a one-screen boundary; On allows validated downward growth without shrinking components. Include configured-component retention on no-room Add, live bottom-edge growth/reflow, exact cancel/undo/scroll restore and safe disable preview. Mandatory scope of existing open T19.6/T20.5/T21.11/T23.4/T24 gates; no new task IDs or completion credit. Overall remains round(849/24) = 35%.
