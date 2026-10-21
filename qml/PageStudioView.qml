@@ -1,3 +1,4 @@
+// PageStudioView.qml — remote-first page editor: canvas, context menu, dialogs, preview/apply.
 import QtQuick
 import QtQuick.Controls
 
