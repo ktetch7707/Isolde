@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -19,6 +20,21 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_studio_suite_builds_only_matching_test_targets(self):
+        targets, pattern = oracle.suite_selection("studio")
+        self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])
+        for name in ("studio_quick", "studio_unit", "studio_behavior"):
+            self.assertIsNotNone(re.fullmatch(pattern, name))
+        self.assertIsNone(re.fullmatch(pattern, "home_component_navigation"))
+        self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))
+        self.assertEqual(oracle.suite_selection("studio_quick"), (["isolde_studio_quick_tests"], "^studio_quick$"))
+
+    def test_targeted_studio_run_cannot_be_used_as_deploy_payload(self):
+        runner = oracle.Oracle(self.root, "targeted")
+        (runner.run / "test-result.json").write_text(json.dumps({"passed": True, "fullSuite": False, "suite": "studio"}))
+        with self.assertRaisesRegex(RuntimeError, "no passing full-suite payload"):
+            runner.tested_payload()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=os.environ.get("ISOLDE_ORACLE_TEST_TMP"))
         self.addCleanup(self.temp.cleanup)
@@ -93,10 +109,12 @@ class OracleTests(unittest.TestCase):
         (run / "status.json").write_text('{"state":"failed"}')
         (run / "build.log").write_text("error")
         (run / "cookie").write_text("test-only-placeholder")
+        (run / "studio-test-move-cancel.png").write_bytes(b"test fixture")
+        (run / "personal-photo.png").write_bytes(b"excluded")
         (run / "source.tar.gz").write_bytes(b"not evidence")
         oracle.write_report(run)
         with tarfile.open(run / "report.tar.gz") as archive:
-            self.assertEqual(set(archive.getnames()), {"status.json", "build.log"})
+            self.assertEqual(set(archive.getnames()), {"status.json", "build.log", "studio-test-move-cancel.png"})
 
     @unittest.skipUnless(os.name == "posix", "Linux /tmp evidence paths")
     def test_visual_evidence_is_allowlisted(self):

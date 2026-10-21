@@ -15,6 +15,8 @@ From the repository root:
 
 # During implementation, run only the relevant native suite.
 ./tools/vm-test.ps1 Test -Suite component_contracts
+# Fast Studio: studio_quick, studio_unit, studio_behavior, or studio (all three).
+./tools/vm-test.ps1 Test -Suite studio
 # Other choices: home_component_navigation, kodi_media_client. Default: all.
 
 # Use the exact RUN_ID printed by the passing full Test.
@@ -36,6 +38,8 @@ From the repository root:
 ```
 
 The `pages` case is opt-in (`-Cases pages`): it exercises real Kodi in a fresh UUID native profile and synthetic media under `~/Videos/Isolde-Acceptance/`. It is not preservation testing of an existing Kodi installation. Do not point it at Household or `~/.kodi`.
+
+For frequent code/test iterations, use [the focused Studio suite](studio-testing.md). These offscreen tests reuse the cached build without installing a release or restarting the normal app. Run full native/graphical acceptance at integration checkpoints; deployment remains explicit and occasional. No host toolchain installation is needed.
 
 ## Agent execution rules
 

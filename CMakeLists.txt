@@ -223,6 +223,15 @@ endforeach()
 
 include(CTest)
 if(BUILD_TESTING)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
+    qt_add_executable(isolde_studio_quick_tests tests/studio/quicktest.cpp)
+    target_link_libraries(isolde_studio_quick_tests PRIVATE isolde_core Qt6::QuickTest Qt6::Quick)
+    target_compile_definitions(isolde_studio_quick_tests PRIVATE
+        QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/studio"
+        STUDIO_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/default-home-layout.json")
+    add_test(NAME studio_quick COMMAND isolde_studio_quick_tests)
+    set_tests_properties(studio_quick PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_tests
         tests/tst_isolde.cpp
     )
@@ -234,6 +243,12 @@ if(BUILD_TESTING)
     qt_add_executable(isolde_component_tests tests/tst_components.cpp)
     target_link_libraries(isolde_component_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME component_contracts COMMAND isolde_component_tests)
+    add_test(NAME studio_unit COMMAND isolde_component_tests
+        studioSessionDraftUndoBoundsAndNoWrite studioCommandsAreAtomicAndProfileScoped
+        studioApplyAtomicFailureAndFocusPreserved studioCollisionProposalsAndParity
+        studioShiftCascadesAreBoundedAndAtomic studioScrollingPagesAreBoundedAndAtomic
+        studioHomeDesignationIsAtomicAndProtected)
+    set_tests_properties(studio_unit PROPERTIES TIMEOUT 30 LABELS "studio;quick;unit")
     qt_add_executable(isolde_home_navigation_tests tests/tst_home_navigation.cpp)
     target_link_libraries(isolde_home_navigation_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE HOME_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/HomeScreen.qml")
@@ -243,6 +258,11 @@ if(BUILD_TESTING)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE COMMAND_CENTER_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CommandCenter.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE KODI_SETTINGS_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/KodiSettingsView.qml")
     add_test(NAME home_component_navigation COMMAND isolde_home_navigation_tests)
+    add_test(NAME studio_behavior COMMAND isolde_home_navigation_tests
+        studioRemoteDraftApplyAndCancel studioRemoteGesturesCollisionsAndAnchors
+        studioRemoteSectionTransferAndCancel studioScrollingAddMoveAndCancel)
+    set_tests_properties(studio_behavior PROPERTIES TIMEOUT 30 LABELS "studio;behavior"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(home_component_navigation PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         find_package(Python3 REQUIRED COMPONENTS Interpreter)

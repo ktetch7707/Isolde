@@ -19,7 +19,19 @@ import xml.etree.ElementTree as ET
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
-          "kodi_media_client": "isolde_kodi_media_tests"}
+          "kodi_media_client": "isolde_kodi_media_tests",
+          "studio_quick": "isolde_studio_quick_tests",
+          "studio_unit": "isolde_component_tests",
+          "studio_behavior": "isolde_home_navigation_tests",
+          "studio": ("isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests")}
+
+
+def suite_selection(suite):
+    """One allowlisted selection authority for build targets and CTest names."""
+    targets = SUITES[suite]
+    targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
+    pattern = "^(studio_quick|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    return targets, pattern
 CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "lounge": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
          "pastel": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
@@ -254,6 +266,7 @@ class Oracle:
 
     def test(self, suite):
         self.check()
+        service_before, releases_before = self.state["service"], self.state["releases"]
         source, entries = extract_snapshot(self.run)
         self.stage("oracle-self-test", ["python3", str(source / "tests/test_vm_oracle.py")], 30)
         work = self.root / "work"
@@ -265,17 +278,23 @@ class Oracle:
         self.stage("configure", ["cmake", "-S", str(work / "source"), "-B", str(build), "-G", "Ninja",
                                  "-DBUILD_TESTING=ON", "-DCMAKE_BUILD_TYPE=Debug"], 120)
         command = ["cmake", "--build", str(build), "--parallel", "2"]
-        if SUITES[suite]:
-            command += ["--target", SUITES[suite]]
+        targets, pattern = suite_selection(suite)
+        if targets:
+            command += ["--target"] + targets
         self.stage("build", command, 1200)
-        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software")
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software",
+                   ISOLDE_TEST_ARTIFACTS=str(self.run))
         command = ["ctest", "--test-dir", str(build), "--output-on-failure", "--timeout", "120",
                    "--output-junit", str(self.run / "ctest.xml")]
         if suite != "all":
-            command += ["-R", "^" + suite + "$"]
+            command += ["-R", pattern]
         self.stage("ctest", command, 360, env)
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
+        if suite != "all":
+            expected = {"studio_quick", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            if {c.get("name") for c in cases} != expected:
+                raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
             raise RuntimeError("CTest report contains no tests or failures")
         if any(c.find("skipped") is not None for c in cases):
@@ -284,8 +303,14 @@ class Oracle:
         if last.is_file():
             shutil.copy2(last, self.run / "LastTest.log")
         verify_tree(work / "source", entries)
+        service_after, releases_after = self.service(), self.links()
+        self.update(service=service_after, releases=releases_after)
+        if service_after != service_before or releases_after != releases_before:
+            raise RuntimeError("Installed service or release changed during offscreen Test; inspect evidence, do not deploy")
         result = {"passed": True, "fullSuite": suite == "all", "suite": suite,
-                  "tests": len(cases), "sourceDigest": digest(self.run / "files.sha256")}
+                  "tests": len(cases), "sourceDigest": digest(self.run / "files.sha256"),
+                  "serviceBefore": service_before, "serviceAfter": service_after,
+                  "releasesBefore": releases_before, "releasesAfter": releases_after}
         if suite == "all":
             self.stage("stage-payload", ["cmake", "--install", str(build), "--prefix", str(self.run / "payload")], 120)
             result["payload"] = payload_hashes(self.run / "payload")
@@ -400,7 +425,8 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages)-[0-9]+\.tar\.gz", path.name)):
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
 
