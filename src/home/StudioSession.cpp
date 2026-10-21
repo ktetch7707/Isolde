@@ -6,6 +6,14 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QFile>
+#include <QDirIterator>
+#include <QTemporaryDir>
+#include <QSaveFile>
+#include <QFileInfo>
+#include <QUrl>
+#include <QImageReader>
+#include <QBuffer>
+#include <QCryptographicHash>
 #include <algorithm>
 #include <functional>
 
@@ -21,21 +29,88 @@ StudioSession::StudioSession(QObject *parent)
 }
 
 QObject *StudioSession::model() const { return m_model; }
+StudioSession::~StudioSession(){delete m_assetStage;}
+QVariantList StudioSession::artworkChoices() const
+{
+    QVariantList result;if(!m_active || !m_live)return result;
+    QSet<QString> paths;
+    const auto append=[&](const QString &path){if(result.size()>=256 || paths.contains(path))return;QImageReader reader(path);const auto size=reader.size();if(!size.isValid() || size.width()>16384 || size.height()>16384 || qint64(size.width())*size.height()>32*1024*1024)return;
+        paths.insert(path);result.append(QVariantMap{{"name",QFileInfo(path).completeBaseName()},{"source",QUrl::fromLocalFile(path).toString()},{"width",size.width()},{"height",size.height()}});
+    };
+    const auto directory=QFileInfo(m_profilePath).absolutePath();
+    const QStringList roots{QDir(directory).filePath("artwork"),QDir(QFileInfo(m_live->m_defaultPath).absolutePath()).filePath("skins"),QDir(QFileInfo(m_live->m_defaultPath).absolutePath()).filePath("artwork")};
+    for(const auto &root:roots){QDirIterator files(root,{"*.png","*.jpg","*.jpeg"},QDir::Files,QDirIterator::Subdirectories);int inspected=0;while(files.hasNext() && ++inspected<=512 && result.size()<256){const auto path=files.next(),canonical=QFileInfo(path).canonicalFilePath(),base=QFileInfo(root).canonicalFilePath();if(!canonical.isEmpty() && !base.isEmpty() && !QDir(base).relativeFilePath(canonical).startsWith("../"))append(canonical);}}
+    for(const auto &path:m_stagedAssets)append(path);
+    return result;
+}
+QString StudioSession::stageArtwork(const QString &source)
+{
+    if(!m_active || !m_live){setError(tr("Reopen Studio before importing artwork."));return {};}
+    const QUrl url(source);const auto path=url.isLocalFile()?url.toLocalFile():url.scheme().isEmpty()?source:QString();
+    QFile input(path);if(path.isEmpty() || !input.open(QIODevice::ReadOnly) || input.size()<8 || input.size()>20*1024*1024){setError(tr("Choose a local PNG or JPEG of at most 20 MiB."));return {};}
+    const auto data=input.readAll();QBuffer buffer;buffer.setData(data);buffer.open(QIODevice::ReadOnly);QImageReader reader(&buffer);const auto format=reader.format();const auto size=reader.size();
+    if(!QList<QByteArray>{"png","jpeg","jpg"}.contains(format) || !size.isValid() || size.width()>16384 || size.height()>16384 || qint64(size.width())*size.height()>32*1024*1024 || reader.read().isNull()){setError(tr("Artwork must be a valid PNG/JPEG within 16384 pixels and 32 megapixels."));return {};}
+    const auto relative="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex())+(format=="png"?".png":".jpg");
+    if(m_stagedAssets.contains(relative))return relative;
+    qint64 total=data.size();for(const auto &path:m_stagedAssets)total+=QFileInfo(path).size();
+    if(m_stagedAssets.size()>=128 || total>64*1024*1024){setError(tr("This draft's artwork budget is 128 images / 64 MiB. Apply or discard before importing more."));return {};}
+    if(!m_assetStage)m_assetStage=new QTemporaryDir;
+    if(!m_assetStage->isValid()){setError(tr("Could not create private artwork staging."));return {};}
+    const auto target=QDir(m_assetStage->path()).filePath(QFileInfo(relative).fileName());QSaveFile output(target);
+    if(!output.open(QIODevice::WriteOnly) || output.write(data)!=data.size() || !output.commit()){setError(tr("Could not stage artwork. Nothing applied."));return {};}
+    m_stagedAssets[relative]=target;if(m_model)m_model->m_assetPaths[relative]=target;
+    setError({});if(m_model)emit m_model->layoutChanged();return relative;
+}
+QVariantList StudioSession::sourceChoices(const QString &id,const QString &pageId) const
+{
+    if(!m_active || !m_live)return {};
+    HomeLayout worker(m_live->registry());configureWorker(worker);
+    auto document=QJsonDocument::fromJson(m_draft).object();
+    if(!pageId.isEmpty()){bool found=false;for(const auto &entry:document["pages"].toArray())if(entry.toObject()["id"]==pageId){document=entry.toObject()["layout"].toObject();found=true;break;}if(!found)return {};}
+    if(!worker.loadDocument(QJsonDocument(document).toJson(),false))return {};
+    return worker.sourceChoices(id);
+}
+QVariantList StudioSession::actionChoices() const
+{
+    QVariantList choices;if(!m_active || !m_live)return choices;
+    for(const auto &entry:m_live->studioOptions().value("actions").toList())choices.append(entry);
+    const auto document=QJsonDocument::fromJson(m_draft).object();const auto root=document["rootPage"].toObject();
+    if(!root.contains("visible") || root["visible"].toBool())choices.append(QVariantMap{{"name",tr("Open page · ")+root.value("name").toString(m_live->studioOptions().value("rootPageName").toString())},{"action",QVariantMap{{"type","root-page"}}}});
+    for(const auto &entry:document["pages"].toArray()){const auto page=entry.toObject();choices.append(QVariantMap{{"name",tr("Open page · ")+page["name"].toString()},{"action",QVariantMap{{"type","open-page"},{"pageId",page["id"].toString()}}}});}
+    for(const auto &entry:m_live->registry()->apps()){const auto app=entry.toMap();const auto id=app.value("id").toString();choices.append(QVariantMap{{"name",tr("Open app · ")+app.value("name").toString()},{"action",QVariantMap{{"type","launch-app"},{"appId",id}}}});
+        const auto *definition=m_live->registry()->find(id);if(definition)for(const auto &type:definition->handledActions)if(QStringList{"open-file","open-folder","open-url","open-disc"}.contains(type))choices.append(QVariantMap{{"name",type+" · "+app.value("name").toString()},{"needsTarget",true},{"action",QVariantMap{{"type",type},{"openWith",id}}}});
+    }
+    for(const auto &entry:m_live->m_collections){const auto collection=entry.toMap();choices.append(QVariantMap{{"name",tr("Open collection · ")+collection.value("name").toString()},{"mediaKind",collection.value("media","movies")},{"action",QVariantMap{{"type","open-collection"},{"collectionId",collection.value("id")}}}});}
+    return choices;
+}
 QObject *StudioSession::proposalModel() const { return m_proposalModel; }
 void StudioSession::configureWorker(HomeLayout &worker,bool assetPaths) const
 {
     worker.m_draftOnly=true;
     if(!m_live)return;
     worker.m_defaultPath=m_live->m_defaultPath;
+    worker.m_defaultTheme=m_live->m_defaultTheme;
     worker.m_collections=m_live->m_collections;
     worker.m_captureInputsReady=m_live->m_captureInputsReady;
+    worker.m_assetPaths=m_live->m_assetPaths;
+    for(auto it=m_stagedAssets.cbegin();it!=m_stagedAssets.cend();++it)worker.m_assetPaths[it.key()]=it.value();
     if(assetPaths)worker.m_userPath=m_live->m_userPath;
 }
-QVariantMap StudioSession::componentPrototype(const QString &type)
+bool StudioSession::validNewAction(const QVariantMap &value)
+{
+    if(value.isEmpty())return true;
+    QString error;const auto action=ComponentSchema::action(value,&error);if(action.isEmpty()){setError(error);return false;}
+    const auto type=action.value("type").toString();
+    if(type=="open-page"){bool exists=false;for(const auto &entry:m_model->studioPages())if(entry.toMap().value("id")==action.value("pageId"))exists=true;if(!exists){setError(tr("Choose an existing destination page."));return false;}}
+    if(type=="root-page" && !m_model->rootPageVisible()){setError(tr("This page was removed. Choose an existing destination."));return false;}
+    return true;
+}
+QVariantMap StudioSession::componentPrototype(const QString &type,const QVariantMap &configuration)
 {
     if(!m_active || !m_live){setError(tr("Reopen Page Studio before adding components."));return {};}
     const auto options=m_live->studioOptions();QJsonArray nodes;
-    if(type=="container")nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
+    if(options.value("componentPresets").toMap().contains(type))nodes.append(QJsonObject::fromVariantMap(options.value("componentPresets").toMap().value(type).toMap()));
+    else if(type=="container")nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
     else if(type=="input-panel"){
         const auto preset=options.value("inputPanelPreset").toMap();nodes.append(QJsonObject::fromVariantMap(preset.value("root").toMap()));
         for(const auto &entry:preset.value("children").toList())nodes.append(QJsonObject::fromVariantMap(entry.toMap()));
@@ -48,8 +123,35 @@ QVariantMap StudioSession::componentPrototype(const QString &type)
         nodes.append(item);
     } else {setError(tr("Choose a registered component type."));return {};}
     if(nodes.isEmpty() || nodes.size()>33){setError(tr("The packaged component preset is invalid."));return {};}
+    auto configured=nodes.first().toObject();
+    for(auto it=configuration.cbegin();it!=configuration.cend();++it){
+        if(!QStringList{"name","action","customLogo","presentation","apps","buttons"}.contains(it.key())){setError(tr("Unsupported component configuration."));return {};}
+        if(it.key()=="apps" || it.key()=="buttons")continue;
+        if(it.key()=="presentation"){
+            if(it.value().metaType().id()!=QMetaType::QVariantMap){setError(tr("Choose valid presentation values."));return {};}
+            auto style=configured["presentation"].toObject();const auto changes=it.value().toMap();for(auto change=changes.cbegin();change!=changes.cend();++change)style[change.key()]=QJsonValue::fromVariant(change.value());configured["presentation"]=style;
+        }else if(it.key()=="action" && it.value().toMap().isEmpty())configured.remove("action");
+        else configured[it.key()]=QJsonValue::fromVariant(it.value());
+    }
+    nodes[0]=configured;
+    if(configuration.contains("buttons")){
+        const auto buttons=configuration.value("buttons").toList();if(type!="carousel" || configuration.value("buttons").metaType().id()!=QMetaType::QVariantList || buttons.size()>16){setError(tr("Choose up to 16 carousel buttons."));return {};}
+        int column=0;for(const auto &value:buttons){const auto changes=value.toMap();if(value.metaType().id()!=QMetaType::QVariantMap){setError(tr("Choose a named button."));return {};}
+            auto child=QJsonObject::fromVariantMap(options.value("buttonChildPreset").toMap());for(auto it=changes.cbegin();it!=changes.cend();++it){if(!QStringList{"name","action"}.contains(it.key())){setError(tr("Unsupported carousel button property."));return {};}child[it.key()]=QJsonValue::fromVariant(it.value());}
+            child["id"]="carousel-button-"+QString::number(column+1);child["parentId"]=configured["id"];auto p=child["placement"].toObject();p["x"]=column++;child["placement"]=p;nodes.append(child);
+        }
+    }
+    if(configuration.contains("apps")){
+        const auto apps=configuration.value("apps").toList();QSet<QString> selected;
+        if(type!="app-bar" || configuration.value("apps").metaType().id()!=QMetaType::QVariantList || apps.size()>16){setError(tr("Choose up to 16 installed apps."));return {};}
+        int column=0;for(const auto &value:apps){const auto id=value.toString();if(value.metaType().id()!=QMetaType::QString || selected.contains(id) || !m_live->registry()->find(id)){setError(tr("Choose distinct installed apps."));return {};}
+            selected.insert(id);auto child=QJsonObject::fromVariantMap(options.value("appChildPreset").toMap());child["id"]="app-slot-"+QString::number(column+1);child["appId"]=id;child["parentId"]=configured["id"];child["action"]=QJsonObject{{"type","launch-app"},{"appId",id}};
+            auto placement=child["placement"].toObject();placement["x"]=column++;child["placement"]=placement;nodes.append(child);
+        }
+    }
     QHash<QString,QString> remap;QSet<QString> allocated;
     for(int i=0;i<nodes.size();++i){
+        if(!validNewAction(nodes[i].toObject()["action"].toObject().toVariantMap()))return {};
         QString error;const auto canonical=ComponentSchema::component(nodes[i].toObject().toVariantMap(),true,&error);
         if(canonical.isEmpty()){setError(error);return {};}
         auto item=QJsonObject::fromVariantMap(canonical);const auto oldId=item["id"].toString();
@@ -117,8 +219,10 @@ bool StudioSession::bind(HomeLayout *layout)
     m_model->m_draftOnly = true;
     m_model->m_userPath=layout->m_userPath;
     m_model->m_defaultPath=layout->m_defaultPath;
+    m_model->m_defaultTheme=layout->m_defaultTheme;
     m_model->m_collections = layout->m_collections;
     m_model->m_captureInputsReady = layout->m_captureInputsReady;
+    m_model->m_assetPaths=layout->m_assetPaths;
     m_active = open(layout->committedDocument());
     connect(layout, &QObject::destroyed, this, &StudioSession::invalidate);
     return m_active;
@@ -128,6 +232,7 @@ void StudioSession::invalidate()
 {
     m_active = false;
     m_live.clear();
+    m_stagedAssets.clear();delete m_assetStage;m_assetStage=nullptr;
     m_diskBaseline.clear();
     m_profilePath.clear();
     cancelPreview();
@@ -137,6 +242,7 @@ void StudioSession::invalidate()
     m_redo.clear();
     if (m_model) {
         m_model->m_items = {};
+        m_model->m_assetPaths.clear();
         m_model->m_categories = {};
         m_model->m_pages = {};
         m_model->m_collections = {};
@@ -169,7 +275,25 @@ bool StudioSession::apply(const QString &focusId)
         return false;
     }
     disk.close();
+    QStringList created;
+    const auto artDirectory=QDir(QFileInfo(m_profilePath).absolutePath()).filePath("artwork");const bool hadArtDirectory=QFileInfo::exists(artDirectory);
+    if(QFileInfo(artDirectory).isSymLink()){setError(tr("The managed artwork directory must stay inside this profile."));return false;}
+    const auto cleanup=[&]{for(const auto &path:created)QFile::remove(path);if(!hadArtDirectory)QDir().rmdir(artDirectory);};
+    const auto serialized=QString::fromUtf8(m_draft);
+    for(auto it=m_stagedAssets.cbegin();it!=m_stagedAssets.cend();++it){
+        if(!serialized.contains(it.key()))continue;
+        QFile source(it.value());if(!source.open(QIODevice::ReadOnly)){cleanup();setError(tr("Staged artwork is missing. Choose it again; the draft is retained."));return false;}
+        const auto data=source.readAll(),target=QDir(QFileInfo(m_profilePath).absolutePath()).filePath(it.key()).toUtf8();
+        const auto expected="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex())+(it.key().endsWith(".png")?".png":".jpg");
+        if(data.size()>20*1024*1024 || expected!=it.key()){cleanup();setError(tr("Staged artwork changed. Import it again before applying."));return false;}
+        const auto targetPath=QString::fromUtf8(target);
+        if(QFile::exists(targetPath)){QFile existing(targetPath);if(!existing.open(QIODevice::ReadOnly) || existing.readAll()!=data){cleanup();setError(tr("Managed artwork conflicts with an existing file."));return false;}continue;}
+        if(!QDir().mkpath(QFileInfo(targetPath).absolutePath())){cleanup();setError(tr("Could not create the managed artwork directory."));return false;}
+        QSaveFile output(targetPath);if(!output.open(QIODevice::WriteOnly) || output.write(data)!=data.size() || !output.commit()){cleanup();setError(tr("Could not save artwork. Nothing applied."));return false;}
+        created.append(targetPath);
+    }
     if (!m_live->applyStudioDraft(m_draft, focusId)) {
+        cleanup();
         setError(m_live->errorString());
         return false;
     }
@@ -299,7 +423,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     }
     if(operation=="addResolved" || operation=="addPlaced") {
         const auto proposal=additionProposal(a.value("type").toString(),a.value("placement").toMap(),
-            a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString(),a.value("parentId").toString());
+            a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString(),a.value("parentId").toString(),a.value("configuration").toMap());
         if(!proposal.value("valid").toBool()){setError(proposal.value("reason").toString());return false;}
         return pushEdit(QJsonDocument(QJsonObject::fromVariantMap(proposal.value("document").toMap())).toJson());
     }
@@ -334,7 +458,75 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     if (!worker.loadDocument(QJsonDocument(document).toJson(), false)) { setError(worker.errorString()); return false; }
     const auto id = a.value("id").toString();
     bool ok = false;
-    if(operation=="arrange") {
+    if(operation=="repairSource") {
+        ok=worker.rebindSource(id,a.value("sourceId").toString());
+    } else if(operation=="assignSection") {
+        ok=worker.assignItemCategory(id,a.value("categoryId").toString());
+    } else if(operation=="navigation") {
+        auto composition=document["composition"].toObject();auto tabs=composition["navigation"].toArray();const auto kind=a.value("kind").toString();int index=-1;
+        for(int i=0;i<tabs.size();++i)if(tabs[i].toObject()["id"]==id)index=i;
+        if(kind=="add"){
+            if(tabs.size()>=64){setError(tr("Use at most 64 navigation tabs."));return false;}
+            const auto identity=allocateId("tab");if(identity.isEmpty())return false;tabs.append(QJsonObject{{"id",identity},{"name",a.value("name").toString()}});
+        }else{
+            if(index<0){setError(tr("Choose an existing navigation tab."));return false;}
+            if(kind=="remove")tabs.removeAt(index);
+            else if(kind=="move") {const int offset=a.value("offset").toInt(),target=index+offset;if((offset!=1 && offset!=-1) || target<0 || target>=tabs.size()){setError(tr("The tab is already at that edge."));return false;}const QJsonValue entry=tabs.at(index);tabs.removeAt(index);tabs.insert(target,entry);}
+            else if(kind=="patch") {auto tab=tabs[index].toObject();const auto values=a.value("value").toMap();if(values.contains("action") && !validNewAction(values.value("action").toMap()))return false;for(auto it=values.cbegin();it!=values.cend();++it){if(!QStringList{"name","action","sections"}.contains(it.key())){setError(tr("Unsupported navigation property."));return false;}if(it.value().isNull() || (it.key()=="action" && it.value().toMap().isEmpty()))tab.remove(it.key());else tab[it.key()]=QJsonValue::fromVariant(it.value());}tabs[index]=tab;}
+            else {setError(tr("Choose a supported navigation operation."));return false;}
+        }
+        composition["navigation"]=tabs;
+        if(composition.contains("initialTab")){bool present=false;for(const auto &tab:tabs)if(tab.toObject()["id"]==composition["initialTab"])present=true;if(!present){if(tabs.isEmpty())composition.remove("initialTab");else composition["initialTab"]=tabs.first().toObject()["id"];}}
+        document["composition"]=composition;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="pagePatch") {
+        const auto scope=a.value("scope").toString();if(!QStringList{"theme","composition"}.contains(scope)){setError(tr("Choose a page property group."));return false;}
+        const auto values=a.value("value").toMap();auto nested=document[scope].toObject();if(scope=="composition" && nested.isEmpty())nested={{"schemaVersion",1},{"enabled",false}};
+        if(scope=="composition")for(const auto &key:QStringList{"moviePage","showsPage"})if(values.contains(key) && !values.value(key).isNull() && !validNewAction({{"type","open-page"},{"pageId",values.value(key)}}))return false;
+        for(auto it=values.cbegin();it!=values.cend();++it){if(it.value().isNull())nested.remove(it.key());else nested[it.key()]=QJsonValue::fromVariant(it.value());}
+        document[scope]=nested;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="setApps") {
+        auto entries=document["components"].toArray();int rootIndex=-1;QSet<QString> removed;
+        for(int i=0;i<entries.size();++i)if(entries[i].toObject()["id"]==id && entries[i].toObject()["family"]=="app-bar")rootIndex=i;
+        if(rootIndex<0 || ComponentSchema::positionLocked(entries,id)){setError(tr("Choose an unlocked app bar."));return false;}
+        removed.insert(id);for(int depth=0;depth<4;++depth)for(const auto &entry:entries)if(removed.contains(entry.toObject()["parentId"].toString()))removed.insert(entry.toObject()["id"].toString());removed.remove(id);
+        for(const auto &entry:entries)if(removed.contains(entry.toObject()["id"].toString()) && entry.toObject().value("locked").toBool()){setError(tr("Unlock the app bar's contents before replacing them."));return false;}
+        const auto prototype=componentPrototype("app-bar",{{"apps",a.value("apps")}});if(prototype.isEmpty())return false;
+        const auto newRoot=prototype.value("rootId").toString();QJsonArray result;
+        for(const auto &entry:entries)if(!removed.contains(entry.toObject()["id"].toString()))result.append(entry);
+        for(const auto &entry:prototype.value("components").toList()){auto child=QJsonObject::fromVariantMap(entry.toMap());if(child["id"]==newRoot)continue;child["parentId"]=id;result.append(child);}
+        document["components"]=result;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="patch") {
+        auto ids=a.value("ids").toList();if(ids.isEmpty() && !id.isEmpty())ids.append(id);
+        const auto values=a.value("value").toMap();QSet<QString> targets;
+        if(ids.isEmpty() || ids.size()>32 || values.isEmpty()){setError(tr("Choose 1–32 components and a property to edit."));return false;}
+        for(const auto &value:ids){if(value.metaType().id()!=QMetaType::QString || targets.contains(value.toString())){setError(tr("Choose distinct component identities."));return false;}targets.insert(value.toString());}
+        for(auto it=values.cbegin();it!=values.cend();++it)if(!QStringList{"name","opacity","showTitle","showType","showLogo","logoFill","symbol","accent","action","customLogo","presentation","accessibility","size"}.contains(it.key())){setError(tr("Unsupported inspector property."));return false;}
+        if(values.contains("action") && !validNewAction(values.value("action").toMap()))return false;
+        auto entries=document["components"].toArray();int found=0;
+        for(int i=0;i<entries.size();++i){auto item=entries[i].toObject();if(!targets.contains(item["id"].toString()))continue;++found;
+            for(auto it=values.cbegin();it!=values.cend();++it){
+                const auto key=it.key();if(key=="presentation" || key=="accessibility"){
+                    if(it.value().metaType().id()!=QMetaType::QVariantMap){setError(tr("Choose valid property values."));return false;}
+                    auto nested=item[key].toObject();const auto changes=it.value().toMap();for(auto v=changes.cbegin();v!=changes.cend();++v){if(v.value().isNull())nested.remove(v.key());else nested[v.key()]=QJsonValue::fromVariant(v.value());}item[key]=nested;
+                }else if(it.value().isNull() || (key=="action" && it.value().metaType().id()==QMetaType::QVariantMap && it.value().toMap().isEmpty()))item.remove(key);
+                else item[key]=QJsonValue::fromVariant(it.value());
+            }
+            if(values.contains("action") && (item["componentType"]=="launcher" || item["componentType"]=="media-shelf")){
+                item["kind"]="widget";item["widgetType"]="button";item["componentType"]="button";item.remove("appId");
+            }
+            QString error;const auto canonical=ComponentSchema::component(item.toVariantMap(),true,&error);if(canonical.isEmpty()){setError(error);return false;}entries[i]=QJsonObject::fromVariantMap(canonical);
+        }
+        if(found!=targets.size()){setError(tr("A selected component no longer exists."));return false;}
+        document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="section") {
+        const auto kind=a.value("kind").toString();
+        if(kind=="add")ok=!worker.addCategory(a.value("name").toString()).isEmpty();
+        else if(kind=="rename")ok=worker.renameCategory(id,a.value("name").toString());
+        else if(kind=="remove")ok=worker.removeCategory(id);
+        else if(kind=="move")ok=worker.moveCategory(id,a.value("offset").toInt());
+        else if(kind=="presentation"){const auto style=a.value("value").toMap();if(style.contains("trailingAction") && !validNewAction(style.value("trailingAction").toMap()))return false;ok=worker.setSectionPresentation(id,style);}
+    } else if(operation=="brand")ok=worker.setBrandVisible(a.value("value").toBool());
+    else if(operation=="arrange") {
         const auto selection=a.value("ids").toList();const auto mode=a.value("mode").toString();
         if(selection.size()<2 || selection.size()>32 || !QStringList{"left","center-x","right","top","center-y","bottom","distribute-x","distribute-y"}.contains(mode)){setError(tr("Choose an alignment and between 2 and 32 components."));return false;}
         auto entries=document["components"].toArray();QList<int> indices;QSet<QString> ids;QString parent,category;int low=16,high=0,total=0;
@@ -572,6 +764,9 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     else { setError(QStringLiteral("Unknown or unavailable edit command.")); return false; }
     if (!ok) { setError(worker.errorString().isEmpty() ? QStringLiteral("The edit was refused; nothing changed.") : worker.errorString()); return false; }
     auto result = QJsonDocument::fromJson(worker.documentData()).object();
+    if(operation=="section" && a.value("kind")=="add"){
+        auto sections=result["categories"].toArray();auto entry=sections.last().toObject();const auto identity=allocateId("section");if(identity.isEmpty())return false;entry["id"]=identity;sections[sections.size()-1]=entry;result["categories"]=sections;
+    }
     if (operation == "newPage") {
         auto entries = result["pages"].toArray();
         auto entry = entries.last().toObject();
@@ -941,14 +1136,14 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
 }
 
 QVariantMap StudioSession::additionProposal(const QString &type, const QVariantMap &placement,
-                                           const QString &strategy, const QString &pageId, const QString &categoryId, const QString &parentId)
+                                           const QString &strategy, const QString &pageId, const QString &categoryId, const QString &parentId,const QVariantMap &configuration)
 {
     if (!m_active || !m_live) return {{"valid",false},{"reason",QStringLiteral("The edit session has closed.")}};
     HomeLayout temporary(m_live->registry()); configureWorker(temporary);
     if (!temporary.loadDocument(m_draft,false)) return {{"valid",false},{"reason",temporary.errorString()}};
     StudioSession transaction;
     if (!transaction.bind(&temporary)) return {{"valid",false},{"reason",transaction.errorString()}};
-    const auto prototype=componentPrototype(type);
+    const auto prototype=componentPrototype(type,configuration);
     if(prototype.isEmpty())return {{"valid",false},{"reason",errorString()}};
     const auto identity=prototype.value("rootId").toString();
     auto root=QJsonDocument::fromJson(m_draft).object();auto pages=root["pages"].toArray();auto document=root;int pageIndex=-1;
@@ -988,7 +1183,7 @@ QVariantMap StudioSession::additionProposal(const QString &type, const QVariantM
     if(!HomeLayout::validateStudioDocument(QJsonDocument(root).toJson(),&error))return {{"valid",false},{"reason",error}};
     proposal["document"]=root.toVariantMap();
     proposal["commands"] = QVariantList{
-        QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId},{"parentId",parentId}}},{"pageId",pageId}}
+        QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId},{"parentId",parentId},{"configuration",configuration}}},{"pageId",pageId}}
     };
     return proposal;
 }

@@ -24,7 +24,7 @@ bool ComponentSchema::safeId(const QString &id)
 }
 bool ComponentSchema::validChildLayout(const QVariantMap &value)
 {
-    static const QSet<QString> keys{"schemaVersion","mode","columns","rows","gap","padding"};
+    static const QSet<QString> keys{"schemaVersion","mode","columns","rows","gap","padding","visibleColumns","wrap"};
     for(auto it=value.cbegin();it!=value.cend();++it)if(!keys.contains(it.key()))return false;
     if(value.value("schemaVersion").metaType().id()==QMetaType::QString || value.value("schemaVersion").metaType().id()==QMetaType::Bool || value.value("schemaVersion").toDouble()!=1)return false;
     if(!QStringList{"grid","row","column"}.contains(value.value("mode").toString()))return false;
@@ -34,19 +34,42 @@ bool ComponentSchema::validChildLayout(const QVariantMap &value)
         const double maximum=key=="columns"?16:key=="rows"?10:100,minimum=(key=="columns" || key=="rows")?1:0;
         if(!ok || !std::isfinite(number) || number<minimum || number>maximum || ((key=="columns" || key=="rows") && std::floor(number)!=number))return false;
     }
+    if(value.contains("wrap") && value["wrap"].metaType().id()!=QMetaType::Bool)return false;
+    if(value.contains("visibleColumns")){
+        const auto n=value["visibleColumns"];if(value["mode"]!="row" || n.metaType().id()==QMetaType::QString || n.metaType().id()==QMetaType::Bool || !std::isfinite(n.toDouble()) || std::floor(n.toDouble())!=n.toDouble() || n.toInt()<1 || n.toInt()>value["columns"].toInt())return false;
+    }
     return !(value["mode"]=="row" && value["rows"].toInt()!=1) && !(value["mode"]=="column" && value["columns"].toInt()!=1);
 }
 bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, bool container)
 {
     for (auto it = value.cbegin(); it != value.cend(); ++it) {
         const auto key = it.key();
-        if(key=="layout") {
+        if(key=="states") {
+            if(it.value().metaType().id()!=QMetaType::QVariantMap)return false;
+            const auto states=it.value().toMap();
+            for(auto state=states.cbegin();state!=states.cend();++state){
+                if(!QStringList{"normal","focused","selected","pressed","disabled","unavailable"}.contains(state.key()) || state.value().metaType().id()!=QMetaType::QVariantMap)return false;
+                const auto fields=state.value().toMap();for(auto f=fields.cbegin();f!=fields.cend();++f)if(!QStringList{"surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"}.contains(f.key()))return false;
+                if(!validPresentation(fields))return false;
+            }
+        } else if(key=="layout") {
             if(!container || it.value().metaType().id()!=QMetaType::QVariantMap || !validChildLayout(it.value().toMap()))return false;
         } else if (key == "grid") {
             if (!section || it.value().metaType().id()!=QMetaType::QVariantMap || !validGrid(it.value().toMap())
                 || it.value().toMap().value("mode","screen")!="screen") return false;
         } else if (key == "variant") {
-            if (!QStringList{"banner", "media", "source", "summary", "launcher", "orb", "recent", "library", "text"}.contains(it.value().toString())) return false;
+            if (!QStringList{"banner", "media", "source", "summary", "launcher", "orb", "recent", "library", "text", "image"}.contains(it.value().toString())) return false;
+        } else if(key=="artFit" || key=="labelPosition" || key=="textAlign") {
+            const auto choices=key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
+            if(it.value().metaType().id()!=QMetaType::QString || !choices.contains(it.value().toString()))return false;
+        } else if(key=="labelBold" || key=="labelWrap" || key=="focusEnabled") {
+            if(it.value().metaType().id()!=QMetaType::Bool)return false;
+        } else if(key=="artFocalX" || key=="artFocalY" || key=="artZoom" || key=="focusWidth" || key=="borderWidth" || key=="labelLines" || key=="libraryLimit") {
+            if(it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool)return false;
+            bool ok=false;const auto n=it.value().toDouble(&ok);const double minimum=key=="artZoom" || key=="labelLines" || key=="libraryLimit"?1:0,maximum=key=="artZoom"?8:key=="focusWidth" || key=="borderWidth"?12:key=="labelLines"?4:key=="libraryLimit"?50:1;
+            if(!ok || !std::isfinite(n) || n<minimum || n>maximum || ((key=="labelLines" || key=="libraryLimit") && std::floor(n)!=n))return false;
+        } else if(key=="borderColor" || key=="focusColor" || key=="labelSurfaceColor") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QColor(it.value().toString()).isValid() || QColor(it.value().toString()).alpha()!=255)return false;
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
             if (key == "libraryKind" && !QStringList{"movies","shows"}.contains(it.value().toString())) return false;
@@ -88,8 +111,16 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
+    if(value.contains("background")) {
+        const auto background=value["background"].toMap();
+        for(auto it=background.cbegin();it!=background.cend();++it)if(!QStringList{"mode","dim","artFit","artFocalX","artFocalY","artZoom","imageCrop","tintColor"}.contains(it.key()))return false;
+        if(value["background"].metaType().id()!=QMetaType::QVariantMap || !QStringList{"solid","gradient","image"}.contains(background.value("mode").toString()))return false;
+        auto art=background;art.remove("mode");const auto dim=art.take("dim");const auto tint=art.take("tintColor");if(tint.isValid() && (tint.metaType().id()!=QMetaType::QString || !QColor(tint.toString()).isValid() || QColor(tint.toString()).alpha()!=255))return false;
+        if(dim.isValid() && (dim.metaType().id()==QMetaType::QString || dim.metaType().id()==QMetaType::Bool || !std::isfinite(dim.toDouble()) || dim.toDouble()<0 || dim.toDouble()>1))return false;
+        if(!validPresentation(art))return false;
+    }
     if (value.contains("pageNavigation") && !QStringList{"left","top","none"}.contains(value["pageNavigation"].toString())) return false;
     if (value.contains("sidebarWidth") && (value["sidebarWidth"].metaType().id()==QMetaType::QString || value["sidebarWidth"].toDouble()<120 || value["sidebarWidth"].toDouble()>400)) return false;
     for (const auto &key : {"moviePage","showsPage"}) if(value.contains(key) && !safeId(value[key].toString())) return false;
@@ -259,7 +290,13 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     const auto kind = input.value("kind").toString();
     auto type = input.value("componentType").toString();
     if (type.isEmpty() && legacy) type = kind == "widget" ? (QStringList{"clock","text","container"}.contains(input.value("widgetType").toString())?input.value("widgetType").toString():"clock") : "launcher";
-    if (!QStringList{"launcher", "clock", "text", "media-shelf","container"}.contains(type)) return reject(error, "Unsupported component type.");
+    if (!QStringList{"launcher", "clock", "text", "media-shelf","container","button","image","library"}.contains(type)) return reject(error, "Unsupported component type.");
+    if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>160 || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
+    if(input.contains("family") && (type!="container" || !QStringList{"carousel","app-bar"}.contains(input["family"].toString())))return reject(error,"Unsupported group family.");
+    if(input.contains("accessibility")){
+        if(input["accessibility"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Invalid accessible description.");
+        const auto a=input["accessibility"].toMap();for(auto it=a.cbegin();it!=a.cend();++it)if(!QStringList{"name","hint"}.contains(it.key()) || it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>160 || it.value().toString().contains(QChar::Null))return reject(error,"Use bounded accessible text.");
+    }
     if(input.contains("parentId")) {
         if(input["parentId"].metaType().id()!=QMetaType::QString || (!input["parentId"].toString().isEmpty() && !safeId(input["parentId"].toString())))return reject(error,"Invalid parent identity.");
         if(input["parentId"].toString().isEmpty())result.remove("parentId");
@@ -269,10 +306,14 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     if (!QStringList{"compact", "standard", "wide"}.contains(input.value("size", "standard").toString()))
         return reject(error, "Invalid component size.");
     if (input.contains("opacity")) {
+        if(input["opacity"].metaType().id()==QMetaType::QString || input["opacity"].metaType().id()==QMetaType::Bool)return reject(error,"Opacity must be numeric.");
         const auto opacity = input.value("opacity").toDouble();
         if (!std::isfinite(opacity) || opacity < 0 || opacity > 1) return reject(error, "Invalid component opacity.");
     }
     for(const auto &key:QStringList{"hidden","locked"})if(input.contains(key) && input.value(key).metaType().id()!=QMetaType::Bool)return reject(error,"Visibility and lock must be boolean values.");
+    for(const auto &key:QStringList{"showTitle","showType","showLogo","logoFill"})if(input.contains(key) && input[key].metaType().id()!=QMetaType::Bool)return reject(error,"Presentation toggles must be boolean values.");
+    if(input.contains("accent") && (input["accent"].metaType().id()!=QMetaType::QString || !QColor(input["accent"].toString()).isValid() || QColor(input["accent"].toString()).alpha()!=255))return reject(error,"Choose an opaque accent color.");
+    if(input.contains("symbol") && (input["symbol"].metaType().id()!=QMetaType::QString || input["symbol"].toString().size()>80))return reject(error,"Use a short symbol.");
     if (input.contains("placement")) {
         // Shape-only bounds here; the layout validates against its actual grid and neighbors.
         const auto placement = input.value("placement");
@@ -281,7 +322,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         result["placement"] = placement;
     }
     if (input.contains("presentation") && (input.value("presentation").metaType().id() != QMetaType::QVariantMap
-        || !validPresentation(input.value("presentation").toMap(),false,type=="container"))) return reject(error, "Invalid component presentation.");
+        || !validPresentation(input.value("presentation").toMap(),type=="library",type=="container"))) return reject(error, "Invalid component presentation.");
     if (!input.value("customLogo").toString().isEmpty()) {
         static const QRegularExpression artwork("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg)$");
         if (!artwork.match(input.value("customLogo").toString()).hasMatch()) return reject(error, "Invalid saved artwork path.");
@@ -289,7 +330,21 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     result["schemaVersion"] = 1; result["componentType"] = type;
     result["size"] = input.value("size", "standard");
     QVariantMap source;
-    if (type == "clock" || type == "text" || type=="container") {
+    if(type=="button" || type=="image" || type=="library") {
+        if(kind!="widget" || input.value("widgetType")!=type || input.value("name").toString().trimmed().isEmpty())return reject(error,"A visual component needs its registered type and a name.");
+        if(type=="library") {
+            if(input.contains("action"))return reject(error,"Kodi owns media activation.");
+            const auto style=input.value("presentation").toMap();
+            if(!style.contains("libraryKind") || !style.contains("libraryView"))return reject(error,"Choose a supported Kodi view.");
+            if(QStringList{"collection","genre","tag"}.contains(style.value("libraryView").toString()) && style.value("libraryValue").toString().trimmed().isEmpty())return reject(error,"Choose a named Kodi source.");
+            if(style.value("libraryKind")=="shows" && QStringList{"genre","tag"}.contains(style.value("libraryView").toString()))return reject(error,"This Kodi view is available for movies only.");
+            if(style.value("libraryView")=="collection" && !safeId(style.value("libraryValue").toString()))return reject(error,"Choose a saved collection.");
+            source={{"schemaVersion",1},{"provider","kodi"},{"kind","library"},{"libraryKind",style.value("libraryKind")},{"libraryView",style.value("libraryView")},{"libraryValue",style.value("libraryValue","")}};
+        } else {
+            if(input.contains("action")) {const auto link=action(input["action"].toMap(),error);if(link.isEmpty())return {};result["action"]=link;}
+            source={{"schemaVersion",1},{"provider","shell"},{"kind",type}};
+        }
+    } else if (type == "clock" || type == "text" || type=="container") {
         if (kind != "widget" || input.value("widgetType") != type) return reject(error, "Unsupported widget.");
         if(type=="container" && (input.value("name").toString().trimmed().isEmpty() || input.value("name").toString().size()>80 || input.value("name").toString().contains(QChar::Null) || !validChildLayout(input.value("presentation").toMap().value("layout").toMap())))return reject(error,"A group needs a name and a bounded internal layout.");
         source = {{"schemaVersion", 1}, {"provider", "shell"}, {"kind", type}};

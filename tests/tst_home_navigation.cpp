@@ -56,8 +56,8 @@ private slots:
     void pageComposerAndIndependentKodiWidgets();
     void gridEditorMoveResizeDuplicateRemove();
     void studioNestedGroupCanvasAndRemoteScope();
+    void studioCatalogAndContextualInspector();
 };
-void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
 void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);InputManager input;
@@ -93,6 +93,7 @@ void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
     QCOMPARE(studio->property("pageId").toString(),QString());
 }
 
+void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
 {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
     int reads=0,plays=0;QJsonObject played;
@@ -146,6 +147,15 @@ void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
     QVERIFY(QMetaObject::invokeMethod(root.get(),"showPage",Q_ARG(QVariant,another),Q_ARG(QVariant,QString("link")),Q_ARG(QVariant,false)));
     QVERIFY(command(InputManager::Back));QCOMPARE(root->property("activeId").toString(),pageId);
     QSignalSpy closed(root.get(),SIGNAL(closed(QString)));QVERIFY(command(InputManager::Home));QVERIFY(!root->property("open").toBool());QCOMPARE(closed.last()[0].toString(),QString("original-card"));
+    root.reset();QTest::qWait(150);const auto readsBeforeWidget=reads;
+    QQmlComponent widget(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(HOME_QML)).dir().filePath("PageLibraryWidget.qml")));
+    QVERIFY2(widget.isReady(),qPrintable(widget.errorString()));
+    std::unique_ptr<QObject> frozen(widget.createWithInitialProperties({{"provider",QVariant::fromValue(&data)},{"widgetKey","frozen-widget"},{"style",QVariantMap{{"libraryKind","movies"},{"libraryView","all"}}},{"readOnly",true},{"width",800},{"height",300}}));QVERIFY(frozen);
+    QTRY_COMPARE(reads,readsBeforeWidget+1);QTest::qWait(100);const auto beforeReads=reads,beforePlays=plays;
+    frozen->setProperty("frozen",true);frozen->setProperty("style",QVariantMap{{"libraryKind","movies"},{"libraryView","recent"},{"surfaceColor","#123456"}});QTest::qWait(100);QCOMPARE(reads,beforeReads);
+    QVERIFY(QMetaObject::invokeMethod(frozen.get(),"handleCommand",Q_ARG(QVariant,InputManager::Confirm)));QCOMPARE(plays,beforePlays);
+    frozen->setProperty("frozen",false);QTRY_COMPARE(reads,beforeReads+1);
+    data.invalidate("Profile closed");QVERIFY(!data.client("late",{}));QVERIFY(!data.artwork("movie",1));data.refresh(one);QTest::qWait(100);QCOMPARE(reads,beforeReads+1);
     QVERIFY(home.addWidget("text"));
     QCOMPARE(home.items().last().toMap()["presentation"].toMap()["subtitle"].toString(),QString("Your message"));
     QQmlComponent legacy(&engine,QUrl::fromLocalFile(QStringLiteral(HOME_QML)));
@@ -857,17 +867,17 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors()
         {"anchors",{InputManager::Confirm,InputManager::NavigateDown,InputManager::Confirm,InputManager::Menu,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}},
         {"geometry",{InputManager::Confirm,InputManager::Confirm,InputManager::Menu,InputManager::Confirm}},
         {"keyboard",{InputManager::Confirm,InputManager::Confirm,InputManager::Menu,InputManager::Confirm,InputManager::Confirm}},
-        {"orderBefore",{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}},
-        {"orderAfter",{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}},
-        {"remove",{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}},
-        {"add",{InputManager::Search}},
-        {"move",{InputManager::Search,InputManager::Confirm}},
+        {"orderBefore",{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}},
+        {"orderAfter",{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}},
+        {"remove",{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::Confirm}},
+        {"catalog",{InputManager::Search}},
+        {"move",{InputManager::Search,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateRight,InputManager::Confirm,InputManager::Confirm}},
         {"collision",{InputManager::Confirm,InputManager::Confirm,InputManager::NavigateRight,InputManager::Confirm}},
         {"collisionDetails",{InputManager::Confirm,InputManager::Confirm,InputManager::NavigateRight,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}}
     };
     for(const auto &entry:cancelCases){
         for(int command:entry.second)QVERIFY(key(command));QCOMPARE(root->property("mode").toString(),entry.first);
-        QVERIFY(key(InputManager::Back));if(entry.first=="keyboard" || entry.first=="collisionDetails")QVERIFY(key(InputManager::Back));
+        QVERIFY(key(InputManager::Back));if(entry.first=="keyboard" || entry.first=="collisionDetails")QVERIFY(key(InputManager::Back));if(root->property("mode").toString()=="inspector"){QVERIFY(key(InputManager::Back));QVERIFY(key(InputManager::Back));}
         QCOMPARE(root->property("mode").toString(),QString("canvas"));QCOMPARE(root->property("selectedId").toString(),QString("clock"));QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);
     }
     QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("context"));
@@ -918,7 +928,7 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel()
     QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString("clock"))));
     auto key=[&](int value){const bool ok=QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,value));QCoreApplication::processEvents();return ok;};
     auto *session=qobject_cast<StudioSession *>(root->property("session").value<QObject *>());QVERIFY(session);const auto start=session->draft();QVERIFY(key(InputManager::NavigateRight));
-    const QList<int> destinationKeys{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm};
+    const QList<int> destinationKeys{InputManager::Confirm,InputManager::Confirm,InputManager::Menu,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm};
     const auto openDestination=[&](){for(int command:destinationKeys)if(!key(command))return false;return true;};
     QVERIFY(openDestination());QCOMPARE(root->property("mode").toString(),QString("destination"));QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);QCOMPARE(root->property("scopeId").toString(),QString("widgets"));
     for(bool accept:{false,true}) {
@@ -1041,7 +1051,7 @@ void HomeNavigationTests::studioRemoteDraftApplyAndCancel()
     }
     root->setProperty("width",1280);root->setProperty("height",720);
     QVERIFY(QMetaObject::invokeMethod(root.get(), "chooseTool", Q_ARG(QVariant,0)));
-    command(InputManager::Confirm); // Clock ghost.
+    command(InputManager::NavigateDown);command(InputManager::NavigateDown);command(InputManager::NavigateRight);command(InputManager::Confirm);command(InputManager::Confirm); // Widgets -> Clock ghost.
     QCOMPARE(root->property("mode").toString(), QString("move"));
     command(InputManager::NavigateDown);
     command(InputManager::NavigateDown);
@@ -1147,14 +1157,15 @@ void HomeNavigationTests::studioRemotePointerAndInspectorParity()
     show(); command(InputManager::NavigateRight); command(InputManager::Menu);
     for(int i=0;i<3;++i)command(InputManager::NavigateDown);
     command(InputManager::Confirm); // Edit component.
-    for(int i=0;i<6;++i)command(InputManager::NavigateDown);
+    auto *inspector=root->findChild<QObject *>("studioInspector");QVERIFY(inspector);if(inspector->property("collapsed").toBool())command(InputManager::Confirm);
+    command(InputManager::NavigateDown);command(InputManager::NavigateDown);command(InputManager::Confirm); // Layout group.
     command(InputManager::Confirm); QCOMPARE(root->property("mode").toString(),QString("geometry"));
     command(InputManager::NavigateDown); command(InputManager::Confirm);
     auto *keyboard=root->findChild<QObject *>("studioKeyboard"); QVERIFY(keyboard);
     QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("3"))));
     for(int i=0;i<3;++i)command(InputManager::NavigateDown);
     command(InputManager::Confirm);
-    QCOMPARE(root->property("mode").toString(),QString("canvas"));
+    QCOMPARE(root->property("mode").toString(),QString("inspector"));
     QCOMPARE(session()->draft(),remote);
     QCOMPARE(home.committedDocument(),baseline);
 }
@@ -1266,3 +1277,49 @@ void HomeNavigationTests::studioNestedGroupCanvasAndRemoteScope()
 }
 QTEST_MAIN(HomeNavigationTests)
 #include "tst_home_navigation.moc"
+
+void HomeNavigationTests::studioCatalogAndContextualInspector()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);InputManager input;
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    const auto pageId=home.createPage("Canvas","blank");QVERIFY(!pageId.isEmpty());
+    auto *createdPage=qobject_cast<PageModel *>(home.pageModel(pageId));QVERIFY(createdPage);QVERIFY(createdPage->setGrid({{"columns",8},{"rows",5},{"mode","screen"}}));
+    const auto disk=home.committedDocument();
+    QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));
+    QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));QVERIFY(root);
+    QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,pageId),Q_ARG(QVariant,QString())));
+    auto key=[&](int c){const auto ok=QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,c));QCoreApplication::processEvents();return ok;};
+    auto *session=qobject_cast<StudioSession *>(root->property("session").value<QObject *>());QVERIFY(session);const auto baseline=session->draft();
+    auto *catalog=root->findChild<QObject *>("studioCatalog"),*inspector=root->findChild<QObject *>("studioInspector");QVERIFY(catalog);QVERIFY(inspector);
+    auto list=[](const QVariant &v){return (v.metaType().id()==qMetaTypeId<QJSValue>()?v.value<QJSValue>().toVariant():v).toList();};
+    QVERIFY(session->execute("newPage",{{"name","Destination"},{"preset","blank"}}));QCoreApplication::processEvents();
+    const auto namedActions=list(catalog->property("actions"));QVERIFY(std::any_of(namedActions.cbegin(),namedActions.cend(),[](const QVariant &v){return v.toMap()["name"].toString().contains("Destination");}));QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);
+    QVERIFY(key(InputManager::Search));QCOMPARE(root->property("mode").toString(),QString("catalog"));QCOMPARE(list(catalog->property("families")).size(),6);
+    // Inspect every family's content step and cancel without writes/history.
+    for(int i=0;i<6;++i){catalog->setProperty("selected",i);QVERIFY(key(InputManager::Confirm));QVERIFY(catalog->property("view").toString()!="families");QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),baseline);}
+    QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));
+    QCOMPARE(session->draft(),baseline);QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("canvas"));QCOMPARE(session->changeCount(),1);
+    const auto selected=root->property("selectedId").toString();QVERIFY(!selected.isEmpty());
+    QVERIFY(key(InputManager::Confirm));for(int i=0;i<3;++i)QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("inspector"));
+    if(inspector->property("collapsed").toBool())QVERIFY(key(InputManager::Confirm));
+    QVERIFY(key(InputManager::Confirm));QCOMPARE(inspector->property("view").toString(),QString("fields"));
+    QVERIFY(key(InputManager::Confirm));QCOMPARE(inspector->property("view").toString(),QString("keyboard"));auto *keyboard=inspector->findChild<QObject *>("inspectorKeyboard");QVERIFY(keyboard);
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("My button"))));QCoreApplication::processEvents();QCOMPARE(inspector->property("view").toString(),QString("fields"));
+    auto *model=qobject_cast<HomeLayout *>(session->model());auto *page=qobject_cast<PageModel *>(model->pageModel(pageId));QVERIFY(page);QCOMPARE(page->items()[0].toMap()["name"].toString(),QString("My button"));
+    QVERIFY(key(InputManager::Back));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm)); // Appearance
+    const auto fields=list(inspector->property("fields"));int opacity=-1;for(int i=0;i<fields.size();++i)if(fields[i].toMap()["key"]=="surfaceOpacity")opacity=i;QVERIFY(opacity>=0);
+    for(int i=0;i<opacity;++i)QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::NavigateLeft));QCOMPARE(page->items()[0].toMap()["presentation"].toMap()["surfaceOpacity"].toDouble(),0.95);
+    QVERIFY(key(InputManager::Menu));QVERIFY(!page->items()[0].toMap()["presentation"].toMap().contains("surfaceOpacity"));
+    QVERIFY(key(InputManager::Back));QVERIFY(key(InputManager::Back));QCOMPARE(root->property("selectedId").toString(),selected);QCOMPARE(home.committedDocument(),disk);
+    while(session->canUndo())QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);
+    std::function<QQuickItem *(QQuickItem *,const QString &)> find=[&](QQuickItem *item,const QString &name)->QQuickItem *{if(item->objectName()==name)return item;for(auto *child:item->childItems())if(auto *match=find(child,name))return match;return nullptr;};
+    for(const auto &family:QStringList{"button","image","library","carousel","app-bar"}){
+        const auto prototype=session->componentPrototype(family);QVERIFY(!prototype.isEmpty());
+        QVERIFY2(session->execute("addResolved",{{"type",family},{"placement",prototype["root"].toMap()["placement"]}},pageId),qPrintable(session->errorString()));
+        QCoreApplication::processEvents();QTRY_VERIFY(find(qobject_cast<QQuickItem *>(root.get()),"placed-"+prototype["rootId"].toString()));
+        QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);
+    }
+}

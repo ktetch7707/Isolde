@@ -14,9 +14,9 @@ Window {
     property bool ambientActive: false
     property string launchErrorText: ""
     property string launchErrorAppId: ""
-    Image {
+    PageBackdrop {
         id: windowWallpaper; anchors.fill: parent; source: homeLayout.wallpaperSource
-        fillMode: Image.PreserveAspectCrop; visible: !sessionManager.active && !pageSurface.open && !window.ambientActive && !!source.toString() && homeLayout.composition.enabled
+        config:homeLayout.composition.background || {};startColor:homeLayout.backgroundStart;endColor:homeLayout.backgroundEnd; visible: !sessionManager.active && !pageSurface.open && !window.ambientActive && !!source.toString() && (homeLayout.composition.enabled || !!homeLayout.composition.background)
     }
 
     function launchAppFromShell(appId, originId) {

@@ -14,6 +14,8 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <QImage>
+#include <QUrl>
 
 static const QByteArray apps = R"([
  {"id":"movies","name":"Movies","type":"mock","section":"Library","accent":"#556677","handledActions":["open-folder","open-file","open-disc"]},
@@ -58,6 +60,7 @@ private slots:
     void studioShiftCascadesAreBoundedAndAtomic();
     void studioSectionTransfersDuplicationAndOrdering();
     void studioNestedGroupsValidateAndReparentAtomically();
+    void studioCatalogLinksInspectorAndStagedArtwork();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
@@ -1131,6 +1134,33 @@ void ComponentTests::studioNestedGroupsValidateAndReparentAtomically()
     auto fifth=group;fifth["id"]="depth-4";fifth["parentId"]="depth-3";deep.append(fifth);
     QVERIFY(!ComponentSchema::hierarchyFits(deep,doc["composition"].toObject().toVariantMap(),{},&error));QVERIFY(error.contains("four"));
     auto invalid=local.toVariantMap();invalid["columns"]=17;QVERIFY(!ComponentSchema::validChildLayout(invalid));invalid=local.toVariantMap();invalid["mode"]="script";QVERIFY(!ComponentSchema::validChildLayout(invalid));
+}
+void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
+{
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);const auto user=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
+    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),6);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
+    doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(options["defaultGrid"].toMap())}};QVERIFY(session->pushEdit(QJsonDocument(doc).toJson()));const auto empty=session->draft();
+    for(const auto &type:QStringList{"button","image","library","carousel","app-bar"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
+    const QVariantMap box{{"x",0},{"y",0},{"width",2},{"height",1}};QVERIFY(session->execute("addResolved",{{"type","button"},{"placement",box}}));
+    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{{"type","root-page"}}}}}}));
+    const auto linked=session->draft();QVERIFY(!session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{{"type","open-page"},{"pageId","absent"}}}}}}));QCOMPARE(session->draft(),linked);
+    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{}}}}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject().contains("action"));
+    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"presentation",QVariantMap{{"surfaceColor","#123456"}}}}}}));
+    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"presentation",QVariantMap{{"surfaceColor",QVariant()}}}}}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject()["presentation"].toObject().contains("surfaceColor"));
+    QImage image(32,24,QImage::Format_RGB32);image.fill(QColor("#56789a"));const auto source=dir.filePath("chosen.png");QVERIFY(image.save(source));
+    const auto relative=session->stageArtwork(source);QVERIFY2(relative.startsWith("artwork/studio-"),qPrintable(session->errorString()));QVERIFY(!QFile::exists(dir.filePath("profile/"+relative)));QVERIFY(!QFile::exists(user));
+    QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"customLogo",relative}}}}));
+    auto *model=qobject_cast<HomeLayout *>(session->model());QVERIFY(model);const auto staged=QUrl(model->items().first().toMap()["logoSource"].toString()).toLocalFile();QVERIFY(QFile::exists(staged));QVERIFY(!staged.startsWith(dir.filePath("profile")));
+    QVERIFY(session->execute("pagePatch",{{"scope","theme"},{"value",QVariantMap{{"focusColor",QVariant()}}}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["theme"].toObject().contains("focusColor"));
+    QVERIFY(session->execute("rename",{{"id","button"},{"name","Artwork button"}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["theme"].toObject().contains("focusColor"));
+    const auto beforeFailure=session->draft();QVERIFY(QDir().mkpath(dir.filePath("profile")));QFile blocked(dir.filePath("profile/artwork"));QVERIFY(blocked.open(QIODevice::WriteOnly));blocked.write("blocked");blocked.close();
+    QVERIFY(!session->apply("button"));QCOMPARE(session->draft(),beforeFailure);QVERIFY(!QFile::exists(user));QCOMPARE(home.focusOrigin(),QString());QVERIFY(QFile::remove(blocked.fileName()));
+    QVERIFY(session->apply("button"));QVERIFY(QFile::exists(dir.filePath("profile/"+relative)));QCOMPARE(readFile(dir.filePath("profile/"+relative)),readFile(source));QVERIFY(!QJsonDocument::fromJson(readFile(user)).object()["theme"].toObject().contains("focusColor"));
+    QVERIFY(session->stageArtwork("https://example.com/image.png").isEmpty());QVERIFY(session->stageArtwork(user).isEmpty());
+    session->invalidate();QVERIFY(!QFile::exists(staged));QVERIFY(QFile::exists(dir.filePath("profile/"+relative)));
+    auto invalid=options["componentPresets"].toMap()["image"].toMap();invalid["action"]=QVariantMap{{"type","exec"},{"target","bad"}};QVERIFY(ComponentSchema::component(invalid,true).isEmpty());
+    invalid=options["componentPresets"].toMap()["library"].toMap();auto style=invalid["presentation"].toMap();style["libraryLimit"]=51;invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,true).isEmpty());
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

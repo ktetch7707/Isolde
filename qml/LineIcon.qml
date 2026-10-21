@@ -14,7 +14,13 @@ Canvas {
         const c = getContext("2d"); c.reset(); c.scale(width / 32, height / 32)
         c.strokeStyle = ink; c.lineWidth = 2; c.lineJoin = "round"; c.lineCap = "round"
         c.beginPath()
-        if (name === "gamepad") {
+        if (name === "arrow-right") {
+            c.moveTo(4,16);c.lineTo(27,16);c.moveTo(19,8);c.lineTo(27,16);c.lineTo(19,24)
+        } else if(name === "image") {
+            c.roundedRect(3,3,26,26,3,3);c.moveTo(8,24);c.lineTo(14,15);c.lineTo(19,21);c.lineTo(23,16);c.lineTo(28,24);c.moveTo(13,10);c.arc(10,10,3,0,Math.PI*2)
+        } else if(name === "carousel") {
+            c.roundedRect(10,6,12,20,2,2);c.moveTo(5,8);c.lineTo(2,8);c.lineTo(2,24);c.lineTo(5,24);c.moveTo(27,8);c.lineTo(30,8);c.lineTo(30,24);c.lineTo(27,24)
+        } else if (name === "gamepad") {
             c.moveTo(9,8); c.lineTo(23,8); c.quadraticCurveTo(27,8,28,13); c.lineTo(30,24)
             c.quadraticCurveTo(30,29,26,26); c.lineTo(21,21); c.lineTo(11,21); c.lineTo(6,26)
             c.quadraticCurveTo(2,29,2,24); c.lineTo(4,13); c.quadraticCurveTo(5,8,9,8)

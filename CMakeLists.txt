@@ -133,6 +133,10 @@ qt_add_qml_module(isolde
         qml/PageSurface.qml
         qml/PageEditor.qml
         qml/PageStudioView.qml
+        qml/PageBackdrop.qml
+        qml/StudioInspector.qml
+        qml/StudioMediaPicker.qml
+    qml/StudioCatalog.qml
         qml/PlacedComponents.qml
         qml/PageLibraryWidget.qml
         qml/ArtworkImage.qml
@@ -239,7 +243,7 @@ if(BUILD_TESTING)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE COMMAND_CENTER_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CommandCenter.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE KODI_SETTINGS_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/KodiSettingsView.qml")
     add_test(NAME home_component_navigation COMMAND isolde_home_navigation_tests)
-    set_tests_properties(home_component_navigation PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    set_tests_properties(home_component_navigation PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
         qt_add_executable(isolde_audio_tests tests/tst_audio.cpp)

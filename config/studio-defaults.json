@@ -2,8 +2,12 @@
   "schemaVersion": 1,
   "rootPageName": "Home",
   "appearance": {
-    "surfaceColor": "#202126", "selectedColor": "#353039", "textColor": "#f5f1f3",
-    "mutedColor": "#aaa5af", "focusColor": "#c994a5", "tileRoundness": 0.25
+    "surfaceColor": "#202126",
+    "selectedColor": "#353039",
+    "textColor": "#f5f1f3",
+    "mutedColor": "#aaa5af",
+    "focusColor": "#c994a5",
+    "tileRoundness": 0.25
   },
   "menuWidth": 280,
   "defaultGrid": {
@@ -16,31 +20,1984 @@
     "mode": "screen"
   },
   "sectionHeight": 560,
-  "widgetSpans": {"clock": {"width": 1, "height": 1}, "text": {"width": 1, "height": 1}},
+  "widgetSpans": {
+    "clock": {
+      "width": 1,
+      "height": 1
+    },
+    "text": {
+      "width": 1,
+      "height": 1
+    }
+  },
   "groupPreset": {
-    "id": "group", "name": "Group", "kind": "widget", "widgetType": "container", "componentType": "container",
-    "placement": {"x": 0, "y": 0, "width": 4, "height": 2},
-    "presentation": {"showHeading": false, "surfaceOpacity": 0, "radius": 0, "layout": {"schemaVersion": 1, "mode": "grid", "columns": 4, "rows": 2, "gap": 12, "padding": 0}}
+    "id": "group",
+    "name": "Group",
+    "kind": "widget",
+    "widgetType": "container",
+    "componentType": "container",
+    "placement": {
+      "x": 0,
+      "y": 0,
+      "width": 4,
+      "height": 2
+    },
+    "presentation": {
+      "showHeading": false,
+      "surfaceOpacity": 0,
+      "radius": 0,
+      "layout": {
+        "schemaVersion": 1,
+        "mode": "grid",
+        "columns": 4,
+        "rows": 2,
+        "gap": 12,
+        "padding": 0
+      }
+    }
   },
   "inputPanelPreset": {
     "root": {
-      "id": "inputs-panel", "name": "Input slots", "kind": "widget", "widgetType": "container", "componentType": "container", "requiredCapability": "capture-inputs",
-      "placement": {"x": 0, "y": 0, "width": 4, "height": 3},
-      "presentation": {"showHeading": true, "headingSize": 24, "surfaceOpacity": 0.18, "radius": 18, "layout": {"schemaVersion": 1, "mode": "grid", "columns": 4, "rows": 2, "gap": 12, "padding": 12}}
+      "id": "inputs-panel",
+      "name": "Input slots",
+      "kind": "widget",
+      "widgetType": "container",
+      "componentType": "container",
+      "requiredCapability": "capture-inputs",
+      "placement": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 3
+      },
+      "presentation": {
+        "showHeading": true,
+        "headingSize": 24,
+        "surfaceOpacity": 0.18,
+        "radius": 18,
+        "layout": {
+          "schemaVersion": 1,
+          "mode": "grid",
+          "columns": 4,
+          "rows": 2,
+          "gap": 12,
+          "padding": 12
+        }
+      }
     },
     "children": [
-      {"id": "input-1", "parentId": "inputs-panel", "name": "HDMI 1", "kind": "action", "symbol": "1", "action": {"type": "switch-input", "input": 1}, "placement": {"x": 0, "y": 0, "width": 1, "height": 1}},
-      {"id": "input-2", "parentId": "inputs-panel", "name": "HDMI 2", "kind": "action", "symbol": "2", "action": {"type": "switch-input", "input": 2}, "placement": {"x": 1, "y": 0, "width": 1, "height": 1}},
-      {"id": "input-3", "parentId": "inputs-panel", "name": "HDMI 3", "kind": "action", "symbol": "3", "action": {"type": "switch-input", "input": 3}, "placement": {"x": 2, "y": 0, "width": 1, "height": 1}},
-      {"id": "input-4", "parentId": "inputs-panel", "name": "HDMI 4", "kind": "action", "symbol": "4", "action": {"type": "switch-input", "input": 4}, "placement": {"x": 3, "y": 0, "width": 1, "height": 1}},
-      {"id": "input-5", "parentId": "inputs-panel", "name": "HDMI 5", "kind": "action", "symbol": "5", "action": {"type": "switch-input", "input": 5}, "placement": {"x": 0, "y": 1, "width": 1, "height": 1}},
-      {"id": "input-6", "parentId": "inputs-panel", "name": "HDMI 6", "kind": "action", "symbol": "6", "action": {"type": "switch-input", "input": 6}, "placement": {"x": 1, "y": 1, "width": 1, "height": 1}},
-      {"id": "input-7", "parentId": "inputs-panel", "name": "HDMI 7", "kind": "action", "symbol": "7", "action": {"type": "switch-input", "input": 7}, "placement": {"x": 2, "y": 1, "width": 1, "height": 1}},
-      {"id": "input-8", "parentId": "inputs-panel", "name": "HDMI 8", "kind": "action", "symbol": "8", "action": {"type": "switch-input", "input": 8}, "placement": {"x": 3, "y": 1, "width": 1, "height": 1}}
+      {
+        "id": "input-1",
+        "parentId": "inputs-panel",
+        "name": "HDMI 1",
+        "kind": "action",
+        "symbol": "1",
+        "action": {
+          "type": "switch-input",
+          "input": 1
+        },
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        }
+      },
+      {
+        "id": "input-2",
+        "parentId": "inputs-panel",
+        "name": "HDMI 2",
+        "kind": "action",
+        "symbol": "2",
+        "action": {
+          "type": "switch-input",
+          "input": 2
+        },
+        "placement": {
+          "x": 1,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        }
+      },
+      {
+        "id": "input-3",
+        "parentId": "inputs-panel",
+        "name": "HDMI 3",
+        "kind": "action",
+        "symbol": "3",
+        "action": {
+          "type": "switch-input",
+          "input": 3
+        },
+        "placement": {
+          "x": 2,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        }
+      },
+      {
+        "id": "input-4",
+        "parentId": "inputs-panel",
+        "name": "HDMI 4",
+        "kind": "action",
+        "symbol": "4",
+        "action": {
+          "type": "switch-input",
+          "input": 4
+        },
+        "placement": {
+          "x": 3,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        }
+      },
+      {
+        "id": "input-5",
+        "parentId": "inputs-panel",
+        "name": "HDMI 5",
+        "kind": "action",
+        "symbol": "5",
+        "action": {
+          "type": "switch-input",
+          "input": 5
+        },
+        "placement": {
+          "x": 0,
+          "y": 1,
+          "width": 1,
+          "height": 1
+        }
+      },
+      {
+        "id": "input-6",
+        "parentId": "inputs-panel",
+        "name": "HDMI 6",
+        "kind": "action",
+        "symbol": "6",
+        "action": {
+          "type": "switch-input",
+          "input": 6
+        },
+        "placement": {
+          "x": 1,
+          "y": 1,
+          "width": 1,
+          "height": 1
+        }
+      },
+      {
+        "id": "input-7",
+        "parentId": "inputs-panel",
+        "name": "HDMI 7",
+        "kind": "action",
+        "symbol": "7",
+        "action": {
+          "type": "switch-input",
+          "input": 7
+        },
+        "placement": {
+          "x": 2,
+          "y": 1,
+          "width": 1,
+          "height": 1
+        }
+      },
+      {
+        "id": "input-8",
+        "parentId": "inputs-panel",
+        "name": "HDMI 8",
+        "kind": "action",
+        "symbol": "8",
+        "action": {
+          "type": "switch-input",
+          "input": 8
+        },
+        "placement": {
+          "x": 3,
+          "y": 1,
+          "width": 1,
+          "height": 1
+        }
+      }
     ]
   },
   "gridModes": [
-    {"id": "screen", "name": "One screen"},
-    {"id": "sections", "name": "Scrolling sections"}
+    {
+      "id": "screen",
+      "name": "One screen"
+    },
+    {
+      "id": "sections",
+      "name": "Scrolling sections"
+    }
+  ],
+  "componentPresets": {
+    "button": {
+      "id": "button",
+      "name": "Button",
+      "kind": "widget",
+      "widgetType": "button",
+      "componentType": "button",
+      "placement": {
+        "x": 0,
+        "y": 0,
+        "width": 2,
+        "height": 1
+      },
+      "presentation": {
+        "variant": "source",
+        "labelSize": 20,
+        "radius": 18,
+        "surfaceOpacity": 1,
+        "icon": "arrow-right",
+        "labelPosition": "inside"
+      }
+    },
+    "image": {
+      "id": "image",
+      "name": "Image",
+      "kind": "widget",
+      "widgetType": "image",
+      "componentType": "image",
+      "placement": {
+        "x": 0,
+        "y": 0,
+        "width": 4,
+        "height": 2
+      },
+      "presentation": {
+        "variant": "image",
+        "radius": 18,
+        "artFit": "cover",
+        "artFocalX": 0.5,
+        "artFocalY": 0.5,
+        "artZoom": 1,
+        "labelPosition": "hidden"
+      }
+    },
+    "library": {
+      "id": "shelf",
+      "name": "Media shelf",
+      "kind": "widget",
+      "widgetType": "library",
+      "componentType": "library",
+      "placement": {
+        "x": 0,
+        "y": 0,
+        "width": 6,
+        "height": 3
+      },
+      "presentation": {
+        "libraryKind": "movies",
+        "libraryView": "all",
+        "libraryLayout": "row",
+        "libraryColumns": 4,
+        "libraryCardStyle": "media",
+        "artHeight": 180,
+        "radius": 16
+      }
+    },
+    "carousel": {
+      "id": "carousel",
+      "name": "Button carousel",
+      "kind": "widget",
+      "widgetType": "container",
+      "componentType": "container",
+      "placement": {
+        "x": 0,
+        "y": 0,
+        "width": 6,
+        "height": 2
+      },
+      "presentation": {
+        "showHeading": true,
+        "surfaceOpacity": 0.35,
+        "radius": 18,
+        "layout": {
+          "schemaVersion": 1,
+          "mode": "row",
+          "columns": 16,
+          "rows": 1,
+          "gap": 14,
+          "padding": 12,
+          "visibleColumns": 4,
+          "wrap": false
+        },
+        "headingSize": 24
+      },
+      "family": "carousel"
+    },
+    "app-bar": {
+      "id": "app-bar",
+      "name": "App bar",
+      "kind": "widget",
+      "widgetType": "container",
+      "componentType": "container",
+      "placement": {
+        "x": 0,
+        "y": 0,
+        "width": 6,
+        "height": 2
+      },
+      "presentation": {
+        "showHeading": true,
+        "surfaceOpacity": 0.35,
+        "radius": 18,
+        "layout": {
+          "schemaVersion": 1,
+          "mode": "row",
+          "columns": 16,
+          "rows": 1,
+          "gap": 14,
+          "padding": 12,
+          "visibleColumns": 6,
+          "wrap": false
+        },
+        "headingSize": 24
+      },
+      "family": "app-bar"
+    }
+  },
+  "appChildPreset": {
+    "id": "app",
+    "kind": "app",
+    "placement": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "presentation": {
+      "variant": "source",
+      "radius": 16
+    }
+  },
+  "catalog": [
+    {
+      "id": "button",
+      "name": "Button",
+      "description": "A page link, app, or supported action",
+      "icon": "arrow-right"
+    },
+    {
+      "id": "carousel",
+      "name": "Button carousel",
+      "description": "An editable scrolling row of buttons",
+      "icon": "carousel"
+    },
+    {
+      "id": "library",
+      "name": "Media shelf",
+      "description": "Live Kodi movies, shows, or saved collections",
+      "icon": "film"
+    },
+    {
+      "id": "app-bar",
+      "name": "App bar",
+      "description": "Choose and arrange installed apps",
+      "icon": "grid"
+    },
+    {
+      "id": "image",
+      "name": "Image",
+      "description": "Managed artwork, decorative or linked",
+      "icon": "image"
+    },
+    {
+      "id": "widgets",
+      "name": "Widgets",
+      "description": "Clock, text, groups, and input slots",
+      "icon": "clock"
+    }
+  ],
+  "actions": [
+    {
+      "name": "Open Settings",
+      "action": {
+        "type": "settings",
+        "section": -1
+      }
+    },
+    {
+      "name": "Open Apps / Search",
+      "action": {
+        "type": "app-drawer"
+      }
+    },
+    {
+      "name": "Desktop mode",
+      "action": {
+        "type": "desktop-mode"
+      }
+    },
+    {
+      "name": "HDMI 1",
+      "action": {
+        "type": "switch-input",
+        "input": 1
+      }
+    },
+    {
+      "name": "HDMI 2",
+      "action": {
+        "type": "switch-input",
+        "input": 2
+      }
+    },
+    {
+      "name": "HDMI 3",
+      "action": {
+        "type": "switch-input",
+        "input": 3
+      }
+    },
+    {
+      "name": "HDMI 4",
+      "action": {
+        "type": "switch-input",
+        "input": 4
+      }
+    },
+    {
+      "name": "HDMI 5",
+      "action": {
+        "type": "switch-input",
+        "input": 5
+      }
+    },
+    {
+      "name": "HDMI 6",
+      "action": {
+        "type": "switch-input",
+        "input": 6
+      }
+    },
+    {
+      "name": "HDMI 7",
+      "action": {
+        "type": "switch-input",
+        "input": 7
+      }
+    },
+    {
+      "name": "HDMI 8",
+      "action": {
+        "type": "switch-input",
+        "input": 8
+      }
+    },
+    {
+      "name": "Settings · Network",
+      "action": {
+        "type": "settings",
+        "section": 0
+      }
+    },
+    {
+      "name": "Settings · Home",
+      "action": {
+        "type": "settings",
+        "section": 1
+      }
+    },
+    {
+      "name": "Settings · Sources",
+      "action": {
+        "type": "settings",
+        "section": 2
+      }
+    },
+    {
+      "name": "Settings · Remotes",
+      "action": {
+        "type": "settings",
+        "section": 3
+      }
+    },
+    {
+      "name": "Settings · System",
+      "action": {
+        "type": "settings",
+        "section": 4
+      }
+    },
+    {
+      "name": "Settings · Profiles",
+      "action": {
+        "type": "settings",
+        "section": 5
+      }
+    }
+  ],
+  "inspector": {
+    "colors": [
+      "#f5f1f3",
+      "#202126",
+      "#c994a5",
+      "#b5d6e8",
+      "#b5d6c8",
+      "#f6c6a5",
+      "#f1a2c1",
+      "#b7a2df",
+      "#000000",
+      "#ffffff"
+    ],
+    "icons": [
+      "display",
+      "film",
+      "music",
+      "gamepad",
+      "grid",
+      "search",
+      "settings",
+      "heart",
+      "clock",
+      "arrow-right"
+    ],
+    "fields": [
+      {
+        "tab": "Content",
+        "scope": "component",
+        "key": "name",
+        "label": "Name",
+        "type": "text"
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "subtitle",
+        "label": "Text / supporting text",
+        "type": "text",
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "label",
+        "label": "Artwork badge",
+        "type": "text",
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "component",
+        "key": "customLogo",
+        "label": "Artwork",
+        "type": "artwork",
+        "excludeTypes": [
+          "library",
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "icon",
+        "label": "Icon",
+        "type": "choice",
+        "choices": [
+          "display",
+          "film",
+          "music",
+          "gamepad",
+          "grid",
+          "search",
+          "settings",
+          "heart",
+          "clock",
+          "arrow-right"
+        ],
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "libraryKind",
+        "label": "Kodi library",
+        "type": "choice",
+        "types": [
+          "library",
+          "section"
+        ],
+        "choices": [
+          "movies",
+          "shows"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "libraryView",
+        "label": "Kodi view",
+        "type": "choice",
+        "types": [
+          "library",
+          "section"
+        ],
+        "choices": [
+          "all",
+          "recent",
+          "continue",
+          "search",
+          "genre",
+          "tag",
+          "collection"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "libraryValue",
+        "label": "Source / search",
+        "type": "source",
+        "types": [
+          "library",
+          "section"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "component",
+        "key": "apps",
+        "label": "Choose installed apps",
+        "type": "apps",
+        "families": [
+          "app-bar"
+        ],
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "component",
+        "key": "addChild",
+        "label": "Add a child component",
+        "type": "children",
+        "types": [
+          "container"
+        ],
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "variant",
+        "label": "Card style",
+        "type": "choice",
+        "choices": [
+          "source",
+          "summary",
+          "banner",
+          "orb",
+          "media",
+          "recent",
+          "text",
+          "image"
+        ],
+        "excludeTypes": [
+          "library",
+          "container",
+          "section"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "surfaceColor",
+        "label": "Surface",
+        "type": "color",
+        "advanced": false
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelColor",
+        "label": "Text",
+        "type": "color",
+        "advanced": false
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "iconColor",
+        "label": "Icon color",
+        "type": "color",
+        "advanced": false,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "focusColor",
+        "label": "Focus ring",
+        "type": "color",
+        "advanced": false
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "borderColor",
+        "label": "Border",
+        "type": "color",
+        "advanced": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelSurfaceColor",
+        "label": "Label surface",
+        "type": "color",
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "surfaceOpacity",
+        "label": "Surface opacity",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "fallback": 1,
+        "advanced": false
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "radius",
+        "label": "Corners",
+        "type": "number",
+        "min": 0,
+        "max": 400,
+        "step": 2,
+        "fallback": 22,
+        "advanced": false
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelSize",
+        "label": "Label size",
+        "type": "number",
+        "min": 0,
+        "max": 400,
+        "step": 1,
+        "fallback": 19,
+        "advanced": false,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "iconSize",
+        "label": "Icon size",
+        "type": "number",
+        "min": 0,
+        "max": 400,
+        "step": 2,
+        "fallback": 48,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "diameter",
+        "label": "Circle diameter",
+        "type": "number",
+        "min": 0,
+        "max": 400,
+        "step": 2,
+        "fallback": 110,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "focusWidth",
+        "label": "Focus ring width",
+        "type": "number",
+        "min": 0,
+        "max": 12,
+        "step": 1,
+        "fallback": 3,
+        "advanced": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "borderWidth",
+        "label": "Border width",
+        "type": "number",
+        "min": 0,
+        "max": 12,
+        "step": 1,
+        "fallback": 0,
+        "advanced": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelLines",
+        "label": "Label lines",
+        "type": "number",
+        "min": 1,
+        "max": 4,
+        "step": 1,
+        "fallback": 2,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "headingSize",
+        "label": "Heading size",
+        "type": "number",
+        "min": 0,
+        "max": 400,
+        "step": 1,
+        "fallback": 24,
+        "advanced": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "cardGap",
+        "label": "Card spacing",
+        "type": "number",
+        "min": 0,
+        "max": 400,
+        "step": 1,
+        "fallback": 14,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "artHeight",
+        "label": "Artwork height",
+        "type": "number",
+        "min": 0,
+        "max": 400,
+        "step": 2,
+        "fallback": 180,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelPosition",
+        "label": "Label position",
+        "type": "choice",
+        "choices": [
+          "inside",
+          "below",
+          "overlay",
+          "hidden"
+        ],
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "textAlign",
+        "label": "Text alignment",
+        "type": "choice",
+        "choices": [
+          "left",
+          "center",
+          "right"
+        ],
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "artFit",
+        "label": "Artwork fit",
+        "type": "choice",
+        "choices": [
+          "cover",
+          "contain"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "libraryLayout",
+        "label": "Shelf arrangement",
+        "type": "choice",
+        "choices": [
+          "row",
+          "grid",
+          "list"
+        ],
+        "types": [
+          "library",
+          "section"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "libraryCardStyle",
+        "label": "Shelf card style",
+        "type": "choice",
+        "choices": [
+          "media",
+          "recent",
+          "orb",
+          "source",
+          "summary",
+          "banner"
+        ],
+        "types": [
+          "library",
+          "section"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "component",
+        "key": "showTitle",
+        "label": "Show title",
+        "type": "toggle",
+        "fallback": true,
+        "advanced": true,
+        "excludeTypes": [
+          "section",
+          "navigation",
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "component",
+        "key": "showType",
+        "label": "Show type",
+        "type": "toggle",
+        "fallback": true,
+        "advanced": true,
+        "excludeTypes": [
+          "section",
+          "navigation",
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "component",
+        "key": "showLogo",
+        "label": "Show artwork",
+        "type": "toggle",
+        "fallback": true,
+        "advanced": true,
+        "excludeTypes": [
+          "section",
+          "navigation",
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "component",
+        "key": "logoFill",
+        "label": "Artwork fills card",
+        "type": "toggle",
+        "fallback": false,
+        "advanced": true,
+        "excludeTypes": [
+          "section",
+          "navigation",
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelPill",
+        "label": "Label pill",
+        "type": "toggle",
+        "fallback": false,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelBold",
+        "label": "Bold label",
+        "type": "toggle",
+        "fallback": false,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "labelWrap",
+        "label": "Wrap label",
+        "type": "toggle",
+        "fallback": true,
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "focusEnabled",
+        "label": "Focus ring",
+        "type": "toggle",
+        "fallback": true,
+        "advanced": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "showHeading",
+        "label": "Group heading",
+        "type": "toggle",
+        "fallback": false,
+        "advanced": true,
+        "types": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "headingBold",
+        "label": "Bold heading",
+        "type": "toggle",
+        "fallback": false,
+        "advanced": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "component",
+        "key": "opacity",
+        "label": "Whole component opacity",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "fallback": 1,
+        "advanced": true,
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "component",
+        "key": "crop",
+        "label": "Crop / focal point",
+        "type": "crop",
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Layout",
+        "scope": "component",
+        "key": "position",
+        "label": "Position and size",
+        "type": "geometry",
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Layout",
+        "scope": "component",
+        "key": "layout",
+        "label": "Internal layout",
+        "type": "layout",
+        "types": [
+          "container"
+        ],
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "libraryColumns",
+        "label": "Visible media cards",
+        "type": "number",
+        "types": [
+          "library",
+          "section"
+        ],
+        "min": 1,
+        "max": 12,
+        "step": 1,
+        "fallback": 4
+      },
+      {
+        "tab": "Layout",
+        "scope": "component",
+        "key": "size",
+        "label": "Legacy size",
+        "type": "choice",
+        "choices": [
+          "compact",
+          "standard",
+          "wide"
+        ],
+        "advanced": true,
+        "excludeTypes": [
+          "section",
+          "navigation",
+          "container"
+        ]
+      },
+      {
+        "tab": "Actions",
+        "scope": "component",
+        "key": "action",
+        "label": "On select",
+        "type": "action",
+        "excludeTypes": [
+          "library",
+          "container",
+          "clock",
+          "text",
+          "section"
+        ]
+      },
+      {
+        "tab": "Accessibility",
+        "scope": "accessibility",
+        "key": "name",
+        "label": "Accessible name",
+        "type": "text"
+      },
+      {
+        "tab": "Accessibility",
+        "scope": "accessibility",
+        "key": "hint",
+        "label": "Accessible hint",
+        "type": "text"
+      },
+      {
+        "tab": "Accessibility",
+        "scope": "component",
+        "key": "hidden",
+        "label": "Runtime visibility",
+        "type": "visibility",
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Accessibility",
+        "scope": "component",
+        "key": "locked",
+        "label": "Lock / unlock",
+        "type": "lock",
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Accessibility",
+        "scope": "component",
+        "key": "order",
+        "label": "Reading / directional focus",
+        "type": "order",
+        "excludeTypes": [
+          "section",
+          "navigation"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "libraryLimit",
+        "label": "Maximum displayed items",
+        "type": "number",
+        "types": [
+          "library",
+          "section"
+        ],
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "fallback": 50
+      },
+      {
+        "tab": "Content",
+        "scope": "component",
+        "key": "action",
+        "label": "On select",
+        "type": "action",
+        "excludeTypes": [
+          "library",
+          "container",
+          "clock",
+          "text",
+          "section"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "component",
+        "key": "typePreset",
+        "label": "Typography preset",
+        "type": "typography",
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "variant",
+        "label": "Section / card style",
+        "type": "choice",
+        "types": [
+          "section"
+        ],
+        "choices": [
+          "source",
+          "summary",
+          "banner",
+          "orb",
+          "media",
+          "recent",
+          "library"
+        ],
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "columns",
+        "label": "Cards per row",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 1,
+        "max": 12,
+        "step": 1,
+        "fallback": 4
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "span",
+        "label": "Flow lane span",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 1,
+        "max": 2,
+        "step": 1,
+        "fallback": 1
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "height",
+        "label": "Section height",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 60,
+        "max": 800,
+        "step": 10,
+        "fallback": 180
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "contentWidth",
+        "label": "Content width",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 100,
+        "max": 3840,
+        "step": 10,
+        "fallback": 1200
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "padding",
+        "label": "Panel padding",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 0,
+        "max": 400,
+        "step": 1,
+        "fallback": 0
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "panelOpacity",
+        "label": "Panel opacity",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "fallback": 0
+      },
+      {
+        "tab": "Layout",
+        "scope": "presentation",
+        "key": "blur",
+        "label": "Panel blur (optional effect)",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "fallback": 0
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "panelColor",
+        "label": "Panel tint",
+        "type": "color",
+        "types": [
+          "section"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "headingColor",
+        "label": "Heading color",
+        "type": "color",
+        "types": [
+          "section",
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "showHeading",
+        "label": "Show heading",
+        "type": "toggle",
+        "types": [
+          "section"
+        ],
+        "fallback": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "headingSize",
+        "label": "Heading size",
+        "type": "number",
+        "types": [
+          "section"
+        ],
+        "min": 0,
+        "max": 400,
+        "step": 1,
+        "fallback": 24
+      },
+      {
+        "tab": "Content",
+        "scope": "presentation",
+        "key": "trailingLabel",
+        "label": "Section link label",
+        "type": "text",
+        "types": [
+          "section"
+        ]
+      },
+      {
+        "tab": "Actions",
+        "scope": "presentation",
+        "key": "trailingAction",
+        "label": "Section link",
+        "type": "action",
+        "types": [
+          "section"
+        ]
+      },
+      {
+        "tab": "Content",
+        "scope": "component",
+        "key": "sourceId",
+        "label": "Repair source",
+        "type": "repair",
+        "types": [
+          "launcher",
+          "media-shelf",
+          "action-tile"
+        ]
+      },
+      {
+        "tab": "Layout",
+        "scope": "component",
+        "key": "categoryId",
+        "label": "Section",
+        "type": "section",
+        "advanced": true
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "selectedLabelColor",
+        "label": "Selected label color",
+        "type": "color",
+        "advanced": true,
+        "excludeTypes": [
+          "container"
+        ]
+      },
+      {
+        "tab": "Appearance",
+        "scope": "presentation",
+        "key": "progress",
+        "label": "Decorative progress (not Kodi history)",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.01,
+        "fallback": 0,
+        "advanced": true,
+        "excludeTypes": [
+          "library",
+          "section",
+          "navigation",
+          "container"
+        ]
+      }
+    ],
+    "typePresets": [
+      {
+        "name": "Card title",
+        "value": {
+          "labelSize": 20,
+          "labelBold": false,
+          "labelLines": 2
+        }
+      },
+      {
+        "name": "Heading",
+        "value": {
+          "labelSize": 28,
+          "labelBold": true,
+          "labelLines": 2
+        }
+      },
+      {
+        "name": "Supporting text",
+        "value": {
+          "labelSize": 17,
+          "labelBold": false,
+          "labelLines": 3
+        }
+      }
+    ],
+    "pageFields": [
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "backgroundStart",
+        "label": "Background top / solid",
+        "type": "color"
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "backgroundEnd",
+        "label": "Background bottom",
+        "type": "color"
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "surfaceColor",
+        "label": "Component surface",
+        "type": "color"
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "selectedColor",
+        "label": "Selected surface",
+        "type": "color"
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "textColor",
+        "label": "Text",
+        "type": "color"
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "mutedColor",
+        "label": "Supporting text",
+        "type": "color"
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "focusColor",
+        "label": "Focus accent",
+        "type": "color"
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "typographyScale",
+        "label": "Text scale",
+        "type": "number",
+        "min": 0.8,
+        "max": 1.3,
+        "step": 0.05,
+        "fallback": 1
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "tileRoundness",
+        "label": "Global roundness",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "fallback": 0.18,
+        "advanced": true
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "spacing",
+        "label": "Spacing",
+        "type": "number",
+        "min": 8,
+        "max": 40,
+        "step": 2,
+        "fallback": 20,
+        "advanced": true
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "motionEnabled",
+        "label": "Focus animation",
+        "type": "toggle",
+        "fallback": true
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "fontFamily",
+        "label": "Font",
+        "type": "choice",
+        "choices": [
+          "DejaVu Sans"
+        ],
+        "advanced": true
+      },
+      {
+        "tab": "Colors",
+        "scope": "theme",
+        "key": "homeColumns",
+        "label": "Legacy columns",
+        "type": "number",
+        "min": 2,
+        "max": 6,
+        "step": 1,
+        "fallback": 3,
+        "advanced": true
+      },
+      {
+        "tab": "Background",
+        "scope": "background",
+        "key": "mode",
+        "label": "Background",
+        "type": "choice",
+        "choices": [
+          "solid",
+          "gradient",
+          "image"
+        ],
+        "fallback": "gradient"
+      },
+      {
+        "tab": "Background",
+        "scope": "composition",
+        "key": "wallpaper",
+        "label": "Managed background image",
+        "type": "artwork"
+      },
+      {
+        "tab": "Background",
+        "scope": "background",
+        "key": "dim",
+        "label": "Background dimming",
+        "type": "number",
+        "min": 0,
+        "max": 1,
+        "step": 0.05,
+        "fallback": 0
+      },
+      {
+        "tab": "Background",
+        "scope": "background",
+        "key": "tintColor",
+        "label": "Dim tint",
+        "type": "color",
+        "fallback": "#000000"
+      },
+      {
+        "tab": "Background",
+        "scope": "background",
+        "key": "artFit",
+        "label": "Image fit",
+        "type": "choice",
+        "choices": [
+          "cover",
+          "contain"
+        ]
+      },
+      {
+        "tab": "Background",
+        "scope": "background",
+        "key": "crop",
+        "label": "Crop / focal point",
+        "type": "crop"
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "grid",
+        "label": "Grid / scrolling sections",
+        "type": "grid"
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "pageNavigation",
+        "label": "Page menu position",
+        "type": "choice",
+        "choices": [
+          "left",
+          "top",
+          "none"
+        ],
+        "needsNamedPage": true,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "sidebarWidth",
+        "label": "Sidebar width",
+        "type": "number",
+        "min": 120,
+        "max": 400,
+        "step": 5,
+        "fallback": 200,
+        "advanced": true,
+        "needsNamedPage": true,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "margin",
+        "label": "Safe margin",
+        "type": "number",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "fallback": 40,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "gap",
+        "label": "Section gap",
+        "type": "number",
+        "min": 0,
+        "max": 100,
+        "step": 2,
+        "fallback": 20,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "columns",
+        "label": "Flow columns",
+        "type": "number",
+        "min": 1,
+        "max": 2,
+        "step": 1,
+        "fallback": 1,
+        "advanced": true,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "fit",
+        "label": "Fit flow sections",
+        "type": "toggle",
+        "fallback": true,
+        "advanced": true,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "designHeight",
+        "label": "Design height",
+        "type": "number",
+        "min": 480,
+        "max": 1440,
+        "step": 10,
+        "fallback": 800,
+        "advanced": true,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "headerMode",
+        "label": "Header style",
+        "type": "choice",
+        "choices": [
+          "navigation",
+          "identity"
+        ],
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "identity",
+        "label": "Header title",
+        "type": "text",
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "showClock",
+        "label": "Header clock",
+        "type": "toggle",
+        "fallback": false,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "showProfile",
+        "label": "Profile label",
+        "type": "toggle",
+        "fallback": false,
+        "advanced": true,
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "theme",
+        "key": "brandVisible",
+        "label": "Isolde brand",
+        "type": "toggle",
+        "fallback": false,
+        "advanced": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "headerControls",
+        "label": "Header controls",
+        "type": "header",
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "initialTab",
+        "label": "Starting tab",
+        "type": "tab",
+        "needsComposition": true
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
+        "key": "enabled",
+        "label": "Use composed layout",
+        "type": "toggle",
+        "advanced": true,
+        "fallback": false
+      }
+    ]
+  },
+  "designSamples": [
+    {
+      "title": "Design sample 1"
+    },
+    {
+      "title": "Design sample 2"
+    },
+    {
+      "title": "Design sample 3"
+    },
+    {
+      "title": "Design sample 4"
+    }
+  ],
+  "buttonChildPreset": {
+    "id": "button",
+    "name": "Button",
+    "kind": "widget",
+    "widgetType": "button",
+    "componentType": "button",
+    "placement": {
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 1
+    },
+    "presentation": {
+      "variant": "source",
+      "labelSize": 20,
+      "radius": 18,
+      "surfaceOpacity": 1,
+      "icon": "arrow-right",
+      "labelPosition": "inside"
+    }
+  },
+  "carouselStart": [
+    {
+      "name": "Button 1"
+    },
+    {
+      "name": "Button 2"
+    },
+    {
+      "name": "Button 3"
+    }
+  ],
+  "backgroundDefaults": {
+    "mode": "gradient",
+    "dim": 0,
+    "tintColor": "#000000",
+    "artFit": "cover",
+    "artFocalX": 0.5,
+    "artFocalY": 0.5,
+    "artZoom": 1
+  },
+  "headerChoices": [
+    {
+      "name": "Search and Settings",
+      "value": [
+        "search",
+        "settings"
+      ]
+    },
+    {
+      "name": "Settings and Edit",
+      "value": [
+        "settings",
+        "edit"
+      ]
+    },
+    {
+      "name": "Search, Settings and Edit",
+      "value": [
+        "search",
+        "settings",
+        "edit"
+      ]
+    },
+    {
+      "name": "Settings only",
+      "value": [
+        "settings"
+      ]
+    },
+    {
+      "name": "Edit only",
+      "value": [
+        "edit"
+      ]
+    }
   ]
 }

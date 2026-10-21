@@ -5,6 +5,7 @@
 PageData::PageData(const QString &profile,KodiMedia *player,QObject *parent,const QString &directory)
     :QObject(parent),m_profile(profile),m_directory(directory),m_player(player){}
 QObject *PageData::client(const QString &key,const QVariantMap &source) {
+    if(!m_valid)return nullptr;
     if(key.size()>330 || !ComponentSchema::safeId(key.left(160)) || key.contains('/') || key.contains('\\'))return nullptr;
     if(!ComponentSchema::validPresentation(source,true))return nullptr;
     QVariantMap query{{"libraryKind",source.value("libraryKind","movies")},{"libraryView",source.value("libraryView","all")},{"libraryValue",source.value("libraryValue","")}};
@@ -20,6 +21,7 @@ QObject *PageData::client(const QString &key,const QVariantMap &source) {
     return entry.client;
 }
 QObject *PageData::artwork(const QString &kind,int id) {
+    if(!m_valid)return nullptr;
     if(!QStringList{"movie","episode","tvshow","season"}.contains(kind)||id<1)return nullptr;
     const auto key=kind+":"+QString::number(id);
     if(!m_artwork.contains(key)) {
@@ -29,6 +31,7 @@ QObject *PageData::artwork(const QString &kind,int id) {
     return m_artwork[key];
 }
 void PageData::activate(QObject *object,int index,bool resume) {
+    if(!m_valid)return;
     auto *client=qobject_cast<KodiMedia *>(object);
     bool owned=false;for(const auto &entry:m_clients)if(entry.client==client)owned=true;
     if(!owned||!client||client->busy()||index<0||index>=client->movies().size()||m_player->playbackActive())return;
@@ -37,7 +40,8 @@ void PageData::activate(QObject *object,int index,bool resume) {
     else m_player->playMedia(item["mediaType"].toString(),item["mediaId"].toInt(),resume);
 }
 void PageData::refresh(QObject *object){
+    if(!m_valid)return;
     for(auto *art:m_artwork)art->deleteLater();m_artwork.clear();++m_revision;emit changed();
     for(auto &entry:m_clients)if(entry.client==object)entry.client->refresh();
 }
-void PageData::invalidate(const QString &reason){for(auto &entry:m_clients){entry.client->invalidate(reason);entry.source.clear();}for(auto *art:m_artwork)art->clear();}
+void PageData::invalidate(const QString &reason){m_valid=false;for(auto &entry:m_clients){entry.client->invalidate(reason);entry.source.clear();}for(auto *art:m_artwork)art->clear();}

@@ -14,16 +14,22 @@ Item {
         delegate:Item {
             id:node
             required property var modelData
+            Accessible.ignored:!node.group && !node.library
+            Accessible.role:Accessible.Button
+            Accessible.name:(modelData.item.accessibility || {}).name || modelData.item.name || "Component"
+            Accessible.description:(modelData.item.accessibility || {}).hint || modelData.item.unavailableReason || ""
             readonly property bool group:modelData.item.componentType==="container"
-            readonly property var style:modelData.item.presentation || ({})
+            readonly property bool library:modelData.item.componentType==="library"
+            readonly property var baseStyle:modelData.item.presentation || ({})
+            readonly property var style:Object.assign({},baseStyle,(baseStyle.states || {}).normal || {},(baseStyle.states || {})[modelData.item.designState || (modelData.item.unavailableReason?"unavailable":surface.host.focusedIndex===surface.host.itemIndex(modelData.item.id)?"focused":"normal")] || {})
             readonly property var layout:style.layout || ({})
             readonly property real padding:(layout.padding || 0)*surface.unit
             readonly property real headingHeight:style.showHeading?(style.headingSize || 24)*surface.unit*(modelData.item.unavailableReason?2.6:1.5):0
             readonly property var localMetrics: {
                 const columns=layout.columns || 1,rows=layout.rows || 1,gap=(layout.gap || 0)*surface.unit
-                const w=width-2*padding,h=height-2*padding-headingHeight
-                const valid=w>(columns-1)*gap && h>(rows-1)*gap
-                return {columns:columns,rows:rows,gap:gap,margin:0,cellW:valid?(w-(columns-1)*gap)/columns:0,cellH:valid?(h-(rows-1)*gap)/rows:0,valid:valid}
+                const w=width-2*padding,h=height-2*padding-headingHeight,visibleColumns=layout.visibleColumns || columns
+                const valid=w>(visibleColumns-1)*gap && h>(rows-1)*gap
+                return {columns:columns,rows:rows,gap:gap,margin:0,cellW:valid?(w-(visibleColumns-1)*gap)/visibleColumns:0,cellH:valid?(h-(rows-1)*gap)/rows:0,valid:valid}
             }
             readonly property var childEntries:surface.catalog.filter(i=>(i.parentId || "")===modelData.item.id && !!i.placement).map(i=>({item:i,placement:i.placement}))
             visible:!surface.host.editMode || (surface.host.suppressedComponentIds || []).indexOf(modelData.item.id)<0
@@ -34,7 +40,7 @@ Item {
             height:surface.metrics.cellH*modelData.placement.height+surface.metrics.gap*(modelData.placement.height-1)
             opacity:modelData.item.opacity===undefined?1:modelData.item.opacity
             HomeCard {
-                visible:!node.group
+                visible:!node.group && !node.library
                 anchors.fill:parent;item:modelData.item;appearance:surface.host.appearance;unit:surface.unit
                 selectMode:surface.host.selectMode;selectTrigger:surface.host.selectTrigger
                 selectAction:surface.host.selectAction;selectionColor:surface.host.selectionColor
@@ -47,15 +53,16 @@ Item {
                 anchors.fill:parent;visible:node.group;radius:Math.min((node.style.radius || 0)*surface.unit,width/2,height/2)
                 readonly property color ink:node.style.surfaceColor || surface.host.appearance.surfaceColor || surface.host.backgroundEnd
                 color:Qt.rgba(ink.r,ink.g,ink.b,node.style.surfaceOpacity===undefined?1:node.style.surfaceOpacity)
-                ArtworkImage {anchors.fill:parent;source:node.modelData.item.logoSource || "";crop:node.style.imageCrop || null;radius:parent.radius}
-                border.width:!surface.host.editMode && !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(node.modelData.item.id)?3*surface.unit:0
-                border.color:surface.host.appearance.focusColor || surface.host.appearance.textColor || "transparent"
+                ArtworkImage {anchors.fill:parent;source:node.modelData.item.logoSource || "";crop:node.style.imageCrop || null;radius:parent.radius;fit:node.style.artFit || "cover";focalX:node.style.artFocalX===undefined?.5:node.style.artFocalX;focalY:node.style.artFocalY===undefined?.5:node.style.artFocalY;zoom:node.style.artZoom || 1}
+                readonly property bool selected:!surface.host.editMode && !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(node.modelData.item.id)
+                border.width:(selected?Math.max(2,node.style.focusWidth===undefined?3:node.style.focusWidth):node.style.borderWidth || 0)*surface.unit
+                border.color:selected?node.style.focusColor || surface.host.appearance.focusColor || surface.host.appearance.textColor || "transparent":node.style.borderColor || "transparent"
             }
             Text {
                 visible:node.group && !!node.style.showHeading;x:node.padding;y:node.padding;width:parent.width-2*node.padding;height:node.headingHeight
                 text:(node.modelData.item.name || "")+(node.modelData.item.unavailableReason?"\n"+node.modelData.item.unavailableReason:"");textFormat:Text.PlainText;elide:Text.ElideRight;maximumLineCount:2;wrapMode:Text.Wrap
-                color:node.style.headingColor || surface.host.appearance.textColor || "transparent";font.pixelSize:(node.style.headingSize || 24)*surface.unit
-                font.family:surface.host.appearance.fontFamily || "DejaVu Sans"
+                color:node.style.headingColor || node.style.labelColor || surface.host.appearance.textColor || "transparent";font.pixelSize:(node.style.headingSize || 24)*surface.unit
+                font.bold:!!node.style.headingBold; font.family:surface.host.appearance.fontFamily || "DejaVu Sans"
             }
             MouseArea {anchors.fill:parent;enabled:node.group;onClicked:surface.activated(node.modelData.item)}
             Text {
@@ -63,19 +70,40 @@ Item {
                 text:"Internal grid has no room. Increase the group size or reduce its spacing.";textFormat:Text.PlainText;wrapMode:Text.Wrap
                 color:surface.host.appearance.textColor || "transparent";font.pixelSize:18*surface.unit
             }
-            Loader {
-                id:contents;x:node.padding;y:node.padding+node.headingHeight;width:parent.width-2*node.padding;height:parent.height-2*node.padding-node.headingHeight
+            Flickable {
+                id:viewport;x:node.padding;y:node.padding+node.headingHeight;width:parent.width-2*node.padding;height:parent.height-2*node.padding-node.headingHeight
+                contentWidth:node.localMetrics.valid?node.localMetrics.columns*node.localMetrics.cellW+(node.localMetrics.columns-1)*node.localMetrics.gap:width
+                contentHeight:height;clip:true;interactive:node.group && !surface.host.editMode;boundsBehavior:Flickable.StopAtBounds
+                Loader {
+                id:contents;width:viewport.contentWidth;height:viewport.height
+                function viewportRect(){const point=viewport.mapToItem(surface.host,0,0);return {x:point.x,y:point.y,width:viewport.width,height:viewport.height}}
+                function revealPlacement(p){const start=p.x*(node.localMetrics.cellW+node.localMetrics.gap),end=start+p.width*node.localMetrics.cellW+(p.width-1)*node.localMetrics.gap;if(start<viewport.contentX)viewport.contentX=start;else if(end>viewport.contentX+viewport.width)viewport.contentX=Math.min(viewport.contentWidth-viewport.width,end-viewport.width)}
                 Component.onCompleted:if(node.group)setSource(Qt.resolvedUrl("PlacedComponents.qml"),{
                     items:Qt.binding(()=>node.childEntries),metrics:Qt.binding(()=>node.localMetrics),host:surface.host,
                     unit:Qt.binding(()=>surface.unit),catalog:Qt.binding(()=>surface.catalog)
                 })
                 onLoaded:if(surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,false)
                 Component.onDestruction:if(node.group && surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,true)
+                }
             }
             Connections {
                 target:contents.item
                 function onActivated(item){surface.activated(item)}
-                function onFocused(card){surface.focused(card)}
+                function onFocused(card){if(card && card.modelData)contents.revealPlacement(card.modelData.placement);surface.focused(card)}
+            }
+            Loader {
+                id:media;anchors.fill:parent;active:node.library
+                sourceComponent:PageLibraryWidget {
+                    provider:surface.host.libraryProvider;widgetKey:surface.host.pageKey+"."+node.modelData.item.id
+                    style:node.style;appearance:surface.host.appearance
+                    readOnly:surface.host.editMode || surface.host.previewOnly;frozen:surface.host.freezeData
+                    samplePreview:surface.host.samplePreview;sampleItems:surface.host.sampleItems
+                    highlighted:!surface.host.editMode && !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(node.modelData.item.id)
+                    engaged:surface.host.activeMediaWidgetId===node.modelData.item.id
+                    onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
+                }
+                onLoaded:surface.host.registerMediaWidget(node.modelData.item.id,item,false)
+                Component.onDestruction:if(node.library && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
             }
         }
     }

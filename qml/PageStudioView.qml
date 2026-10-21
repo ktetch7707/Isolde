@@ -23,6 +23,12 @@ Item {
     property int choice: 0
     property string message: ""
     property string addingType: ""
+    property var addingConfiguration:({})
+    property bool inspectorReturn:false
+    property bool samplePreview:false
+    property string structureType:""
+    property string structureId:""
+    property var navSections:[]
     property string resizeAxis:"both"
     property string resizeAnchor:"top-left"
     property string gestureMode:"move"
@@ -67,7 +73,7 @@ Item {
     readonly property var contextActions: ["Move", "Resize", "Rename", "Duplicate", "Remove", "Text", "Surface opacity", "Corners", "Position and size","Hide / show","Lock / unlock",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…","Move to section…","Edit group contents","Ungroup","Move to group…","Select / deselect for grouping","Group internal layout…"]
     readonly property var names: ["Clock", "Text", "Group", "Input slots (4 × 2)"]
     readonly property var current: items.find(i=>i.id===selectedId) || null
-    readonly property var addPrototype:addingType && session?session.componentPrototype(addingType):({})
+    readonly property var addPrototype:addingType && session?session.componentPrototype(addingType,addingConfiguration):({})
     readonly property bool manipulating:["move","resize","collision","collisionDetails","geometry"].indexOf(mode)>=0
     function componentName(item) {
         if(!item)return addingType?addingType.charAt(0).toUpperCase()+addingType.slice(1):"Component"
@@ -88,7 +94,7 @@ Item {
     readonly property var placementOptions:parentScopeId?({parentId:parentScopeId,categoryId:""}):sectionMode?({parentId:"",categoryId:scopeId}):({parentId:""})
     function collisionProposal(strategy) {
         if((mode!=="collision" && mode!=="collisionDetails") || !session)return ({})
-        return addingType?session.additionProposal(addingType,candidate,strategy,pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId)
+        return addingType?session.additionProposal(addingType,candidate,strategy,pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId,addingConfiguration)
                          :session.placementProposal(selectedId,candidate,strategy,pageId,placementOptions)
     }
     readonly property var shiftPreview:collisionProposal("shift")
@@ -112,19 +118,19 @@ Item {
         if(entry.action==="new")beginKeyboard("newPage","")
         else if(entry.action==="page"){pageFocus[pageId]=selectedId;pageId=entry.id;selectedId=pageFocus[pageId] || "";mode="pageContext"}
         else if(entry.action==="add")chooseTool(0)
-        else if(entry.action==="appearance")mode="pageAppearance"
+        else if(entry.action==="appearance")openInspector(true)
         else if(entry.action==="more")mode="more"
         else if(entry.action==="apply")mode="apply"
         else {toolbarFocus=false;mode="canvas";if(!current && scopedItems.length)selectedId=scopedItems[0].id}
     }
     signal closed()
+    signal skinsRequested()
     visible: open
     z: 100
-    onCurrentChanged:if(current){parentScopeId=current.parentId || "";if(sectionMode){let root=current;for(let depth=0;root.parentId && depth<4;++depth)root=items.find(i=>i.id===root.parentId) || root;scopeId=root.categoryId || ""}}
+    onCurrentChanged:if(current){parentScopeId=current.parentId || "";if(sectionMode){let root=current;for(let depth=0;root.parentId && depth<4;++depth)root=items.find(i=>i.id===root.parentId) || root;scopeId=root.categoryId || ""}Qt.callLater(()=>{if(current && current.placement && gridMode)preview.revealPlacement(current.placement,scopeId,current.parentId || "")})}
     onChoiceChanged:if(mode==="collision" && choice<2)collisionStrategy=choice===0?"shift":"swap"
     onScopeIdChanged:if(open && sectionMode && !scopeOverview)Qt.callLater(()=>{if(open && sectionMode)preview.revealScope(scopeId)})
 
-    signal skinsRequested()
     function show(id, component) {
         session = layoutModel.beginStudio()
         pageId = id || (!session.model.rootPageVisible?session.model.homePageId:""); selectedId = component || "";pageFocus=({})
@@ -141,6 +147,23 @@ Item {
         message = "Draft updated. Nothing applied yet."
         return true
     }
+    function openInspector(asPage){mode="inspector";toolbarFocus=false;inspector.begin(asPage)}
+    function openStructureInspector(type,id){openInspector(false);inspector.structureType=type;inspector.structureId=id;structureType=type;structureId=id}
+    function projected(item){return mode==="inspector" && inspector.editingState!=="base" && (inspector.structureType==="section"?item.categoryId===inspector.structureId:inspector.selectedIds.indexOf(item.id)>=0)?Object.assign({},item,{designState:inspector.editingState}):item}
+    function inspectorOperation(name){
+        inspectorReturn=false
+        if(name==="structureEarlier" || name==="structureLater") {command(inspector.structureType==="section"?"section":"navigation",{kind:"move",id:inspector.structureId,offset:name==="structureEarlier"?-1:1});return}
+        if(name==="structureRemove"){structureType=inspector.structureType;structureId=inspector.structureId;mode="structureRemove";choice=0;message=structureType==="section"?"Remove this section and move its components to Uncategorized? Placements must still fit; Undo restores the entire change.":"Remove this navigation tab? If it starts the page, the first remaining tab becomes the start. Undo restores it.";return}
+        if(name==="navSections"){structureId=inspector.structureId;const tab=(page.composition.navigation || []).find(t=>t.id===structureId);navSections=tab && tab.sections?tab.sections.slice():(page.categories || []).map(s=>s.id);mode="navSections";choice=0;return}
+        if(name==="geometry"){beginGesture(false);if(mode==="move"){mode="geometry";choice=0;inspectorReturn=true}return}
+        if(name==="grid"){beginGrid();inspectorReturn=true;return}
+        if(name==="children"){if(current && current.componentType==="container"){const parent=current.id;context(14);parentScopeId=parent;chooseTool(0)}return}
+        if(name==="order"){mode="navigationOrder";choice=0;inspectorReturn=true;return}
+        if(name==="navigation" && !page.composition.enabled){beginGrid();inspectorReturn=true;message="Preview an explicit composed layout before adding navigation tabs.";return}
+        if(name==="navigation" || name==="sections" || name==="moviePage" || name==="showsPage"){mode=name;choice=0;return}
+        const index=({duplicate:3,remove:4,orderBefore:11,orderAfter:12,destination:13,contents:14,groupDestination:16,selectGroup:17})[name]
+        if(index!==undefined){context(index);if(mode!=="canvas")inspectorReturn=true}
+    }
     function position(item) { return item && item.placement ? Object.assign({},item.placement) : ({x:0,y:0,width:1,height:1}) }
     function beginGesture(resize) {
         if (!current) { message="Choose a component in Layers first."; return }
@@ -153,8 +176,8 @@ Item {
         mode=resize ? "resize" : "move"; toolbarFocus=false
     }
     function cancelGesture() {
-        if(!addingType && current){parentScopeId=originParentId;scopeId=originScopeId;candidate=Object.assign({},origin);Qt.callLater(()=>preview.revealPlacement(origin,originScopeId))}
-        addingType="";mode="canvas";message="Canceled · no draft or history changes."
+        if(!addingType && current){parentScopeId=originParentId;scopeId=originScopeId;candidate=Object.assign({},origin);Qt.callLater(()=>preview.revealPlacement(origin,originScopeId,originParentId))}
+        addingType="";mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;message="Canceled · no draft or history changes."
     }
     function beginRelative(before) {
         if(!current || addingType){message="Place the new component before changing its reading order.";return}
@@ -178,19 +201,19 @@ Item {
     }
     function acceptCandidate(strategy) {
         if (addingType) {
-            proposal=session.additionProposal(addingType,candidate,strategy || "cancel",pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId)
+            proposal=session.additionProposal(addingType,candidate,strategy || "cancel",pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId,addingConfiguration)
             if(!proposal.valid){message=proposal.reason;const previous=mode;mode="collision";if(previous!=="collision"){collisionStrategy="shift";choice=0}return}
             if(command("batch",{commands:proposal.commands})){selectedId=proposal.id;addingType="";mode="canvas"}
             return
         }
         proposal=session.placementProposal(selectedId,candidate,strategy || "cancel",pageId,placementOptions)
         if (!proposal.valid) { message=proposal.reason; const previous=mode; mode="collision"; if(previous!=="collision"){collisionStrategy="shift";choice=0} return }
-        if (command("place",{placements:proposal.placements})) mode="canvas"
+        if (command("place",{placements:proposal.placements})){mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false}
     }
     function beginKeyboard(action, value) { keyboardReturnMode=mode; keyboardAction=action; keyboard.value=value || ""; keyboard.selectedIndex=0; mode="keyboard" }
     function chooseTool(index) {
         tool=index; choice=0
-        if(index===0) { if(!gridMode) beginGrid(); else mode="add" }
+        if(index===0) { if(!gridMode) beginGrid(); else {mode="catalog";catalog.begin()} }
         else if(index===1) mode="pages"
         else if(index===2) mode="layers"
         else if(index===3) { if(!session.undo()) message=session.errorString }
@@ -223,6 +246,11 @@ Item {
         else if(index===17){let selection=multiSelection.slice();const index=selection.indexOf(selectedId);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(selectedId);else{message="Select at most 32 components.";return}multiSelection=selection;mode="layers";choice=0;message="Choose Group selected at the end of Layers. Right expands; Left collapses."}
     }
     function dialogLabels() {
+        if(mode==="navigation")return ["＋ Add navigation tab"].concat((page.composition.navigation || []).map(t=>t.name))
+        if(mode==="sections")return ["＋ Add section"].concat((page.categories || []).map(s=>s.name))
+        if(mode==="structureRemove")return ["Cancel","Remove in draft"]
+        if(mode==="moviePage" || mode==="showsPage")return ["Use classic library"].concat(pageEntries.filter(p=>!!p.id).map(p=>p.name))
+        if(mode==="navSections")return ["Show all sections","Use selected sections"].concat((page.categories || []).map(s=>(navSections.indexOf(s.id)>=0?"✓ ":"□ ")+s.name))
         if(mode==="pageContext")return ["Edit page","Appearance","Rename page","Duplicate page",pageId===draftModel.homePageId?"Current Home page":"Set as Home","Move page up","Move page down",pageId===draftModel.homePageId?"Delete unavailable · this is Home":"Delete page…"]
         if(mode==="setHome")return ["Set as Home in draft","Cancel"]
         if(mode==="deletePage")return ["Cancel","Delete if there are no incoming links"].concat(removalDestinations.map(p=>"Redirect incoming links to "+p.name))
@@ -263,9 +291,17 @@ Item {
         return []
     }
     function activateChoice() {
+        if(mode==="navigation"){if(choice===0)beginKeyboard("navAdd","");else{const tab=(page.composition.navigation || [])[choice-1];if(tab)openStructureInspector("navigation",tab.id)}return}
+        if(mode==="sections"){if(choice===0)beginKeyboard("sectionAdd","");else{const section=(page.categories || [])[choice-1];if(section)openStructureInspector("section",section.id)}return}
+        if(mode==="structureRemove"){if(choice===1 && command(structureType==="section"?"section":"navigation",{kind:"remove",id:structureId})){mode=structureType==="section"?"sections":"navigation";choice=0}else if(choice===0)mode="inspector";return}
+        if(mode==="moviePage" || mode==="showsPage"){const destinations=pageEntries.filter(p=>!!p.id),value=choice===0?null:destinations[choice-1].id;if(command("pagePatch",{scope:"composition",value:{[mode]:value}})){mode="inspector"}return}
+        if(mode==="navSections"){
+            if(choice<2){if(command("navigation",{kind:"patch",id:structureId,value:{sections:choice===0?null:navSections}}))mode="inspector";return}
+            const id=page.categories[choice-2].id,next=navSections.slice(),index=next.indexOf(id);if(index>=0)next.splice(index,1);else next.push(id);navSections=next;return
+        }
         if(mode==="pageContext") {
             if(choice===0){mode="canvas";toolbarFocus=false;if(!current && scopedItems.length)selectedId=scopedItems[0].id}
-            else if(choice===1){mode="pageAppearance";choice=0}
+            else if(choice===1){openInspector(true);choice=0}
             else if(choice===2)beginKeyboard("renamePage",(pageEntries.find(p=>p.id===pageId)||{}).name)
             else if(choice===3){duplicateBefore=pageEntries.map(p=>p.id);beginKeyboard("duplicatePage",(pageEntries.find(p=>p.id===pageId)||{}).name+" copy")}
             else if(choice===4){mode="setHome";choice=0;message="Home navigation and Settings colors will follow this page after Apply."}
@@ -312,7 +348,7 @@ Item {
         if(mode==="context") {
             if(choice===0)beginGesture(false)
             else if(choice===1 || choice===2){const axis=choice===1?"width":"height";beginGesture(true);resizeAxis=axis}
-            else {mode="properties";choice=0}
+            else openInspector(false)
             return
         }
         if(mode==="properties"){context(choice+2);return}
@@ -375,7 +411,7 @@ Item {
             else if(session.previewCommand("convertGrid",{value:gridDraft,sectionHeight:sectionHeightDraft},pageId)){mode="conversionPreview";choice=0;message="Preview the complete grid arrangement. Section layouts retain named sections, library widgets and section actions. Apply remains a separate step."}else message=session.errorString
             return
         }
-        if(mode==="conversionPreview") {if(choice===0)session.acceptPreview();else session.cancelPreview();mode="canvas";return}
+        if(mode==="conversionPreview") {if(choice===0)session.acceptPreview();else session.cancelPreview();mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;return}
         if(mode==="dirty") {mode=choice===0 ? "canvas" : choice===1 ? "discard":"apply";choice=0;return}
         if(mode==="discard") {if(choice===1)close();else mode="canvas";return}
         if(mode==="remove") {if(choice===1 && command("remove",{id:selectedId}))selectedId=items.length ? items[0].id:"";mode="canvas";return}
@@ -385,12 +421,14 @@ Item {
     function handleCommand(c) {
         if (!open) return
         if (!session || !session.active) {close();return}
+        if(mode==="catalog"){catalog.handleCommand(c);return}
+        if(mode==="inspector"){inspector.handleCommand(c);return}
         if(mode==="keyboard") {keyboard.handleCommand(c);return}
         if(mode==="preview") {if(c===inputManager.back)mode="canvas";else preview.handleCommand(c);return}
         if(c===inputManager.back) {
             if(mode==="collisionDetails"){mode="collision";choice=collisionStrategy==="shift"?0:1;return}
             if(["move","resize","collision","geometry","moveOptions","destination","groupDestination","anchors"].indexOf(mode)>=0){cancelGesture();return}
-            if(mode!=="canvas") {if(mode==="conversionPreview")session.cancelPreview();mode="canvas";addingType="";return}
+            if(mode!=="canvas") {if(mode==="conversionPreview")session.cancelPreview();mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;addingType="";return}
             if(!toolbarFocus && parentScopeId){const id=parentScopeId;parentScopeId="";selectedId=id;return}
             if(!toolbarFocus){toolbarFocus=true;return}
             if(session.dirty){mode="dirty";choice=0}else close()
@@ -411,7 +449,7 @@ Item {
                 if(resizeAnchor.indexOf("bottom")>=0)p.y-=p.height-candidate.height
             }
             if(p.x<0 || p.y<0 || p.width<1 || p.height<1 || p.x+p.width>grid.columns || p.y+p.height>grid.rows){message="Grid boundary: choose a position or size inside the grid.";return}
-            candidate=p;preview.revealPlacement(p,scopeId);message="";return
+            candidate=p;preview.revealPlacement(p,scopeId,parentScopeId);message="";return
         }
         if(mode!=="canvas") {
             const labels=dialogLabels()
@@ -509,11 +547,13 @@ Item {
                 HomeScreen {
                     id:preview;objectName:"studioPreview"
                     x:draftNavigation.contentLeft;y:draftNavigation.contentTop;width:parent.width-x;height:parent.height-y
-                    items:studio.page?studio.page.items.filter(i=>studio.editorReveals(i)):[]
-                    sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>studio.editorReveals(i))})):[]
+                    items:studio.page?studio.page.items.filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i)):[]
+                    sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i))})):[]
                     appearance:studio.page?studio.page.appearance:studio.palette;composition:studio.page?studio.page.composition:({})
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
+                    libraryProvider:studio.provider;previewOnly:true;freezeData:studio.manipulating;samplePreview:studio.samplePreview
+                    sampleItems:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
                     editSelection:studio.gridMode?"":studio.selectedId
                     suppressedComponentIds:(studio.mode==="collision" || studio.mode==="collisionDetails") && studio.collisionPreview.valid?studio.collisionPreview.placements.map(p=>p.id):studio.manipulating && !studio.addingType && studio.current?[studio.selectedId]:[]
                     onEditSelected:componentId=>{if(studio.mode!=="canvas")return;studio.selectedId=componentId;studio.toolbarFocus=false;studio.mode="context";studio.choice=0}
@@ -547,7 +587,7 @@ Item {
                         model:studio.gridMode && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry") ? studio.grid.columns*studio.grid.rows : 0
                         delegate:Rectangle {
                             required property int index
-                            readonly property var rect:preview.placementRectFor({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns),width:1,height:1},studio.scopeId,studio.parentScopeId)
+                            readonly property var rect:preview.clippedPlacement({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns),width:1,height:1},studio.scopeId,studio.parentScopeId)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:1;border.color:studio.palette.mutedColor;opacity:0.35
                         }
                     }
@@ -555,7 +595,7 @@ Item {
                         model:studio.gridMode ? studio.scopedItems.filter(i=>!!i.placement && (!i.hidden || i.id===studio.selectedId)):[]
                         delegate:Rectangle {
                             required property var modelData
-                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || "")
+                            readonly property var rect:preview.clippedPlacement(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || "")
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating?7:0;border.color:studio.palette.surfaceColor
                             Rectangle {anchors.fill:parent;anchors.margins:2;visible:modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
                             Text {objectName:"studioSelectionName-"+modelData.id;visible:!modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
@@ -604,11 +644,11 @@ Item {
                         readonly property var rect:preview.placementRectFor(studio.candidate,studio.scopeId,studio.parentScopeId)
                         x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:4;border.color:studio.palette.focusColor
                         readonly property var sourceSection:studio.page?(studio.page.sections || []).find(s=>(s.id || "")===studio.scopeId):null
-                        HomeCard {visible:!((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType || ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="container";objectName:"studioGhostCard";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd;item:Object.assign({},studio.addingType?{kind:"widget",widgetType:studio.addingType,name:studio.addingType}:studio.current || {},{presentation:Object.assign({},parent.sourceSection?parent.sourceSection.presentation || {}:{},studio.current && !studio.addingType?studio.current.presentation || {}:{})});appearance:studio.page?studio.page.appearance:studio.palette;selected:true;opacity:studio.current && !studio.addingType && studio.current.opacity!==undefined?studio.current.opacity:1}
+                        HomeCard {visible:!((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType || ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="container" && ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="library";objectName:"studioGhostCard";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd;item:Object.assign({},studio.addingType?(studio.addPrototype.viewItems || [])[0] || {}:studio.current || {},{presentation:Object.assign({},parent.sourceSection?parent.sourceSection.presentation || {}:{},studio.addingType?((studio.addPrototype.viewItems || [])[0] || {}).presentation || {}:studio.current?studio.current.presentation || {}:{})});appearance:studio.page?studio.page.appearance:studio.palette;selected:true;opacity:studio.current && !studio.addingType && studio.current.opacity!==undefined?studio.current.opacity:1}
                         PlacedComponents {
                             anchors.fill:parent;enabled:false
                             readonly property var component:studio.addingType?studio.addPrototype.root:studio.current
-                            visible:!!component && component.componentType==="container"
+                            visible:!!component && (component.componentType==="container" || component.componentType==="library")
                             items:visible?[{item:component,placement:{x:0,y:0,width:1,height:1}}]:[]
                             metrics:({valid:true,margin:0,gap:0,cellW:width,cellH:height});host:preview;unit:preview.componentUnit
                             catalog:studio.addingType?studio.addPrototype.viewItems:studio.items
@@ -634,10 +674,10 @@ Item {
             }
             Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode==="canvas";text:"Empty page · Confirm to add a component";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
         }
-        Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview";text:studio.footerText;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
+        Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview" && studio.mode!=="catalog";text:studio.footerText;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
     }
     Rectangle {
-        visible:studio.mode!=="canvas" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="preview"
+        visible:studio.mode!=="canvas" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="preview" && studio.mode!=="inspector" && studio.mode!=="catalog"
         z:3
         width:Math.min(parent.width-2*studio.spacing,560*studio.textScale);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
         readonly property var localSelection:studio.gridMode && studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || ""):preview.editRect
@@ -648,7 +688,7 @@ Item {
         Column {
             id:dialogColumn;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:studio.spacing;spacing:studio.spacing/2
             Text {id:dialogHeading;width:parent.width;text:studio.operationTitle?studio.operationTitle:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="more"?"More tools":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
-            Text {id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.selectedId+"? This stays undoable until Apply." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
+            Text {id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.componentName(studio.current)+" and its children? This is one undoable draft change; Apply saves it." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
             ListView {
                 width:parent.width;height:Math.min(studio.dialogLabels().length*42*studio.textScale,Math.max(42*studio.textScale,studio.height-dialogHeading.implicitHeight-dialogMessage.implicitHeight-6*studio.spacing))
                 clip:true;currentIndex:studio.choice;highlightRangeMode:ListView.ApplyRange
@@ -664,10 +704,39 @@ Item {
             }
         }
     }
+    StudioCatalog {
+        id:catalog;anchors.fill:parent;z:5;visible:studio.open && studio.mode==="catalog"
+        provider:studio.provider;session:studio.session;options:visible && studio.layoutModel?studio.layoutModel.studioOptions:({});appearance:studio.palette
+        onCanceled:{studio.mode="canvas";studio.addingType=""}
+        onPicked:(type,configuration)=>{
+            studio.addingType=type;studio.addingConfiguration=configuration
+            const prototype=studio.session.componentPrototype(type,configuration);if(!prototype.root){studio.message=studio.session.errorString;return}
+            studio.origin=({});studio.originScopeId=studio.scopeId;studio.originParentId=studio.parentScopeId
+            studio.gestureMode="move";studio.candidate=Object.assign({},prototype.root.placement,{x:0,y:0})
+            studio.mode="move";studio.toolbarFocus=false;studio.message="Choose a cell. Confirm places; Back cancels without changing the draft."
+        }
+    }
+    StudioInspector {
+        id:inspector;anchors.fill:parent;z:5;visible:studio.open && studio.mode==="inspector"
+        provider:studio.provider;session:studio.session;page:studio.page;pageId:studio.pageId;options:studio.layoutModel?studio.layoutModel.studioOptions:({});appearance:studio.palette
+        selectedIds:studio.multiSelection.length>1 && studio.multiSelection.indexOf(studio.selectedId)>=0?studio.multiSelection:studio.selectedId?[studio.selectedId]:[]
+        selectionRect:{
+            if(inspector.pageMode || inspector.structureType || !studio.current || !studio.current.placement)return null
+            const r=preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || "")
+            const p=preview.mapToItem(studio,r.x,r.y)
+            return {x:p.x,y:p.y,width:r.width*camera.scale,height:r.height*camera.scale}
+        }
+        onClosed:{studio.mode="canvas";studio.toolbarFocus=false}
+        onOperation:name=>studio.inspectorOperation(name)
+        onSamplesChanged:enabled=>studio.samplePreview=enabled
+    }
     OnScreenKeyboard {
         id:keyboard;objectName:"studioKeyboard";visible:studio.mode==="keyboard";anchors.fill:parent;z:10;appearance:studio.palette;hint:studio.message
         onCanceled:studio.mode=studio.keyboardReturnMode
         onAccepted:text=>{
+            if(studio.keyboardAction==="navAdd" || studio.keyboardAction==="sectionAdd"){
+                const section=studio.keyboardAction==="sectionAdd";if(studio.command(section?"section":"navigation",{kind:"add",name:text})){studio.mode=section?"sections":"navigation";studio.choice=0}return
+            }
             if(studio.keyboardAction.indexOf("studioColor:")===0) {
                 const key=studio.keyboardAction.slice(12),value=Object.assign({},studio.palette,{[key]:text})
                 if(studio.command("studioAppearance",{value:value}))studio.mode="editorAppearance"
@@ -705,7 +774,7 @@ Item {
                 else if(field===2)p.width=number
                 else p.height=number
                 if(p.x+p.width>studio.grid.columns || p.y+p.height>studio.grid.rows){studio.message="The placement exceeds the grid.";return}
-                studio.candidate=p;studio.mode="geometry";return
+                studio.candidate=p;preview.revealPlacement(p,studio.scopeId,studio.parentScopeId);studio.mode="geometry";return
             }
             if(studio.keyboardAction==="rename")studio.command("rename",{id:studio.selectedId,name:text})
             else if(studio.keyboardAction==="newPage"){

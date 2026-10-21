@@ -126,7 +126,7 @@ QVariantList HomeLayout::items() const
         if (item.value("kind") == QStringLiteral("app")) {
             const auto appId = item.value("appId").toString();
             const auto *app = m_registry->find(appId);
-            item.insert("name", app ? app->name : item.value("name", appId));
+            item.insert("name", !item.value("name").toString().isEmpty()?item.value("name"):app ? app->name : appId);
             item.insert("section", app ? app->section : QStringLiteral("Missing app"));
             const auto tileSymbol = item.value("symbol").toString();
             const auto tileAccent = item.value("accent").toString();
@@ -145,8 +145,7 @@ QVariantList HomeLayout::items() const
             item.insert("networkRequirement", networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
         }
         const auto logoFile = item.value("customLogo").toString();
-        item.insert("logoSource", logoFile.isEmpty() ? QString() : QUrl::fromLocalFile(
-            QDir(QFileInfo(m_userPath).absolutePath()).filePath(logoFile)).toString());
+        item.insert("logoSource", resolveArtwork(logoFile));
         auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), m_registry, m_collections);
         if (unavailable.isEmpty() && action.value("type").toString() == "switch-input" && !m_captureInputsReady)
             unavailable = "Configure Settings → System → HDMI Inputs";
@@ -262,6 +261,7 @@ bool HomeLayout::setAppearance(const QVariantMap &changes)
     auto normalized = changes;
     if (!normalizeAppearance(normalized)) { setError(tr("Choose valid opaque colors and appearance values within the displayed ranges.")); return false; }
     const auto previous = m_appearance;
+    const auto previousKeys=m_themeKeys;for(auto it=changes.cbegin();it!=changes.cend();++it)m_themeKeys.insert(it.key());
     const auto previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
     const auto previousRoundness = m_tileRoundness;
     if (normalized.contains("backgroundStart")) m_backgroundStart = normalized.take("backgroundStart").toString();
@@ -269,7 +269,7 @@ bool HomeLayout::setAppearance(const QVariantMap &changes)
     if (normalized.contains("tileRoundness")) m_tileRoundness = normalized.take("tileRoundness").toDouble();
     for (auto it = normalized.cbegin(); it != normalized.cend(); ++it) m_appearance[it.key()] = it.value();
     if (!save()) {
-        m_appearance = previous; m_backgroundStart = previousStart; m_backgroundEnd = previousEnd;
+        m_themeKeys=previousKeys;m_appearance = previous; m_backgroundStart = previousStart; m_backgroundEnd = previousEnd;
         m_tileRoundness = previousRoundness; return false;
     }
     emit layoutChanged(); return true;
@@ -309,6 +309,10 @@ QVariantMap HomeLayout::studioOptions() const
     panelItems.append(QJsonObject::fromVariantMap(panelRoot));
     for(const auto &entry:panel["children"].toArray()){const auto child=ComponentSchema::component(entry.toObject().toVariantMap(),true);if(child.isEmpty())return {};panelItems.append(QJsonObject::fromVariantMap(child));}
     if(!ComponentSchema::hierarchyFits(panelItems,{{"schemaVersion",1},{"enabled",true},{"grid",object["defaultGrid"].toObject().toVariantMap()}},{}))return {};
+    const auto presets=object["componentPresets"].toObject();
+    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","library","carousel","app-bar"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
+    if(presets.size()!=5 || object["catalog"].toArray().size()!=6 || object["inspector"].toObject()["fields"].toArray().size()>160)return {};
+    for(const auto &entry:object["actions"].toArray())if(ComponentSchema::action(entry.toObject()["action"].toObject().toVariantMap()).isEmpty())return {};
     QSet<QString> ids;
     for(const auto &entry:object["gridModes"].toArray()) {
         const auto mode=entry.toObject();const auto id=mode["id"].toString(),name=mode["name"].toString();
@@ -445,8 +449,19 @@ QVariantList HomeLayout::gridCollisions(const QString &itemId, const QVariantMap
 }
 QString HomeLayout::wallpaperSource() const
 {
-    const auto path = m_composition.value("wallpaper").toString();
-    return path.isEmpty() ? QString() : QUrl::fromLocalFile(QDir(QFileInfo(m_userPath).absolutePath()).filePath(path)).toString();
+    return resolveArtwork(m_composition.value("wallpaper").toString());
+}
+QString HomeLayout::resolveArtwork(const QString &relative) const
+{
+    if(relative.isEmpty())return {};
+    if(!QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg)$").match(relative).hasMatch())return {};
+    if(m_assetPaths.contains(relative))return QUrl::fromLocalFile(m_assetPaths.value(relative)).toString();
+    if(m_userPath.isEmpty())return {};
+    const auto profile=QFileInfo(QFileInfo(m_userPath).absolutePath()).canonicalFilePath();
+    const auto path=QDir(QFileInfo(m_userPath).absolutePath()).filePath(relative);
+    const auto canonical=QFileInfo(path).canonicalFilePath();
+    if(!canonical.isEmpty() && (profile.isEmpty() || QDir(profile).relativeFilePath(canonical).startsWith("../")))return {};
+    return QUrl::fromLocalFile(path).toString();
 }
 bool HomeLayout::setWallpaper(const QString &sourceUrl)
 {
@@ -470,7 +485,7 @@ bool HomeLayout::setItemPresentation(const QString &id, const QVariantMap &value
 {
     for (qsizetype i = 0; i < m_items.size(); ++i) {
         auto item = m_items[i].toObject(); if (item["id"] != id) continue;
-        if(!ComponentSchema::validPresentation(value,false,item["componentType"]=="container")){setError(tr("Choose supported presentation choices for this component."));return false;}
+        if(!ComponentSchema::validPresentation(value,item["componentType"]=="library",item["componentType"]=="container")){setError(tr("Choose supported presentation choices for this component."));return false;}
         const auto previous = item; item["presentation"] = QJsonObject::fromVariantMap(value); m_items[i] = item;
         if (!save()) { m_items[i] = previous; return false; }
         emit layoutChanged(); return true;
@@ -504,7 +519,9 @@ bool HomeLayout::load(const QString &defaultPath, const QString &userPath)
         : userPath;
 
     QFile defaults(m_defaultPath);
+    m_defaultTheme.clear();
     if (!defaults.open(QIODevice::ReadOnly) || !loadDocument(defaults.read(4 * 1024 * 1024 + 1), false)) return false;
+    m_defaultTheme=appearance();
     QFile user(m_userPath);
     if (user.exists() && user.open(QIODevice::ReadOnly)) {
         const auto defaultItems = m_items;
@@ -582,10 +599,11 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
     if ((object.contains("composition") && !object["composition"].isObject()) || !ComponentSchema::validComposition(composition)) {
         setError(tr("Home composition is invalid.")); return false;
     }
-    const QColor start(theme.value("backgroundStart").toString());
-    const QColor end(theme.value("backgroundEnd").toString());
+    const QColor start(theme.contains("backgroundStart")?theme.value("backgroundStart").toString():m_defaultTheme.value("backgroundStart",m_initialBackgroundStart).toString());
+    const QColor end(theme.contains("backgroundEnd")?theme.value("backgroundEnd").toString():m_defaultTheme.value("backgroundEnd",m_initialBackgroundEnd).toString());
     if (!start.isValid() || !end.isValid()) { setError(tr("Home theme contains invalid colors.")); return false; }
     auto presentation = appearanceDefaults();
+    for(auto it=presentation.begin();it!=presentation.end();++it)if(m_defaultTheme.contains(it.key()))it.value()=m_defaultTheme.value(it.key());
     for (auto it = presentation.begin(); it != presentation.end(); ++it)
         if (theme.contains(it.key())) it.value() = theme.value(it.key()).toVariant();
     if (!normalizeAppearance(presentation)) { setError(tr("Home appearance contains invalid values.")); return false; }
@@ -634,6 +652,7 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
     m_studioAppearance=editorAppearance;
     m_composition = composition;
     m_appearance = presentation;
+    m_themeKeys.clear();for(const auto &key:theme.keys())m_themeKeys.insert(key);
     if (userDocument && version == 1) m_legacyDocument = data;
     m_categories = categoryArray;
     m_brandVisible = theme.value("brandVisible").toBool(false);
@@ -955,9 +974,11 @@ bool HomeLayout::assignItemCategory(const QString &itemId, const QString &catego
 
 bool HomeLayout::setBrandVisible(bool visible)
 {
-    if (m_brandVisible == visible) return true;
+    if (m_brandVisible == visible && m_themeKeys.contains("brandVisible")) return true;
+    const auto previousKeys=m_themeKeys;m_themeKeys.insert("brandVisible");
+    const auto previousVisible=m_brandVisible;
     m_brandVisible = visible;
-    if (!save()) { m_brandVisible = !visible; return false; }
+    if (!save()) {m_themeKeys=previousKeys; m_brandVisible = previousVisible; return false; }
     emit layoutChanged(); return true;
 }
 
@@ -966,8 +987,9 @@ bool HomeLayout::setBackground(const QString &start, const QString &end)
     const QColor startColor(start), endColor(end);
     if (!startColor.isValid() || !endColor.isValid()) return false;
     const auto previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
+    const auto previousKeys=m_themeKeys;m_themeKeys.insert("backgroundStart");m_themeKeys.insert("backgroundEnd");
     m_backgroundStart = startColor.name(); m_backgroundEnd = endColor.name();
-    if (!save()) { m_backgroundStart = previousStart; m_backgroundEnd = previousEnd; return false; }
+    if (!save()) {m_themeKeys=previousKeys; m_backgroundStart = previousStart; m_backgroundEnd = previousEnd; return false; }
     emit layoutChanged(); return true;
 }
 
@@ -975,9 +997,10 @@ bool HomeLayout::setTileRoundness(double roundness)
 {
     if (!qIsFinite(roundness)) return false;
     roundness = qBound(0.0, roundness, 1.0);
-    if (qFuzzyCompare(m_tileRoundness, roundness)) return true;
+    if (qFuzzyCompare(m_tileRoundness, roundness) && m_themeKeys.contains("tileRoundness")) return true;
+    const auto previousKeys=m_themeKeys;m_themeKeys.insert("tileRoundness");
     const auto previous = m_tileRoundness; m_tileRoundness = roundness;
-    if (!save()) { m_tileRoundness = previous; return false; }
+    if (!save()) {m_themeKeys=previousKeys; m_tileRoundness = previous; return false; }
     emit layoutChanged(); return true;
 }
 
@@ -1003,6 +1026,7 @@ bool HomeLayout::applyTheme(const QVariantMap &theme, bool includeSuggestedArtwo
     const auto previousRoundness = m_tileRoundness;
     const auto previousItems = m_items;
     const auto previousAppearance = m_appearance;
+    const auto previousKeys=m_themeKeys;for(auto it=presentation.cbegin();it!=presentation.cend();++it)m_themeKeys.insert(it.key());m_themeKeys.insert("backgroundStart");m_themeKeys.insert("backgroundEnd");m_themeKeys.insert("tileRoundness");
     m_appearance = presentation;
     m_backgroundStart = startColor.name();
     m_backgroundEnd = endColor.name();
@@ -1034,6 +1058,7 @@ bool HomeLayout::applyTheme(const QVariantMap &theme, bool includeSuggestedArtwo
         m_items.replace(i, item);
     }
     if (!save()) {
+        m_themeKeys=previousKeys;
         m_backgroundStart = previousStart;
         m_backgroundEnd = previousEnd;
         m_tileRoundness = previousRoundness;
@@ -1060,6 +1085,7 @@ QByteArray HomeLayout::documentData() const
 {
     auto theme = QJsonObject::fromVariantMap(appearance());
     theme.insert("brandVisible", m_brandVisible);
+    for(const auto &key:theme.keys())if(!m_themeKeys.contains(key))theme.remove(key);
     QJsonArray components;
     for (const auto &entry : m_items) {
         const auto normalized = ComponentSchema::component(entry.toObject().toVariantMap(), true);
@@ -1148,6 +1174,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
     const auto previousRootPage=m_rootPage;
     const auto previousStudioAppearance=m_studioAppearance;
     const QVariantMap previousAppearance = m_appearance;
+    const auto previousThemeKeys=m_themeKeys;
     const QVariantMap previousComposition = m_composition;
     const QString previousStart = m_backgroundStart, previousEnd = m_backgroundEnd;
     const double previousRoundness = m_tileRoundness;
@@ -1155,6 +1182,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
     const QString previousFocus = m_focusOrigin;
 
     HomeLayout probe(m_registry);
+    probe.m_defaultTheme=m_defaultTheme;
     probe.m_owner = m_owner; // page-scoped drafts validate against the owner
     if (!probe.loadDocument(draft, false)) {
         setError(probe.errorString().isEmpty()
@@ -1167,6 +1195,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
     m_categories = probe.m_categories;
     if (!m_owner) {m_pages = probe.m_pages;m_homePageId=probe.m_homePageId;m_rootPage=probe.m_rootPage;m_studioAppearance=probe.m_studioAppearance;}
     m_appearance = probe.m_appearance;
+    m_themeKeys=probe.m_themeKeys;
     m_composition = probe.m_composition;
     m_backgroundStart = probe.m_backgroundStart;
     m_backgroundEnd = probe.m_backgroundEnd;
@@ -1183,6 +1212,7 @@ bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusC
         m_rootPage=previousRootPage;
         m_studioAppearance=previousStudioAppearance;
         m_appearance = previousAppearance;
+        m_themeKeys=previousThemeKeys;
         m_composition = previousComposition;
         m_backgroundStart = previousStart;
         m_backgroundEnd = previousEnd;

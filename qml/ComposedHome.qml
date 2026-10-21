@@ -35,6 +35,7 @@ Item {
     property string activeWidget: ""
     property string activeGroup: ""
     property var widgets: ({})
+    function registerWidget(id,widget,remove){let entries=Object.assign({},widgets);if(remove){if(entries[id]===widget)delete entries[id]}else entries[id]=widget;widgets=entries}
     readonly property var grid: host.grid || ({})
     readonly property var placements: host.placements || []
     readonly property bool sectionMode: !!root.config.grid && root.grid.mode==="sections"
@@ -94,6 +95,7 @@ Item {
         else if(point.y+height>content.contentY+content.height)content.contentY=Math.min(Math.max(0,content.contentHeight-content.height),point.y+height-content.height+c.gap)
     }
     function activatePlaced(item) {
+        if(host.editMode){host.editSelected(item.id);return}
         activeGroup=item.parentId || ""
         sectionActionId="";host.focusedIndex=host.itemIndex(item.id);navigationFocused=false;host.recoveryFocused=false
         handleCommand(inputManager.confirm)
@@ -152,10 +154,10 @@ Item {
         return { entries: entries, rows: rows, factor: config.fit === false ? 1 : Math.min(1, available / Math.max(1,total)) }
     }
     function focusEntries() {
-        if(activeGroup)return (host.items || []).filter(i=>(i.parentId || "")===activeGroup && !!i.placement).map(i=>({id:i.id,row:i.placement.y,x:i.placement.x+i.placement.width/2}))
+        if(activeGroup)return (host.items || []).filter(i=>(i.parentId || "")===activeGroup && !!i.placement && host.focusable(i)).map(i=>({id:i.id,row:i.placement.y,x:i.placement.x+i.placement.width/2}))
         if (placementMode && !sectionMode) {
             const tab=tabs[activeTab]
-            return placedItems.filter(e=>!tab || !tab.sections || tab.sections.indexOf(e.item.categoryId || "")>=0).map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2}))
+            return placedItems.filter(e=>host.focusable(e.item) && (!tab || !tab.sections || tab.sections.indexOf(e.item.categoryId || "")>=0)).map(e=>({id:e.item.id,row:e.placement.y,x:e.placement.x+e.placement.width/2}))
         }
         let entries = []
         for (let s = 0; s < visibleSections.length; s++) {
@@ -164,14 +166,14 @@ Item {
             const values = section.items || []
             if (style.variant === "library") entries.push({id:"widget-"+section.id,widget:true,row:g.row*100,x:g.column+g.span/2})
             if(sectionMode && style.variant!=="library") {
-                for(const item of values)if(item.placement)entries.push({id:item.id,row:g.row*100+item.placement.y,x:item.placement.x+item.placement.width/2})
+                for(const item of values)if(item.placement && host.focusable(item))entries.push({id:item.id,row:g.row*100+item.placement.y,x:item.placement.x+item.placement.width/2})
                 if(style.trailingAction)entries.push({id:"section-"+section.id,sectionAction:true,row:g.row*100,x:0})
                 continue
             }
             const sectionWidth = (content.width - gap*(columns-1))*g.span/columns + (g.span-1)*gap
             const innerWidth = Math.min(sectionWidth,(style.contentWidth || 3840)*unit) - 2*(style.padding || 0)*unit
             const left = g.column*(content.width+gap)/columns + (sectionWidth-innerWidth)/2
-            for (let i = 0; i < values.length; i++) entries.push({ id: values[i].id,
+            for (let i = 0; i < values.length; i++) if(host.focusable(values[i]))entries.push({ id: values[i].id,
                 row: g.row * 100 + Math.floor(i/cards), x: (left + (i % cards + 0.5)*innerWidth/cards)/content.width*columns })
             if (style.trailingAction) entries.push({id:"section-"+section.id, sectionAction:true, row:g.row*100+Math.floor(Math.max(0,values.length-1)/cards),x:g.column+g.span+0.5})
         }
@@ -199,13 +201,13 @@ Item {
         else host.settingsRequested(control === "edit" ? 1 : -1)
     }
     function handleCommand(command) {
-        if(activeGroup && command===inputManager.back){const group=(host.items || []).find(i=>i.id===activeGroup);if(group){host.focusedIndex=host.itemIndex(group.id);activeGroup=group.parentId || ""}else activeGroup="";return}
         if (activeWidget) {
             const widget = widgets[activeWidget]
             if (widget && widget.handleCommand(command)) return
             activeWidget = ""
             if (command === inputManager.back) return
         }
+        if(activeGroup && command===inputManager.back){const group=(host.items || []).find(i=>i.id===activeGroup);if(group){host.focusedIndex=host.itemIndex(group.id);activeGroup=group.parentId || ""}else activeGroup="";return}
         if (host.recoveryFocused) {
             if (command === inputManager.navigateDown) { host.recoveryFocused = false; navigationFocused = tabs.length > 0 }
             else if (command === inputManager.navigateLeft) host.recoveryIndex = Math.max(0,host.recoveryIndex-1)
@@ -227,8 +229,9 @@ Item {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
             if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) host.actionActivated(section.presentation.trailingAction,current.id); return }
             const item = host.items[host.itemIndex(current.id)]
+            if(item && item.componentType==="library"){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
             if(item && item.componentType==="container"){
-                const children=(host.items || []).filter(i=>(i.parentId || "")===item.id)
+                const children=(host.items || []).filter(i=>(i.parentId || "")===item.id && host.focusable(i))
                 if(children.length){activeGroup=item.id;host.focusedIndex=host.itemIndex(children[0].id)}
                 return
             }
@@ -247,6 +250,7 @@ Item {
             const row = direction < 0 ? Math.max(...rows) : Math.min(...rows)
             candidates = entries.filter(e => e.row === row).sort((a,b) => Math.abs(a.x-current.x)-Math.abs(b.x-current.x))
         }
+        if(!candidates.length && activeGroup && (command===inputManager.navigateLeft || command===inputManager.navigateRight)){const group=host.items.find(i=>i.id===activeGroup);if(group && (group.presentation.layout || {}).wrap)candidates=entries.slice().sort((a,b)=>command===inputManager.navigateRight?a.x-b.x:b.x-a.x)}
         next = candidates[0]; if (next) { sectionActionId = next.sectionAction || next.widget ? next.id : ""; if (!next.sectionAction && !next.widget) host.focusedIndex = host.itemIndex(next.id) }
     }
     Column {
@@ -397,6 +401,7 @@ Item {
                                 visible: active
                                 sourceComponent: PageLibraryWidget {
                                     provider:host.libraryProvider; widgetKey:host.pageKey+"."+sectionView.modelData.id
+                                    readOnly:host.editMode || host.previewOnly;frozen:host.freezeData;samplePreview:host.samplePreview;sampleItems:host.sampleItems
                                     style:sectionView.style; appearance:host.appearance
                                     engaged:root.activeWidget === "widget-"+sectionView.modelData.id
                                     highlighted:!host.editMode && !host.recoveryFocused && !root.navigationFocused && (root.sectionActionId==="widget-"+sectionView.modelData.id || !root.sectionActionId && !!root.focusEntries()[0] && root.focusEntries()[0].id==="widget-"+sectionView.modelData.id)

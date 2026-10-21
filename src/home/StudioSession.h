@@ -10,6 +10,7 @@
 #include <QVariantMap>
 
 class HomeLayout;
+class QTemporaryDir;
 
 /**
  * @brief T16 — shared draft/undo transaction foundation for Page Studio.
@@ -42,6 +43,7 @@ class StudioSession final : public QObject {
     Q_PROPERTY(QVariantMap document READ document NOTIFY changed)
     Q_PROPERTY(QObject *model READ model NOTIFY changed)
     Q_PROPERTY(bool active READ active NOTIFY changed)
+    Q_PROPERTY(QVariantList availableActions READ actionChoices NOTIFY changed)
     Q_PROPERTY(QObject *proposalModel READ proposalModel NOTIFY changed)
 
 public:
@@ -51,6 +53,7 @@ public:
     static constexpr qsizetype kMaxComponents = 1024;
 
     explicit StudioSession(QObject *parent = nullptr);
+    ~StudioSession() override;
     bool bind(HomeLayout *layout);
     Q_INVOKABLE void invalidate();
     bool active() const { return m_active; }
@@ -62,11 +65,15 @@ public:
     Q_INVOKABLE void cancelPreview();
     Q_INVOKABLE bool execute(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
     Q_INVOKABLE bool apply(const QString &focusId = {});
-    Q_INVOKABLE QVariantMap componentPrototype(const QString &type);
+    Q_INVOKABLE QVariantMap componentPrototype(const QString &type, const QVariantMap &configuration = {});
+    Q_INVOKABLE QVariantList artworkChoices() const;
+    Q_INVOKABLE QString stageArtwork(const QString &source);
+    Q_INVOKABLE QVariantList actionChoices() const;
+    Q_INVOKABLE QVariantList sourceChoices(const QString &id, const QString &pageId = {}) const;
     Q_INVOKABLE QVariantMap placementProposal(const QString &id, const QVariantMap &placement,
                                                const QString &strategy, const QString &pageId = {}, const QVariantMap &options = {});
     Q_INVOKABLE QVariantMap additionProposal(const QString &type, const QVariantMap &placement,
-                                              const QString &strategy, const QString &pageId = {}, const QString &categoryId = {}, const QString &parentId = {});
+                                              const QString &strategy, const QString &pageId = {}, const QString &categoryId = {}, const QString &parentId = {}, const QVariantMap &configuration = {});
 
     /** Capture the live committed document. Clears undo/redo history. */
     Q_INVOKABLE bool open(const QByteArray &committedDocument);
@@ -119,6 +126,7 @@ signals:
 
 private:
     void configureWorker(HomeLayout &worker, bool assetPaths = false) const;
+    bool validNewAction(const QVariantMap &value);
     bool validDraft(const QByteArray &data);
     void setError(const QString &message);
 
@@ -128,6 +136,8 @@ private:
     QStack<QByteArray> m_redo;
     QString m_error;
     QPointer<HomeLayout> m_live;
+    QTemporaryDir *m_assetStage = nullptr;
+    QHash<QString,QString> m_stagedAssets;
     HomeLayout *m_model = nullptr;
     QString m_profilePath;
     bool m_active = false;

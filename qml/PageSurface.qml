@@ -60,7 +60,7 @@ Item {
     }
     Connections { target:root.layoutModel;function onLayoutChanged(){if(root.activeId && !root.model)root.closeAll()} }
     Rectangle {anchors.fill:parent;color:root.model?root.model.backgroundEnd:"#101014"}
-    Image {id:wallpaper;anchors.fill:parent;source:root.model?root.model.wallpaperSource:"";fillMode:Image.PreserveAspectCrop}
+    PageBackdrop {id:wallpaper;anchors.fill:parent;source:root.model?root.model.wallpaperSource:"";config:root.config.background || {};startColor:root.model?root.model.backgroundStart:"transparent";endColor:root.model?root.model.backgroundEnd:"transparent"}
     HomeScreen {
         id:content;objectName:"pageContent"
         x:pageNavigation.contentLeft;y:pageNavigation.contentTop;width:parent.width-x;height:parent.height-y

@@ -15,11 +15,12 @@ Item {
         id: circle; objectName: "orbSurface"
         width: root.diameter; height: width; radius: width/2; anchors.horizontalCenter: parent.horizontalCenter
         color: Qt.rgba(root.surface.r,root.surface.g,root.surface.b,root.style.surfaceOpacity === undefined ? 1 : root.style.surfaceOpacity)
-        border.width: root.selected ? 4*root.unit : 1; border.color: root.selected ? root.appearance.focusColor || "white" : "#80FFFFFF"
+        border.width: root.selected && root.style.focusEnabled!==false ? (root.style.focusWidth===undefined?4:root.style.focusWidth)*root.unit : root.style.borderWidth || 1; border.color: root.selected ? root.style.focusColor || root.appearance.focusColor || "white" : root.style.borderColor || "#80FFFFFF"
         Rectangle { anchors.fill: parent; anchors.margins: -7*root.unit; radius: width/2; color:"transparent"; border.width: root.selected ? 7*root.unit : 0; border.color: "#30FFFFFF" }
         ArtworkImage {
             anchors.fill: parent; anchors.margins: root.selected ? 4*root.unit : 1
             radius: width/2; source: root.item.logoSource || ""; crop: root.style.imageCrop || null
+            fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1
         }
         LineIcon {
             visible: !root.item.logoSource
@@ -28,10 +29,11 @@ Item {
         }
     }
     Rectangle {
+        visible:root.item.showTitle!==false && root.style.labelPosition===undefined
         anchors.horizontalCenter: parent.horizontalCenter; y: circle.height + 5*root.unit
         width: Math.min(root.width,label.implicitWidth+24*root.unit); height: 23*root.unit; radius: height/2
         color: root.style.labelPill === false ? "transparent" : "#85FFFFFF"
-        Text {
+        Text {textFormat:Text.PlainText;
             id: label; anchors.centerIn: parent; width: Math.min(implicitWidth,parent.width-8)
             text: root.item.name || ""; color: root.selected && root.style.selectedLabelColor ? root.style.selectedLabelColor : root.ink
             font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: (root.style.labelSize || 15)*root.unit*(root.appearance.typographyScale || 1)

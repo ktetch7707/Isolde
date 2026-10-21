@@ -21,6 +21,7 @@ private:
     QString m_profile,m_directory;
     KodiMedia *m_player;
     int m_revision=0;
+    bool m_valid=true;
     struct Entry { KodiMedia *client; QVariantMap source; };
     QHash<QString,Entry> m_clients;
     QHash<QString,KodiArtwork *> m_artwork;

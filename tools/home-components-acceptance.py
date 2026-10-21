@@ -75,6 +75,28 @@ def main():
     display = x11.XOpenDisplay(env.get("DISPLAY", "").encode())
     if not display:
         raise RuntimeError("Cannot open the VM X11 display")
+    # XWayland can list a window before it is focusable. Without a custom
+    # error handler Xlib's default handler exits the process, which would skip
+    # the finally block and leave the user service stopped.
+    error_type = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
+    x11_errors = []
+    error_handler = error_type(lambda _display, _event: x11_errors.append(1) or 0)
+    x11.XSetErrorHandler.argtypes = [error_type]
+    x11.XSetErrorHandler(error_handler)
+
+    def focus_window():
+        # The window may not be focusable yet; activating it through the
+        # window manager and retrying is enough for XSendEvent delivery.
+        focused = ctypes.c_ulong(); revert = ctypes.c_int()
+        for _ in range(20):
+            run("wmctrl", "-i", "-a", window, env=env)
+            x11.XSetInputFocus(display, int(window, 16), 2, 0)
+            x11.XFlush(display)
+            time.sleep(0.25)
+            x11.XGetInputFocus(display, ctypes.byref(focused), ctypes.byref(revert))
+            if focused.value == int(window, 16):
+                return focused.value
+        return focused.value
 
     def key(name, count=1):
         code = x11.XKeysymToKeycode(display, x11.XStringToKeysym(name.encode()))
@@ -128,12 +150,8 @@ def main():
             if not window:
                 raise RuntimeError("The shell did not create an X11 window")
             run("wmctrl", "-i", "-a", window, env=env)
-            x11.XSetInputFocus(display, int(window, 16), 2, 0)
-            x11.XFlush(display)
-            time.sleep(1)
-            focused = ctypes.c_ulong(); revert = ctypes.c_int()
-            x11.XGetInputFocus(display, ctypes.byref(focused), ctypes.byref(revert))
-            print(f"Acceptance window {window}, keyboard focus {focused.value:#x}", flush=True)
+            focused = focus_window()
+            print(f"Acceptance window {window}, keyboard focus {focused:#x}", flush=True)
             if args.studio:
                 def capture(phase):
                     print(f"{phase.upper()}_READY {evidence}", flush=True)
@@ -150,7 +168,9 @@ def main():
                 assert layout.read_bytes() == original_bytes
                 key("Down", 2); key("Return"); key("Return"); key("Return")  # Page menu Add -> conversion preview -> accept.
                 assert layout.read_bytes() == original_bytes
-                key("Return"); key("Return")  # Add -> Clock ghost.
+                key("Return")  # Open the catalog after accepting explicit conversion.
+                capture("catalog")
+                key("Down", 2); key("Right"); key("Return"); key("Return")  # Widgets -> Clock ghost.
                 key("Right"); key("Return")  # Free neighboring cell; one draft operation.
                 assert layout.read_bytes() == original_bytes
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
@@ -194,11 +214,16 @@ def main():
                 key("Escape"); key("Return")  # Close and reopen Studio from the legacy entry.
                 assert layout.read_bytes() == applied
                 capture("applied")
-                key("Down", 2); key("Return"); key("Down", 3); key("Return")  # Add the packaged eight-slot group.
+                key("Down", 2); key("Return"); key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")  # Widgets -> packaged eight-slot group.
                 key("Down"); key("Return")  # Place below the original components.
                 assert layout.read_bytes() == applied
                 capture("group")
-                key("Return"); key("Down", 3); key("Return"); key("Down", 12); key("Return")  # Edit group contents.
+                key("Return"); key("Down", 3); key("Return")  # Context -> Inspector.
+                capture("inspector")  # Controls fit beside this fixture group.
+                key("Return")  # Content properties.
+                capture("content")
+                key("Escape")  # Return to property groups.
+                key("Down", 5); key("Return"); key("Down", 7); key("Return")  # More -> Edit group contents.
                 assert layout.read_bytes() == applied
                 capture("inside")
                 key("Escape")  # Exact containing group selection.

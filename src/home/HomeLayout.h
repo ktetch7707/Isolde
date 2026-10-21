@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QVariantList>
+#include <QSet>
 
 class PageModel;
 class StudioSession;
@@ -114,6 +115,7 @@ public:
     Q_INVOKABLE bool setSectionPresentation(const QString &id, const QVariantMap &value);
     Q_INVOKABLE QVariantList gridCollisions(const QString &itemId, const QVariantMap &placement) const;
     [[nodiscard]] QString wallpaperSource() const;
+    Q_INVOKABLE QString resolveArtwork(const QString &relative) const;
     Q_INVOKABLE bool setWallpaper(const QString &sourceUrl);
     Q_INVOKABLE bool setComposition(const QVariantMap &value);
 
@@ -165,8 +167,12 @@ private:
     bool m_brandVisible = false;
     QString m_backgroundStart = QStringLiteral("#111A32");
     QString m_backgroundEnd = QStringLiteral("#080C18");
+    const QString m_initialBackgroundStart=m_backgroundStart;
+    const QString m_initialBackgroundEnd=m_backgroundEnd;
     double m_tileRoundness = 0.18;
     QVariantMap m_appearance;
+    QSet<QString> m_themeKeys;
+    QVariantMap m_defaultTheme;
     QVariantMap m_composition;
     QString m_defaultPath;
     QString m_userPath;
@@ -176,6 +182,7 @@ private:
     QByteArray m_legacyDocument;
     QString m_focusOrigin;
     bool m_draftOnly = false;
+    QHash<QString,QString> m_assetPaths;
     StudioSession *m_studio = nullptr;
 
 };

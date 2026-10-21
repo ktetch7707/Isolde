@@ -25,7 +25,7 @@ QVariantMap normalizedActionForItem(const QJsonObject &object)
     if (kind == QStringLiteral("app")) {
         return QJsonObject{{"type", "launch-app"}, {"appId", object.value("appId")}}.toVariantMap();
     }
-    if (kind == QStringLiteral("action") && object.contains("action")) {
+    if ((kind == QStringLiteral("action") || object["componentType"]=="button" || object["componentType"]=="image") && object.contains("action")) {
         return object.value("action").toObject().toVariantMap();
     }
     return QVariantMap{};
@@ -126,7 +126,7 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
         if (item.value("kind") == QStringLiteral("app")) {
             const auto appId = item.value("appId").toString();
             const auto *app = registry ? registry->find(appId) : nullptr;
-            item.insert("name", app ? app->name : item.value("name", appId));
+            item.insert("name", !item.value("name").toString().isEmpty()?item.value("name"):app ? app->name : appId);
             item.insert("section", app ? app->section : QStringLiteral("Missing app"));
             const auto tileSymbol = item.value("symbol").toString();
             const auto tileAccent = item.value("accent").toString();
@@ -145,8 +145,7 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
             item.insert("networkRequirement", networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
         }
         const auto logoFile = item.value("customLogo").toString();
-        item.insert("logoSource", logoFile.isEmpty() || !m_owner || m_owner->m_userPath.isEmpty() ? QString()
-            : QUrl::fromLocalFile(QDir(QFileInfo(m_owner->m_userPath).absolutePath()).filePath(logoFile)).toString());
+        item.insert("logoSource", m_owner?m_owner->resolveArtwork(logoFile):QString());
         auto unavailable = ComponentSchema::unavailable(action, registry, m_owner?m_owner->m_collections:QVariantList{});
         if (unavailable.isEmpty() && action.value("type").toString() == QStringLiteral("switch-input") && (!m_owner || !m_owner->m_captureInputsReady)) {
             unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
@@ -307,7 +306,7 @@ QString PageModel::backgroundStart() const
         if (theme.contains("backgroundStart")) return theme.value("backgroundStart").toString();
     }
     if (!m_owner) return QString();
-    return m_owner->backgroundStart();
+    return m_owner->homeAppearance().value("backgroundStart",m_owner->backgroundStart()).toString();
 }
 
 QString PageModel::backgroundEnd() const
@@ -317,12 +316,12 @@ QString PageModel::backgroundEnd() const
         if (theme.contains("backgroundEnd")) return theme.value("backgroundEnd").toString();
     }
     if (!m_owner) return QString();
-    return m_owner->backgroundEnd();
+    return m_owner->homeAppearance().value("backgroundEnd",m_owner->backgroundEnd()).toString();
 }
 
 QVariantMap PageModel::appearance() const
 {
-    QVariantMap result = themeDefaults();
+    QVariantMap result = m_owner?m_owner->homeAppearance():themeDefaults();
     if (m_documentLoaded && m_pageDocument.contains("theme")) {
         const auto theme = m_pageDocument.value("theme").toObject();
         for (const auto &key : theme.keys())
@@ -406,6 +405,8 @@ bool PageModel::setAppearance(const QVariantMap &changes)
 
 QString PageModel::wallpaperSource() const
 {
+    if(m_documentLoaded && m_pageDocument.contains("composition") && m_owner)
+        return m_owner->resolveArtwork(m_pageDocument["composition"].toObject()["wallpaper"].toString());
     if (m_documentLoaded && m_pageDocument.contains("composition")) {
         const auto comp = m_pageDocument.value("composition").toObject();
         if (comp.contains("wallpaperSource")) return comp.value("wallpaperSource").toString();
