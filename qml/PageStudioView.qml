@@ -274,7 +274,7 @@ Item {
         else if(index===17){let selection=multiSelection.slice();const index=selection.indexOf(selectedId);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(selectedId);else{message="Select at most 32 components.";return}multiSelection=selection;mode="layers";choice=0;message="Choose Group selected at the end of Layers. Right expands; Left collapses."}
     }
     function dialogLabels() {
-if(mode==="canvas" && !selectedId)return ["Add component","Page appearance"]
+if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Templates"]
         if(mode==="navigation")return ["＋ Add navigation tab"].concat((page.composition.navigation || []).map(t=>t.name))
         if(mode==="sections")return ["＋ Add section"].concat((page.categories || []).map(s=>s.name))
         if(mode==="structureRemove")return ["Cancel","Remove in draft"]
