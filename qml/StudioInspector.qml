@@ -122,7 +122,7 @@ Item {
         if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
         if(f.type==="toggle"){adjust(f,1);return}
         if(f.type==="choice"){openChoices(f.choices.map(value=>({name:value,value:value})));return}
-        if(f.type==="color"){openChoices((options.inspector.colors || []).map(c=>({name:"■ "+c,value:c})).concat([{name:"Color wheel…",kind:"wheel"},{name:"Custom color…",kind:"custom"},{name:"Reset override",kind:"reset"}]));return}
+        if(f.type==="color"){view="colorWheel";selected=0;return}
         if(f.type==="action"){openChoices([{name:"None · clear link",value:{}}].concat(actions.map(a=>({name:a.name,value:a.action,needsTarget:a.needsTarget})).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])));return}
         if(f.type==="typography"){openChoices((options.inspector.typePresets || []).map(p=>({name:p.name,value:p.value,kind:"typography"})));return}
         if(f.type==="artwork"){assets=session.artworkChoices();view="artwork";selected=0;return}
@@ -147,6 +147,7 @@ Item {
             return fields.map(f=>f.label+": "+summary(f)).concat([advanced?"Hide advanced controls":"Show advanced controls",...(tabs[tab]==="Appearance"?["Appearance state: "+editingState]:[]),"Back to property groups"])
         }
         if(view==="choices")return choices.map(c=>c.name)
+if(view==="colorWheel")return ["Back"]
         if(view==="artwork")return ["Import local PNG / JPEG…","Clear image"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
         if(view==="crop")return ["Fit: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFit",fallback:"cover"}),"Focal X: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalX",fallback:.5}),"Focal Y: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalY",fallback:.5}),"Zoom: "+effective(current,{scope:pageMode?"background":"presentation",key:"artZoom",fallback:1}),"Pixel crop…","Use full artwork","Back"]
         if(view==="pixelCrop")return ["Left: "+cropDraft.x,"Top: "+cropDraft.y,"Width: "+cropDraft.width,"Height: "+cropDraft.height,"Use this crop","Cancel"]
@@ -168,6 +169,7 @@ Item {
             activateField(fields[selected]);return
         }
         if(view==="states"){editingState=labels()[selected];view="fields";selected=0;return}
+if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(view==="choices"){
             const entry=choices[selected];if(!entry)return
             if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
