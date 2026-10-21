@@ -16,6 +16,8 @@ The 1280 × 720 reference may be adapted to the test display while preserving it
 
 ## Fixture and assets
 
+Semantic limitation (user clarification, 2026-10-20): the existing app/recent cards are individually authored illustrative items. This fixture's historical visual passes do not prove App or Recently viewed carousel functionality. T21.9 must rebuild it and the packaged opt-in pastel preset with the production collections and deterministic fixture providers described in [component contracts](../../../docs/design/page-studio/component-contracts.md), testing saved structure and real collection behavior as well as appearance. Runtime presets must use real data or honest empty/unavailable states; existing user layouts must not be rewritten on load.
+
 [recreation-config.json](recreation-config.json) uses the shared composed-Home model. [interaction.json](interaction.json) supplies only the existing remote keys needed to reach the editor; it is test automation, not product layout code. Local logo/recent-art regions are cropped from the supplied reference by the actual artwork component. All surrounding labels, icons, circles, panels and focus rings are rendered separately.
 
 [wallpaper.png](wallpaper.png) is a clean scene produced with the built-in imagegen tool from the supplied image. It contains no interface. The exact edit prompt and provenance are in [wallpaper-generation.json](wallpaper-generation.json). The image is a local visual fixture and the opt-in Pastel sky skin wallpaper; the original packaged Home remains the default.

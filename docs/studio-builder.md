@@ -1,5 +1,7 @@
 # Isolde Studio — Home Screen Studio and universal grid builder
 
+Latest component requirements (user, 2026-10-20): [Component contracts](design/page-studio/component-contracts.md) defines genuine App/Button/Recently viewed carousels, shapes as backgrounds or containers, linked buttons/images including bounded GIF support, independent text and optional labels on every component. This supersedes conflicting six-family or illustrative-preset assumptions below. T21 is reopened before T22; existing screenshot resemblance is not functional acceptance.
+
 Additive shell-surface requirements (user, 2026-10-19): [shell-surfaces-design.md](shell-surfaces-design.md) governs configurable contained source notices (T25), a dedicated All Apps gallery distinct from Search (T26), shared Home/page theme inheritance through Search/Settings/Isolde Kodi screens (T27), and a genuine default-top-right Search header switch (T28). Priority revision (user): finish the complete core Studio T15-T24 first. T22 depends on T21; the four shell fixes no longer block templates, Preview/Apply or core cutover. Then T27 depends on T24; T25/T26 consume T27; T28 depends on T25/T26/T27 and verifies their combined integration with the accepted Studio. This adds four zero-percent tasks: 24 active tasks, 11% overall. No application or VM change is part of this planning revision.
 
 ## Page Studio replacement — user decision, 2026-10-19

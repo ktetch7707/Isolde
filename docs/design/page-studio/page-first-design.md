@@ -1,5 +1,7 @@
 # Page-first Studio — revised UX direction
 
+Latest component clarification (2026-10-20): [Component contracts](component-contracts.md) governs the catalog and semantic preset rebuild. App and recently viewed rows are real collections; Shape, Text and linked Image/GIF are first-class tools. Read this before the older six-family table below. This requirement update is not implementation evidence.
+
 Reference audit, 2026-10-20: [Reference-driven Studio design audit](reference-design-audit.md) specifies the additional composition, styling, source-state, reference-image and usability requirements exposed by the two supplied images. Read it alongside the direct-edit refinement. These additions are proposed requirements, not implemented capabilities.
 
 Status: proposed design, 2026-10-19. Based on direct user feedback rejecting the current screenshots; not an implemented interface or a successful usability test. This revision supersedes conflicting toolbar, fitted-canvas, permanent inspector and page-context instructions in the earlier design pack. Persistence, validation, ownership and accessibility gates remain in force.
