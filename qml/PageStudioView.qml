@@ -255,9 +255,9 @@ Item {
     function context(index) {
         choice=index
         if(index===0) beginGesture(false)
-        else if(index===1) beginGesture(true)
-        else if(index===2) beginKeyboard("rename",current ? current.name || current.id : "")
-        else if(index===3) {const identities=items.map(i=>i.id),parent=current.parentId || "";if(command("duplicate",{id:selectedId})){const copy=items.find(i=>identities.indexOf(i.id)<0 && (i.parentId || "")===parent);selectedId=copy?copy.id:"";mode="canvas"}}
+        else if(index===1){mode="inspector";inspectorReturn=false;return}
+        else if(index===2) {const identities=items.map(i=>i.id),parent=current.parentId || "";if(command("duplicate",{id:selectedId})){const copy=items.find(i=>identities.indexOf(i.id)<0 && (i.parentId || "")===parent);selectedId=copy?copy.id:"";mode="canvas"}}
+        else if(index===3) { mode="remove";choice=0 }
         else if(index===4) { mode="remove";choice=0 }
         else if(index===5) beginKeyboard("text",current && current.presentation ? current.presentation.subtitle : "")
         else if(index===6) beginKeyboard("opacity",current && current.presentation && current.presentation.surfaceOpacity!==undefined ? String(current.presentation.surfaceOpacity) : "1")
