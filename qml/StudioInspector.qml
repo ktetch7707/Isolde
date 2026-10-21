@@ -122,7 +122,7 @@ Item {
         if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
         if(f.type==="toggle"){adjust(f,1);return}
         if(f.type==="choice"){openChoices(f.choices.map(value=>({name:value,value:value})));return}
-        if(f.type==="color"){openChoices((options.inspector.colors || []).map(c=>({name:c,value:c})).concat([{name:"Custom color…",kind:"custom"},{name:"Reset override",kind:"reset"}]));return}
+        if(f.type==="color"){openChoices((options.inspector.colors || []).map(c=>({name:"■ "+c,value:c})).concat([{name:"Custom color…",kind:"custom"},{name:"Reset override",kind:"reset"}]));return}
         if(f.type==="action"){openChoices([{name:"None · clear link",value:{}}].concat(actions.map(a=>({name:a.name,value:a.action,needsTarget:a.needsTarget})).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])));return}
         if(f.type==="typography"){openChoices((options.inspector.typePresets || []).map(p=>({name:p.name,value:p.value,kind:"typography"})));return}
         if(f.type==="artwork"){assets=session.artworkChoices();view="artwork";selected=0;return}
