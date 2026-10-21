@@ -26,7 +26,7 @@ $status = & git status --short
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record status.' }
 [IO.File]::WriteAllLines((Join-Path $outputPath 'status.txt'), $status, $utf8)
 $diffPath = Join-Path $outputPath 'working-tree.patch'
-& git diff HEAD --binary "--output=$diffPath"
+& git diff HEAD --binary "--output=$diffPath" 2> (Join-Path $outputPath 'git-diff.stderr.log')
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record working-tree diff.' }
 $manifest = foreach ($file in $files) { "$((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant())  $file" }
 [IO.File]::WriteAllLines((Join-Path $outputPath 'files.sha256'), $manifest, $utf8)

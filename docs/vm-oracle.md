@@ -1,107 +1,80 @@
-# Oracle VirtualBox test runbook
+# Oracle VM testing — use the runner
 
-Verified by deployment, restart, full CTest and both visual fixture runs on 2026-10-19; see the linked execution record. This is the existing developer oracle, not a disposable VM or a hardware certification environment. Preserve its normal Household profile, Kodi data, service and release links. Read this before any guest test. Run only one graphical acceptance at a time; all three Python harnesses share `/tmp/isolde-home-components-acceptance.lock`. Do not delete that lock to bypass an active test.
+The VM is the existing **Isolde-Test** developer machine. Preserve Household, Kodi, installed releases and the graphical login. Routine testing goes through `tools/vm-test.ps1` in **PowerShell 7**. Do not assemble ad hoc SSH/build/capture loops.
 
-## Known machine and preflight
+## Commands
 
-| Item | Verified value |
+From the repository root:
+
+```powershell
+# Optional: connection, tools, disk and service check; changes no release/profile.
+./tools/vm-test.ps1 Check
+
+# Normal development gate. Prints RUN_ID and EVIDENCE immediately.
+./tools/vm-test.ps1 Test
+
+# During implementation, run only the relevant native suite.
+./tools/vm-test.ps1 Test -Suite component_contracts
+# Other choices: home_component_navigation, kodi_media_client. Default: all.
+
+# Use the exact RUN_ID printed by the passing full Test.
+./tools/vm-test.ps1 Visual -RunId <id>
+# Default: Studio, lounge and pastel sequentially, using the staged tested build.
+# To rerun one graphical case without rebuilding:
+./tools/vm-test.ps1 Visual -RunId <id> -Cases studio
+
+# Only when deployment is requested: activate the already tested payload and restart.
+./tools/vm-test.ps1 Deploy -RunId <id>
+./tools/vm-test.ps1 Visual -RunId <id> -Installed
+
+# Inspect a running/failed run. Never start a second build to get progress.
+./tools/vm-test.ps1 Status -RunId <id>
+# Explicitly cancel ONLY this runner's verified process; it restores the service.
+./tools/vm-test.ps1 Cancel -RunId <id>
+# After a crashed guardian, restore its recorded service state if no test owns either lock.
+./tools/vm-test.ps1 Recover -RunId <id>
+```
+
+The `pages` case is opt-in (`-Cases pages`): it exercises real Kodi in a fresh UUID native profile and synthetic media under `~/Videos/Isolde-Acceptance/`. It is not preservation testing of an existing Kodi installation. Do not point it at Household or `~/.kodi`.
+
+## Agent execution rules
+
+1. Finish a meaningful edit batch before Test. Do not cancel a healthy build to add optional polish. If a tool returns a running session, poll **that session**; do not launch another SSH build.
+2. Track required new source/test files before Test. Packaging includes tracked **working-tree bytes**, including uncommitted edits, and excludes unrelated untracked files. No reset/stash/clean is part of testing.
+3. Treat the first `FAIL` as a stop. Read the named stage log and `host-failure.json`/`report/status.json`, fix that cause, then run once. No blind retries, new run-number loops, package installation, VM resets or lock deletion.
+4. Targeted Test is quick feedback, not completion: it cannot stage, deploy or run visual acceptance. Full Test discovers the actual CTest count and refuses failed/skipped/zero-test reports.
+5. Visual uses the exact run's staged executable by default, so it cannot accidentally test an older installed release. `-Installed` requires that run's explicit successful Deploy and verifies its selected release.
+6. View **every** captured screenshot and compare both recreation/reset pairs with the fixture references. `captures.json` deliberately says `visualReview: pending`. Automated pixel/blank checks and capture acknowledgements are not design acceptance. T24 still owns genuine user usability/cutover.
+7. Commit only source and concise evidence records. Do not stage `build/`, generated caches, PulseAudio cookies, browser profiles or binary artwork.
+
+## What the runner does
+
+- Bounded SSH/SCP with BatchMode, ConnectTimeout and keepalive; no host-key bypass. One connection attempt, no automatic retries.
+- Unique immutable source archive and per-file SHA-256 manifests per run. Archive extraction rejects traversal, links, unexpected files and hash mismatches.
+- One guest lock serializes builds, deployment and graphical runs. BUSY is diagnostic, not permission to remove a lock.
+- A persistent **Linux** Ninja cache at `~/isolde-oracle/work/` retains unchanged source timestamps and compiled objects. New run snapshots stay immutable under `~/isolde-oracle/runs/<id>/source`. Tests run under the lock against verified matching workspace bytes. A changed file rebuilds normally; a new evidence run does not force a clean compilation. Never put a Windows CMake cache there or edit the workspace manually.
+- The first Test populates the cache. Later tests reuse it. Full Test stages a complete payload per run; no installation is needed for graphical verification. Deploy rechecks the passing full-suite/payload hashes and reuses the existing appliance installer's atomic release selection. It does not rebuild or run the same successful CTest again, change startup configuration, or reboot.
+- Stage deadlines: configure 120s, build 1200s, CTest 360s (120s default per test), staging 120s; graphical 480s, real-Kodi pages 900s. Host transports/captures/acknowledgements have separate deadlines. Progress/status updates every 10s, with stage/log/error paths.
+- On a graphical failure, timeout or cancellation, the guardian terminates its owned test process group and restores the initially recorded service state. Release links and normal layout hashes must remain unchanged. Recover refuses while either test lock is held. This is bounded recovery, not protection against power loss or SIGKILL of every guardian; inspect status after a host/guest crash.
+- Logs, JUnit, passing/failed status, executable identity and allowlisted guest result/config/shell evidence are fetched automatically to `build/vm-oracle/<id>/report/`. Framebuffer PNGs are under `visual/<case>/attempt-*/`. Reruns retain earlier attempts. No cache or authentication-cookie trees are collected.
+
+## Failure decisions
+
+| Failure | Action |
 | --- | --- |
-| Windows VM name | `Isolde-Test` |
-| VirtualBox directory | `C:/Program Files/Oracle/VirtualBox` |
-| Guest | `isolde-test`, Ubuntu 26.04.1 LTS |
-| SSH | `isolde-dev@127.0.0.1`, TCP 2222 forwarded to guest 22, loopback only |
-| Private key location | `C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation` |
-| Normal executable | `/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde` |
-| Normal service | `systemctl --user`, `isolde.service` |
-| Observed baseline | updated release `deacfc0b6d02d96d759303da`; previous `161ea2e866cae3d1f982416e`; active/running, NRestarts=0 |
+| Approval review / usage limit | Stop; report the blocked action and reason. Do not try another access path. |
+| SSH / host key / VM unavailable | Inspect `transport.log`. Do not recreate the VM or change NAT/login. |
+| BUSY | Use Status for the existing run; wait or explicitly Cancel its verified owner. |
+| Hash / unsafe archive / changed payload | Stop; package a new run after fixing the input. Never disable verification. |
+| Build / CTest failure | Read the stage log, fix the cause, then one new Test. No repeated clean builds. |
+| Capture/acknowledgement failure | Runner cancels its guardian and preserves diagnostics. Correct the cause, rerun Visual on the same tested run. |
+| Missing display / failed service restoration | Inspect status and the user journal. Recover only when no test owns the locks. No duplicate manual Isolde launch. |
+| Less than 2 GiB free | Stop and review disk use. The runner never deletes old evidence, profiles or releases automatically. |
 
-The release is an observation, not a permanently approved baseline. Record it afresh for each run. Never print/copy the key contents. In PowerShell:
+## Machine and limits
 
-```powershell
-$vmTool = 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe'
-$vmKey = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
-$vmSsh = @('-i', $vmKey, '-p', '2222', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', 'isolde-dev@127.0.0.1')
-& $vmTool showvminfo Isolde-Test --machinereadable
-ssh.exe @vmSsh 'hostname; systemctl --user show isolde.service -p ActiveState -p SubState -p NRestarts; readlink -f ~/.local/share/isolde-appliance/current; readlink -f ~/.local/share/isolde-appliance/previous'
-ssh.exe @vmSsh 'systemctl --user show-environment; command -v cmake ninja ctest python3'
-```
+VM `Isolde-Test`; VirtualBox `C:/Program Files/Oracle/VirtualBox`; guest Ubuntu 26.04.1 LTS, `isolde-dev@127.0.0.1:2222`. Key location `C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation` (never print its contents). Normal service `systemctl --user isolde.service`; release links under `~/.local/share/isolde-appliance/{current,previous}`. These links are observations, never fixed release IDs.
 
-Do not paste the entire service environment into reports; retain only display/runtime entries. Verify SSH's host key normally; never add `StrictHostKeyChecking=no`. A sandbox permission error is not a broken VM: request the permitted local VM/SSH tool access before changing anything. If stopped, use `tools/start-isolde-vm-visible.ps1` for an intentionally visible test display. Do not create another machine, change NAT, reset, power off, restore snapshots, alter login/compositor, or install packages to fix a failed test without diagnosing and obtaining authorization for that change. A named snapshot is not evidence of a current backup.
+Keep the normal graphical session logged in. Harnesses import only DISPLAY/XAUTHORITY/XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS from the user service manager; do not hard-code a display/UID or export offscreen settings into the service. If stopped, use `tools/start-isolde-vm-visible.ps1`; do not restore snapshots, alter autologin or bypass a lock/password prompt. Physical HDMI/CEC/audio/latency and a disconnected cold-boot Generator Test remain separate gates.
 
-## Freeze the source being tested
-
-Use `./tools/package-vm-source.ps1 -OutputDirectory <NEW-absolute-host-directory>` from the repository root. It packages tracked working-tree bytes (including staged/unstaged edits), records HEAD/status/diff, produces `files.sha256` and `archive.sha256`, and refuses an existing output directory or missing tracked file. Review untracked files first: required new code/assets must be explicitly tracked; scratch files stay excluded. Stop other writers while packaging. Transfer archive and manifests; verify `sha256sum -c archive.sha256` before extraction and `sha256sum -c ../files.sha256` inside the extracted source. A failed check means stop and take a new snapshot.
-
-For an executed example with the failures and corrections retained, see [the October 19 update record](vm-update-2026-10-19.md).
-
-Record Windows `git rev-parse HEAD`, `git status --short` and the tracked diff. A commit ID alone does not identify a dirty tree. Preserve existing edits; do not reset/stash/clean them. Transfer the chosen source to a NEW guest directory with a unique run ID. Exclude `.git`, build directories, temporary dot-files, credentials and unrelated untracked files. Use an explicit reviewed file list/archive and retain its SHA-256; include required fixture artwork. A `git archive HEAD` omits uncommitted changes and cannot test them. Do not synchronize over an old source tree or the installed payload. Record archive hash, guest source path, diff and build path in the evidence manifest.
-
-`/tmp/isolde-order-vsDgGY` is a stale source tree from earlier runs. It is NOT the current source. The PowerShell screenshot wrapper now requires `-SourceRoot` explicitly; its unsafe historical default was removed. Guest `/tmp` evidence can disappear on reboot; copy results/logs/screenshots to a durable per-run location before closing a gate.
-
-## Linux automated oracle (does not deploy)
-
-In a guest Bash shell, substitute the newly transferred source directory. Use a fresh build directory; never reuse a Windows CMake cache:
-
-```bash
-set -euo pipefail
-source_dir=/tmp/isolde-YOUR_RUN/source
-evidence_dir=$(mktemp -d /tmp/isolde-oracle-XXXXXX)
-cd "$source_dir"
-cmake -S . -B build -G Ninja -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug 2>&1 | tee "$evidence_dir/configure.log"
-cmake --build build --parallel 2 2>&1 | tee "$evidence_dir/build.log"
-QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software ctest --test-dir build --output-on-failure 2>&1 | tee "$evidence_dir/ctest.log"
-cp build/Testing/Temporary/LastTest.log "$evidence_dir/LastTest.log"
-python3 tools/verify-t03-search.py 2>&1 | tee "$evidence_dir/t03-static.log"
-```
-
-The current CMake file registers 14 Linux suites (including `capture_protocol`), not a permanently fixed 13. Record CTest's actual discovery/count, failures, skips and source identity. The static T03 script checks strings/patterns; it does not prove runtime cancellation, Web OFF network silence, or real playback. Offscreen success does not establish installed UI appearance, GPU effects, capture/audio/CEC, or cold-boot offline readiness.
-
-## Choose the executable deliberately
-
-For staged acceptance without changing `current`, use CMake install into a new run-specific prefix after successful tests:
-
-```bash
-cmake --install build --prefix /tmp/isolde-YOUR_RUN/payload
-python3 tools/home-components-acceptance.py /tmp/isolde-YOUR_RUN/payload/bin/isolde
-```
-
-This is staged acceptance, not installed-release acceptance. Keep the complete payload (native host, config, bridge, support files); do not copy only the Isolde binary into the installed release. Python reference and TV harnesses likewise take an explicit executable. The PowerShell wrapper instead hardcodes the normal `current/bin/isolde`, so it cannot prove an undeployed source build passes.
-
-Actual deployment is a separate, intentional operation. `python3 tools/install-appliance.py install --build-dir <linux-build-dir>` builds/tests/stages and selects a content-addressed release; `--startup` also rewrites/enables startup configuration. It changes `current`/`previous` but does not restart the running UI. Do not deploy merely to obtain unit-test results. Follow `docs/install.md` when deployment is in scope; record old/new links and explicitly restart the user service to test the selected release. Rollback switches binaries, not profile data, packages or OS state.
-
-## Graphical acceptance and capture handshake
-
-Keep the guest logged into its normal graphical session. Harnesses import `DISPLAY`, `XAUTHORITY`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS` from the user service manager and use X11 (`xcb`); do not hardcode `:0`, UID 1000 or the observed temporary Xauthority filename. Do not export offscreen/software variables into the normal service. If a display is unavailable, inspect graphical login and the allowlisted environment before testing.
-
-For the installed executable, from PowerShell 7 (the wrapper uses `ProcessStartInfo.ArgumentList`):
-
-```powershell
-./tools/run-visual-acceptance.ps1 -Case lounge -SourceRoot /tmp/isolde-YOUR_RUN/source -OutputDirectory ./evidence/YOUR_RUN/lounge
-./tools/run-visual-acceptance.ps1 -Case pastel -SourceRoot /tmp/isolde-YOUR_RUN/source -OutputDirectory ./evidence/YOUR_RUN/pastel
-./tools/run-visual-acceptance.ps1 -Case pages -SourceRoot /tmp/isolde-YOUR_RUN/source -OutputDirectory ./evidence/YOUR_RUN/pages
-```
-
-Run sequentially. The wrapper runs the appropriate guest Python script, waits for `PHASE_READY /tmp/isolde-...`, waits two seconds, captures the actual framebuffer using `VBoxManage controlvm Isolde-Test screenshotpng <host-path>`, checks the file, then acknowledges exactly that phase using `touch <guest-evidence>/<phase>-captured`. Reference phases include CUSTOM and DEFAULT; page phases include PAGE, TAB, TOP, STANDALONE and DIRECT. Never acknowledge before capturing or fabricate an image from QML/rendered source. Harness waits are bounded. `--inspect` is a failure-inspection pause, not an automatic visual verdict. A reference run needs both recreation and reset screenshots and explicit review against its reference README; exit zero alone is insufficient.
-
-The wrapper saves host screenshots/stdout, but does NOT retrieve the guest `result.json`, shell logs or fixture config. Copy the exact printed evidence directory with `scp.exe -i $vmKey -P 2222 -r 'isolde-dev@127.0.0.1:/tmp/EXACT_PRINTED_DIRECTORY' ./evidence/YOUR_RUN/` after the run. Retain the source/executable identity with it. Do not commit binary artwork or build artifacts.
-
-## Isolation boundaries and mandatory restoration
-
-- `home-reference-acceptance.py` and `home-components-acceptance.py` use disposable config/data/cache roots. They temporarily stop an initially active normal service and restore it in `finally`. Never point their data at Household.
-- `tv-library-acceptance.py` isolates config/cache but intentionally keeps the standard data root so the native sandbox can use a fresh UUID profile. It creates `~/.local/share/Isolde/native-profiles/<fresh-uuid>/kodi/...` and synthetic media under `~/Videos/Isolde-Acceptance/Isolde-tv-test-<uuid>`. It imports through Kodi's native UI, hashes fixture files, and uses private bridge calls. This is not a fully disposable XDG data root and not preservation testing of an existing non-default Kodi setup. Keep the printed UUID and paths; never substitute a real profile or media folder.
-- Do not run the importer/rollback against `~/.kodi` as an oracle smoke test. See the T04 blockers in `planning-audit.md`. Existing reference/TV harnesses do not prove import rollback safe.
-- Harness `finally` restoration is best effort, not protection against kill, lost session or host failure. Do not use broad `pkill`, kill all Kodi/Isolde processes, or force shutdown to escape a timeout. Inspect the exact test PID, lock owner, evidence and logs; terminate only owned test processes when necessary.
-
-After every graphical run (including failure), check the previously recorded service state, release links and restart count. For the normal initially active machine:
-
-```powershell
-ssh.exe @vmSsh 'systemctl --user show isolde.service -p ActiveState -p SubState -p NRestarts; readlink -f ~/.local/share/isolde-appliance/current; journalctl --user -u isolde.service -n 40 --no-pager'
-```
-
-If the harness left the previously active service stopped, confirm its test child has exited, then `systemctl --user start isolde.service`. Do not start a duplicate executable. If it fails, retain journal/recovery logs and diagnose before `reset-failed` or rollback. Capture and inspect the normal Household Home and focus after restoration; active/running alone is insufficient. Restore an initially inactive service to inactive. Record any intentionally changed release separately. Never delete profiles, evidence, guest source trees or restore snapshots as routine cleanup.
-
-## Evidence required to close a gate
-
-Keep exact source/archive hash and dirty diff, executable/release path, build/test commands and exit codes, test counts, guest result JSON/config/logs, both fixture screenshot pairs, human visual verdict with limitations, fixture hashes and service restoration evidence. Offline Generator Test needs a separately recorded disconnected cold boot; this runbook's online SSH preflight is not that test. Physical RS-232, capture, audio sync, latency, hotplug and CEC still require target hardware. A VM pass never closes those gates.
-
-Display troubleshooting verified during this run: a black framebuffer became GDM after a Shift press; the already-running Isolde desktop was on a different VT. Inspect `loginctl list-sessions` and each session's Name/Type/Class/Active/VTNr/LockedHint. Use the normal console Ctrl+Alt+F-key for the observed existing desktop VT when unlocked; do not change autologin or bypass a lock/password prompt. Over SSH, `loginctl activate` can require interactive authorization even for an existing session. Check its own exit code immediately. Source paths, VTs, session IDs and Xauthority filenames are observations, not constants.
+Low-level scripts are implementation details. `run-visual-acceptance.ps1` requires the runner's guardian; direct unguarded launches are retired. Historical evidence remains in [the October 19 record](vm-update-2026-10-19.md) and task execution records; old `/tmp/isolde-*` trees are never a current-source default.

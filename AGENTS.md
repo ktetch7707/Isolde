@@ -3,7 +3,7 @@
 > Persistent instruction. Do not delete.
 
 1. On session start, read `docs/agent-backlog.md` — it is the single source of truth for sequencing and percent completion.
-Before VM actions, read `docs/vm-oracle.md`. Explicit user-requested architecture/planning/testing reviews may inspect relevant plans and evidence without implementing the next feature. Preserve unrelated working-tree changes.
+Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Visual/Deploy/Status/Cancel/Recover; do not hand-roll SSH/build/capture loops. Finish an edit batch before testing, reuse the incremental Linux cache, and stop at the first named failure. Poll an existing tool session rather than starting another build; never interrupt a healthy build for optional polish. Explicit user-requested architecture/planning/testing reviews may inspect relevant plans and evidence without implementing the next feature. Preserve unrelated working-tree changes.
 
 2. Follow the execution-priority table in `docs/agent-backlog.md`: core Page Studio T15-T24 first, related shell fixes next, then remaining work. Task IDs are stable identifiers, not priority. Select the first unfinished ACTIVE row with completed Depends tasks; exclude struck/superseded tasks and report blockers rather than silently switching features. A planning-only request does not authorize application implementation.
 3. Within a task, read ONLY its `Entry docs` + `Entry files`. Do not re-read the entire codebase or all planning docs.
