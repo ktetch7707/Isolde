@@ -9,7 +9,6 @@ Item {
     property var appearance: ({})
     property int selectedSection: 0
     property bool inPage: false
-    onVisibleChanged: if (!visible) homePage.sourceRepairEditing = false
     signal previewAmbientRequested()
     signal pageRequested(string id)
     readonly property var sections: [
@@ -84,6 +83,7 @@ Item {
         themes: root.themes
         z: 5
         onPageRequested:id=>root.pageRequested(id)
+        onClosed: root.inPage = false
     }
 
     Row {

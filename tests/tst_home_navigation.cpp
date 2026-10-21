@@ -33,6 +33,7 @@ class HomeNavigationTests : public QObject {
     Q_OBJECT
 private slots:
     void retainsExactOriginAndRecoversWithoutHomeButton();
+    void customizeOpensStudioAndPreservesDirtyExit();
     void studioRemoteDraftApplyAndCancel();
     void studioRemotePointerAndInspectorParity();
     void studioRemotePointerAndInspectorParity_data();
@@ -57,6 +58,41 @@ private slots:
     void studioNestedGroupCanvasAndRemoteScope();
 };
 void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
+void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);InputManager input;
+    const auto user=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
+    QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("homeLayout",&home);
+    engine.rootContext()->setContextProperty("isoldeVersion","test");
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
+    QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    QQuickWindow window;window.resize(1280,720);
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));QVERIFY(root);
+    qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
+    auto *studio=root->findChild<QObject *>("pageStudio");QVERIFY(studio);
+    QTRY_VERIFY(studio->property("open").toBool());
+    QCOMPARE(studio->property("mode").toString(),QString("canvas"));
+    QVERIFY(studio->property("toolbarFocus").toBool());
+    QVERIFY(!root->findChild<QObject *>("designEditor"));
+    auto command=[&](int key){QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,key)));QCoreApplication::processEvents();};
+    command(InputManager::Confirm);
+    auto *keyboard=studio->findChild<QObject *>("studioKeyboard");QVERIFY(keyboard);
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("Library"))));QCoreApplication::processEvents();
+    auto *session=qobject_cast<StudioSession *>(studio->property("session").value<QObject *>());QVERIFY(session);QVERIFY(session->isDirty());
+    QVERIFY(!QFile::exists(user));
+    command(InputManager::Back);command(InputManager::Back);
+    QCOMPARE(studio->property("mode").toString(),QString("dirty"));
+    command(InputManager::Confirm); // Keep editing, not a legacy editor underneath.
+    QVERIFY(studio->property("open").toBool());QVERIFY(session->isDirty());
+    root->setProperty("visible",false);QCoreApplication::processEvents();
+    QVERIFY(!session->active());QVERIFY(!QFile::exists(user));
+    root->setProperty("visible",true);
+    QTRY_VERIFY2(studio->property("open").toBool(),qPrintable(QString("visible=%1 ready=%2 editing=%3 skins=%4 session=%5")
+        .arg(root->property("visible").toBool()).arg(root->property("ready").toBool()).arg(root->property("editing").toBool())
+        .arg(root->findChild<QObject *>("skinLibrary")->property("open").toBool()).arg(studio->property("session").value<QObject *>()!=nullptr)));
+    QCOMPARE(studio->property("pageId").toString(),QString());
+}
+
 {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
     int reads=0,plays=0;QJsonObject played;
@@ -79,7 +115,7 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     KodiMedia player("page-ui",nullptr,dir.path());PageData data("page-ui",&player,nullptr,dir.path());InputManager input;QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("homeLayout",&home);
     engine.rootContext()->setContextProperty("isoldeVersion","0.0.1.2");
-    QQmlComponent settings(&engine,QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
+    QQmlComponent settings(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("LegacyCustomizeHomeView.qml")));
     QVERIFY2(settings.isReady(),qPrintable(settings.errorString()));
     std::unique_ptr<QObject> controls(settings.createWithInitialProperties({{"items",home.items()},{"availableApps",QVariantList{}},{"artwork",QVariantList{}},{"themes",QVariantList{}},{"width",1280},{"height",800}}));QVERIFY(controls);
     auto control=[&](int value){return QMetaObject::invokeMethod(controls.get(),"handleCommand",Q_ARG(QVariant,value));};
@@ -133,7 +169,7 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
     InputManager input; QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager",&input);
     engine.rootContext()->setContextProperty("homeLayout",&home);
-    QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("LegacyCustomizeHomeView.qml")));
     QVERIFY2(component.isReady(),qPrintable(component.errorString()));
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items",home.items()},{"availableApps",QVariantList{}},{"artwork",QVariantList{}},{"themes",QVariantList{}},{"width",1280},{"height",800}}));
     QVERIFY2(root,qPrintable(component.errorString()));
@@ -276,7 +312,7 @@ void HomeNavigationTests::repairsSourceWithRemoteAndCanCancel()
     engine.rootContext()->setContextProperty("inputManager", &input);
     engine.rootContext()->setContextProperty("homeLayout", &home);
     engine.rootContext()->setContextProperty("isoldeVersion", "test");
-    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("LegacyCustomizeHomeView.qml")));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items", home.items()}, {"availableApps", registry.apps()},
         {"artwork", QVariantList{}}, {"themes", QVariantList{}}, {"width", 1280}, {"height", 720}}));
@@ -462,7 +498,7 @@ void HomeNavigationTests::appearancePreviewCancelAndApply()
     InputManager input; QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
     engine.rootContext()->setContextProperty("homeLayout", &home);
-    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("LegacyCustomizeHomeView.qml")));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items", QVariantList{}}, {"availableApps", QVariantList{}},
         {"artwork", QVariantList{}}, {"themes", QVariantList{}}, {"width", 1280}, {"height", 720}}));
@@ -663,7 +699,7 @@ void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
     engine.rootContext()->setContextProperty("homeLayout", &home);
-    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(CUSTOMIZE_QML)));
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("LegacyCustomizeHomeView.qml")));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items", home.items()}, {"availableApps", QVariantList{}},
         {"artwork", QVariantList{}}, {"themes", QVariantList{}}, {"width", 1280}, {"height", 720}}));

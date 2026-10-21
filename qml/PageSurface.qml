@@ -42,7 +42,7 @@ Item {
     }
     function choose(index){const page=pageEntries[index];if(!page)return;if(!page.id)closeAll();else showPage(page.id,"",true)}
     function handleCommand(command){
-        if(editing){if(root.model && pageEditor.visible){if(command===inputManager.back){pageEditor.open=false;editing=false;return}else pageEditor.handleCommand(command);return}if(command===inputManager.back && !editor.editing)editing=false;else editor.handleCommand(command);return}
+        if(editing){editor.handleCommand(command);return}
         if(command===inputManager.home){closeAll();return}
         if(command===inputManager.back){if(content.widgetActive || content.groupActive)content.handleCommand(command);else if(navigationFocused)navigationFocused=false;else back();return}
         if(command===inputManager.menu && !content.widgetActive && navigation!=="none"){navigationFocused=!navigationFocused;return}
@@ -83,11 +83,9 @@ Item {
     }
     Text {anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:8;visible:root.navigation!=="none";text:"Menu · Pages";color:root.model?root.model.appearance.mutedColor || "#AAA5AF":"#AAA5AF";font.pixelSize:12}
     CustomizeHomeView {
-        id:editor;anchors.fill:parent;visible:root.editing && !root.model;layoutModel:root.model || root.layoutModel;items:layoutModel.items
+        id:editor;anchors.fill:parent;visible:root.editing;layoutModel:root.layoutModel;provider:root.provider;initialPageId:root.activeId
         availableApps:root.availableApps;artwork:root.artwork;themes:root.themes
         onPageRequested:id=>root.showPage(id,"",false)
-    }
-    PageEditor {
-        id:pageEditor;anchors.fill:parent;visible:root.editing && !!root.model;layoutModel:root.model
+        onClosed: {root.editing=false;content.restoreFocus(content.focusedItemId)}
     }
 }

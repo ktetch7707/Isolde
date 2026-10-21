@@ -169,7 +169,7 @@ def main():
                 # Begin with the packaged default. No Home layout is injected.
                 assert not layout.exists()
                 key("Up",30); key("Right"); key("Return")  # Recovery -> Edit Home.
-                key("Right",23); key("Return")  # Settings -> Home skins.
+                key("Down",4); key("Return"); key("Down",8); key("Return")  # Studio -> More -> Saved skins.
                 if args.capture_library: captured("library")
                 preset_index = 2 if case.name == "home-pastel-reference" else 1
                 key("Down",preset_index); key("Return"); key("Return")
@@ -195,18 +195,13 @@ def main():
                 if case.name == "home-pastel-reference": key("Right")
                 key("Return")  # Header Settings, with remembered Settings selection.
                 key("Up",10); key("Down"); key("Return")  # Select Home explicitly.
-                key("Left",30)  # Home also remembers its last action.
             else:
                 for name in interaction.get("editKeys",["Up","Up","Right","Return"]): key(name)
-            key("Right", 22); key("Return")  # New remote component-layout editor.
-            key("Escape")  # Opening/closing the editor must preserve the config.
+            # Customize opens the full-size Studio directly; no legacy action wall.
             assert layout.read_bytes() == original_bytes
-            if args.skin_from_settings:
-                key("Right",2); key("Return")  # Detailed structured editor.
-                if args.capture_library: captured("editor")
-                key("Escape"); key("Left",2)
-                assert layout.read_bytes() == original_bytes
-            key("Left", 3); key("Return")  # Existing Restore defaults operation (22 → 19).
+            if args.capture_library: captured("editor")
+            key("Down",4); key("Return"); key("Down",9); key("Return")  # More -> Restore defaults.
+            key("Down"); key("Return")  # Explicit scoped confirmation.
             expect(lambda: not layout.exists(), "Reset to packaged defaults passed")
             key("Escape"); key("Escape")
             key("Up", 30); key("Down")  # Capture the first default item, not retained bottom focus.

@@ -4,6 +4,7 @@ Item {
     id: studio
     objectName: "pageStudio"
     property var layoutModel
+    property var provider:null
     property var session: null
     property bool open: false
     property string pageId: ""
@@ -123,6 +124,7 @@ Item {
     onChoiceChanged:if(mode==="collision" && choice<2)collisionStrategy=choice===0?"shift":"swap"
     onScopeIdChanged:if(open && sectionMode && !scopeOverview)Qt.callLater(()=>{if(open && sectionMode)preview.revealScope(scopeId)})
 
+    signal skinsRequested()
     function show(id, component) {
         session = layoutModel.beginStudio()
         pageId = id || (!session.model.rootPageVisible?session.model.homePageId:""); selectedId = component || "";pageFocus=({})
@@ -227,7 +229,8 @@ Item {
         if(mode==="confirmDeletePage")return ["Delete page in draft","Cancel"]
         if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
         if(mode==="editorAppearance")return ["Surface color","Selected surface","Text color","Supporting text","Focus color","Reset Studio colors"]
-        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance","Canvas view"]
+        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance","Canvas view","Saved skins","Restore defaults"]
+        if(mode==="restoreDefaults")return ["Cancel","Restore profile defaults and remove custom pages"]
         if(mode==="context") return ["Move","Width","Height","Edit component"]
         if(mode==="flowMove")return ["Move before…","Move after…","Convert to a grid…","Cancel"]
         if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Return to "+gestureMode]
@@ -285,7 +288,23 @@ Item {
             return
         }
         if(mode==="pageAppearance"){const key=["backgroundStart","backgroundEnd","surfaceColor","textColor","focusColor"][choice];beginKeyboard("pageColor:"+key,String(page.appearance[key] || ""));return}
-        if(mode==="more"){if(choice===7){mode="view";choice=0;return}if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return}
+        if(mode==="restoreDefaults") {
+            if(choice===1) {
+                session.invalidate()
+                const ok=layoutModel.resetToDefaults(),error=layoutModel.errorString
+                show("","")
+                if(!ok)message=error
+            } else {mode="more";choice=9}
+            return
+        }
+        if(mode==="more"){
+            if(choice>=8){
+                if(session.dirty){message="Apply or discard your draft before changing saved skins or restoring defaults.";return}
+                if(choice===8)skinsRequested();else{mode="restoreDefaults";choice=0;message="Replaces this profile's page designs with packaged defaults. Saved skins, apps and Kodi media stay available."}
+                return
+            }
+            if(choice===7){mode="view";choice=0;return}if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return
+        }
         if(mode==="editorAppearance") {
             if(choice===5){command("studioAppearance",{value:{}});return}
             const key=["surfaceColor","selectedColor","textColor","mutedColor","focusColor"][choice];beginKeyboard("studioColor:"+key,String(palette[key]));return

@@ -146,7 +146,7 @@ def main():
                         time.sleep(0.1)
 
                 key("Return")  # Existing missing source -> Home editor.
-                key("Right", 31); key("Return")  # Explicit provisional Studio entry.
+                capture("entry")  # Real Customize Home entry must already be the page-first Studio.
                 assert layout.read_bytes() == original_bytes
                 key("Down", 2); key("Return"); key("Return"); key("Return")  # Page menu Add -> conversion preview -> accept.
                 assert layout.read_bytes() == original_bytes
