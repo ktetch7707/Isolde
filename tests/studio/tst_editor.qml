@@ -166,5 +166,111 @@ Item {
                 compare(studioFixture.disk(), diskBaseline)
             })
         }
+        function pageColor(key) {
+            editor.openInspector(true)
+            const inspector=findChild(editor,"studioInspector")
+            inspector.activateField(homeLayout.studioOptions.inspector.pageFields.find(f=>f.key===key))
+            compare(inspector.view,"colorWheel")
+            return findChild(inspector,"studioColorPicker")
+        }
+        function test_page_color_swatches_preview_cancel_and_accept_once() {
+            scenario("color-swatches",()=>{
+                givenPage(false,false)
+                const before=document(), picker=pageColor("backgroundStart")
+                verify(waitForRendering(picker))
+                mouseClick(findChild(picker,"studioColorSwatch-2"))
+                // Preview replaces the model object; observe the current
+                // editor binding rather than retaining the prior model.
+                tryVerify(()=>editor.page.backgroundStart==="#e89ab0")
+                if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-color-presets.png")
+                compare(document(),before)
+                compare(editor.session.changeCount,0)
+                compare(studioFixture.disk(),diskBaseline)
+                command(inputManager.back)
+                compare(document(),before)
+                const again=pageColor("backgroundStart")
+                again.choose("#82bce8")
+                again.choose("#91d4b8")
+                again.control=4;command(inputManager.confirm)
+                compare(editor.session.changeCount,1)
+                compare(editor.session.document.theme.backgroundStart,"#91d4b8")
+                compare(findChild(editor,"studioInspector").recentColors.length,1)
+                verify(editor.session.undo());compare(document(),before)
+                compare(studioFixture.disk(),diskBaseline)
+            })
+        }
+        function test_color_wheel_pointer_remote_parity_and_cancel() {
+            scenario("color-wheel",()=>{
+                givenPage(false,false)
+                const before=document(),picker=pageColor("backgroundStart")
+                picker.updateHsv(0,1,1)
+                verify(waitForRendering(picker))
+                mouseClick(findChild(picker,"studioColorCategory-3"))
+                compare(picker.category,3)
+                const wheel=findChild(picker,"studioColorWheel")
+                verify(waitForRendering(wheel))
+                mouseClick(wheel,wheel.width-4,wheel.height/2)
+                compare(picker.hex(picker.sample),"#ff0000")
+                mouseClick(wheel,4,wheel.height/2)
+                compare(picker.hex(picker.sample),"#00ffff")
+                tryVerify(()=>editor.page.backgroundStart==="#00ffff")
+                if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-color-wheel.png")
+                picker.control=4;command(inputManager.confirm)
+                const pointerDocument=document()
+                verify(editor.session.undo());compare(document(),before)
+                const remote=pageColor("backgroundStart")
+                remote.updateHsv(0,1,1);remote.category=3;remote.control=1
+                command(inputManager.confirm)
+                for(let step=0;step<36;++step)command(inputManager.navigateRight)
+                compare(remote.hex(remote.sample),"#00ffff")
+                command(inputManager.back) // Leave two-axis adjustment, keep picker.
+                compare(findChild(editor,"studioInspector").view,"colorWheel")
+                remote.control=4;command(inputManager.confirm)
+                compare(document(),pointerDocument)
+                verify(editor.session.undo());compare(document(),before)
+                pageColor("backgroundStart").choose("#f2ce75")
+                command(inputManager.back)
+                compare(document(),before)
+                compare(findChild(editor,"studioInspector").recentColors.length,1)
+            })
+        }
+        function test_page_color_reset_removes_override_and_is_undoable() {
+            scenario("color-reset",()=>{
+                givenPage(false,false)
+                let picker=pageColor("textColor")
+                picker.choose("#f2ce75");picker.control=4;command(inputManager.confirm)
+                const custom=document(),history=editor.session.changeCount
+                picker=pageColor("textColor")
+                picker.control=3;command(inputManager.confirm)
+                compare(document(),custom)
+                compare(editor.session.changeCount,history)
+                picker.control=4;command(inputManager.confirm)
+                verify(editor.session.document.theme.textColor===undefined)
+                compare(editor.session.changeCount,history+1)
+                verify(editor.session.undo());compare(document(),custom)
+                compare(studioFixture.disk(),diskBaseline)
+            })
+        }
+        function test_exact_color_validation_keeps_preview_private() {
+            scenario("color-exact",()=>{
+                givenPage(false,false)
+                const before=document(),picker=pageColor("backgroundEnd")
+                // A pending wheel/swatch preview must remain a preview while
+                // the optional exact-input subdialog is open.
+                picker.choose("#e89ab0")
+                picker.control=6;command(inputManager.confirm)
+                const inspector=findChild(editor,"studioInspector"),keyboard=findChild(inspector,"inspectorKeyboard")
+                compare(inspector.view,"keyboard")
+                settle();compare(document(),before);compare(editor.session.changeCount,0)
+                keyboard.accepted("#zzzzzz")
+                compare(inspector.view,"keyboard");compare(document(),before)
+                keyboard.accepted("#123456")
+                compare(inspector.view,"colorWheel")
+                compare(picker.hex(picker.sample),"#123456")
+                compare(document(),before);compare(editor.session.changeCount,0)
+                command(inputManager.back)
+                compare(document(),before);compare(studioFixture.disk(),diskBaseline)
+            })
+        }
     }
 }

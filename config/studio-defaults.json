@@ -1,6 +1,18 @@
 {
   "schemaVersion": 1,
   "rootPageName": "Home",
+  "colorPicker": {
+    "presets": [
+      {"name": "Snow", "value": "#ffffff"},
+      {"name": "Charcoal", "value": "#202126"},
+      {"name": "Rose", "value": "#e89ab0"},
+      {"name": "Lavender", "value": "#b4a1e8"},
+      {"name": "Sky", "value": "#82bce8"},
+      {"name": "Mint", "value": "#91d4b8"},
+      {"name": "Peach", "value": "#ffc5a2"},
+      {"name": "Gold", "value": "#f2ce75"}
+    ]
+  },
   "appearance": {
     "surfaceColor": "#202126",
     "selectedColor": "#353039",

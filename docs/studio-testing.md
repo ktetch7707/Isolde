@@ -31,7 +31,7 @@ During development, run the relevant small suite; run `studio` after a complete 
 
 | Suite | Implementation | Checks |
 | --- | --- | --- |
-| `studio_quick` | Qt Quick Test; `tests/studio/tst_editor.qml` | Six real QML scenarios below, remote commands and actual pointer input |
+| `studio_quick` | Qt Quick Test; `tests/studio/tst_editor.qml` | Ten real QML scenarios below, remote commands and actual pointer input |
 | `studio_unit` | Existing Qt Test component executable, seven selected functions | Draft/history bounds, atomic failure/rollback, profile scope, collision parity, bounded cascades, scrolling persistence and home protection |
 | `studio_behavior` | Existing Qt Test navigation executable, four selected functions | Remote draft/apply/cancel, gestures/collisions/anchors, section transfer/cancel and long-page Add/move/cancel/runtime visibility |
 | `studio` | Three suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
@@ -50,6 +50,10 @@ These are Qt tests with readable Given/When/Then contracts, **not a Cucumber ins
 | `scrolling_checkbox_pointer_preview_cancel` | A fixed page | Click the real checkbox, then Back | Preview changes without changing draft/history/disk; Cancel removes proposal |
 | `move_reveals_actual_rendered_component` | A scrolling page | Move twelve rows down | Actual proposal item is wholly inside the viewport; Confirm accepts once without saving |
 | `locked_component_cannot_start_moving` | A locked component | Attempt Move | Clear refusal, unchanged draft/history/disk |
+| `page_color_swatches_preview_cancel_and_accept_once` | Page appearance | Choose swatches, cancel, then accept a changed color | Live model changes without a draft write; one accepted edit and exact Undo |
+| `color_wheel_pointer_remote_parity_and_cancel` | A custom wheel | Select red/cyan by actual pointer input and equivalent remote input | Expected distinct colors, identical authored document, pending changes cancel safely |
+| `page_color_reset_removes_override_and_is_undoable` | A custom text color | Preview Reset to theme and accept | Removes the override once; Undo restores it |
+| `exact_color_validation_keeps_preview_private` | Optional exact input | Submit invalid then valid RGB | Invalid text refused; valid color previews without saving; Cancel restores |
 
 ## Adding tests
 

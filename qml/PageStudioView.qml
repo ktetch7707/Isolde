@@ -57,7 +57,7 @@ Item {
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
     property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
-    readonly property var draftModel: session ? ((mode==="conversionPreview" || mode==="flowMove" || mode==="scrolling") && session.proposalModel ? session.proposalModel : session.model) : null
+    readonly property var draftModel: session ? ((mode==="conversionPreview" || mode==="flowMove" || mode==="scrolling" || mode==="inspector" && inspector.colorTransactionActive) && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
     readonly property var pageGrid:page?page.grid:({})

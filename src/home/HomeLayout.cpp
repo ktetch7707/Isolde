@@ -306,6 +306,15 @@ QVariantMap HomeLayout::studioOptions() const
     if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
     if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
+    if(object.contains("colorPicker")) {
+        const auto picker=object["colorPicker"].toObject();
+        if(picker.size()!=1 || !picker["presets"].isArray() || picker["presets"].toArray().isEmpty() || picker["presets"].toArray().size()>8)return {};
+        for(const auto &entry:picker["presets"].toArray()) {
+            const auto swatch=entry.toObject();const QColor color(swatch["value"].toString());
+            if(swatch.size()!=2 || !swatch["name"].isString() || swatch["name"].toString().isEmpty() || swatch["name"].toString().size()>40
+                || !swatch["value"].isString() || !color.isValid() || color.alpha()!=255)return {};
+        }
+    }
     if(!object["menuWidth"].isDouble() || object["menuWidth"].toDouble()<200 || object["menuWidth"].toDouble()>480)return {};
     if(!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble()<60 || object["sectionHeight"].toDouble()>800)return {};
     for(const auto &type:QStringList{"clock","text"}){const auto span=object["widgetSpans"].toObject()[type].toObject().toVariantMap();if(span.size()!=2 || !ComponentSchema::validPlacement({{"x",0},{"y",0},{"width",span.value("width")},{"height",span.value("height")}},16,10))return {};}

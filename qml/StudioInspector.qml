@@ -32,6 +32,13 @@ Item {
     property var cropDraft:({})
     property var pendingAction:({})
     property string keyboardKind:""
+    property var recentColors:[]
+    property var pickerAppearance:({})
+    property var pickerThemeColors:[]
+    readonly property var colorPicker:colorLoader.item
+    property bool colorTransactionActive:false
+    onSessionChanged:{recentColors=[];colorTransactionActive=false;if(colorPicker)colorPicker.previewQueued=false;if(colorLoader)colorLoader.active=false}
+    onVisibleChanged:if(!visible && colorTransactionActive)cancelColor()
     property string returnView:"fields"
     property int returnSelection:0
     property int keyboardSelection:0
@@ -82,10 +89,28 @@ Item {
         if(f.type==="artwork")return value?"Managed image":"None"
         if(["geometry","layout","children","apps","order","crop","grid","header","typography"].indexOf(f.type)>=0)return "Open…"
         if(f.type==="toggle" || f.type==="scrolling")return value?"On":"Off"
+        if(f.type==="color")return local(current || {},f)===undefined?"Theme":"Custom"
         const members=pageMode?[{}]:targets,overridden=members.filter(i=>local(i,f)!==undefined).length
         return String(value===undefined?"":value)+(overridden===0?" · Inherited":overridden===members.length?" · Override":" · Mixed overrides")
     }
-    function run(op,args){if(!session.execute(op,args,pageId)){message=session.errorString;return false}message="Draft updated · nothing applied.";return true}
+    function run(op,args){
+        const success=colorTransactionActive?session.previewCommand(op,args,pageId):session.execute(op,args,pageId)
+        if(!success){message=session.errorString;if(colorTransactionActive)colorPicker.error=message;return false}
+        message=colorTransactionActive?"":"Draft updated · nothing applied.";return true
+    }
+    function beginColor(){
+        pickerAppearance=Object.assign({},appearance)
+        pickerThemeColors=[{name:"Background",value:page.appearance.backgroundStart},{name:"Surface",value:page.appearance.surfaceColor},{name:"Text",value:page.appearance.textColor},{name:"Focus",value:page.appearance.focusColor},{name:"Selected",value:page.appearance.selectedColor},{name:"Muted",value:page.appearance.mutedColor}].filter(entry=>!!entry.value)
+        colorTransactionActive=true;colorLoader.active=true;view="colorWheel";selected=0
+        colorPicker.begin(effective(current,activeField) || page.appearance.textColor)
+    }
+    function cancelColor(){if(colorPicker)colorPicker.previewQueued=false;if(session)session.cancelPreview();colorTransactionActive=false;view="fields";selected=returnSelection;message="";colorLoader.active=false}
+    function acceptColor(value,reset){
+        if(colorPicker.error)return
+        if(session.proposalModel && !session.acceptPreview()){colorPicker.error=session.errorString;return}
+        if(!reset && value!==colorPicker.hex(colorPicker.original))recentColors=[{value:value}].concat(recentColors.filter(c=>c.value!==value)).slice(0,8).map((entry,index)=>({name:"Recent "+(index+1),value:entry.value}))
+        colorTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied.";colorLoader.active=false
+    }
     function set(f,value,reset){
         if(structureType==="navigation")return run("navigation",{kind:"patch",id:structureId,value:{[f.key]:reset?null:value}})
         if(structureType==="section"){
@@ -124,7 +149,7 @@ Item {
         if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
         if(f.type==="toggle"){adjust(f,1);return}
         if(f.type==="choice"){openChoices(f.choices.map(value=>({name:value,value:value})));return}
-        if(f.type==="color"){view="colorWheel";selected=0;return}
+        if(f.type==="color"){beginColor();return}
         if(f.type==="action"){openChoices([{name:"None · clear link",value:{}}].concat(actions.map(a=>({name:a.name,value:a.action,needsTarget:a.needsTarget})).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])));return}
         if(f.type==="typography"){openChoices((options.inspector.typePresets || []).map(p=>({name:p.name,value:p.value,kind:"typography"})));return}
         if(f.type==="artwork"){assets=session.artworkChoices();view="artwork";selected=0;return}
@@ -213,6 +238,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         layoutDraft=next
     }
     function handleCommand(command){
+        if(view==="colorWheel"){colorPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
         if(collapsed){if(command===inputManager.back)closed();else if(command===inputManager.confirm){controlsShown=true;hiddenControls=false;}return}
@@ -231,8 +257,29 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
     function contrast(){
         if(!page)return ""
         function luminance(value){const c=Qt.darker(value,1);function linear(v){return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)}return .2126*linear(c.r)+.7152*linear(c.g)+.0722*linear(c.b)}
-        const style=current?current.presentation || {}:{},a=luminance(style.labelColor || page.appearance.textColor),b=luminance(style.surfaceColor || page.appearance.surfaceColor),ratio=(Math.max(a,b)+.05)/(Math.min(a,b)+.05)
+        const style=!pageMode && current?current.presentation || {}:{},a=luminance(style.labelColor || page.appearance.textColor)
+        const backgrounds=pageMode && (activeField.key==="backgroundStart" || activeField.key==="backgroundEnd" || activeField.key==="textColor")?[page.appearance.backgroundStart,page.appearance.backgroundEnd]:[style.surfaceColor || page.appearance.surfaceColor]
+        const ratio=Math.min(...backgrounds.map(value=>{const b=luminance(value);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)}))
         return (ratio>=4.5?"Text contrast ":"Low text contrast · ")+ratio.toFixed(1)+":1 · solid-surface estimate"
+    }
+    Loader {
+        id:colorLoader;anchors.fill:parent;active:false;visible:root.view==="colorWheel";z:10
+        sourceComponent:Component { StudioColorPicker {
+        appearance:Object.keys(root.pickerAppearance).length?root.pickerAppearance:root.appearance;settings:root.options.colorPicker || ({})
+        roleName:root.activeField.label || "Color";selectionRect:root.pageMode?null:root.selectionRect
+        themeColors:root.pickerThemeColors;recentColors:root.recentColors
+        contrastText:root.contrast()
+        onPreview:(value,reset)=>{
+            if(root.set(root.activeField,value,reset) && reset)Qt.callLater(()=>{
+                if(root.view!=="colorWheel" || !root.session.proposalModel)return
+                const model=root.pageId?root.session.proposalModel.pageModel(root.pageId):root.session.proposalModel
+                colorPicker.sample=root.pageMode && root.activeField.scope==="theme"?model.appearance[root.activeField.key]:root.effective(root.current,root.activeField)
+            })
+        }
+        onAccepted:(value,reset)=>root.acceptColor(value,reset)
+        onCanceled:root.cancelColor()
+        onExactRequested:value=>root.beginKeyboard("color",value)
+        } }
     }
     Image {id:assetProbe;visible:false;source:root.pageMode && root.page?root.page.wallpaperSource:root.current?root.current.logoSource || "":""}
     Rectangle {
@@ -242,7 +289,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         MouseArea {anchors.fill:parent;onClicked:{root.controlsShown=true;root.hiddenControls=false}}
     }
     Rectangle {
-        id:panel;visible:!root.collapsed && root.view!=="keyboard";width:root.panelWidth;height:root.panelHeight
+        id:panel;visible:!root.collapsed && root.view!=="keyboard" && root.view!=="colorWheel";width:root.panelWidth;height:root.panelHeight
         x:root.roomRight?root.selectionRect.x+root.selectionRect.width+24*root.unit:root.roomLeft?root.selectionRect.x-width-24*root.unit:(parent.width-width)/2
         y:Math.max(24*root.unit,Math.min(parent.height-height-24*root.unit,root.selectionRect?root.selectionRect.y:(parent.height-height)/2))
         radius:18*root.unit;color:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor
@@ -258,7 +305,8 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                     required property int index;required property string modelData
                     readonly property var rowField:root.view==="fields" && root.tabs[root.tab]!=="More"?root.fields[index]:null
                     width:list.width;height:48*root.unit;radius:8*root.unit;color:index===root.selected?root.appearance.selectedColor:"transparent";border.width:index===root.selected?2:0;border.color:root.appearance.focusColor
-                    Text {visible:!scrollCheckbox.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;elide:Text.ElideRight}
+                    Text {visible:!scrollCheckbox.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;anchors.rightMargin:colorSample.visible?48*root.unit:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;elide:Text.ElideRight}
+                    Rectangle {id:colorSample;visible:!!parent.rowField && parent.rowField.type==="color";anchors.right:parent.right;anchors.rightMargin:12*root.unit;anchors.verticalCenter:parent.verticalCenter;width:26*root.unit;height:width;radius:5*root.unit;color:visible?root.effective(root.current,parent.rowField):"transparent";border.width:1;border.color:root.appearance.textColor}
                     CheckBox {
                         id:scrollCheckbox;objectName:"studioScrollingCheckbox";anchors.fill:parent;visible:!!parent.rowField && parent.rowField.type==="scrolling"
                         checkable:false;checked:visible && root.effective(root.current,parent.rowField)===true
@@ -274,13 +322,17 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:footerText;width:parent.width;text:root.collapseNeeded?"Confirm edits · Back returns":"Adjust · Menu resets · Back returns";color:root.appearance.mutedColor;font.pixelSize:14*root.unit;wrapMode:Text.Wrap}
         }
         Rectangle {visible:true;anchors.right:parent.right;anchors.top:parent.top;width:140*root.unit;height:34*root.unit;color:root.appearance.selectedColor;Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.centerIn:parent;text:"Hide controls";color:root.appearance.textColor;font.pixelSize:14*root.unit}MouseArea {anchors.fill:parent;onClicked:root.hiddenControls=true}}
-Canvas {id:colorWheel;visible:root.view==="colorWheel";width:200*root.unit;height:200*root.unit;onPaint:{var ctx=getContext("2d");var cx=width/2,cy=height/2,r=Math.min(cx,cy)-4;for(var a=0;a<360;a++){ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a*Math.PI/180,(a+1)*Math.PI/180);ctx.closePath();ctx.fillStyle="hsl("+a+",100%,50%)";ctx.fill()}ctx.beginPath();ctx.arc(cx,cy,r*0.55,0,Math.PI*2);ctx.fillStyle=root.appearance.surfaceColor;ctx.fill()}MouseArea{anchors.fill:parent;onClicked:{root.set(root.activeField,"#ff0000",false);root.view="fields";root.selected=root.returnSelection}}}
+
     }
     StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="choices";onPicked:action=>{if(root.set(root.activeField,action,false)){root.view="fields";root.selected=root.returnSelection}}}
     OnScreenKeyboard {
         id:keyboard;objectName:"inspectorKeyboard";anchors.fill:parent;visible:root.view==="keyboard";appearance:root.appearance;hint:root.message
         onCanceled:{root.view=root.returnView;root.selected=root.keyboardSelection}
         onAccepted:text=>{
+            if(root.keyboardKind==="color"){
+                if(!/^#[0-9a-fA-F]{6}$/.test(text)){root.message="Use # followed by six hexadecimal digits.";return}
+                root.view="colorWheel";colorPicker.choose(text);return
+            }
             if(root.keyboardKind==="import"){root.pickArtwork(text);return}
             if(root.keyboardKind==="pixel"){const n=Number(text),key=["x","y","width","height"][root.keyboardSelection];if(!Number.isInteger(n) || n<(root.keyboardSelection<2?0:1) || n>16384){root.message="Enter a whole pixel value within the image bounds.";return}root.cropDraft=Object.assign({},root.cropDraft,{[key]:n});root.view="pixelCrop";root.selected=root.keyboardSelection;return}
             let f=root.activeField,value=text
