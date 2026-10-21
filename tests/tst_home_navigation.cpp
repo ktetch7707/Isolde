@@ -929,6 +929,23 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors()
         if(!accept){QCOMPARE(session->draft(),beforeAnchor);QCOMPARE(session->changeCount(),1);}
     }
     QCOMPARE(session->changeCount(),2);QVERIFY(session->undo());QCOMPARE(session->draft(),beforeAnchor);QVERIFY(session->undo());QCOMPARE(session->draft(),start);
+    // A blocked ordinary drop stays on the canvas. It never forces the old
+    // Shift/Swap dialog, changes the draft, or strands the moving item.
+    QVERIFY(session->execute("state",{{"id","text"},{"key","locked"},{"value",true}}));
+    const auto locked=session->draft();const auto lockedCount=session->changeCount();
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"beginGesture",Q_ARG(QVariant,false)));
+    QVERIFY(key(InputManager::NavigateRight));QVERIFY(key(InputManager::Confirm));
+    QCOMPARE(root->property("mode").toString(),QString("move"));
+    QVERIFY(root->property("message").toString().contains("locked",Qt::CaseInsensitive));
+    QCOMPARE(session->draft(),locked);QCOMPARE(session->changeCount(),lockedCount);
+    QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));
+    QCOMPARE(root->property("mode").toString(),QString("canvas"));
+    QVERIFY(session->undo());QCOMPARE(session->draft(),locked);QVERIFY(session->undo());QCOMPARE(session->draft(),start);
+    // Duplicate and Edit contents must not dispatch to Delete after the
+    // coder's context-menu index changes.
+    QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));
+    QCOMPARE(root->property("mode").toString(),QString("canvas"));QCOMPARE(session->model()->property("items").toList().size(),3);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),start);
     QCOMPARE(actions.count(),0);QVERIFY(saved.open(QIODevice::ReadOnly));QCOMPARE(saved.readAll(),disk);
 }
 void HomeNavigationTests::studioRemoteSectionTransferAndCancel()
@@ -946,12 +963,19 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel()
     const QList<int> destinationKeys{InputManager::Confirm,InputManager::Confirm,InputManager::Menu,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm};
     const auto openDestination=[&](){for(int command:destinationKeys)if(!key(command))return false;return true;};
     QVERIFY(openDestination());QCOMPARE(root->property("mode").toString(),QString("destination"));QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);QCOMPARE(root->property("scopeId").toString(),QString("widgets"));
+    auto *viewport=root->findChild<QObject *>("studioPreview");QVERIFY(viewport);
     for(bool accept:{false,true}) {
+        QCoreApplication::processEvents();
+        const QVariantMap scroll{{"legacyY",0},{"composed",QVariantMap{{"y",137},{"navigationX",0}}},{"groups",QVariantMap{}}};
+        QVERIFY(QMetaObject::invokeMethod(viewport,"restoreEditorViewport",Q_ARG(QVariant,scroll)));
         QVERIFY(openDestination());QCOMPARE(root->property("mode").toString(),QString("destination"));
         for(int i=0;i<3;++i)QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));QCOMPARE(root->property("scopeId").toString(),QString("inputs"));
         for(int i=0;i<4;++i)QVERIFY(key(InputManager::NavigateDown));QCOMPARE(session->draft(),start);
         QVERIFY(key(accept?InputManager::Confirm:InputManager::Back));
-        if(!accept){QCOMPARE(root->property("scopeId").toString(),QString("widgets"));QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);}
+        if(!accept){QCOMPARE(root->property("scopeId").toString(),QString("widgets"));QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);
+            QTest::qWait(50);QVariant restored;QVERIFY(QMetaObject::invokeMethod(viewport,"editorViewport",Q_RETURN_ARG(QVariant,restored)));
+            const auto value=restored.value<QJSValue>().toVariant().toMap();QCOMPARE(value["composed"].toMap()["y"].toInt(),137);
+        }
     }
     QCOMPARE(session->changeCount(),1);QCOMPARE(QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject()["categoryId"].toString(),QString("inputs"));
     QVERIFY(session->undo());QCoreApplication::processEvents();QCOMPARE(session->draft(),start);QTRY_COMPARE(root->property("scopeId").toString(),QString("widgets"));QCOMPARE(root->property("selectedId").toString(),QString("clock"));
@@ -964,10 +988,15 @@ void HomeNavigationTests::studioLegacyRemoteOrdering()
     QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
     QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));QVERIFY2(component.isReady(),qPrintable(component.errorString()));
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));QVERIFY(root);
+    QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
     QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString("movies"))));
     auto key=[&](int value){const bool ok=QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,value));QCoreApplication::processEvents();return ok;};
     auto *session=qobject_cast<StudioSession *>(root->property("session").value<QObject *>());QVERIFY(session);const auto start=session->draft();QVERIFY(key(InputManager::NavigateRight));
     QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("flowMove"));
+    auto *preview=root->findChild<QQuickItem *>("studioPreview");QVERIFY(preview);
+    QCOMPARE(preview->property("suppressedComponentIds").toList().size(),0);
+    auto *insertion=root->findChild<QQuickItem *>("studioInsertionTarget");QVERIFY(insertion);
+    QTRY_VERIFY(insertion->isVisible());QVERIFY(insertion->width()>0);QVERIFY(insertion->height()>0);
     QVERIFY(key(InputManager::NavigateDown));QVERIFY(session->proposalModel());QCOMPARE(session->draft(),start);QVERIFY(key(InputManager::Back));QVERIFY(!session->proposalModel());QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);
     QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::NavigateDown));QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);QVERIFY(session->proposalModel());
     QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("canvas"));QCOMPARE(session->changeCount(),1);QVERIFY(!root->property("gridMode").toBool());

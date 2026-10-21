@@ -1103,9 +1103,17 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
             auto item=entries[index].toObject();auto target=originalEntries[index].toObject()["placement"].toObject().toVariantMap();
             item.remove("placement");entries[index]=item;
             const auto vacant=entries;
-            for(int pass=0;pass<2;++pass)for(int row=0;row<rows;++row)for(int col=0;col<cols;++col) {
+            // Keep neighbors near their authored positions instead of sending
+            // every displaced item to the first free cell at the top-left.
+            QList<QPair<int,int>> cells;
+            for(int row=0;row<rows;++row)for(int col=0;col<cols;++col)cells.append({col,row});
+            const int originalX=target["x"].toInt(),originalY=target["y"].toInt();
+            std::stable_sort(cells.begin(),cells.end(),[=](const auto &a,const auto &b){
+                return std::abs(a.first-originalX)+std::abs(a.second-originalY)<std::abs(b.first-originalX)+std::abs(b.second-originalY);
+            });
+            for(int pass=0;pass<2;++pass)for(const auto &cell:cells) {
                 if(++attempts>4096){entries=baseline;fixed=fixedBefore;return false;}
-                target["x"]=col;target["y"]=row;
+                target["x"]=cell.first;target["y"]=cell.second;
                 if(!ComponentSchema::validPlacement(target,cols,rows))continue;
                 QList<int> displaced;bool blocked=false;
                 for(int j=0;j<entries.size();++j) {

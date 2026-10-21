@@ -41,6 +41,8 @@ Item {
     readonly property bool sectionMode: !!root.config.grid && root.grid.mode==="sections"
     property var sectionSurfaces: ({})
     readonly property real scrollOffset:content.contentY
+    function editorViewport(){return {y:content.contentY,navigationX:navigationStrip.contentX}}
+    function restoreEditorViewport(state){if(!state)return;content.cancelFlick();content.contentY=state.y;navigationStrip.cancelFlick();navigationStrip.contentX=state.navigationX}
     readonly property bool placementMode: {
         if(!root.config.grid)return false
         if(root.sectionMode)return true

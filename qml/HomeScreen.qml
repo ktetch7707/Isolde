@@ -85,6 +85,17 @@ Item {
     function gridMetricsFor(scope,parentId) { const surface=groupSurface(parentId);return surface && surface.item?surface.item.metrics:composed.gridMetricsFor(scope) }
     function revealScope(scope) { composed.revealScope(scope) }
     function revealPlacement(p,scope,parentId) {const surface=groupSurface(parentId);if(surface && surface.revealPlacement)surface.revealPlacement(p);else composed.revealPlacement(p,scope) }
+    function editorViewport() {
+        const groups={}
+        for(const id of Object.keys(groupSurfaces)){const surface=groupSurface(id);if(surface && surface.editorViewport)groups[id]=surface.editorViewport()}
+        return {legacyY:sectionFlick.contentY,composed:composed.editorViewport(),groups:groups}
+    }
+    function restoreEditorViewport(state) {
+        if(!state || state.legacyY===undefined)return
+        sectionFlick.cancelFlick();sectionFlick.contentY=state.legacyY
+        composed.restoreEditorViewport(state.composed)
+        for(const id of Object.keys(state.groups || {})){const surface=groupSurface(id);if(surface && surface.restoreEditorViewport)surface.restoreEditorViewport(state.groups[id])}
+    }
     function registerMediaWidget(id,widget,remove){composed.registerWidget(id,widget,remove)}
     function engageMediaWidget(id){focusedIndex=itemIndex(id);recoveryFocused=false;composed.activeWidget=id}
     property var setItemPlacement: null

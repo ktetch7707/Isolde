@@ -7,6 +7,9 @@ Item {
     required property var host
     property real unit:1
     property var catalog:host.authoredItems || host.items || []
+    // Proposal replicas render real components without becoming live focus,
+    // geometry or provider clients in the underlying page.
+    property bool previewOverlay:false
     signal activated(var item)
     signal focused(var card)
     Repeater {
@@ -32,7 +35,7 @@ Item {
                 return {columns:columns,rows:rows,gap:gap,margin:0,cellW:valid?(w-(visibleColumns-1)*gap)/visibleColumns:0,cellH:valid?(h-(rows-1)*gap)/rows:0,valid:valid}
             }
             readonly property var childEntries:surface.catalog.filter(i=>(i.parentId || "")===modelData.item.id && !!i.placement).map(i=>({item:i,placement:i.placement}))
-            visible:!surface.host.editMode || (surface.host.suppressedComponentIds || []).indexOf(modelData.item.id)<0
+            visible:surface.previewOverlay || !surface.host.editMode || (surface.host.suppressedComponentIds || []).indexOf(modelData.item.id)<0
             objectName:"placed-"+modelData.item.id
             x:surface.metrics.margin+modelData.placement.x*(surface.metrics.cellW+surface.metrics.gap)
             y:surface.metrics.margin+modelData.placement.y*(surface.metrics.cellH+surface.metrics.gap)
@@ -78,12 +81,14 @@ Item {
                 id:contents;width:viewport.contentWidth;height:viewport.height
                 function viewportRect(){const point=viewport.mapToItem(surface.host,0,0);return {x:point.x,y:point.y,width:viewport.width,height:viewport.height}}
                 function revealPlacement(p){const start=p.x*(node.localMetrics.cellW+node.localMetrics.gap),end=start+p.width*node.localMetrics.cellW+(p.width-1)*node.localMetrics.gap;if(start<viewport.contentX)viewport.contentX=start;else if(end>viewport.contentX+viewport.width)viewport.contentX=Math.min(viewport.contentWidth-viewport.width,end-viewport.width)}
+                function editorViewport(){return {x:viewport.contentX,y:viewport.contentY}}
+                function restoreEditorViewport(state){viewport.cancelFlick();viewport.contentX=state.x;viewport.contentY=state.y}
                 Component.onCompleted:if(node.group)setSource(Qt.resolvedUrl("PlacedComponents.qml"),{
                     items:Qt.binding(()=>node.childEntries),metrics:Qt.binding(()=>node.localMetrics),host:surface.host,
-                    unit:Qt.binding(()=>surface.unit),catalog:Qt.binding(()=>surface.catalog)
+                    unit:Qt.binding(()=>surface.unit),catalog:Qt.binding(()=>surface.catalog),previewOverlay:surface.previewOverlay
                 })
-                onLoaded:if(surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,false)
-                Component.onDestruction:if(node.group && surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,true)
+                onLoaded:if(!surface.previewOverlay && surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,false)
+                Component.onDestruction:if(!surface.previewOverlay && node.group && surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,true)
                 }
             }
             Connections {
@@ -94,7 +99,7 @@ Item {
             Loader {
                 id:media;anchors.fill:parent;active:node.library
                 sourceComponent:PageLibraryWidget {
-                    provider:surface.host.libraryProvider;widgetKey:surface.host.pageKey+"."+node.modelData.item.id
+                    provider:surface.previewOverlay?null:surface.host.libraryProvider;widgetKey:surface.host.pageKey+"."+node.modelData.item.id
                     style:node.style;appearance:surface.host.appearance
                     readOnly:surface.host.editMode || surface.host.previewOnly;frozen:surface.host.freezeData
                     samplePreview:surface.host.samplePreview;sampleItems:surface.host.sampleItems
@@ -102,8 +107,8 @@ Item {
                     engaged:surface.host.activeMediaWidgetId===node.modelData.item.id
                     onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
                 }
-                onLoaded:surface.host.registerMediaWidget(node.modelData.item.id,item,false)
-                Component.onDestruction:if(node.library && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
+                onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
+                Component.onDestruction:if(!surface.previewOverlay && node.library && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
             }
         }
     }
