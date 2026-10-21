@@ -1,5 +1,7 @@
 # Product implementation order
 
+Latest UX audit (user, 2026-10-20): [usability audit](design/page-studio/usability-audit-2026-10-20.md) reopens T19.6 → T20.5 → T21.6-T21.11 before T22. Deliver direct visual movement/reflow, a compact Move/Edit/Duplicate/Delete context, visual color selection with a wheel and size within Edit component. This supersedes older context/Shift-dialog/hex-first guidance; the backlog records current percentages.
+
 Component clarification (user, 2026-10-20): finish the reopened T21.6-T21.9 gates in [the backlog](agent-backlog.md) before T22. [Component contracts](design/page-studio/component-contracts.md) supersedes older catalog/preset assumptions: deliver genuine app/button/history carousels and semantic Pastel sky defaults, shapes, labels and linked GIF/image/text controls. Prior visual fixtures are appearance regression evidence, not proof of these behaviors. No task IDs or active task count change.
 
 **Latest UX authority:** [Page-first Studio](design/page-studio/page-first-design.md) supersedes conflicting toolbar/fitted-canvas proposals. Sequence remains T15-T24 then T27/T25/T26/T28. Exception to older wording below: T18 establishes movable protected Home designation; T21 includes page colors/background; T22 implements the shared inheritance contract and minimum Settings/Home theme adoption before T24. T27 then completes the remaining shell surfaces. User feedback rejected the provisional screenshots; design acceptance is still pending. Backlog percentages, not historical arithmetic below, are current.
