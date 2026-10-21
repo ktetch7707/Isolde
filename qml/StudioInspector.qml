@@ -1,3 +1,4 @@
+// StudioInspector.qml — remote-operable property editor (D-pad friendly). Views: fields, choices, artwork, crop, layout, apps, states, colorWheel.
 import QtQuick
 
 Item {
