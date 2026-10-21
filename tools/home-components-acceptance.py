@@ -180,19 +180,20 @@ def main():
                     key("Up", 2); key("Right")  # Restore Add menu origin and the selected canvas item.
                     assert layout.read_bytes() == original_bytes
 
-                key("Return"); key("Return"); key("Left"); key("Return")  # Move Clock onto the existing source.
-                key("Down")  # Inspect the complete Swap proposal; no implicit drop.
-                capture("collision")
-                key("Down"); key("Return")  # Cancel keeps both original cells.
+                key("Return"); key("Return"); key("Left")  # Moving into occupied space previews neighbors making room.
+                capture("reflow")
+                key("Escape")
                 assert layout.read_bytes() == original_bytes
-                key("Return"); key("Return"); key("Left"); key("Return"); key("Down"); key("Return")
-                undo_operation()  # Accepted Swap is one undoable draft operation.
-                key("Return"); key("Down"); key("Return"); key("Right")  # Width: 1 -> 2 cells.
+                key("Return"); key("Return"); key("Left"); key("Return")
+                undo_operation()  # The whole reflow is one undo operation.
+
+                key("Return"); key("Down"); key("Return")  # Edit component.
+                key("Down", 2); key("Return"); key("Return")  # Layout -> Size sliders.
+                key("Right")  # Width slider increases with live preview.
                 capture("resize")
-                key("Escape")  # Cancel size without a history entry.
-                key("Return"); key("Down"); key("Return"); key("Right"); key("Return")
-                undo_operation()  # Accepted resize also restores in one undo.
-                key("Return"); key("Return"); key("Right", 20); key("Escape")  # Repeat stops at the bounded edge; cancel.
+                key("Escape"); key("Escape"); key("Escape")  # Cancel size, fields, inspector.
+                assert layout.read_bytes() == original_bytes
+                key("Return"); key("Return"); key("Right", 20); key("Escape")
                 assert layout.read_bytes() == original_bytes
 
                 key("Escape"); key("Down", 2); key("Return"); key("Return")  # Pages -> More -> Undo.
@@ -218,7 +219,7 @@ def main():
                 key("Down"); key("Return")  # Place below the original components.
                 assert layout.read_bytes() == applied
                 capture("group")
-                key("Return"); key("Down", 3); key("Return")  # Context -> Inspector.
+                key("Return"); key("Down"); key("Return")  # Context -> Inspector.
                 capture("inspector")  # Controls fit beside this fixture group.
                 key("Return")  # Content properties.
                 capture("content")
