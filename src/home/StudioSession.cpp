@@ -422,8 +422,9 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         document["homePageId"]=id;return pushEdit(QJsonDocument(document).toJson());
     }
     if(operation=="addResolved" || operation=="addPlaced") {
+        if(a.contains("enableScrolling") && a.value("enableScrolling").metaType().id()!=QMetaType::Bool){setError(tr("Choose whether this page scrolls."));return false;}
         const auto proposal=additionProposal(a.value("type").toString(),a.value("placement").toMap(),
-            a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString(),a.value("parentId").toString(),a.value("configuration").toMap());
+            a.value("strategy","cancel").toString(),pageId,a.value("categoryId").toString(),a.value("parentId").toString(),a.value("configuration").toMap(),a.value("enableScrolling",false).toBool());
         if(!proposal.value("valid").toBool()){setError(proposal.value("reason").toString());return false;}
         return pushEdit(QJsonDocument(QJsonObject::fromVariantMap(proposal.value("document").toMap())).toJson());
     }
@@ -484,6 +485,17 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         if(scope=="composition")for(const auto &key:QStringList{"moviePage","showsPage"})if(values.contains(key) && !values.value(key).isNull() && !validNewAction({{"type","open-page"},{"pageId",values.value(key)}}))return false;
         for(auto it=values.cbegin();it!=values.cend();++it){if(it.value().isNull())nested.remove(it.key());else nested[it.key()]=QJsonValue::fromVariant(it.value());}
         document[scope]=nested;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
+    } else if(operation=="scrolling") {
+        if(a.value("enabled").metaType().id()!=QMetaType::Bool){setError(tr("Choose whether this page scrolls."));return false;}
+        auto composition=document["composition"].toObject();
+        if(!composition.value("enabled").toBool() || !composition.contains("grid") || ComponentSchema::normalizedGrid(composition["grid"].toObject().toVariantMap()).value("mode")!="screen"){
+            setError(tr("This layout uses scrolling sections or automatic sizing. Preview a page grid before changing this option."));return false;
+        }
+        composition["verticalScrolling"]=a.value("enabled").toBool();document["composition"]=composition;
+        if(!a.value("enabled").toBool() && !ComponentSchema::layoutPlacementsFit(document["components"].toArray(),composition.toVariantMap(),document["categories"].toArray())){
+            setError(tr("Components extend below the first screen. Move or resize them before turning scrolling off."));return false;
+        }
+        ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if(operation=="setApps") {
         auto entries=document["components"].toArray();int rootIndex=-1;QSet<QString> removed;
         for(int i=0;i<entries.size();++i)if(entries[i].toObject()["id"]==id && entries[i].toObject()["family"]=="app-bar")rootIndex=i;
@@ -1054,6 +1066,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     const auto grid = ComponentSchema::componentGrid(entries,composition,doc["categories"].toArray(),parent,category);
     const int cols = grid["columns"].toInt(), rows = grid["rows"].toInt();
     if (!ComponentSchema::validPlacement(placement, cols, rows)) return fail(QStringLiteral("The candidate is outside the grid."));
+    if(placement.value("height").toInt()>10)return fail(tr("A component can be at most ten rows tall."));
     int selected = -1;
     QVariantMap origin;
     QList<int> colliders;
@@ -1106,7 +1119,13 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
             // Keep neighbors near their authored positions instead of sending
             // every displaced item to the first free cell at the top-left.
             QList<QPair<int,int>> cells;
-            for(int row=0;row<rows;++row)for(int col=0;col<cols;++col)cells.append({col,row});
+            int searchRows=rows;
+            if(rows==ComponentSchema::MaxScrollableRows){
+                int bottom=placement.value("y").toInt()+placement.value("height").toInt();
+                for(const auto &value:originalEntries){const auto entry=value.toObject();if(entry.value("parentId").toString()!=parent)continue;const auto p=entry["placement"].toObject();bottom=qMax(bottom,p["y"].toInt()+p["height"].toInt());}
+                searchRows=qMin(rows,bottom+10);
+            }
+            for(int row=0;row<searchRows;++row)for(int col=0;col<cols;++col)cells.append({col,row});
             const int originalX=target["x"].toInt(),originalY=target["y"].toInt();
             std::stable_sort(cells.begin(),cells.end(),[=](const auto &a,const auto &b){
                 return std::abs(a.first-originalX)+std::abs(a.second-originalY)<std::abs(b.first-originalX)+std::abs(b.second-originalY);
@@ -1144,7 +1163,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
 }
 
 QVariantMap StudioSession::additionProposal(const QString &type, const QVariantMap &placement,
-                                           const QString &strategy, const QString &pageId, const QString &categoryId, const QString &parentId,const QVariantMap &configuration)
+                                           const QString &strategy, const QString &pageId, const QString &categoryId, const QString &parentId,const QVariantMap &configuration,bool enableScrolling)
 {
     if (!m_active || !m_live) return {{"valid",false},{"reason",QStringLiteral("The edit session has closed.")}};
     HomeLayout temporary(m_live->registry()); configureWorker(temporary);
@@ -1159,6 +1178,10 @@ QVariantMap StudioSession::additionProposal(const QString &type, const QVariantM
         for(int i=0;i<pages.size();++i)if(pages[i].toObject()["id"]==pageId)pageIndex=i;
         if(pageIndex<0)return {{"valid",false},{"reason",QStringLiteral("The page no longer exists.")}};
         document=pages[pageIndex].toObject()["layout"].toObject();
+    }
+    if(enableScrolling){
+        if(!parentId.isEmpty() || !categoryId.isEmpty())return {{"valid",false},{"reason",tr("Choose the page before enabling vertical scrolling.")}};
+        auto composition=document["composition"].toObject();composition["verticalScrolling"]=true;document["composition"]=composition;
     }
     auto entries=document["components"].toArray();
     for(const auto &value:prototype.value("components").toList()) {
@@ -1191,7 +1214,7 @@ QVariantMap StudioSession::additionProposal(const QString &type, const QVariantM
     if(!HomeLayout::validateStudioDocument(QJsonDocument(root).toJson(),&error))return {{"valid",false},{"reason",error}};
     proposal["document"]=root.toVariantMap();
     proposal["commands"] = QVariantList{
-        QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId},{"parentId",parentId},{"configuration",configuration}}},{"pageId",pageId}}
+        QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId},{"parentId",parentId},{"configuration",configuration},{"enableScrolling",enableScrolling}}},{"pageId",pageId}}
     };
     return proposal;
 }

@@ -37,6 +37,14 @@ An optional `grid` map inside `composition` declares the universal screen grid, 
 
 `placement` stores `x` (start column), `y` (start row), `width` and `height` (spans) as whole cells that must fit inside the declared grid — overflow is refused, never clamped. `HomeLayout` exposes `grid()`, `setGrid()`, `setItemPlacement()`, `clearItemPlacement()` and `gridCollisions(itemId, placement)` (which returns the `{id, name}` of each occupier, feeding the future shift/swap/cancel dialog). `setGrid` refuses changes that would strand or newly overlap placed widgets. Stored documents whose placements fall outside their grid are rejected on read and the packaged defaults are used; the stored file is never rewritten. Invalid edits fail with `errorString()` and roll back atomically, matching the composition contract. Legacy version-1 layouts load with default grid data and no migration write on read.
 
+### Optional long-page policy (October 21, 2026)
+
+For an enabled screen-grid page, `composition.verticalScrolling` is an optional boolean, default false when absent. Page appearance → Layout exposes **Allow vertical scrolling**, with a draft preview and Done/Cancel. Existing automatic/section layouts retain their behavior and use their explicit conversion workflow; stored documents are never converted on read.
+
+When true, `grid.rows` still means **visible viewport density**, not document length. Root placements may extend downward within a separate 10,240-row bound; component spans remain at most ten rows high and nested grids retain their existing bounds. Content extent is derived from validated placements, with no stored empty-row count. The generic renderer keeps the same cell dimensions, renders a bounded viewport neighborhood and reveals spatial focus by placement. The earlier fixed-root containment rule continues to apply when this policy is false; overlap, locking and document/component limits are unchanged.
+
+Studio's `scrolling` command validates an enabled boolean and previews safely. Turning it off refuses authored content below the first screen. Add suggests a vacant position, and its optional provisional `enableScrolling` flag accepts the policy plus the configured new component atomically; cancel/undo leave the previous fixed page intact. See [implementation and verification](studio-scrolling-2026-10-21.md) for source identities, evidence and remaining scope. This does not make a viewport grid with `rows > 10` valid.
+
 Category `presentation` defines a section independently of its content:
 
 | Field | Behavior |

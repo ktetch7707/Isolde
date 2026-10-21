@@ -171,7 +171,7 @@ def main():
                 key("Return")  # Open the catalog after accepting explicit conversion.
                 capture("catalog")
                 key("Down", 2); key("Right"); key("Return"); key("Return")  # Widgets -> Clock ghost.
-                key("Right"); key("Return")  # Free neighboring cell; one draft operation.
+                key("Return")  # Add suggests the first free cell; one draft operation.
                 assert layout.read_bytes() == original_bytes
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
 
@@ -216,7 +216,7 @@ def main():
                 assert layout.read_bytes() == applied
                 capture("applied")
                 key("Down", 2); key("Return"); key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")  # Widgets -> packaged eight-slot group.
-                key("Down"); key("Return")  # Place below the original components.
+                key("Left", 2); key("Down"); key("Return")  # Place below the original components, with room beside the inspector.
                 assert layout.read_bytes() == applied
                 capture("group")
                 key("Return"); key("Down"); key("Return")  # Context -> Inspector.
@@ -242,12 +242,34 @@ def main():
                 assert panel["presentation"]["layout"]["columns"] == 4
                 assert panel["presentation"]["layout"]["rows"] == 2
                 assert {(item["placement"]["x"], item["placement"]["y"]) for item in children} == {(x, y) for y in range(2) for x in range(4)}
+                grouped_bytes = layout.read_bytes()
+                key("Up", 2); key("Return")  # Page appearance from the Apply menu origin.
+                key("Down", 2); key("Return"); key("Return")  # Layout -> scrolling checkbox.
+                key("Return")  # Preview enabled; no saved setting yet.
+                capture("scrollingoption")
+                assert layout.read_bytes() == grouped_bytes
+                key("Down"); key("Return"); key("Escape", 2)  # Done -> canvas.
+                key("Escape"); key("Down"); key("Return"); key("Down", 2); key("Return")  # More -> Layers.
+                key("Down"); key("Return")  # Select Clock by its stable layer order.
+                key("Return"); key("Return"); key("Down", 15)
+                capture("scrolling")  # Three viewport heights below the first row, same card size.
+                assert layout.read_bytes() == grouped_bytes
+                key("Escape")  # Complete gesture/viewport cancellation.
+                key("Return"); key("Return"); key("Down", 15); key("Return")
+                key("Escape"); key("Down"); key("Return"); key("Return")  # Atomic Apply.
+                expect(lambda: json.loads(layout.read_text())["composition"].get("verticalScrolling") is True,
+                       "Scrolling page saved through the normal Studio checkbox")
+                scrolling_document = json.loads(layout.read_text())
+                assert next(item for item in scrolling_document["components"] if item["id"] == "clock")["placement"]["y"] == 15
+                key("Escape", 2); key("Down", 2)  # Close Studio and Settings; runtime navigation reveals the offscreen Clock.
+                capture("scrollinghome")
                 (evidence / "result.json").write_text(json.dumps({
                     "passed": True, "journey": "studio", "layout": str(layout),
                     "executable": str(executable), "preview_cancel_preserved_bytes": True,
                     "reopen_preserved_bytes": True, "user_usability_acceptance": "pending",
                     "remote_collision_cancel_swap_undo": True, "remote_resize_cancel_accept_undo": True,
                     "bounded_repeat_cancel": True, "nested_group_remote_layers_apply": True,
+                    "scrolling_checkbox_preview_cancel_apply": True, "three_viewport_page": True,
                     "eight_slot_layout_only": True, "physical_input_qualification": "not claimed"
                 }, indent=2))
                 print("Evidence: " + str(evidence), flush=True)

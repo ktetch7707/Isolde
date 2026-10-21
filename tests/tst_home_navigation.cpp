@@ -44,6 +44,7 @@ private slots:
     void studioRemoteGesturesCollisionsAndAnchors();
     void studioRemoteSectionTransferAndCancel();
     void studioLegacyRemoteOrdering();
+    void studioScrollingAddMoveAndCancel();
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
@@ -980,6 +981,86 @@ void HomeNavigationTests::studioRemoteSectionTransferAndCancel()
     QCOMPARE(session->changeCount(),1);QCOMPARE(QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject()["categoryId"].toString(),QString("inputs"));
     QVERIFY(session->undo());QCoreApplication::processEvents();QCOMPARE(session->draft(),start);QTRY_COMPARE(root->property("scopeId").toString(),QString("widgets"));QCOMPARE(root->property("selectedId").toString(),QString("clock"));
     QVERIFY(saved.open(QIODevice::ReadOnly));QCOMPARE(saved.readAll(),disk);
+}
+void HomeNavigationTests::studioScrollingAddMoveAndCancel()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);InputManager input;
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");QVERIFY(home.load(defaults,user));
+    auto doc=QJsonDocument::fromJson(home.committedDocument()).object();doc["categories"]=QJsonArray{};
+    doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",4},{"rows",3},{"mode","screen"}}}};
+    QJsonArray nodes;for(int i=0;i<12;++i)nodes.append(QJsonObject::fromVariantMap(ComponentSchema::component({{"id",QString("cell-%1").arg(i)},{"kind","widget"},{"widgetType","text"},{"name",QString("Item %1").arg(i)},{"placement",QVariantMap{{"x",i%4},{"y",i/4},{"width",1},{"height",1}}}},true)));
+    doc["components"]=nodes;const auto disk=QJsonDocument(doc).toJson();QFile file(user);QVERIFY(file.open(QIODevice::WriteOnly));file.write(disk);file.close();QVERIFY(home.load(defaults,user));
+    QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"layoutModel",QVariant::fromValue(&home)},{"width",1280},{"height",720}}));QVERIFY(root);
+    QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"show",Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString("cell-0"))));
+    auto key=[&](int value){const auto ok=QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,value));QCoreApplication::processEvents();return ok;};
+    const auto variant=[](const QVariant &v){return v.metaType().id()==qMetaTypeId<QJSValue>()?v.value<QJSValue>().toVariant():v;};
+    std::function<QQuickItem *(QQuickItem *,const QString &)> findVisual=[&](QQuickItem *item,const QString &name)->QQuickItem *{if(item->objectName()==name)return item;for(auto *child:item->childItems())if(auto *found=findVisual(child,name))return found;return nullptr;};
+    auto *session=qobject_cast<StudioSession *>(root->property("session").value<QObject *>());QVERIFY(session);const auto start=session->draft();
+    auto *preview=root->findChild<QQuickItem *>("studioPreview");QVERIFY(preview);auto *composed=preview->findChild<QObject *>("composedHome");QVERIFY(composed);
+    QTest::qWait(30);const auto initialCell=variant(composed->property("placementCell")).toMap();
+    for(bool accept:{false,true}){
+        QVERIFY(QMetaObject::invokeMethod(root.get(),"startAddition",Q_ARG(QVariant,QString("text")),Q_ARG(QVariant,QVariantMap{})));
+        QCOMPARE(root->property("mode").toString(),QString("noRoom"));QCOMPARE(session->draft(),start);
+        QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));
+        QVERIFY(root->property("pendingScrollEnable").toBool());QCOMPARE(variant(root->property("candidate")).toMap()["y"].toInt(),3);
+        QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);
+        QVERIFY(key(accept?InputManager::Confirm:InputManager::Back));
+        if(!accept){QTest::qWait(30);QCOMPARE(session->draft(),start);QVERIFY(!root->property("pendingScrollEnable").toBool());}
+    }
+    QCOMPARE(session->changeCount(),1);QVERIFY(session->model()->property("composition").toMap()["verticalScrolling"].toBool());
+    QVERIFY(session->undo());QCOMPARE(session->draft(),start);root->setProperty("selectedId","cell-0");QCoreApplication::processEvents();
+    // Enter the history-budget dialog while an Add is provisional: cancel
+    // must clear the pending policy as well as the component.
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"startAddition",Q_ARG(QVariant,QString("text")),Q_ARG(QVariant,QVariantMap{})));
+    QVERIFY(key(InputManager::Confirm));QVERIFY(root->property("pendingScrollEnable").toBool());
+    root->setProperty("mode","history");root->setProperty("choice",0);QVERIFY(key(InputManager::Confirm));
+    QCOMPARE(root->property("mode").toString(),QString("canvas"));QVERIFY(!root->property("pendingScrollEnable").toBool());QCOMPARE(session->draft(),start);
+    // Exercise the real page-property checkbox and its draft preview panel.
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"openInspector",Q_ARG(QVariant,true)));
+    auto *inspector=root->findChild<QObject *>("studioInspector");QVERIFY(inspector);inspector->setProperty("selected",2);
+    QVERIFY(key(InputManager::Confirm));QCOMPARE(inspector->property("view").toString(),QString("fields"));
+    const auto fields=variant(inspector->property("fields")).toList();QVERIFY(!fields.isEmpty());QCOMPARE(fields[0].toMap()["key"].toString(),QString("verticalScrolling"));
+    QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("scrolling"));
+    auto *toggle=root->findChild<QObject *>("studioScrollingToggle");QVERIFY(toggle);QVERIFY(!toggle->property("checked").toBool());
+    QVERIFY(key(InputManager::Confirm));QVERIFY(toggle->property("checked").toBool());QCOMPARE(session->draft(),start);
+    QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),start);QVERIFY(!session->proposalModel());
+    QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));
+    QCOMPARE(root->property("mode").toString(),QString("inspector"));QCOMPARE(session->changeCount(),1);
+    QVERIFY(key(InputManager::Back));QVERIFY(key(InputManager::Back));QCOMPARE(root->property("mode").toString(),QString("canvas"));
+    const auto enabled=session->draft();QCOMPARE(variant(composed->property("placementCell")).toMap()["cellH"],initialCell["cellH"]);
+    for(bool accept:{false,true}){
+        QVERIFY(QMetaObject::invokeMethod(root.get(),"beginGesture",Q_ARG(QVariant,false)));
+        for(int i=0;i<12;++i)QVERIFY(key(InputManager::NavigateDown));QTest::qWait(40);
+        QVERIFY(composed->property("scrollOffset").toReal()>0);QCOMPARE(session->draft(),enabled);
+        QVariant placed;QVERIFY(QMetaObject::invokeMethod(preview,"placementRectFor",Q_RETURN_ARG(QVariant,placed),Q_ARG(QVariant,variant(root->property("candidate"))),Q_ARG(QVariant,QString()),Q_ARG(QVariant,QString())));
+        const auto visibleRect=variant(placed).toMap(),viewport=variant(preview->property("pageViewport")).toMap();
+        auto *rendered=findVisual(qobject_cast<QQuickItem *>(root.get()),"studioProposal-cell-0");QVERIFY(rendered);QVERIFY(rendered->isVisible());
+        const auto actual=rendered->mapToItem(preview,QPointF(0,0));
+        QVERIFY(qAbs(actual.y()-visibleRect["y"].toReal())<0.01);QVERIFY(qAbs(actual.x()-visibleRect["x"].toReal())<0.01);
+        QVERIFY(visibleRect["y"].toReal()>=viewport["y"].toReal()-0.01);
+        QVERIFY2(visibleRect["y"].toReal()+visibleRect["height"].toReal()<=viewport["y"].toReal()+viewport["height"].toReal()+0.01,qPrintable(QString("target %1 + %2, viewport %3 + %4, scroll %5").arg(visibleRect["y"].toReal()).arg(visibleRect["height"].toReal()).arg(viewport["y"].toReal()).arg(viewport["height"].toReal()).arg(composed->property("scrollOffset").toReal())));
+        QCOMPARE(variant(composed->property("placementCell")).toMap()["cellH"],initialCell["cellH"]);
+        QVERIFY(key(accept?InputManager::Confirm:InputManager::Back));
+        if(!accept){QTest::qWait(40);QCOMPARE(session->draft(),enabled);QCOMPARE(composed->property("scrollOffset").toInt(),0);}
+    }
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"inspectorOperation",Q_ARG(QVariant,QString("scrolling"))));
+    QVERIFY(key(InputManager::Confirm));QVERIFY(root->property("scrollingDraft").toBool());QVERIFY(root->property("message").toString().contains("below"));
+    QVERIFY(key(InputManager::Back));QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),disk);
+    // Runtime consumes the same grid/placements as Main, not just Studio's
+    // proposal geometry. Offscreen widgets instantiate when focused.
+    auto *model=session->model();
+    QQmlComponent runtime(&engine,QUrl::fromLocalFile(QStringLiteral(HOME_QML)));QVERIFY2(runtime.isReady(),qPrintable(runtime.errorString()));
+    QVariantMap properties{{"width",1280},{"height",720},{"internetAvailable",false},{"localNetworkAvailable",false},{"hasContextualSources",false}};
+    for(const auto &name:QStringList{"items","sections","brandVisible","backgroundStart","backgroundEnd","tileRoundness","appearance","composition","grid","placements"})properties[name]=model->property(name.toUtf8().constData());
+    std::unique_ptr<QObject> live(runtime.createWithInitialProperties(properties));QVERIFY2(live,qPrintable(runtime.errorString()));
+    auto *liveItem=qobject_cast<QQuickItem *>(live.get());liveItem->setParentItem(window.contentItem());
+    QVERIFY(QMetaObject::invokeMethod(live.get(),"restoreFocus",Q_ARG(QVariant,QString("cell-0"))));QTest::qWait(50);
+    auto *card=findVisual(liveItem,"placed-cell-0");QVERIFY(card);QVERIFY(card->isVisible());
+    const auto actual=card->mapToItem(liveItem,QPointF(0,0));const auto viewport=variant(live->property("pageViewport")).toMap();
+    QVERIFY(actual.y()>=viewport["y"].toReal()-0.01);QVERIFY2(actual.y()+card->height()<=viewport["y"].toReal()+viewport["height"].toReal()+0.01,qPrintable(QString("runtime target %1 + %2, viewport %3 + %4").arg(actual.y()).arg(card->height()).arg(viewport["y"].toReal()).arg(viewport["height"].toReal())));
 }
 void HomeNavigationTests::studioLegacyRemoteOrdering()
 {

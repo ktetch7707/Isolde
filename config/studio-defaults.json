@@ -1742,6 +1742,14 @@
       {
         "tab": "Layout",
         "scope": "composition",
+        "key": "verticalScrolling",
+        "label": "Allow vertical scrolling",
+        "type": "scrolling",
+        "fallback": false
+      },
+      {
+        "tab": "Layout",
+        "scope": "composition",
         "key": "grid",
         "label": "Grid / scrolling sections",
         "type": "grid"

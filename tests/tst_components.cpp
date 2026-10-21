@@ -58,6 +58,7 @@ private slots:
     void studioChromeRemainsReadableAndProfileLocal();
     void studioHiddenAndLockedStatesAreRecoverable();
     void studioShiftCascadesAreBoundedAndAtomic();
+    void studioScrollingPagesAreBoundedAndAtomic();
     void studioSectionTransfersDuplicationAndOrdering();
     void studioNestedGroupsValidateAndReparentAtomically();
     void studioCatalogLinksInspectorAndStagedArtwork();
@@ -1015,6 +1016,41 @@ void ComponentTests::studioHiddenAndLockedStatesAreRecoverable()
     QVERIFY(session->execute("state",{{"id","clock"},{"key","locked"},{"value",false}}));
     QVERIFY(session->execute("place",{{"placements",QVariantList{QVariantMap{{"id","clock"},{"placement",target}}}}}));QVERIFY(session->apply());
     bool found=false;for(const auto &entry:home.items())if(entry.toMap()["id"]=="clock")found=true;QVERIFY(found);
+}
+void ComponentTests::studioScrollingPagesAreBoundedAndAtomic()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");QVERIFY(home.load(defaults,user));
+    auto document=QJsonDocument::fromJson(home.committedDocument()).object();document["categories"]=QJsonArray{};
+    const QJsonObject composition{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",4},{"rows",3},{"mode","screen"}}}};
+    document["composition"]=composition;
+    document["components"]=QJsonArray{QJsonObject::fromVariantMap(ComponentSchema::component({{"id","clock"},{"kind","widget"},{"widgetType","clock"},{"placement",QVariantMap{{"x",0},{"y",0},{"width",1},{"height",1}}}},true))};
+    writeFile(user,QJsonDocument(document).toJson());QVERIFY(home.load(defaults,user));const auto disk=readFile(user);
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto start=session->draft();
+    const QVariantMap below{{"x",0},{"y",12},{"width",1},{"height",1}};
+    QVERIFY(!session->placementProposal("clock",below,"shift")["valid"].toBool());
+    QVERIFY(!session->execute("scrolling",{{"enabled","yes"}}));QCOMPARE(session->draft(),start);
+    QVERIFY(session->previewCommand("scrolling",{{"enabled",true}}));QCOMPARE(session->draft(),start);QCOMPARE(session->changeCount(),0);
+    session->cancelPreview();QCOMPARE(session->draft(),start);
+    QVERIFY(session->execute("scrolling",{{"enabled",true}}));
+    const auto enabled=session->draft();
+    const auto proposal=session->placementProposal("clock",below,"shift");QVERIFY2(proposal["valid"].toBool(),qPrintable(proposal["reason"].toString()));
+    QVERIFY(session->execute("place",{{"placements",proposal["placements"]}}));const auto longPage=session->draft();
+    QVERIFY(!session->previewCommand("scrolling",{{"enabled",false}}));QCOMPARE(session->draft(),longPage);QVERIFY(!session->proposalModel());
+    QVERIFY(!session->placementProposal("clock",{{"x",0},{"y",ComponentSchema::MaxScrollableRows},{"width",1},{"height",1}},"shift")["valid"].toBool());
+    QVERIFY(!session->placementProposal("clock",{{"x",0},{"y",0},{"width",1},{"height",11}},"shift")["valid"].toBool());
+    QCOMPARE(readFile(user),disk);QVERIFY(session->undo());QCOMPARE(session->draft(),enabled);QVERIFY(session->undo());QCOMPARE(session->draft(),start);
+    // Enabling scrolling from a blocked Add is one transaction, not a
+    // separately applied setting that survives cancellation/undo.
+    const auto addition=session->additionProposal("text",below,"shift",{},{},{},{},true);
+    QVERIFY2(addition["valid"].toBool(),qPrintable(addition["reason"].toString()));QCOMPARE(session->draft(),start);
+    QVERIFY(session->execute("batch",{{"commands",addition["commands"]}}));QCOMPARE(session->changeCount(),1);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),start);QVERIFY(session->redo());
+    QVERIFY(session->apply());HomeLayout reload(&registry);QVERIFY(reload.load(defaults,user));
+    QVERIFY(reload.composition()["verticalScrolling"].toBool());QCOMPARE(reload.grid()["rows"].toInt(),3);
+    QCOMPARE(reload.components().size(),2);QVERIFY(!session->canUndo());
+    auto malformed=composition.toVariantMap();malformed["verticalScrolling"]="true";QVERIFY(!ComponentSchema::validComposition(malformed));
+    malformed["verticalScrolling"]=true;malformed["grid"]=QVariantMap{{"rows",100},{"columns",4},{"mode","screen"}};QVERIFY(!ComponentSchema::validComposition(malformed));
 }
 void ComponentTests::studioShiftCascadesAreBoundedAndAtomic()
 {

@@ -1,5 +1,6 @@
 // StudioInspector.qml — remote-operable property editor (D-pad friendly). Views: fields, choices, artwork, crop, layout, apps, states, colorWheel.
 import QtQuick
+import QtQuick.Controls
 
 Item {
     id:root
@@ -80,7 +81,7 @@ Item {
         if(f.type==="action"){if(!value || !value.type)return "None";const named=actions.find(a=>Object.keys(a.action).every(k=>a.action[k]===value[k]));return named?named.name:"Unavailable link · choose a replacement"}
         if(f.type==="artwork")return value?"Managed image":"None"
         if(["geometry","layout","children","apps","order","crop","grid","header","typography"].indexOf(f.type)>=0)return "Open…"
-        if(f.type==="toggle")return value?"On":"Off"
+        if(f.type==="toggle" || f.type==="scrolling")return value?"On":"Off"
         const members=pageMode?[{}]:targets,overridden=members.filter(i=>local(i,f)!==undefined).length
         return String(value===undefined?"":value)+(overridden===0?" · Inherited":overridden===members.length?" · Override":" · Mixed overrides")
     }
@@ -255,10 +256,19 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                 model:root.labels()
                 delegate:Rectangle {
                     required property int index;required property string modelData
+                    readonly property var rowField:root.view==="fields" && root.tabs[root.tab]!=="More"?root.fields[index]:null
                     width:list.width;height:48*root.unit;radius:8*root.unit;color:index===root.selected?root.appearance.selectedColor:"transparent";border.width:index===root.selected?2:0;border.color:root.appearance.focusColor
-                    Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;elide:Text.ElideRight}
+                    Text {visible:!scrollCheckbox.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;elide:Text.ElideRight}
+                    CheckBox {
+                        id:scrollCheckbox;objectName:"studioScrollingCheckbox";anchors.fill:parent;visible:!!parent.rowField && parent.rowField.type==="scrolling"
+                        checkable:false;checked:visible && root.effective(root.current,parent.rowField)===true
+                        text:visible?parent.rowField.label:"";font.pixelSize:18*root.unit
+                        indicator:Rectangle {x:8*root.unit;anchors.verticalCenter:parent.verticalCenter;width:24*root.unit;height:width;radius:4*root.unit;color:scrollCheckbox.checked?root.appearance.focusColor:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor;Text {anchors.centerIn:parent;text:scrollCheckbox.checked?"✓":"";color:root.appearance.surfaceColor}}
+                        contentItem:Text {text:scrollCheckbox.text;leftPadding:44*root.unit;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font:scrollCheckbox.font;elide:Text.ElideRight}
+                        onClicked:{root.selected=index;root.activateField(parent.rowField)}
+                    }
                     Accessible.role:Accessible.Button;Accessible.name:modelData
-                    MouseArea {anchors.fill:parent;onClicked:{root.selected=index;root.activate()}}
+                    MouseArea {anchors.fill:parent;enabled:!scrollCheckbox.visible;onClicked:{root.selected=index;root.activate()}}
                 }
             }
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:footerText;width:parent.width;text:root.collapseNeeded?"Confirm edits · Back returns":"Adjust · Menu resets · Back returns";color:root.appearance.mutedColor;font.pixelSize:14*root.unit;wrapMode:Text.Wrap}

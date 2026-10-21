@@ -66,6 +66,9 @@ Item {
     property var composition: ({})
     property var grid: ({})
     property var placements: []
+    property int previewExtentRows:0
+    readonly property int firstVisibleGridRow:composed.firstVisibleGridRow
+    readonly property var pageViewport:composed.viewportRect()
     readonly property var gridMetrics: composed.placementCell
     readonly property real componentUnit:composed.unit
     readonly property string layoutError: {
@@ -84,7 +87,16 @@ Item {
     }
     function gridMetricsFor(scope,parentId) { const surface=groupSurface(parentId);return surface && surface.item?surface.item.metrics:composed.gridMetricsFor(scope) }
     function revealScope(scope) { composed.revealScope(scope) }
-    function revealPlacement(p,scope,parentId) {const surface=groupSurface(parentId);if(surface && surface.revealPlacement)surface.revealPlacement(p);else composed.revealPlacement(p,scope) }
+    function revealPlacement(p,scope,parentId) {
+        const surface=groupSurface(parentId)
+        if(surface && surface.revealPlacement)surface.revealPlacement(p)
+        else if(composition.verticalScrolling && grid.mode==="screen"){
+            // Candidate growth changes contentHeight in the same input event.
+            // Reveal after that binding settles, including the final step.
+            const placement=Object.assign({},p)
+            Qt.callLater(()=>composed.revealPlacement(placement,scope))
+        }else composed.revealPlacement(p,scope)
+    }
     function editorViewport() {
         const groups={}
         for(const id of Object.keys(groupSurfaces)){const surface=groupSurface(id);if(surface && surface.editorViewport)groups[id]=surface.editorViewport()}

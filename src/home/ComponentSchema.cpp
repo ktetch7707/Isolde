@@ -178,7 +178,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
     if(value.contains("background")) {
         const auto background=value["background"].toMap();
@@ -214,7 +214,8 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
         for (const auto &control : controls) { const auto id = control.toString(); if (!QStringList{"search", "settings", "edit"}.contains(id) || unique.contains(id)) return false; unique.insert(id); }
         if (!unique.contains("settings") && !unique.contains("edit")) return false;
     }
-    for (const auto &key : {"enabled", "fit", "showProfile", "showClock"})
+    if(value.value("verticalScrolling").toBool() && (!value.value("enabled").toBool() || !value.contains("grid") || normalizedGrid(value.value("grid").toMap()).value("mode")!="screen"))return false;
+    for (const auto &key : {"enabled", "fit", "showProfile", "showClock", "verticalScrolling"})
         if (value.contains(key) && value[key].metaType().id() != QMetaType::Bool) return false;
     for (const auto &key : {"margin", "gap"}) if (value.contains(key)) {
         bool ok; const double number = value[key].toDouble(&ok);
@@ -387,7 +388,8 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         // Shape-only bounds here; the layout validates against its actual grid and neighbors.
         const auto placement = input.value("placement");
         if (placement.metaType().id() != QMetaType::QVariantMap
-            || !validPlacement(placement.toMap(), MaxChildColumns, MaxChildRows)) return reject(error, "Invalid component placement.");
+            || !validPlacement(placement.toMap(), MaxChildColumns, MaxScrollableRows)
+            || placement.toMap().value("height").toInt()>MaxChildRows) return reject(error, "Invalid component placement.");
         result["placement"] = placement;
     }
     if (input.contains("presentation") && (input.value("presentation").metaType().id() != QMetaType::QVariantMap
@@ -493,6 +495,7 @@ bool ComponentSchema::placementsFit(const QJsonArray &items, const QVariantMap &
 QVariantMap ComponentSchema::sectionGrid(const QVariantMap &composition, const QJsonArray &categories, const QString &categoryId)
 {
     auto grid=normalizedGrid(composition.value("grid").toMap());
+    if(grid.value("mode")=="screen" && composition.value("verticalScrolling").toBool())grid["rows"]=MaxScrollableRows;
     if(grid.value("mode")!="sections")return grid;
     for(const auto &entry:categories) {
         const auto category=entry.toObject();
@@ -560,7 +563,7 @@ bool ComponentSchema::hierarchyFits(const QJsonArray &items,const QVariantMap &c
         if(!it.value().contains("placement") || !validChildLayout(it.value()["presentation"].toObject()["layout"].toObject().toVariantMap()))return fail("A group needs a bounded placement and internal layout.");
         if(!placementsFit(children.value(it.key()),componentGrid(items,composition,categories,it.key(),{})))return fail("Group contents overlap or do not fit their local grid.");
     }
-    const auto grid=normalizedGrid(composition.value("grid").toMap());
+    const auto grid=sectionGrid(composition,categories,{});
     if(grid.value("mode")!="sections")return placementsFit(roots,grid)?true:fail("Page components overlap or do not fit the grid.");
     QHash<QString,QJsonArray> groups;
     for(const auto &entry:roots) {

@@ -329,7 +329,8 @@ QVariantMap HomeLayout::studioOptions() const
         ids.insert(id);
     }
     if(ids.size()!=2 || !ids.contains(object["defaultGrid"].toObject()["mode"].toString()))return {};
-    return object.toVariantMap();
+    auto result=object.toVariantMap();result["maxScrollableRows"]=ComponentSchema::MaxScrollableRows;
+    return result;
 }
 
 QVariantMap HomeLayout::studioAppearance() const {

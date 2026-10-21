@@ -7,6 +7,8 @@ class AppRegistry;
 // Every validator returns true only for documents that satisfy the layout
 // bounds declared in ComponentSchema.cpp; values are never clamped silently.
 namespace ComponentSchema {
+// Logical page extent is independent of the bounded TV viewport grid.
+inline constexpr int MaxScrollableRows = 10240;
 // Validates a component/section presentation map. When section is true the
 // map is a page section; when container is true it is a group container.
 // Allowed state keys: normal, focused, selected, pressed, disabled, unavailable.

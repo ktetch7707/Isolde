@@ -1,6 +1,6 @@
 # Optional vertically scrolling pages
 
-User decision, 2026-10-21: a page may contain more rows than fit on the TV, controlled by a per-page checkbox. Users can keep a one-screen interface or put their interface on one long page. This document defines pending implementation, not current installed behavior.
+User decision, 2026-10-21: a page may contain more rows than fit on the TV, controlled by a per-page checkbox. Users can keep a one-screen interface or put their interface on one long page. This document defines the required behavior. The [implementation record](../../studio-scrolling-2026-10-21.md) tracks the delivered screen-grid slice, verification and remaining scope; it does not claim the entire contract is complete.
 
 ## User-facing behavior
 

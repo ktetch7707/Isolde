@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 
 Item {
     id: root
@@ -41,6 +42,36 @@ Item {
     readonly property bool sectionMode: !!root.config.grid && root.grid.mode==="sections"
     property var sectionSurfaces: ({})
     readonly property real scrollOffset:content.contentY
+    function viewportRect(){
+        // mapToItem does not subscribe a binding to ancestor transforms.
+        let ancestor=content
+        while(ancestor && ancestor!==host){const geometry=ancestor.x+ancestor.y+ancestor.width+ancestor.height+ancestor.scale;ancestor=ancestor.parent}
+        const point=content.mapToItem(host,0,0);return {x:point.x,y:point.y,width:content.width,height:content.height}
+    }
+    readonly property bool scrollingPage:placementMode && !sectionMode && config.verticalScrolling===true
+    readonly property int contentRows: {
+        let rows=root.grid.rows || 5
+        if(!scrollingPage)return rows
+        for(const entry of placedItems)rows=Math.max(rows,entry.placement.y+entry.placement.height)
+        return Math.max(rows,host.previewExtentRows || 0)
+    }
+    readonly property int firstVisibleGridRow:scrollingPage?Math.max(0,Math.floor(content.contentY/(placementCell.cellH+placementCell.gap))):0
+    readonly property real pageContentHeight:scrollingPage?Math.max(content.height,2*placementCell.margin+contentRows*(placementCell.cellH+placementCell.gap)-placementCell.gap):content.height
+    readonly property var viewportItems:scrollingPage?placedItems.filter(entry=>{
+        const top=placementCell.margin+entry.placement.y*(placementCell.cellH+placementCell.gap)
+        const bottom=top+entry.placement.height*(placementCell.cellH+placementCell.gap)-placementCell.gap
+        return bottom>=content.contentY-content.height && top<=content.contentY+2*content.height
+    }):placedItems
+    Connections {
+        target:host
+        function onFocusedIndexChanged(){root.settleRuntimeFocus()}
+    }
+    function revealFocusedPlacement(){
+        let item=(host.items || [])[host.focusedIndex]
+        for(let depth=0;item && item.parentId && depth<4;++depth)item=(host.items || []).find(i=>i.id===item.parentId)
+        if(item && item.placement)revealPlacement(item.placement,item.categoryId || "")
+    }
+    function settleRuntimeFocus(){if(scrollingPage && !host.editMode)Qt.callLater(revealFocusedPlacement)}
     function editorViewport(){return {y:content.contentY,navigationX:navigationStrip.contentX}}
     function restoreEditorViewport(state){if(!state)return;content.cancelFlick();content.contentY=state.y;navigationStrip.cancelFlick();navigationStrip.contentX=state.navigationX}
     readonly property bool placementMode: {
@@ -79,8 +110,12 @@ Item {
     function placementRect(p,scope) {
         const surface=sectionMode?sectionSurfaces[scope || ""]:placementGrid
         const c = gridMetricsFor(scope)
-        const origin = (surface || placementGrid).mapToItem(host, c.margin, c.margin)
-        return {x: origin.x + p.x*(c.cellW+c.gap), y: origin.y + p.y*(c.cellH+c.gap),
+        let ancestor=surface || placementGrid
+        while(ancestor && ancestor!==content.contentItem){const geometry=ancestor.x+ancestor.y+ancestor.width+ancestor.height;ancestor=ancestor.parent}
+        const origin = (surface || placementGrid).mapToItem(content.contentItem, c.margin, c.margin),viewport=viewportRect()
+        // Explicit scroll dependencies keep rendered proposal bindings in
+        // sync; mapToItem alone only updates when it is called again.
+        return {x: viewport.x+origin.x-content.contentX + p.x*(c.cellW+c.gap), y: viewport.y+origin.y-content.contentY + p.y*(c.cellH+c.gap),
             width: p.width*c.cellW + (p.width-1)*c.gap,
             height: p.height*c.cellH + (p.height-1)*c.gap}
     }
@@ -90,6 +125,12 @@ Item {
         content.contentY=Math.max(0,Math.min(content.contentHeight-content.height,point.y))
     }
     function revealPlacement(p,scope) {
+        if(scrollingPage){
+            const rect=placementRect(p,scope),viewport=viewportRect(),c=placementCell
+            if(rect.y<viewport.y)content.contentY=Math.max(0,content.contentY+rect.y-viewport.y-c.gap)
+            else if(rect.y+rect.height>viewport.y+viewport.height)content.contentY=Math.min(Math.max(0,content.contentHeight-content.height),content.contentY+rect.y+rect.height-viewport.y-viewport.height+c.gap)
+            return
+        }
         const surface=sectionSurfaces[scope || ""];if(!sectionMode || !surface)return
         const c=surface.metrics,point=surface.mapToItem(content.contentItem,c.margin+p.x*(c.cellW+c.gap),c.margin+p.y*(c.cellH+c.gap))
         const height=p.height*c.cellH+(p.height-1)*c.gap
@@ -103,7 +144,7 @@ Item {
         handleCommand(inputManager.confirm)
     }
     function revealCard(card,editing) {
-        if (!card || host.editMode && !editing || root.placementMode && !root.sectionMode) return
+        if (!card || host.editMode && !editing || root.placementMode && !root.sectionMode && !scrollingPage) return
         const p = card.mapToItem(content.contentItem,0,0)
         if(p.y<content.contentY)content.contentY=Math.max(0,p.y-6)
         else if(p.y+card.height>content.contentY+content.height)content.contentY=Math.max(0,p.y+card.height-content.height+6)
@@ -188,6 +229,7 @@ Item {
         else { activeTabId = tab.id; const first = focusEntries()[0]; if (first) host.focusedIndex = host.itemIndex(first.id) }
     }
     function restoreFocus(id) {
+        if(scrollingPage)Qt.callLater(revealFocusedPlacement)
         const component=(host.items || []).find(i=>i.id===id);activeGroup=component?component.parentId || "":""
         sectionActionId = id.startsWith("section-") ? id : ""
         navigationFocused = id.startsWith("tab-")
@@ -310,7 +352,17 @@ Item {
             }
         }
         Flickable {
-            id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode && !root.sectionMode ? height : grid.implicitHeight; clip:true
+            id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode && !root.sectionMode ? root.pageContentHeight : grid.implicitHeight; clip:true
+            boundsBehavior:Flickable.StopAtBounds
+            onYChanged:root.settleRuntimeFocus()
+            onHeightChanged:root.settleRuntimeFocus()
+            onContentHeightChanged:root.settleRuntimeFocus()
+            ScrollBar.vertical:ScrollBar {
+                visible:root.scrollingPage && content.contentHeight>content.height
+                policy:ScrollBar.AsNeeded
+                contentItem:Rectangle {implicitWidth:5*root.unit;radius:width/2;color:host.appearance.focusColor}
+                background:Rectangle {color:"transparent"}
+            }
             GridLayout {
                 id:grid; width:parent.width; columns:root.columns; columnSpacing:root.gap; rowSpacing:root.gap; visible:!root.placementMode || root.sectionMode
                 Repeater {
@@ -420,9 +472,12 @@ Item {
                 id:placementGrid
                 visible:root.placementMode && !root.sectionMode
                 width:content.width;height:content.height
-                items:visible?root.placedItems:[];metrics:root.placementCell;host:root.host;unit:root.unit
+                items:visible?root.viewportItems:[];metrics:root.placementCell;host:root.host;unit:root.unit
                 onActivated:item=>root.activatePlaced(item)
-                onFocused:card=>root.revealCard(card)
+                // Delegates can announce selection while the viewport's
+                // filtered model is being constructed, before their geometry
+                // is ready. Reveal authored placement after that construction.
+                onFocused:card=>{if(root.scrollingPage)root.settleRuntimeFocus();else root.revealCard(card)}
             }
         }
     }
