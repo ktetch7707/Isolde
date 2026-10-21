@@ -1,5 +1,7 @@
 # Page-first Studio — revised UX direction
 
+Follow-up UX requirements (2026-10-20): [the usability audit](usability-audit-2026-10-20.md) now also requires Studio selection to share the authored Home focus appearance, direct header/title/clock/Search/Settings editing, and named homes for tools rather than a mixed More tools menu. Essential interactions must be discoverable from the controls; optional Help and consequence/error feedback must not become operating instructions pasted over the page. T21.12-T21.14 remain unimplemented delivery gates.
+
 Latest usability authority (user, 2026-10-20): [UI audit and revised interaction contract](usability-audit-2026-10-20.md) supersedes the older movement/size/color/context details below. Use Move/Edit component/Duplicate/Delete; put Size & layout inside Edit component; provide a visual wheel/palette; preview automatic neighbor reflow during movement. Earlier Shift/Swap dialogs remain only for exceptional alternatives, not routine occupied drops.
 
 Latest component clarification (2026-10-20): [Component contracts](component-contracts.md) governs the catalog and semantic preset rebuild. App and recently viewed rows are real collections; Shape, Text and linked Image/GIF are first-class tools. Read this before the older six-family table below. This requirement update is not implementation evidence.
