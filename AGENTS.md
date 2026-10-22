@@ -2,6 +2,12 @@
 
 > Persistent instruction. Do not delete.
 
+## Machine boundary — standing user preference (2026-10-21)
+
+The **Isolde-Test VM exists solely to test Isolde**. Necessary cleanup, build/test setup, test data and service changes **inside that guest** are authorized without repeated permission requests. Manage obsolete guest build artifacts proactively when space blocks work; preserve useful evidence and current acceptance data where practical. Verify resolved paths belong to the guest before destructive operations; never follow a shared-folder/mount path into the host. Continue using the bounded VM runner and recording what changed. This permission does not make a failed test a pass or waive verification.
+
+The **Windows host is the user's personal machine and contains valuable data**. Limit host writes to the authorized Isolde workspace and explicitly requested artifact outputs. Do not clean unrelated host files, install host toolchains, change host services/settings/security/networking, or touch personal account data. Guest maintenance permission never authorizes host maintenance. Repository edits, Git operations and task evidence within the workspace remain authorized.
+
 1. On session start, read `docs/agent-backlog.md` — it is the single source of truth for sequencing and percent completion.
 Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Visual/Deploy/Status/Cancel/Recover; do not hand-roll SSH/build/capture loops. Finish an edit batch before testing, reuse the incremental Linux cache, and stop at the first named failure. Poll an existing tool session rather than starting another build; never interrupt a healthy build for optional polish. Explicit user-requested architecture/planning/testing reviews may inspect relevant plans and evidence without implementing the next feature. Preserve unrelated working-tree changes.
 
