@@ -87,14 +87,25 @@ QString HomeLayout::saveSkin(const QString &name) {
     }
     setError({}); emit skinsChanged(); return id;
 }
-bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &assets) {
+bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &assets, bool addMissingPages) {
     const auto previous = documentData();
     const auto legacy = m_legacyDocument;
+    QJsonArray mergedPages=m_pages;
+    if(addMissingPages) {
+        if(m_owner){setError(tr("Apply this page-set skin from Home to add its library pages."));return false;}
+        HomeLayout validator(m_registry);
+        if(!validator.loadDocument(QJsonDocument(document).toJson(),false)){setError(validator.errorString());return false;}
+        for(const auto &entry:document["pages"].toArray()) {
+            bool exists=false;for(const auto &saved:mergedPages)if(saved.toObject()["id"]==entry.toObject()["id"])exists=true;
+            if(!exists)mergedPages.append(entry);
+        }
+        document.remove("pages");
+    }
     const bool singlePage=!m_owner && !document.contains("pages");
     const auto wrap=[&](QJsonObject page) {
         if(!singlePage)return page;
         if(m_homePageId.isEmpty()) {
-            page["pages"]=m_pages;page["homePageId"]=m_homePageId;
+            page["pages"]=mergedPages;page["homePageId"]=m_homePageId;
             if(!m_rootPage.isEmpty())page["rootPage"]=m_rootPage;
             if(!m_studioAppearance.isEmpty())page["studioAppearance"]=QJsonObject::fromVariantMap(m_studioAppearance);
             return page;
@@ -103,7 +114,7 @@ bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &asse
         HomeLayout converted(m_registry);converted.m_owner=this;
         if(!converted.loadDocument(QJsonDocument(page).toJson(),false))return QJsonObject{};
         page=QJsonDocument::fromJson(converted.documentData()).object();
-        auto root=QJsonDocument::fromJson(previous).object();auto pages=root["pages"].toArray();
+        auto root=QJsonDocument::fromJson(previous).object();auto pages=mergedPages;
         for(int i=0;i<pages.size();++i)if(pages[i].toObject()["id"]==m_homePageId){auto entry=pages[i].toObject();entry["layout"]=page;pages[i]=entry;}
         root["pages"]=pages;return root;
     };
@@ -145,7 +156,8 @@ bool HomeLayout::applySkin(const QString &id) {
     if (skin["schemaVersion"].toInt() != 1 || !skin["layout"].isObject() || !skin["assets"].isObject()) {
         setError(tr("This skin is missing or invalid.")); return false;
     }
-    return applySkinDocument(skin["layout"].toObject(), skin["assets"].toObject());
+    if(skin.contains("pagePolicy") && skin["pagePolicy"]!="add-missing") {setError(tr("Unsupported skin page policy."));return false;}
+    return applySkinDocument(skin["layout"].toObject(), skin["assets"].toObject(),skin["pagePolicy"]=="add-missing");
 }
 bool HomeLayout::renameSkin(const QString &id, const QString &name) {
     if (!id.startsWith("user-") || !ComponentSchema::safeId(id) || !validName(name)) { setError(tr("Choose a saved skin and a name of 1–80 characters.")); return false; }

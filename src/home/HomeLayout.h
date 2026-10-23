@@ -188,7 +188,7 @@ private:
     bool save();
     QByteArray documentData() const;
     QString skinDirectory() const;
-    bool applySkinDocument(QJsonObject document, const QJsonObject &assets);
+    bool applySkinDocument(QJsonObject document, const QJsonObject &assets, bool addMissingPages = false);
     bool storePage(const QString &id, const QJsonObject &document);
     void syncPages();
     QString pageKey(const QString &id) const;

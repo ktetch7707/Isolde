@@ -129,7 +129,7 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     auto *restoredPage=qobject_cast<PageModel *>(restored.pageModel(movies));QVERIFY(restoredPage);
     QCOMPARE(restoredPage->appearance()["focusColor"].toString(),QString("#123456"));
     const auto snapshot=layout.saveSkin("Whole interface");QVERIFY(!snapshot.isEmpty());
-    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));QCOMPARE(layout.pages().size(),2); // Home presets preserve authored pages.
+    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));QCOMPARE(layout.pages().size(),4); // Add starter pages without replacing authored pages.
     const auto linkedState=layout.committedDocument();
     QVERIFY(!layout.removePage(shows));QCOMPARE(layout.committedDocument(),linkedState);
     QVERIFY(page->setItemAction(button,{{"type","open-page"},{"pageId",movies}})); // Explicitly repair the incoming link.
@@ -164,6 +164,15 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     const auto savedComposition = layout.composition();
     const auto savedItems = layout.components();
     QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));
+    QCOMPARE(layout.pages().size(),2);
+    auto *moviePage=qobject_cast<PageModel *>(layout.pageModel("library-movies"));QVERIFY(moviePage);
+    QCOMPARE(moviePage->items().first().toMap()["componentType"].toString(),QString("library"));
+    const auto moviesLink=layout.components()[6].toMap()["action"].toMap();
+    QCOMPARE(moviesLink["type"].toString(),QString("open-page"));
+    QCOMPARE(moviesLink["pageId"].toString(),QString("library-movies"));
+    QVERIFY(moviePage->setAppearance({{"focusColor","#123456"}}));
+    QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),2);
+    QCOMPARE(moviePage->appearance()["focusColor"].toString(),QString("#123456"));
     QVERIFY(!layout.wallpaperSource().isEmpty());
     QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),4);
     // The snapshot is independent of the live artwork store, and survives a process reload.

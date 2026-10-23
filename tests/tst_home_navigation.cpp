@@ -138,7 +138,9 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     one->selectIndex(3);QCOMPARE(two->selectedIndex(),0);
     auto style=page->categories()[0].toMap()["presentation"].toMap();style["panelOpacity"]=0.7;style["libraryCardStyle"]="orb";QVERIFY(page->setSectionPresentation("library",style));QTest::qWait(100);QCOMPARE(reads,2);QCOMPARE(one->selectedIndex(),3);
     auto command=[&](int value){return QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,value));};
-    QVERIFY(command(InputManager::Confirm));QVERIFY(command(InputManager::Confirm));QTRY_COMPARE(plays,1);QCOMPARE(played["movieid"].toInt(),4);QCOMPARE(played["resume"].toBool(),true);
+    QVERIFY(command(InputManager::NavigateRight));QCOMPARE(one->selectedIndex(),4);
+    QVERIFY(command(InputManager::NavigateLeft));QCOMPARE(one->selectedIndex(),3);
+    QVERIFY(command(InputManager::Confirm));QTRY_COMPARE(plays,1);QCOMPARE(played["movieid"].toInt(),4);QCOMPARE(played["resume"].toBool(),true);
     QVERIFY(QMetaObject::invokeMethod(root.get(),"restoreOrigin",Q_ARG(QVariant,QString("tab-original-home"))));
     auto *content=root->findChild<QObject *>("pageContent");QVERIFY(content);QVERIFY(!content->property("recoveryFocused").toBool());
     player.playbackControl("stop");QTRY_VERIFY(!player.playbackActive());

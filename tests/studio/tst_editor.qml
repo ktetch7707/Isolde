@@ -221,7 +221,7 @@ Item {
                 const remote=pageColor("backgroundStart")
                 remote.updateHsv(0,1,1);remote.category=3;remote.control=1
                 command(inputManager.confirm)
-                for(let step=0;step<36;++step)command(inputManager.navigateRight)
+                for(let step=0;step<80;++step)command(inputManager.navigateLeft)
                 compare(remote.hex(remote.sample),"#00ffff")
                 command(inputManager.back) // Leave two-axis adjustment, keep picker.
                 compare(findChild(editor,"studioInspector").view,"colorWheel")

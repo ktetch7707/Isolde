@@ -200,13 +200,28 @@ def main():
             # Customize opens the full-size Studio directly; no legacy action wall.
             assert layout.read_bytes() == original_bytes
             if args.capture_library: captured("editor")
-            key("Down",4); key("Return"); key("Down",9); key("Return")  # More -> Restore defaults.
+            if args.inspect: captured("resetmenu")
+            current_document=json.loads(layout.read_text())
+            more_index=3+len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
+            print(f"Reset Studio More index: {more_index}",flush=True)
+            key("Down",more_index); key("Return"); key("Down",9); key("Return")  # More -> Restore defaults.
+            if args.inspect: captured("resetconfirm")
             key("Down"); key("Return")  # Explicit scoped confirmation.
-            expect(lambda: not layout.exists(), "Reset to packaged defaults passed")
+            defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
+            def reset_verified():
+                if not current_document.get("pages"): return not layout.exists()
+                restored=json.loads(layout.read_text())
+                return (restored.get("pages")==current_document["pages"]
+                    and restored.get("homePageId","")==current_document.get("homePageId","")
+                    and not restored.get("composition")
+                    and {i["id"] for i in restored["components"]}=={i["id"] for i in defaults["items"]}
+                    and restored["categories"]==defaults["categories"]
+                    and all(str(restored["theme"].get(k)).lower()==str(v).lower() for k,v in defaults["theme"].items()))
+            expect(reset_verified, "Reset Home to packaged defaults with other pages preserved passed")
             key("Escape"); key("Escape")
             key("Up", 30); key("Down")  # Capture the first default item, not retained bottom focus.
             captured("default")
-            assert not layout.exists()
+            assert reset_verified()
             (evidence / "result.json").write_text(json.dumps({"configuration_match": None, "component_support": True,
                 "reference_sha256": reference_hash, "visual_review_required": True,
                 "case": str(case),
@@ -217,6 +232,8 @@ def main():
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
         if args.inspect:
+            if process and process.poll() is None:
+                captured("failed")
             print("Inspect failed UI now: " + str(evidence), flush=True)
             time.sleep(25)
         raise

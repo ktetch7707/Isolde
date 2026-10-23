@@ -244,6 +244,14 @@ Item {
         if (control === "search") host.searchRequested()
         else host.settingsRequested(control === "edit" ? 1 : -1)
     }
+    function focusEntry(entry) {
+        if(!entry)return
+        sectionActionId=entry.sectionAction || entry.widget?entry.id:""
+        if(!entry.sectionAction && !entry.widget)host.focusedIndex=host.itemIndex(entry.id)
+        const item=(host.items || []).find(i=>i.id===entry.id)
+        const collection=entry.widget || item && (item.componentType==="library" || item.appCollection)
+        if(collection && widgets[entry.id])activeWidget=entry.id
+    }
     function handleCommand(command) {
         if (activeWidget) {
             const widget = widgets[activeWidget]
@@ -264,11 +272,18 @@ Item {
             else if (command === inputManager.navigateRight) focusedTab = Math.min(tabs.length - 1, focusedTab + 1)
             else if (command === inputManager.confirm) activateTab(focusedTab)
             else if (command === inputManager.navigateUp) host.recoveryFocused = true
-            else if (command === inputManager.navigateDown) { const first = focusEntries()[0]; if (first) { sectionActionId = first.widget ? first.id : ""; if (!first.widget) host.focusedIndex = host.itemIndex(first.id); navigationFocused = false } }
+            else if (command === inputManager.navigateDown) { const first = focusEntries()[0]; if (first) { focusEntry(first); navigationFocused = false } }
             return
         }
         const entries = focusEntries(), current = entries.find(e => sectionActionId ? e.id === sectionActionId : !e.sectionAction && host.itemIndex(e.id) === host.focusedIndex) || entries[0]
         if (!current) { host.recoveryFocused = true; return }
+        const focusedItem=(host.items || []).find(i=>i.id===current.id)
+        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection)) && widgets[current.id]
+            && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm)) {
+            activeWidget=current.id
+            widgets[current.id].handleCommand(command)
+            return
+        }
         if (command === inputManager.confirm) {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
             if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) host.actionActivated(section.presentation.trailingAction,current.id); return }
@@ -295,7 +310,7 @@ Item {
             candidates = entries.filter(e => e.row === row).sort((a,b) => Math.abs(a.x-current.x)-Math.abs(b.x-current.x))
         }
         if(!candidates.length && activeGroup && (command===inputManager.navigateLeft || command===inputManager.navigateRight)){const group=host.items.find(i=>i.id===activeGroup);if(group && (group.presentation.layout || {}).wrap)candidates=entries.slice().sort((a,b)=>command===inputManager.navigateRight?a.x-b.x:b.x-a.x)}
-        next = candidates[0]; if (next) { sectionActionId = next.sectionAction || next.widget ? next.id : ""; if (!next.sectionAction && !next.widget) host.focusedIndex = host.itemIndex(next.id) }
+        next = candidates[0]; if(next)focusEntry(next)
     }
     Column {
         anchors.fill: parent; anchors.margins: root.margin; spacing: root.gap

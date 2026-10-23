@@ -151,7 +151,7 @@ Item {
         session = layoutModel.beginStudio()
         pageId = id || (!session.model.rootPageVisible?session.model.homePageId:""); selectedId = component || "";pageFocus=({})
         mode = "canvas"; toolbarFocus = true; tool = 0;menuIndex=0; message = "";deletedSelection=""
-        scopeOverview=false;scopeId=current?current.categoryId || "":page && page.sections.length?page.sections[0].id || "":""
+        scopeOverview=true;scopeId=current?current.categoryId || "":page && page.sections.length?page.sections[0].id || "":""
         open = true
     }
     function close() { if(session) session.invalidate(); open=false; closed() }
@@ -332,7 +332,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
         if(mode==="editorAppearance")return ["Surface color","Selected surface","Text color","Supporting text","Focus color","Reset Studio colors"]
         if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance","Canvas view","Saved skins","Restore defaults"]
-        if(mode==="restoreDefaults")return ["Cancel","Restore profile defaults and remove custom pages"]
+        if(mode==="restoreDefaults")return ["Cancel","Restore Home layout; keep other pages"]
         if(mode==="context") return (current && (current.componentType==="container" || current.componentType==="carousel")) ? ["Move","Edit component","Duplicate","Delete…","Edit contents"] : ["Move","Edit component","Duplicate","Delete…"]
         if(mode==="flowMove")return ["Move before…","Move after…","Convert to a grid…","Cancel"]
         if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Return to "+gestureMode]
@@ -418,7 +418,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="more"){
             if(choice>=8){
                 if(session.dirty){message="Apply or discard your draft before changing saved skins or restoring defaults.";return}
-                if(choice===8)skinsRequested();else{mode="restoreDefaults";choice=0;message="Replaces this profile's page designs with packaged defaults. Saved skins, apps and Kodi media stay available."}
+                if(choice===8)skinsRequested();else{mode="restoreDefaults";choice=0;message="Restores Home's packaged layout. Other pages, saved skins, apps and Kodi media stay unchanged."}
                 return
             }
             if(choice===7){mode="view";choice=0;return}if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return
@@ -685,7 +685,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     previewExtentRows:studio.scrollingEnabled && !studio.parentScopeId && studio.manipulating?Math.max(studio.candidate.y+studio.candidate.height,...(studio.collisionPreview.placements || []).map(p=>p.placement.y+p.placement.height)):0
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
-                    libraryProvider:studio.provider;previewOnly:true;freezeData:studio.manipulating;samplePreview:studio.samplePreview
+                    libraryProvider:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating;samplePreview:studio.samplePreview
                     sampleItems:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
                     editSelection:studio.selectedId
                     suppressedComponentIds:studio.collisionPreview.valid?studio.collisionPreview.placements.map(p=>p.id):studio.manipulating && studio.mode!=="flowMove" && !studio.addingType && studio.current?[studio.selectedId]:[]

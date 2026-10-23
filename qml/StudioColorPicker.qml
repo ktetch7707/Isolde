@@ -68,11 +68,18 @@ Item {
         // let pointer and remote reach identical authored values.
         updateHsv(Math.round(Math.atan2(dy,dx)*180/Math.PI)/360,Math.round(Math.sqrt(dx*dx+dy*dy)/r*100)/100,brightness)
     }
+    function moveWheel(dx,dy) {
+        let x=Math.cos(hue*2*Math.PI)*saturation+dx*.025
+        let y=Math.sin(hue*2*Math.PI)*saturation+dy*.025
+        const length=Math.sqrt(x*x+y*y)
+        if(length>1){x/=length;y/=length}
+        updateHsv(Math.atan2(y,x)/(2*Math.PI),Math.sqrt(x*x+y*y),brightness)
+    }
     function handleCommand(command) {
         if(command===inputManager.back){if(adjustingWheel){adjustingWheel=false;return}cancel();return}
         const dx=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
         const dy=command===inputManager.navigateDown?1:command===inputManager.navigateUp?-1:0
-        if(adjustingWheel){if(command===inputManager.confirm){adjustingWheel=false;return}if(dx || dy)updateHsv(hue+dx/72,saturation-dy*.05,brightness);return}
+        if(adjustingWheel){if(command===inputManager.confirm){adjustingWheel=false;return}if(dx || dy)moveWheel(dx,dy);return}
         if(control===0 && dx){category=Math.max(0,Math.min(3,category+dx));swatch=0;return}
         if(control===1 && category<3){
             if(dx){swatch=Math.max(0,Math.min(swatches.length-1,swatch+dx));return}

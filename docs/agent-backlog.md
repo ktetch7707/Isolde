@@ -30,7 +30,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T16 | 2 | Shared draft transactions, history and profile safety | 100% | task verification complete; T17 next |
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 100% | geometry checkpoint verified; T18 next |
 | T18 | 4 | Unified Page Studio workspace and selection | 100% | workspace/lifecycle/selection verified; T19 next |
-| T19 | 6 | Remote pick-up/drop, resize and collision workflows | 100% | reopened: compact context and direct movement with live reflow; next |
+| T19 | 5 | Remote pick-up/drop, resize and collision workflows | 100% | verified movement/reflow checkpoint; T20 next |
 | T20 | 6 | Desktop parity, layers and nested/group editing | 80% | reopened: pointer/reflow parity; depends on T19 |
 | T21 | 7 | Contextual inspector, catalog and capability binding | 36% | reopened: component semantics, visual editing, shared selection, editable header and tool organization; depends on T20 |
 | T22 | 8 | Templates, tokens, reusable sections and portability | 0% | planned |
@@ -54,9 +54,11 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **35%** | T15 provisional; T19-T21 reopened for user-facing usability; T19 next |
+| **Overall** | — | **average of 24 active tasks** | **36%** | T15 provisional; T20/T21 usability gates remain open |
 
 ## Highest priority: core Page Studio
+
+User-selected four-fix slice (2026-10-22): [card navigation, library pages, full Studio view and spatial color input](studio-four-fixes-2026-10-22.md) owns the requested fixes under existing T21.7/T21.9/T21.10/T21.12 gates. Full-g passes 18/18 suites and both reviewed visual save/reset journeys; release `fc815f2341cb375a0b809118` is installed. Studio Demo has real editable Movies/TV pages and both visible Studio carousels; direct history-card navigation, spatial Left input and restart persistence are checked. Household is unchanged. No broad task checkbox credit: T21 36%, Overall round(866/24) = 36% across 24 active tasks.
 
 Live pastel implementation (user, 2026-10-21–22): [installed checkpoint and remaining gates](studio-live-carousels-2026-10-21.md). Full-c passes 18/18 suites and both reviewed visual save/reset journeys; release `a72852697c1f50e138161a63` is installed. Studio Demo explicitly applied Pastel with actual app/history collections; six watched movies, playback/reorder/focus return and actual Spotify launch are evidenced. Complete installed acceptance remains OPEN: native Home return is unverified, and a startup shelf-recovery follow-up is under test. Guest-only maintenance is authorized by the standing machine boundary. T21 36%; Overall round(866/24) = 36% over 24 active tasks.
 
@@ -395,4 +397,3 @@ Excluded from progress math. Four templates, tokens/symbols, page/interface expo
 ## Completion rule
 
 Overall = round(sum(active task percentages)/24). Active set: T01,T03-T05,T09-T28. Exclude T02 (struck) and T06-T08 (superseded). When every active checkbox and Done when gate has specific evidence and all 24 active tasks read 100%, this active backlog is implemented. Documentation, mockups, source presence and old-release screenshots do not count as delivery. If an active task lacks required evidence, it cannot read 100%; the existing 90% no-evidence cap also applies. Adding tasks requires updating the active count, table, dependencies and AGENTS.md consistently.
-
