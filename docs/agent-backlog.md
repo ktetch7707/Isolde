@@ -31,7 +31,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 100% | geometry checkpoint verified; T18 next |
 | T18 | 4 | Unified Page Studio workspace and selection | 100% | workspace/lifecycle/selection verified; T19 next |
 | T19 | 5 | Remote pick-up/drop, resize and collision workflows | 100% | verified movement/reflow checkpoint; T20 next |
-| T20 | 6 | Desktop parity, layers and nested/group editing | 80% | reopened: pointer/reflow parity; depends on T19 |
+| T20 | 6 | Desktop parity, layers and nested/group editing | 80% | blocked: standing Pastel gate requires T21.9; sequencing decision pending |
 | T21 | 7 | Contextual inspector, catalog and capability binding | 36% | reopened: component semantics, visual editing, shared selection, editable header and tool organization; depends on T20 |
 | T22 | 8 | Templates, tokens, reusable sections and portability | 0% | planned |
 | T23 | 9 | Preview, Apply, restore and navigation safety | 0% | planned |
@@ -57,6 +57,8 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | **Overall** | — | **average of 24 active tasks** | **36%** | T15 provisional; T20/T21 usability gates remain open |
 
 ## Highest priority: core Page Studio
+
+T20 dependency audit (2026-10-23): [requirement/evidence audit and sequencing block](studio-t20-completion-audit-2026-10-23.md) verifies the committed root/nested installed parity evidence and the remaining failed populated Pastel standing gate. Its required real carousel/fixture rebuild belongs to T21.9, while strict order requires T20 before T21. The previously raised sequencing question remains unanswered across independent follow-up work; no healthy run remains active. Await permission to implement that prerequisite with T20 still open, rather than weakening the gate or silently switching features. T20 80%, T21 36%; Overall round(866/24) = 36% across 24 active tasks.
 
 T20 nested installed extension (2026-10-23): [pointer evidence record](studio-installed-pointer-2026-10-23.md) now includes an actual UI-authored eight-input group, occupied-child remote/pointer movement, held-drag cancel and exact group Undo. Full-a passes 25/25 native registrations in 275.45 seconds and the extended installed desktop journey; all ten graphical captures reviewed. Complete group Undo and pointer/remote saved equality pass, with unchanged normal profiles. Visual acceptance/Pastel remain open, with T21.9 sequencing clarification pending; no checkbox credit. T20 80%; Overall round(866/24) = 36% across 24 active tasks.
 
