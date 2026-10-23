@@ -45,6 +45,9 @@ Item {
     property int flowOriginIndex: 0
     property int flowTargetIndex: 0
     property var flowTargets: []
+    property string flowContainerId:""
+    property string flowAxis:"x"
+    property bool flowPreviewValid:true
     property string deletedSelection: ""
     property bool sizeControlsVisible: true
     property bool pendingScrollEnable:false
@@ -94,7 +97,7 @@ Item {
     readonly property var pointerItems: {
         if(!session)return []
         const model=pageId?session.model.pageModel(pageId):session.model
-        return model.items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId))
+        return model?model.items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId)):[]
     }
     readonly property var layerRows: {
         const rows=[]
@@ -229,7 +232,7 @@ Item {
         if(name==="navSections"){structureId=inspector.structureId;const tab=(page.composition.navigation || []).find(t=>t.id===structureId);navSections=tab && tab.sections?tab.sections.slice():(page.categories || []).map(s=>s.id);mode="navSections";choice=0;return}
         if(name==="geometry"){
             if(!gridMode){message="Size follows this page's automatic layout.";inspector.message=message;return}
-            beginGesture(false);if(mode==="move"){mode="size";choice=0;sizeControlsVisible=true;inspectorReturn=true}return
+            beginGesture(true);if(mode==="resize"){mode="size";choice=0;sizeControlsVisible=true;inspectorReturn=true}return
         }
         if(name==="grid"){beginGrid();inspectorReturn=true;return}
         if(name==="children"){if(current && current.componentType==="container"){const parent=current.id;context(14);parentScopeId=parent;chooseTool(0)}return}
@@ -240,18 +243,25 @@ Item {
         if(index!==undefined){context(index);if(mode!=="canvas")inspectorReturn=true}
     }
     function position(item) { return item && item.placement ? Object.assign({},item.placement) : ({x:0,y:0,width:1,height:1}) }
-    function beginGesture(resize) {
+    function beginGesture(resize){beginGestureInScope(resize,false)}
+    function beginGestureInScope(resize,forceGrid) {
         if (!current) { message="Choose a component in Layers first."; return }
         if(current.locked){message="This component is locked. Choose Edit component → Lock / unlock first.";return}
         gestureViewport=preview.editorViewport()
         originParentId=current.parentId || "";originScopeId=scopeId
-        if(!gridMode){
+        origin=position(current);candidate=Object.assign({},origin)
+        const layout=parentGroup?(parentGroup.presentation.layout || {}):({})
+        const ordered=!!parentGroup && (layout.mode==="row" || layout.mode==="column")
+        if(!gridMode || !resize && ordered && !forceGrid){
             if(resize){message="Size is determined by this page's layout.";return}
-            flowIds=items.filter(i=>(i.parentId || "")===(current.parentId || "") && (i.categoryId || "")===(current.categoryId || "")).map(i=>i.id)
+            flowContainerId=ordered?parentScopeId:"";flowAxis=layout.mode==="column"?"y":"x";flowPreviewValid=true
+            let siblings=items.filter(i=>(i.parentId || "")===(current.parentId || "") && (i.categoryId || "")===(current.categoryId || ""))
+            if(ordered)siblings=siblings.slice().sort((a,b)=>a.placement[flowAxis]-b.placement[flowAxis] || a.id.localeCompare(b.id))
+            flowIds=siblings.map(i=>i.id)
             flowOriginIndex=flowIds.indexOf(selectedId);flowTargetIndex=flowOriginIndex
             // Freeze target geometry before reordering. Moving neighbors must
             // not change which insertion target lies under a stationary mouse.
-            flowTargets=flowIds.map(id=>({id:id,rect:preview.editorRectFor(id)}))
+            flowTargets=flowIds.map(id=>({id:id,rect:preview.editorRectFor(id),placement:position(items.find(item=>item.id===id))}))
             mode="flowMove";toolbarFocus=false;message="Moving "+componentName(current);return
         }
         addingType="";pendingScrollEnable=false; origin=position(current); candidate=Object.assign({},origin)
@@ -271,9 +281,13 @@ Item {
     }
     function previewFlowTarget(target) {
         if(mode!=="flowMove" || target<0 || target>=flowIds.length || target===flowTargetIndex)return
-        if(target===flowOriginIndex){session.cancelPreview();flowTargetIndex=target;return}
-        if(session.previewCommand("orderRelative",{id:selectedId,relativeId:flowIds[target],before:target<flowOriginIndex},pageId)){flowTargetIndex=target;message="Moving "+componentName(current)}else message=session.errorString
+        if(target===flowOriginIndex){session.cancelPreview();flowTargetIndex=target;flowPreviewValid=true;message="";return}
+        flowPreviewValid=session.previewCommand(flowContainerId?"insertRelative":"orderRelative",{id:selectedId,relativeId:flowIds[target],before:target<flowOriginIndex},pageId)
+        flowTargetIndex=target
+        if(flowPreviewValid){message="Moving "+componentName(current);if(flowContainerId)Qt.callLater(()=>{if(current)preview.revealPlacement(current.placement,scopeId,flowContainerId)})}
+        else{message=session.errorString;session.cancelPreview()}
     }
+    function flowTargetRect(index){const target=flowTargets[index];return target?(flowContainerId?preview.placementRectFor(target.placement,scopeId,flowContainerId):target.rect):null}
     function beginArrangement() {
         arrangementReturnChoice=choice;gestureViewport=preview.editorViewport()
         session.cancelPreview();arrangementValid=false;mode="arrange";choice=0;message=""
@@ -421,14 +435,14 @@ Item {
         else if(index===5) beginKeyboard("text",current && current.presentation ? current.presentation.subtitle : "")
         else if(index===6) beginKeyboard("opacity",current && current.presentation && current.presentation.surfaceOpacity!==undefined ? String(current.presentation.surfaceOpacity) : "1")
         else if(index===7) beginKeyboard("corners",current && current.presentation ? String(current.presentation.radius || 0) : "0")
-        else if(index===8) {beginGesture(false);if(mode==="move"){mode="geometry";choice=0}}
+        else if(index===8) {beginGestureInScope(false,true);if(mode==="move"){mode="geometry";choice=0}}
         else if(index===9){if(command("state",{id:selectedId,key:"hidden",value:!current.hidden})){mode="canvas";toolbarFocus=false}}
         else if(index===10){if(command("state",{id:selectedId,key:"locked",value:!current.locked})){mode="canvas";toolbarFocus=false}}
         else if(index===11 || index===12)beginRelative(index===11)
-        else if(index===13){beginGesture(false);if(mode==="move"){mode="destination";choice=0}}
+        else if(index===13){beginGestureInScope(false,true);if(mode==="move"){mode="destination";choice=0}}
         else if(index===14){if(current.appCollection){openInspector(false);inspector.controlsShown=true;inspector.activateField({type:"apps"});return}if(current.componentType!=="container"){message="Choose a group to edit its contents.";return}parentScopeId=current.id;const children=items.filter(i=>(i.parentId || "")===parentScopeId);selectedId=children.length?children[0].id:"";mode="canvas";toolbarFocus=false}
         else if(index===15){if(command("ungroup",{id:selectedId})){selectedId="";mode="canvas";toolbarFocus=false}}
-        else if(index===16){beginGesture(false);if(mode==="move"){mode="groupDestination";choice=0}}
+        else if(index===16){beginGestureInScope(false,true);if(mode==="move"){mode="groupDestination";choice=0}}
         else if(index===18)beginChildLayout()
         else if(index===17){let selection=multiSelection.slice();const index=selection.indexOf(selectedId);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(selectedId);else{message="Select at most 32 components.";return}multiSelection=selection;mode="layers";choice=0;message="Choose Group selected at the end of Layers. Right expands; Left collapses."}
     }
@@ -679,7 +693,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         }
         if(mode==="flowMove") {
             if(c===inputManager.back){cancelGesture();return}
-            if(c===inputManager.confirm){if(!session.proposalModel || session.acceptPreview()){mode="canvas";message=""}else message=session.errorString;return}
+            if(c===inputManager.confirm){if(!flowPreviewValid)return;if(!session.proposalModel || session.acceptPreview()){mode="canvas";message=""}else message=session.errorString;return}
             const direction=c===inputManager.navigateRight || c===inputManager.navigateDown?1:c===inputManager.navigateLeft || c===inputManager.navigateUp?-1:0
             if(!direction)return
             const target=flowTargetIndex+direction
@@ -848,8 +862,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     y:-parent.scrollClipTop;width:preview.width;height:preview.height
                     Rectangle {
                         objectName:"studioInsertionTarget"
-                        visible:studio.mode==="flowMove" && !!preview.editRect
-                        readonly property var rect:preview.editRect || ({x:0,y:0,width:0,height:0})
+                        visible:studio.mode==="flowMove" && !!rect
+                        readonly property var rect:(studio.flowPreviewValid?preview.editRect:studio.flowTargetRect(studio.flowTargetIndex)) || ({x:0,y:0,width:0,height:0})
                         x:rect.x;y:rect.y;width:rect.width;height:rect.height
                         color:"transparent";border.width:3;border.color:studio.palette.focusColor
                         Text {anchors.bottom:parent.top;text:"Position "+(studio.flowTargetIndex+1)+" of "+studio.flowIds.length;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale}
@@ -881,6 +895,17 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         }
                     }
                     Repeater {
+                        model:studio.mode==="flowMove"?studio.flowTargets:[]
+                        delegate:Rectangle {
+                            required property int index;required property var modelData
+                            objectName:"studioFlowTarget-"+index
+                            readonly property var rect:studio.flowTargetRect(index) || {x:0,y:0,width:0,height:0}
+                            x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:1;border.color:studio.palette.mutedColor;opacity:0.35
+                            Accessible.role:Accessible.Button;Accessible.name:"Insertion position "+(index+1)
+                            MouseArea {anchors.fill:parent;onClicked:studio.previewFlowTarget(index)}
+                        }
+                    }
+                    Repeater {
                         model:studio.pointerItems.filter(i=>(!studio.gridMode || !!i.placement) && (!i.hidden || i.id===studio.selectedId))
                         delegate:Rectangle {
                             required property var modelData
@@ -899,6 +924,15 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                 property int edgeBudget:0
                                 property point edgeAnchor
                                 function updateEdge(point) {
+                                    if(studio.mode==="flowMove" && studio.flowContainerId){
+                                        const local=studio.mapToItem(preview,point.x,point.y),viewport=preview.scopeViewport(studio.flowContainerId)
+                                        if(!viewport){edgeDirection=0;edgeBudget=0;return}
+                                        const horizontal=studio.flowAxis==="x",coordinate=horizontal?local.x:local.y,start=horizontal?viewport.x:viewport.y,length=horizontal?viewport.width:viewport.height
+                                        const band=Math.min(studio.spacing*2,length/6),direction=coordinate>=start+length-band?1:coordinate<=start+band?-1:0
+                                        if(!direction){edgeDirection=0;edgeBudget=0;return}
+                                        if(direction!==edgeDirection || Math.abs(horizontal?point.x-edgeAnchor.x:point.y-edgeAnchor.y)>=Qt.styleHints.startDragDistance){edgeBudget=studio.flowAxis==="x"?(studio.grid.visibleColumns || studio.grid.columns):studio.grid.rows;edgeAnchor=point}
+                                        edgeDirection=direction;return
+                                    }
                                     if(!studio.scrollingEnabled || studio.parentScopeId){edgeDirection=0;edgeBudget=0;return}
                                     const local=studio.mapToItem(preview,point.x,point.y),viewport=preview.pageViewport
                                     const band=Math.min(studio.spacing*2,viewport.height/6)
@@ -911,8 +945,9 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                 }
                                 Timer {
                                     interval:100;repeat:true
-                                    running:pointerDrag.pressed && pointerDrag.dragging && studio.mode==="move" && pointerDrag.edgeDirection!==0 && pointerDrag.edgeBudget>0
+                                    running:pointerDrag.pressed && pointerDrag.dragging && (studio.mode==="move" || studio.mode==="flowMove") && pointerDrag.edgeDirection!==0 && pointerDrag.edgeBudget>0
                                     onTriggered:{
+                                        if(studio.mode==="flowMove"){const before=studio.flowTargetIndex;studio.previewFlowTarget(before+pointerDrag.edgeDirection);pointerDrag.edgeBudget=studio.flowTargetIndex===before?0:pointerDrag.edgeBudget-1;return}
                                         const before=studio.candidate.y
                                         studio.handleCommand(pointerDrag.edgeDirection>0?inputManager.navigateDown:inputManager.navigateUp)
                                         pointerDrag.edgeBudget=studio.candidate.y===before?0:pointerDrag.edgeBudget-1
@@ -925,7 +960,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                     if(!dragging){if(Math.abs(point.x-start.x)+Math.abs(point.y-start.y)<Qt.styleHints.startDragDistance)return;if(studio.current && studio.current.locked){studio.message="Unlock this component before moving it.";return}studio.beginGesture(false);dragging=studio.mode==="move" || studio.mode==="flowMove"}
                                     if(dragging && studio.mode==="flowMove"){
                                         const local=mapToItem(preview,mouse.x,mouse.y)
-                                        for(let index=0;index<studio.flowTargets.length;++index){const r=studio.flowTargets[index].rect;if(r && local.x>=r.x && local.x<=r.x+r.width && local.y>=r.y && local.y<=r.y+r.height){studio.previewFlowTarget(index);break}}
+                                        for(let index=0;index<studio.flowTargets.length;++index){const r=studio.flowTargetRect(index);if(r && local.x>=r.x && local.x<=r.x+r.width && local.y>=r.y && local.y<=r.y+r.height){studio.previewFlowTarget(index);break}}
+                                        updateEdge(point)
                                         return
                                     }
                                     if(!dragging || studio.mode!=="move")return
@@ -1038,28 +1074,28 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         }
     }
     Rectangle {
-        id:moveActions;objectName:"studioMoveActions";visible:studio.open && studio.mode==="move";z:4
+        id:moveActions;objectName:"studioMoveActions";visible:studio.open && (studio.mode==="move" || studio.mode==="flowMove");z:4
         width:Math.min(studio.width-2*studio.spacing,480*studio.textScale);height:moveActionColumn.implicitHeight+2*studio.spacing
-        readonly property var target:preview.placementRectFor(studio.candidate,studio.scopeId,studio.parentScopeId)
+        readonly property var target:studio.mode==="flowMove"?(preview.editRect || {x:0,y:0,width:0,height:0}):preview.placementRectFor(studio.candidate,studio.scopeId,studio.parentScopeId)
         readonly property point targetPoint:preview.mapToItem(studio,target.x,target.y)
         x:targetPoint.x+target.width*camera.scale/2<studio.width/2?studio.width-width-studio.spacing:studio.spacing
         y:studio.spacing;color:studio.palette.surfaceColor;border.width:1;border.color:studio.palette.mutedColor;radius:studio.spacing/2
         Column {
             id:moveActionColumn;width:parent.width-2*studio.spacing;x:studio.spacing;y:studio.spacing;spacing:studio.spacing/2
-            Text {width:parent.width;text:studio.parentScopeId?"Move into "+studio.componentName(studio.parentGroup):studio.sectionMode?"Move to "+(studio.selectedSection?studio.selectedSection.name:"Uncategorized"):"Move on page";color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+            Text {width:parent.width;text:studio.mode==="flowMove"?"Position "+(studio.flowTargetIndex+1)+" of "+studio.flowIds.length:studio.parentScopeId?"Move into "+studio.componentName(studio.parentGroup):studio.sectionMode?"Move to "+(studio.selectedSection?studio.selectedSection.name:"Uncategorized"):"Move on page";color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
             Row {
                 width:parent.width;spacing:studio.spacing/2
                 Repeater {
-                    model:["Place here","Options…","Cancel"]
+                    model:studio.mode==="flowMove"?["Place here","Cancel"]:["Place here","Options…","Cancel"]
                     delegate:Rectangle {
                         required property int index;required property string modelData
-                        objectName:["studioMovePlace","studioMoveOptions","studioMoveCancel"][index]
-                        readonly property bool available:index!==0 || !!studio.collisionPreview.valid
-                        width:(moveActionColumn.width-studio.spacing)/3;height:44*studio.textScale;radius:studio.spacing/4
+                        objectName:studio.mode==="flowMove"?["studioMovePlace","studioMoveCancel"][index]:["studioMovePlace","studioMoveOptions","studioMoveCancel"][index]
+                        readonly property bool available:index!==0 || (studio.mode==="flowMove"?studio.flowPreviewValid:!!studio.collisionPreview.valid)
+                        width:(moveActionColumn.width-studio.spacing*(studio.mode==="flowMove"?0.5:1))/(studio.mode==="flowMove"?2:3);height:44*studio.textScale;radius:studio.spacing/4
                         color:index===0?studio.palette.selectedColor:"transparent";border.width:1;border.color:studio.palette.mutedColor
                         Text {anchors.centerIn:parent;text:modelData;color:parent.available?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
                         Accessible.role:Accessible.Button;Accessible.name:modelData
-                        MouseArea {anchors.fill:parent;enabled:parent.available;onClicked:studio.handleCommand(index===0?inputManager.confirm:index===1?inputManager.menu:inputManager.back)}
+                        MouseArea {anchors.fill:parent;enabled:parent.available;onClicked:studio.handleCommand(index===0?inputManager.confirm:studio.mode!=="flowMove" && index===1?inputManager.menu:inputManager.back)}
                     }
                 }
             }

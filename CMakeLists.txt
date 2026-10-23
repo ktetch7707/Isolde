@@ -246,6 +246,9 @@ if(BUILD_TESTING)
     add_test(NAME studio_destinations COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_destinations.qml)
     set_tests_properties(studio_destinations PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_ordered COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_ordered.qml)
+    set_tests_properties(studio_ordered PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(studio_selection PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_tests
@@ -273,7 +276,21 @@ if(BUILD_TESTING)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE LIBRARY_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/KodiLibraryView.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE COMMAND_CENTER_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CommandCenter.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE KODI_SETTINGS_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/KodiSettingsView.qml")
-    add_test(NAME home_component_navigation COMMAND isolde_home_navigation_tests)
+    set(ISOLDE_RUNTIME_NAVIGATION_CASES
+        retainsExactOriginAndRecoversWithoutHomeButton repairsSourceWithRemoteAndCanCancel
+        televisionLibraryRemoteFlow universalLocalSearchRemoteFlow pageScopedSourcesAppearInSearch
+        kodiSettingsFollowUserTheme appearancePreviewCancelAndApply composedReferenceNavigationAndGeometry
+        pastelReferenceNavigationAndGeometry skinsAndDesignAreReachableFromSettings
+        pageComposerAndIndependentKodiWidgets gridEditorMoveResizeDuplicateRemove)
+    set(ISOLDE_STUDIO_NAVIGATION_CASES
+        customizeOpensStudioAndPreservesDirtyExit studioRemoteDraftApplyAndCancel
+        studioRemotePointerAndInspectorParity studioPreservesLegacyGridMetadataWithoutConversion
+        studioSectionGeometryMatchesRuntime studioPageMenuCreatesAndDesignatesHome studioNamedPageViewportMatchesRuntime
+        studioRemoteGesturesCollisionsAndAnchors studioRemoteSectionTransferAndCancel studioLegacyRemoteOrdering
+        studioScrollingAddMoveAndCancel studioNestedGroupCanvasAndRemoteScope studioCatalogAndContextualInspector)
+    add_test(NAME home_component_navigation COMMAND isolde_home_navigation_tests ${ISOLDE_RUNTIME_NAVIGATION_CASES})
+    add_test(NAME studio_navigation COMMAND isolde_home_navigation_tests ${ISOLDE_STUDIO_NAVIGATION_CASES})
+    set_tests_properties(studio_navigation PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_behavior COMMAND isolde_home_navigation_tests
         studioRemoteDraftApplyAndCancel studioRemoteGesturesCollisionsAndAnchors
         studioRemoteSectionTransferAndCancel studioScrollingAddMoveAndCancel)

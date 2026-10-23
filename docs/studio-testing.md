@@ -16,7 +16,7 @@ Run from the project root in PowerShell 7:
 # Real editor workflows, including scrolling and cancellation.
 ./tools/vm-test.ps1 Test -Suite studio_behavior
 
-# All seven focused suites for a completed Studio change.
+# All eight focused suites for a completed Studio change.
 ./tools/vm-test.ps1 Test -Suite studio
 
 # Full native regression gate at an integration/release checkpoint.
@@ -38,9 +38,12 @@ During development, run the relevant small suite; run `studio` after a complete 
 | `studio_gestures` | Qt Quick Test; `tests/studio/tst_gestures.qml` | Actual pointer threshold/cancel/release, ordered insertion, bounded edge growth, remote canonical parity, resize reflow/refusal, visual alignment and group-layout transactions |
 | `studio_grid` | Qt Quick Test; `tests/studio/tst_grid.qml` | Page-layout stepper/slider parity, bounded exact values, preserved locked groups, explicit legacy conversion, section geometry readiness and private cancellation/undo |
 | `studio_destinations` | Qt Quick Test; `tests/studio/tst_destinations.qml` | Named group targets, pointer cell selection, remote canonical parity, exact cancel/undo, locked/hidden/descendant refusal and full destinations |
-| `studio` | Seven suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
+| `studio_ordered` | Qt Quick Test; `tests/studio/tst_ordered.qml` | Row/column insertion by drag and menu-started slot selection, mixed spans/gaps, locked refusal, bounded carousel edge scrolling, remote canonical parity and exact viewport cancellation |
+| `studio` | Eight suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
 
 The complete existing suites remain registered. These additional focused registrations deliberately reuse tested functions instead of copying their code. Full CTest includes both focused and broad registrations; a focused pass is not a substitute for full integration coverage.
+
+The broad native navigation functions are partitioned into `home_component_navigation` (runtime) and `studio_navigation`, each retaining its 60-second bound. The runner choice `-Suite home_component_navigation` runs both. A runner regression compares the partition with all declared native test slots, excluding only data providers, and refuses missing or duplicate scenarios. The smaller `studio_behavior` registration remains the quick four-journey subset.
 
 ## Executable behavior scenarios
 

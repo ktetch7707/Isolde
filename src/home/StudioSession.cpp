@@ -660,6 +660,25 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         }
         document["components"] = entries;
         ok = worker.loadDocument(QJsonDocument(document).toJson(), false);
+    } else if(operation=="insertRelative") {
+        const auto relative=a.value("relativeId").toString();
+        if(a.value("before").metaType().id()!=QMetaType::Bool || relative==id){setError(tr("Choose another component and an insertion direction."));return false;}
+        auto entries=document["components"].toArray();QString parent;int selected=-1;
+        for(int i=0;i<entries.size();++i)if(entries[i].toObject()["id"]==id){selected=i;parent=entries[i].toObject()["parentId"].toString();}
+        QJsonObject group;for(const auto &entry:entries)if(entry.toObject()["id"]==parent)group=entry.toObject();
+        const auto layout=group["presentation"].toObject()["layout"].toObject();const auto mode=layout["mode"].toString();
+        if(selected<0 || parent.isEmpty() || group["componentType"]!="container" || group.contains("appCollection") || (mode!="row" && mode!="column")){setError(tr("Choose an item in an editable row or column."));return false;}
+        const QString axis=mode=="row"?"x":"y",span=mode=="row"?"width":"height";
+        QList<int> order;for(int i=0;i<entries.size();++i)if(entries[i].toObject()["parentId"]==parent)order.append(i);
+        if(order.size()>64){setError(tr("An insertion can affect at most 64 components."));return false;}
+        std::sort(order.begin(),order.end(),[&](int left,int right){const auto l=entries[left].toObject(),r=entries[right].toObject();const auto lp=l["placement"].toObject()[axis].toInt(),rp=r["placement"].toObject()[axis].toInt();return lp!=rp?lp<rp:l["id"].toString()<r["id"].toString();});
+        QList<int> gaps;int from=-1,to=-1;
+        for(int i=0;i<order.size();++i){const auto node=entries[order[i]].toObject(),p=node["placement"].toObject();if(node["id"]==id)from=i;if(node["id"]==relative)to=i;if(i+1<order.size())gaps.append(entries[order[i+1]].toObject()["placement"].toObject()[axis].toInt()-p[axis].toInt()-p[span].toInt());}
+        if(from<0 || to<0){setError(tr("Choose an insertion target in the same group."));return false;}
+        int cursor=entries[order.first()].toObject()["placement"].toObject()[axis].toInt();
+        const int moving=order.takeAt(from);if(from<to)--to;order.insert(to+(a.value("before").toBool()?0:1),moving);
+        for(int i=0;i<order.size();++i){auto node=entries[order[i]].toObject(),p=node["placement"].toObject();if(p[axis].toInt()!=cursor && ComponentSchema::positionLocked(entries,node["id"].toString())){setError(tr("A locked component blocks this insertion."));return false;}p[axis]=cursor;node["placement"]=p;entries[order[i]]=node;cursor+=p[span].toInt()+(i<gaps.size()?gaps[i]:0);}
+        document["components"]=entries;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if(operation=="orderRelative") {
         const auto relative=a.value("relativeId").toString();
         if(a.value("before").metaType().id()!=QMetaType::Bool || relative==id){setError(tr("Choose another component and an ordering direction."));return false;}

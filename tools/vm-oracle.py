@@ -19,12 +19,14 @@ import xml.etree.ElementTree as ET
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
+          "studio_navigation": "isolde_home_navigation_tests",
           "kodi_media_client": "isolde_kodi_media_tests",
           "studio_quick": "isolde_studio_quick_tests",
           "studio_selection": "isolde_studio_quick_tests",
           "studio_gestures": "isolde_studio_quick_tests",
           "studio_grid": "isolde_studio_quick_tests",
           "studio_destinations": "isolde_studio_quick_tests",
+          "studio_ordered": "isolde_studio_quick_tests",
           "studio_unit": "isolde_component_tests",
           "studio_behavior": "isolde_home_navigation_tests",
           "studio": ("isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests")}
@@ -34,7 +36,9 @@ def suite_selection(suite):
     """One allowlisted selection authority for build targets and CTest names."""
     targets = SUITES[suite]
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
-    pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_destinations|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_destinations|studio_ordered|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    if suite == "home_component_navigation":
+        pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
 CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "lounge": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
@@ -296,7 +300,9 @@ class Oracle:
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":
-            expected = {"studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_destinations", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            expected = {"studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_destinations", "studio_ordered", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            if suite == "home_component_navigation":
+                expected = {"home_component_navigation", "studio_navigation"}
             if {c.get("name") for c in cases} != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):

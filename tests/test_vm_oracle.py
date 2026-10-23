@@ -23,7 +23,7 @@ class OracleTests(unittest.TestCase):
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])
-        for name in ("studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_destinations", "studio_unit", "studio_behavior"):
+        for name in ("studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_destinations", "studio_ordered", "studio_unit", "studio_behavior"):
             self.assertIsNotNone(re.fullmatch(pattern, name))
         self.assertIsNone(re.fullmatch(pattern, "home_component_navigation"))
         self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))
@@ -34,6 +34,23 @@ class OracleTests(unittest.TestCase):
         (runner.run / "test-result.json").write_text(json.dumps({"passed": True, "fullSuite": False, "suite": "studio"}))
         with self.assertRaisesRegex(RuntimeError, "no passing full-suite payload"):
             runner.tested_payload()
+
+    def test_split_navigation_runs_every_native_scenario_once(self):
+        repo = Path(__file__).resolve().parents[1]
+        source = (repo / "tests/tst_home_navigation.cpp").read_text()
+        slots = re.search(r"private slots:(.*?)\n};", source, re.S).group(1)
+        expected = {name for name in re.findall(r"void (\w+)\(\);", slots) if not name.endswith("_data")}
+        cmake = (repo / "CMakeLists.txt").read_text()
+        selected = []
+        for group in ("RUNTIME", "STUDIO"):
+            selected.extend(re.search(r"set\(ISOLDE_" + group + r"_NAVIGATION_CASES\s+(.*?)\)", cmake, re.S).group(1).split())
+        self.assertEqual(set(selected), expected)
+        self.assertEqual(len(selected), len(expected))
+        targets, pattern = oracle.suite_selection("home_component_navigation")
+        self.assertEqual(targets, ["isolde_home_navigation_tests"])
+        for name in ("home_component_navigation", "studio_navigation"):
+            self.assertIsNotNone(re.fullmatch(pattern, name))
+        self.assertIsNone(re.fullmatch(pattern, "studio_behavior"))
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(dir=os.environ.get("ISOLDE_ORACLE_TEST_TMP"))

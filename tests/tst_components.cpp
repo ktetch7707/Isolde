@@ -61,6 +61,7 @@ private slots:
     void studioScrollingPagesAreBoundedAndAtomic();
     void studioSectionTransfersDuplicationAndOrdering();
     void studioNestedGroupsValidateAndReparentAtomically();
+    void studioOrderedInsertionPreservesSlotsAndIsAtomic();
     void studioCatalogLinksInspectorAndStagedArtwork();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
@@ -1214,6 +1215,43 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     session->invalidate();QVERIFY(!QFile::exists(staged));QVERIFY(QFile::exists(dir.filePath("profile/"+relative)));
     auto invalid=options["componentPresets"].toMap()["image"].toMap();invalid["action"]=QVariantMap{{"type","exec"},{"target","bad"}};QVERIFY(ComponentSchema::component(invalid,true).isEmpty());
     invalid=options["componentPresets"].toMap()["library"].toMap();auto style=invalid["presentation"].toMap();style["libraryLimit"]=51;invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,true).isEmpty());
+}
+void ComponentTests::studioOrderedInsertionPreservesSlotsAndIsAtomic()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("ordered.json");QVERIFY(home.load(defaults,user));
+    auto *setup=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(setup);
+    auto group=QJsonObject::fromVariantMap(setup->componentPrototype("container")["root"].toMap());group["id"]="ordered";
+    group["placement"]=QJsonObject{{"x",0},{"y",0},{"width",4},{"height",2}};
+    auto style=group["presentation"].toObject();style["layout"]=QJsonObject{{"schemaVersion",1},{"mode","row"},{"columns",6},{"rows",1},{"visibleColumns",2},{"wrap",true},{"gap",12},{"padding",0}};group["presentation"]=style;
+    auto doc=QJsonDocument::fromJson(home.committedDocument()).object();doc["categories"]=QJsonArray{};
+    doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",4},{"rows",3},{"mode","screen"}}}};
+    QJsonArray nodes{group};
+    for(int i=0;i<3;++i){auto node=QJsonObject::fromVariantMap(ComponentSchema::component({{"id",QString("ordered-%1").arg(i)},{"kind","widget"},{"widgetType","text"},{"name",QString("Child %1").arg(i)},{"parentId","ordered"},{"placement",QVariantMap{{"x",i==0?0:i==1?3:5},{"y",0},{"width",i==0?2:1},{"height",1}}}},true));QVERIFY(!node.isEmpty());nodes.append(node);}
+    auto outside=QJsonObject::fromVariantMap(ComponentSchema::component({{"id","outside"},{"kind","widget"},{"widgetType","text"},{"name","Outside"},{"placement",QVariantMap{{"x",0},{"y",2},{"width",1},{"height",1}}}},true));nodes.append(outside);doc["components"]=nodes;
+    setup->invalidate();writeFile(user,QJsonDocument(doc).toJson());QVERIFY(home.load(defaults,user));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    const auto before=session->draft(),disk=readFile(user);const auto count=session->changeCount();
+    for(const auto &args:QVariantList{
+        QVariantMap{{"id","ordered-0"},{"relativeId","outside"},{"before",false}},
+        QVariantMap{{"id","ordered-0"},{"relativeId","ordered-0"},{"before",false}},
+        QVariantMap{{"id","ordered-0"},{"relativeId","ordered-2"},{"before","false"}},
+        QVariantMap{{"id","outside"},{"relativeId","ordered-2"},{"before",false}}}){
+        QVERIFY(!session->execute("insertRelative",args.toMap()));QVERIFY(!session->errorString().isEmpty());QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),count);
+    }
+    const QVariantMap insert{{"id","ordered-0"},{"relativeId","ordered-2"},{"before",false}};
+    QVERIFY2(session->previewCommand("insertRelative",insert),qPrintable(session->errorString()));QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),count);
+    QVERIFY(session->acceptPreview());QCOMPARE(session->changeCount(),count+1);
+    const auto inserted=QJsonDocument::fromJson(session->draft()).object()["components"].toArray();
+    QCOMPARE(inserted[0],nodes[0]);QCOMPARE(inserted[4],nodes[4]);
+    for(int i=0;i<3;++i){auto expected=nodes[i+1].toObject(),p=expected["placement"].toObject();p["x"]=i==0?4:i==1?0:2;expected["placement"]=p;QCOMPARE(inserted[i+1].toObject(),expected);}
+    QCOMPARE(readFile(user),disk);QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+    QVERIFY(session->execute("state",{{"id","ordered-1"},{"key","locked"},{"value",true}}));const auto locked=session->draft();const auto lockedCount=session->changeCount();
+    QVERIFY(!session->execute("insertRelative",insert));QCOMPARE(session->draft(),locked);QCOMPARE(session->changeCount(),lockedCount);QCOMPARE(readFile(user),disk);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+    QVERIFY(session->execute("orderRelative",insert));
+    for(const auto &entry:QJsonDocument::fromJson(session->draft()).object()["components"].toArray())for(const auto &original:nodes)if(entry.toObject()["id"]==original.toObject()["id"])QCOMPARE(entry.toObject()["placement"],original.toObject()["placement"]);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),before);
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

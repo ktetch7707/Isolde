@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Check','Test','Visual','Deploy','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
-    [ValidateSet('all','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_unit','studio_behavior','component_contracts','home_component_navigation','kodi_media_client')][string]$Suite = 'all',
+    [ValidateSet('all','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client')][string]$Suite = 'all',
     [ValidateSet('studio','lounge','pastel','pages')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
