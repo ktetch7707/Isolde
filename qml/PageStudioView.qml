@@ -35,6 +35,7 @@ Item {
     property string resizeAnchor:"top-left"
     property string gestureMode:"move"
     property string originScopeId:""
+    property bool originScopeOverview:true
     property string collisionStrategy:"shift"
     property string deletionReplacement:""
     property bool deletionRemaps:false
@@ -146,6 +147,18 @@ Item {
         return false
     }
     readonly property var destinationGroups:[{id:"",name:sectionMode?"Current section":"Page"}].concat(items.filter(group=>groupDestinationAllowed(group)))
+    function destinationGroupLabel(group) {
+        if(!group.id)return "Move to "+group.name
+        const path=[group.name]
+        let root=group
+        for(let depth=0;root.parentId && depth<4;++depth){
+            const parent=items.find(item=>item.id===root.parentId)
+            if(!parent)break
+            path.unshift(componentName(parent));root=parent
+        }
+        if(sectionMode){const section=page.sections.find(item=>item.id===(root.categoryId || ""));if(section)path.unshift(section.name)}
+        return "Move into "+path.join(" / ")
+    }
     function chooseGroupDestination(index) {
         const group=destinationGroups[index]
         if(!group)return
@@ -156,7 +169,7 @@ Item {
             scopeId=root.categoryId || "";scopeOverview=false
         }
         candidate=Object.assign({},candidate,{x:0,y:0});mode="move"
-        message="Move into "+group.name+" · Preview"
+        message=destinationGroupLabel(group)+" · Preview"
         Qt.callLater(()=>preview.revealPlacement(candidate,scopeId,parentScopeId))
     }
     readonly property var placementOptions:parentScopeId?({parentId:parentScopeId,categoryId:""}):sectionMode?({parentId:"",categoryId:scopeId}):({parentId:""})
@@ -248,6 +261,7 @@ Item {
         if (!current) { message="Choose a component in Layers first."; return }
         if(current.locked){message="This component is locked. Choose Edit component → Lock / unlock first.";return}
         gestureViewport=preview.editorViewport()
+        originScopeOverview=scopeOverview
         originParentId=current.parentId || "";originScopeId=scopeId
         origin=position(current);candidate=Object.assign({},origin)
         const layout=parentGroup?(parentGroup.presentation.layout || {}):({})
@@ -272,7 +286,7 @@ Item {
     }
     function cancelGesture() {
         if(mode==="flowMove")session.cancelPreview()
-        parentScopeId=originParentId;scopeId=originScopeId
+        parentScopeId=originParentId;scopeId=originScopeId;scopeOverview=originScopeOverview
         if(!addingType && current)candidate=Object.assign({},origin)
         addingType="";pendingScrollEnable=false;mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;message="Canceled · no draft or history changes."
         const viewport=gestureViewport
@@ -392,7 +406,7 @@ Item {
         pendingScrollEnable=false;addingType=type;addingConfiguration=configuration || ({})
         const prototype=session.componentPrototype(type,addingConfiguration)
         if(!prototype.root){message=session.errorString;return}
-        gestureViewport=preview.editorViewport();originScopeId=scopeId;originParentId=parentScopeId
+        gestureViewport=preview.editorViewport();originScopeId=scopeId;originParentId=parentScopeId;originScopeOverview=scopeOverview
         candidate=Object.assign({},prototype.root.placement,{x:0,y:0});origin=Object.assign({},candidate)
         gestureMode="move";toolbarFocus=false;mode="move";message=""
         suggestAdditionPosition()
@@ -468,7 +482,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Move into group…","Return to "+gestureMode]
         if(mode==="anchors")return ["Top left","Top right","Bottom left","Bottom right"]
         if(mode==="destination")return destinationSections.map(s=>s.name+(s.id===originScopeId?" · Current section":""))
-        if(mode==="groupDestination")return destinationGroups.map(g=>(g.id?"Move into ":"Move to ")+g.name+(g.id===originParentId?" · Current":""))
+        if(mode==="groupDestination")return destinationGroups.map(g=>destinationGroupLabel(g)+(g.id===originParentId?" · Current":""))
         if(mode==="orderBefore" || mode==="orderAfter")return relativeItems.length?relativeItems.map(i=>i.name || i.widgetType || i.id):["No other components in this section · Back returns"]
         if(mode==="properties")return contextActions.slice(2)
         if(mode==="layers") return layerRows.map(row=>"  ".repeat(row.depth)+(row.item.componentType==="container"?(expandedGroups[row.item.id]?"▾ ":"▸ "):"  ")+(multiSelection.indexOf(row.item.id)>=0?"✓ ":"")+(row.item.name || row.item.widgetType || row.item.id)+(row.item.hidden?" · Hidden":"")+(row.item.locked?" · Locked":"")).concat(multiSelection.length>=2?["Group "+multiSelection.length+" selected components","Align / distribute selected…"]:[]).concat(["Inspect reading order / directional focus"])

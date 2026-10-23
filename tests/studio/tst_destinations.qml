@@ -23,15 +23,53 @@ Item {
             verify(editor.session.execute("batch",{commands:proposal.commands}),editor.session.errorString)
             return proposal.id
         }
-        function givenGroups(){
+        function givenGroups(sectioned){
             verify(studioFixture.reset(false,false,false,true));diskBaseline=studioFixture.disk()
             editor=createTemporaryObject(editorComponent,tests.parent);verify(editor !== null)
             editor.show("","cell-0");editor.toolbarFocus=false
+            if(sectioned){
+                verify(editor.session.execute("convertGrid",{value:{mode:"sections",columns:4,rows:3,gap:12,margin:20},sectionHeight:500}),editor.session.errorString)
+                // Conversion packs the three authored cells into the first row.
+                // The third cell is outside this two-group transfer scenario.
+                verify(editor.session.execute("remove",{id:"cell-2"}),editor.session.errorString)
+            }
             verify(editor.session.execute("group",{ids:["cell-0","cell-1"]}))
             sourceId=editor.items.find(item=>item.componentType==="container").id
             destinationId=addGroup("Reading room","",2,0,2,2,4,2)
             editor.selectedId="cell-0";settle()
             compare(editor.parentScopeId,sourceId)
+        }
+        function test_cross_section_group_preview_cancel_and_input_parity_data(){return [{tag:"overview",overview:true},{tag:"isolated",overview:false}]}
+        function test_cross_section_group_preview_cancel_and_input_parity(data){
+            scenario("cross-section-group",()=>{
+                givenGroups(true)
+                verify(editor.session.execute("section",{kind:"add",name:"Reading"}),editor.session.errorString)
+                const section=editor.page.sections.find(item=>item.name==="Reading");verify(section !== undefined)
+                verify(editor.session.execute("assignSection",{id:destinationId,categoryId:section.id}),editor.session.errorString)
+                editor.selectedId="cell-0";editor.scopeOverview=data.overview;settle()
+                const before=document(),count=editor.session.changeCount,sourceSection=editor.scopeId,overview=editor.scopeOverview
+                const preview=findChild(editor,"studioPreview"),viewport=JSON.stringify(preview.editorViewport())
+                beginMove();destinations(false)
+                const index=editor.destinationGroups.findIndex(group=>group.id===destinationId)
+                verify(editor.dialogLabels()[index].indexOf("Reading / Reading room")>=0)
+                choose(destinationId,false)
+                compare(editor.scopeId,section.id);compare(editor.parentScopeId,destinationId)
+                tryVerify(()=>{const rect=preview.clippedPlacement(editor.candidate,editor.scopeId,editor.parentScopeId);return rect.width>0 && rect.height>0})
+                verify(editor.collisionPreview.valid);compare(document(),before);compare(editor.session.changeCount,count)
+                if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-cross-section-group-"+data.tag+".png")
+                command(inputManager.back);settle()
+                compare(editor.scopeId,sourceSection);compare(editor.parentScopeId,sourceId)
+                compare(editor.scopeOverview,overview)
+                compare(JSON.stringify(preview.editorViewport()),viewport);compare(document(),before)
+                beginMove();destinations(false);choose(destinationId,false);command(inputManager.navigateRight);command(inputManager.confirm)
+                compare(editor.mode,"canvas");compare(editor.session.changeCount,count+1)
+                const remote=document();compare(editor.items.find(item=>item.id==="cell-0").parentId,destinationId)
+                verify(editor.session.undo());compare(document(),before);settle()
+                beginMove();destinations(true);choose(destinationId,true)
+                mouseClick(findChild(editor,"studioMoveCell-1"));compare(editor.candidate.x,1)
+                mouseClick(findChild(editor,"studioMovePlace"));compare(editor.mode,"canvas");compare(document(),remote)
+                verify(editor.session.undo());compare(document(),before);compare(studioFixture.disk(),diskBaseline)
+            })
         }
         function beginMove(){command(inputManager.confirm);compare(editor.mode,"context");command(inputManager.confirm);compare(editor.mode,"move");settle()}
         function destinations(pointer){
