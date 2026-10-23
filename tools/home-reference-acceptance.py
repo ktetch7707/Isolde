@@ -22,6 +22,32 @@ def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
 
 
+def collection_review(document):
+    """Saved structure identifies required reviews, never provider population.
+
+    This journey checks save/reapply/reset. It has no provider assertions and
+    must not imply collection functionality or a populated visual acceptance.
+    Inspect every page because the saved skin can include linked destinations.
+    """
+    kinds = set()
+    layouts = [document]
+    while layouts:
+        layout = layouts.pop()
+        for item in layout.get("components", layout.get("items", [])):
+            if "appCollection" in item:
+                kinds.add("apps")
+            if item.get("componentType", item.get("widgetType")) == "library":
+                kinds.add("media")
+        layouts.extend(page["layout"] for page in layout.get("pages", []) if isinstance(page.get("layout"), dict))
+    return {
+        "required": sorted(kinds),
+        "population_verified": False if kinds else None,
+        "behavior_verified": False if kinds else None,
+        "missing": [f"{kind.capitalize()} collection population and behavior are not verified by save/reapply/reset."
+                    for kind in sorted(kinds)],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
@@ -222,13 +248,16 @@ def main():
             key("Up", 30); key("Down")  # Capture the first default item, not retained bottom focus.
             captured("default")
             assert reset_verified()
-            (evidence / "result.json").write_text(json.dumps({"configuration_match": None, "component_support": True,
+            collections = collection_review(json.loads(original_bytes))
+            (evidence / "result.json").write_text(json.dumps({"configuration_match": None, "component_support": None,
                 "reference_sha256": reference_hash, "visual_review_required": True,
+                "functional_journey_passed": True, "visual_acceptance": "pending",
+                "semantic_acceptance": "not_verified", "collections": collections,
                 "case": str(case),
                 "settings_skin_round_trip": args.skin_from_settings,
                 "saved_skin_survives_reset": bool(list((config / "skins").glob("user-*.json"))) if args.skin_from_settings else None,
                 "reset_verified": True, "executable": str(executable),
-                "fixture_only": ["Movie labels/progress are visual fixtures; launch opens the real library", "HDMI 4 and guide open setup; real backends remain unqualified"], "missing": []}, indent=2))
+                "fixture_only": ["Individually authored media labels/art are illustrative, not provider history", "Input/guide setup routes do not qualify their backends"], "missing": collections["missing"]}, indent=2))
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
         if args.inspect:

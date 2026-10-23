@@ -50,11 +50,13 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
 
 def visual_result_passed(case, result):
     if case in ("lounge", "pastel"):
-        return (result.get("component_support") is True
+        functional = (result.get("functional_journey_passed") is True
+                      if "functional_journey_passed" in result else
+                      result.get("component_support") is True and result.get("missing") == [])
+        return (functional
                 and result.get("reset_verified") is True
                 and result.get("settings_skin_round_trip") is True
-                and result.get("saved_skin_survives_reset") is True
-                and result.get("missing") == [])
+                and result.get("saved_skin_survives_reset") is True)
     return result.get("passed") is True
 
 
@@ -371,7 +373,8 @@ class Oracle:
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
-            self.update(visualCase=case, visualPassed=True, visualReview="pending", executable=str(executable))
+            self.update(visualCase=case, visualPassed=True, visualReview="pending",
+                        visualAcceptance="pending", semanticAcceptance="not_verified", executable=str(executable))
         finally:
             # This guard also runs on timeouts/SIGHUP when a harness cannot reach its own finally.
             restored = self.restore(before)

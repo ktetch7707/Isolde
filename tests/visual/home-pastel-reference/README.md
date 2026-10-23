@@ -30,6 +30,10 @@ Run `tools/home-reference-acceptance.py <installed-executable> --case <repo>/tes
 
 Hardware shader support may vary: panel tint remains usable when optional Qt Quick Effects blur is unavailable. Record whether the target renderer supports the frosted effect; do not count a software-rendered unit test as GPU blur qualification.
 
-## Last completed run
+## Historical authored-card run
 
 Installed release `523f627f0c06211f92b6e43b` passed all thirteen suites and the Settings-only skin selection/save/default/reapply/reset sequence. The [actual recreation](last-attempt.png), [restored default](last-default.png), [exact configuration](last-attempt-config.json) and [explicit visual review](last-review.json) are retained here. Visual recreation passes as a landscape adaptation at 1280 × 800; the wallpaper is the documented clean reconstruction and the clock shows real time. Evidence: `/tmp/isolde-reference-config-yj_y0vbc`. Saved skins survive reset. Household restored active with zero restarts. See [skin acceptance](../home-skins/README.md).
+
+## Current semantic status (2026-10-23)
+
+The current Settings-selected preset uses production collections; its isolated acceptance profile lacks populated app/history providers. Save/reapply/reset passes, but populated reference recreation remains incomplete. The historical captures above do not prove current collection semantics. See [standing evidence audit](../../../docs/studio-reference-evidence-2026-10-23.md). T21.9 owns the required real Recently viewed and deterministic-provider fixture rebuild.

@@ -20,6 +20,29 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_reference_round_trip_does_not_claim_collection_acceptance(self):
+        path = Path(__file__).resolve().parents[1] / "tools/home-reference-acceptance.py"
+        module_spec = importlib.util.spec_from_file_location("reference_acceptance", path)
+        reference = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(reference)
+        document = {"components": [{"appCollection": {"mode": "all"}}], "pages": [
+            {"layout": {"components": [{"componentType": "library"}]}}]}
+        review = reference.collection_review(document)
+        self.assertEqual(review["required"], ["apps", "media"])
+        self.assertFalse(review["population_verified"])
+        self.assertFalse(review["behavior_verified"])
+        self.assertEqual(len(review["missing"]), 2)
+        legacy = reference.collection_review({"items": [{"kind": "action"}]})
+        self.assertEqual(legacy["required"], [])
+        self.assertIsNone(legacy["population_verified"])
+        functional = dict(functional_journey_passed=True, reset_verified=True,
+                          settings_skin_round_trip=True, saved_skin_survives_reset=True,
+                          component_support=None, missing=review["missing"],
+                          semantic_acceptance="not_verified", visual_acceptance="pending")
+        self.assertTrue(oracle.visual_result_passed("pastel", functional))
+        functional["functional_journey_passed"] = False
+        self.assertFalse(oracle.visual_result_passed("pastel", functional))
+
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])
