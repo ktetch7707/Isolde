@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge','studio')][string]$Case = 'pages',
+    [ValidateSet('pages','pastel','lounge','studio','desktop')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -22,8 +22,9 @@ $sshArgs = Get-OracleSshArguments $IdentityFile
 if ($GuestRunner) {
     if ($GuestRunner -notmatch '^/[A-Za-z0-9/_.-]+$' -or $RunId -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') { throw 'Invalid oracle runner/run ID.' }
     $command = "python3 $GuestRunner visual --run-id $RunId --case $Case" + $(if ($Installed) { ' --installed' } else { '' })
-} elseif ($Case -eq 'studio') {
-    $command = "python3 $SourceRoot/tools/home-components-acceptance.py $Executable --studio --inspect"
+} elseif ($Case -in @('studio','desktop')) {
+    $desktopFlag = if ($Case -eq 'desktop') { ' --desktop' } else { '' }
+    $command = "python3 $SourceRoot/tools/home-components-acceptance.py $Executable --studio --inspect$desktopFlag"
 } elseif ($Case -eq 'pages') {
     $command = "python3 $SourceRoot/tools/tv-library-acceptance.py $Executable --pages --inspect"
 } else {

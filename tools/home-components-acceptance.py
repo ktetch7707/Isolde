@@ -25,6 +25,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--inspect", action="store_true", help="Pause briefly on failure for a VM screenshot")
     parser.add_argument("--studio", action="store_true", help="Exercise draft canvas, remote editing, history, preview and Apply")
+    parser.add_argument("--desktop", action="store_true", help="Compare actual X11 pointer drag and remote saved output in the Studio fixture")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
     args = parser.parse_args()
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a")
@@ -128,6 +129,22 @@ def main():
             time.sleep(0.1)
         raise RuntimeError(message + " did not complete; evidence: " + str(evidence))
 
+    def pointer(event_type, x, y, held=False):
+        # Window-targeted events stay inside this disposable application's X11
+        # window. KeyEvent and XButtonEvent share the same wire field layout.
+        geometry = next(line.split() for line in run("wmctrl", "-lG", env=env).splitlines()
+                        if line.split()[0] == window)
+        origin_x, origin_y, width, height = map(int, geometry[2:6])
+        px, py = round(x * width), round(y * height)
+        event = Event()
+        event.key = KeyEvent(type=event_type, send_event=1, display=display, window=int(window, 16),
+                             x=px, y=py, x_root=origin_x+px, y_root=origin_y+py,
+                             state=256 if held else 0, keycode=0 if event_type == 6 else 1, same_screen=1)
+        mask = {4:4, 5:8, 6:64}[event_type]
+        x11.XSendEvent(display, int(window, 16), 1, mask, ctypes.byref(event))
+        x11.XFlush(display)
+        time.sleep(0.15)
+
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
     try:
@@ -174,6 +191,47 @@ def main():
                 key("Return")  # Add suggests the first free cell; one draft operation.
                 assert layout.read_bytes() == original_bytes
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
+
+                if args.desktop:
+                    def apply_at(column):
+                        key("Escape"); key("Up", 30); key("Down", 5); key("Return"); key("Return")
+                        expect(lambda: next(item for item in json.loads(layout.read_text())["components"]
+                                            if item["id"] == "clock")["placement"]["x"] == column,
+                               "Desktop fixture Apply at column " + str(column))
+                        return layout.read_bytes()
+
+                    def reopen_clock():
+                        key("Escape"); key("Return")  # Close/reopen the actual editor.
+                        key("Down", 4); key("Return"); key("Down", 2); key("Return")  # More -> Layers.
+                        key("Up", 30); key("Down"); key("Return")  # Explicit Clock, not runtime focus's source.
+
+                    key("Return"); key("Return"); key("Right"); key("Return")
+                    remote = apply_at(2)
+                    reopen_clock()
+                    capture("baseline")
+                    key("Return"); key("Return"); key("Left"); key("Return")
+                    baseline = apply_at(1)
+                    reopen_clock()
+                    # Fixture-relative centers: the selected Clock's full card,
+                    # then one free cell right. No tiny resize handle is used.
+                    start, end = (0.225, 0.246), (0.335, 0.246)
+                    pointer(4, *start); pointer(6, *end, held=True)
+                    capture("pointer")
+                    assert layout.read_bytes() == baseline
+                    key("Escape"); pointer(5, *end, held=True)
+                    capture("pointercancel")
+                    assert layout.read_bytes() == baseline
+                    pointer(4, *start); pointer(6, *end, held=True); pointer(5, *end, held=True)
+                    assert layout.read_bytes() == baseline
+                    pointer_saved = apply_at(2)
+                    assert pointer_saved == remote, "Pointer and remote saved documents differ"
+                    capture("pointerapplied")
+                    (evidence / "result.json").write_text(json.dumps({
+                        "passed": True, "journey": "desktop", "executable": str(executable),
+                        "pointer_remote_saved_bytes_equal": True, "held_drag_back_no_write": True,
+                        "apply_required": True, "user_usability_acceptance": "pending"}, indent=2))
+                    print("Evidence: " + str(evidence), flush=True)
+                    return
 
                 def undo_operation():
                     key("Escape"); key("Down", 2); key("Return"); key("Return")  # More -> Undo.

@@ -82,3 +82,5 @@ Logs, aggregate JUnit and failure screenshots are fetched to `build/vm-oracle/<r
 Test records include before/after installed-service and release identities. An unexpected change fails the test run; the runner does not try to repair it by deploying. Failure-image bundling is covered by the runner's allowlist regression.
 
 Framework references: [Qt Quick Test](https://doc.qt.io/qt-6/qtquicktest-index.html), [QML TestCase and input/wait/image helpers](https://doc.qt.io/qt-6/qml-qttest-testcase.html).
+
+Installed desktop acceptance is opt-in: after full Test and explicit Deploy, run `./tools/vm-test.ps1 Visual -RunId <run> -Installed -Cases desktop`. It compares actual X11 pointer and remote saved output in a disposable profile, including held-drag Back/release and normal Apply. This is additional to the default Studio/Lounge/Pastel cases; it does not qualify physical TV usability or populated collection semantics. [Evidence and limits](studio-installed-pointer-2026-10-23.md).

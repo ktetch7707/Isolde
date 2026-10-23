@@ -43,6 +43,7 @@ def suite_selection(suite):
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
 CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
+         "desktop": ("home-components-acceptance.py", ["--studio", "--desktop", "--inspect"]),
          "lounge": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
          "pastel": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"])}
