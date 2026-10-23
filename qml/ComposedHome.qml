@@ -97,6 +97,16 @@ Item {
         return { columns: columns, rows: rows, gap: gap, margin: margin, cellW: cellW, cellH: cellH,valid:valid }
     }
     readonly property var placementCell:measureGrid(content.width,content.height,root.grid || {})
+    readonly property bool editorGeometryReady: {
+        if(content.width<=0 || content.height<=0)return false
+        if(!sectionMode)return true
+        for(const section of visibleSections){
+            if((section.presentation || {}).variant==="library")continue
+            const surface=sectionSurfaces[section.id || ""]
+            if(!surface || !surface.geometryReady)return false
+        }
+        return true
+    }
     readonly property string layoutError: {
         if(!placementMode)return ""
         if(!sectionMode)return placementCell.valid?"":"Grid spacing or margins leave no room for cells. Edit Grid to repair."
@@ -449,6 +459,7 @@ Item {
                                 property string sectionId:sectionView.modelData.id || ""
                                 property string sectionName:sectionView.modelData.name || ""
                                 property bool editableGrid:sectionView.style.variant!=="library"
+                                readonly property bool geometryReady:sectionView.width>0 && sectionView.height>0 && Math.abs(sectionView.height-sectionView.Layout.preferredHeight)<0.5
                                 width:parent.width;height:Math.max(0,parent.height-heading.height-subtitle.height-2*sectionBody.spacing)
                                 visible:root.sectionMode && editableGrid
                                 metrics:root.measureGrid(width,height,Object.assign({},root.grid,sectionView.style.grid || {}))
@@ -457,7 +468,7 @@ Item {
                                 onActivated:item=>root.activatePlaced(item)
                                 onFocused:card=>root.revealCard(card)
                                 Component.onCompleted:{let surfaces=Object.assign({},root.sectionSurfaces);surfaces[sectionId]=sectionPlacement;root.sectionSurfaces=surfaces}
-                                Component.onDestruction:{let surfaces=Object.assign({},root.sectionSurfaces);delete surfaces[sectionId];root.sectionSurfaces=surfaces}
+                                Component.onDestruction:{let surfaces=Object.assign({},root.sectionSurfaces);if(surfaces[sectionId]===sectionPlacement)delete surfaces[sectionId];root.sectionSurfaces=surfaces}
                             }
                             Text {
                                 visible:sectionView.style.variant==="library" && !host.libraryProvider

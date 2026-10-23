@@ -70,6 +70,7 @@ Item {
     property int previewExtentRows:0
     readonly property int firstVisibleGridRow:composed.firstVisibleGridRow
     readonly property var pageViewport:composed.viewportRect()
+    readonly property bool editorGeometryReady:composed.editorGeometryReady
     readonly property var gridMetrics: composed.placementCell
     readonly property real componentUnit:composed.unit
     readonly property string layoutError: {

@@ -239,7 +239,7 @@
   "gridModes": [
     {
       "id": "screen",
-      "name": "One screen"
+      "name": "Page grid"
     },
     {
       "id": "sections",

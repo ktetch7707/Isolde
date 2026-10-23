@@ -16,7 +16,7 @@ Run from the project root in PowerShell 7:
 # Real editor workflows, including scrolling and cancellation.
 ./tools/vm-test.ps1 Test -Suite studio_behavior
 
-# All three focused suites for a completed Studio change.
+# All six focused suites for a completed Studio change.
 ./tools/vm-test.ps1 Test -Suite studio
 
 # Full native regression gate at an integration/release checkpoint.
@@ -36,7 +36,8 @@ During development, run the relevant small suite; run `studio` after a complete 
 | `studio_unit` | Existing Qt Test component executable, seven selected functions | Draft/history bounds, atomic failure/rollback, profile scope, collision parity, bounded cascades, scrolling persistence and home protection |
 | `studio_behavior` | Existing Qt Test navigation executable, four selected functions | Remote draft/apply/cancel, gestures/collisions/anchors, section transfer/cancel and long-page Add/move/cancel/runtime visibility |
 | `studio_gestures` | Qt Quick Test; `tests/studio/tst_gestures.qml` | Actual pointer threshold/cancel/release, ordered insertion, bounded edge growth, remote canonical parity, resize reflow/refusal, visual alignment and group-layout transactions |
-| `studio` | Five suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
+| `studio_grid` | Qt Quick Test; `tests/studio/tst_grid.qml` | Page-layout stepper/slider parity, bounded exact values, preserved locked groups, explicit legacy conversion, section geometry readiness and private cancellation/undo |
+| `studio` | Six suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
 
 The complete existing suites remain registered. These additional focused registrations deliberately reuse tested functions instead of copying their code. Full CTest includes both focused and broad registrations; a focused pass is not a substitute for full integration coverage.
 

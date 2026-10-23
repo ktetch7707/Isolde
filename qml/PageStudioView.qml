@@ -54,6 +54,21 @@ Item {
     property var gestureViewport: ({})
     property var proposal: ({})
     property var gridDraft: ({})
+    property var gridBaselineComposition:({})
+    property bool gridWasPlaced:false
+    property bool gridPreviewValid:true
+    property int gridPreviewSerial:0
+    readonly property bool gridEditing:["convert","conversionPreview","gridExact"].indexOf(mode)>=0 || mode==="keyboard" && keyboardAction.indexOf("grid:")===0
+    readonly property bool gridGeometryPending:gridEditing && !!session && !!session.proposalModel && !preview.editorGeometryReady
+    readonly property string gridGeometryError:gridEditing && session && session.proposalModel && preview.editorGeometryReady?preview.layoutError:""
+    onGridGeometryErrorChanged: {
+        if(!gridGeometryError)return
+        const serial=gridPreviewSerial
+        Qt.callLater(()=>{
+            if(serial!==gridPreviewSerial || !gridEditing || !session || !session.proposalModel || !preview.editorGeometryReady || !preview.layoutError)return
+            message=preview.layoutError;gridPreviewValid=false;session.cancelPreview()
+        })
+    }
     property var childLayoutDraft:({})
     property bool childLayoutValid:true
     property bool childLayoutFromInspector:false
@@ -64,7 +79,7 @@ Item {
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
     property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
-    readonly property var draftModel: session ? ((mode==="conversionPreview" || mode==="flowMove" || mode==="scrolling" || mode==="arrange" || mode==="childLayout" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
+    readonly property var draftModel: session ? ((gridEditing || mode==="flowMove" || mode==="scrolling" || mode==="arrange" || mode==="childLayout" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
     readonly property var pageGrid:page?page.grid:({})
@@ -107,7 +122,7 @@ Item {
     }
     function editorReveals(item){if(!item.hidden)return true;if(mode==="preview")return false;let id=selectedId;for(let depth=0;id && depth<=4;++depth){if(id===item.id)return true;const node=items.find(i=>i.id===id);id=node?node.parentId || "":""}return false}
     readonly property string operationSummary:componentName(addingType?null:current)+" · row "+(candidate.y+1)+", column "+(candidate.x+1)+" · "+candidate.width+" × "+candidate.height+" cells"
-    readonly property string operationTitle:({noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size"})[mode] || ""
+    readonly property string operationTitle:({noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
     readonly property string footerText: {
         if(mode==="flowMove")return message
         if(mode==="move" || mode==="resize")return (addingType?"Adding ":mode==="move"?"Moving ":"Resizing ")+componentName(addingType?null:current)+(message?" · "+message:mode==="move" && collisionPreview.valid===false?" · "+collisionPreview.reason:"")
@@ -285,9 +300,25 @@ Item {
     }
     function beginGrid() {
         if(!gridModes.length){message="Packaged Studio defaults are missing or invalid.";return}
+        inspectorReturn=false;gridWasPlaced=gridMode;gridBaselineComposition=Object.assign({},page.composition);gestureViewport=preview.editorViewport()
+        ++gridPreviewSerial;session.cancelPreview();gridPreviewValid=gridWasPlaced;message=""
         gridDraft=Object.assign({},layoutModel.studioOptions.defaultGrid,pageGrid)
         sectionHeightDraft=page && page.composition.sectionHeight!==undefined?page.composition.sectionHeight:layoutModel.studioOptions.sectionHeight
         mode="convert";choice=6
+    }
+    function previewGrid(value,height) {
+        ++gridPreviewSerial;gridDraft=Object.assign({},value);sectionHeightDraft=height;session.cancelPreview()
+        const preserve=gridWasPlaced && value.mode===((gridBaselineComposition.grid || {}).mode || "screen")
+        const composition=Object.assign({},gridBaselineComposition,{grid:value})
+        if(value.mode==="sections")composition.sectionHeight=height
+        gridPreviewValid=preserve?session.previewCommand("composition",{value:composition},pageId):session.previewCommand("convertGrid",{value:value,sectionHeight:height},pageId)
+        message=gridPreviewValid?"":session.errorString
+        if(gridPreviewValid && preview.editorGeometryReady && preview.layoutError){message=preview.layoutError;gridPreviewValid=false;session.cancelPreview()}
+        return gridPreviewValid
+    }
+    function cancelGrid() {
+        ++gridPreviewSerial;session.cancelPreview();mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;message=""
+        const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))
     }
     function gridField(index) {
         if(index===1)return {key:"columns",min:4,max:16,integer:true,step:1}
@@ -418,6 +449,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="geometry") return ["Column (cell): "+(candidate.x+1), "Row (cell): "+(candidate.y+1), "Width (cells): "+candidate.width, "Height (cells): "+candidate.height, "Accept placement", "Cancel"]
         if(mode==="scopes")return ["Whole page overview"].concat((page.sections || []).map(s=>s.name))
         if(mode==="convert") return ["Layout: "+((gridModes.find(m=>m.id===gridDraft.mode)||{}).name || "Unavailable"),"Columns: "+gridDraft.columns,"Rows: "+gridDraft.rows,"Gap: "+gridDraft.gap,"Margin: "+gridDraft.margin,"Section height: "+sectionHeightDraft,"Preview arrangement","Cancel"]
+        if(mode==="gridExact")return ["Columns: "+gridDraft.columns,"Rows: "+gridDraft.rows,"Item gap: "+gridDraft.gap,"Safe margin: "+gridDraft.margin].concat(gridDraft.mode==="sections"?["Section height: "+sectionHeightDraft]:[]).concat(["Back to layout"])
         if(mode==="conversionPreview") return ["Use this arrangement in draft", "Cancel"]
         if(mode==="dirty") return ["Keep editing", "Discard draft…", "Review & Apply"]
         if(mode==="discard") return ["Keep editing", "Discard all draft pages"]
@@ -551,13 +583,24 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             return
         }
         if(mode==="convert") {
-            if(choice===7)mode="canvas"
+            if(choice===7)cancelGrid()
+            else if(choice===8){mode="gridExact";choice=0}
             else if(choice===0){const index=gridModes.findIndex(m=>m.id===gridDraft.mode);gridDraft=Object.assign({},gridDraft,{mode:gridModes[(index+1)%gridModes.length].id})}
-            else if(choice<6){const field=gridField(choice);beginKeyboard("grid:"+field.key,String(field.key==="sectionHeight"?sectionHeightDraft:gridDraft[field.key]))}
-            else if(session.previewCommand("convertGrid",{value:gridDraft,sectionHeight:sectionHeightDraft},pageId)){mode="conversionPreview";choice=0;message="Preview the complete grid arrangement. Section layouts retain named sections, library widgets and section actions. Apply remains a separate step."}else message=session.errorString
+            else if(choice===6 && previewGrid(gridDraft,sectionHeightDraft)){mode="conversionPreview";choice=0;message=gridDraft.columns+" columns × "+gridDraft.rows+" rows · "+(gridModes.find(m=>m.id===gridDraft.mode)||{}).name}
             return
         }
-        if(mode==="conversionPreview") {if(choice===0)session.acceptPreview();else session.cancelPreview();mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;return}
+        if(mode==="gridExact"){
+            const count=gridDraft.mode==="sections"?5:4
+            if(choice===count){mode="convert";choice=8;return}
+            const field=gridField(choice+1);beginKeyboard("grid:"+field.key,String(field.key==="sectionHeight"?sectionHeightDraft:gridDraft[field.key]));return
+        }
+        if(mode==="conversionPreview") {
+            if(choice!==0){cancelGrid();return}
+            if(gridGeometryPending){message="Layout is updating…";return}
+            if(!gridPreviewValid || preview.layoutError){message=preview.layoutError || "Choose a valid layout first.";return}
+            if(!session.acceptPreview()){message=session.errorString;return}
+            mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;message="Page layout updated in draft.";return
+        }
         if(mode==="dirty") {mode=choice===0 ? "canvas" : choice===1 ? "discard":"apply";choice=0;return}
         if(mode==="discard") {if(choice===1)close();else mode="canvas";return}
         if(mode==="remove") {
@@ -574,6 +617,9 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
     function handleCommand(c) {
         if (!open) return
         if (!session || !session.active) {close();return}
+        if(mode==="convert"){gridEditor.handleCommand(c);return}
+        if(mode==="gridExact" && c===inputManager.back){mode="convert";choice=8;return}
+        if(mode==="conversionPreview" && c===inputManager.back){cancelGrid();return}
         if(mode==="childLayout"){childLayoutEditor.handleCommand(c);return}
         if(mode==="arrange"){
             if(c===inputManager.back){finishArrangement(false);return}
@@ -749,7 +795,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     previewExtentRows:studio.scrollingEnabled && !studio.parentScopeId && studio.manipulating?Math.max(studio.candidate.y+studio.candidate.height,...(studio.collisionPreview.placements || []).map(p=>p.placement.y+p.placement.height)):0
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
-                    libraryProvider:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating || studio.mode==="arrange" || studio.mode==="childLayout";samplePreview:studio.samplePreview
+                    libraryProvider:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating || studio.gridEditing || studio.mode==="arrange" || studio.mode==="childLayout";samplePreview:studio.samplePreview
                     sampleItems:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
                     editSelection:studio.selectedId
                     suppressedComponentIds:studio.collisionPreview.valid?studio.collisionPreview.placements.map(p=>p.id):studio.manipulating && studio.mode!=="flowMove" && !studio.addingType && studio.current?[studio.selectedId]:[]
@@ -1010,7 +1056,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         }
     }
     Rectangle {
-        visible:studio.mode!=="canvas" && studio.mode!=="flowMove" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="size" && studio.mode!=="preview" && studio.mode!=="inspector" && studio.mode!=="catalog" && studio.mode!=="scrolling" && studio.mode!=="arrange" && studio.mode!=="childLayout"
+        visible:studio.mode!=="canvas" && studio.mode!=="flowMove" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="size" && studio.mode!=="preview" && studio.mode!=="inspector" && studio.mode!=="catalog" && studio.mode!=="scrolling" && studio.mode!=="arrange" && studio.mode!=="childLayout" && studio.mode!=="convert"
         z:3
         width:Math.min(parent.width-2*studio.spacing,560*studio.textScale);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
         readonly property var localSelection:studio.gridMode && studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || ""):preview.editRect
@@ -1028,7 +1074,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 model:studio.mode==="keyboard" ? []:studio.dialogLabels()
                 delegate:Rectangle {
                     required property int index;required property string modelData
-                    readonly property bool available:studio.mode!=="collision" || index>1 || (index===0?!!studio.shiftPreview.valid:!!studio.swapPreview.valid)
+                    readonly property bool available:studio.mode==="conversionPreview" && index===0?studio.gridPreviewValid && !studio.gridGeometryPending && !preview.layoutError:studio.mode!=="collision" || index>1 || (index===0?!!studio.shiftPreview.valid:!!studio.swapPreview.valid)
                     width:dialogColumn.width;height:42*studio.textScale;color:studio.choice===index?studio.palette.selectedColor:"transparent";border.width:studio.choice===index?2:0;border.color:studio.palette.focusColor
                     Text {anchors.fill:parent;anchors.margins:8;text:modelData;color:parent.available?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
                     Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.description:available?"":"Unavailable. Choose another proposal or Cancel."
@@ -1120,6 +1166,24 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             }
         }
     }
+    StudioGridEditor {
+        id:gridEditor;objectName:"studioGridEditor";anchors.fill:parent;z:5
+        visible:studio.open && studio.mode==="convert"
+        value:studio.gridDraft;sectionHeight:studio.sectionHeightDraft;modes:studio.gridModes
+        fields:[studio.gridField(1),studio.gridField(2),studio.gridField(3),studio.gridField(4),studio.gridField(5)]
+        metrics:preview.gridMetricsFor(studio.scopeId,"");appearance:studio.palette;choice:studio.choice
+        message:studio.message;valid:studio.gridPreviewValid
+        selectionRect:{
+            if(!studio.current || !studio.current.placement)return null
+            const rect=preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || "")
+            const point=preview.mapToItem(studio,rect.x,rect.y)
+            return {x:point.x,y:point.y,width:rect.width*camera.scale,height:rect.height*camera.scale}
+        }
+        onFocused:index=>studio.choice=index
+        onProposed:(value,height)=>studio.previewGrid(value,height)
+        onActivated:index=>{studio.choice=index;studio.activateChoice()}
+        onCanceled:studio.cancelGrid()
+    }
     StudioLayoutEditor {
         id:childLayoutEditor;objectName:"studioChildLayoutEditor"
         anchors.fill:parent;z:5;visible:studio.open && studio.mode==="childLayout"
@@ -1183,11 +1247,11 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 return
             }
             if(studio.keyboardAction.indexOf("grid:")===0) {
-                const key=studio.keyboardAction.slice(5),field=studio.gridField(studio.choice),number=Number(text)
+                const key=studio.keyboardAction.slice(5),field=studio.gridField(({columns:1,rows:2,gap:3,margin:4,sectionHeight:5})[key]),number=Number(text)
                 if(!text.trim() || !Number.isFinite(number) || (field.integer && !Number.isInteger(number)) || number<field.min || number>field.max){studio.message="Enter a value between "+field.min+" and "+field.max+".";return}
-                if(key==="sectionHeight")studio.sectionHeightDraft=number
-                else studio.gridDraft=Object.assign({},studio.gridDraft,{[key]:number})
-                studio.mode="convert";return
+                const value=Object.assign({},studio.gridDraft),height=key==="sectionHeight"?number:studio.sectionHeightDraft
+                if(key!=="sectionHeight")value[key]=number
+                studio.mode=studio.keyboardReturnMode;studio.previewGrid(value,height);return
             }
             if(studio.keyboardAction.indexOf("geometry")===0) {
                 const field=Number(studio.keyboardAction.slice(8)), number=Number(text)

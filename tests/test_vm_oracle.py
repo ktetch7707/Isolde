@@ -23,7 +23,7 @@ class OracleTests(unittest.TestCase):
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])
-        for name in ("studio_quick", "studio_selection", "studio_gestures", "studio_unit", "studio_behavior"):
+        for name in ("studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_unit", "studio_behavior"):
             self.assertIsNotNone(re.fullmatch(pattern, name))
         self.assertIsNone(re.fullmatch(pattern, "home_component_navigation"))
         self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))

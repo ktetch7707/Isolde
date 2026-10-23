@@ -134,6 +134,7 @@ qt_add_qml_module(isolde
         qml/PageEditor.qml
         qml/PageStudioView.qml
         qml/StudioLayoutEditor.qml
+        qml/StudioGridEditor.qml
         qml/PageBackdrop.qml
         qml/StudioInspector.qml
         qml/StudioColorPicker.qml
@@ -238,6 +239,9 @@ if(BUILD_TESTING)
     add_test(NAME studio_selection COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_selection.qml)
     add_test(NAME studio_gestures COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_gestures.qml)
     set_tests_properties(studio_gestures PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_grid COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_grid.qml)
+    set_tests_properties(studio_grid PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(studio_selection PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
