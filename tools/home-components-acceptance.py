@@ -226,9 +226,61 @@ def main():
                     pointer_saved = apply_at(2)
                     assert pointer_saved == remote, "Pointer and remote saved documents differ"
                     capture("pointerapplied")
+
+                    # Author the ordinary packaged 4x2 input group, then move
+                    # one of its children through the actual nested canvas.
+                    key("Up", 30); key("Down", 2); key("Return")
+                    key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")
+                    key("Left", 20); key("Down"); key("Return")
+                    key("Escape"); key("Up", 30); key("Down", 5); key("Return"); key("Return")
+                    expect(lambda: len(json.loads(layout.read_text())["components"]) == 11,
+                           "Desktop nested group saved")
+                    nested_baseline = layout.read_bytes()
+                    panel = next(item for item in json.loads(nested_baseline)["components"]
+                                 if item.get("componentType") == "container")
+                    child = next(item for item in json.loads(nested_baseline)["components"]
+                                 if item.get("parentId") == panel["id"] and item["placement"]["x"] == 0
+                                 and item["placement"]["y"] == 0)
+
+                    def select_child():
+                        key("Up", 30); key("Down", 4); key("Return"); key("Down", 2); key("Return")
+                        key("Up", 30); key("Down", 2); key("Right"); key("Down"); key("Return")
+
+                    def save_child(column, leave_child=True):
+                        if leave_child:
+                            key("Escape", 2)  # Child -> parent -> page menu.
+                        key("Up", 30); key("Down", 5); key("Return"); key("Return")
+                        expect(lambda: next(item for item in json.loads(layout.read_text())["components"]
+                                            if item["id"] == child["id"])["placement"]["x"] == column,
+                               "Nested child saved at column " + str(column))
+                        return layout.read_bytes()
+
+                    select_child()
+                    key("Return"); key("Return"); key("Right"); key("Return")
+                    nested_remote = save_child(1)
+                    select_child()
+                    key("Return"); key("Return"); key("Left"); key("Return")
+                    assert save_child(0) == nested_baseline, "Remote nested return did not restore all neighbors"
+                    select_child()
+                    nested_start, nested_end = (0.122, 0.486), (0.227, 0.486)
+                    pointer(4, *nested_start); pointer(6, *nested_end, held=True)
+                    capture("nestedpointer")
+                    assert layout.read_bytes() == nested_baseline
+                    key("Escape"); pointer(5, *nested_end, held=True)
+                    capture("nestedcancel")
+                    assert layout.read_bytes() == nested_baseline
+                    pointer(4, *nested_start); pointer(6, *nested_end, held=True); pointer(5, *nested_end, held=True)
+                    key("Escape", 2); key("Up", 30); key("Down", 4); key("Return"); key("Return")  # More -> Undo.
+                    assert save_child(0, False) == nested_baseline, "Pointer Undo did not restore the complete group"
+                    select_child()
+                    pointer(4, *nested_start); pointer(6, *nested_end, held=True); pointer(5, *nested_end, held=True)
+                    assert save_child(1) == nested_remote, "Nested pointer and remote saved documents differ"
+                    capture("nestedapplied")
                     (evidence / "result.json").write_text(json.dumps({
                         "passed": True, "journey": "desktop", "executable": str(executable),
                         "pointer_remote_saved_bytes_equal": True, "held_drag_back_no_write": True,
+                        "nested_pointer_remote_saved_bytes_equal": True, "nested_undo_exact": True,
+                        "nested_held_drag_back_no_write": True,
                         "apply_required": True, "user_usability_acceptance": "pending"}, indent=2))
                     print("Evidence: " + str(evidence), flush=True)
                     return
