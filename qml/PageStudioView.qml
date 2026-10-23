@@ -122,7 +122,7 @@ Item {
     }
     function editorReveals(item){if(!item.hidden)return true;if(mode==="preview")return false;let id=selectedId;for(let depth=0;id && depth<=4;++depth){if(id===item.id)return true;const node=items.find(i=>i.id===id);id=node?node.parentId || "":""}return false}
     readonly property string operationSummary:componentName(addingType?null:current)+" · row "+(candidate.y+1)+", column "+(candidate.x+1)+" · "+candidate.width+" × "+candidate.height+" cells"
-    readonly property string operationTitle:({noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
+    readonly property string operationTitle:({noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",groupDestination:"Move into a group",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
     readonly property string footerText: {
         if(mode==="flowMove")return message
         if(mode==="move" || mode==="resize")return (addingType?"Adding ":mode==="move"?"Moving ":"Resizing ")+componentName(addingType?null:current)+(message?" · "+message:mode==="move" && collisionPreview.valid===false?" · "+collisionPreview.reason:"")
@@ -132,7 +132,30 @@ Item {
     }
     readonly property var relativeItems:current?items.filter(i=>i.id!==selectedId && (i.parentId || "")===(current.parentId || "") && (i.categoryId || "")===(current.categoryId || "")):[]
     readonly property var destinationSections:sectionMode?page.sections.filter(s=>(s.presentation || {}).variant!=="library"):[]
-    readonly property var destinationGroups:[{id:"",name:"Page / current section"}].concat(items.filter(i=>i.componentType==="container" && !i.appCollection && i.id!==selectedId && !i.locked))
+    function groupDestinationAllowed(group) {
+        if(group.componentType!=="container" || group.appCollection)return false
+        let node=group
+        for(let depth=0;node && depth<=4;++depth){
+            if(node.id===selectedId || node.locked || node.hidden)return false
+            if(!node.parentId)return true
+            node=items.find(item=>item.id===node.parentId)
+        }
+        return false
+    }
+    readonly property var destinationGroups:[{id:"",name:sectionMode?"Current section":"Page"}].concat(items.filter(group=>groupDestinationAllowed(group)))
+    function chooseGroupDestination(index) {
+        const group=destinationGroups[index]
+        if(!group)return
+        parentScopeId=group.id
+        if(group.id && sectionMode){
+            let root=group
+            for(let depth=0;root.parentId && depth<4;++depth)root=items.find(item=>item.id===root.parentId) || root
+            scopeId=root.categoryId || "";scopeOverview=false
+        }
+        candidate=Object.assign({},candidate,{x:0,y:0});mode="move"
+        message="Move into "+group.name+" · Preview"
+        Qt.callLater(()=>preview.revealPlacement(candidate,scopeId,parentScopeId))
+    }
     readonly property var placementOptions:parentScopeId?({parentId:parentScopeId,categoryId:""}):sectionMode?({parentId:"",categoryId:scopeId}):({parentId:""})
     function collisionProposal(strategy) {
         if(strategy==="swap" && mode!=="collision" && mode!=="collisionDetails")return ({})
@@ -428,10 +451,10 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="restoreDefaults")return ["Cancel","Restore Home layout; keep other pages"]
         if(mode==="context") return (current && (current.componentType==="container" || current.componentType==="carousel")) ? ["Move","Edit component","Duplicate","Delete…","Edit contents"] : ["Move","Edit component","Duplicate","Delete…"]
         if(mode==="flowMove")return ["Move before…","Move after…","Convert to a grid…","Cancel"]
-        if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Return to "+gestureMode]
+        if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Move into group…","Return to "+gestureMode]
         if(mode==="anchors")return ["Top left","Top right","Bottom left","Bottom right"]
         if(mode==="destination")return destinationSections.map(s=>s.name+(s.id===originScopeId?" · Current section":""))
-        if(mode==="groupDestination")return destinationGroups.map(g=>g.name)
+        if(mode==="groupDestination")return destinationGroups.map(g=>(g.id?"Move into ":"Move to ")+g.name+(g.id===originParentId?" · Current":""))
         if(mode==="orderBefore" || mode==="orderAfter")return relativeItems.length?relativeItems.map(i=>i.name || i.widgetType || i.id):["No other components in this section · Back returns"]
         if(mode==="properties")return contextActions.slice(2)
         if(mode==="layers") return layerRows.map(row=>"  ".repeat(row.depth)+(row.item.componentType==="container"?(expandedGroups[row.item.id]?"▾ ":"▸ "):"  ")+(multiSelection.indexOf(row.item.id)>=0?"✓ ":"")+(row.item.name || row.item.widgetType || row.item.id)+(row.item.hidden?" · Hidden":"")+(row.item.locked?" · Locked":"")).concat(multiSelection.length>=2?["Group "+multiSelection.length+" selected components","Align / distribute selected…"]:[]).concat(["Inspect reading order / directional focus"])
@@ -561,6 +584,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             else if(choice===1 || choice===2)beginRelative(choice===1)
             else if(choice===3){if(sectionMode){mode="destination";choice=0}else message="Choose a scrolling section layout to move between sections."}
             else if(choice===4){if(gestureMode==="resize"){mode="anchors";choice=0}else message="Choose Width or Height to change the resize anchor."}
+            else if(choice===5){mode="groupDestination";choice=0;message="Choose a destination; the complete move stays a preview until placed."}
             else mode=gestureMode
             return
         }
@@ -571,7 +595,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             message="Move to "+destinationSections[choice].name+" · choose a cell, then Confirm. Back restores the original section."
             Qt.callLater(()=>preview.revealScope(scopeId));return
         }
-        if(mode==="groupDestination"){if(destinationGroups[choice]){parentScopeId=destinationGroups[choice].id;candidate=Object.assign({},candidate,{x:0,y:0});mode="move";message="Choose a cell in the destination. Confirm places; Back restores the original group."}return}
+        if(mode==="groupDestination"){chooseGroupDestination(choice);return}
         if(mode==="orderBefore" || mode==="orderAfter") {
             if(relativeItems[choice] && command("orderRelative",{id:selectedId,relativeId:relativeItems[choice].id,before:mode==="orderBefore"})){mode="canvas";toolbarFocus=false}
             return
@@ -841,8 +865,19 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         model:studio.gridMode && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry") ? studio.grid.columns*(studio.grid.rows+(studio.scrollingEnabled && !studio.parentScopeId?2:0)) : 0
                         delegate:Rectangle {
                             required property int index
-                            readonly property var rect:preview.clippedPlacement({x:index%studio.grid.columns,y:Math.floor(index/studio.grid.columns)+(studio.scrollingEnabled && !studio.parentScopeId?preview.firstVisibleGridRow:0),width:1,height:1},studio.scopeId,studio.parentScopeId)
+                            objectName:"studioMoveCell-"+index
+                            readonly property int column:index%studio.grid.columns
+                            readonly property int row:Math.floor(index/studio.grid.columns)+(studio.scrollingEnabled && !studio.parentScopeId?preview.firstVisibleGridRow:0)
+                            readonly property var rect:preview.clippedPlacement({x:column,y:row,width:1,height:1},studio.scopeId,studio.parentScopeId)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:1;border.color:studio.palette.mutedColor;opacity:0.35
+                            MouseArea {
+                                anchors.fill:parent;enabled:studio.mode==="move"
+                                onClicked:{
+                                    if(parent.column+studio.candidate.width>studio.grid.columns || parent.row+studio.candidate.height>studio.placementRows){studio.message="Grid boundary: choose a position inside the grid.";return}
+                                    studio.candidate=Object.assign({},studio.candidate,{x:parent.column,y:parent.row})
+                                    preview.revealPlacement(studio.candidate,studio.scopeId,studio.parentScopeId);studio.message=""
+                                }
+                            }
                         }
                     }
                     Repeater {
@@ -1003,6 +1038,34 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         }
     }
     Rectangle {
+        id:moveActions;objectName:"studioMoveActions";visible:studio.open && studio.mode==="move";z:4
+        width:Math.min(studio.width-2*studio.spacing,480*studio.textScale);height:moveActionColumn.implicitHeight+2*studio.spacing
+        readonly property var target:preview.placementRectFor(studio.candidate,studio.scopeId,studio.parentScopeId)
+        readonly property point targetPoint:preview.mapToItem(studio,target.x,target.y)
+        x:targetPoint.x+target.width*camera.scale/2<studio.width/2?studio.width-width-studio.spacing:studio.spacing
+        y:studio.spacing;color:studio.palette.surfaceColor;border.width:1;border.color:studio.palette.mutedColor;radius:studio.spacing/2
+        Column {
+            id:moveActionColumn;width:parent.width-2*studio.spacing;x:studio.spacing;y:studio.spacing;spacing:studio.spacing/2
+            Text {width:parent.width;text:studio.parentScopeId?"Move into "+studio.componentName(studio.parentGroup):studio.sectionMode?"Move to "+(studio.selectedSection?studio.selectedSection.name:"Uncategorized"):"Move on page";color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+            Row {
+                width:parent.width;spacing:studio.spacing/2
+                Repeater {
+                    model:["Place here","Options…","Cancel"]
+                    delegate:Rectangle {
+                        required property int index;required property string modelData
+                        objectName:["studioMovePlace","studioMoveOptions","studioMoveCancel"][index]
+                        readonly property bool available:index!==0 || !!studio.collisionPreview.valid
+                        width:(moveActionColumn.width-studio.spacing)/3;height:44*studio.textScale;radius:studio.spacing/4
+                        color:index===0?studio.palette.selectedColor:"transparent";border.width:1;border.color:studio.palette.mutedColor
+                        Text {anchors.centerIn:parent;text:modelData;color:parent.available?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
+                        Accessible.role:Accessible.Button;Accessible.name:modelData
+                        MouseArea {anchors.fill:parent;enabled:parent.available;onClicked:studio.handleCommand(index===0?inputManager.confirm:index===1?inputManager.menu:inputManager.back)}
+                    }
+                }
+            }
+        }
+    }
+    Rectangle {
         id:sizePanel;objectName:"studioSizePanel";visible:studio.mode==="size";z:4
         width:Math.min(parent.width-2*studio.spacing,studio.layoutModel.studioOptions.menuWidth*1.4*studio.textScale)
         height:sizeColumn.implicitHeight+2*studio.spacing
@@ -1074,6 +1137,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 model:studio.mode==="keyboard" ? []:studio.dialogLabels()
                 delegate:Rectangle {
                     required property int index;required property string modelData
+                    objectName:"studioDialogChoice-"+index
                     readonly property bool available:studio.mode==="conversionPreview" && index===0?studio.gridPreviewValid && !studio.gridGeometryPending && !preview.layoutError:studio.mode!=="collision" || index>1 || (index===0?!!studio.shiftPreview.valid:!!studio.swapPreview.valid)
                     width:dialogColumn.width;height:42*studio.textScale;color:studio.choice===index?studio.palette.selectedColor:"transparent";border.width:studio.choice===index?2:0;border.color:studio.palette.focusColor
                     Text {anchors.fill:parent;anchors.margins:8;text:modelData;color:parent.available?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
