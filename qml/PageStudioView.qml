@@ -44,6 +44,7 @@ Item {
     property var flowIds: []
     property int flowOriginIndex: 0
     property int flowTargetIndex: 0
+    property var flowTargets: []
     property string deletedSelection: ""
     property bool sizeControlsVisible: true
     property bool pendingScrollEnable:false
@@ -54,10 +55,16 @@ Item {
     property var proposal: ({})
     property var gridDraft: ({})
     property var childLayoutDraft:({})
+    property bool childLayoutValid:true
+    property bool childLayoutFromInspector:false
+    property bool arrangementValid:false
+    property int arrangementReturnChoice:0
+    readonly property var arrangementModes:["left","center-x","right","top","center-y","bottom","distribute-x","distribute-y"]
+    readonly property var arrangementNames:["Left","Horizontal center","Right","Top","Vertical center","Bottom","Horizontal spacing","Vertical spacing"]
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
     property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
-    readonly property var draftModel: session ? ((mode==="conversionPreview" || mode==="flowMove" || mode==="scrolling" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
+    readonly property var draftModel: session ? ((mode==="conversionPreview" || mode==="flowMove" || mode==="scrolling" || mode==="arrange" || mode==="childLayout" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
     readonly property var pageGrid:page?page.grid:({})
@@ -68,6 +75,12 @@ Item {
     readonly property var parentGroup:items.find(i=>i.id===parentScopeId) || null
     readonly property var grid:parentGroup?Object.assign({},parentGroup.presentation.layout,{margin:parentGroup.presentation.layout.padding}):sectionMode && selectedSection?Object.assign({},pageGrid,(selectedSection.presentation || {}).grid || {}):pageGrid
     readonly property var scopedItems:items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId))
+    // Keep pointer delegates alive while the separate proposal model reflows.
+    readonly property var pointerItems: {
+        if(!session)return []
+        const model=pageId?session.model.pageModel(pageId):session.model
+        return model.items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId))
+    }
     readonly property var layerRows: {
         const rows=[]
         function append(parent,depth){for(const item of items.filter(i=>(i.parentId || "")===parent)){rows.push({item:item,depth:depth});if(item.componentType==="container" && expandedGroups[item.id])append(item.id,depth+1)}}
@@ -108,14 +121,14 @@ Item {
     readonly property var placementOptions:parentScopeId?({parentId:parentScopeId,categoryId:""}):sectionMode?({parentId:"",categoryId:scopeId}):({parentId:""})
     function collisionProposal(strategy) {
         if(strategy==="swap" && mode!=="collision" && mode!=="collisionDetails")return ({})
-        if((mode!=="collision" && mode!=="collisionDetails" && mode!=="move" && mode!=="size") || !session)return ({})
+        if((mode!=="collision" && mode!=="collisionDetails" && mode!=="move" && mode!=="resize" && mode!=="size") || !session)return ({})
         return addingType?session.additionProposal(addingType,candidate,strategy,pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId,addingConfiguration,pendingScrollEnable)
                          :session.placementProposal(selectedId,candidate,strategy,pageId,placementOptions)
     }
     readonly property var shiftPreview:collisionProposal("shift")
     readonly property var swapPreview:collisionProposal("swap")
     readonly property var collisionPreview: {
-        if(mode==="move" || mode==="size")return shiftPreview
+        if(mode==="move" || mode==="resize" || mode==="size")return shiftPreview
         if((mode!=="collision" && mode!=="collisionDetails") || (mode==="collision" && choice===2) || !session)return ({})
         return collisionStrategy==="shift"?shiftPreview:swapPreview
     }
@@ -168,6 +181,7 @@ Item {
     function projected(item){return mode==="inspector" && inspector.editingState!=="base" && (inspector.structureType==="section"?item.categoryId===inspector.structureId:inspector.selectedIds.indexOf(item.id)>=0)?Object.assign({},item,{designState:inspector.editingState}):item}
     function inspectorOperation(name){
         inspectorReturn=false
+        if(name==="groupLayout"){beginChildLayout(true);return}
         if(name==="scrolling"){
             if(!gridMode || sectionMode){inspector.message="This layout uses automatic sizing or scrolling sections. Use Grid to preview a different layout.";return}
             scrollingViewport=preview.editorViewport();scrollingDraft=!!page.composition.verticalScrolling;mode="scrolling";choice=0;message="";return
@@ -197,6 +211,9 @@ Item {
             if(resize){message="Size is determined by this page's layout.";return}
             flowIds=items.filter(i=>(i.parentId || "")===(current.parentId || "") && (i.categoryId || "")===(current.categoryId || "")).map(i=>i.id)
             flowOriginIndex=flowIds.indexOf(selectedId);flowTargetIndex=flowOriginIndex
+            // Freeze target geometry before reordering. Moving neighbors must
+            // not change which insertion target lies under a stationary mouse.
+            flowTargets=flowIds.map(id=>({id:id,rect:preview.editorRectFor(id)}))
             mode="flowMove";toolbarFocus=false;message="Moving "+componentName(current);return
         }
         addingType="";pendingScrollEnable=false; origin=position(current); candidate=Object.assign({},origin)
@@ -213,6 +230,51 @@ Item {
         const viewport=gestureViewport
         // Let proposal delegates and queued selection reveals settle first.
         Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))
+    }
+    function previewFlowTarget(target) {
+        if(mode!=="flowMove" || target<0 || target>=flowIds.length || target===flowTargetIndex)return
+        if(target===flowOriginIndex){session.cancelPreview();flowTargetIndex=target;return}
+        if(session.previewCommand("orderRelative",{id:selectedId,relativeId:flowIds[target],before:target<flowOriginIndex},pageId)){flowTargetIndex=target;message="Moving "+componentName(current)}else message=session.errorString
+    }
+    function beginArrangement() {
+        arrangementReturnChoice=choice;gestureViewport=preview.editorViewport()
+        session.cancelPreview();arrangementValid=false;mode="arrange";choice=0;message=""
+    }
+    function previewArrangement(index) {
+        if(index<0 || index>=arrangementModes.length)return
+        choice=index;session.cancelPreview();arrangementValid=false
+        arrangementValid=session.previewCommand("arrange",{ids:multiSelection,mode:arrangementModes[index]},pageId)
+        message=arrangementValid?arrangementNames[index]+" · Preview":session.errorString
+    }
+    function finishArrangement(accept) {
+        if(accept){
+            if(!arrangementValid){message="Choose a valid arrangement first.";return}
+            if(!session.acceptPreview()){arrangementValid=false;message=session.errorString;return}
+            mode="canvas";toolbarFocus=false;message="Arrangement updated in draft."
+        }else{
+            session.cancelPreview();mode="layers";choice=arrangementReturnChoice;message=""
+            const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))
+        }
+    }
+    function beginChildLayout(fromInspector) {
+        if(!current || current.componentType!=="container"){message="Choose a group first.";return}
+        if(current.locked){message="Unlock this group before arranging it.";return}
+        childLayoutFromInspector=!!fromInspector;gestureViewport=preview.editorViewport();session.cancelPreview()
+        childLayoutDraft=Object.assign({},current.presentation.layout);childLayoutValid=true;mode="childLayout";choice=0;message=""
+    }
+    function previewChildLayout(value) {
+        childLayoutDraft=value;session.cancelPreview()
+        childLayoutValid=session.previewCommand("childLayout",{id:selectedId,value:value},pageId)
+        message=childLayoutValid?"":session.errorString
+    }
+    function finishChildLayout(accept) {
+        if(accept){
+            if(!childLayoutValid){message="Choose a valid layout first.";return}
+            if(preview.layoutError){message=preview.layoutError;return}
+            if(session.proposalModel && !session.acceptPreview()){childLayoutValid=false;message=session.errorString;return}
+            message="Group layout updated in draft."
+        }else{session.cancelPreview();message="";const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))}
+        mode=childLayoutFromInspector?"inspector":"canvas";toolbarFocus=false
     }
     function beginRelative(before) {
         if(!current || addingType){message="Place the new component before changing its reading order.";return}
@@ -241,8 +303,8 @@ Item {
             if(command("batch",{commands:proposal.commands})){selectedId=proposal.id;addingType="";pendingScrollEnable=false;mode="canvas"}
             return
         }
-        proposal=session.placementProposal(selectedId,candidate,strategy || (mode==="move" || mode==="size"?"shift":"cancel"),pageId,placementOptions)
-        if(!proposal.valid && (mode==="size" || mode==="move" && !strategy)){message=proposal.reason;return}
+        proposal=session.placementProposal(selectedId,candidate,strategy || (["move","resize","size"].indexOf(mode)>=0?"shift":"cancel"),pageId,placementOptions)
+        if(!proposal.valid && (["move","resize","size"].indexOf(mode)>=0 && !strategy)){message=proposal.reason;return}
         if (!proposal.valid) { message=proposal.reason; const previous=mode; mode="collision"; if(previous!=="collision"){collisionStrategy="shift";choice=0} return }
         if (command("place",{placements:proposal.placements})){mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false}
     }
@@ -313,7 +375,7 @@ Item {
         else if(index===14){if(current.appCollection){openInspector(false);inspector.controlsShown=true;inspector.activateField({type:"apps"});return}if(current.componentType!=="container"){message="Choose a group to edit its contents.";return}parentScopeId=current.id;const children=items.filter(i=>(i.parentId || "")===parentScopeId);selectedId=children.length?children[0].id:"";mode="canvas";toolbarFocus=false}
         else if(index===15){if(command("ungroup",{id:selectedId})){selectedId="";mode="canvas";toolbarFocus=false}}
         else if(index===16){beginGesture(false);if(mode==="move"){mode="groupDestination";choice=0}}
-        else if(index===18){if(current.componentType!=="container"){message="Choose a group first.";return}childLayoutDraft=Object.assign({},current.presentation.layout);mode="childLayout";choice=0;message="Left / Right changes a field. Arrange validates the complete result; Back cancels."}
+        else if(index===18)beginChildLayout()
         else if(index===17){let selection=multiSelection.slice();const index=selection.indexOf(selectedId);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(selectedId);else{message="Select at most 32 components.";return}multiSelection=selection;mode="layers";choice=0;message="Choose Group selected at the end of Layers. Right expands; Left collapses."}
     }
     function dialogLabels() {
@@ -442,7 +504,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(choice>0){scopeId=page.sections[choice-1].id || "";const item=items.find(i=>(i.categoryId || "")===scopeId);selectedId=item?item.id:""}
             mode="canvas";toolbarFocus=false;Qt.callLater(()=>preview.revealScope(scopeId));return
         }
-        if(mode==="layers") {if(choice===layerRows.length+(multiSelection.length>=2?2:0)){mode="navigationOrder";choice=0;message="Reading order follows this list. D-pad movement uses the displayed row and column in the current scope.";return}if(choice===layerRows.length){if(command("group",{ids:multiSelection})){multiSelection=[];mode="canvas";toolbarFocus=false}return}if(choice===layerRows.length+1){mode="arrange";choice=0;return}if(layerRows[choice])selectedId=layerRows[choice].item.id;mode="canvas";toolbarFocus=false;return}
+        if(mode==="layers") {if(choice===layerRows.length+(multiSelection.length>=2?2:0)){mode="navigationOrder";choice=0;message="Reading order follows this list. D-pad movement uses the displayed row and column in the current scope.";return}if(choice===layerRows.length){if(command("group",{ids:multiSelection})){multiSelection=[];mode="canvas";toolbarFocus=false}return}if(choice===layerRows.length+1){beginArrangement();return}if(layerRows[choice])selectedId=layerRows[choice].item.id;mode="canvas";toolbarFocus=false;return}
         if(mode==="view"){
             if(choice===0)camera.zoom=Math.min(2,camera.zoom+0.1)
             else if(choice===1)camera.zoom=Math.max(0.5,camera.zoom-0.1)
@@ -454,7 +516,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             message="View only. Layout unchanged.";return
         }
         if(mode==="childLayout"){if(choice===6){mode="canvas";return}if(choice===5 && command("childLayout",{id:selectedId,value:childLayoutDraft})){mode="canvas";toolbarFocus=false}return}
-        if(mode==="arrange"){if(command("arrange",{ids:multiSelection,mode:["left","center-x","right","top","center-y","bottom","distribute-x","distribute-y"][choice]})){mode="canvas";toolbarFocus=false}return}
+        if(mode==="arrange"){if(choice<8)previewArrangement(choice);else finishArrangement(choice===8);return}
         if(mode==="pages") {
             if(choice===draftModel.pages.length+1) {beginKeyboard("newPage","");return}
             pageId=choice===0 ? "" : draftModel.pages[choice-1].id;selectedId="";mode="canvas";return
@@ -512,6 +574,16 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
     function handleCommand(c) {
         if (!open) return
         if (!session || !session.active) {close();return}
+        if(mode==="childLayout"){childLayoutEditor.handleCommand(c);return}
+        if(mode==="arrange"){
+            if(c===inputManager.back){finishArrangement(false);return}
+            if(c===inputManager.confirm){activateChoice();return}
+            if(c===inputManager.navigateLeft)choice=Math.max(choice<6?Math.floor(choice/3)*3:choice<8?6:8,choice-1)
+            else if(c===inputManager.navigateRight)choice=Math.min(choice<6?Math.floor(choice/3)*3+2:choice<8?7:9,choice+1)
+            else if(c===inputManager.navigateUp)choice=choice>=8?choice-2:choice>=6?choice===6?3:5:Math.max(0,choice-3)
+            else if(c===inputManager.navigateDown)choice=choice<3?choice+3:choice<6?choice===5?7:6:Math.min(9,choice+2)
+            return
+        }
         if(mode==="scrolling"){
             if(c===inputManager.back || c===inputManager.confirm && choice===2){session.cancelPreview();mode="inspector";const viewport=scrollingViewport;Qt.callLater(()=>preview.restoreEditorViewport(viewport));return}
             if(c===inputManager.navigateUp)choice=Math.max(0,choice-1)
@@ -541,9 +613,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             const direction=c===inputManager.navigateRight || c===inputManager.navigateDown?1:c===inputManager.navigateLeft || c===inputManager.navigateUp?-1:0
             if(!direction)return
             const target=flowTargetIndex+direction
-            if(target<0 || target>=flowIds.length)return
-            if(target===flowOriginIndex){session.cancelPreview();flowTargetIndex=target;return}
-            if(session.previewCommand("orderRelative",{id:selectedId,relativeId:flowIds[target],before:target<flowOriginIndex},pageId)){flowTargetIndex=target;message="Moving "+componentName(current)}else message=session.errorString
+            previewFlowTarget(target)
             return
         }
         if(mode==="catalog"){catalog.handleCommand(c);return}
@@ -585,12 +655,6 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 candidate=next;preview.revealPlacement(next,scopeId,parentScopeId);message="";return
             }
             const labels=dialogLabels()
-            if(mode==="childLayout" && choice<5 && (c===inputManager.navigateLeft || c===inputManager.navigateRight)){
-                const direction=c===inputManager.navigateRight?1:-1;let layout=Object.assign({},childLayoutDraft)
-                if(choice===0){const modes=["grid","row","column"],index=modes.indexOf(layout.mode)+direction;if(index>=0 && index<modes.length)layout.mode=modes[index]}
-                else{const key=["","columns","rows","gap","padding"][choice],value=layout[key]+direction,minimum=choice<3?1:0,maximum=choice===1?16:choice===2?10:100;if(value<minimum || value>maximum){message="Choose "+minimum+"–"+maximum+".";return}layout[key]=value}
-                childLayoutDraft=layout;return
-            }
             if(mode==="layers" && layerRows[choice]){
                 const item=layerRows[choice].item
                 if(c===inputManager.menu){const selection=multiSelection.slice(),index=selection.indexOf(item.id);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(item.id);else{message="Select at most 32 components.";return}multiSelection=selection;message="Menu toggles selection · Right expands · Left collapses · Group selected appears at the end.";return}
@@ -685,7 +749,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     previewExtentRows:studio.scrollingEnabled && !studio.parentScopeId && studio.manipulating?Math.max(studio.candidate.y+studio.candidate.height,...(studio.collisionPreview.placements || []).map(p=>p.placement.y+p.placement.height)):0
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
-                    libraryProvider:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating;samplePreview:studio.samplePreview
+                    libraryProvider:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating || studio.mode==="arrange" || studio.mode==="childLayout";samplePreview:studio.samplePreview
                     sampleItems:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
                     editSelection:studio.selectedId
                     suppressedComponentIds:studio.collisionPreview.valid?studio.collisionPreview.placements.map(p=>p.id):studio.manipulating && studio.mode!=="flowMove" && !studio.addingType && studio.current?[studio.selectedId]:[]
@@ -736,33 +800,68 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         }
                     }
                     Repeater {
-                        model:studio.gridMode ? studio.scopedItems.filter(i=>!!i.placement && (!i.hidden || i.id===studio.selectedId)):[]
+                        model:studio.pointerItems.filter(i=>(!studio.gridMode || !!i.placement) && (!i.hidden || i.id===studio.selectedId))
                         delegate:Rectangle {
                             required property var modelData
-                            readonly property var rect:preview.clippedPlacement(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || "")
+                            readonly property var rect:studio.gridMode?preview.clippedPlacement(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || ""):preview.editorRectFor(modelData.id) || ({x:0,y:0,width:0,height:0})
                             objectName:"studioSelectionTarget-"+modelData.id
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:0
                             Text {objectName:"studioSelectionName-"+modelData.id;visible:!modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
                             MouseArea {
+                                id:pointerDrag
                                 objectName:"studioHit-"+modelData.id
                                 anchors.fill:parent
                                 property point start
+                                property point originScreen
                                 property bool dragging:false
-                                onPressed:mouse=>{if(studio.mode!=="canvas"){mouse.accepted=false;return}studio.selectedId=modelData.id;studio.toolbarFocus=false;dragging=false;start=Qt.point(mouse.x,mouse.y)}
+                                property int edgeDirection:0
+                                property int edgeBudget:0
+                                property point edgeAnchor
+                                function updateEdge(point) {
+                                    if(!studio.scrollingEnabled || studio.parentScopeId){edgeDirection=0;edgeBudget=0;return}
+                                    const local=studio.mapToItem(preview,point.x,point.y),viewport=preview.pageViewport
+                                    const band=Math.min(studio.spacing*2,viewport.height/6)
+                                    const direction=local.y>=viewport.y+viewport.height-band?1:local.y<=viewport.y+band?-1:0
+                                    if(!direction){edgeDirection=0;edgeBudget=0;return}
+                                    // One viewport per deliberate edge movement. Holding an
+                                    // idle pointer cannot grow an unbounded document forever.
+                                    if(direction!==edgeDirection || Math.abs(point.y-edgeAnchor.y)>=Qt.styleHints.startDragDistance){edgeBudget=studio.grid.rows;edgeAnchor=point}
+                                    edgeDirection=direction
+                                }
+                                Timer {
+                                    interval:100;repeat:true
+                                    running:pointerDrag.pressed && pointerDrag.dragging && studio.mode==="move" && pointerDrag.edgeDirection!==0 && pointerDrag.edgeBudget>0
+                                    onTriggered:{
+                                        const before=studio.candidate.y
+                                        studio.handleCommand(pointerDrag.edgeDirection>0?inputManager.navigateDown:inputManager.navigateUp)
+                                        pointerDrag.edgeBudget=studio.candidate.y===before?0:pointerDrag.edgeBudget-1
+                                    }
+                                }
+                                onPressed:mouse=>{if(studio.mode!=="canvas"){mouse.accepted=false;return}studio.selectedId=modelData.id;studio.toolbarFocus=false;dragging=false;edgeDirection=0;edgeBudget=0;start=mapToItem(studio,mouse.x,mouse.y);originScreen=mapToItem(studio,0,0);edgeAnchor=start}
                                 onPositionChanged:mouse=>{
                                     if(!pressed)return
-                                    if(!dragging){if(Math.abs(mouse.x-start.x)+Math.abs(mouse.y-start.y)<Qt.styleHints.startDragDistance)return;if(studio.current && studio.current.locked){studio.message="Unlock this component before moving it.";return}studio.beginGesture(false);dragging=true}
+                                    const point=mapToItem(studio,mouse.x,mouse.y)
+                                    if(!dragging){if(Math.abs(point.x-start.x)+Math.abs(point.y-start.y)<Qt.styleHints.startDragDistance)return;if(studio.current && studio.current.locked){studio.message="Unlock this component before moving it.";return}studio.beginGesture(false);dragging=studio.mode==="move" || studio.mode==="flowMove"}
+                                    if(dragging && studio.mode==="flowMove"){
+                                        const local=mapToItem(preview,mouse.x,mouse.y)
+                                        for(let index=0;index<studio.flowTargets.length;++index){const r=studio.flowTargets[index].rect;if(r && local.x>=r.x && local.x<=r.x+r.width && local.y>=r.y && local.y<=r.y+r.height){studio.previewFlowTarget(index);break}}
+                                        return
+                                    }
+                                    if(!dragging || studio.mode!=="move")return
+                                    const screen=mapToItem(studio,0,0),metrics=preview.gridMetricsFor(studio.scopeId,studio.parentScopeId)
                                     let p=Object.assign({},studio.origin)
-                                    p.x+=Math.round((mouse.x-start.x)/(preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).cellW+preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).gap))
-                                    p.y+=Math.round((mouse.y-start.y)/(preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).cellH+preview.gridMetricsFor(studio.scopeId,studio.parentScopeId).gap))
-                                    if(p.x>=0 && p.y>=0 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.placementRows){studio.candidate=p;preview.revealPlacement(p,studio.scopeId,studio.parentScopeId)}
+                                    p.x+=Math.round((point.x-start.x-screen.x+originScreen.x)/(metrics.cellW+metrics.gap))
+                                    p.y+=Math.round((point.y-start.y-screen.y+originScreen.y)/(metrics.cellH+metrics.gap))
+                                    if(p.x>=0 && p.y>=0 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.placementRows){studio.candidate=p;preview.revealPlacement(p,studio.scopeId,studio.parentScopeId);studio.message=""}
+                                    else studio.message="Grid boundary: choose a position inside the grid."
+                                    updateEdge(point)
                                 }
-                                onReleased:{if(dragging)studio.acceptCandidate();else{studio.mode="context";studio.choice=0}}
-                                onCanceled:if(dragging)studio.cancelGesture()
+                                onReleased:{if(dragging){if(studio.mode==="move")studio.acceptCandidate();else if(studio.mode==="flowMove")studio.handleCommand(inputManager.confirm)}else if(studio.mode==="canvas"){studio.mode="context";studio.choice=0}dragging=false}
+                                onCanceled:{if(dragging && (studio.mode==="move" || studio.mode==="flowMove"))studio.cancelGesture();dragging=false}
                             }
                             Rectangle {
                                 objectName:"studioResize-"+modelData.id
-                                visible:modelData.id===studio.selectedId && !studio.toolbarFocus && !modelData.locked && (studio.mode==="canvas" || studio.mode==="resize")
+                                visible:studio.gridMode && modelData.id===studio.selectedId && !studio.toolbarFocus && !modelData.locked && (studio.mode==="canvas" || studio.mode==="resize")
                                 width:30*studio.textScale;height:width;anchors.right:parent.right;anchors.bottom:parent.bottom
                                 radius:5*studio.textScale;color:studio.palette.focusColor;border.width:2;border.color:studio.palette.surfaceColor
                                 Text {anchors.centerIn:parent;text:"↘";color:studio.palette.surfaceColor;font.pixelSize:22*studio.textScale}
@@ -770,8 +869,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                     anchors.fill:parent;property point start
                                     onPressed:mouse=>{start=Qt.point(mouse.x,mouse.y);studio.beginGesture(true)}
                                     onPositionChanged:mouse=>{if(!pressed)return;const metrics=preview.gridMetricsFor(studio.scopeId,studio.parentScopeId);let p=Object.assign({},studio.origin);p.width+=Math.round((mouse.x-start.x)/(metrics.cellW+metrics.gap));p.height+=Math.round((mouse.y-start.y)/(metrics.cellH+metrics.gap));if(p.width>=1 && p.height>=1 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.placementRows && p.height<=studio.grid.rows)studio.candidate=p;else studio.message="Grid boundary: choose a size inside the grid."}
-                                    onReleased:studio.acceptCandidate()
-                                    onCanceled:studio.cancelGesture()
+                                    onReleased:if(studio.mode==="resize")studio.acceptCandidate()
+                                    onCanceled:if(studio.mode==="resize")studio.cancelGesture()
                                 }
                             }
                         }
@@ -911,7 +1010,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         }
     }
     Rectangle {
-        visible:studio.mode!=="canvas" && studio.mode!=="flowMove" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="size" && studio.mode!=="preview" && studio.mode!=="inspector" && studio.mode!=="catalog" && studio.mode!=="scrolling"
+        visible:studio.mode!=="canvas" && studio.mode!=="flowMove" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="size" && studio.mode!=="preview" && studio.mode!=="inspector" && studio.mode!=="catalog" && studio.mode!=="scrolling" && studio.mode!=="arrange" && studio.mode!=="childLayout"
         z:3
         width:Math.min(parent.width-2*studio.spacing,560*studio.textScale);height:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
         readonly property var localSelection:studio.gridMode && studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || ""):preview.editRect
@@ -937,6 +1036,103 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 }
             }
         }
+    }
+    Rectangle {
+        id:arrangementPanel
+        objectName:"studioArrangement"
+        visible:studio.open && studio.mode==="arrange";z:4
+        width:Math.min(studio.width-2*studio.spacing,480*studio.textScale)
+        height:Math.min(studio.height-2*studio.spacing,arrangementColumn.implicitHeight+2*studio.spacing)
+        // Keep the authored selection visible whenever one side has room.
+        readonly property var selectedRect:studio.gridMode && studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || ""):preview.editRect
+        readonly property point selectedPoint:selectedRect?preview.mapToItem(studio,selectedRect.x,selectedRect.y):Qt.point(studio.width/2,0)
+        x:selectedPoint.x<studio.width/2?studio.width-width-studio.spacing:studio.spacing
+        y:Math.max(studio.spacing,(studio.height-height)/2)
+        color:studio.palette.surfaceColor;border.color:studio.palette.focusColor;border.width:2;radius:studio.spacing
+        Column {
+            id:arrangementColumn
+            anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:studio.spacing
+            spacing:studio.spacing
+            Text {text:"Arrange selection";color:studio.palette.textColor;font.pixelSize:24*studio.textScale}
+            Text {text:studio.multiSelection.length+" components";color:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
+            Grid {
+                width:parent.width;columns:3;spacing:studio.spacing/2
+                Repeater {
+                    model:6
+                    delegate:Rectangle {
+                        required property int index
+                        objectName:"studioAlign-"+studio.arrangementModes[index]
+                        width:(arrangementColumn.width-studio.spacing)/3;height:96*studio.textScale
+                        radius:studio.spacing/2;color:studio.choice===index?studio.palette.selectedColor:"transparent"
+                        border.width:studio.choice===index?2:1;border.color:studio.choice===index?studio.palette.focusColor:studio.palette.mutedColor
+                        Item {
+                            width:42*studio.textScale;height:28*studio.textScale;anchors.horizontalCenter:parent.horizontalCenter;y:12*studio.textScale
+                            Repeater {
+                                model:3
+                                delegate:Rectangle {
+                                    required property int index
+                                    readonly property int alignment:parent.parent.index%3
+                                    readonly property bool horizontal:parent.parent.index<3
+                                    readonly property real length:(12+index*8)*studio.textScale
+                                    width:horizontal?length:5*studio.textScale;height:horizontal?5*studio.textScale:length
+                                    x:horizontal?(alignment===0?0:alignment===1?(parent.width-width)/2:parent.width-width):index*12*studio.textScale
+                                    y:horizontal?index*10*studio.textScale:alignment===0?0:alignment===1?(parent.height-height)/2:parent.height-height
+                                    color:studio.palette.textColor;radius:studio.textScale
+                                }
+                            }
+                        }
+                        Text {anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:8*studio.textScale;text:studio.arrangementNames[index];horizontalAlignment:Text.AlignHCenter;wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+                        Accessible.role:Accessible.Button;Accessible.name:"Align "+studio.arrangementNames[index]
+                        MouseArea {anchors.fill:parent;onClicked:studio.previewArrangement(index)}
+                    }
+                }
+            }
+            Row {
+                width:parent.width;spacing:studio.spacing/2
+                Repeater {
+                    model:2
+                    delegate:Rectangle {
+                        required property int index
+                        objectName:"studioDistribute-"+index
+                        width:(arrangementColumn.width-studio.spacing/2)/2;height:64*studio.textScale;radius:studio.spacing/2
+                        color:studio.choice===index+6?studio.palette.selectedColor:"transparent";border.width:studio.choice===index+6?2:1;border.color:studio.choice===index+6?studio.palette.focusColor:studio.palette.mutedColor
+                        Text {anchors.centerIn:parent;width:parent.width-16*studio.textScale;text:(index===0?"↔  ":"↕  ")+studio.arrangementNames[index+6];wrapMode:Text.Wrap;horizontalAlignment:Text.AlignHCenter;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+                        Accessible.role:Accessible.Button;Accessible.name:studio.arrangementNames[index+6]
+                        MouseArea {anchors.fill:parent;onClicked:studio.previewArrangement(index+6)}
+                    }
+                }
+            }
+            Text {width:parent.width;visible:text.length>0;text:studio.message;wrapMode:Text.Wrap;color:studio.arrangementValid?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
+            Row {
+                width:parent.width;spacing:studio.spacing/2
+                Repeater {
+                    model:["Done","Cancel"]
+                    delegate:Rectangle {
+                        required property int index;required property string modelData
+                        objectName:index===0?"studioArrangeDone":"studioArrangeCancel"
+                        width:(arrangementColumn.width-studio.spacing/2)/2;height:48*studio.textScale;radius:studio.spacing/2
+                        color:studio.choice===index+8?studio.palette.selectedColor:"transparent";border.width:studio.choice===index+8?2:0;border.color:studio.palette.focusColor
+                        Text {anchors.centerIn:parent;text:modelData;color:index===0 && !studio.arrangementValid?studio.palette.mutedColor:studio.palette.textColor;font.pixelSize:18*studio.textScale}
+                        Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.description:index===0 && !studio.arrangementValid?"Choose a valid arrangement first":""
+                        MouseArea {anchors.fill:parent;onClicked:{studio.choice=index+8;studio.finishArrangement(index===0)}}
+                    }
+                }
+            }
+        }
+    }
+    StudioLayoutEditor {
+        id:childLayoutEditor;objectName:"studioChildLayoutEditor"
+        anchors.fill:parent;z:5;visible:studio.open && studio.mode==="childLayout"
+        value:studio.childLayoutDraft;appearance:studio.palette;message:studio.message;valid:studio.childLayoutValid
+        selectionRect: {
+            if(!studio.current || !studio.current.placement)return null
+            const r=preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || "")
+            const point=preview.mapToItem(studio,r.x,r.y)
+            return {x:point.x,y:point.y,width:r.width*camera.scale,height:r.height*camera.scale}
+        }
+        onProposed:value=>studio.previewChildLayout(value)
+        onAccepted:studio.finishChildLayout(true)
+        onCanceled:studio.finishChildLayout(false)
     }
     StudioCatalog {
         id:catalog;anchors.fill:parent;z:5;visible:studio.open && studio.mode==="catalog"

@@ -216,7 +216,7 @@ Item {
         }
         if(f.type==="header"){openChoices((options.headerChoices || []).map(entry=>({name:entry.name,value:entry.value})));return}
         if(f.type==="tab"){openChoices((page.composition.navigation || []).map(t=>({name:t.name,value:t.id})));return}
-        if(f.type==="layout"){layoutDraft=Object.assign({},current.presentation.layout);view="layout";selected=0;return}
+        if(f.type==="layout"){operation("groupLayout");return}
         if(f.type==="apps"){const ids=new Set(selectedIds);appSelection=current.appCollection?(current.appCollection.ids || []).slice():(page.items || []).filter(i=>ids.has(i.parentId) && i.appId).map(i=>i.appId);view="apps";selected=0;message="Choosing apps replaces this bar's contents as one undoable change.";return}
         if(f.type==="visibility"){run("batch",{commands:targets.map(i=>({operation:"state",arguments:{id:i.id,key:"hidden",value:!current.hidden},pageId:pageId}))});return}
         if(f.type==="lock"){run("batch",{commands:targets.map(i=>({operation:"state",arguments:{id:i.id,key:"locked",value:!current.locked},pageId:pageId}))});return}

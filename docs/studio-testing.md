@@ -35,7 +35,8 @@ During development, run the relevant small suite; run `studio` after a complete 
 | `studio_selection` | Qt Quick Test; `tests/studio/tst_selection.qml` | Three scenarios for authored selection geometry/persistence, transparent recovery and pointer/remote switch parity; newly added, execution pending VM capacity |
 | `studio_unit` | Existing Qt Test component executable, seven selected functions | Draft/history bounds, atomic failure/rollback, profile scope, collision parity, bounded cascades, scrolling persistence and home protection |
 | `studio_behavior` | Existing Qt Test navigation executable, four selected functions | Remote draft/apply/cancel, gestures/collisions/anchors, section transfer/cancel and long-page Add/move/cancel/runtime visibility |
-| `studio` | Four suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
+| `studio_gestures` | Qt Quick Test; `tests/studio/tst_gestures.qml` | Actual pointer threshold/cancel/release, ordered insertion, bounded edge growth, remote canonical parity, resize reflow/refusal, visual alignment and group-layout transactions |
+| `studio` | Five suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
 
 The complete existing suites remain registered. These additional focused registrations deliberately reuse tested functions instead of copying their code. Full CTest includes both focused and broad registrations; a focused pass is not a substitute for full integration coverage.
 

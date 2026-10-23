@@ -38,8 +38,9 @@ Item {
         return target===root
     }
     readonly property var editTarget:(editTargets[editSelection] || []).find(t=>t && editorVisible(t) && t.width>0 && t.height>0) || null
-    readonly property var editRect: {
-        const target=editTarget,scroll=sectionFlick.contentY+composed.scrollOffset
+    readonly property var editRect: editorRectFor(editSelection)
+    function editorRectFor(id) {
+        const target=(editTargets[id] || []).find(t=>t && editorVisible(t) && t.width>0 && t.height>0),scroll=sectionFlick.contentY+composed.scrollOffset
         if(!target)return null
         const geometry=target.x+target.y+target.width+target.height+scroll
         // mapToItem alone does not subscribe to ancestor layout changes.
