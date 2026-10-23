@@ -116,7 +116,7 @@
         }
       },
       {
-        "name": "Recently watched",
+        "name": "Recently viewed",
         "id": "recent",
         "presentation": {
           "cardGap": 16,
@@ -482,10 +482,11 @@
       },
       {
         "id": "recently-watched",
-        "name": "Recently watched",
+        "name": "Recently viewed",
         "kind": "widget",
         "widgetType": "library",
         "componentType": "library",
+        "family": "recently-viewed",
         "placement": {
           "height": 3,
           "y": 0,
@@ -499,7 +500,7 @@
           "labelSize": 14,
           "libraryLimit": 50,
           "libraryColumns": 5,
-          "libraryKind": "movies",
+          "libraryKind": "history",
           "libraryView": "watched",
           "libraryChrome": false,
           "libraryLayout": "row"
@@ -508,10 +509,10 @@
         "source": {
           "libraryView": "watched",
           "libraryValue": "",
-          "kind": "library",
+          "kind": "recently-viewed",
           "schemaVersion": 1,
           "provider": "kodi",
-          "libraryKind": "movies"
+          "libraryKind": "history"
         }
       }
     ],

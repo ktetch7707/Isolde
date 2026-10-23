@@ -1,0 +1,184 @@
+{
+  "installedApps": [
+    "ambient-weather",
+    "living-room-radio",
+    "photo-gallery",
+    "plex",
+    "home-assistant",
+    "kodi",
+    "retro-arcade",
+    "spotify"
+  ],
+  "history": [
+    {
+      "resume": {
+        "total": 120,
+        "position": 0
+      },
+      "kind": "movie",
+      "show": "",
+      "playcount": 1,
+      "id": 1,
+      "viewedAt": "2026-10-23 18:30:00",
+      "title": "Moonlit Harbor"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 35
+      },
+      "kind": "movie",
+      "show": "",
+      "playcount": 0,
+      "id": 2,
+      "viewedAt": "2026-10-22 18:30:00",
+      "title": "The Glass Garden"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 0
+      },
+      "kind": "episode",
+      "show": "Sunday in the City",
+      "playcount": 1,
+      "id": 3,
+      "viewedAt": "2026-10-21 18:30:00",
+      "title": "First light"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 35
+      },
+      "kind": "movie",
+      "show": "",
+      "playcount": 0,
+      "id": 4,
+      "viewedAt": "2026-10-20 18:30:00",
+      "title": "Beyond the Clouds"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 0
+      },
+      "kind": "movie",
+      "show": "",
+      "playcount": 1,
+      "id": 5,
+      "viewedAt": "2026-10-19 18:30:00",
+      "title": "Postcards from June"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 35
+      },
+      "kind": "episode",
+      "show": "Sunday in the City",
+      "playcount": 0,
+      "id": 6,
+      "viewedAt": "2026-10-18 18:30:00",
+      "title": "The long way home"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 0
+      },
+      "kind": "movie",
+      "show": "",
+      "playcount": 1,
+      "id": 7,
+      "viewedAt": "2026-10-17 18:30:00",
+      "title": "A Quiet Orbit"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 35
+      },
+      "kind": "movie",
+      "show": "",
+      "playcount": 0,
+      "id": 8,
+      "viewedAt": "2026-10-16 18:30:00",
+      "title": "The Last Lighthouse"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 0
+      },
+      "kind": "episode",
+      "show": "Sunday in the City",
+      "playcount": 1,
+      "id": 9,
+      "viewedAt": "2026-10-15 18:30:00",
+      "title": "After the rain"
+    },
+    {
+      "resume": {
+        "total": 120,
+        "position": 35
+      },
+      "kind": "movie",
+      "show": "",
+      "playcount": 0,
+      "id": 10,
+      "viewedAt": "2026-10-14 18:30:00",
+      "title": "Wildflower Road"
+    }
+  ],
+  "palettes": [
+    [
+      [
+        249,
+        194,
+        207
+      ],
+      [
+        111,
+        103,
+        163
+      ]
+    ],
+    [
+      [
+        176,
+        216,
+        239
+      ],
+      [
+        84,
+        112,
+        154
+      ]
+    ],
+    [
+      [
+        205,
+        224,
+        195
+      ],
+      [
+        73,
+        119,
+        112
+      ]
+    ],
+    [
+      [
+        242,
+        217,
+        170
+      ],
+      [
+        169,
+        105,
+        130
+      ]
+    ]
+  ]
+}

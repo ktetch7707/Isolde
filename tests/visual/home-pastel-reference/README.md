@@ -16,13 +16,13 @@ The 1280 × 720 reference may be adapted to the test display while preserving it
 
 ## Fixture and assets
 
-Semantic limitation (user clarification, 2026-10-20): the existing app/recent cards are individually authored illustrative items. This fixture's historical visual passes do not prove App or Recently viewed carousel functionality. T21.9 must rebuild it and the packaged opt-in pastel preset with the production collections and deterministic fixture providers described in [component contracts](../../../docs/design/page-studio/component-contracts.md), testing saved structure and real collection behavior as well as appearance. Runtime presets must use real data or honest empty/unavailable states; existing user layouts must not be rewritten on load.
+The current recreation configuration is the layout from the packaged opt-in Pastel preset: one production app collection and one registered Recently viewed component. [collections.json](collections.json) supplies deterministic local movie/episode history, including completed and partial items, and the IDs of actual packaged catalog apps to restore inside the disposable acceptance profile. The acceptance-only provider feeds the normal Kodi bridge and artwork interfaces; it is not part of the application. Runtime presets use real providers or honest empty/unavailable states. Existing user layouts are never rewritten on load.
 
-[recreation-config.json](recreation-config.json) uses the shared composed-Home model. [interaction.json](interaction.json) supplies only the existing remote keys needed to reach the editor; it is test automation, not product layout code. Local logo/recent-art regions are cropped from the supplied reference by the actual artwork component. All surrounding labels, icons, circles, panels and focus rings are rendered separately.
+[recreation-config.json](recreation-config.json) uses the shared composed-Home model. [interaction.json](interaction.json) supplies only the existing remote keys needed to reach the editor; it is test automation, not product layout code. History artwork is original generated geometric test art. The reference is retained for comparison and is never supplied as a rendered card or Home surface. Labels, symbols, circles, panels and focus rings are rendered by the production components.
 
 [wallpaper.png](wallpaper.png) is a clean scene produced with the built-in imagegen tool from the supplied image. It contains no interface. The exact edit prompt and provenance are in [wallpaper-generation.json](wallpaper-generation.json). The image is a local visual fixture and the opt-in Pastel sky skin wallpaper; the original packaged Home remains the default.
 
-Fixture apps/media/history are illustrative. Brand cards without a configured provider open the real app drawer. YouTube uses its configured application route; Movies/Shows open the actual Kodi-backed library; Desktop uses the existing Desktop action. HDMI/guide tiles open setup. None of these establish streaming entitlement, captured inputs, music/game integrations or actual recent history.
+Fixture history is synthetic and does not establish actual installed Kodi playback or third-party history permissions. App entries retain real registry identities; the visual test does not launch or install their external programs. Movies/Shows use actual library pages; Desktop uses the existing Desktop action. HDMI/guide tiles open setup. None of these qualify captured inputs, streaming entitlement or music/game integrations.
 
 ## Repeat
 
@@ -36,4 +36,4 @@ Installed release `523f627f0c06211f92b6e43b` passed all thirteen suites and the 
 
 ## Current semantic status (2026-10-23)
 
-The current Settings-selected preset uses production collections; its isolated acceptance profile lacks populated app/history providers. Save/reapply/reset passes, but populated reference recreation remains incomplete. The historical captures above do not prove current collection semantics. See [standing evidence audit](../../../docs/studio-reference-evidence-2026-10-23.md). T21.9 owns the required real Recently viewed and deterministic-provider fixture rebuild.
+The prerequisite rebuild and its verification are recorded in [genuine collection evidence](../../../docs/studio-history-prerequisite-2026-10-23.md). Current populated graphical review remains pending until that record reports actual captures. The historical captures above do not prove current collection semantics. See also the earlier [standing evidence audit](../../../docs/studio-reference-evidence-2026-10-23.md).

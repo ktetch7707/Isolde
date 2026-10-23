@@ -108,8 +108,8 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
             else if(method=="Isolde.GetArtwork")result={{"mime","image/png"},{"data",QString::fromLatin1(png.toBase64())}};
             else if(method=="Isolde.PlayMovie"||method=="Isolde.PlayEpisode"){++plays;played=request["params"].toObject();result={{"state","playing"},{"home",false}};}
             else if(method.startsWith("Isolde.Playback"))result={{"state",method=="Isolde.PlaybackControl"?"ended":"playing"},{"home",false}};
-            else {++reads;if(rejectedReads>0){--rejectedReads;socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Kodi starting"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;}const auto key=method=="VideoLibrary.GetTVShows"?"tvshows":"movies";QJsonArray items;
-                for(int i=1;i<=8;++i)items.append(QJsonObject{{key==QString("movies")?"movieid":"tvshowid",i},{"title",QString("Kodi title %1").arg(i)},{"year",2020+i},{"resume",QJsonObject{{"position",i*10},{"total",120}}}});
+            else {++reads;if(rejectedReads>0){--rejectedReads;socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Kodi starting"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;}const auto key=method=="VideoLibrary.GetTVShows"?"tvshows":method=="VideoLibrary.GetEpisodes"?"episodes":"movies";QJsonArray items;
+                for(int i=1;i<=8;++i)items.append(QJsonObject{{key==QString("movies")?"movieid":key==QString("episodes")?"episodeid":"tvshowid",i},{"title",QString("Kodi title %1").arg(i)},{"year",2020+i},{"lastplayed",QString("2026-10-%1 12:00:00").arg(i,2,10,QChar('0'))},{"resume",QJsonObject{{"position",i*10},{"total",120}}}});
                 result={{key,items},{"limits",QJsonObject{{"start",0},{"end",8},{"total",8}}}};}
             socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
         });}});
@@ -164,6 +164,17 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     auto *early=qobject_cast<KodiMedia *>(startingData.client("early",{{"libraryKind","movies"},{"libraryView","watched"}}));QVERIFY(early);
     QTRY_VERIFY(!early->busy());QVERIFY(!early->connected());
     startingPlayer.refresh();QTRY_VERIFY(startingPlayer.connected());QTRY_VERIFY(early->connected());QCOMPARE(early->movies().size(),8);
+    const QVariantMap historyStyle{{"libraryKind","history"},{"libraryView","watched"},{"libraryLimit",16},{"libraryColumns",5},{"libraryChrome",false},{"libraryLayout","row"}};
+    QVERIFY(!startingData.client("invalid-history",{{"libraryKind","history"},{"libraryView","recent"}}));
+    std::unique_ptr<QObject> history(widget.createWithInitialProperties({{"provider",QVariant::fromValue(&startingData)},{"widgetKey","history-widget"},{"style",historyStyle},{"width",800},{"height",300}}));QVERIFY(history);
+    auto *historyClient=qobject_cast<KodiMedia *>(startingData.client("history-widget",historyStyle));QVERIFY(historyClient);
+    QTRY_VERIFY(historyClient->connected());QCOMPARE(historyClient->items().size(),16);
+    const auto historyActions=history->property("actions");
+    QCOMPARE((historyActions.metaType().id()==qMetaTypeId<QJSValue>()?historyActions.value<QJSValue>().toVariant():historyActions).toStringList(),QStringList{"Refresh"});
+    historyClient->selectIndex(12);auto reduced=historyStyle;reduced["libraryLimit"]=2;history->setProperty("style",reduced);
+    QTRY_COMPARE(historyClient->selectedIndex(),1);QCOMPARE(historyClient->items().size(),16);
+    auto *otherHistory=qobject_cast<KodiMedia *>(startingData.client("independent-history",historyStyle));QVERIFY(otherHistory);QVERIFY(otherHistory!=historyClient);QTRY_VERIFY(otherHistory->connected());QCOMPARE(otherHistory->selectedIndex(),0);
+    startingData.invalidate("Profile closed");QVERIFY(!startingData.client("history-widget",historyStyle));QVERIFY(historyClient->items().isEmpty());
     QVERIFY(!data.client("still-closed",{})); // Bridge readiness cannot revive a torn-down profile.
     QVERIFY(home.addWidget("text"));
     QCOMPARE(home.items().last().toMap()["presentation"].toMap()["subtitle"].toString(),QString("Your message"));
@@ -242,6 +253,9 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
             const auto entries = scope == 1 ? home.categories() : home.components();
             for (const auto &entry : entries) {
                 const auto style = entry.toMap()["presentation"].toMap();
+                // Placed v2 fixture controls belong to Page Studio. The legacy
+                // inspector cannot edit grid/group/library composition data.
+                if(home.composition().contains("grid")) {QVERIFY(ComponentSchema::validPresentation(style,true,entry.toMap()["componentType"]=="container"));continue;}
                 for (auto it=style.cbegin(); it!=style.cend(); ++it) QVERIFY2(keys.contains(it.key()),qPrintable(it.key()));
             }
         }
@@ -603,12 +617,13 @@ void HomeNavigationTests::pastelReferenceNavigationAndGeometry()
     QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(HOME_QML)));
     QVERIFY2(component.isReady(),qPrintable(component.errorString()));
     std::unique_ptr<QObject> root(component.createWithInitialProperties({{"items",home.components()},{"sections",home.sections()},
-        {"composition",home.composition()},{"appearance",home.appearance()},{"wallpaperSource",home.wallpaperSource()},
+        {"composition",home.composition()},{"grid",home.grid()},{"placements",home.placements()},{"appearance",home.appearance()},{"wallpaperSource",home.wallpaperSource()},
         {"brandVisible",false},{"backgroundStart",QColor(home.backgroundStart())},{"backgroundEnd",QColor(home.backgroundEnd())},{"tileRoundness",0.18},
         {"internetAvailable",true},{"localNetworkAvailable",true},{"hasContextualSources",false},{"width",1280},{"height",800}}));
     QVERIFY2(root,qPrintable(component.errorString()));
     QQuickWindow window; window.resize(1280,800); qobject_cast<QQuickItem*>(root.get())->setParentItem(window.contentItem()); window.show();
     QTRY_VERIFY(root->property("hasWallpaper").toBool());
+    QTRY_VERIFY(root->property("editorGeometryReady").toBool());
     auto *content = root->findChild<QQuickItem*>("composedContent"); QVERIFY(content);
     QVERIFY(content->property("contentHeight").toReal() <= content->height()+2);
     auto *composed = root->findChild<QObject*>("composedHome"); QVERIFY(composed);
@@ -617,12 +632,13 @@ void HomeNavigationTests::pastelReferenceNavigationAndGeometry()
     auto command = [&](int value) { return QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,value)); };
     QCOMPARE(root->property("focusedItemId").toString(),QString("hdmi1"));
     QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("guide"));
-    QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("disney"));
-    QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("challengers"));
-    for(int i=0;i<4;i++) QVERIFY(command(InputManager::NavigateRight));
-    QCOMPARE(composed->property("sectionActionId").toString(),QString("section-recent"));
-    QVERIFY(command(InputManager::Confirm)); QCOMPARE(activated.last()[1].toString(),QString("section-recent"));
+    QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("favorite-apps"));
+    QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("recently-watched"));
+    QCOMPARE(home.components().last().toMap()["family"].toString(),QString("recently-viewed"));
+    QCOMPARE(home.components().last().toMap()["source"].toMap()["kind"].toString(),QString("recently-viewed"));
+    QVERIFY(command(InputManager::NavigateUp)); QCOMPARE(root->property("focusedItemId").toString(),QString("favorite-apps"));
     QVERIFY(QMetaObject::invokeMethod(root.get(),"restoreFocus",Q_ARG(QVariant,QString("hdmi1"))));
+    QVERIFY(command(InputManager::NavigateUp)); QVERIFY(composed->property("navigationFocused").toBool());
     QVERIFY(command(InputManager::NavigateUp)); QVERIFY(root->property("recoveryFocused").toBool());
     QVERIFY(command(InputManager::Confirm)); QCOMPARE(search.size(),1);
     QVERIFY(command(InputManager::NavigateRight)); QVERIFY(command(InputManager::Confirm)); QCOMPARE(settings.last()[0].toInt(),-1);
@@ -1434,7 +1450,7 @@ void HomeNavigationTests::studioCatalogAndContextualInspector()
     auto list=[](const QVariant &v){return (v.metaType().id()==qMetaTypeId<QJSValue>()?v.value<QJSValue>().toVariant():v).toList();};
     QVERIFY(session->execute("newPage",{{"name","Destination"},{"preset","blank"}}));QCoreApplication::processEvents();
     const auto namedActions=list(catalog->property("actions"));QVERIFY(std::any_of(namedActions.cbegin(),namedActions.cend(),[](const QVariant &v){return v.toMap()["name"].toString().contains("Destination");}));QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);
-    QVERIFY(key(InputManager::Search));QCOMPARE(root->property("mode").toString(),QString("catalog"));QCOMPARE(list(catalog->property("families")).size(),6);
+    QVERIFY(key(InputManager::Search));QCOMPARE(root->property("mode").toString(),QString("catalog"));QCOMPARE(list(catalog->property("families")).size(),7);
     // Inspect every family's content step and cancel without writes/history.
     for(int i=0;i<6;++i){catalog->setProperty("selected",i);QVERIFY(key(InputManager::Confirm));QVERIFY(catalog->property("view").toString()!="families");QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),baseline);}
     QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));

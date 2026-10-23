@@ -1185,11 +1185,20 @@ void ComponentTests::studioNestedGroupsValidateAndReparentAtomically()
 void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
 {
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);const auto user=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
-    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),6);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
+    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),7);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
     doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(options["defaultGrid"].toMap())}};QVERIFY(session->pushEdit(QJsonDocument(doc).toJson()));const auto empty=session->draft();
-    for(const auto &type:QStringList{"button","image","library","carousel","app-bar"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
+    for(const auto &type:QStringList{"button","image","library","recently-viewed","carousel","app-bar"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
     const auto appPrototype=session->componentPrototype("app-bar");
+    const auto historyPrototype=session->componentPrototype("recently-viewed");
+    const auto historyRoot=historyPrototype["root"].toMap();
+    QCOMPARE(historyRoot["family"].toString(),QString("recently-viewed"));
+    QCOMPARE(historyRoot["source"].toMap()["kind"].toString(),QString("recently-viewed"));
+    auto wrongHistory=historyRoot;auto historyStyle=historyRoot["presentation"].toMap();
+    historyStyle["libraryView"]="recent";wrongHistory["presentation"]=historyStyle;
+    QVERIFY(ComponentSchema::component(wrongHistory,true).isEmpty());
+    historyStyle["libraryView"]="watched";wrongHistory["presentation"]=historyStyle;wrongHistory.remove("family");
+    QVERIFY(ComponentSchema::component(wrongHistory,true).isEmpty());
     QCOMPARE(appPrototype["components"].toList().size(),1);
     auto appNode=appPrototype["root"].toMap();
     QCOMPARE(appNode["appCollection"].toMap()["mode"].toString(),QString("all"));

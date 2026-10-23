@@ -21,6 +21,7 @@ private slots:
     void frontendPreferenceRoundTrip();
     void mediaFolderPermissions();
     void readsLibraryThroughTwoRequests();
+    void recentlyViewedMergesKodiHistoryAndStaysBounded();
     void pagesLibraryAndResets();
     void playbackLifecycle();
     void localViewsAndCollections();
@@ -173,6 +174,9 @@ static void serve(QLocalServer &server, int version)
                     const auto method = request.value("method").toString();
                     server.setProperty("lastMethod", method);
                     server.setProperty("lastParams", params.toVariantMap());
+                    if(server.property("historyFixture").toBool()) {
+                        auto calls=server.property("historyRequests").toList();calls.append(QVariantMap{{"method",method},{"params",params.toVariantMap()}});server.setProperty("historyRequests",calls);
+                    }
                     const int start = params.value("limits").toObject().value("start").toInt();
                     const int total = method == "VideoLibrary.GetSeasons" ? 2 : server.property("total").isValid() ? server.property("total").toInt() : 1;
                     QJsonArray movies;
@@ -180,6 +184,10 @@ static void serve(QLocalServer &server, int version)
                     const auto idKey = method == "VideoLibrary.GetTVShows" ? "tvshowid" : method == "VideoLibrary.GetSeasons" ? "seasonid" : method == "VideoLibrary.GetEpisodes" ? "episodeid" : "movieid";
                     for (int i = start; i < qMin(start + 50, total); ++i) {
                         QJsonObject entry{{idKey, i + 1}, {"title", "Fixture movie"}};
+                        if(server.property("historyFixture").toBool()) {
+                            entry["dateadded"]="2026-10-24 00:00:00";
+                            entry["lastplayed"]=i==2?(method=="VideoLibrary.GetEpisodes"?"2026-02-30 00:00:00":""):i==0?(method=="VideoLibrary.GetEpisodes"?"2026-10-23 12:00:00":"2026-10-20 12:00:00"):i==1?"2026-10-22 12:00:00":"2026-10-21 12:00:00";
+                        }
                         if (method == "VideoLibrary.GetSeasons") { entry["season"] = i; entry.remove("title"); }
                         if (method == "VideoLibrary.GetEpisodes") { entry["season"] = params.value("season").toInt(); entry["episode"] = i + 1; }
                         movies.append(entry);
@@ -194,6 +202,29 @@ static void serve(QLocalServer &server, int version)
             });
         }
     });
+}
+void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
+{
+    QTemporaryDir dir; QLocalServer server; QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    serve(server,13); server.setProperty("historyFixture",true);server.setProperty("total",3);
+    KodiMedia media("history-test",nullptr,dir.path());media.openView("history","watched");
+    QTRY_VERIFY(media.connected());QVERIFY(!media.busy());QCOMPARE(media.items().size(),4);
+    const auto items=media.items();
+    QCOMPARE(items[0].toMap()["mediaType"].toString(),QString("episode"));QCOMPARE(items[0].toMap()["mediaId"].toInt(),1);
+    QCOMPARE(items[1].toMap()["mediaType"].toString(),QString("episode"));QCOMPARE(items[1].toMap()["mediaId"].toInt(),2);
+    QCOMPARE(items[2].toMap()["mediaType"].toString(),QString("movie"));QCOMPARE(items[2].toMap()["mediaId"].toInt(),2);
+    QCOMPARE(items[3].toMap()["mediaType"].toString(),QString("movie"));QCOMPARE(items[3].toMap()["mediaId"].toInt(),1);
+    const auto calls=server.property("historyRequests").toList();QCOMPARE(calls.size(),2);
+    for(const auto &call:calls){const auto params=call.toMap()["params"].toMap();
+        QCOMPARE(params["limits"].toMap()["end"].toInt(),50);
+        QCOMPARE(params["sort"].toMap()["method"].toString(),QString("lastplayed"));
+        QCOMPARE(params["filter"].toMap()["field"].toString(),QString("lastplayed"));
+        QVERIFY(params["properties"].toList().contains("lastplayed"));
+    }
+    QVERIFY(!media.hasNextPage());media.nextPage();QTest::qWait(30);QCOMPARE(server.property("historyRequests").toList().size(),2);
+    server.setProperty("total",60);media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QCOMPARE(media.items().size(),50);QVERIFY(!media.hasNextPage());
+    server.setProperty("total",0);media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QVERIFY(media.items().isEmpty());QVERIFY(media.status().contains("Nothing viewed"));
+    media.refresh();media.invalidate("Profile closed");QTest::qWait(30);QVERIFY(!media.connected());QVERIFY(media.items().isEmpty());QCOMPARE(media.status(),QString("Profile closed"));
 }
 void KodiMediaTests::artworkSelectionCancellation()
 {

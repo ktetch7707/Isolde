@@ -96,6 +96,10 @@ def main():
             env[key] = value
     env.update(XDG_CONFIG_HOME=str(evidence / "config"), XDG_DATA_HOME=str(evidence / "data"),
                XDG_CACHE_HOME=str(evidence / "cache"), QT_QPA_PLATFORM="xcb")
+    from reference_collections import ReferenceCollections
+    fixture_path = case / "collections.json"
+    collection_provider = ReferenceCollections(evidence, json.loads(fixture_path.read_text()),
+        Path(__file__).resolve().parents[1]) if fixture_path.exists() else None
     x11 = ctypes.CDLL(ctypes.util.find_library("X11"))
     x11.XOpenDisplay.argtypes = [ctypes.c_char_p]; x11.XOpenDisplay.restype = ctypes.c_void_p
     x11.XStringToKeysym.argtypes = [ctypes.c_char_p]; x11.XStringToKeysym.restype = ctypes.c_ulong
@@ -215,6 +219,18 @@ def main():
             for name in interaction.get("initialKeys",["Right"]): key(name)
             assert layout.read_bytes() == original_bytes
             (evidence / "attempt-config.json").write_bytes(original_bytes)
+            if collection_provider:
+                document = json.loads(original_bytes)
+                history = [item for item in document["components"] if item.get("family") == "recently-viewed"]
+                apps = [item for item in document["components"] if "appCollection" in item]
+                assert len(history) == 1 and len(apps) == 1
+                assert history[0]["source"]["kind"] == "recently-viewed"
+                assert history[0]["presentation"]["libraryKind"] == "history"
+                assert not any(item.get("customLogo") for item in document["components"]
+                               if item.get("categoryId") in {"favorites", "recent"})
+                expect(lambda: any(r["method"] == "Isolde.GetArtwork" for r in collection_provider.requests),
+                       "Production history collection requested local artwork")
+                collection_provider.verify_history()
             captured("custom")
             if args.skin_from_settings:
                 key("Up",30); key("Left",3)
@@ -257,7 +273,9 @@ def main():
                 "settings_skin_round_trip": args.skin_from_settings,
                 "saved_skin_survives_reset": bool(list((config / "skins").glob("user-*.json"))) if args.skin_from_settings else None,
                 "reset_verified": True, "executable": str(executable),
-                "fixture_only": ["Individually authored media labels/art are illustrative, not provider history", "Input/guide setup routes do not qualify their backends"], "missing": collections["missing"]}, indent=2))
+                "provider_fixture": bool(collection_provider),
+                "provider_requests_verified": bool(collection_provider),
+                "fixture_only": ["Deterministic providers do not prove installed Kodi or playback" if collection_provider else "Individually authored media labels/art are illustrative, not provider history", "Input/guide setup routes do not qualify their backends"], "missing": collections["missing"]}, indent=2))
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
         if args.inspect:
@@ -274,6 +292,8 @@ def main():
             except subprocess.TimeoutExpired:
                 process.kill(); process.wait()
         x11.XCloseDisplay(display)
+        if collection_provider:
+            collection_provider.close()
         if active:
             run("systemctl", "--user", "start", "isolde.service")
 

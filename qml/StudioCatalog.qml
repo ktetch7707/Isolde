@@ -39,6 +39,7 @@ Item {
         else if(family==="image"){assets=session.artworkChoices();view="artwork"}
         else if(family==="app-bar"){selectedApps=apps.slice(0,6).map(a=>a.action.appId);view="apps"}
         else if(family==="library")view="media"
+        else if(family==="recently-viewed")finish(family)
         else if(family==="carousel")view="carousel"
         else view="widgets"
     }

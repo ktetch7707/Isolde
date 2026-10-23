@@ -290,6 +290,20 @@
         "labelPosition": "hidden"
       }
     },
+    "recently-viewed": {
+      "id": "recently-viewed",
+      "name": "Recently viewed",
+      "kind": "widget",
+      "widgetType": "library",
+      "componentType": "library",
+      "family": "recently-viewed",
+      "placement": {"x": 0, "y": 0, "width": 6, "height": 3},
+      "presentation": {
+        "libraryKind": "history", "libraryView": "watched", "libraryLimit": 20,
+        "libraryColumns": 5, "libraryLayout": "row", "libraryCardStyle": "recent",
+        "libraryChrome": false, "artHeight": 180, "radius": 16
+      }
+    },
     "library": {
       "id": "shelf",
       "name": "Media shelf",
@@ -423,6 +437,12 @@
       "id": "widgets",
       "name": "Widgets",
       "description": "Clock, text, groups, and input slots",
+      "icon": "clock"
+    },
+    {
+      "id": "recently-viewed",
+      "name": "Recently viewed",
+      "description": "Local Kodi movies and episodes, most recently viewed first",
       "icon": "clock"
     }
   ],
@@ -637,6 +657,7 @@
         "tab": "Content",
         "scope": "presentation",
         "key": "libraryKind",
+        "excludeFamilies": ["recently-viewed"],
         "label": "Kodi library",
         "type": "choice",
         "types": [
@@ -652,6 +673,7 @@
         "tab": "Content",
         "scope": "presentation",
         "key": "libraryView",
+        "excludeFamilies": ["recently-viewed"],
         "label": "Kodi view",
         "type": "choice",
         "types": [
@@ -673,6 +695,7 @@
         "tab": "Content",
         "scope": "presentation",
         "key": "libraryValue",
+        "excludeFamilies": ["recently-viewed"],
         "label": "Source / search",
         "type": "source",
         "types": [
@@ -1214,7 +1237,8 @@
         "tab": "Layout",
         "scope": "presentation",
         "key": "libraryColumns",
-        "label": "Visible media cards",
+        "control": "slider",
+        "label": "Visible cards",
         "type": "number",
         "types": [
           "library",
@@ -1308,7 +1332,8 @@
         "tab": "Content",
         "scope": "presentation",
         "key": "libraryLimit",
-        "label": "Maximum displayed items",
+        "control": "slider",
+        "label": "Result count",
         "type": "number",
         "types": [
           "library",

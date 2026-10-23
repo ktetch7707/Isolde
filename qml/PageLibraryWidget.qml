@@ -21,6 +21,10 @@ Item {
     readonly property var liveItems:frozen?frozenItems:client?client.items:[]
     readonly property bool usingSamples:readOnly && samplePreview && !liveItems.length
     readonly property var displayedItems:usingSamples?sampleItems:liveItems.slice(0,style.libraryLimit || 50)
+    onDisplayedItemsChanged:Qt.callLater(function(){
+        if(!root.frozen && root.client && !root.client.busy && root.displayedItems.length>0 && root.client.selectedIndex>=root.displayedItems.length)
+            root.client.selectIndex(root.displayedItems.length-1)
+    })
     property int toolbarIndex:0
     property var details:null
     property string returnMediaKey:""
@@ -33,7 +37,8 @@ Item {
             if(index>=0 && root.client.selectedIndex!==index)root.client.selectIndex(index)
         }
     }
-    readonly property var actions:["Refresh","Previous","Next","All","Recent","Continue"]
+    readonly property bool history:style.libraryKind==="history"
+    readonly property var actions:history?["Refresh"]:["Refresh","Previous","Next","All","Recent","Continue"]
     readonly property bool listMode:style.libraryLayout === "list"
     readonly property bool rowMode:style.libraryLayout === "row"
     readonly property bool chrome:style.libraryChrome!==false
@@ -76,7 +81,7 @@ Item {
             Repeater { model:root.actions
                 delegate:Rectangle {
                     required property int index; required property string modelData
-                    width:(parent.width-25)/6;height:36;radius:8;color:root.appearance.surfaceColor || "#202126"
+                    width:(parent.width-(root.actions.length-1)*5)/root.actions.length;height:36;radius:8;color:root.appearance.surfaceColor || "#202126"
                     border.width:root.engaged && root.client && root.client.selectedIndex<0 && root.toolbarIndex===index?2:0;border.color:root.appearance.focusColor || "#C994A5"
                     Text {textFormat:Text.PlainText; anchors.centerIn:parent;text:modelData;color:root.appearance.textColor || "#F5F1F3";font.pixelSize:13*(root.appearance.typographyScale || 1) }
                     MouseArea { anchors.fill:parent;onClicked:{root.engage();if(root.client)root.client.selectIndex(-1);root.toolbarIndex=index;root.invoke(index)} }

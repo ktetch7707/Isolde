@@ -38,7 +38,9 @@ def suite_selection(suite):
     """One allowlisted selection authority for build targets and CTest names."""
     targets = SUITES[suite]
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
-    pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    if suite == "studio_grid":
+        pattern = "^(studio_grid|studio_grid_controls)$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
@@ -305,7 +307,9 @@ class Oracle:
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":
-            expected = {"studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            expected = {"studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            if suite == "studio_grid":
+                expected = {"studio_grid", "studio_grid_controls"}
             if suite == "home_component_navigation":
                 expected = {"home_component_navigation", "studio_navigation"}
             if {c.get("name") for c in cases} != expected:
@@ -426,7 +430,7 @@ def collect_evidence(run, case, directories):
         for directory in sorted(directories):
             if not re.fullmatch(r"/tmp/isolde-(?:components-acceptance|reference-config|tv-acceptance)-[A-Za-z0-9_-]+", str(directory)):
                 raise RuntimeError("Unexpected evidence root")
-            paths = [directory / name for name in ("result.json", "shell.log", "attempt-config.json")]
+            paths = [directory / name for name in ("result.json", "shell.log", "attempt-config.json", "provider-requests.json")]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:

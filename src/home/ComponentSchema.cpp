@@ -139,7 +139,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if(it.value().metaType().id()!=QMetaType::QString || !QColor(it.value().toString()).isValid() || QColor(it.value().toString()).alpha()!=255)return false;
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
-            if (key == "libraryKind" && !QStringList{"movies","shows"}.contains(it.value().toString())) return false;
+            if (key == "libraryKind" && !QStringList{"movies","shows","history"}.contains(it.value().toString())) return false;
             if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection"}.contains(it.value().toString())) return false;
             if (key == "libraryLayout" && !QStringList{"grid","list","row"}.contains(it.value().toString())) return false;
             if (key == "libraryCardStyle" && !QStringList{"media","recent","orb","source","summary","banner"}.contains(it.value().toString())) return false;
@@ -364,7 +364,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     if (type.isEmpty() && legacy) type = kind == "widget" ? (QStringList{"clock","text","container"}.contains(input.value("widgetType").toString())?input.value("widgetType").toString():"clock") : "launcher";
     if (!QStringList{"launcher", "clock", "text", "media-shelf","container","button","image","library"}.contains(type)) return reject(error, "Unsupported component type.");
     if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>MaxComponentNameLength || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
-    if(input.contains("family") && (type!="container" || !QStringList{"carousel","app-bar"}.contains(input["family"].toString())))return reject(error,"Unsupported group family.");
+    if(input.contains("family") && !((type=="container" && QStringList{"carousel","app-bar"}.contains(input["family"].toString())) || (type=="library" && input["family"]=="recently-viewed")))return reject(error,"Unsupported component family.");
     if(input.contains("appCollection")) {
         if(type!="container" || input.value("family")!="app-bar" || input["appCollection"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Choose an app carousel for an app collection.");
         const auto collection=input["appCollection"].toMap();
@@ -416,11 +416,15 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         if(type=="library") {
             if(input.contains("action"))return reject(error,"Kodi owns media activation.");
             const auto style=input.value("presentation").toMap();
+            const bool history=input.value("family")=="recently-viewed";
+            if(history && (style.value("libraryKind")!="history" || style.value("libraryView")!="watched" || !style.value("libraryValue").toString().isEmpty()))return reject(error,"Recently viewed uses local Kodi viewing history, not a library or recently added view.");
+            if(!history && style.value("libraryKind")=="history")return reject(error,"Choose a Recently viewed carousel for viewing history.");
             if(!style.contains("libraryKind") || !style.contains("libraryView"))return reject(error,"Choose a supported Kodi view.");
             if(QStringList{"collection","genre","tag"}.contains(style.value("libraryView").toString()) && style.value("libraryValue").toString().trimmed().isEmpty())return reject(error,"Choose a named Kodi source.");
             if(style.value("libraryKind")=="shows" && QStringList{"genre","tag"}.contains(style.value("libraryView").toString()))return reject(error,"This Kodi view is available for movies only.");
             if(style.value("libraryView")=="collection" && !safeId(style.value("libraryValue").toString()))return reject(error,"Choose a saved collection.");
             source={{"schemaVersion",1},{"provider","kodi"},{"kind","library"},{"libraryKind",style.value("libraryKind")},{"libraryView",style.value("libraryView")},{"libraryValue",style.value("libraryValue","")}};
+            if(history)source["kind"]="recently-viewed";
         } else {
             if(input.contains("action")) {const auto link=action(input["action"].toMap(),error);if(link.isEmpty())return {};result["action"]=link;}
             source={{"schemaVersion",1},{"provider","shell"},{"kind",type}};

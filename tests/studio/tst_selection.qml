@@ -46,6 +46,42 @@ Item {
         function cleanup(){if(editor)editor.close();editor=null}
         function command(value){editor.handleCommand(value)}
         function settle(){let ready=false;Qt.callLater(()=>Qt.callLater(()=>ready=true));tryVerify(()=>ready)}
+        function test_recently_viewed_catalog_count_capacity_and_private_cancel() {
+            verify(editor.session.execute("composition",{value:Object.assign({},editor.page.composition,{grid:Object.assign({},editor.page.grid,{columns:8,rows:5})})}),editor.session.errorString)
+            editor.toolbarFocus=true;editor.menuIndex=0;command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
+            compare(editor.mode,"catalog")
+            command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
+            compare(editor.mode,"move");compare(editor.addingType,"recently-viewed")
+            const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
+            command(inputManager.confirm);compare(editor.mode,"canvas");compare(editor.session.changeCount,count+1)
+            compare(editor.current.family,"recently-viewed");compare(editor.current.source.kind,"recently-viewed")
+            compare(editor.current.presentation.libraryKind,"history");compare(editor.current.presentation.libraryView,"watched")
+            const added=JSON.stringify(editor.session.document)
+            editor.openInspector(false);settle()
+            const inspector=findChild(editor,"studioInspector")
+            if(inspector.collapsed)command(inputManager.confirm)
+            command(inputManager.confirm);compare(inspector.view,"fields")
+            verify(!inspector.fields.some(f=>["libraryKind","libraryView","libraryValue"].indexOf(f.key)>=0))
+            const index=inspector.fields.findIndex(f=>f.key==="libraryLimit");verify(index>=0)
+            for(let i=0;i<index;++i)command(inputManager.navigateDown)
+            command(inputManager.confirm);compare(inspector.view,"scalar");command(inputManager.navigateRight)
+            settle();if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-history-count.png")
+            compare(JSON.stringify(editor.session.document),added)
+            command(inputManager.back);compare(JSON.stringify(editor.session.document),added)
+            command(inputManager.confirm);command(inputManager.navigateRight);command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
+            compare(editor.current.presentation.libraryLimit,21);compare(editor.current.presentation.libraryColumns,5)
+            compare(editor.session.changeCount,count+2)
+            command(inputManager.back);command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
+            const capacity=inspector.fields.findIndex(f=>f.key==="libraryColumns");verify(capacity>=0)
+            for(let i=0;i<capacity;++i)command(inputManager.navigateDown)
+            command(inputManager.confirm);compare(inspector.view,"scalar");command(inputManager.navigateLeft)
+            command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
+            compare(editor.current.presentation.libraryColumns,4);compare(editor.current.presentation.libraryLimit,21)
+            verify(editor.session.undo());compare(editor.current.presentation.libraryColumns,5)
+            verify(editor.session.undo());compare(JSON.stringify(editor.session.document),added)
+            verify(editor.session.undo());compare(JSON.stringify(editor.session.document),before)
+            compare(studioFixture.disk(),diskBaseline)
+        }
         function test_authored_orb_focus_survives_context_and_toolbar() {
             verify(editor.session.execute("addResolved",{type:"button",placement:{x:1,y:0,width:2,height:1}}))
             const button=editor.items.find(i=>i.id!=="cell-0")

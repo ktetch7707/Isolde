@@ -107,6 +107,8 @@ private:
     QTimer m_timeout;
     QByteArray m_received, m_request;
     QVariantList m_movies;
+    QVariantList m_recentResults;
+    bool m_recentEpisodes = false;
     int m_descriptor = -1, m_id = 0, m_stage = 0;
     quint64 m_generation = 0;
     bool m_busy = false, m_connected = false;
