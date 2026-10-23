@@ -62,6 +62,7 @@ private slots:
     void studioSectionTransfersDuplicationAndOrdering();
     void studioNestedGroupsValidateAndReparentAtomically();
     void studioOrderedInsertionPreservesSlotsAndIsAtomic();
+    void studioOverlayMovementKeepsNeighborsAndBounds();
     void studioCatalogLinksInspectorAndStagedArtwork();
 };
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
@@ -1252,6 +1253,31 @@ void ComponentTests::studioOrderedInsertionPreservesSlotsAndIsAtomic()
     QVERIFY(session->execute("orderRelative",insert));
     for(const auto &entry:QJsonDocument::fromJson(session->draft()).object()["components"].toArray())for(const auto &original:nodes)if(entry.toObject()["id"]==original.toObject()["id"])QCOMPARE(entry.toObject()["placement"],original.toObject()["placement"]);
     QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+}
+void ComponentTests::studioOverlayMovementKeepsNeighborsAndBounds()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    const auto user=dir.filePath("layers.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY(session->execute("convertGrid",{{"value",QVariantMap{{"columns",8},{"rows",5}}}}));
+    QVERIFY(session->execute("grid",{{"value",QVariantMap{{"overlap",true}}}}));
+    QVERIFY(session->execute("state",{{"id","movies"},{"key","locked"},{"value",true}}));
+    const auto before=session->draft();const auto count=session->changeCount();
+    const QVariantMap target{{"x",1},{"y",0},{"width",1},{"height",1}};
+    for(const auto &strategy:QStringList{"shift","cancel"}){
+        const auto proposal=session->placementProposal("clock",target,strategy);QVERIFY2(proposal["valid"].toBool(),qPrintable(proposal["reason"].toString()));
+        QCOMPARE(proposal["placements"].toList().size(),1);QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),count);
+        QVERIFY(session->execute("place",{{"placements",proposal["placements"]}}));QCOMPARE(session->changeCount(),count+1);
+        const auto original=QJsonDocument::fromJson(before).object()["components"].toArray(),moved=QJsonDocument::fromJson(session->draft()).object()["components"].toArray();
+        for(int i=0;i<original.size();++i)if(original[i].toObject()["id"]!="clock")QCOMPARE(moved[i],original[i]);
+        const auto overlapping=session->draft();QVERIFY(!session->execute("grid",{{"value",QVariantMap{{"overlap",false}}}}));QCOMPARE(session->draft(),overlapping);QCOMPARE(session->changeCount(),count+1);
+        QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+    }
+    QVERIFY(!session->placementProposal("clock",target,"swap")["valid"].toBool()); // Explicit swap cannot move a locked neighbor.
+    QVERIFY(!session->placementProposal("clock",{{"x",8},{"y",0},{"width",1},{"height",1}},"shift")["valid"].toBool());
+    QVERIFY(session->execute("state",{{"id","clock"},{"key","locked"},{"value",true}}));const auto locked=session->draft();
+    QVERIFY(!session->placementProposal("clock",target,"shift")["valid"].toBool());QCOMPARE(session->draft(),locked);
+    QVERIFY(!QFile::exists(user));
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

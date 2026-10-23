@@ -27,6 +27,8 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "studio_grid": "isolde_studio_quick_tests",
           "studio_destinations": "isolde_studio_quick_tests",
           "studio_ordered": "isolde_studio_quick_tests",
+          "studio_policies": "isolde_studio_quick_tests",
+          "studio_overlays": "isolde_studio_quick_tests",
           "studio_unit": "isolde_component_tests",
           "studio_behavior": "isolde_home_navigation_tests",
           "studio": ("isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests")}
@@ -36,7 +38,7 @@ def suite_selection(suite):
     """One allowlisted selection authority for build targets and CTest names."""
     targets = SUITES[suite]
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
-    pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_destinations|studio_ordered|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
@@ -300,7 +302,7 @@ class Oracle:
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":
-            expected = {"studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_destinations", "studio_ordered", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            expected = {"studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
             if suite == "home_component_navigation":
                 expected = {"home_component_navigation", "studio_navigation"}
             if {c.get("name") for c in cases} != expected:

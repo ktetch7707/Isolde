@@ -17,6 +17,7 @@ Item {
     property bool collapsed:false
     readonly property real unit:appearance.typographyScale || 1
     readonly property real spacing:appearance.spacing || 20
+    readonly property var focusOrder:[0,1,2,3,4].concat(value.mode==="sections"?[5]:[]).concat([9,6,7,8])
     signal proposed(var grid, real sectionHeight)
     signal focused(int index)
     signal activated(int index)
@@ -36,13 +37,14 @@ Item {
         if(command===inputManager.menu){collapsed=!collapsed;return}
         if(collapsed){if(command===inputManager.confirm)collapsed=false;return}
         const direction=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
+        if(choice===9 && (direction || command===inputManager.confirm)){proposed(Object.assign({},value,{overlap:direction?direction>0:!value.overlap}),sectionHeight);return}
         if(direction && choice===0){const index=modes.findIndex(m=>m.id===value.mode)+direction;chooseMode(index);return}
         if(direction && choice>0 && choice<6){const spec=field(choice);setField(choice,(spec.key==="sectionHeight"?sectionHeight:Number(value[spec.key]))+direction*spec.step);return}
         if(direction && choice>=6){focused(Math.max(6,Math.min(8,choice+direction)));return}
         if(command===inputManager.navigateDown || command===inputManager.navigateUp){
             const step=command===inputManager.navigateDown?1:-1
-            let next=Math.max(0,Math.min(8,choice+step));if(next===5 && value.mode!=="sections")next+=step
-            focused(next);return
+            const index=focusOrder.indexOf(choice)
+            focused(focusOrder[Math.max(0,Math.min(focusOrder.length-1,index+step))]);return
         }
         if(command===inputManager.confirm){if(choice===0)chooseMode((modes.findIndex(m=>m.id===value.mode)+1)%modes.length);else if(choice>=6)activated(choice)}
     }
@@ -152,6 +154,16 @@ Item {
                         }
                     }
                 }
+                CheckBox {
+                    id:overlapToggle;objectName:"studioGridOverlap"
+                    width:parent.width;height:44*root.unit;checkable:false
+                    text:"Allow overlapping layers";checked:!!root.value.overlap
+                    Accessible.name:text
+                    onClicked:{root.focused(9);root.proposed(Object.assign({},root.value,{overlap:!root.value.overlap}),root.sectionHeight)}
+                    background:Rectangle {color:root.choice===9?root.appearance.selectedColor:"transparent";radius:6*root.unit;border.width:root.choice===9?2:0;border.color:root.appearance.focusColor}
+                    contentItem:Text {leftPadding:44*root.unit;text:overlapToggle.text;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font.pixelSize:18*root.unit;wrapMode:Text.Wrap}
+                    indicator:Rectangle {x:6*root.unit;y:(overlapToggle.height-height)/2;width:28*root.unit;height:width;radius:5*root.unit;color:overlapToggle.checked?root.appearance.focusColor:"transparent";border.width:2;border.color:root.choice===9?root.appearance.focusColor:root.appearance.mutedColor;Text {anchors.centerIn:parent;text:overlapToggle.checked?"✓":"";color:root.appearance.surfaceColor;font.pixelSize:20*root.unit}}
+                }
                 Text {width:parent.width;visible:text.length>0;text:root.message;wrapMode:Text.Wrap;color:root.appearance.mutedColor;font.pixelSize:16*root.unit}
                 Row {
                     id:actions;width:parent.width;spacing:8*root.unit
@@ -181,5 +193,5 @@ Item {
         MouseArea {visible:root.collapsed;anchors.fill:parent;onClicked:root.collapsed=false}
     }
     onVisibleChanged:if(visible){collapsed=false;scroll.contentY=0}
-    onChoiceChanged:Qt.callLater(()=>scroll.reveal(choice===0?modeRow:choice<3?dimensions.itemAt(choice-1):choice<6?scalars.itemAt(choice-3):choice===8?exact:actions))
+    onChoiceChanged:Qt.callLater(()=>scroll.reveal(choice===0?modeRow:choice<3?dimensions.itemAt(choice-1):choice<6?scalars.itemAt(choice-3):choice===9?overlapToggle:choice===8?exact:actions))
 }

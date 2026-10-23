@@ -16,7 +16,7 @@ Run from the project root in PowerShell 7:
 # Real editor workflows, including scrolling and cancellation.
 ./tools/vm-test.ps1 Test -Suite studio_behavior
 
-# All eight focused suites for a completed Studio change.
+# All ten focused suites for a completed Studio change.
 ./tools/vm-test.ps1 Test -Suite studio
 
 # Full native regression gate at an integration/release checkpoint.
@@ -39,7 +39,9 @@ During development, run the relevant small suite; run `studio` after a complete 
 | `studio_grid` | Qt Quick Test; `tests/studio/tst_grid.qml` | Page-layout stepper/slider parity, bounded exact values, preserved locked groups, explicit legacy conversion, section geometry readiness and private cancellation/undo |
 | `studio_destinations` | Qt Quick Test; `tests/studio/tst_destinations.qml` | Named group targets, pointer cell selection, remote canonical parity, exact cancel/undo, locked/hidden/descendant refusal and full destinations |
 | `studio_ordered` | Qt Quick Test; `tests/studio/tst_ordered.qml` | Row/column insertion by drag and menu-started slot selection, mixed spans/gaps, locked refusal, bounded carousel edge scrolling, remote canonical parity and exact viewport cancellation |
-| `studio` | Eight suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
+| `studio_policies` | Qt Quick Test; `tests/studio/tst_policies.qml` | Full/mixed-span grids, enabled reduced-motion replay, remote/drag/cell canonical parity and locked refusal with exact cancellation |
+| `studio_overlays` | Qt Quick Test; `tests/studio/tst_overlays.qml` | Overlap checkbox preview/cancel/parity, locked decorative panel retention and atomic unsafe-disable refusal |
+| `studio` | Ten suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
 
 The complete existing suites remain registered. These additional focused registrations deliberately reuse tested functions instead of copying their code. Full CTest includes both focused and broad registrations; a focused pass is not a substitute for full integration coverage.
 

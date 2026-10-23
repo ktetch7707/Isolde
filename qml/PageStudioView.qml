@@ -128,7 +128,7 @@ Item {
     readonly property string operationTitle:({noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",groupDestination:"Move into a group",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
     readonly property string footerText: {
         if(mode==="flowMove")return message
-        if(mode==="move" || mode==="resize")return (addingType?"Adding ":mode==="move"?"Moving ":"Resizing ")+componentName(addingType?null:current)+(message?" · "+message:mode==="move" && collisionPreview.valid===false?" · "+collisionPreview.reason:"")
+        if(mode==="move" || mode==="resize")return (addingType?"Adding ":mode==="move"?(grid.overlap?"Moving layer · ":"Moving "):"Resizing ")+componentName(addingType?null:current)+(message?" · "+message:mode==="move" && collisionPreview.valid===false?" · "+collisionPreview.reason:"")
         if(mode==="collision")return breadcrumb+" · Resolve overlap · Choose a proposal or Cancel · Back cancels"
         if(mode==="collisionDetails")return breadcrumb+" · Proposed positions only · Back returns to the choices"
         return breadcrumb+(current?" · "+componentName(current):"")+(message?" · "+message:"")

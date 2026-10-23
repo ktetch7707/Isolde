@@ -1091,7 +1091,7 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     for (int i = 0; i < entries.size(); ++i) {
         const auto item = entries[i].toObject();
         if (item["id"] == id) { selected = i; origin = item["placement"].toObject().toVariantMap(); }
-        else if (item["parentId"].toString()==parent && (!sections || !parent.isEmpty() || item["categoryId"].toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement)) colliders.append(i);
+        else if ((!grid.value("overlap").toBool() || strategy=="swap") && item["parentId"].toString()==parent && (!sections || !parent.isEmpty() || item["categoryId"].toString()==category) && item.contains("placement") && ComponentSchema::placementsOverlap(item["placement"].toObject().toVariantMap(), placement)) colliders.append(i);
     }
     if (selected < 0) return fail(QStringLiteral("The component no longer exists."));
     for(const int index:colliders)if(entries[index].toObject().value("locked").toBool())return fail(tr("A locked component occupies this region. Unlock it or choose another position."));
