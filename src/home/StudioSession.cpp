@@ -77,7 +77,7 @@ QVariantList StudioSession::actionChoices() const
     const auto document=QJsonDocument::fromJson(m_draft).object();const auto root=document["rootPage"].toObject();
     if(!root.contains("visible") || root["visible"].toBool())choices.append(QVariantMap{{"name",tr("Open page · ")+root.value("name").toString(m_live->studioOptions().value("rootPageName").toString())},{"action",QVariantMap{{"type","root-page"}}}});
     for(const auto &entry:document["pages"].toArray()){const auto page=entry.toObject();choices.append(QVariantMap{{"name",tr("Open page · ")+page["name"].toString()},{"action",QVariantMap{{"type","open-page"},{"pageId",page["id"].toString()}}}});}
-    for(const auto &entry:m_live->registry()->apps()){const auto app=entry.toMap();const auto id=app.value("id").toString();choices.append(QVariantMap{{"name",tr("Open app · ")+app.value("name").toString()},{"action",QVariantMap{{"type","launch-app"},{"appId",id}}}});
+    for(const auto &entry:m_live->registry()->apps()){const auto app=entry.toMap();const auto id=app.value("id").toString();choices.append(QVariantMap{{"name",tr("Open app · ")+app.value("name").toString()},{"appType",app.value("type")},{"action",QVariantMap{{"type","launch-app"},{"appId",id}}}});
         const auto *definition=m_live->registry()->find(id);if(definition)for(const auto &type:definition->handledActions)if(QStringList{"open-file","open-folder","open-url","open-disc"}.contains(type))choices.append(QVariantMap{{"name",type+" · "+app.value("name").toString()},{"needsTarget",true},{"action",QVariantMap{{"type",type},{"openWith",id}}}});
     }
     for(const auto &entry:m_live->m_collections){const auto collection=entry.toMap();choices.append(QVariantMap{{"name",tr("Open collection · ")+collection.value("name").toString()},{"mediaKind",collection.value("media","movies")},{"action",QVariantMap{{"type","open-collection"},{"collectionId",collection.value("id")}}}});}
@@ -125,7 +125,7 @@ QVariantMap StudioSession::componentPrototype(const QString &type,const QVariant
     if(nodes.isEmpty() || nodes.size()>33){setError(tr("The packaged component preset is invalid."));return {};}
     auto configured=nodes.first().toObject();
     for(auto it=configuration.cbegin();it!=configuration.cend();++it){
-        if(!QStringList{"name","action","customLogo","presentation","apps","buttons"}.contains(it.key())){setError(tr("Unsupported component configuration."));return {};}
+        if(!QStringList{"name","action","customLogo","presentation","appCollection","apps","buttons"}.contains(it.key())){setError(tr("Unsupported component configuration."));return {};}
         if(it.key()=="apps" || it.key()=="buttons")continue;
         if(it.key()=="presentation"){
             if(it.value().metaType().id()!=QMetaType::QVariantMap){setError(tr("Choose valid presentation values."));return {};}
@@ -143,11 +143,9 @@ QVariantMap StudioSession::componentPrototype(const QString &type,const QVariant
     }
     if(configuration.contains("apps")){
         const auto apps=configuration.value("apps").toList();QSet<QString> selected;
-        if(type!="app-bar" || configuration.value("apps").metaType().id()!=QMetaType::QVariantList || apps.size()>16){setError(tr("Choose up to 16 installed apps."));return {};}
-        int column=0;for(const auto &value:apps){const auto id=value.toString();if(value.metaType().id()!=QMetaType::QString || selected.contains(id) || !m_live->registry()->find(id)){setError(tr("Choose distinct installed apps."));return {};}
-            selected.insert(id);auto child=QJsonObject::fromVariantMap(options.value("appChildPreset").toMap());child["id"]="app-slot-"+QString::number(column+1);child["appId"]=id;child["parentId"]=configured["id"];child["action"]=QJsonObject{{"type","launch-app"},{"appId",id}};
-            auto placement=child["placement"].toObject();placement["x"]=column++;child["placement"]=placement;nodes.append(child);
-        }
+        if(type!="app-bar" || configuration.value("apps").metaType().id()!=QMetaType::QVariantList || apps.size()>128){setError(tr("Choose up to 128 installed apps."));return {};}
+        for(const auto &value:apps){const auto id=value.toString();const auto *app=m_live->registry()->find(id);if(value.metaType().id()!=QMetaType::QString || selected.contains(id) || !app || !QStringList{"desktop","web"}.contains(app->type)){setError(tr("Choose distinct installed applications."));return {};}selected.insert(id);}
+        configured["appCollection"]=QJsonObject{{"mode","selected"},{"ids",QJsonArray::fromVariantList(apps)}};nodes[0]=configured;
     }
     QHash<QString,QString> remap;QSet<QString> allocated;
     for(int i=0;i<nodes.size();++i){
@@ -497,14 +495,15 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         }
         ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if(operation=="setApps") {
+        if(a.contains("mode") && !QStringList{"all","selected"}.contains(a.value("mode").toString())){setError(tr("Choose All installed or Selected apps."));return false;}
         auto entries=document["components"].toArray();int rootIndex=-1;QSet<QString> removed;
         for(int i=0;i<entries.size();++i)if(entries[i].toObject()["id"]==id && entries[i].toObject()["family"]=="app-bar")rootIndex=i;
         if(rootIndex<0 || ComponentSchema::positionLocked(entries,id)){setError(tr("Choose an unlocked app bar."));return false;}
         removed.insert(id);for(int depth=0;depth<4;++depth)for(const auto &entry:entries)if(removed.contains(entry.toObject()["parentId"].toString()))removed.insert(entry.toObject()["id"].toString());removed.remove(id);
         for(const auto &entry:entries)if(removed.contains(entry.toObject()["id"].toString()) && entry.toObject().value("locked").toBool()){setError(tr("Unlock the app bar's contents before replacing them."));return false;}
-        const auto prototype=componentPrototype("app-bar",{{"apps",a.value("apps")}});if(prototype.isEmpty())return false;
+        const auto prototype=componentPrototype("app-bar",a.value("mode")=="all"?QVariantMap{{"appCollection",QVariantMap{{"mode","all"},{"ids",QVariantList{}}}}}:QVariantMap{{"apps",a.value("apps")}});if(prototype.isEmpty())return false;
         const auto newRoot=prototype.value("rootId").toString();QJsonArray result;
-        for(const auto &entry:entries)if(!removed.contains(entry.toObject()["id"].toString()))result.append(entry);
+        for(const auto &entry:entries)if(!removed.contains(entry.toObject()["id"].toString())){auto item=entry.toObject();if(item["id"]==id)item["appCollection"]=QJsonObject::fromVariantMap(prototype.value("root").toMap().value("appCollection").toMap());result.append(item);}
         for(const auto &entry:prototype.value("components").toList()){auto child=QJsonObject::fromVariantMap(entry.toMap());if(child["id"]==newRoot)continue;child["parentId"]=id;result.append(child);}
         document["components"]=result;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if(operation=="patch") {

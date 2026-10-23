@@ -273,7 +273,7 @@ Item {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
             if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) host.actionActivated(section.presentation.trailingAction,current.id); return }
             const item = host.items[host.itemIndex(current.id)]
-            if(item && item.componentType==="library"){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
+            if(item && (item.componentType==="library" || item.appCollection)){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
             if(item && item.componentType==="container"){
                 const children=(host.items || []).filter(i=>(i.parentId || "")===item.id && host.focusable(i))
                 if(children.length){activeGroup=item.id;host.focusedIndex=host.itemIndex(children[0].id)}
@@ -421,7 +421,7 @@ Item {
                                         width:(parent.width-(parent.columns-1)*parent.spacing)/parent.columns
                                         height:Math.max(40,(sectionView.Layout.preferredHeight-2*sectionView.padding-(heading.visible ? heading.height+sectionBody.spacing : 0)-(subtitle.visible ? subtitle.height+sectionBody.spacing : 0)
                                             -(Math.ceil(sectionView.modelData.items.length/parent.columns)-1)*parent.spacing)/Math.max(1,Math.ceil(sectionView.modelData.items.length/parent.columns)))
-                                        selected:!host.editMode && !root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.id)
+                                        selected:host.editMode ? host.editSelection===modelData.id : !root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.id)
                                         outsideColor:host.backgroundEnd
                                         onSelectedChanged:if(selected) Qt.callLater(root.revealCard,this)
                                         onActivated:{if(host.editMode){host.editSelected(modelData.id);return}root.sectionActionId="";host.focusedIndex=host.itemIndex(modelData.id);root.navigationFocused=false;host.recoveryFocused=false;root.handleCommand(inputManager.confirm)}

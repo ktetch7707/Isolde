@@ -57,7 +57,7 @@ Item {
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
     property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
-    readonly property var draftModel: session ? ((mode==="conversionPreview" || mode==="flowMove" || mode==="scrolling" || mode==="inspector" && inspector.colorTransactionActive) && session.proposalModel ? session.proposalModel : session.model) : null
+    readonly property var draftModel: session ? ((mode==="conversionPreview" || mode==="flowMove" || mode==="scrolling" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
     readonly property var pageGrid:page?page.grid:({})
@@ -104,7 +104,7 @@ Item {
     }
     readonly property var relativeItems:current?items.filter(i=>i.id!==selectedId && (i.parentId || "")===(current.parentId || "") && (i.categoryId || "")===(current.categoryId || "")):[]
     readonly property var destinationSections:sectionMode?page.sections.filter(s=>(s.presentation || {}).variant!=="library"):[]
-    readonly property var destinationGroups:[{id:"",name:"Page / current section"}].concat(items.filter(i=>i.componentType==="container" && i.id!==selectedId && !i.locked))
+    readonly property var destinationGroups:[{id:"",name:"Page / current section"}].concat(items.filter(i=>i.componentType==="container" && !i.appCollection && i.id!==selectedId && !i.locked))
     readonly property var placementOptions:parentScopeId?({parentId:parentScopeId,categoryId:""}):sectionMode?({parentId:"",categoryId:scopeId}):({parentId:""})
     function collisionProposal(strategy) {
         if(strategy==="swap" && mode!=="collision" && mode!=="collisionDetails")return ({})
@@ -310,7 +310,7 @@ Item {
         else if(index===10){if(command("state",{id:selectedId,key:"locked",value:!current.locked})){mode="canvas";toolbarFocus=false}}
         else if(index===11 || index===12)beginRelative(index===11)
         else if(index===13){beginGesture(false);if(mode==="move"){mode="destination";choice=0}}
-        else if(index===14){if(current.componentType!=="container"){message="Choose a group to edit its contents.";return}parentScopeId=current.id;const children=items.filter(i=>(i.parentId || "")===parentScopeId);selectedId=children.length?children[0].id:"";mode="canvas";toolbarFocus=false}
+        else if(index===14){if(current.appCollection){openInspector(false);inspector.controlsShown=true;inspector.activateField({type:"apps"});return}if(current.componentType!=="container"){message="Choose a group to edit its contents.";return}parentScopeId=current.id;const children=items.filter(i=>(i.parentId || "")===parentScopeId);selectedId=children.length?children[0].id:"";mode="canvas";toolbarFocus=false}
         else if(index===15){if(command("ungroup",{id:selectedId})){selectedId="";mode="canvas";toolbarFocus=false}}
         else if(index===16){beginGesture(false);if(mode==="move"){mode="groupDestination";choice=0}}
         else if(index===18){if(current.componentType!=="container"){message="Choose a group first.";return}childLayoutDraft=Object.assign({},current.presentation.layout);mode="childLayout";choice=0;message="Left / Right changes a field. Arrange validates the complete result; Back cancels."}
@@ -322,6 +322,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="navigation")return ["＋ Add navigation tab"].concat((page.composition.navigation || []).map(t=>t.name))
         if(mode==="sections")return ["＋ Add section"].concat((page.categories || []).map(s=>s.name))
         if(mode==="structureRemove")return ["Cancel","Remove in draft"]
+        if(mode==="remove")return ["Cancel","Remove in draft"]
         if(mode==="moviePage" || mode==="showsPage")return ["Use classic library"].concat(pageEntries.filter(p=>!!p.id).map(p=>p.name))
         if(mode==="navSections")return ["Show all sections","Use selected sections"].concat((page.categories || []).map(s=>(navSections.indexOf(s.id)>=0?"✓ ":"□ ")+s.name))
         if(mode==="pageContext")return ["Edit page","Appearance","Rename page","Duplicate page",pageId===draftModel.homePageId?"Current Home page":"Set as Home","Move page up","Move page down",pageId===draftModel.homePageId?"Delete unavailable · this is Home":"Delete page…"]
@@ -686,7 +687,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
                     libraryProvider:studio.provider;previewOnly:true;freezeData:studio.manipulating;samplePreview:studio.samplePreview
                     sampleItems:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
-                    editSelection:studio.gridMode?"":studio.selectedId
+                    editSelection:studio.selectedId
                     suppressedComponentIds:studio.collisionPreview.valid?studio.collisionPreview.placements.map(p=>p.id):studio.manipulating && studio.mode!=="flowMove" && !studio.addingType && studio.current?[studio.selectedId]:[]
                     onEditSelected:componentId=>{if(studio.mode!=="canvas")return;studio.selectedId=componentId;studio.toolbarFocus=false;studio.mode="context";studio.choice=0}
                     brandVisible:studio.page?studio.page.brandVisible:false;tileRoundness:studio.page?studio.page.tileRoundness:0
@@ -723,8 +724,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         visible:!studio.gridMode && !!preview.editRect && !studio.toolbarFocus
                         x:preview.editRect?preview.editRect.x:0;y:preview.editRect?preview.editRect.y:0
                         width:preview.editRect?preview.editRect.width:0;height:preview.editRect?preview.editRect.height:0
-                        color:"transparent";border.width:7;border.color:studio.palette.surfaceColor
-                        Rectangle {anchors.fill:parent;anchors.margins:2;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
+                        color:"transparent"
                         Text {anchors.bottom:parent.top;width:parent.width;text:studio.current?studio.current.name || studio.current.widgetType || studio.current.id:"";color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;elide:Text.ElideRight;font.pixelSize:16*studio.textScale}
                     }
                     Repeater {
@@ -740,8 +740,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         delegate:Rectangle {
                             required property var modelData
                             readonly property var rect:preview.clippedPlacement(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || "")
-                            x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating?7:0;border.color:studio.palette.surfaceColor
-                            Rectangle {anchors.fill:parent;anchors.margins:2;visible:modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
+                            objectName:"studioSelectionTarget-"+modelData.id
+                            x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:0
                             Text {objectName:"studioSelectionName-"+modelData.id;visible:!modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
                             MouseArea {
                                 objectName:"studioHit-"+modelData.id
@@ -786,11 +786,11 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         objectName:"studioGhost"
                         visible:(studio.mode==="noRoom" && !!studio.addingType) || ((studio.mode==="move" || studio.mode==="size") && !studio.collisionPreview.valid) || studio.mode==="resize" || studio.mode==="geometry" || (studio.mode==="collision" && !studio.collisionPreview.valid)
                         readonly property var rect:preview.placementRectFor(studio.candidate,studio.scopeId,studio.parentScopeId)
-                        x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:4;border.color:studio.palette.focusColor
+                        x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent"
                         readonly property var sourceSection:studio.page?(studio.page.sections || []).find(s=>(s.id || "")===studio.scopeId):null
                         HomeCard {visible:!((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType || ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="container" && ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="library";objectName:"studioGhostCard";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd;item:Object.assign({},studio.addingType?(studio.addPrototype.viewItems || [])[0] || {}:studio.current || {},{presentation:Object.assign({},parent.sourceSection?parent.sourceSection.presentation || {}:{},studio.addingType?((studio.addPrototype.viewItems || [])[0] || {}).presentation || {}:studio.current?studio.current.presentation || {}:{})});appearance:studio.page?studio.page.appearance:studio.palette;selected:true;opacity:studio.current && !studio.addingType && studio.current.opacity!==undefined?studio.current.opacity:1}
                         PlacedComponents {
-                            anchors.fill:parent;enabled:false;previewOverlay:true
+                            anchors.fill:parent;enabled:false;previewOverlay:true;editorSelectionId:studio.addingType?(studio.addPrototype.root || {}).id || "":studio.selectedId
                             readonly property var component:studio.addingType?studio.addPrototype.root:studio.current
                             visible:!!component && (component.componentType==="container" || component.componentType==="library")
                             items:visible?[{item:component,placement:{x:0,y:0,width:1,height:1}}]:[]
@@ -809,15 +809,14 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                             readonly property var section:studio.page.sections.find(s=>(s.id || "")===(modelData.categoryId || ""))
                             readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId!==undefined?modelData.categoryId:studio.scopeId,modelData.parentId || "")
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent"
-                            HomeCard {objectName:"studioProposedCard-"+parent.modelData.id;visible:parent.previewItem.componentType!=="container" && parent.previewItem.componentType!=="library";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page.backgroundEnd;item:Object.assign({},parent.previewItem,{presentation:Object.assign({},parent.section?parent.section.presentation || {}:{},parent.previewItem.presentation || {})});appearance:studio.page.appearance;opacity:parent.previewItem.opacity===undefined?1:parent.previewItem.opacity}
+                            HomeCard {objectName:"studioProposedCard-"+parent.modelData.id;visible:parent.previewItem.componentType!=="container" && parent.previewItem.componentType!=="library";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page.backgroundEnd;item:Object.assign({},parent.previewItem,{presentation:Object.assign({},parent.section?parent.section.presentation || {}:{},parent.previewItem.presentation || {})});appearance:studio.page.appearance;selected:parent.modelData.id===studio.selectedId || !!studio.addingType && parent.modelData.id===(studio.addPrototype.root || {}).id;opacity:parent.previewItem.opacity===undefined?1:parent.previewItem.opacity}
                             PlacedComponents {
-                                anchors.fill:parent;enabled:false;previewOverlay:true
+                                anchors.fill:parent;enabled:false;previewOverlay:true;editorSelectionId:studio.addingType?(studio.addPrototype.root || {}).id || "":studio.selectedId
                                 visible:parent.previewItem.componentType==="container" || parent.previewItem.componentType==="library"
                                 items:visible?[{item:parent.previewItem,placement:{x:0,y:0,width:1,height:1}}]:[]
                                 metrics:({valid:true,margin:0,gap:0,cellW:width,cellH:height})
                                 host:preview;unit:preview.componentUnit;catalog:studio.addingType?studio.items.concat(studio.addPrototype.viewItems || []):studio.items
                             }
-                            Rectangle {anchors.fill:parent;color:"transparent";border.width:3;border.color:studio.palette.focusColor}
                             Text {anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:7;text:(index+1)+" · "+studio.componentName(parent.previewItem);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:15*studio.textScale;elide:Text.ElideRight}
                         }
                     }

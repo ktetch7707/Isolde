@@ -39,6 +39,8 @@ Use the existing PowerShell transport in `tools/vm-process.ps1`, as in the VM gu
 python3 seed-studio-demo.py --execute-on-isolde-test-vm
 # Only to verify the existing completed profile; no history/profile changes:
 python3 seed-studio-demo.py --execute-on-isolde-test-vm --verify-profile 8bdf6077-4613-4b52-9b20-d1ec7931dfcf
+# After an intentional deployment, name its exact release ID explicitly:
+python3 seed-studio-demo.py --execute-on-isolde-test-vm --verify-profile 8bdf6077-4613-4b52-9b20-d1ec7931dfcf --expected-release a72852697c1f50e138161a63
 ```
 
 The tool locks against the Oracle and graphical harness, requires the existing guest home and running service, creates a fresh UUID profile, records baseline backups, and briefly restarts the same installed release to activate it. On ordinary failure it restores the original active-profile registry/media grants and restarts the existing service. It preserves failed data for diagnosis. The `--restore-prepared-profile UUID` recovery mode requires that exact prepared profile to be active; `--resume-prepared-profile UUID` requires matching unchanged baseline configuration and an unfinished fixture manifest. Never bypass these checks, delete locks, or copy an existing Kodi database/profile.

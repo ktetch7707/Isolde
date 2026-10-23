@@ -3,7 +3,19 @@
 #include "media/KodiMedia.h"
 #include "media/KodiArtwork.h"
 PageData::PageData(const QString &profile,KodiMedia *player,QObject *parent,const QString &directory)
-    :QObject(parent),m_profile(profile),m_directory(directory),m_player(player){}
+    :QObject(parent),m_profile(profile),m_directory(directory),m_player(player){
+    connect(player,&KodiMedia::changed,this,[this,wasConnected=false]() mutable {
+        const bool connected=m_player->connected();
+        // A Home shelf can reach the bridge before Kodi finishes starting.
+        // Retry failed clients once on the owning player's connection transition.
+        if(connected && !wasConnected && m_valid)
+            for(auto &entry:m_clients)if(!entry.client->connected() && !entry.client->busy())entry.client->refresh();
+        wasConnected=connected;
+    });
+    connect(player,&KodiMedia::playbackReturned,this,[this](bool){
+        QTimer::singleShot(1500,this,[this]{if(m_valid)for(auto &entry:m_clients)entry.client->refresh();});
+    });
+}
 QObject *PageData::client(const QString &key,const QVariantMap &source) {
     if(!m_valid)return nullptr;
     // The key is bounded and its id prefix must be a safe component id; path

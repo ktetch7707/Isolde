@@ -23,9 +23,20 @@ Item {
     readonly property var displayedItems:usingSamples?sampleItems:liveItems.slice(0,style.libraryLimit || 50)
     property int toolbarIndex:0
     property var details:null
+    property string returnMediaKey:""
+    function rememberSelection(){const item=client?client.items[client.selectedIndex]:null;if(item)returnMediaKey=item.mediaType+":"+item.mediaId}
+    Connections {
+        target:root.client
+        function onChanged(){
+            if(!root.client || root.client.busy || !root.returnMediaKey)return
+            const index=root.displayedItems.findIndex(i=>i.mediaType+":"+i.mediaId===root.returnMediaKey)
+            if(index>=0 && root.client.selectedIndex!==index)root.client.selectIndex(index)
+        }
+    }
     readonly property var actions:["Refresh","Previous","Next","All","Recent","Continue"]
     readonly property bool listMode:style.libraryLayout === "list"
     readonly property bool rowMode:style.libraryLayout === "row"
+    readonly property bool chrome:style.libraryChrome!==false
     readonly property int columns:listMode ? 1 : Math.max(1,style.libraryColumns || 4)
     signal engage()
     function invoke(index) {
@@ -40,7 +51,7 @@ Item {
         if(!client)return command !== inputManager.back && command !== inputManager.navigateUp
         const index=client.selectedIndex, step=columns
         if(command===inputManager.back){if(details){details=null;return true}if(client.goBack())return true;return false}
-        if(details){if(command===inputManager.confirm || command===inputManager.navigateRight){provider.activate(client,index,command!==inputManager.navigateRight);details=null}return true}
+        if(details){if(command===inputManager.confirm || command===inputManager.navigateRight){rememberSelection();provider.activate(client,index,command!==inputManager.navigateRight);details=null}return true}
         if(command===inputManager.menu && index>=0){details=client.items[index];return true}
         if(index<0){
             if(command===inputManager.navigateUp || command===inputManager.navigateLeft && toolbarIndex===0)return false
@@ -50,18 +61,18 @@ Item {
             else if(command===inputManager.confirm)invoke(toolbarIndex)
             return true
         }
-        if(command===inputManager.confirm){provider.activate(client,index);return true}
-        if(command===inputManager.navigateUp){client.selectIndex(index<step?-1:index-step);return true}
-        if(command===inputManager.navigateDown){if(rowMode||index+step>=client.items.length)return false;client.selectIndex(index+step);return true}
-        if(command===inputManager.navigateLeft){if(index===0)return false;client.selectIndex(index-1);return true}
-        if(command===inputManager.navigateRight){client.selectIndex(index+1);return true}
+        if(command===inputManager.confirm){rememberSelection();provider.activate(client,index);return true}
+        if(command===inputManager.navigateUp){if(!chrome && (rowMode || index<step))return false;returnMediaKey="";client.selectIndex(index<step?-1:index-step);return true}
+        if(command===inputManager.navigateDown){if(rowMode||index+step>=root.displayedItems.length)return false;returnMediaKey="";client.selectIndex(index+step);return true}
+        if(command===inputManager.navigateLeft){if(index===0)return false;returnMediaKey="";client.selectIndex(index-1);return true}
+        if(command===inputManager.navigateRight){if(index+1<root.displayedItems.length){returnMediaKey="";client.selectIndex(index+1)}return true}
         return false
     }
     Rectangle { anchors.fill:parent; color:"transparent"; radius:root.style.radius || 12; border.width:root.engaged || root.highlighted?2:0; border.color:root.appearance.focusColor || "#C994A5" }
     Column {
         anchors.fill:parent; anchors.margins:5; spacing:8
         Row {
-            width:parent.width; height:36; spacing:5
+            visible:root.chrome;width:parent.width; height:visible?36:0; spacing:5
             Repeater { model:root.actions
                 delegate:Rectangle {
                     required property int index; required property string modelData
@@ -73,7 +84,7 @@ Item {
             }
         }
         GridView {
-            id:grid; objectName:"pageLibraryGrid";width:parent.width;height:Math.max(50,parent.height-84);clip:true
+            id:grid; objectName:"pageLibraryGrid";width:parent.width;height:Math.max(50,parent.height-(root.chrome?84:8));clip:true
             flow:root.rowMode?GridView.FlowTopToBottom:GridView.FlowLeftToRight
             cellWidth:width/root.columns;cellHeight:root.listMode?78:root.rowMode?height:Math.max(140,root.style.artHeight || 230)
             model:root.displayedItems;currentIndex:root.client?root.client.selectedIndex:-1;highlightRangeMode:GridView.ApplyRange;highlightMoveDuration:0
@@ -86,12 +97,12 @@ Item {
                     anchors.fill:parent;anchors.margins:8
                     item:({name:modelData.title || modelData.label || "Untitled",logoSource:parent.art?parent.art.source:"",presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || (root.listMode?"summary":"media"),subtitle:modelData.year?String(modelData.year):modelData.showtitle || "",progress:modelData.resume && modelData.resume.total>0?modelData.resume.position/modelData.resume.total:0})})
                     appearance:root.appearance;selected:root.engaged && root.client && root.client.selectedIndex===index
-                    onActivated:{root.engage();if(root.client && !root.readOnly && !root.frozen){root.client.selectIndex(index);root.provider.activate(root.client,index)}}
+                    onActivated:{root.engage();if(root.client && !root.readOnly && !root.frozen){root.returnMediaKey="";root.client.selectIndex(index);root.rememberSelection();root.provider.activate(root.client,index)}}
                 }
             }
             Text {textFormat:Text.PlainText; anchors.centerIn:parent;width:parent.width-20;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;visible:!grid.count;text:root.client?root.client.status:"Choose a valid Kodi source in Design Home. Back returns to the page.";color:root.appearance.mutedColor || "#AAA5AF";font.pixelSize:17 }
         }
-        Text {textFormat:Text.PlainText; width:parent.width;elide:Text.ElideRight;text:root.usingSamples?"Design samples · not your library or viewing history":root.readOnly?"Read-only Kodi preview · playback and refresh are intercepted":(root.client?root.client.status:"")+" · OK enters / plays · Menu details · Back leaves widget";color:root.appearance.mutedColor || "#AAA5AF";font.pixelSize:12 }
+        Text {visible:root.chrome || root.usingSamples;textFormat:Text.PlainText; width:parent.width;elide:Text.ElideRight;text:root.usingSamples?"Design samples · not your library or viewing history":root.readOnly?"Read-only Kodi preview · playback and refresh are intercepted":(root.client?root.client.status:"")+" · OK enters / plays · Menu details · Back leaves widget";color:root.appearance.mutedColor || "#AAA5AF";font.pixelSize:12 }
     }
     Rectangle {
         anchors.fill:parent;visible:!!root.details;color:root.appearance.surfaceColor || "#202126";radius:12

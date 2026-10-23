@@ -97,7 +97,7 @@ void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
 {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
-    int reads=0,plays=0;QJsonObject played;
+    int reads=0,plays=0,rejectedReads=0;QJsonObject played;
     QImage image(20,30,QImage::Format_RGB32);image.fill(QColor("#886677"));QByteArray png;QBuffer buffer(&png);buffer.open(QIODevice::WriteOnly);image.save(&buffer,"PNG");
     connect(&server,&QLocalServer::newConnection,&server,[&]{while(server.hasPendingConnections()){
         auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
@@ -108,7 +108,7 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
             else if(method=="Isolde.GetArtwork")result={{"mime","image/png"},{"data",QString::fromLatin1(png.toBase64())}};
             else if(method=="Isolde.PlayMovie"||method=="Isolde.PlayEpisode"){++plays;played=request["params"].toObject();result={{"state","playing"},{"home",false}};}
             else if(method.startsWith("Isolde.Playback"))result={{"state",method=="Isolde.PlaybackControl"?"ended":"playing"},{"home",false}};
-            else {++reads;const auto key=method=="VideoLibrary.GetTVShows"?"tvshows":"movies";QJsonArray items;
+            else {++reads;if(rejectedReads>0){--rejectedReads;socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Kodi starting"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;}const auto key=method=="VideoLibrary.GetTVShows"?"tvshows":"movies";QJsonArray items;
                 for(int i=1;i<=8;++i)items.append(QJsonObject{{key==QString("movies")?"movieid":"tvshowid",i},{"title",QString("Kodi title %1").arg(i)},{"year",2020+i},{"resume",QJsonObject{{"position",i*10},{"total",120}}}});
                 result={{key,items},{"limits",QJsonObject{{"start",0},{"end",8},{"total",8}}}};}
             socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
@@ -157,6 +157,12 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     QVERIFY(QMetaObject::invokeMethod(frozen.get(),"handleCommand",Q_ARG(QVariant,InputManager::Confirm)));QCOMPARE(plays,beforePlays);
     frozen->setProperty("frozen",false);QTRY_COMPARE(reads,beforeReads+1);
     data.invalidate("Profile closed");QVERIFY(!data.client("late",{}));QVERIFY(!data.artwork("movie",1));data.refresh(one);QTest::qWait(100);QCOMPARE(reads,beforeReads+1);
+    KodiMedia startingPlayer("starting-profile",nullptr,dir.path());PageData startingData("starting-profile",&startingPlayer,nullptr,dir.path());
+    rejectedReads=1;
+    auto *early=qobject_cast<KodiMedia *>(startingData.client("early",{{"libraryKind","movies"},{"libraryView","watched"}}));QVERIFY(early);
+    QTRY_VERIFY(!early->busy());QVERIFY(!early->connected());
+    startingPlayer.refresh();QTRY_VERIFY(startingPlayer.connected());QTRY_VERIFY(early->connected());QCOMPARE(early->movies().size(),8);
+    QVERIFY(!data.client("still-closed",{})); // Bridge readiness cannot revive a torn-down profile.
     QVERIFY(home.addWidget("text"));
     QCOMPARE(home.items().last().toMap()["presentation"].toMap()["subtitle"].toString(),QString("Your message"));
     QQmlComponent legacy(&engine,QUrl::fromLocalFile(QStringLiteral(HOME_QML)));
@@ -224,9 +230,9 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
     QCOMPARE(home.composition()["gap"].toInt(),10);
     QVERIFY(command(InputManager::Back)); QVERIFY(home.applySkin(id)); QCOMPARE(home.composition()["gap"].toInt(),9);
     QVERIFY(home.applySkin("builtin-lounge"));
-    // Every presentation property used by either reference is represented in the structured editor.
-    for (const auto &skin : {QString("builtin-lounge"),QString("builtin-pastel")}) {
-        QVERIFY(home.applySkin(skin));
+    // The legacy editor retains coverage of both standing reference documents.
+    for (const auto &fixture : {QStringLiteral(REFERENCE_DIR), QStringLiteral(REFERENCE_DIR) + "/../home-pastel-reference"}) {
+        QVERIFY(home.load(fixture + "/recreation-config.json",dir.filePath(QFileInfo(fixture).fileName() + ".json")));
         for (int scope : {1,2}) {
             editor->setProperty("scope",scope);
             QSet<QString> keys;
@@ -1440,7 +1446,12 @@ void HomeNavigationTests::studioCatalogAndContextualInspector()
     auto *model=qobject_cast<HomeLayout *>(session->model());auto *page=qobject_cast<PageModel *>(model->pageModel(pageId));QVERIFY(page);QCOMPARE(page->items()[0].toMap()["name"].toString(),QString("My button"));
     QVERIFY(key(InputManager::Back));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm)); // Appearance
     const auto fields=list(inspector->property("fields"));int opacity=-1;for(int i=0;i<fields.size();++i)if(fields[i].toMap()["key"]=="surfaceOpacity")opacity=i;QVERIFY(opacity>=0);
-    for(int i=0;i<opacity;++i)QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::NavigateLeft));QCOMPARE(page->items()[0].toMap()["presentation"].toMap()["surfaceOpacity"].toDouble(),0.95);
+    const auto opacityBaseline=session->draft();
+    for(int i=0;i<opacity;++i)QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::NavigateLeft));
+    QCOMPARE(inspector->property("view").toString(),QString("scalar"));
+    QCOMPARE(session->draft(),opacityBaseline);
+    inspector->setProperty("scalarControl",2);QVERIFY(key(InputManager::Confirm));
+    QCOMPARE(page->items()[0].toMap()["presentation"].toMap()["surfaceOpacity"].toDouble(),0.95);
     QVERIFY(key(InputManager::Menu));QVERIFY(!page->items()[0].toMap()["presentation"].toMap().contains("surfaceOpacity"));
     QVERIFY(key(InputManager::Back));QVERIFY(key(InputManager::Back));QCOMPARE(root->property("selectedId").toString(),selected);QCOMPARE(home.committedDocument(),disk);
     while(session->canUndo())QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);

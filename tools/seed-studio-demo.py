@@ -88,7 +88,7 @@ def key(window, name, env):
     finally: x11.XCloseDisplay(display)
 
 
-def verify_demo(home, profile):
+def verify_demo(home, profile, expected_release=None):
     profile=str(uuid.UUID(profile))
     media=home/"Videos/Isolde-Studio-Demo"/profile
     manifest=json.loads((media/"manifest.json").read_text())
@@ -100,6 +100,12 @@ def verify_demo(home, profile):
     query.pop("filter"); query["sort"]={"method":"dateadded","order":"descending"}
     recent=rpc(directory,"VideoLibrary.GetMovies",query).get("movies",[])
     if len(recent)!=8: raise RuntimeError("Actual Recently Added query must return eight movies")
+    query["filter"]={"field":"lastplayed","operator":"after","value":"1970-01-01"}
+    query["sort"]={"method":"lastplayed","order":"descending"}
+    watched=rpc(directory,"VideoLibrary.GetMovies",query).get("movies",[])
+    expected_watched={m["title"] for m in json.loads((media/"expected.json").read_text()) if m["state"]!="unwatched"}
+    if {m["label"] for m in watched}!=expected_watched or len(watched)!=6:
+        raise RuntimeError("Recently watched must include all six viewed movies and exclude never-watched movies")
     art_checks=[]
     for movie in recent:
         art=rpc(directory,"Isolde.GetArtwork",{"kind":"movie","id":movie["movieid"]})
@@ -114,8 +120,14 @@ def verify_demo(home, profile):
         episode_checks.append({"show":show["label"],"episodes":episodes})
     for path,digest in manifest["preserved"].items():
         if hashlib.sha256(Path(path).read_bytes()).hexdigest()!=digest: raise RuntimeError("Household layout differs")
-    if str((home/".local/share/isolde-appliance/current").resolve())!=manifest["release"]: raise RuntimeError("Release differs")
-    report={"ok":True,"profile":profile,"continueWatching":[m["label"] for m in continuing],"recentlyAdded":[m["label"] for m in recent],"artwork":art_checks,"shows":episode_checks,"householdLayoutUnchanged":True,"installedReleaseUnchanged":True}
+    installed=str((home/".local/share/isolde-appliance/current").resolve())
+    expected=manifest["release"]
+    if expected_release:
+        if len(expected_release)!=24 or any(c not in "0123456789abcdef" for c in expected_release):
+            raise RuntimeError("Expected release must be the exact 24-character deployed release ID")
+        expected=str(home/".local/share/isolde-appliance/releases"/expected_release)
+    if installed!=expected: raise RuntimeError("Release differs from the explicit verification baseline")
+    report={"ok":True,"profile":profile,"continueWatching":[m["label"] for m in continuing],"recentlyWatched":[m["label"] for m in watched],"recentlyAdded":[m["label"] for m in recent],"artwork":art_checks,"shows":episode_checks,"householdLayoutUnchanged":True,"installedRelease":installed,"seedRelease":manifest["release"],"expectedReleaseMatched":True,"installedReleaseUnchanged":installed==manifest["release"]}
     atomic(media/"verification.json",json.dumps(report,indent=2).encode())
     print(json.dumps(report,indent=2))
 
@@ -126,7 +138,10 @@ def main():
     parser.add_argument("--restore-prepared-profile",type=str)
     parser.add_argument("--resume-prepared-profile",type=str)
     parser.add_argument("--verify-profile",type=str,help="Read Kodi and write fixture verification evidence; no profile switch/history changes")
+    parser.add_argument("--expected-release",type=str,help="Exact deployed release ID for verification after an intentional update; seed manifest stays unchanged")
     args=parser.parse_args()
+    if args.expected_release and not args.verify_profile:
+        parser.error("--expected-release requires --verify-profile")
     home=Path.home()
     if sys.platform!="linux" or home!=Path("/home/isolde-dev") or not (home/"isolde-oracle").is_dir():
         raise RuntimeError("Only the existing Isolde-Test guest is supported")
@@ -134,7 +149,7 @@ def main():
     for path in (home/"isolde-oracle/oracle.lock",Path("/tmp/isolde-home-components-acceptance.lock")):
         handle=path.open("a"); fcntl.flock(handle,fcntl.LOCK_EX|fcntl.LOCK_NB); locks.append(handle)
     if args.verify_profile:
-        verify_demo(home,args.verify_profile)
+        verify_demo(home,args.verify_profile,args.expected_release)
         return
     config=home/".config/Isolde"; profile_file=config/"profiles.json"
     original_profiles=profile_file.read_bytes(); profiles=json.loads(original_profiles)

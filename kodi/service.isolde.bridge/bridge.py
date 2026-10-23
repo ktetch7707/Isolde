@@ -99,10 +99,17 @@ def dispatch(raw, execute, playback=None, artwork=None):
         if "filter" in params:
             rule = params["filter"]
             if not isinstance(rule, dict) or set(rule) != {"field", "operator", "value"}:
-                return error(-32602, "Only local title, tag, genre and progress filters are supported")
-            valid = ((rule["field"], rule["operator"]) in (("title", "contains"), ("tag", "is"), ("genre", "is"), ("inprogress", "true")))
+                return error(-32602, "Only local title, tag, genre, progress and viewing-date filters are supported")
+            valid = ((rule["field"], rule["operator"]) in (("title", "contains"), ("tag", "is"), ("genre", "is"), ("inprogress", "true"), ("lastplayed", "after")))
             if not valid or not isinstance(rule["value"], str) or len(rule["value"]) > 160:
                 return error(-32602, "Invalid local library filter")
+            if rule["field"] == "lastplayed":
+                import datetime
+                try:
+                    if datetime.date.fromisoformat(rule["value"]).isoformat() != rule["value"]:
+                        raise ValueError("Noncanonical date")
+                except ValueError:
+                    return error(-32602, "Viewing history requires an ISO calendar date")
             if request["method"] == "VideoLibrary.GetSeasons" or (request["method"] == "VideoLibrary.GetTVShows" and rule["field"] != "title"):
                 return error(-32602, "This filter is not supported for this view")
         limits = params.get("limits", {"start": 0, "end": 50})

@@ -272,5 +272,90 @@ Item {
                 compare(document(),before);compare(studioFixture.disk(),diskBaseline)
             })
         }
+        function scalarField(key,asPage) {
+            editor.openInspector(asPage)
+            const inspector=findChild(editor,"studioInspector")
+            const fields=asPage?homeLayout.studioOptions.inspector.pageFields:homeLayout.studioOptions.inspector.fields
+            inspector.activateField(fields.find(f=>f.key===key))
+            compare(inspector.view,"scalar")
+            return inspector
+        }
+        function test_scalar_remote_cancel_pointer_commit_and_parity() {
+            scenario("scalar-opacity",()=>{
+                givenPage(false,false)
+                const before=document()
+                let inspector=scalarField("surfaceOpacity",false)
+                compare(inspector.scalarText(inspector.scalarDraft),"100%")
+                for(let i=0;i<20;++i)command(inputManager.navigateLeft)
+                compare(inspector.scalarDraft,0)
+                settle();compare(document(),before);compare(editor.session.changeCount,0)
+                command(inputManager.back);settle();compare(document(),before)
+                inspector=scalarField("surfaceOpacity",false)
+                const slider=findChild(inspector,"studioScalarSlider")
+                verify(waitForRendering(slider));mouseClick(slider,slider.leftPadding+1,slider.height/2)
+                compare(inspector.scalarDraft,0)
+                inspector.scalarControl=2;command(inputManager.confirm)
+                const pointer=document();compare(editor.session.changeCount,1)
+                verify(editor.session.undo());compare(document(),before)
+                inspector=scalarField("surfaceOpacity",false)
+                for(let i=0;i<20;++i)command(inputManager.navigateLeft)
+                inspector.scalarControl=2;command(inputManager.confirm)
+                compare(document(),pointer)
+                compare(studioFixture.disk(),diskBaseline)
+            })
+        }
+        function test_scalar_exact_percent_preview_and_reset() {
+            scenario("scalar-dimming",()=>{
+                givenPage(false,false)
+                const before=document(),inspector=scalarField("dim",true)
+                inspector.changeScalar(.5,false)
+                inspector.scalarControl=4;command(inputManager.confirm)
+                settle();compare(document(),before);compare(editor.session.changeCount,0)
+                const keyboard=findChild(inspector,"inspectorKeyboard")
+                keyboard.accepted("120");compare(inspector.view,"keyboard")
+                command(inputManager.back);compare(inspector.view,"scalar");compare(inspector.message,"")
+                inspector.scalarControl=4;command(inputManager.confirm)
+                keyboard.accepted("25");compare(inspector.view,"scalar")
+                compare(inspector.scalarDraft,.25);compare(inspector.scalarText(inspector.scalarDraft),"25%")
+                settle();compare(document(),before)
+                const panel=findChild(inspector,"studioScalarPanel")
+                tryVerify(()=>panel.width>0 && panel.width<editor.width && panel.height>0 && panel.height<editor.height && panel.x>=0 && panel.x+panel.width<=editor.width)
+                if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-scalar-dimming.png")
+                inspector.scalarControl=2;command(inputManager.confirm)
+                compare(editor.session.changeCount,1)
+                compare(editor.session.document.composition.background.dim,.25)
+                const custom=document()
+                scalarField("dim",true).changeScalar(.25,true)
+                command(inputManager.back);settle();compare(document(),custom)
+                verify(editor.session.undo());compare(document(),before)
+                compare(studioFixture.disk(),diskBaseline)
+            })
+        }
+        function test_scalar_corner_presets_and_custom_value_preservation() {
+            scenario("scalar-corners",()=>{
+                givenPage(false,false)
+                verify(editor.session.execute("patch",{id:"cell-0",value:{presentation:{radius:23}}}))
+                const before=document(),history=editor.session.changeCount
+                const inspector=scalarField("radius",false)
+                compare(inspector.scalarDraft,23) // Opening never snaps an existing custom value.
+                compare(findChild(inspector,"studioScalarSlider").value,23)
+                compare(document(),before)
+                command(inputManager.navigateDown);command(inputManager.confirm)
+                compare(inspector.scalarDraft,0)
+                command(inputManager.navigateRight);command(inputManager.confirm)
+                compare(inspector.scalarDraft,22)
+                command(inputManager.navigateRight);command(inputManager.confirm)
+                compare(inspector.scalarDraft,100)
+                settle();compare(document(),before)
+                const panel=findChild(inspector,"studioScalarPanel")
+                tryVerify(()=>panel.width>0 && panel.width<editor.width && panel.height>0 && panel.height<editor.height && panel.x>=0 && panel.x+panel.width<=editor.width)
+                if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-scalar-corners.png")
+                inspector.scalarControl=3;command(inputManager.confirm)
+                compare(editor.session.changeCount,history+1)
+                compare(editor.current.presentation.radius,100)
+                verify(editor.session.undo());compare(document(),before)
+                compare(studioFixture.disk(),diskBaseline)
+            })
+        }
     }
 }

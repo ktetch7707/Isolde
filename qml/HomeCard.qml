@@ -29,6 +29,9 @@ Item {
     readonly property color surfaceInk: root.style.surfaceColor || root.appearance.surfaceColor || "#28262F"
     readonly property bool customLabel:style.labelPosition!==undefined
     readonly property bool interactive:item.componentType!=="image" || !!item.action
+    // Geometry comes from the rendered surface, including the orb's own diameter.
+    // Editors can retain this outline when the authored body is transparent.
+    readonly property var focusFrame:kind==="orb" ? orb.focusFrame : ({x:surface.x-3*unit,y:surface.y-3*unit,width:surface.width+6*unit,height:surface.height+6*unit,radius:surface.radius+3*unit,color:style.focusColor || selColor,lineWidth:Math.max(2,style.focusWidth===undefined?3:style.focusWidth)*unit})
     Accessible.role:interactive?Accessible.Button:Accessible.Graphic
     Accessible.name:(item.accessibility || {}).name || title
     Accessible.description:(item.accessibility || {}).hint || item.unavailableReason || ""
@@ -89,7 +92,7 @@ Item {
         visible: root.kind === "recent"; x: 0; y: surface.height + 22*root.unit; width: parent.width
         text: root.style.subtitle || ""; color: root.muted; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: 11*root.textScale; elide: Text.ElideRight
     }
-    OrbCard { anchors.fill: parent;enabled:root.interactive; visible: root.kind === "orb"; item: root.item; style: root.style; appearance: root.appearance; unit: root.unit; selected: root.selected; onActivated: root.activated() }
+    OrbCard { id:orb;anchors.fill: parent;enabled:root.interactive; visible: root.kind === "orb"; item: root.item; style: root.style; appearance: root.appearance; unit: root.unit; selected: root.selected; onActivated: root.activated() }
     Rectangle {
         objectName: "resumeTrack"
         visible: root.kind === "media" && root.style.progress !== undefined

@@ -56,7 +56,7 @@ QVariantList HomeLayout::skins() const {
     QVariantList result{
         QVariantMap{{"id", "builtin-default"}, {"name", tr("Isolde default")}, {"builtIn", true}, {"description", tr("The original Home layout")}},
         QVariantMap{{"id", "builtin-lounge"}, {"name", tr("Cinema lounge")}, {"builtIn", true}, {"description", tr("Dark reference design · sample artwork and cards")}},
-        QVariantMap{{"id", "builtin-pastel"}, {"name", tr("Pastel sky")}, {"builtIn", true}, {"description", tr("Cloud wallpaper, glass panels, circular launchers · sample cards")}}
+        QVariantMap{{"id", "builtin-pastel"}, {"name", tr("Pastel sky")}, {"builtIn", true}, {"description", tr("Cloud wallpaper, glass panels, installed apps and Kodi viewing history")}}
     };
     const QDir directory(skinDirectory());
     for (const auto &file : directory.entryList({"*.json"}, QDir::Files, QDir::Name)) {

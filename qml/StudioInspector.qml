@@ -37,8 +37,19 @@ Item {
     property var pickerThemeColors:[]
     readonly property var colorPicker:colorLoader.item
     property bool colorTransactionActive:false
-    onSessionChanged:{recentColors=[];colorTransactionActive=false;if(colorPicker)colorPicker.previewQueued=false;if(colorLoader)colorLoader.active=false}
-    onVisibleChanged:if(!visible && colorTransactionActive)cancelColor()
+    property bool scalarTransactionActive:false
+    readonly property bool previewActive:colorTransactionActive || scalarTransactionActive
+    property real scalarDraft:0
+    property real scalarOriginal:0
+    property bool scalarPending:false
+    property bool scalarResetChoice:false
+    property int scalarControl:0
+    property int scalarPreset:0
+    property var scalarAppearance:({})
+    readonly property real scalarUnit:Math.min(width/1280,height/720)*(scalarAppearance.typographyScale || 1)
+    readonly property int scalarActionBase:(activeField.presets || []).length?2:1
+    onSessionChanged:{recentColors=[];colorTransactionActive=false;scalarTransactionActive=false;scalarPending=false;if(colorPicker)colorPicker.previewQueued=false;if(colorLoader)colorLoader.active=false}
+    onVisibleChanged:if(!visible){if(colorTransactionActive)cancelColor();if(scalarTransactionActive)cancelScalar()}
     property string returnView:"fields"
     property int returnSelection:0
     property int keyboardSelection:0
@@ -46,7 +57,7 @@ Item {
     readonly property var targets:!page?[]:structureType?((structureType==="section"?page.categories:page.composition.navigation) || []).filter(i=>i.id===structureId).map(i=>Object.assign({},i,{componentType:structureType})):(page.items || []).filter(i=>selectedIds.indexOf(i.id)>=0)
     readonly property var current:targets[0] || null
     readonly property var actions:session?session.availableActions:[]
-    readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app")
+    readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop"))
     readonly property var fields:((options.inspector || {})[pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !f.advanced) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (pageMode || targets.length && targets.every(i=>(!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0) && (!f.families || f.families.indexOf(i.family)>=0))))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     readonly property real panelWidth:Math.min(width-48*unit,540*unit)
@@ -66,7 +77,9 @@ Item {
         return f.scope==="accessibility"?(item.accessibility || {})[f.key]:item[f.key]
     }
     function effective(item,f){
-        const value=local(item || {},f);if(value!==undefined)return value
+        item=item || {}
+        if(!page)return f.fallback!==undefined?f.fallback:""
+        const value=local(item,f);if(value!==undefined)return value
         if(pageMode){if(f.scope==="theme")return page.appearance[f.key];if(f.scope==="background")return (options.backgroundDefaults || {})[f.key]}
         else if(f.scope==="presentation"){
             const p=item.presentation || {};if(editingState!=="base" && p[f.key]!==undefined)return p[f.key]
@@ -90,13 +103,54 @@ Item {
         if(["geometry","layout","children","apps","order","crop","grid","header","typography"].indexOf(f.type)>=0)return "Open…"
         if(f.type==="toggle" || f.type==="scrolling")return value?"On":"Off"
         if(f.type==="color")return local(current || {},f)===undefined?"Theme":"Custom"
+        if(f.control==="slider")return Number((Number(value)*(f.displayScale || 1)).toFixed(2))+String(f.displayUnit || "")+(local(current || {},f)===undefined?" · Theme":"")
         const members=pageMode?[{}]:targets,overridden=members.filter(i=>local(i,f)!==undefined).length
         return String(value===undefined?"":value)+(overridden===0?" · Inherited":overridden===members.length?" · Override":" · Mixed overrides")
     }
     function run(op,args){
-        const success=colorTransactionActive?session.previewCommand(op,args,pageId):session.execute(op,args,pageId)
+        const success=previewActive?session.previewCommand(op,args,pageId):session.execute(op,args,pageId)
         if(!success){message=session.errorString;if(colorTransactionActive)colorPicker.error=message;return false}
-        message=colorTransactionActive?"":"Draft updated · nothing applied.";return true
+        message=previewActive?"":"Draft updated · nothing applied.";return true
+    }
+    function scalarText(value){return Number((value*(activeField.displayScale || 1)).toFixed(2))+String(activeField.displayUnit || "")}
+    function beginScalar(){
+        scalarOriginal=Number(effective(current,activeField));scalarDraft=scalarOriginal
+        scalarAppearance=Object.assign({},appearance);scalarPending=false;scalarResetChoice=false;scalarControl=0;scalarPreset=0;scalarTransactionActive=true;view="scalar";message=""
+    }
+    function changeScalar(value,reset){
+        if(!reset && (!Number.isFinite(value) || value<activeField.min || value>activeField.max)){message="Choose a value within the slider range.";return false}
+        if(!reset)scalarDraft=value
+        scalarResetChoice=reset;message=""
+        if(!scalarPending){scalarPending=true;Qt.callLater(flushScalar)}
+        return true
+    }
+    function flushScalar(){
+        if(!scalarPending || !scalarTransactionActive)return
+        scalarPending=false
+        if(set(activeField,scalarDraft,scalarResetChoice) && scalarResetChoice)Qt.callLater(()=>{
+            if(!scalarTransactionActive || !scalarResetChoice)return
+            if(pageMode && activeField.scope==="theme")scalarDraft=Number(page.appearance[activeField.key])
+            else if(pageMode && activeField.scope==="background")scalarDraft=Number((page.composition.background || {})[activeField.key]===undefined?(options.backgroundDefaults || {})[activeField.key]:(page.composition.background || {})[activeField.key])
+            else scalarDraft=Number(effective(current,activeField))
+        })
+    }
+    function cancelScalar(){scalarPending=false;if(session)session.cancelPreview();scalarTransactionActive=false;view="fields";selected=returnSelection;message=""}
+    function acceptScalar(){flushScalar();if(message)return;if(session.proposalModel && !session.acceptPreview()){message=session.errorString;return}scalarTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied."}
+    function scalarCommand(command){
+        if(command===inputManager.back){cancelScalar();return}
+        const direction=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
+        if(scalarControl===0 && direction){const next=Math.round((scalarDraft+direction*activeField.step)*10000)/10000;if(next>=activeField.min && next<=activeField.max)changeScalar(next,false);return}
+        if(scalarControl===1 && scalarActionBase===2 && direction){scalarPreset=Math.max(0,Math.min(activeField.presets.length-1,scalarPreset+direction));return}
+        if(direction && scalarControl>=scalarActionBase && scalarControl<=scalarActionBase+2){scalarControl=Math.max(scalarActionBase,Math.min(scalarActionBase+2,scalarControl+direction));return}
+        if(command===inputManager.navigateDown)scalarControl=Math.min(scalarActionBase+3,scalarControl+1)
+        else if(command===inputManager.navigateUp)scalarControl=Math.max(0,scalarControl-1)
+        else if(command===inputManager.confirm){
+            if(scalarControl===1 && scalarActionBase===2)changeScalar(activeField.presets[scalarPreset].value,false)
+            else if(scalarControl===scalarActionBase)changeScalar(scalarDraft,true)
+            else if(scalarControl===scalarActionBase+1)acceptScalar()
+            else if(scalarControl===scalarActionBase+2)cancelScalar()
+            else if(scalarControl===scalarActionBase+3)beginKeyboard("scalarNumber",scalarDraft*(activeField.displayScale || 1))
+        }
     }
     function beginColor(){
         pickerAppearance=Object.assign({},appearance)
@@ -146,6 +200,7 @@ Item {
     function activateField(f){
         if(targets.length>1 && ["geometry","layout","children","apps","order","grid"].indexOf(f.type)>=0){message="Choose one component for this structural operation. Shared appearance and links can edit all selected items.";return}
         activeField=f;returnSelection=selected
+        if(f.type==="number" && f.control==="slider"){beginScalar();return}
         if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
         if(f.type==="toggle"){adjust(f,1);return}
         if(f.type==="choice"){openChoices(f.choices.map(value=>({name:value,value:value})));return}
@@ -162,7 +217,7 @@ Item {
         if(f.type==="header"){openChoices((options.headerChoices || []).map(entry=>({name:entry.name,value:entry.value})));return}
         if(f.type==="tab"){openChoices((page.composition.navigation || []).map(t=>({name:t.name,value:t.id})));return}
         if(f.type==="layout"){layoutDraft=Object.assign({},current.presentation.layout);view="layout";selected=0;return}
-        if(f.type==="apps"){const ids=new Set(selectedIds);appSelection=(page.items || []).filter(i=>ids.has(i.parentId) && i.appId).map(i=>i.appId);view="apps";selected=0;message="Choosing apps replaces this bar's contents as one undoable change.";return}
+        if(f.type==="apps"){const ids=new Set(selectedIds);appSelection=current.appCollection?(current.appCollection.ids || []).slice():(page.items || []).filter(i=>ids.has(i.parentId) && i.appId).map(i=>i.appId);view="apps";selected=0;message="Choosing apps replaces this bar's contents as one undoable change.";return}
         if(f.type==="visibility"){run("batch",{commands:targets.map(i=>({operation:"state",arguments:{id:i.id,key:"hidden",value:!current.hidden},pageId:pageId}))});return}
         if(f.type==="lock"){run("batch",{commands:targets.map(i=>({operation:"state",arguments:{id:i.id,key:"locked",value:!current.locked},pageId:pageId}))});return}
         operation(f.type)
@@ -179,7 +234,7 @@ if(view==="colorWheel")return ["Back"]
         if(view==="crop")return ["Fit: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFit",fallback:"cover"}),"Focal X: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalX",fallback:.5}),"Focal Y: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalY",fallback:.5}),"Zoom: "+effective(current,{scope:pageMode?"background":"presentation",key:"artZoom",fallback:1}),"Pixel crop…","Use full artwork","Back"]
         if(view==="pixelCrop")return ["Left: "+cropDraft.x,"Top: "+cropDraft.y,"Width: "+cropDraft.width,"Height: "+cropDraft.height,"Use this crop","Cancel"]
         if(view==="layout")return ["Layout: "+layoutDraft.mode,"Columns: "+layoutDraft.columns,"Rows: "+layoutDraft.rows,"Gap: "+layoutDraft.gap,"Padding: "+layoutDraft.padding,"Visible columns: "+(layoutDraft.visibleColumns || layoutDraft.columns),"Wrap navigation: "+(layoutDraft.wrap?"On":"Off"),"Use this arrangement","Cancel"]
-        if(view==="apps")return ["Use "+appSelection.length+" apps"].concat(apps.map(a=>(appSelection.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
+        if(view==="apps")return ["All installed apps","Use "+appSelection.length+" selected apps"].concat(apps.map(a=>(appSelection.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
         if(view==="states")return ["base","normal","focused","selected","pressed","disabled","unavailable"]
         return []
     }
@@ -225,8 +280,8 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             adjustLayout(1);return
         }
         if(view==="apps"){
-            if(selected===0){if(run("setApps",{id:current.id,apps:appSelection})){view="fields";selected=returnSelection}return}
-            const id=apps[selected-1].action.appId,next=appSelection.slice(),index=next.indexOf(id);if(index>=0)next.splice(index,1);else if(next.length<16)next.push(id);else{message="Choose up to 16 apps.";return}appSelection=next
+            if(selected<=1){if(run("setApps",{id:current.id,mode:selected===0?"all":"selected",apps:appSelection})){view="fields";selected=returnSelection}return}
+            const id=apps[selected-2].action.appId,next=appSelection.slice(),index=next.indexOf(id);if(index>=0)next.splice(index,1);else if(next.length<128)next.push(id);else{message="Choose up to 128 apps.";return}appSelection=next
         }
     }
     function cropField(index){return {scope:pageMode?"background":"presentation",key:["artFit","artFocalX","artFocalY","artZoom"][index],fallback:index===0?"cover":index===3?1:.5,min:index===3?1:0,max:index===3?8:1,step:index===3?.1:.05,type:index===0?"choice":"number"}}
@@ -238,6 +293,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         layoutDraft=next
     }
     function handleCommand(command){
+        if(view==="scalar"){scalarCommand(command);return}
         if(view==="colorWheel"){colorPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
@@ -247,6 +303,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(command===inputManager.menu && view==="fields" && fields[selected]){reset(fields[selected]);return}
         if(command===inputManager.confirm){activate();return}
         const direction=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
+        if(direction && view==="fields" && fields[selected] && fields[selected].control==="slider"){activeField=fields[selected];returnSelection=selected;beginScalar();scalarCommand(command);return}
         if(direction && view==="fields" && fields[selected] && ["number","toggle"].indexOf(fields[selected].type)>=0){adjust(fields[selected],direction);return}
         if(direction && view==="crop" && selected>0 && selected<4){adjust(cropField(selected),direction);return}
         if(direction && view==="layout" && selected<7){adjustLayout(direction);return}
@@ -282,14 +339,76 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         } }
     }
     Image {id:assetProbe;visible:false;source:root.pageMode && root.page?root.page.wallpaperSource:root.current?root.current.logoSource || "":""}
+    Loader {
+        anchors.fill:parent;active:root.scalarTransactionActive;visible:root.view==="scalar";z:10
+        sourceComponent:Component { Item { Rectangle {
+            objectName:"studioScalarPanel"
+            readonly property real uiScale:Math.min(root.width/1280,root.height/720)
+            width:Math.min(root.width-32*uiScale,500*uiScale);height:scalarBody.implicitHeight+36*uiScale
+            x:root.roomLeft?root.selectionRect.x-width-24*uiScale:root.roomRight?root.selectionRect.x+root.selectionRect.width+24*uiScale:root.width-width-24*uiScale
+            y:Math.max(16*uiScale,(root.height-height)/2)
+            color:root.scalarAppearance.surfaceColor;radius:16*uiScale;border.width:2;border.color:root.scalarAppearance.focusColor
+            Column {
+                id:scalarBody;x:18*parent.uiScale;y:18*parent.uiScale;width:parent.width-36*parent.uiScale;spacing:14*parent.uiScale
+                Text {width:parent.width;text:root.activeField.label;elide:Text.ElideRight;color:root.scalarAppearance.textColor;font.pixelSize:24*root.scalarUnit;font.bold:true}
+                Text {text:"Before "+root.scalarText(root.scalarOriginal)+"   →   "+(root.scalarResetChoice?"Theme · ":"")+root.scalarText(root.scalarDraft);color:root.scalarAppearance.textColor;font.pixelSize:22*root.scalarUnit}
+                Slider {
+                    id:scalarSlider;objectName:"studioScalarSlider";width:parent.width;height:38*root.scalarUnit
+                    from:root.activeField.min || 0;to:root.activeField.max || 1;stepSize:root.activeField.step || 1;snapMode:Slider.SnapAlways;value:root.scalarDraft
+                    Accessible.name:root.activeField.label
+                    onMoved:{root.scalarControl=0;root.changeScalar(Number(value.toFixed(4)),false)}
+                    background:Rectangle {x:scalarSlider.leftPadding;y:(scalarSlider.height-height)/2;width:scalarSlider.availableWidth;height:6*root.scalarUnit;radius:height/2;color:root.scalarAppearance.mutedColor;Rectangle {width:parent.width*scalarSlider.visualPosition;height:parent.height;radius:parent.radius;color:root.scalarAppearance.focusColor}}
+                    handle:Rectangle {x:scalarSlider.leftPadding+scalarSlider.visualPosition*(scalarSlider.availableWidth-width);y:(scalarSlider.height-height)/2;width:22*root.scalarUnit;height:width;radius:width/2;color:root.scalarAppearance.focusColor;border.width:root.scalarControl===0?3:1;border.color:root.scalarAppearance.textColor}
+                }
+                Row {
+                    width:parent.width
+                    Text {width:parent.width/2;text:root.scalarText(root.activeField.min || 0);color:root.scalarAppearance.mutedColor;font.pixelSize:15*root.scalarUnit}
+                    Text {width:parent.width/2;horizontalAlignment:Text.AlignRight;text:root.scalarText(root.activeField.max || 1);color:root.scalarAppearance.mutedColor;font.pixelSize:15*root.scalarUnit}
+                }
+                Row {
+                    visible:!!root.activeField.presets;spacing:8*root.scalarUnit
+                    Repeater {
+                        model:root.activeField.presets || []
+                        delegate:Button {
+                            required property var modelData;required property int index
+                            width:(scalarBody.width-16*root.scalarUnit)/3;height:44*root.scalarUnit;text:modelData.name
+                            onClicked:{root.scalarControl=1;root.scalarPreset=index;root.changeScalar(modelData.value,false)}
+                            background:Rectangle {radius:Math.min(14*root.scalarUnit,parent.modelData.value*root.scalarUnit/4);color:root.scalarAppearance.selectedColor;border.width:root.scalarControl===1 && root.scalarPreset===parent.index?3:root.scalarDraft===parent.modelData.value?2:1;border.color:root.scalarAppearance.focusColor}
+                            contentItem:Text {text:parent.text;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter;color:root.scalarAppearance.textColor;font.pixelSize:16*root.scalarUnit}
+                        }
+                    }
+                }
+                Text {visible:!!root.message;width:parent.width;text:root.message;wrapMode:Text.Wrap;color:root.scalarAppearance.textColor;font.pixelSize:16*root.scalarUnit}
+                Row {
+                    spacing:8*root.scalarUnit
+                    Repeater {
+                        model:["Reset to theme","Done","Cancel"]
+                        delegate:Button {
+                            required property string modelData;required property int index
+                            objectName:"studioScalarAction-"+index;width:(scalarBody.width-16*root.scalarUnit)/3;height:44*root.scalarUnit;text:modelData
+                            onClicked:{root.scalarControl=index+root.scalarActionBase;root.scalarCommand(inputManager.confirm)}
+                            background:Rectangle {radius:7*root.scalarUnit;color:root.scalarAppearance.selectedColor;border.width:root.scalarControl===parent.index+root.scalarActionBase?2:0;border.color:root.scalarAppearance.focusColor}
+                            contentItem:Text {text:parent.text;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter;color:root.scalarAppearance.textColor;font.pixelSize:15*root.scalarUnit}
+                        }
+                    }
+                }
+                Button {
+                    objectName:"studioScalarExact";width:parent.width;height:36*root.scalarUnit;text:"Exact value…"
+                    onClicked:{root.scalarControl=root.scalarActionBase+3;root.scalarCommand(inputManager.confirm)}
+                    background:Rectangle {color:"transparent";radius:5*root.scalarUnit;border.width:root.scalarControl===root.scalarActionBase+3?2:0;border.color:root.scalarAppearance.focusColor}
+                    contentItem:Text {text:parent.text;color:root.scalarAppearance.textColor;font.pixelSize:16*root.scalarUnit;verticalAlignment:Text.AlignVCenter}
+                }
+            }
+        } } }
+    }
     Rectangle {
-        visible:root.collapsed;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:24*root.unit
+        visible:root.collapsed && !root.previewActive;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:24*root.unit
         width:Math.min(parent.width-48,440*root.unit);height:64*root.unit;radius:12*root.unit;color:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor
         Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:12*root.unit;text:"Show controls · selection stays full size";color:root.appearance.textColor;font.pixelSize:19*root.unit;wrapMode:Text.Wrap}
         MouseArea {anchors.fill:parent;onClicked:{root.controlsShown=true;root.hiddenControls=false}}
     }
     Rectangle {
-        id:panel;visible:!root.collapsed && root.view!=="keyboard" && root.view!=="colorWheel";width:root.panelWidth;height:root.panelHeight
+        id:panel;visible:!root.collapsed && root.view!=="keyboard" && root.view!=="colorWheel" && root.view!=="scalar";width:root.panelWidth;height:root.panelHeight
         x:root.roomRight?root.selectionRect.x+root.selectionRect.width+24*root.unit:root.roomLeft?root.selectionRect.x-width-24*root.unit:(parent.width-width)/2
         y:Math.max(24*root.unit,Math.min(parent.height-height-24*root.unit,root.selectionRect?root.selectionRect.y:(parent.height-height)/2))
         radius:18*root.unit;color:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor
@@ -299,13 +418,15 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:detailText;width:parent.width;text:root.view==="fields"?root.tabs[root.tab]+" · "+root.contrast():root.view==="tabs"?"Choose what to edit":root.view;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:statusText;width:parent.width;text:root.current && root.current.unavailableReason?root.current.unavailableReason+" · Change its source or On select link.":root.message;color:root.appearance.mutedColor;font.pixelSize:16*root.unit;wrapMode:Text.Wrap;maximumLineCount:3;elide:Text.ElideRight}
             ListView {
-                id:list;width:parent.width;height:Math.max(48*root.unit,parent.height-titleText.height-detailText.height-statusText.height-footerText.height-4*parent.spacing);clip:true;spacing:5*root.unit;currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange
+                id:list;objectName:"studioInspectorFields";width:parent.width;height:Math.max(48*root.unit,parent.height-titleText.height-detailText.height-statusText.height-footerText.height-4*parent.spacing);clip:true;spacing:5*root.unit;currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
                 model:root.labels()
+                // A model reset can reset ListView currentIndex to zero; restore the remote field origin.
+                onModelChanged:Qt.callLater(()=>{list.currentIndex=Qt.binding(()=>root.selected);list.positionViewAtIndex(root.selected,ListView.Contain)})
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     readonly property var rowField:root.view==="fields" && root.tabs[root.tab]!=="More"?root.fields[index]:null
                     width:list.width;height:48*root.unit;radius:8*root.unit;color:index===root.selected?root.appearance.selectedColor:"transparent";border.width:index===root.selected?2:0;border.color:root.appearance.focusColor
-                    Text {visible:!scrollCheckbox.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;anchors.rightMargin:colorSample.visible?48*root.unit:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;elide:Text.ElideRight}
+                    Text {visible:!scrollCheckbox.visible && !propertySwitch.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;anchors.rightMargin:colorSample.visible?48*root.unit:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;elide:Text.ElideRight}
                     Rectangle {id:colorSample;visible:!!parent.rowField && parent.rowField.type==="color";anchors.right:parent.right;anchors.rightMargin:12*root.unit;anchors.verticalCenter:parent.verticalCenter;width:26*root.unit;height:width;radius:5*root.unit;color:visible?root.effective(root.current,parent.rowField):"transparent";border.width:1;border.color:root.appearance.textColor}
                     CheckBox {
                         id:scrollCheckbox;objectName:"studioScrollingCheckbox";anchors.fill:parent;visible:!!parent.rowField && parent.rowField.type==="scrolling"
@@ -315,8 +436,24 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                         contentItem:Text {text:scrollCheckbox.text;leftPadding:44*root.unit;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font:scrollCheckbox.font;elide:Text.ElideRight}
                         onClicked:{root.selected=index;root.activateField(parent.rowField)}
                     }
-                    Accessible.role:Accessible.Button;Accessible.name:modelData
-                    MouseArea {anchors.fill:parent;enabled:!scrollCheckbox.visible;onClicked:{root.selected=index;root.activate()}}
+                    Switch {
+                        id:propertySwitch
+                        objectName:"studioSwitch-"+(parent.rowField?parent.rowField.key:"")
+                        anchors.fill:parent;visible:!!parent.rowField && parent.rowField.type==="toggle"
+                        checkable:true;checked:visible && root.effective(root.current,parent.rowField)===true
+                        text:visible?parent.rowField.label:"";Accessible.name:text;Accessible.checkable:true;Accessible.checked:checked
+                        indicator:Rectangle {
+                            x:propertySwitch.width-width-12*root.unit;anchors.verticalCenter:parent.verticalCenter
+                            width:48*root.unit;height:26*root.unit;radius:height/2
+                            color:propertySwitch.checked?root.appearance.focusColor:root.appearance.surfaceColor
+                            border.width:1;border.color:root.appearance.mutedColor
+                            Rectangle {width:18*root.unit;height:width;radius:width/2;y:4*root.unit;x:(propertySwitch.checked?26:4)*root.unit;color:propertySwitch.checked?root.appearance.surfaceColor:root.appearance.textColor}
+                        }
+                        contentItem:Text {text:propertySwitch.text;leftPadding:10*root.unit;rightPadding:72*root.unit;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font.pixelSize:18*root.unit;font.family:root.appearance.fontFamily || "DejaVu Sans";elide:Text.ElideRight}
+                        onClicked:{root.selected=index;root.activateField(parent.rowField);checked=Qt.binding(()=>propertySwitch.visible && root.effective(root.current,propertySwitch.parent.rowField)===true)}
+                    }
+                    Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.ignored:scrollCheckbox.visible || propertySwitch.visible
+                    MouseArea {anchors.fill:parent;enabled:!scrollCheckbox.visible && !propertySwitch.visible;onClicked:{root.selected=index;root.activate()}}
                 }
             }
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:footerText;width:parent.width;text:root.collapseNeeded?"Confirm edits · Back returns":"Adjust · Menu resets · Back returns";color:root.appearance.mutedColor;font.pixelSize:14*root.unit;wrapMode:Text.Wrap}
@@ -327,8 +464,13 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
     StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="choices";onPicked:action=>{if(root.set(root.activeField,action,false)){root.view="fields";root.selected=root.returnSelection}}}
     OnScreenKeyboard {
         id:keyboard;objectName:"inspectorKeyboard";anchors.fill:parent;visible:root.view==="keyboard";appearance:root.appearance;hint:root.message
-        onCanceled:{root.view=root.returnView;root.selected=root.keyboardSelection}
+        onCanceled:{root.view=root.returnView;root.selected=root.keyboardSelection;if(root.keyboardKind==="scalarNumber")root.message=""}
         onAccepted:text=>{
+            if(root.keyboardKind==="scalarNumber"){
+                const value=Number(text)/(root.activeField.displayScale || 1)
+                if(!text.trim() || !Number.isFinite(value) || value<root.activeField.min || value>root.activeField.max || root.activeField.step>=1 && !Number.isInteger(value)){root.message="Choose a value within the slider range.";return}
+                root.view="scalar";root.changeScalar(value,false);return
+            }
             if(root.keyboardKind==="color"){
                 if(!/^#[0-9a-fA-F]{6}$/.test(text)){root.message="Use # followed by six hexadecimal digits.";return}
                 root.view="colorWheel";colorPicker.choose(text);return

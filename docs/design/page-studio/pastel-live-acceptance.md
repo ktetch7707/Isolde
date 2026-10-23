@@ -4,7 +4,7 @@ User acceptance criteria, 2026-10-21:
 
 > Isolde home displays the pastel skin with an app carousel containing real apps and a recently watched carousel with the seeded recently watched videos.
 
-This is an installed Home acceptance gate for T21.6/T21.7, packaged preset adoption and T24.2. Seeded data, a Studio preview, passing bridge queries or a similar-looking screenshot alone do not satisfy it. Status: **NOT MET**; no new completion credit.
+This is an installed Home acceptance gate for T21.6/T21.7, packaged preset adoption and T24.2. Seeded data, a Studio preview, passing bridge queries or a similar-looking screenshot alone do not satisfy it. Status: **PARTIAL — installed display/playback evidenced; complete interaction gate OPEN**. No new completion credit.
 
 ## Required result
 
@@ -15,10 +15,10 @@ This is an installed Home acceptance gate for T21.6/T21.7, packaged preset adopt
 5. **Live behavior and editing:** After playing/stopping a seeded video, the row reflects Kodi's updated history/progress on refresh without hand-editing the layout. Include a test where viewing order differs from date-added order. Both rows support remote navigation, overflow, launch/playback and exact focus return. In Studio each row is selectable/configurable as one carousel and remains visually faithful to Home. Editing membership, count/capacity, placement and appearance uses validated data and existing Undo/Apply behavior.
 6. **Persistence and proof:** After explicit Apply, restart the same installed release and confirm the pastel Home and both live collections remain. Record installed source/release identity, profile, screenshots of normal Home, persisted component/source definitions, actual registry IDs, Kodi query results and remote launch/playback/return results. Inspect screenshots explicitly. Preserve the existing fixture, atomicity, profile-isolation and offline gates; neither this acceptance statement nor seed setup closes them.
 
-## Current gap, verified by source inspection
+## Installed checkpoint (2026-10-22)
 
-- `config/skins/pastel.json` still contains authored illustration cards for the recent category; those are not a history collection.
-- `src/media/KodiMedia.cpp` maps `recent` to `dateadded`; `continue` filters in-progress items. Neither implements the full Recently watched requirement above.
+- Release `a72852697c1f50e138161a63` passed 18/18 suites and both visual save/reset journeys, then was explicitly applied in Studio Demo. Normal Home displays the live app collection and all six actual viewed movies; never-watched entries are excluded. Real playback/Back restores the same movie after Kodi moves it to the front. Spotify's actual desktop client launches.
+- [Implementation, evidence and remaining gaps](../../studio-live-carousels-2026-10-21.md) records captures, source/release identity, persisted collection definitions and query results. Native Spotify Home-key return is not passing. Restart exposed a shelf startup-error race; its bounded recovery follow-up is under verification. The complete interaction/persistence gate remains OPEN.
 - The separate Studio Demo library is ready: eight movies, two shows/six episodes, local artwork, watched state and resume points. Its bridge-query checks establish the data prerequisite only. See [demo setup/evidence](../../studio-demo-library.md).
 
 Implement the missing real collection/preset behavior through the existing generic component/provider pipeline. Keep T21.6/T21.7 open until their full contracts pass, including any separately blocked app-provider integration. This local installed gate does not require claiming streaming-service watch-history access.

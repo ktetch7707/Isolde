@@ -31,10 +31,11 @@ During development, run the relevant small suite; run `studio` after a complete 
 
 | Suite | Implementation | Checks |
 | --- | --- | --- |
-| `studio_quick` | Qt Quick Test; `tests/studio/tst_editor.qml` | Ten real QML scenarios below, remote commands and actual pointer input |
+| `studio_quick` | Qt Quick Test; `tests/studio/tst_editor.qml` | Thirteen real QML scenarios below, remote commands and actual pointer input |
+| `studio_selection` | Qt Quick Test; `tests/studio/tst_selection.qml` | Three scenarios for authored selection geometry/persistence, transparent recovery and pointer/remote switch parity; newly added, execution pending VM capacity |
 | `studio_unit` | Existing Qt Test component executable, seven selected functions | Draft/history bounds, atomic failure/rollback, profile scope, collision parity, bounded cascades, scrolling persistence and home protection |
 | `studio_behavior` | Existing Qt Test navigation executable, four selected functions | Remote draft/apply/cancel, gestures/collisions/anchors, section transfer/cancel and long-page Add/move/cancel/runtime visibility |
-| `studio` | Three suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
+| `studio` | Four suites above | Builds only their three test executables; excludes unrelated navigation and Kodi journeys |
 
 The complete existing suites remain registered. These additional focused registrations deliberately reuse tested functions instead of copying their code. Full CTest includes both focused and broad registrations; a focused pass is not a substitute for full integration coverage.
 
@@ -54,6 +55,9 @@ These are Qt tests with readable Given/When/Then contracts, **not a Cucumber ins
 | `color_wheel_pointer_remote_parity_and_cancel` | A custom wheel | Select red/cyan by actual pointer input and equivalent remote input | Expected distinct colors, identical authored document, pending changes cancel safely |
 | `page_color_reset_removes_override_and_is_undoable` | A custom text color | Preview Reset to theme and accept | Removes the override once; Undo restores it |
 | `exact_color_validation_keeps_preview_private` | Optional exact input | Submit invalid then valid RGB | Invalid text refused; valid color previews without saving; Cancel restores |
+| `scalar_remote_cancel_pointer_commit_and_parity` | Opacity slider | Reach endpoints by remote/pointer, cancel or accept | Percentage display, exact canonical parity, one edit and no disk writes |
+| `scalar_exact_percent_preview_and_reset` | Page dimming | Open optional exact input during pending preview, reject invalid values, cancel/reset | Percentage conversion, private transaction, exact cancellation and undo |
+| `scalar_corner_presets_and_custom_value_preservation` | An existing custom corner value | Open slider, choose named presets by remote and accept | No snap on open, context fits viewport, one accepted edit and exact Undo |
 
 ## Adding tests
 

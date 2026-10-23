@@ -18,8 +18,8 @@ Item {
     property string keyboardReturn:""
     readonly property var families:options.catalog || []
     readonly property var actions:(session?session.availableActions:[]).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])
-    readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app")
-    readonly property var mediaChoices:[{name:"Movies · All",kind:"movies",view:"all"},{name:"Movies · Recently added",kind:"movies",view:"recent"},{name:"Movies · Continue watching",kind:"movies",view:"continue"},{name:"Shows · All",kind:"shows",view:"all"},{name:"Shows · Recently added",kind:"shows",view:"recent"},{name:"Shows · Continue watching",kind:"shows",view:"continue"}].concat(actions.filter(a=>a.action && a.action.type==="open-collection").map(a=>({name:a.name,kind:a.mediaKind || "movies",view:"collection",value:a.action.collectionId})))
+    readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop"))
+    readonly property var mediaChoices:[{name:"Movies · All",kind:"movies",view:"all"},{name:"Movies · Recently watched",kind:"movies",view:"watched"},{name:"Movies · Recently added",kind:"movies",view:"recent"},{name:"Movies · Continue watching",kind:"movies",view:"continue"},{name:"Shows · All",kind:"shows",view:"all"},{name:"Shows · Recently watched",kind:"shows",view:"watched"},{name:"Shows · Recently added",kind:"shows",view:"recent"},{name:"Shows · Continue watching",kind:"shows",view:"continue"}].concat(actions.filter(a=>a.action && a.action.type==="open-collection").map(a=>({name:a.name,kind:a.mediaKind || "movies",view:"collection",value:a.action.collectionId})))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     signal picked(string type,var configuration)
     signal canceled()
@@ -28,7 +28,7 @@ Item {
         if(view==="widgets")return ["Clock","Text / heading","Section / Group","Input slots · eight editable positions, capture availability required"]
         if(view==="links")return ["None · no action"].concat(actions.map(a=>a.name))
         if(view==="media")return mediaChoices.map(m=>m.name)
-        if(view==="apps")return ["Use "+selectedApps.length+" selected apps"].concat(apps.map(a=>(selectedApps.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
+        if(view==="apps")return ["All installed apps","Use "+selectedApps.length+" selected apps"].concat(apps.map(a=>(selectedApps.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
         if(view==="carousel")return ["Start with three editable buttons · links are unassigned","Start with an empty carousel"]
         if(view==="artwork")return ["Import a local PNG / JPEG…"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
         return []
@@ -50,9 +50,10 @@ Item {
         if(view==="carousel"){if(selected===0)configuration={buttons:options.carouselStart || []};finish("carousel");return}
         if(view==="media"){const source=mediaChoices[selected];configuration={presentation:{libraryKind:source.kind,libraryView:source.view,libraryValue:source.value || ""}};finish("library");return}
         if(view==="apps"){
-            if(selected===0){configuration={apps:selectedApps};finish("app-bar");return}
-            const id=apps[selected-1].action.appId,next=selectedApps.slice(),index=next.indexOf(id)
-            if(index>=0)next.splice(index,1);else if(next.length<16)next.push(id);else{message="Choose up to 16 apps.";return}selectedApps=next;return
+            if(selected===0){configuration={appCollection:{mode:"all",ids:[]}};finish("app-bar");return}
+            if(selected===1){configuration={apps:selectedApps};finish("app-bar");return}
+            const id=apps[selected-2].action.appId,next=selectedApps.slice(),index=next.indexOf(id)
+            if(index>=0)next.splice(index,1);else if(next.length<128)next.push(id);else{message="Choose up to 128 apps.";return}selectedApps=next;return
         }
         if(view==="artwork"){if(selected===0){beginKeyboard("import","","artwork");return}importArtwork(assets[selected-1].source);return}
         if(view==="links"){

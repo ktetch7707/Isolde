@@ -355,6 +355,13 @@ void KodiMediaTests::localViewsAndCollections()
         params = server.property("lastParams").toMap();
         QCOMPARE(params["filter"].toMap()["field"].toString(), QString("inprogress"));
         QCOMPARE(params["sort"].toMap()["method"].toString(), QString("lastplayed"));
+        media.setView("watched"); QTRY_VERIFY(!media.busy());
+        params = server.property("lastParams").toMap();
+        QCOMPARE(params["filter"].toMap()["field"].toString(), QString("lastplayed"));
+        QCOMPARE(params["filter"].toMap()["operator"].toString(), QString("after"));
+        QCOMPARE(params["sort"].toMap()["method"].toString(), QString("lastplayed"));
+        QCOMPARE(params["sort"].toMap()["order"].toString(), QString("descending"));
+        QCOMPARE(params["limits"].toMap()["end"].toInt(),50);
         media.openCollection(id); QTRY_VERIFY(!media.busy());
         QCOMPARE(media.viewKind(), QString("search"));
         media.setView("tag", "Family");
@@ -365,6 +372,11 @@ void KodiMediaTests::localViewsAndCollections()
         QVERIFY(!server.property("lastParams").toMap().contains("filter"));
         media.removeCollection(id);
         QVERIFY(restored.collections().isEmpty());
+        media.openLibrary("shows"); QTRY_VERIFY(!media.busy());
+        media.openView("shows","watched"); QTRY_VERIFY(!media.busy());
+        QCOMPARE(media.mediaKind(),QString("episodes"));
+        QCOMPARE(server.property("lastMethod").toString(),QString("VideoLibrary.GetEpisodes"));
+        QCOMPARE(server.property("lastParams").toMap()["filter"].toMap()["field"].toString(),QString("lastplayed"));
         media.openLibrary("shows"); QTRY_VERIFY(!media.busy());
         media.setView("search", "North"); QTRY_VERIFY(!media.busy());
         params = server.property("lastParams").toMap();

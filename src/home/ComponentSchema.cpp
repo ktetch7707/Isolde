@@ -140,7 +140,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
             if (key == "libraryKind" && !QStringList{"movies","shows"}.contains(it.value().toString())) return false;
-            if (key == "libraryView" && !QStringList{"all","recent","continue","search","tag","genre","collection"}.contains(it.value().toString())) return false;
+            if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection"}.contains(it.value().toString())) return false;
             if (key == "libraryLayout" && !QStringList{"grid","list","row"}.contains(it.value().toString())) return false;
             if (key == "libraryCardStyle" && !QStringList{"media","recent","orb","source","summary","banner"}.contains(it.value().toString())) return false;
             if (key == "libraryValue" && (it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>160)) return false;
@@ -149,6 +149,8 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().size() > 160) return false;
         } else if (QStringList{"surfaceColor", "panelColor", "headingColor", "iconColor", "labelColor", "selectedLabelColor"}.contains(key)) {
             const QColor color(it.value().toString()); if (!color.isValid() || color.alpha() != 255) return false;
+        } else if (key == "libraryChrome") {
+            if(!section || it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if (key == "showHeading" || key == "labelPill" || key == "headingBold") {
             if ((key == "showHeading" && !section && !container) || it.value().metaType().id() != QMetaType::Bool) return false;
         } else if (key == "trailingAction") {
@@ -363,6 +365,14 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     if (!QStringList{"launcher", "clock", "text", "media-shelf","container","button","image","library"}.contains(type)) return reject(error, "Unsupported component type.");
     if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>MaxComponentNameLength || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
     if(input.contains("family") && (type!="container" || !QStringList{"carousel","app-bar"}.contains(input["family"].toString())))return reject(error,"Unsupported group family.");
+    if(input.contains("appCollection")) {
+        if(type!="container" || input.value("family")!="app-bar" || input["appCollection"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Choose an app carousel for an app collection.");
+        const auto collection=input["appCollection"].toMap();
+        if(collection.size()!=2 || !QStringList{"all","selected"}.contains(collection.value("mode").toString()) || collection.value("ids").metaType().id()!=QMetaType::QVariantList || collection.value("ids").toList().size()>128)return reject(error,"Choose All installed or up to 128 selected apps.");
+        QSet<QString> ids;
+        for(const auto &id:collection.value("ids").toList()) {if(id.metaType().id()!=QMetaType::QString || !safeId(id.toString()) || ids.contains(id.toString()))return reject(error,"Choose distinct safe app identities.");ids.insert(id.toString());}
+        if(collection.value("mode")=="all" && !ids.isEmpty())return reject(error,"All installed apps does not store selected membership.");
+    }
     if(input.contains("accessibility")){
         if(input["accessibility"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Invalid accessible description.");
         const auto a=input["accessibility"].toMap();for(auto it=a.cbegin();it!=a.cend();++it)if(!QStringList{"name","hint"}.contains(it.key()) || it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>MaxAccessibleTextLength || it.value().toString().contains(QChar::Null))return reject(error,"Use bounded accessible text.");
@@ -560,6 +570,7 @@ bool ComponentSchema::hierarchyFits(const QJsonArray &items,const QVariantMap &c
     }
     if(containers && (!composition.value("enabled").toBool() || !composition.contains("grid")))return fail("Groups require an enabled page grid. Preview grid conversion first.");
     for(auto it=byId.cbegin();it!=byId.cend();++it)if(it.value()["componentType"]=="container"){
+        if(it.value().contains("appCollection") && !children.value(it.key()).isEmpty())return fail("An app collection uses registry membership, not placed children.");
         if(!it.value().contains("placement") || !validChildLayout(it.value()["presentation"].toObject()["layout"].toObject().toVariantMap()))return fail("A group needs a bounded placement and internal layout.");
         if(!placementsFit(children.value(it.key()),componentGrid(items,composition,categories,it.key(),{})))return fail("Group contents overlap or do not fit their local grid.");
     }

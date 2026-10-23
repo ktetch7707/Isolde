@@ -10,6 +10,7 @@ Item {
     readonly property real diameter: Math.min(width-8*unit,height-28*unit,(style.diameter || 110)*unit)
     readonly property color ink: style.labelColor || appearance.textColor || "#514B67"
     readonly property color surface: style.surfaceColor || appearance.surfaceColor || "#E8D4F8"
+    readonly property var focusFrame:({x:circle.x,y:circle.y,width:circle.width,height:circle.height,radius:circle.radius,color:style.focusColor || appearance.focusColor || "white",lineWidth:Math.max(2,style.focusWidth===undefined?4:style.focusWidth)*unit})
     signal activated()
     Rectangle {
         id: circle; objectName: "orbSurface"
@@ -23,9 +24,15 @@ Item {
             fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1
         }
         LineIcon {
-            visible: !root.item.logoSource
+            visible: !root.item.logoSource && !root.item.appSymbol
             anchors.centerIn: parent; width: (root.style.iconSize || 44)*root.unit; height: width
             name: root.style.icon || "display"; ink: root.style.iconColor || "white"
+        }
+        Text {
+            anchors.centerIn:parent;visible:!!root.item.appSymbol && !root.item.logoSource
+            text:root.item.appSymbol || "";textFormat:Text.PlainText
+            color:root.style.iconColor || root.ink;font.family:root.appearance.fontFamily || "DejaVu Sans"
+            font.pixelSize:(root.style.iconSize || 32)*root.unit;Accessible.ignored:true
         }
     }
     Rectangle {

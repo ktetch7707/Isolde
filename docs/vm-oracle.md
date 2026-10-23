@@ -1,5 +1,11 @@
 # Oracle VM testing — use the runner
 
+## Standing machine-boundary permission (user, 2026-10-21)
+
+Isolde-Test is a disposable Isolde test machine. Agents may perform necessary **guest-only** cleanup and testing/setup autonomously; do not repeatedly ask permission for obsolete guest build artifacts or ordinary test setup. Prefer deleting obsolete staged payloads before useful source/evidence or active test data. Resolve/check every destructive target inside the guest and exclude host/shared mounts. Record cleanup and retain useful diagnostics. The runner itself still does not silently delete artifacts; its low-space guard prompts an agent to inspect and manage guest space, not another approval loop.
+
+The Windows host is the user's personal machine. Keep host changes within the authorized project workspace/requested outputs; no unrelated cleanup, host packages/toolchains, services, security/settings or personal-data changes. Guest authorization does not extend to the host. This preference is also saved in the root `AGENTS.md` for future sessions.
+
 The VM is the existing **Isolde-Test** developer machine. Preserve Household, Kodi, installed releases and the graphical login. Routine testing goes through `tools/vm-test.ps1` in **PowerShell 7**. Do not assemble ad hoc SSH/build/capture loops.
 
 ## Commands
@@ -15,7 +21,7 @@ From the repository root:
 
 # During implementation, run only the relevant native suite.
 ./tools/vm-test.ps1 Test -Suite component_contracts
-# Fast Studio: studio_quick, studio_unit, studio_behavior, or studio (all three).
+# Fast Studio: studio_quick, studio_selection, studio_unit, studio_behavior, or studio (all four).
 ./tools/vm-test.ps1 Test -Suite studio
 # Other choices: home_component_navigation, kodi_media_client. Default: all.
 

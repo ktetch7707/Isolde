@@ -129,7 +129,7 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     auto *restoredPage=qobject_cast<PageModel *>(restored.pageModel(movies));QVERIFY(restoredPage);
     QCOMPARE(restoredPage->appearance()["focusColor"].toString(),QString("#123456"));
     const auto snapshot=layout.saveSkin("Whole interface");QVERIFY(!snapshot.isEmpty());
-    QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),2); // Home presets preserve authored pages.
+    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));QCOMPARE(layout.pages().size(),2); // Home presets preserve authored pages.
     const auto linkedState=layout.committedDocument();
     QVERIFY(!layout.removePage(shows));QCOMPARE(layout.committedDocument(),linkedState);
     QVERIFY(page->setItemAction(button,{{"type","open-page"},{"pageId",movies}})); // Explicitly repair the incoming link.
@@ -163,7 +163,7 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     const auto id = layout.saveSkin("  Evening  "); QVERIFY(!id.isEmpty());
     const auto savedComposition = layout.composition();
     const auto savedItems = layout.components();
-    QVERIFY(layout.applySkin("builtin-pastel"));
+    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));
     QVERIFY(!layout.wallpaperSource().isEmpty());
     QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),4);
     // The snapshot is independent of the live artwork store, and survives a process reload.
@@ -1178,6 +1178,14 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
     doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(options["defaultGrid"].toMap())}};QVERIFY(session->pushEdit(QJsonDocument(doc).toJson()));const auto empty=session->draft();
     for(const auto &type:QStringList{"button","image","library","carousel","app-bar"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
+    const auto appPrototype=session->componentPrototype("app-bar");
+    QCOMPARE(appPrototype["components"].toList().size(),1);
+    auto appNode=appPrototype["root"].toMap();
+    QCOMPARE(appNode["appCollection"].toMap()["mode"].toString(),QString("all"));
+    appNode["appCollection"]=QVariantMap{{"mode","selected"},{"ids",QVariantList{"duplicate","duplicate"}}};
+    QVERIFY(ComponentSchema::component(appNode,true).isEmpty());
+    appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{"unsafe/identity"}}};
+    QVERIFY(ComponentSchema::component(appNode,true).isEmpty());
     const QVariantMap box{{"x",0},{"y",0},{"width",2},{"height",1}};QVERIFY(session->execute("addResolved",{{"type","button"},{"placement",box}}));
     QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{{"type","root-page"}}}}}}));
     const auto linked=session->draft();QVERIFY(!session->execute("patch",{{"id","button"},{"value",QVariantMap{{"action",QVariantMap{{"type","open-page"},{"pageId","absent"}}}}}}));QCOMPARE(session->draft(),linked);

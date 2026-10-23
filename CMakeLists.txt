@@ -140,6 +140,7 @@ qt_add_qml_module(isolde
     qml/StudioCatalog.qml
         qml/PlacedComponents.qml
         qml/PageLibraryWidget.qml
+        qml/PageAppCarousel.qml
         qml/ArtworkImage.qml
         qml/FrostedPanel.qml
         qml/OrbCard.qml
@@ -230,8 +231,11 @@ if(BUILD_TESTING)
     target_compile_definitions(isolde_studio_quick_tests PRIVATE
         QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/studio"
         STUDIO_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/default-home-layout.json")
-    add_test(NAME studio_quick COMMAND isolde_studio_quick_tests)
+    add_test(NAME studio_quick COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_editor.qml)
     set_tests_properties(studio_quick PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_selection COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_selection.qml)
+    set_tests_properties(studio_selection PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_tests
         tests/tst_isolde.cpp

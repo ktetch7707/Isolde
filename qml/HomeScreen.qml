@@ -113,6 +113,7 @@ Item {
     property var setItemPlacement: null
     property var gridCollisions: null
     property var libraryProvider: null
+    property var appProvider:typeof appRegistry!=="undefined"?appRegistry:null
     property bool previewOnly:false
     property bool freezeData:false
     property bool samplePreview:false
@@ -412,11 +413,11 @@ Item {
                                     Component.onCompleted:root.registerEditTarget(modelData.id,tileHost,false)
                                     Component.onDestruction:root.registerEditTarget(modelData.id,tileHost,true)
                                     readonly property int globalIndex: root.itemIndex(modelData.id)
-                                    readonly property bool selected: !root.editMode && !root.recoveryFocused && globalIndex === root.focusedIndex
+                                    readonly property bool selected: root.editMode ? root.editSelection===modelData.id : !root.recoveryFocused && globalIndex === root.focusedIndex
                                     Layout.columnSpan: Math.min(root.gridUnits, modelData.size === "compact" ? 1 : modelData.size === "wide" ? 4 : 2)
                                     Layout.fillWidth: true
                                     height: 150
-                                    onSelectedChanged: if (selected) root.reveal(tileHost)
+                                    onSelectedChanged: if (selected && !root.editMode) root.reveal(tileHost)
                                     Loader {
                                         anchors.fill: parent
                                         opacity: (modelData.opacity === undefined ? 1.0 : modelData.opacity) * (root.unavailableReason(modelData) === "" ? 1.0 : 0.42)

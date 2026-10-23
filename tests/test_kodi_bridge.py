@@ -19,13 +19,15 @@ class BridgeTests(unittest.TestCase):
             calls.append(json.loads(raw))
             return '{"jsonrpc":"2.0","id":7,"result":{"movies":[]}}'
         for field, operator, value in (("title", "contains", "Movie"), ("tag", "is", "Family"),
-                                       ("genre", "is", "Drama"), ("inprogress", "true", "")):
+                                       ("genre", "is", "Drama"), ("inprogress", "true", ""), ("lastplayed", "after", "1970-01-01")):
             result = bridge.dispatch(self.request("VideoLibrary.GetMovies", {"filter": {"field": field, "operator": operator, "value": value}}), execute)
             self.assertNotIn("error", result)
         for rule in ({"field": "playlist", "operator": "is", "value": "https://example.com"},
-                     {"url": "https://example.com"}, {"field": "title", "operator": "contains", "value": "x" * 161}):
+                     {"url": "https://example.com"}, {"field": "title", "operator": "contains", "value": "x" * 161},
+                     {"field":"lastplayed","operator":"after","value":"2026-99-99"},
+                     {"field":"lastplayed","operator":"after","value":"20261021"}):
             self.assertIn("error", bridge.dispatch(self.request("VideoLibrary.GetMovies", {"filter": rule}), execute))
-        self.assertEqual(len(calls), 4)
+        self.assertEqual(len(calls), 5)
         self.assertTrue(all(c["method"] == "VideoLibrary.GetMovies" for c in calls))
 
     def test_quit_checks_playback_and_both_scanners(self):
