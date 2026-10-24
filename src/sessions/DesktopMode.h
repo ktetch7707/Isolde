@@ -23,7 +23,9 @@ class DesktopMode final : public QObject, protected QDBusContext {
     Q_PROPERTY(QString shortcutDescription READ shortcutDescription NOTIFY changed)
     Q_PROPERTY(QVariantMap presentation READ presentation NOTIFY changed)
 public:
-    explicit DesktopMode(QObject *parent=nullptr,const QDBusConnection &bus=QDBusConnection::sessionBus());
+    static constexpr const char *ApplicationId="org.isolde.Isolde";
+    explicit DesktopMode(QObject *parent=nullptr);
+    DesktopMode(QObject *parent,const QDBusConnection &bus);
     ~DesktopMode() override;
     bool active() const{return m_active;}
     bool busy() const{return m_busy;}
@@ -43,14 +45,15 @@ private slots:
     void sessionClosed();
 private:
     void request(const QString &method,const QVariantList &arguments,const QString &token);
+    void beginSession();
     void closePortal();
     void fail(const QString &message);
     QString requestPath(const QString &token) const;
     QDBusConnection m_bus;
     QTimer m_deadline;
     QVariantMap m_presentation;
-    QString m_origin,m_error,m_shortcut,m_request,m_session,m_sessionToken;
-    enum Phase {Idle,Creating,Binding} m_phase=Idle;
-    bool m_active=false,m_busy=false;
-    quint64 m_generation=0;
+    QString m_origin,m_error,m_shortcut,m_request,m_session,m_sessionToken,m_connectionName;
+    enum Phase {Idle,Registering,Creating,Binding} m_phase=Idle;
+    bool m_active=false,m_busy=false,m_registered=false,m_registering=false;
+    quint64 m_generation=0,m_identityGeneration=0;
 };

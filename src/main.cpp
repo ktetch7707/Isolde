@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("Isolde"));
     QCoreApplication::setApplicationVersion(QStringLiteral(ISOLDE_VERSION));
-    QGuiApplication::setDesktopFileName(QStringLiteral("isolde"));
+    QGuiApplication::setDesktopFileName(QString::fromLatin1(DesktopMode::ApplicationId));
     app.setQuitOnLastWindowClosed(false);
     bool switching = false;
     QQuickWindow switchCover;

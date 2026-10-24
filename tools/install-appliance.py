@@ -91,11 +91,19 @@ def install_payload(payload, prefix):
             staged = Path(scratch) / "payload"
             shutil.copytree(payload, staged)
             staged.rename(release)
+    install_desktop_identity(prefix)
     if current != release:
         if current:
             set_link(prefix / "previous", current)
         set_link(prefix / "current", release)
     return release
+
+
+def install_desktop_identity(prefix):
+    executable = str(prefix / "current/bin/isolde").replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`").replace("$", "\\$").replace("%", "%%")
+    entry = f'[Desktop Entry]\nType=Application\nName=Isolde\nExec="{executable}"\nTerminal=false\n'
+    atomic_text(prefix.parent / "applications/org.isolde.Isolde.desktop", entry)
+    atomic_text(prefix.parent / "applications/isolde.desktop", entry+"NoDisplay=true\n")
 
 
 def rollback(prefix):
@@ -172,7 +180,7 @@ X-GNOME-Autostart-enabled=true
     atomic_text(config / "autostart/isolde.desktop", desktop_entry)
     # A stable desktop identity is required by the compositor's global-shortcut
     # permission portal. This is an Isolde launcher, not an OS shortcut change.
-    atomic_text(prefix.parent / "applications/isolde.desktop", desktop_entry)
+    install_desktop_identity(prefix)
 
 
 def enable_startup():
