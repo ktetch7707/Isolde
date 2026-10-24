@@ -144,6 +144,7 @@ const AppDefinition *AppRegistry::find(const QString &id) const
     for (const auto &app : m_apps)
         if (app.id == id)
             return &app;
+    for(const auto &app:m_apps)if(app.legacyIds().contains(id))return &app;
     return nullptr;
 }
 
@@ -151,6 +152,7 @@ bool AppRegistry::addApp(const AppDefinition &app)
 {
     if (!app.isValid() || find(app.id) || !validIconName(app))
         return false;
+    for(const auto &alias:app.legacyIds())if(find(alias))return false;
     auto resolved=app;resolved.iconSource=appIcon(app);m_apps.append(resolved);
     emit appsChanged();
     return true;
@@ -245,6 +247,10 @@ bool AppRegistry::loadFromData(const QByteArray &data)
         if(!validIconName(app)){setError(tr("Choose a local registered app icon name."));return false;}
         app.iconSource=appIcon(app);
         ids.insert(app.id);
+        for(const auto &alias:app.legacyIds()){
+            if(ids.contains(alias)){setError(tr("App compatibility IDs must be unique."));return false;}
+            ids.insert(alias);
+        }
         loaded.append(app);
     }
     if (loaded.isEmpty()) {

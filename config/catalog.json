@@ -9,6 +9,14 @@
     "packages/kodi/manifest.json",
     "packages/retro-arcade/manifest.json",
     "packages/spotify/manifest.json",
-    "packages/steam/manifest.json"
+    "packages/steam/manifest.json",
+    "packages/freetube/manifest.json",
+    "packages/cbc-gem/manifest.json",
+    "packages/prime-video/manifest.json",
+    "packages/disney-plus/manifest.json",
+    "packages/paramount-plus/manifest.json",
+    "packages/crunchyroll/manifest.json",
+    "packages/netflix/manifest.json",
+    "packages/peacock/manifest.json"
   ]
 }

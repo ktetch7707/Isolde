@@ -61,6 +61,8 @@ def main():
     parser.add_argument("--skin-from-settings", action="store_true", help="Select the built-in design and save/reapply a personal skin entirely through Settings")
     parser.add_argument("--capture-library", action="store_true", help="Also pause for a screenshot of the skin library")
     parser.add_argument("--existing-profile", help="Explicit installed repair journey for the active VM acceptance profile")
+    parser.add_argument("--verify-default-apps", action="store_true", help="Verify provisioned clients in the authorized VM acceptance profile")
+    parser.add_argument("--skip-steam", action="store_true", help="Independent client checks; never reports Steam bootstrap verified")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
     args = parser.parse_args()
     case = args.case.resolve(strict=True)
@@ -160,8 +162,8 @@ def main():
             time.sleep(0.09)
         time.sleep(0.4)
 
-    def expect(predicate, message):
-        deadline = time.monotonic() + 8
+    def expect(predicate, message, seconds=8):
+        deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise RuntimeError("The shell exited; inspect " + str(evidence / "shell.log"))
@@ -176,6 +178,7 @@ def main():
 
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
+    desktop_probe = None
     try:
         if active:
             run("systemctl", "--user", "stop", "isolde.service")
@@ -241,13 +244,75 @@ def main():
                     assert household.read_bytes() == household_before
                     key("Escape", 3); key("Home")
                 captured("updated")
+                post_update = layout.read_bytes()
+                receipt = Path.home()/".config/Isolde/default-apps-completed.json"
+                if receipt.is_file():
+                    collection = next((c for c in original["components"] if c.get("appCollection", {}).get("mode") == "all" and not c.get("appCollection", {}).get("section")), None)
+                    required = json.loads((Path(__file__).resolve().parents[1]/"config/default-apps.json").read_text())["apps"]
+                    installed = json.loads((Path.home()/".config/Isolde/installed-apps.json").read_text())["installed"]
+                    assert set(required) <= set(installed)
+                    capacity = (collection.get("presentation", {}).get("layout", {}).get("visibleColumns", 4)) if collection else 0
+                    if collection and len(required) > capacity:
+                        key("Home"); key("Up", 30); key("Down", 4); key("Left", 30); key("Right", capacity-1); key("Return")
+                        captured("appsoverflow")
+                        key("Escape")
+                        assert layout.read_bytes() == post_update
+                if args.verify_default_apps:
+                    assert receipt.is_file(), "Default applications have not been provisioned"
+                    def starter(column):
+                        key("Home"); key("Up", 30); key("Down", 3); key("Left", 10)
+                        if column: key("Right", column)
+                        key("Return")
+                    steam_home = Path.home()/".local/share/Isolde/native-profiles"/args.existing_profile/"steam/home"
+                    def steam_ready():
+                        folders = [steam_home/".steam/debian-installation", steam_home/".local/share/Steam", steam_home/".steam/steam"]
+                        client = any(p.resolve().is_relative_to(steam_home.resolve()) and (p/"ubuntu12_32/steam").is_file() and (p/"package/steam_client_ubuntu12.installed").is_file() for p in folders)
+                        return client and "steam" in run("wmctrl", "-lx", env=env).lower()
+                    if not args.skip_steam:
+                        starter(4); captured("steamgames"); key("Return")
+                        time.sleep(3); captured("steaminstall")
+                        expect(steam_ready, "Steam client finished its first download and opened its own UI", 300)
+                        captured("steam"); key("Home")
+                    # Registry order comes from declarative packaged definitions.
+                    source = Path(__file__).resolve().parents[1]
+                    definitions = json.loads((source/"config/apps.json").read_text())
+                    packages = {}
+                    for relative in json.loads((source/"config/catalog.json").read_text())["packages"]:
+                        package = json.loads((source/"config"/relative).read_text())
+                        packages[package["app"]["id"]] = package["app"]
+                    definitions += [packages[app_id] for app_id in installed if app_id in packages]
+                    ids = [a["id"] for a in definitions if a["type"] in {"web", "desktop"}]
+                    for app_id, phase in (("freetube", "freetube"), ("cbc-gem", "streaming")):
+                        index = ids.index(app_id)
+                        assert collection and index < capacity-1, "Default test client is outside this saved collection's visible slots"
+                        key("Home"); key("Up", 30); key("Down", 4); key("Left", 30); key("Right", index); key("Return")
+                        marker = "freetube" if app_id == "freetube" else "isolde-cbc-gem"
+                        expect(lambda: marker in run("wmctrl", "-lx", env=env).lower(), "Private native client opened: "+app_id, 30)
+                        captured(phase); key("Home")
+                    assert household.read_bytes() == household_before
+                    assert layout.read_bytes() == post_update
+                    (evidence/"result.json").write_text(json.dumps({"passed": True, "native_clients": True, "steam_client_downloaded": not args.skip_steam, "subscriptionPlaybackVerified": False, "household_unchanged": True}))
+                    return
                 # The portal belongs to the real compositor. Host-side bounded
                 # VM key input follows review of its permission screenshot.
                 key("Home"); key("Up", 30); key("Down", 2); key("Left", 10); key("Right", 4); key("Return")
                 captured("desktoppermission")
                 expect(lambda: "Map State: IsUnMapped" in run("xwininfo", "-id", window), "Desktop handoff hid the shell only after a granted shortcut")
-                x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]; x11.XDefaultRootWindow.restype = ctypes.c_ulong
-                x11.XSetInputFocus(display, x11.XDefaultRootWindow(display), 2, 0); x11.XFlush(display)
+                probe_name = "isolde-return-" + str(os.getpid())
+                desktop_probe = subprocess.Popen(["xmessage", "-name", probe_name, "-center", "Desktop return test: Home must return to Isolde from this independent application."], env=env, stdout=log, stderr=log)
+                def probe_window():
+                    for line in run("wmctrl", "-lx", env=env).splitlines():
+                        fields = line.split(None, 4)
+                        if len(fields) >= 3 and fields[2].split(".")[0] == probe_name: return fields[0]
+                    return ""
+                expect(lambda: bool(probe_window()), "Independent desktop application opened")
+                probe = probe_window(); run("wmctrl", "-i", "-a", probe, env=env)
+                x11.XSetInputFocus(display, int(probe, 16), 2, 0); x11.XFlush(display)
+                def probe_focused():
+                    target = ctypes.c_ulong(); mode = ctypes.c_int()
+                    x11.XGetInputFocus(display, ctypes.byref(target), ctypes.byref(mode))
+                    return target.value == int(probe, 16)
+                expect(probe_focused, "Return control is unfocused; independent desktop app owns input")
                 captured("desktop")
                 expect(lambda: "Map State: IsViewable" in run("xwininfo", "-id", window), "Compositor Home shortcut returned to Isolde")
                 captured("desktopreturned")
@@ -370,6 +435,10 @@ def main():
             time.sleep(25)
         raise
     finally:
+        if desktop_probe and desktop_probe.poll() is None:
+            desktop_probe.terminate()
+            try: desktop_probe.wait(timeout=3)
+            except subprocess.TimeoutExpired: desktop_probe.kill(); desktop_probe.wait()
         if process and process.poll() is None:
             process.terminate()
             try:

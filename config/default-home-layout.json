@@ -27,7 +27,7 @@
     { "kind": "action", "id": "hdmi-6", "name": "HDMI 6", "symbol": "6", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 6 } },
     { "kind": "action", "id": "hdmi-7", "name": "HDMI 7", "symbol": "7", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 7 } },
     { "kind": "action", "id": "hdmi-8", "name": "HDMI 8", "symbol": "8", "size": "standard", "categoryId": "inputs", "action": { "schemaVersion": 1, "type": "switch-input", "input": 8 } },
-    { "kind": "app", "id": "steam-machine", "appId": "steam-machine", "size": "standard", "categoryId": "apps" },
+    { "kind": "app", "id": "steam-machine", "appId": "steam", "size": "standard", "categoryId": "apps" },
     { "kind": "app", "id": "app-store", "appId": "app-store", "size": "standard", "categoryId": "system" },
     { "kind": "app", "id": "desktop-mode", "appId": "desktop-mode", "size": "standard", "categoryId": "system" },
     { "kind": "app", "id": "settings", "appId": "settings", "size": "standard", "categoryId": "system" }

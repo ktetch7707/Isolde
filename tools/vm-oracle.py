@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded Linux half of vm-test.ps1. No packages, profile edits or VM resets."""
+"""Bounded Linux runner: tests, explicit guest provisioning and isolated acceptance."""
 import argparse
 import contextlib
 import hashlib
@@ -50,10 +50,16 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "lounge": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
          "pastel": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
          "repairs": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--inspect"]),
+         "apps": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--inspect"]),
+         "clients": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--skip-steam", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"])}
 
 
 def visual_result_passed(case, result):
+    if case == "clients":
+        return all(result.get(key) is True for key in ("passed", "native_clients", "household_unchanged")) and result.get("steam_client_downloaded") is False and result.get("subscriptionPlaybackVerified") is False
+    if case == "apps":
+        return all(result.get(key) is True for key in ("passed", "native_clients", "steam_client_downloaded", "household_unchanged")) and result.get("subscriptionPlaybackVerified") is False
     if case == "repairs":
         return all(result.get(key) is True for key in ("passed", "preserving_update", "household_unchanged", "real_compositor_return"))
     if case in ("lounge", "pastel"):
@@ -282,6 +288,57 @@ class Oracle:
             raise RuntimeError("Less than 2 GiB free; stop and review space. No automatic deletion.")
         self.update(hostname=self.command("hostname"), freeGiB=round(free / 1024**3, 2),
                     service=self.service(), releases=self.links())
+        environment = dict(os.environ)
+        for line in self.command("systemctl", "--user", "show-environment").splitlines():
+            key, _, value = line.partition("=")
+            if key in {"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR", "DISPLAY", "XAUTHORITY"}: environment[key] = value
+        portal = subprocess.run(["gdbus", "introspect", "--session", "--dest", "org.freedesktop.portal.Desktop", "--object-path", "/org/freedesktop/portal/desktop"], env=environment, capture_output=True, text=True, timeout=15)
+        app_metadata = {}
+        for app_id in ("spotify", "steam", "freetube"):
+            entries = {}
+            for root in (Path.home()/".local/share", Path("/usr/share")):
+                for desktop_id in (app_id, "isolde-"+app_id):
+                    entry = root/"applications"/(desktop_id+".desktop")
+                    if entry.is_file() and entry.stat().st_size <= 16384: entries[str(entry)] = entry.read_text()[:16384]
+            icons = []
+            for pattern in ("icons/hicolor/*/apps/"+app_id+"*", "pixmaps/"+app_id+"*", app_id+"/icons/*"):
+                icons.extend(str(p) for p in Path("/usr/share").glob(pattern) if p.is_file())
+            app_metadata[app_id] = {"entries": entries, "icons": sorted(icons)[:64]}
+        atomic_json(self.run / "desktop-platform.json", {"portalExit": portal.returncode, "appMetadata": app_metadata,
+            "globalShortcuts": "org.freedesktop.portal.GlobalShortcuts" in portal.stdout,
+            "portalInterfaces": portal.stdout[:65536], "error": portal.stderr[:2048],
+            "desktopIdentity": (Path.home()/".local/share/applications/org.isolde.Isolde.desktop").is_file()})
+        locations = [Path.home()/"isolde-runs", Path.home(), Path("/var/cache/apt"), Path("/var/lib/systemd/coredump")]
+        usage = subprocess.run(["du", "-x", "-B1", "--max-depth=2", *[str(p) for p in locations if p.is_dir()]], capture_output=True, text=True, timeout=30)
+        atomic_json(self.run / "guest-disk-usage.json", {"guestHome": str(Path.home()), "usage": usage.stdout[:65536], "errors": usage.stderr[:2048]})
+        privileges = subprocess.run(["sudo", "-n", "-l"], capture_output=True, text=True, timeout=10)
+        atomic_json(self.run / "guest-privileges.json", {"exit": privileges.returncode, "policy": privileges.stdout[:8192], "error": privileges.stderr[:2048]})
+        native_home = Path.home()/".local/share/Isolde/native-profiles/8bdf6077-4613-4b52-9b20-d1ec7931dfcf/steam/home"
+        native_logs = {}
+        if native_home.is_dir() and not native_home.is_symlink():
+            for directory, children, files in os.walk(native_home, followlinks=False):
+                children[:] = [c for c in children if not (Path(directory)/c).is_symlink()]
+                if len(Path(directory).relative_to(native_home).parts)>7: children[:]=[]; continue
+                for name in files:
+                    file = Path(directory)/name
+                    if name in {"bootstrap_log.txt", "console-linux.txt", "steam-runtime-check-requirements.log"} and not file.is_symlink() and file.stat().st_size <= 4*1024*1024:
+                        native_logs[str(file.relative_to(native_home))] = file.read_text(errors="replace")[-16384:]
+                if len(native_logs)>=8: break
+        atomic_json(self.run/"native-bootstrap-diagnostics.json", native_logs)
+        namespace_policy = {}
+        for filename in ("/proc/sys/kernel/unprivileged_userns_clone", "/proc/sys/kernel/apparmor_restrict_unprivileged_userns", "/proc/sys/user/max_user_namespaces", "/etc/apparmor.d/bwrap", "/etc/apparmor.d/bubblewrap", "/etc/apparmor.d/steam", "/proc/self/attr/current"):
+            file = Path(filename)
+            try: namespace_policy[filename] = file.read_text()[:16384]
+            except OSError as error: namespace_policy[filename] = str(error)
+        atomic_json(self.run/"native-namespace-policy.json", namespace_policy)
+        denials = subprocess.run(["journalctl", "-k", "--since=-20min", "--no-pager", "-g", "userns|apparmor"], capture_output=True, text=True, timeout=15)
+        atomic_json(self.run/"native-namespace-denials.json", {"exit": denials.returncode, "output": denials.stdout[-16384:], "error": denials.stderr[:2048]})
+        matching_profiles = {}
+        for file in sorted(Path("/etc/apparmor.d").glob("*"))[:256]:
+            if file.is_file() and not file.is_symlink() and file.stat().st_size<=65536:
+                content=file.read_text(errors="replace")
+                if "unpriv_bwrap" in content: matching_profiles[file.name]=content
+        atomic_json(self.run/"native-bwrap-profile.json", matching_profiles)
 
     def test(self, suite):
         self.check()
@@ -349,8 +406,32 @@ class Oracle:
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
 
+    def diagnose(self):
+        self.tested_payload()
+        profile_id = "8bdf6077-4613-4b52-9b20-d1ec7931dfcf"
+        profiles = json.loads((Path.home()/".config/Isolde/profiles.json").read_text())
+        if profiles.get("active") != profile_id or not any(p.get("id")==profile_id and p.get("name")=="Studio Demo" for p in profiles.get("profiles", [])):
+            raise RuntimeError("Select the explicitly authorized Studio Demo profile before native diagnostics")
+        work = self.root/"work"
+        if json.loads((work/"manifest.json").read_text()) != manifest(self.run/"files.sha256"):
+            raise RuntimeError("Native diagnostic helper does not match this tested source")
+        executable = work/"build/isolde_native_smoke"
+        if not executable.is_file(): raise RuntimeError("Tested native diagnostic helper is unavailable")
+        before, links, layouts = self.service(), self.links(), self.layout_hashes()
+        atomic_json(self.root/"service-lease.json", {"service": before, "releases": links, "runId": self.state["runId"], "pid": os.getpid()})
+        try:
+            self.stage("native-diagnostic-stop", ["systemctl", "--user", "stop", "isolde.service"], 30)
+            # Existing production-bridge helper, same explicitly authorized
+            # Studio Demo profile. No shell, shared home, login or policy change.
+            self.stage("native-freetube-diagnostic", [str(executable), "freetube", profile_id, "5"], 20)
+        finally:
+            self.update(service=self.restore(before), normalLayoutsBefore=layouts, normalLayoutsAfter=self.layout_hashes(), diagnosticOnly=True)
+            (self.root/"service-lease.json").unlink(missing_ok=True)
+            if self.links()!=links or self.layout_hashes()!=layouts:
+                raise RuntimeError("Native diagnostic changed a release or saved layout")
+
     def visual(self, case, installed=False):
-        if case == "repairs" and not installed:
+        if case in ("repairs", "apps", "clients") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
         if installed:
@@ -364,7 +445,7 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
-        if case in ("lounge", "pastel", "repairs"):
+        if case in ("lounge", "pastel", "repairs", "apps", "clients"):
             fixture = "home-reference" if case == "lounge" else "home-pastel-reference"
             command += ["--case", str(source / "tests/visual" / fixture)]
         before, links = self.service(), self.links()
@@ -429,6 +510,75 @@ class Oracle:
             time.sleep(0.5)
         raise RuntimeError("Selected release failed to start; inspect restart.log and journal. No automatic rollback.")
 
+    def provision(self):
+        self.tested_payload()
+        deployment = json.loads((self.run / "deploy-result.json").read_text())
+        if self.links()["current"] != deployment["release"]:
+            raise RuntimeError("Provisioning requires this run's deployed release")
+        if self.command("hostname") != "isolde-test":
+            raise RuntimeError("Guest provisioning is restricted to Isolde-Test")
+        # Only obsolete generated payloads; source, logs, screenshots, releases,
+        # native build cache and all profile/account trees are retained.
+        runs = self.root / "runs"
+        candidates = sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p:p.stat().st_mtime, reverse=True)
+        protected = {self.run, *candidates[:3]}
+        mounts = [Path(line.split()[4].replace("\\040", " ")) for line in Path("/proc/self/mountinfo").read_text().splitlines()]
+        cleanup_path = self.run / "guest-payload-cleanup.json"
+        removed = json.loads(cleanup_path.read_text()).get("targets", []) if cleanup_path.exists() else []
+        for candidate in reversed(candidates):
+            if shutil.disk_usage(self.root).free >= 5 * 1024**3: break
+            target = candidate / "payload"
+            if candidate in protected or not target.is_dir() or target.is_symlink(): continue
+            if target.resolve() != target or not target.resolve().is_relative_to(runs.resolve()): raise RuntimeError("Unsafe guest artifact path")
+            if any(m == target or m.is_relative_to(target) for m in mounts): raise RuntimeError("Refusing mounted guest artifact")
+            removed.append(str(target))
+            atomic_json(self.run / "guest-payload-cleanup.json", {"guest": "isolde-test", "targets": removed})
+            shutil.rmtree(target)
+        legacy = Path.home()/"isolde-runs"
+        if legacy.is_dir() and not legacy.is_symlink() and legacy.resolve() == legacy:
+            old_runs = sorted((p for p in legacy.iterdir() if p.is_dir() and not p.is_symlink() and re.fullmatch(r"studio-implementation-[0-9]+", p.name)), key=lambda p:int(p.name.rsplit("-", 1)[1]))
+            active = []
+            for process in Path("/proc").iterdir():
+                if process.name.isdigit():
+                    for name in ("cwd", "exe"):
+                        try: active.append((process/name).resolve(strict=True))
+                        except (OSError, RuntimeError): pass
+            for old in old_runs[:-3][:128]:
+                if shutil.disk_usage(self.root).free >= 8 * 1024**3: break
+                target = old/"build"
+                if not target.is_dir() or any(p == target or p.is_relative_to(target) for p in active): continue
+                # Record the checked absolute target before deleting generated
+                # artifacts. The helper rejects links, mounts and unknown trees.
+                removed.append(str(target))
+                atomic_json(cleanup_path, {"guest": "isolde-test", "targets": removed})
+                remove_guest_build(target, legacy, mounts)
+        self.check()
+        if shutil.disk_usage(self.root).free < 4 * 1024**3: raise RuntimeError("Default clients need at least 4 GiB free after bounded artifact cleanup")
+        before, links, layouts = self.service(), self.links(), self.layout_hashes()
+        atomic_json(self.root / "service-lease.json", {"service": before, "releases": links, "runId": self.state["runId"], "pid": os.getpid()})
+        source = self.run / "source"
+        script = source / "tools/provision-default-apps.py"
+        try:
+            self.stage("default-apps-stop", ["systemctl", "--user", "stop", "isolde.service"], 30)
+            self.stage("default-apps-system", ["python3", str(script), "system", "--sudo-apt", "--source", str(source)], 1800)
+            self.stage("default-apps-activate", ["python3", str(script), "activate", "--source", str(source)], 480)
+            receipt = Path.home()/".config/Isolde/default-apps-completed.json"
+            atomic_json(self.run / "default-apps-result.json", json.loads(receipt.read_text()))
+            if self.layout_hashes() != layouts: raise RuntimeError("Application provisioning changed a saved layout")
+        finally:
+            self.update(service=self.restore(before), normalLayoutsBefore=layouts, normalLayoutsAfter=self.layout_hashes())
+            (self.root / "service-lease.json").unlink(missing_ok=True)
+
+
+def remove_guest_build(target, boundary, mounts):
+    """Generated legacy build only, with no redirected or mounted descendants."""
+    if target.name != "build" or target.is_symlink() or target.resolve() != target.absolute() or not target.resolve().is_relative_to(boundary.resolve()):
+        raise RuntimeError("Unsafe legacy guest build target")
+    if not (target/"CMakeCache.txt").is_file() or not (target/"CMakeFiles").is_dir():
+        raise RuntimeError("Legacy target is not a generated CMake build")
+    if any(m == target or m.is_relative_to(target) for m in mounts): raise RuntimeError("Refusing mounted legacy guest build")
+    shutil.rmtree(target)
+
 
 def collect_evidence(run, case, directories):
     """Do not copy WebEngine caches, PulseAudio cookies or personal profile trees."""
@@ -451,7 +601,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -500,7 +650,7 @@ def cancel_owned(root, run_id):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["check", "test", "visual", "deploy", "status", "recover", "cancel"])
+    parser.add_argument("action", choices=["check", "test", "visual", "deploy", "provision", "diagnose", "status", "recover", "cancel"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--suite", choices=SUITES, default="all")
     parser.add_argument("--case", choices=CASES, default="studio")
@@ -512,7 +662,15 @@ def main():
     root.mkdir(exist_ok=True)
     if args.action == "status":
         path = root / "runs" / args.run_id / "status.json"
-        print(path.read_text() if path.is_file() else json.dumps({"state": "unknown", "runId": args.run_id}))
+        status = json.loads(path.read_text()) if path.is_file() else {"state": "unknown", "runId": args.run_id}
+        environment = dict(os.environ)
+        manager = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True, timeout=10)
+        for line in manager.stdout.splitlines():
+            key, _, value = line.partition("=")
+            if key in {"DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}: environment[key] = value
+        windows = subprocess.run(["wmctrl", "-lpx"], env=environment, capture_output=True, text=True, timeout=10)
+        status["windowClasses"] = [line.split(None, 5)[:4] for line in windows.stdout.splitlines()[:64]]
+        print(json.dumps(status))
         return
     if args.action == "cancel":
         print(json.dumps(cancel_owned(root, args.run_id)), flush=True)
@@ -533,6 +691,10 @@ def main():
                 oracle.visual(args.case, args.installed)
             elif args.action == "deploy":
                 oracle.deploy()
+            elif args.action == "provision":
+                oracle.provision()
+            elif args.action == "diagnose":
+                oracle.diagnose()
             elif args.action == "recover":
                 lease = root / "service-lease.json"
                 if lease.is_file():

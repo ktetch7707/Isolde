@@ -167,6 +167,7 @@ qt_add_resources(isolde "isolde_config"
         config/app-icons/youtube.svg
         config/art-packs.json
         config/catalog.json
+        config/default-apps.json
         config/default-home-layout.json
         config/studio-defaults.json
         config/skins/lounge.json
@@ -180,6 +181,14 @@ qt_add_resources(isolde "isolde_config"
         config/packages/retro-arcade/manifest.json
         config/packages/spotify/manifest.json
         config/packages/steam/manifest.json
+    config/packages/freetube/manifest.json
+    config/packages/cbc-gem/manifest.json
+    config/packages/prime-video/manifest.json
+    config/packages/disney-plus/manifest.json
+    config/packages/paramount-plus/manifest.json
+    config/packages/crunchyroll/manifest.json
+    config/packages/netflix/manifest.json
+    config/packages/peacock/manifest.json
 )
 
 qt_add_resources(isolde "isolde_store_web"
@@ -191,6 +200,7 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/config")
 configure_file(config/native-session-bus.conf "${CMAKE_CURRENT_BINARY_DIR}/config/native-session-bus.conf" COPYONLY)
 configure_file(config/apps.json "${CMAKE_CURRENT_BINARY_DIR}/config/apps.json" COPYONLY)
 configure_file(config/art-packs.json "${CMAKE_CURRENT_BINARY_DIR}/config/art-packs.json" COPYONLY)
+configure_file(config/default-apps.json "${CMAKE_CURRENT_BINARY_DIR}/config/default-apps.json" COPYONLY)
 configure_file(config/catalog.json "${CMAKE_CURRENT_BINARY_DIR}/config/catalog.json" COPYONLY)
 configure_file(config/default-home-layout.json "${CMAKE_CURRENT_BINARY_DIR}/config/default-home-layout.json" COPYONLY)
 configure_file(config/studio-defaults.json "${CMAKE_CURRENT_BINARY_DIR}/config/studio-defaults.json" COPYONLY)
@@ -205,6 +215,14 @@ set(ISOLDE_PACKAGE_MANIFESTS
     config/packages/retro-arcade/manifest.json
     config/packages/spotify/manifest.json
     config/packages/steam/manifest.json
+    config/packages/freetube/manifest.json
+    config/packages/cbc-gem/manifest.json
+    config/packages/prime-video/manifest.json
+    config/packages/disney-plus/manifest.json
+    config/packages/paramount-plus/manifest.json
+    config/packages/crunchyroll/manifest.json
+    config/packages/netflix/manifest.json
+    config/packages/peacock/manifest.json
 )
 foreach(package_manifest IN LISTS ISOLDE_PACKAGE_MANIFESTS)
     get_filename_component(package_dir "${package_manifest}" DIRECTORY)
@@ -213,6 +231,7 @@ endforeach()
 
 install(TARGETS isolde RUNTIME DESTINATION bin)
 install(FILES tools/component-health.py DESTINATION share/isolde)
+install(FILES tools/provision-default-apps.py DESTINATION share/isolde)
 install(FILES tools/kodi-window.py DESTINATION share/isolde)
 configure_file(tools/kodi-window.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/kodi-window.py COPYONLY)
 configure_file(tools/component-health.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/component-health.py COPYONLY)
@@ -221,6 +240,7 @@ install(TARGETS isolde-native-host RUNTIME DESTINATION bin)
 install(FILES config/apps.json DESTINATION bin/config)
 install(FILES config/native-session-bus.conf DESTINATION bin/config)
 install(FILES config/art-packs.json DESTINATION bin/config)
+install(FILES config/default-apps.json DESTINATION bin/config)
 install(FILES config/catalog.json DESTINATION bin/config)
 install(FILES config/default-home-layout.json DESTINATION bin/config)
 install(FILES config/studio-defaults.json DESTINATION bin/config)
@@ -325,6 +345,7 @@ if(BUILD_TESTING)
         target_compile_definitions(isolde_audio_tests PRIVATE AUDIO_PLAYER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fake-audio-player.py")
         add_test(NAME audio_backend COMMAND isolde_audio_tests)
         add_test(NAME appliance_installation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appliance_install.py)
+        add_test(NAME default_app_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_apps.py)
         add_test(NAME appliance_recovery COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_recovery.py)
         add_test(NAME kodi_local_bridge COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_bridge.py)
         add_test(NAME kodi_playback COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_playback.py)

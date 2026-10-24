@@ -198,6 +198,7 @@ def main():
     parser.add_argument("--prefix", type=Path, default=Path.home() / ".local/share/isolde-appliance")
     parser.add_argument("--startup", action="store_true", help="Start at graphical login and recover from crashes")
     parser.add_argument("--build-dir", type=Path, help="Reuse a CMake build directory (default: build-appliance)")
+    parser.add_argument("--without-default-apps", action="store_true", help="Explicitly omit native default-app downloads and first-install activation")
     args = parser.parse_args()
     if args.action == "plan":
         print("Target: Ubuntu 26.04; existing desktop and user preserved.")
@@ -215,6 +216,8 @@ def main():
             raise RuntimeError("Run only the dependencies action with sudo.")
         run("apt-get", "update")
         run("apt-get", "install", "-y", *DEPENDENCIES)
+        if not args.without_default_apps:
+            run(sys.executable, str(args.source.resolve()/"tools/provision-default-apps.py"), "system", "--source", str(args.source.resolve()))
         return
     if os.geteuid() == 0:
         raise RuntimeError("Build/install as the regular Isolde user, not root.")
@@ -247,6 +250,10 @@ def main():
         config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
         install_startup(prefix, config)
         enable_startup()
+    if not args.without_default_apps:
+        config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config"))) / "Isolde"
+        if not (config / "default-apps-completed.json").exists():
+            run(sys.executable, str(source/"tools/provision-default-apps.py"), "activate", "--source", str(source))
     print(f"Installed and tested: {release}. Existing running app was not interrupted.")
     print(f"Launch: {prefix / 'current/bin/isolde'}")
 

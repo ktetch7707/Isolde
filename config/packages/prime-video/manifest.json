@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "packageId": "prime-video",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Prime Video",
+  "description": "Provider web app in a private browser profile. Requires an account, supported region and any applicable subscription.",
+  "category": "Photo & Video",
+  "publisher": "Amazon",
+  "provenance": "Official provider website with Google Chrome runtime",
+  "capabilities": [
+    "network",
+    "audio.output",
+    "video.output",
+    "desktop.external"
+  ],
+  "app": {
+    "id": "prime-video",
+    "type": "desktop",
+    "presentationMode": "web-kiosk",
+    "networkRequirement": "internet",
+    "section": "Apps",
+    "accent": "#00A8E1",
+    "symbol": "P",
+    "desktopId": "isolde-prime-video",
+    "windowClass": "isolde-prime-video",
+    "containment": "fullscreen"
+  }
+}

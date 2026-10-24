@@ -20,6 +20,23 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_guest_build_cleanup_preserves_source_and_rejects_redirects(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root/"studio-implementation-1"; run.mkdir()
+            build = run/"build"; build.mkdir()
+            (build/"CMakeCache.txt").write_text("Generated cache")
+            (build/"CMakeFiles").mkdir()
+            (run/"source").mkdir(); (run/"evidence.log").write_text("retain")
+            with self.assertRaises(RuntimeError): oracle.remove_guest_build(build, root, [build/"shared"])
+            self.assertTrue(build.exists())
+            oracle.remove_guest_build(build, root, [])
+            self.assertTrue((run/"source").exists()); self.assertTrue((run/"evidence.log").exists())
+            outside = root/"outside"; outside.mkdir()
+            build.symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(RuntimeError): oracle.remove_guest_build(build, root, [])
+            self.assertTrue(outside.exists())
+
     def test_reference_round_trip_does_not_claim_collection_acceptance(self):
         path = Path(__file__).resolve().parents[1] / "tools/home-reference-acceptance.py"
         module_spec = importlib.util.spec_from_file_location("reference_acceptance", path)
@@ -169,6 +186,14 @@ class OracleTests(unittest.TestCase):
             self.assertTrue(archive.getnames()[0].endswith("result.json"))
 
     def test_visual_results_use_each_harness_contract(self):
+        independent = {"passed": True, "native_clients": True, "steam_client_downloaded": False, "subscriptionPlaybackVerified": False, "household_unchanged": True}
+        self.assertTrue(oracle.visual_result_passed("clients", independent))
+        self.assertFalse(oracle.visual_result_passed("apps", independent))
+        clients = dict(passed=True, native_clients=True, steam_client_downloaded=True, household_unchanged=True, subscriptionPlaybackVerified=False)
+        self.assertTrue(oracle.visual_result_passed("apps", clients))
+        self.assertFalse(oracle.visual_result_passed("apps", {"passed": True}))
+        clients["subscriptionPlaybackVerified"] = True
+        self.assertFalse(oracle.visual_result_passed("apps", clients))
         repaired = dict(passed=True, preserving_update=True, household_unchanged=True, real_compositor_return=True)
         self.assertTrue(oracle.visual_result_passed("repairs", repaired))
         for key in repaired:

@@ -4,7 +4,6 @@
   { "id": "youtube", "icon": "youtube",       "name": "YouTube",       "type": "web", "presentationMode": "web-kiosk", "networkRequirement": "internet", "url": "https://www.youtube.com/tv", "allowedOrigins": ["https://www.youtube.com", "https://accounts.google.com"], "section": "Apps",    "accent": "#E45252", "symbol": "Y" },
   { "id": "switch",        "name": "Switch",        "type": "mock", "presentationMode": "capture", "section": "Games",   "accent": "#E85C68", "symbol": "N" },
   { "id": "switch2",       "name": "Switch 2",      "type": "mock", "presentationMode": "capture", "section": "Games",   "accent": "#7A77E8", "symbol": "2" },
-  { "id": "steam-machine", "name": "Steam Machine", "type": "mock", "presentationMode": "game-hub", "section": "Games",   "accent": "#4F83A8", "symbol": "S" },
   { "id": "desktop-mode",  "name": "Desktop Mode",  "type": "desktop-shell", "presentationMode": "utility-desktop", "section": "System", "accent": "#68758F", "symbol": "D" },
   { "id": "app-store",     "name": "App Store",     "type": "store", "presentationMode": "native-tv", "section": "System",  "accent": "#D58A45", "symbol": "+" },
   { "id": "settings", "name": "Settings", "type": "settings", "presentationMode": "native-tv", "section": "System", "accent": "#9B6BE3", "symbol": "S" }

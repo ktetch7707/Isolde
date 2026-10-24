@@ -28,6 +28,7 @@ private slots:
     void setupProgressPersistsAndHandlesFailure();
     void profilesPersistAndIsolatePersonalSettings();
     void registryLoadsConfig();
+    void registryCompatibilityIdsPreserveLayoutsWithoutDuplicateApps();
     void inputManagerMapsRemoteAndMediaKeys();
     void registryAcceptsLivingRoomPresentationModes();
     void registryAndHomeExposeNetworkRequirements();
@@ -109,6 +110,21 @@ void IsoldeTests::registryLoadsConfig()
     QVERIFY(registry.loadFromData(config));
     QCOMPARE(registry.apps().size(), 3);
     QCOMPARE(registry.find("switch")->name, QString("Switch"));
+}
+void IsoldeTests::registryCompatibilityIdsPreserveLayoutsWithoutDuplicateApps()
+{
+    AppRegistry registry;
+    const auto valid=QByteArray(R"([{"id":"reader","name":"Reader","type":"mock","legacyIds":["old-reader"]}])");
+    QVERIFY(registry.loadFromData(valid));QCOMPARE(registry.apps().size(),1);QCOMPARE(registry.find("old-reader"),registry.find("reader"));
+    QTemporaryDir dir;const auto defaults=dir.filePath("default.json"),saved=dir.filePath("home.json");
+    const QByteArray layout=R"({"schemaVersion":1,"items":[{"id":"saved-tile","kind":"app","appId":"old-reader"}]})";
+    QFile file(defaults);QVERIFY(file.open(QIODevice::WriteOnly));file.write(layout);file.close();
+    HomeLayout home(&registry);QVERIFY(home.load(defaults,saved));QVERIFY(!QFile::exists(saved));QCOMPARE(home.items().first().toMap()["name"].toString(),QString("Reader"));
+    QVERIFY(!registry.loadFromData(R"([{"id":"reader","name":"Reader","type":"mock","legacyIds":["other"]},{"id":"other","name":"Other","type":"mock"}])"));
+    QCOMPARE(registry.find("old-reader"),registry.find("reader"));QCOMPARE(registry.apps().size(),1);
+    AppDefinition conflict;conflict.id="other";conflict.name="Other";conflict.type="mock";conflict.launchConfiguration={{"legacyIds",QVariantList{"old-reader"}}};QVERIFY(!registry.addApp(conflict));
+    conflict.launchConfiguration={{"legacyIds",QVariantList{"../unsafe"}}};QVERIFY(!registry.addApp(conflict));
+    QVERIFY(registry.removeApp("reader"));QVERIFY(!registry.find("old-reader"));QVERIFY(!QFile::exists(saved));
 }
 
 void IsoldeTests::inputManagerMapsRemoteAndMediaKeys()

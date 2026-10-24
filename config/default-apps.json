@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "apps": ["kodi", "freetube", "spotify", "cbc-gem", "prime-video", "disney-plus", "paramount-plus", "crunchyroll", "netflix", "peacock", "steam"],
+  "gamesBackend": "steam",
+  "native": {
+    "kodi": {"provider": "ubuntu", "package": "kodi", "executable": "/usr/bin/kodi", "desktopId": "isolde-kodi", "arguments": ["-fs"], "icon": "kodi"},
+    "freetube": {"provider": "freetube", "executable": "/usr/bin/freetube", "desktopId": "freetube", "arguments": [], "icon": "freetube"},
+    "spotify": {"provider": "spotify", "executable": "/usr/bin/spotify", "desktopId": "isolde-spotify", "arguments": ["--password-store=basic"], "icon": "spotify"},
+    "steam": {"provider": "ubuntu", "package": "steam-installer", "executable": "/usr/games/steam", "desktopId": "isolde-steam", "arguments": ["-gamepadui"], "icon": "steam"}
+  },
+  "web": {
+    "cbc-gem": {"url": "https://gem.cbc.ca/", "iconUrl": "https://gem.cbc.ca/favicon.ico"},
+    "prime-video": {"url": "https://www.primevideo.com/", "iconUrl": "https://www.primevideo.com/favicon.ico"},
+    "disney-plus": {"url": "https://www.disneyplus.com/", "iconUrl": "https://www.disneyplus.com/favicon.ico"},
+    "paramount-plus": {"url": "https://www.paramountplus.com/", "iconUrl": "https://www.paramountplus.com/favicon.ico"},
+    "crunchyroll": {"url": "https://www.crunchyroll.com/", "iconUrl": "https://www.crunchyroll.com/build/assets/img/favicons/favicon-32x32.png"},
+    "netflix": {"url": "https://www.netflix.com/", "iconUrl": "https://www.netflix.com/favicon.ico"},
+    "peacock": {"url": "https://www.peacocktv.com/", "iconUrl": "https://www.peacocktv.com/favicon.ico"}
+  }
+}

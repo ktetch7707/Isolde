@@ -1,8 +1,8 @@
 param(
-    [ValidateSet('Check','Test','Visual','Deploy','Status','Recover','Cancel')][string]$Action = 'Test',
+    [ValidateSet('Check','Test','Visual','Deploy','Provision','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
     [ValidateSet('all','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode')][string]$Suite = 'all',
-    [ValidateSet('studio','desktop','lounge','pastel','pages','repairs')][string[]]$Cases = @('studio','lounge','pastel'),
+    [ValidateSet('studio','desktop','lounge','pastel','pages','repairs','apps','clients')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
@@ -54,7 +54,7 @@ try {
         $remoteAction = $Action.ToLowerInvariant()
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
-        $seconds = if ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } else { 45 }
+        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')
         $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + $command) -TimeoutSeconds $seconds -Log (Join-Path $local "$remoteAction.log")
     }

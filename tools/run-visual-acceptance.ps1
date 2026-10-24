@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs')][string]$Case = 'pages',
+    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -46,15 +46,15 @@ $captureLine = {
             -Arguments @('controlvm',$VmName,'screenshotpng',$capture) -TimeoutSeconds 20 `
             -Log (Join-Path $outputPath 'capture.log')
         if (!(Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).Length -eq 0) { throw "Screenshot missing: $phase" }
-        if ($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) {
+        if (($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) -or ($Case -eq 'apps' -and $phase -eq 'steaminstall')) {
             if ($VmName -ne 'Isolde-Test') { throw 'Compositor input is restricted to the Isolde-Test guest.' }
             $keys = @('Home')
-            if ($phase -eq 'desktoppermission') {
-                $instructions = Join-Path $outputPath 'desktop-permission-keys.json'
+            if ($phase -in @('desktoppermission','steaminstall')) {
+                $instructions = Join-Path $outputPath $(if ($phase -eq 'desktoppermission') {'desktop-permission-keys.json'} else {'steam-install-keys.json'})
                 Write-Host "Review $capture then provide bounded guest keys in $instructions"
                 $deadline = [DateTime]::UtcNow.AddSeconds(110)
                 while (!(Test-Path -LiteralPath $instructions)) {
-                    if ([DateTime]::UtcNow -gt $deadline) { throw 'Desktop permission review timed out; no consent input sent.' }
+                    if ([DateTime]::UtcNow -gt $deadline) { throw 'Guest dialog review timed out; no consent input sent.' }
                     Start-Sleep -Milliseconds 250
                 }
                 if ((Get-Item -LiteralPath $instructions).Length -gt 2048) { throw 'Oversized guest key instruction.' }
