@@ -117,6 +117,10 @@ def install_native_isolation(root=Path("/")):
         if path.is_symlink(): raise ValueError("Refusing redirected sandbox installation")
     previous = {p: (p.read_bytes(), stat.S_IMODE(p.stat().st_mode)) if p.exists() else None for p in (wrapper, profile)}
     try:
+        wrapper.parent.mkdir(parents=True, exist_ok=True)
+        if wrapper.parent.is_symlink() or wrapper.parent.resolve() != wrapper.parent.absolute():
+            raise ValueError("Refusing redirected sandbox directory")
+        os.chmod(wrapper.parent, 0o755)
         atomic(wrapper, binary.read_bytes(), 0o755)
         atomic(profile, policy, 0o644)
         run(parser, "-r", str(profile))

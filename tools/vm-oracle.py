@@ -322,6 +322,7 @@ class Oracle:
             native_setup[filename]={"exists":file.is_file(),"symlink":file.is_symlink()}
             if file.is_file(): native_setup[filename].update(uid=file.stat().st_uid,mode=oct(file.stat().st_mode & 0o7777),sha256=digest(file))
         if Path("/usr/lib/isolde-native/bwrap").is_file():
+            native_setup["ancestors"]=[{"path":str(p),"symlink":p.is_symlink(),"uid":p.stat().st_uid,"mode":oct(p.stat().st_mode & 0o7777)} for p in Path("/usr/lib/isolde-native/bwrap").parents]
             label=subprocess.run(["/usr/lib/isolde-native/bwrap","--ro-bind","/","/","--proc","/proc","--","/usr/bin/cat","/proc/self/attr/current"],capture_output=True,text=True,timeout=10)
             native_setup["loadedLabel"]={"exit":label.returncode,"output":label.stdout[:2048],"error":label.stderr[:2048]}
         atomic_json(self.run/"native-setup-state.json",native_setup)
@@ -425,6 +426,11 @@ class Oracle:
             raise RuntimeError("Native configuration requires this deployed snapshot in Isolde-Test")
         script=self.run/"source/tools/provision-default-apps.py"
         command=["/usr/bin/python3",str(script),"isolation","--source",str(self.run/"source")]
+        # Older tested installers inherited the administrator's group-writable
+        # umask. Tighten only the exact approved directory after installation.
+        command=["/usr/bin/python3","-c","import os,runpy,sys; sys.argv="+repr(command[1:])+"; runpy.run_path(sys.argv[0],run_name='__main__'); os.chmod('/usr/lib/isolde-native',0o755)"]
+        launcher=self.run/"native-admin-terminal.py"
+        launcher.write_text("import subprocess\nprint('Isolde native setup — enter the VM administrator password only here.', flush=True)\nr = subprocess.run("+repr(["pkexec"]+command)+")\nprint('Setup finished with exit code', r.returncode, flush=True)\ninput('Press Enter to close this window. ')\nraise SystemExit(r.returncode)\n")
         environment=dict(os.environ)
         for line in self.command("systemctl","--user","show-environment").splitlines():
             key,_,value=line.partition("=")
@@ -434,7 +440,7 @@ class Oracle:
         try:
             self.stage("native-configure-stop",["systemctl","--user","stop","isolde.service"],30)
             print("VM_AUTH_REQUIRED: authenticate in the Isolde native setup terminal inside Isolde-Test; never send a password here.",flush=True)
-            self.stage("native-configure-policy",["ptyxis","--standalone","--title","Isolde native setup","--","pkexec"]+command,180,env=environment)
+            self.stage("native-configure-policy",["ptyxis","--standalone","--title","Isolde native setup","--","/usr/bin/python3",str(launcher)],180,env=environment)
             if not Path("/usr/lib/isolde-native/bwrap").is_file() or not Path("/etc/apparmor.d/isolde-native").is_file():
                 raise RuntimeError("Administrator setup did not complete; no native sandbox exception installed")
             self.stage("native-configure-isolation-test",["ctest","--test-dir",str(self.root/"work/build"),"-R","^native_profile_isolation$","--output-on-failure"],90)
@@ -455,13 +461,18 @@ class Oracle:
             raise RuntimeError("Native diagnostic helper does not match this tested source")
         executable = work/"build/isolde_native_smoke"
         if not executable.is_file(): raise RuntimeError("Tested native diagnostic helper is unavailable")
+        environment=dict(os.environ)
+        for line in self.command("systemctl","--user","show-environment").splitlines():
+            key,_,value=line.partition("=")
+            if key in {"DISPLAY","XAUTHORITY","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS"}: environment[key]=value
+        if not environment.get("DISPLAY"): raise RuntimeError("Native diagnostics require the logged-in graphical session")
         before, links, layouts = self.service(), self.links(), self.layout_hashes()
         atomic_json(self.root/"service-lease.json", {"service": before, "releases": links, "runId": self.state["runId"], "pid": os.getpid()})
         try:
             self.stage("native-diagnostic-stop", ["systemctl", "--user", "stop", "isolde.service"], 30)
             # Existing production-bridge helper, same explicitly authorized
             # Studio Demo profile. No shell, shared home, login or policy change.
-            self.stage("native-"+app_id+"-diagnostic", [str(executable), app_id, profile_id, "5"], 20)
+            self.stage("native-"+app_id+"-diagnostic", [str(executable), app_id, profile_id, "5"], 20, env=environment)
         finally:
             self.update(service=self.restore(before), normalLayoutsBefore=layouts, normalLayoutsAfter=self.layout_hashes(), diagnosticOnly=True)
             (self.root/"service-lease.json").unlink(missing_ok=True)

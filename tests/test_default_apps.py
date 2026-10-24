@@ -20,6 +20,11 @@ class DefaultAppsTests(unittest.TestCase):
                 result=apps.install_native_isolation(root)
             self.assertFalse(result["globalBwrapPolicyChanged"])
             wrapper=root/"usr/lib/isolde-native/bwrap"; profile=root/"etc/apparmor.d/isolde-native"
+            self.assertEqual(wrapper.parent.stat().st_mode & 0o777, 0o755)
+            apps.os.chmod(wrapper.parent, 0o775)
+            with patch.object(apps,"platform"), patch.object(apps.os,"geteuid",return_value=0), patch.object(apps,"run"):
+                apps.install_native_isolation(root)
+            self.assertEqual(wrapper.parent.stat().st_mode & 0o777, 0o755)
             previous=(wrapper.read_bytes(),profile.read_bytes())
             self.assertIn(b"flags=(unconfined)",previous[1])
             with patch.object(apps,"platform"), patch.object(apps.os,"geteuid",return_value=0), patch.object(apps,"run",side_effect=[RuntimeError("reload failed"),None]):
