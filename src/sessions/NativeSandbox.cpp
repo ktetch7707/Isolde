@@ -48,6 +48,23 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         return plan;
     }
     plan.program = QStandardPaths::findExecutable("bwrap");
+    const QFileInfo applianceWrapper("/usr/lib/isolde-native/bwrap");
+    if(applianceWrapper.exists() || applianceWrapper.isSymLink()){
+        auto path=applianceWrapper;
+        while(true){
+            if(path.isSymLink() || path.ownerId()!=0 || (path.permissions() & (QFile::WriteGroup|QFile::WriteOther))){
+                plan.error="Repair the root-owned Isolde native sandbox installation. Shared-account launch is disabled.";
+                return plan;
+            }
+            if(path.absoluteFilePath()=="/")break;
+            path=QFileInfo(path.absolutePath());
+        }
+        if(!applianceWrapper.isFile() || !applianceWrapper.isExecutable()){
+            plan.error="The Isolde native sandbox executable is unavailable.";
+            return plan;
+        }
+        plan.program=applianceWrapper.absoluteFilePath();
+    }
     const auto dbus = QStandardPaths::findExecutable("dbus-run-session");
     const auto supervisor = QCoreApplication::applicationDirPath() + "/isolde-native-host";
     const auto busConfig = QCoreApplication::applicationDirPath() + "/config/native-session-bus.conf";

@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 import re
 import shutil
@@ -97,6 +98,35 @@ def platform():
     if sys.platform != "linux": raise RuntimeError("Provisioning is restricted to the Ubuntu appliance")
     values = dict(line.split("=", 1) for line in Path("/etc/os-release").read_text().splitlines() if "=" in line)
     if values.get("ID", "").strip('"') != "ubuntu" or values.get("VERSION_ID", "").strip('"') != "26.04": raise RuntimeError("Ubuntu 26.04 required")
+
+
+def install_native_isolation(root=Path("/")):
+    """Explicitly approved native-runtime namespace exception (Isolde-Test)."""
+    platform()
+    if os.geteuid() != 0: raise RuntimeError("Native sandbox setup requires a guest administrator")
+    binary = Path("/usr/bin/bwrap")
+    metadata = binary.stat()
+    if metadata.st_uid != 0 or metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH) or binary.is_symlink() or metadata.st_size > 16*1024*1024:
+        raise RuntimeError("Use the root-owned Ubuntu bubblewrap package")
+    parser = shutil.which("apparmor_parser") or "/usr/sbin/apparmor_parser"
+    if not Path(parser).is_file(): raise RuntimeError("Ubuntu AppArmor parser is required")
+    wrapper = root/"usr/lib/isolde-native/bwrap"
+    profile = root/"etc/apparmor.d/isolde-native"
+    policy = b'abi <abi/5.0>,\ninclude <tunables/global>\n\n# Isolde retains private homes, mounts and session buses.\nprofile isolde-native /usr/lib/isolde-native/bwrap flags=(unconfined) {\n  userns,\n}\n'
+    for path in (wrapper, profile):
+        if path.is_symlink(): raise ValueError("Refusing redirected sandbox installation")
+    previous = {p: (p.read_bytes(), stat.S_IMODE(p.stat().st_mode)) if p.exists() else None for p in (wrapper, profile)}
+    try:
+        atomic(wrapper, binary.read_bytes(), 0o755)
+        atomic(profile, policy, 0o644)
+        run(parser, "-r", str(profile))
+    except Exception:
+        for path, saved in previous.items():
+            if saved is None: path.unlink(missing_ok=True)
+            else: atomic(path, saved[0], saved[1])
+        if previous[profile] is not None: run(parser, "-r", str(profile))
+        raise
+    return {"wrapper": str(wrapper), "profile": str(profile), "globalBwrapPolicyChanged": False}
 
 
 def system(document, delegated=False):
@@ -241,7 +271,7 @@ def activate(source, document, config=None, data=None, applications=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["plan", "system", "activate"])
+    parser.add_argument("action", choices=["plan", "system", "activate", "isolation"])
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--sudo-apt", action="store_true", help="Use existing delegated apt-get/dpkg privileges; repositories must already be configured")
     args = parser.parse_args()
@@ -249,6 +279,10 @@ def main():
     document = load(source)
     if args.action == "plan": print(json.dumps(document, indent=2)); return
     platform()
+    if args.action == "isolation":
+        import socket
+        if socket.gethostname() != "isolde-test": raise RuntimeError("This sandbox exception is authorized only in Isolde-Test")
+        print(json.dumps(install_native_isolation())); return
     if args.action == "system": system(document, args.sudo_apt)
     else: print(json.dumps(activate(source, document)))
 

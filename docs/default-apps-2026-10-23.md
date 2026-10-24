@@ -40,6 +40,16 @@ Follow-up authorization (2026-10-24): the user says “Go ahead” and explicitl
 
 Unchanged-policy diagnosis continues through the bounded runner. `Diagnose -RunId default-apps-20261024-full-g -NativeApp cbc-gem` captures Chrome's corresponding unusable SUID helper at `/opt/google/chrome/chrome-sandbox`, with exit 1, safe Home recovery and restored service. Its driver digest is `51b6e406b83fb0cd3da4fe3b1e8ce262a7ffcaf74c72ebb1eb07b723d2ad2e68`. The diagnostic selector is restricted to FreeTube, CBC Gem and Steam, retains active-profile/source/layout/release guards, and changes no sandbox flags or security policy.
 
+## Exact authorization and administrator authentication
+
+The user subsequently selects **“Approve these exact VM changes”** for the question naming both persistent paths, `flags=(unconfined)`, user namespaces, and all native apps launched through the wrapper. This is standing authorization for that exact Isolde-Test exception. Do not ask for the same permission again. It does not grant administrator credentials or authorize changes to the Windows host.
+
+`native-compat-20261024-full-a` passes all 28 registrations in 289.61 seconds, including the root-only installer guard and deterministic AppArmor reload-failure rollback. Release `5f8701685636756747b35ad9` is deployed. The native launcher prefers the approved wrapper only when it and its ancestors are root-owned, free of redirects and not writable by other users. The explicit `isolation` command refuses any hostname other than `isolde-test`; it does not run on appliance startup or silently change other machines.
+
+`Configure` verifies the deployed tested payload, leases/stops the service, invokes this setup and then runs native profile isolation tests. Its first attempt stops at sudo's interactive authentication requirement. A bounded retry through the installed Ptyxis terminal and pkexec waits 180 seconds for guest administrator authentication, then times out and restores the service. `native-configure-state-20261024-a` confirms **neither approved persistent path exists**. No policy is loaded, and post-install isolation/client verification remains open. Service active/running, zero restarts; both normal layout hashes unchanged. Authenticate inside the guest when ready, never share a password in chat.
+
+A separate proposal to add `--disable-setuid-sandbox` flags is rejected by automatic review as outside the exact approval. Those flags are not applied. The implemented route retains normal native-client sandbox flags and first tests whether the approved namespace exception resolves their selection automatically.
+
 Household expected hash: `87aedaa1a40f7857ac54d06398aade1e2b41e18182aad698b248058c21d6fa6e`. Studio Demo after its explicit preserving page update: `85865ee3f03c6301cb2b3153bacc1bde8fba01b2c005279f7cd86263311cb4cf`. No task checkbox credit: T20 80%, T21 36%, Overall round(866/24) = 36% across 24 active tasks.
 
 Portal identity reference: [Registry interface](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.host.portal.Registry.html). This documents the API, not successful installed handoff.

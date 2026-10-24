@@ -13,6 +13,21 @@ spec.loader.exec_module(apps)
 
 
 class DefaultAppsTests(unittest.TestCase):
+    def test_isolation_install_and_failed_reload_roll_back(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            with patch.object(apps,"platform"), patch.object(apps.os,"geteuid",return_value=0), patch.object(apps,"run"):
+                result=apps.install_native_isolation(root)
+            self.assertFalse(result["globalBwrapPolicyChanged"])
+            wrapper=root/"usr/lib/isolde-native/bwrap"; profile=root/"etc/apparmor.d/isolde-native"
+            previous=(wrapper.read_bytes(),profile.read_bytes())
+            self.assertIn(b"flags=(unconfined)",previous[1])
+            with patch.object(apps,"platform"), patch.object(apps.os,"geteuid",return_value=0), patch.object(apps,"run",side_effect=[RuntimeError("reload failed"),None]):
+                with self.assertRaisesRegex(RuntimeError,"reload failed"): apps.install_native_isolation(root)
+            self.assertEqual(previous,(wrapper.read_bytes(),profile.read_bytes()))
+    def test_isolation_setup_requires_administrator(self):
+        with patch.object(apps,"platform"),patch.object(apps.os,"geteuid",return_value=1000):
+            with self.assertRaisesRegex(RuntimeError,"administrator"): apps.install_native_isolation()
     def test_native_wrapper_keeps_supplied_icon_name(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); (root/"applications").mkdir()

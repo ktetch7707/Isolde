@@ -313,6 +313,18 @@ class Oracle:
         atomic_json(self.run / "guest-disk-usage.json", {"guestHome": str(Path.home()), "usage": usage.stdout[:65536], "errors": usage.stderr[:2048]})
         privileges = subprocess.run(["sudo", "-n", "-l"], capture_output=True, text=True, timeout=10)
         atomic_json(self.run / "guest-privileges.json", {"exit": privileges.returncode, "policy": privileges.stdout[:8192], "error": privileges.stderr[:2048]})
+        atomic_json(self.run/"native-admin-tools.json", {name:shutil.which(name) for name in ("pkexec","gnome-terminal","kgx","ptyxis","systemd-run")})
+        terminal_help=subprocess.run(["ptyxis","--help"],env=environment,capture_output=True,text=True,timeout=10)
+        atomic_json(self.run/"native-terminal-help.json",{"exit":terminal_help.returncode,"output":terminal_help.stdout[:16384],"error":terminal_help.stderr[:2048]})
+        native_setup={}
+        for filename in ("/usr/lib/isolde-native/bwrap","/etc/apparmor.d/isolde-native"):
+            file=Path(filename)
+            native_setup[filename]={"exists":file.is_file(),"symlink":file.is_symlink()}
+            if file.is_file(): native_setup[filename].update(uid=file.stat().st_uid,mode=oct(file.stat().st_mode & 0o7777),sha256=digest(file))
+        if Path("/usr/lib/isolde-native/bwrap").is_file():
+            label=subprocess.run(["/usr/lib/isolde-native/bwrap","--ro-bind","/","/","--proc","/proc","--","/usr/bin/cat","/proc/self/attr/current"],capture_output=True,text=True,timeout=10)
+            native_setup["loadedLabel"]={"exit":label.returncode,"output":label.stdout[:2048],"error":label.stderr[:2048]}
+        atomic_json(self.run/"native-setup-state.json",native_setup)
         native_home = Path.home()/".local/share/Isolde/native-profiles/8bdf6077-4613-4b52-9b20-d1ec7931dfcf/steam/home"
         native_logs = {}
         if native_home.is_dir() and not native_home.is_symlink():
@@ -405,6 +417,31 @@ class Oracle:
             raise RuntimeError("Staged payload changed after testing; refuse use")
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
+
+    def configure_native(self):
+        payload=self.tested_payload()
+        deployed=json.loads((self.run/"deploy-result.json").read_text())
+        if self.command("hostname")!="isolde-test" or self.links()["current"]!=deployed["release"] or digest(Path(deployed["release"])/"bin/isolde")!=digest(payload/"bin/isolde"):
+            raise RuntimeError("Native configuration requires this deployed snapshot in Isolde-Test")
+        script=self.run/"source/tools/provision-default-apps.py"
+        command=["/usr/bin/python3",str(script),"isolation","--source",str(self.run/"source")]
+        environment=dict(os.environ)
+        for line in self.command("systemctl","--user","show-environment").splitlines():
+            key,_,value=line.partition("=")
+            if key in {"DISPLAY","XAUTHORITY","XDG_RUNTIME_DIR","DBUS_SESSION_BUS_ADDRESS"}: environment[key]=value
+        before,links,layouts=self.service(),self.links(),self.layout_hashes()
+        atomic_json(self.root/"service-lease.json",{"service":before,"releases":links,"runId":self.state["runId"],"pid":os.getpid()})
+        try:
+            self.stage("native-configure-stop",["systemctl","--user","stop","isolde.service"],30)
+            print("VM_AUTH_REQUIRED: authenticate in the Isolde native setup terminal inside Isolde-Test; never send a password here.",flush=True)
+            self.stage("native-configure-policy",["ptyxis","--standalone","--title","Isolde native setup","--","pkexec"]+command,180,env=environment)
+            if not Path("/usr/lib/isolde-native/bwrap").is_file() or not Path("/etc/apparmor.d/isolde-native").is_file():
+                raise RuntimeError("Administrator setup did not complete; no native sandbox exception installed")
+            self.stage("native-configure-isolation-test",["ctest","--test-dir",str(self.root/"work/build"),"-R","^native_profile_isolation$","--output-on-failure"],90)
+        finally:
+            self.update(service=self.restore(before),normalLayoutsBefore=layouts,normalLayoutsAfter=self.layout_hashes())
+            (self.root/"service-lease.json").unlink(missing_ok=True)
+            if self.links()!=links or self.layout_hashes()!=layouts: raise RuntimeError("Native configuration changed a release or saved layout")
 
     def diagnose(self, app_id="freetube"):
         if app_id not in {"freetube", "cbc-gem", "steam"}: raise ValueError("Unsupported native diagnostic")
@@ -651,7 +688,7 @@ def cancel_owned(root, run_id):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["check", "test", "visual", "deploy", "provision", "diagnose", "status", "recover", "cancel"])
+    parser.add_argument("action", choices=["check", "test", "visual", "deploy", "provision", "configure", "diagnose", "status", "recover", "cancel"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--suite", choices=SUITES, default="all")
     parser.add_argument("--case", choices=CASES, default="studio")
@@ -697,6 +734,8 @@ def main():
                 oracle.provision()
             elif args.action == "diagnose":
                 oracle.diagnose(args.native_app)
+            elif args.action == "configure":
+                oracle.configure_native()
             elif args.action == "recover":
                 lease = root / "service-lease.json"
                 if lease.is_file():
