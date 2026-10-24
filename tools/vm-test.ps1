@@ -5,6 +5,7 @@ param(
     [ValidateSet('studio','desktop','lounge','pastel','pages','repairs','apps','clients')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
+    [ValidateSet('native','surfshark')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
@@ -56,7 +57,8 @@ try {
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
-        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure') { 360 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
+        if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
+        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')
         $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + $command) -TimeoutSeconds $seconds -Log (Join-Path $local "$remoteAction.log")
     }

@@ -11,6 +11,8 @@ import sys
 import tarfile
 import tempfile
 import time
+import signal
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -20,6 +22,18 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_cancellation_unwinds_a_waiting_selector_and_owned_child(self):
+        previous=signal.signal(signal.SIGTERM,oracle.interrupted)
+        timer=threading.Timer(.2,lambda:os.kill(os.getpid(),signal.SIGTERM))
+        started=time.monotonic()
+        try:
+            timer.start()
+            runner=oracle.Oracle(self.root,"cancel-select")
+            with self.assertRaisesRegex(RuntimeError,"interrupted by signal"):
+                runner.stage("wait",[sys.executable,"-c","import time; time.sleep(30)"],35)
+            self.assertLess(time.monotonic()-started,3)
+        finally:
+            timer.cancel();signal.signal(signal.SIGTERM,previous)
     def test_guest_build_cleanup_preserves_source_and_rejects_redirects(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

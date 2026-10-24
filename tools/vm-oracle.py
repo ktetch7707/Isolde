@@ -419,7 +419,8 @@ class Oracle:
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
 
-    def configure_native(self):
+    def configure_native(self, target="native"):
+        if target not in {"native","surfshark"}: raise ValueError("Unsupported guest configuration target")
         payload=self.tested_payload()
         deployed=json.loads((self.run/"deploy-result.json").read_text())
         if self.command("hostname")!="isolde-test" or self.links()["current"]!=deployed["release"] or digest(Path(deployed["release"])/"bin/isolde")!=digest(payload/"bin/isolde"):
@@ -429,8 +430,10 @@ class Oracle:
         # Older tested installers inherited the administrator's group-writable
         # umask. Tighten only the exact approved directory after installation.
         command=["/usr/bin/python3","-c","import os,runpy,sys; sys.argv="+repr(command[1:])+"; runpy.run_path(sys.argv[0],run_name='__main__'); os.chmod('/usr/lib/isolde-native',0o755)"]
+        if target=="surfshark":command=["/usr/bin/python3",str(script),"surfshark","--source",str(self.run/"source")]
         launcher=self.run/"native-admin-terminal.py"
-        launcher.write_text("import subprocess\nprint('Isolde native setup — enter the VM administrator password only here.', flush=True)\nr = subprocess.run("+repr(["pkexec"]+command)+")\nprint('Setup finished with exit code', r.returncode, flush=True)\ninput('Press Enter to close this window. ')\nraise SystemExit(r.returncode)\n")
+        title="Isolde Surfshark setup" if target=="surfshark" else "Isolde native setup"
+        launcher.write_text("import subprocess\nprint("+repr(title+" — enter the VM administrator password only here.")+", flush=True)\nr = subprocess.run("+repr(["pkexec"]+command)+")\nprint('Setup finished with exit code', r.returncode, flush=True)\n"+("if r.returncode: input('Press Enter to close this window. ')\n" if target=="surfshark" else "input('Press Enter to close this window. ')\n")+"raise SystemExit(r.returncode)\n")
         environment=dict(os.environ)
         for line in self.command("systemctl","--user","show-environment").splitlines():
             key,_,value=line.partition("=")
@@ -439,15 +442,25 @@ class Oracle:
         atomic_json(self.root/"service-lease.json",{"service":before,"releases":links,"runId":self.state["runId"],"pid":os.getpid()})
         try:
             self.stage("native-configure-stop",["systemctl","--user","stop","isolde.service"],30)
-            print("VM_AUTH_REQUIRED: authenticate in the Isolde native setup terminal inside Isolde-Test; never send a password here.",flush=True)
-            self.stage("native-configure-policy",["ptyxis","--standalone","--title","Isolde native setup","--","/usr/bin/python3",str(launcher)],180,env=environment)
-            if not Path("/usr/lib/isolde-native/bwrap").is_file() or not Path("/etc/apparmor.d/isolde-native").is_file():
+            print("VM_AUTH_REQUIRED: authenticate in the "+title+" terminal inside Isolde-Test; never send a password here.",flush=True)
+            self.stage("native-configure-policy",["ptyxis","--standalone","--title",title,"--","/usr/bin/python3",str(launcher)],900 if target=="surfshark" else 180,env=environment)
+            if target=="surfshark":
+                receipt=Path("/var/lib/isolde/surfshark-install.json")
+                if not receipt.is_file():raise RuntimeError("Surfshark administrator setup did not complete")
+                result=json.loads(receipt.read_text())
+                if not result.get("installed"):raise RuntimeError("Surfshark installation was not confirmed")
+                atomic_json(self.run/"surfshark-install-result.json",result)
+            elif not Path("/usr/lib/isolde-native/bwrap").is_file() or not Path("/etc/apparmor.d/isolde-native").is_file():
                 raise RuntimeError("Administrator setup did not complete; no native sandbox exception installed")
-            self.stage("native-configure-isolation-test",["ctest","--test-dir",str(self.root/"work/build"),"-R","^native_profile_isolation$","--output-on-failure"],90)
+            if target=="native":self.stage("native-configure-isolation-test",["ctest","--test-dir",str(self.root/"work/build"),"-R","^native_profile_isolation$","--output-on-failure"],90)
         finally:
             self.update(service=self.restore(before),normalLayoutsBefore=layouts,normalLayoutsAfter=self.layout_hashes())
             (self.root/"service-lease.json").unlink(missing_ok=True)
             if self.links()!=links or self.layout_hashes()!=layouts: raise RuntimeError("Native configuration changed a release or saved layout")
+        if target=="surfshark":
+            # The VPN control app runs in the guest desktop, not a private media
+            # app sandbox. Its system daemon must manage this guest's network.
+            self.stage("surfshark-open",["/usr/bin/python3","-c","import subprocess; subprocess.Popen(['gtk-launch','surfshark'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)"],15,env=environment)
 
     def diagnose(self, app_id="freetube"):
         if app_id not in {"freetube", "cbc-gem", "steam"}: raise ValueError("Unsupported native diagnostic")
@@ -670,7 +683,9 @@ def exclusive_lock(path):
 
 
 def interrupted(signum, _frame):
-    raise InterruptedError("Oracle interrupted by signal " + str(signum))
+    # selectors treats InterruptedError as a retryable interrupted system call.
+    # Cancellation must escape that retry and reach the stage/service finally.
+    raise RuntimeError("Oracle interrupted by signal " + str(signum))
 
 
 def cancel_owned(root, run_id):
@@ -688,11 +703,17 @@ def cancel_owned(root, run_id):
     if (not owned_driver or "--run-id" not in command or command[command.index("--run-id") + 1] != run_id
             or state.get("processStartTicks") != start_ticks):
         raise RuntimeError("Refusing to signal a process whose ownership/start identity does not match")
-    os.kill(pid, signal.SIGTERM)
+    # SIGINT also unwinds older guardians whose SIGTERM handler raised the
+    # retryable InterruptedError. Ownership and process-start checks stay above.
+    os.kill(pid, signal.SIGINT)
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
         state = json.loads(path.read_text())
         if state.get("state") != "running":
+            return {"cancelled": True, "state": state}
+        if not proc.is_dir():
+            state.update(state="failed", error="Cancelled owned runner", updated=time.time())
+            atomic_json(path, state)
             return {"cancelled": True, "state": state}
         time.sleep(.2)
     raise RuntimeError("Owned runner has not finished cleanup; preserve evidence and inspect Status")
@@ -706,6 +727,7 @@ def main():
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
+    parser.add_argument("--configure-target",choices=["native","surfshark"],default="native")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.run_id):
         parser.error("Invalid run ID")
@@ -732,6 +754,7 @@ def main():
         with exclusive_lock(root / "oracle.lock"):
             acquired = True
             signal.signal(signal.SIGTERM, interrupted)
+            signal.signal(signal.SIGINT, interrupted)
             signal.signal(signal.SIGHUP, interrupted)
             oracle.update(action=args.action)
             if args.action == "check":
@@ -747,7 +770,7 @@ def main():
             elif args.action == "diagnose":
                 oracle.diagnose(args.native_app)
             elif args.action == "configure":
-                oracle.configure_native()
+                oracle.configure_native(args.configure_target)
             elif args.action == "recover":
                 lease = root / "service-lease.json"
                 if lease.is_file():

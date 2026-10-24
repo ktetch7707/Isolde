@@ -186,6 +186,46 @@ def native_missing(document):
     return missing
 
 
+def install_surfshark(source):
+    """Explicit guest-only system VPN client installation, never a shell pipe."""
+    import socket
+    platform()
+    if socket.gethostname() != "isolde-test" or os.geteuid() != 0:
+        raise RuntimeError("Surfshark installation requires the Isolde-Test guest administrator")
+    path=source/"config/vpn-providers.json"
+    if path.stat().st_size>8192: raise ValueError("Oversized VPN provider definition")
+    definition=json.loads(path.read_text())
+    if set(definition)!={"schemaVersion","surfshark"} or definition["schemaVersion"]!=1: raise ValueError("Unsupported VPN provider definition")
+    provider=definition["surfshark"]
+    if set(provider)!={"installerUrl","installerSha256","signingFingerprint","repository","suite","package"}: raise ValueError("Unsupported VPN provider fields")
+    if provider["installerUrl"]!="https://downloads.surfshark.com/linux/debian-install.sh" or provider["repository"]!="https://ocean.surfshark.com/debian" or provider["suite"]!="stretch" or provider["package"]!="surfshark": raise ValueError("Use the reviewed official Surfshark provider")
+    if not re.fullmatch(r"[a-f0-9]{64}",provider["installerSha256"]) or not re.fullmatch(r"[A-F0-9]{40}",provider["signingFingerprint"]): raise ValueError("Invalid provider verification data")
+    if run("dpkg","--print-architecture",capture_output=True,text=True).stdout.strip() not in {"amd64","arm64"}: raise RuntimeError("Unsupported Surfshark architecture")
+    with tempfile.TemporaryDirectory(prefix="isolde-surfshark-") as temporary:
+        installer=Path(temporary)/"installer.sh"
+        actual=download(provider["installerUrl"],installer,128*1024)
+        if actual!=provider["installerSha256"]: raise RuntimeError("Surfshark installer changed; review it before installing")
+        keys=re.findall(rb"-----BEGIN PGP PUBLIC KEY BLOCK-----\n.*?-----END PGP PUBLIC KEY BLOCK-----",installer.read_bytes(),re.S)
+        if len(keys)!=1: raise RuntimeError("Surfshark signing key is missing or ambiguous")
+        key=Path(temporary)/"surfshark.asc";key.write_bytes(keys[0]+b"\n")
+        metadata=run("gpg","--batch","--show-keys","--with-colons",str(key),capture_output=True,text=True).stdout
+        fingerprints=[line.split(":")[9] for line in metadata.splitlines() if line.startswith("fpr:")]
+        if not fingerprints or fingerprints[0]!=provider["signingFingerprint"]: raise RuntimeError("Unexpected Surfshark repository signing key")
+        # Extract only the reviewed key. Never execute the downloaded script,
+        # remove an existing client, or grant its key global repository trust.
+        keyring=Path("/usr/share/keyrings/isolde-surfshark.asc")
+        repository=Path("/etc/apt/sources.list.d/isolde-surfshark.list")
+        atomic(keyring,key.read_bytes(),0o644)
+        atomic(repository,("deb [signed-by="+str(keyring)+"] "+provider["repository"]+" "+provider["suite"]+" main\n").encode(),0o644)
+        run("apt-get","update",timeout=180)
+        run("apt-get","install","-y","surfshark",timeout=600)
+        status=run("dpkg-query","-W","-f=${Status}\n${Version}\n","surfshark",capture_output=True,text=True).stdout.splitlines()
+        if len(status)!=2 or status[0]!="install ok installed": raise RuntimeError("Surfshark package installation was not confirmed")
+        result={"provider":"surfshark","installed":True,"version":status[1],"installerSha256":actual,"signingFingerprint":fingerprints[0],"loginVerified":False,"tunnelVerified":False}
+        atomic(Path("/var/lib/isolde/surfshark-install.json"),json.dumps(result,indent=2).encode(),0o644)
+        return result
+
+
 def provider_icon(url, destination, page_url=None):
     # Public provider artwork only. No cookies, browser profiles or account data.
     with tempfile.TemporaryDirectory(prefix="isolde-provider-icon-") as temporary:
@@ -299,7 +339,7 @@ def activate(source, document, config=None, data=None, applications=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["plan", "system", "activate", "isolation"])
+    parser.add_argument("action", choices=["plan", "system", "activate", "isolation", "surfshark"])
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--sudo-apt", action="store_true", help="Use existing delegated apt-get/dpkg privileges; repositories must already be configured")
     args = parser.parse_args()
@@ -307,6 +347,7 @@ def main():
     document = load(source)
     if args.action == "plan": print(json.dumps(document, indent=2)); return
     platform()
+    if args.action == "surfshark": print(json.dumps(install_surfshark(source))); return
     if args.action == "isolation":
         import socket
         if socket.gethostname() != "isolde-test": raise RuntimeError("This sandbox exception is authorized only in Isolde-Test")

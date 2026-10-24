@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "surfshark": {
+    "installerUrl": "https://downloads.surfshark.com/linux/debian-install.sh",
+    "installerSha256": "37f435b52916dadea289bf3f26aba010237f7266b55e52353e19f3daac4cda3d",
+    "signingFingerprint": "D00FDC3221233215271F88DC1DB7590E83C8F643",
+    "repository": "https://ocean.surfshark.com/debian",
+    "suite": "stretch",
+    "package": "surfshark"
+  }
+}

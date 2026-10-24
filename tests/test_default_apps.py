@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import shutil
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +14,33 @@ spec.loader.exec_module(apps)
 
 
 class DefaultAppsTests(unittest.TestCase):
+    def test_surfshark_install_uses_scoped_trust_without_executing_vendor_script(self):
+        provider=json.loads((ROOT/"config/vpn-providers.json").read_text())["surfshark"]
+        commands=[]
+        def fetch(url,path,*args,**kwargs):
+            self.assertEqual(url,provider["installerUrl"])
+            path.write_bytes(b"#!/bin/sh\nnever-execute\n-----BEGIN PGP PUBLIC KEY BLOCK-----\npublic-key\n-----END PGP PUBLIC KEY BLOCK-----\n")
+            return provider["installerSha256"]
+        def execute(*args,**kwargs):
+            commands.append(args)
+            output="amd64\n" if args[0]=="dpkg" else "fpr:::::::::"+provider["signingFingerprint"]+":\n" if args[0]=="gpg" else "install ok installed\n3.0-test\n" if args[0]=="dpkg-query" else ""
+            return SimpleNamespace(stdout=output)
+        with patch.object(apps,"platform"),patch("socket.gethostname",return_value="isolde-test"),patch.object(apps.os,"geteuid",return_value=0),patch.object(apps,"download",side_effect=fetch),patch.object(apps,"run",side_effect=execute),patch.object(apps,"atomic") as write:
+            result=apps.install_surfshark(ROOT)
+        self.assertTrue(result["installed"]);self.assertFalse(result["tunnelVerified"])
+        self.assertEqual(result["version"],"3.0-test")
+        self.assertIn(("apt-get","install","-y","surfshark"),commands)
+        self.assertFalse(any(args[0] in {"sh","bash"} or "remove" in args for args in commands))
+        repository=[call.args[1] for call in write.call_args_list if str(call.args[0]).endswith("isolde-surfshark.list")][0]
+        self.assertIn(b"signed-by=/usr/share/keyrings/isolde-surfshark.asc",repository)
+    def test_surfshark_changed_installer_cannot_modify_guest_trust(self):
+        with patch.object(apps,"platform"),patch("socket.gethostname",return_value="isolde-test"),patch.object(apps.os,"geteuid",return_value=0),patch.object(apps,"run",return_value=SimpleNamespace(stdout="amd64\n")),patch.object(apps,"download",return_value="0"*64),patch.object(apps,"atomic") as write:
+            with self.assertRaisesRegex(RuntimeError,"installer changed"):apps.install_surfshark(ROOT)
+            write.assert_not_called()
+    def test_surfshark_requires_guest_administrator(self):
+        with patch.object(apps,"platform"),patch("socket.gethostname",return_value="not-the-guest"),patch.object(apps.os,"geteuid",return_value=0),patch.object(apps,"run") as execute:
+            with self.assertRaisesRegex(RuntimeError,"guest administrator"):apps.install_surfshark(ROOT)
+            execute.assert_not_called()
     def test_provider_prefers_large_supplied_icon_over_working_favicon(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)
