@@ -406,7 +406,8 @@ class Oracle:
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
 
-    def diagnose(self):
+    def diagnose(self, app_id="freetube"):
+        if app_id not in {"freetube", "cbc-gem", "steam"}: raise ValueError("Unsupported native diagnostic")
         self.tested_payload()
         profile_id = "8bdf6077-4613-4b52-9b20-d1ec7931dfcf"
         profiles = json.loads((Path.home()/".config/Isolde/profiles.json").read_text())
@@ -423,7 +424,7 @@ class Oracle:
             self.stage("native-diagnostic-stop", ["systemctl", "--user", "stop", "isolde.service"], 30)
             # Existing production-bridge helper, same explicitly authorized
             # Studio Demo profile. No shell, shared home, login or policy change.
-            self.stage("native-freetube-diagnostic", [str(executable), "freetube", profile_id, "5"], 20)
+            self.stage("native-"+app_id+"-diagnostic", [str(executable), app_id, profile_id, "5"], 20)
         finally:
             self.update(service=self.restore(before), normalLayoutsBefore=layouts, normalLayoutsAfter=self.layout_hashes(), diagnosticOnly=True)
             (self.root/"service-lease.json").unlink(missing_ok=True)
@@ -655,6 +656,7 @@ def main():
     parser.add_argument("--suite", choices=SUITES, default="all")
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
+    parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.run_id):
         parser.error("Invalid run ID")
@@ -694,7 +696,7 @@ def main():
             elif args.action == "provision":
                 oracle.provision()
             elif args.action == "diagnose":
-                oracle.diagnose()
+                oracle.diagnose(args.native_app)
             elif args.action == "recover":
                 lease = root / "service-lease.json"
                 if lease.is_file():

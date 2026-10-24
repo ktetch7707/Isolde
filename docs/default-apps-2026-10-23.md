@@ -36,6 +36,10 @@ Automatic approval review rejects a proposed root-owned Isolde bubblewrap copy p
 
 This exception would permit native clients to create their own nested sandboxes but reduce Ubuntu's current restriction for processes launched through that wrapper. Explicit user approval is required before pursuing that route; administrator authentication may also be required. Product and installed native-client acceptance remain open. Downloads, launcher registration and passing isolated native tests do not waive this real runtime failure.
 
+Follow-up authorization (2026-10-24): the user says “Go ahead” and explicitly requests Steam, CBC Gem and FreeTube installed and working by default. Automatic review nevertheless rejects the same proposed patch again, asking for approval of the exact persistent files and blast radius. No wrapper, profile, native sandbox code or privileged setup change is applied. An explicit question naming `/usr/lib/isolde-native/bwrap`, `/etc/apparmor.d/isolde-native`, its unconfined/userns policy and all native launches through the wrapper is pending.
+
+Unchanged-policy diagnosis continues through the bounded runner. `Diagnose -RunId default-apps-20261024-full-g -NativeApp cbc-gem` captures Chrome's corresponding unusable SUID helper at `/opt/google/chrome/chrome-sandbox`, with exit 1, safe Home recovery and restored service. Its driver digest is `51b6e406b83fb0cd3da4fe3b1e8ce262a7ffcaf74c72ebb1eb07b723d2ad2e68`. The diagnostic selector is restricted to FreeTube, CBC Gem and Steam, retains active-profile/source/layout/release guards, and changes no sandbox flags or security policy.
+
 Household expected hash: `87aedaa1a40f7857ac54d06398aade1e2b41e18182aad698b248058c21d6fa6e`. Studio Demo after its explicit preserving page update: `85865ee3f03c6301cb2b3153bacc1bde8fba01b2c005279f7cd86263311cb4cf`. No task checkbox credit: T20 80%, T21 36%, Overall round(866/24) = 36% across 24 active tasks.
 
 Portal identity reference: [Registry interface](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.host.portal.Registry.html). This documents the API, not successful installed handoff.
