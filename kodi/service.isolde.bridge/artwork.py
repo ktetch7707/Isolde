@@ -19,12 +19,14 @@ class Artwork:
         return reply["result"]
 
     def get(self, params):
-        kinds = {"movie": "Movie", "tvshow": "TVShow", "season": "Season", "episode": "Episode"}
+        kinds = {"movie": "Movie", "tvshow": "TVShow", "season": "Season", "episode": "Episode", "album": "Album", "song": "Song", "channel":"Channel"}
         kind, ident = params.get("kind"), params.get("id")
         if set(params) != {"kind", "id"} or kind not in kinds or type(ident) is not int or ident < 1:
             raise ValueError("A library identity is required")
-        details = self.query("VideoLibrary.Get" + kinds[kind] + "Details", {kind + "id": ident, "properties": ["art"]})
+        namespace = "AudioLibrary." if kind in {"album", "song"} else "PVR." if kind == "channel" else "VideoLibrary."
+        details = self.query(namespace + "Get" + kinds[kind] + "Details", {kind + "id": ident, "properties": ["icon"] if kind == "channel" else ["art"]})
         art = details.get(kind + "details", {}).get("art", {})
+        if kind == "channel": art = {"thumb":details.get("channeldetails",{}).get("icon","")}
         for name in ("poster", "tvshow.poster", "thumb", "fanart"):
             url = art.get(name, "")
             if not isinstance(url, str) or not url or len(url) > 8192:

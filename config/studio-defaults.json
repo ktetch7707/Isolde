@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "rootPageName": "Home",
+  "desktop": {"title":"Desktop","returnLabel":"Return to Isolde","returnShortcut":"Home","width":360,"height":120,"margin":24,"radius":18,"labelSize":20},
   "colorPicker": {
     "presets": [
       {"name": "Snow", "value": "#ffffff"},
@@ -247,6 +248,17 @@
     }
   ],
   "componentPresets": {
+    "tv-guide": {
+      "id":"tv-guide", "name":"TV Guide", "kind":"widget", "widgetType":"library",
+      "componentType":"library", "family":"tv-guide", "placement":{"x":0,"y":0,"width":6,"height":4},
+      "presentation":{"libraryKind":"channels","libraryView":"all","libraryLimit":50,"libraryColumns":1,"libraryLayout":"list","libraryCardStyle":"summary","libraryChrome":true,"icon":"tv","subtitle":"Programme information unavailable"}
+    },
+    "music-library": {
+      "id":"music-library", "name":"Music library", "kind":"widget", "widgetType":"library",
+      "componentType":"library", "family":"music-library",
+      "placement":{"x":0,"y":0,"width":6,"height":3},
+      "presentation":{"libraryKind":"albums","libraryView":"all","libraryLimit":50,"libraryColumns":4,"libraryLayout":"grid","libraryChrome":true}
+    },
     "button": {
       "id": "button",
       "name": "Button",
@@ -444,6 +456,14 @@
       "name": "Recently viewed",
       "description": "Local Kodi movies and episodes, most recently viewed first",
       "icon": "clock"
+    },
+    {
+      "id":"music-library", "name":"Music library",
+      "description":"Local Kodi albums and tracks with artwork and playback", "icon":"music"
+    },
+    {
+      "id":"tv-guide", "name":"TV Guide",
+      "description":"Configured Kodi TV channels and current/next programmes", "icon":"tv"
     }
   ],
   "actions": [
@@ -657,7 +677,7 @@
         "tab": "Content",
         "scope": "presentation",
         "key": "libraryKind",
-        "excludeFamilies": ["recently-viewed"],
+        "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
         "label": "Kodi library",
         "type": "choice",
         "types": [
@@ -673,7 +693,7 @@
         "tab": "Content",
         "scope": "presentation",
         "key": "libraryView",
-        "excludeFamilies": ["recently-viewed"],
+        "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
         "label": "Kodi view",
         "type": "choice",
         "types": [
@@ -695,7 +715,7 @@
         "tab": "Content",
         "scope": "presentation",
         "key": "libraryValue",
-        "excludeFamilies": ["recently-viewed"],
+        "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
         "label": "Source / search",
         "type": "source",
         "types": [
@@ -717,6 +737,7 @@
           "navigation"
         ]
       },
+      {"tab":"Content","scope":"appCollection","key":"section","label":"App group","type":"appGroup","families":["app-bar"],"fallback":"All app groups"},
       {
         "tab": "Content",
         "scope": "component",

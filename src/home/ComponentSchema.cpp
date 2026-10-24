@@ -139,7 +139,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if(it.value().metaType().id()!=QMetaType::QString || !QColor(it.value().toString()).isValid() || QColor(it.value().toString()).alpha()!=255)return false;
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
-            if (key == "libraryKind" && !QStringList{"movies","shows","history"}.contains(it.value().toString())) return false;
+            if (key == "libraryKind" && !QStringList{"movies","shows","history","albums","channels"}.contains(it.value().toString())) return false;
             if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection"}.contains(it.value().toString())) return false;
             if (key == "libraryLayout" && !QStringList{"grid","list","row"}.contains(it.value().toString())) return false;
             if (key == "libraryCardStyle" && !QStringList{"media","recent","orb","source","summary","banner"}.contains(it.value().toString())) return false;
@@ -364,11 +364,12 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     if (type.isEmpty() && legacy) type = kind == "widget" ? (QStringList{"clock","text","container"}.contains(input.value("widgetType").toString())?input.value("widgetType").toString():"clock") : "launcher";
     if (!QStringList{"launcher", "clock", "text", "media-shelf","container","button","image","library"}.contains(type)) return reject(error, "Unsupported component type.");
     if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>MaxComponentNameLength || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
-    if(input.contains("family") && !((type=="container" && QStringList{"carousel","app-bar"}.contains(input["family"].toString())) || (type=="library" && input["family"]=="recently-viewed")))return reject(error,"Unsupported component family.");
+    if(input.contains("family") && !((type=="container" && QStringList{"carousel","app-bar"}.contains(input["family"].toString())) || (type=="library" && QStringList{"recently-viewed","music-library","tv-guide"}.contains(input["family"].toString()))))return reject(error,"Unsupported component family.");
     if(input.contains("appCollection")) {
         if(type!="container" || input.value("family")!="app-bar" || input["appCollection"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Choose an app carousel for an app collection.");
         const auto collection=input["appCollection"].toMap();
-        if(collection.size()!=2 || !QStringList{"all","selected"}.contains(collection.value("mode").toString()) || collection.value("ids").metaType().id()!=QMetaType::QVariantList || collection.value("ids").toList().size()>128)return reject(error,"Choose All installed or up to 128 selected apps.");
+        if(collection.size()!=(collection.contains("section")?3:2) || !QStringList{"all","selected"}.contains(collection.value("mode").toString()) || collection.value("ids").metaType().id()!=QMetaType::QVariantList || collection.value("ids").toList().size()>128)return reject(error,"Choose All installed or up to 128 selected apps.");
+        if(collection.contains("section") && (collection["section"].metaType().id()!=QMetaType::QString || collection["section"].toString().trimmed().isEmpty() || collection["section"].toString().size()>80 || collection["section"].toString().contains(QChar::Null)))return reject(error,"Choose a named app group of up to 80 characters.");
         QSet<QString> ids;
         for(const auto &id:collection.value("ids").toList()) {if(id.metaType().id()!=QMetaType::QString || !safeId(id.toString()) || ids.contains(id.toString()))return reject(error,"Choose distinct safe app identities.");ids.insert(id.toString());}
         if(collection.value("mode")=="all" && !ids.isEmpty())return reject(error,"All installed apps does not store selected membership.");
@@ -417,6 +418,12 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(input.contains("action"))return reject(error,"Kodi owns media activation.");
             const auto style=input.value("presentation").toMap();
             const bool history=input.value("family")=="recently-viewed";
+            const bool music=input.value("family")=="music-library";
+            const bool guide=input.value("family")=="tv-guide";
+            if(guide && (style.value("libraryKind")!="channels" || style.value("libraryView")!="all" || !style.value("libraryValue").toString().isEmpty()))return reject(error,"TV Guide uses this profile's configured Kodi PVR TV channels.");
+            if(!guide && style.value("libraryKind")=="channels")return reject(error,"Choose a TV Guide component for TV channels.");
+            if(music && (style.value("libraryKind")!="albums" || style.value("libraryView")!="all" || !style.value("libraryValue").toString().isEmpty()))return reject(error,"Music uses this profile's Kodi albums and tracks.");
+            if(!music && style.value("libraryKind")=="albums")return reject(error,"Choose a Music library component for albums and tracks.");
             if(history && (style.value("libraryKind")!="history" || style.value("libraryView")!="watched" || !style.value("libraryValue").toString().isEmpty()))return reject(error,"Recently viewed uses local Kodi viewing history, not a library or recently added view.");
             if(!history && style.value("libraryKind")=="history")return reject(error,"Choose a Recently viewed carousel for viewing history.");
             if(!style.contains("libraryKind") || !style.contains("libraryView"))return reject(error,"Choose a supported Kodi view.");
@@ -425,6 +432,8 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(style.value("libraryView")=="collection" && !safeId(style.value("libraryValue").toString()))return reject(error,"Choose a saved collection.");
             source={{"schemaVersion",1},{"provider","kodi"},{"kind","library"},{"libraryKind",style.value("libraryKind")},{"libraryView",style.value("libraryView")},{"libraryValue",style.value("libraryValue","")}};
             if(history)source["kind"]="recently-viewed";
+            if(music)source["kind"]="music";
+            if(guide)source["kind"]="guide";
         } else {
             if(input.contains("action")) {const auto link=action(input["action"].toMap(),error);if(link.isEmpty())return {};result["action"]=link;}
             source={{"schemaVersion",1},{"provider","shell"},{"kind",type}};

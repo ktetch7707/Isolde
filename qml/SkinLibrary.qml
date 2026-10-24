@@ -10,13 +10,20 @@ Rectangle {
     property string naming: ""
     property bool confirming: false
     property string message: ""
+    property var pageUpdates: []
     readonly property var entries: layoutModel.skins || []
     readonly property var choice: entries[selected] || ({})
-    readonly property var operations: ["Apply skin", "Save current as new skin", "Rename saved skin", "Delete saved skin"]
+    readonly property var operations: ["Apply skin", "Save current as new skin", "Rename saved skin", "Delete saved skin", "Update starter pages"]
     color: "#101014"; visible: open
     function begin() { selected = 0; operation = 0; naming = ""; confirming = false; message = ""; open = true }
     function execute() {
         message = ""
+        if (operation === 4) {
+            pageUpdates = layoutModel.skinPageUpdates(choice.id)
+            if (!pageUpdates.length) { message = "No unchanged starter links need updating. Custom links are kept."; return }
+            confirming = true
+            return
+        }
         if (operation === 1 || operation === 2) {
             if (operation === 2 && choice.builtIn) { message = "Save your own copy to give this design a new name."; return }
             naming = operation === 1 ? "save" : "rename"
@@ -26,10 +33,10 @@ Rectangle {
         else confirming = true
     }
     function confirmOperation() {
-        const ok = operation === 0 ? layoutModel.applySkin(choice.id) : layoutModel.deleteSkin(choice.id)
+        const ok = operation === 4 ? layoutModel.applySkinPageUpdates(choice.id) : operation === 0 ? layoutModel.applySkin(choice.id) : layoutModel.deleteSkin(choice.id)
         confirming = false
         selected = Math.min(selected, entries.length - 1)
-        message = ok ? operation === 0 ? "Skin applied. Back returns to Home settings." : "Saved skin deleted. Your current Home is unchanged." : layoutModel.errorString
+        message = ok ? operation === 4 ? "Starter links updated. Your design and existing pages are kept." : operation === 0 ? "Skin applied. Back returns to Home settings." : "Saved skin deleted. Your current Home is unchanged." : layoutModel.errorString
     }
     function finishName(text) {
         if (naming === "save") {
@@ -50,7 +57,7 @@ Rectangle {
         else if (command === inputManager.navigateUp) selected = Math.max(0, selected - 1)
         else if (command === inputManager.navigateDown) selected = Math.min(entries.length - 1, selected + 1)
         else if (command === inputManager.navigateLeft) operation = Math.max(0, operation - 1)
-        else if (command === inputManager.navigateRight) operation = Math.min(3, operation + 1)
+        else if (command === inputManager.navigateRight) operation = Math.min(operations.length - 1, operation + 1)
         else if (command === inputManager.confirm) execute()
     }
     MouseArea { anchors.fill: parent }
@@ -64,10 +71,10 @@ Rectangle {
                 model: root.operations
                 delegate: Rectangle {
                     required property int index; required property string modelData
-                    width: (root.width - 110) / 4; height: 54; radius: 10
+                    width: (root.width - 80 - 10 * (root.operations.length - 1)) / root.operations.length; height: 54; radius: 10
                     color: root.operation === index ? "#553C4C" : "#25242C"
                     border.color: root.operation === index ? "#E3ACC3" : "#39353D"
-                    Text { anchors.centerIn: parent; text: modelData; color: "#F5F1F3"; font.pixelSize: 15 }
+                    Text { anchors.centerIn: parent; width: parent.width - 12; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: modelData; color: "#F5F1F3"; font.pixelSize: 15 }
                     MouseArea { anchors.fill: parent; onClicked: { root.operation = index; root.execute() } }
                 }
             }
@@ -94,8 +101,8 @@ Rectangle {
         anchors.fill: parent; color: "#ED101014"; visible: root.confirming
         Column {
             anchors.centerIn: parent; width: parent.width - 160; spacing: 20
-            Text { width: parent.width; wrapMode: Text.WordWrap; color: "#F5F1F3"; font.pixelSize: 28; text: root.operation === 0 ? "Apply “" + root.choice.name + "”?" : "Delete saved skin “" + root.choice.name + "”?" }
-            Text { width: parent.width; wrapMode: Text.WordWrap; color: "#AAA5AF"; font.pixelSize: 20; text: root.operation === 0 ? "This replaces the current Home design. Save it as a skin first if you want to keep it." : "The current Home design and its artwork will stay in place." }
+            Text { width: parent.width; textFormat: Text.PlainText; wrapMode: Text.WordWrap; color: "#F5F1F3"; font.pixelSize: 28; text: root.operation === 4 ? "Update starter pages?" : root.operation === 0 ? "Apply “" + root.choice.name + "”?" : "Delete saved skin “" + root.choice.name + "”?" }
+            Text { width: parent.width; textFormat: Text.PlainText; wrapMode: Text.WordWrap; color: "#AAA5AF"; font.pixelSize: 20; text: root.operation === 4 ? "Update these unchanged starter links: " + root.pageUpdates.map(function(p) { return p.name }).join(", ") + ". Add their pages where missing. Keep your design, custom links and existing pages. Back writes nothing." : root.operation === 0 ? "This replaces the current Home design. Save it as a skin first if you want to keep it." : "The current Home design and its artwork will stay in place." }
             Row {
                 spacing: 20
                 Rectangle { width: 240; height: 56; radius: 10; color: "#553C4C"; Text { anchors.centerIn: parent; text: "OK · Confirm"; color: "white"; font.pixelSize: 20 } MouseArea { anchors.fill: parent; onClicked: root.confirmOperation() } }

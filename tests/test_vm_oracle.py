@@ -169,6 +169,11 @@ class OracleTests(unittest.TestCase):
             self.assertTrue(archive.getnames()[0].endswith("result.json"))
 
     def test_visual_results_use_each_harness_contract(self):
+        repaired = dict(passed=True, preserving_update=True, household_unchanged=True, real_compositor_return=True)
+        self.assertTrue(oracle.visual_result_passed("repairs", repaired))
+        for key in repaired:
+            incomplete = dict(repaired); incomplete[key] = False
+            self.assertFalse(oracle.visual_result_passed("repairs", incomplete))
         reference = dict(component_support=True, reset_verified=True,
                          settings_skin_round_trip=True, saved_skin_survives_reset=True, missing=[])
         for case in ("lounge", "pastel"):

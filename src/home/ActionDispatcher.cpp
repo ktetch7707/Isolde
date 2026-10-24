@@ -20,6 +20,7 @@ ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, 
 }
 bool ActionDispatcher::launchApp(const QString &id)
 {
+    if(id=="desktop-mode"){emit desktopRequested(m_origin);return true;}
     const auto *definition = m_apps->find(id);
     if (definition && definition->presentationMode == "capture") {
         if (!m_capture) return false;
@@ -93,8 +94,7 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         else if (!m_capture->canSwitchInput(input)) emit rejected(m_capture->switchStatus());
         else { emit captureSessionRequested(input, originId); accepted = true; }
     } else if (type == "desktop-mode") {
-        // Desktop remains an explicit app capability, not an arbitrary command.
-        accepted = launchApp("desktop-mode");
+        emit desktopRequested(originId);accepted=true;
     } else accepted = m_sessions->launchAction(value);
     if (!accepted) m_origin = previous;
     return accepted;

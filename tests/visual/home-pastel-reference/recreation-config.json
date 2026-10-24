@@ -295,8 +295,8 @@
       "id": "guide",
       "name": "TV Guide",
       "action": {
-        "type": "settings",
-        "section": 4
+        "type": "open-page",
+        "pageId": "live-tv"
       },
       "categoryId": "shortcuts",
       "presentation": {
@@ -314,9 +314,10 @@
       "componentType": "launcher",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
+        "kind": "page",
+        "id": "live-tv",
         "schemaVersion": 1,
-        "kind": "settings"
+        "provider": "shell"
       }
     },
     {
@@ -384,7 +385,8 @@
       "id": "music",
       "name": "Music",
       "action": {
-        "type": "app-drawer"
+        "pageId": "library-music",
+        "type": "open-page"
       },
       "categoryId": "shortcuts",
       "presentation": {
@@ -402,9 +404,10 @@
       "componentType": "launcher",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
         "schemaVersion": 1,
-        "kind": "app-drawer"
+        "id": "library-music",
+        "kind": "page",
+        "provider": "shell"
       }
     },
     {
@@ -412,7 +415,8 @@
       "id": "games",
       "name": "Games",
       "action": {
-        "type": "app-drawer"
+        "type": "open-page",
+        "pageId": "library-games"
       },
       "categoryId": "shortcuts",
       "presentation": {
@@ -430,9 +434,10 @@
       "componentType": "launcher",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
         "schemaVersion": 1,
-        "kind": "app-drawer"
+        "provider": "shell",
+        "kind": "page",
+        "id": "library-games"
       }
     },
     {
@@ -652,6 +657,364 @@
       },
       "name": "TV Shows",
       "id": "library-shows"
+    },
+    {
+      "layout": {
+        "schemaVersion": 2,
+        "components": [
+          {
+            "componentType": "library",
+            "source": {
+              "kind": "music",
+              "libraryKind": "albums",
+              "provider": "kodi",
+              "libraryView": "all",
+              "schemaVersion": 1,
+              "libraryValue": ""
+            },
+            "widgetType": "library",
+            "schemaVersion": 1,
+            "kind": "widget",
+            "placement": {
+              "x": 0,
+              "height": 3,
+              "width": 4,
+              "y": 0
+            },
+            "id": "browse-music",
+            "name": "Music library",
+            "presentation": {
+              "libraryKind": "albums",
+              "libraryColumns": 4,
+              "libraryLayout": "grid",
+              "libraryView": "all",
+              "libraryLimit": 50,
+              "libraryChrome": true
+            },
+            "categoryId": "library",
+            "family": "music-library"
+          },
+          {
+            "componentType": "button",
+            "placement": {
+              "x": 0,
+              "height": 1,
+              "width": 1,
+              "y": 3
+            },
+            "presentation": {
+              "labelSize": 17,
+              "radius": 16,
+              "variant": "source",
+              "icon": "music"
+            },
+            "action": {
+              "appId": "kodi",
+              "type": "launch-app"
+            },
+            "schemaVersion": 1,
+            "categoryId": "library",
+            "widgetType": "button",
+            "kind": "widget",
+            "id": "manage-music",
+            "name": "Manage music in Kodi",
+            "source": {
+              "kind": "button",
+              "provider": "shell",
+              "schemaVersion": 1
+            }
+          },
+          {
+            "componentType": "container",
+            "placement": {
+              "x": 1,
+              "height": 1,
+              "width": 3,
+              "y": 3
+            },
+            "presentation": {
+              "layout": {
+                "rows": 1,
+                "mode": "row",
+                "columns": 16,
+                "wrap": false,
+                "gap": 16,
+                "visibleColumns": 4,
+                "padding": 8,
+                "schemaVersion": 1
+              },
+              "variant": "orb",
+              "labelSize": 15,
+              "diameter": 70,
+              "subtitle": "Installed music apps appear here.",
+              "artFit": "contain"
+            },
+            "schemaVersion": 1,
+            "categoryId": "library",
+            "family": "app-bar",
+            "appCollection": {
+              "ids": [],
+              "section": "Music",
+              "mode": "all"
+            },
+            "widgetType": "container",
+            "kind": "widget",
+            "id": "music-apps",
+            "name": "Music apps",
+            "source": {
+              "kind": "container",
+              "provider": "shell",
+              "schemaVersion": 1
+            }
+          }
+        ],
+        "theme": {},
+        "categories": [
+          {
+            "id": "library",
+            "name": "Music"
+          }
+        ],
+        "composition": {
+          "pageNavigation": "left",
+          "headerMode": "identity",
+          "grid": {
+            "columns": 4,
+            "mode": "screen",
+            "rows": 4,
+            "overlap": false,
+            "gap": 8,
+            "snap": true,
+            "margin": 16
+          },
+          "headerControls": [
+            "search",
+            "settings",
+            "edit"
+          ],
+          "fit": false,
+          "enabled": true,
+          "identity": "Music",
+          "schemaVersion": 1
+        }
+      },
+      "name": "Music",
+      "id": "library-music"
+    },
+    {
+      "layout": {
+        "schemaVersion": 2,
+        "components": [
+          {
+            "componentType": "container",
+            "placement": {
+              "x": 0,
+              "height": 2,
+              "width": 4,
+              "y": 0
+            },
+            "presentation": {
+              "layout": {
+                "rows": 1,
+                "mode": "row",
+                "columns": 16,
+                "wrap": false,
+                "gap": 20,
+                "visibleColumns": 5,
+                "padding": 16,
+                "schemaVersion": 1
+              },
+              "variant": "orb",
+              "labelSize": 18,
+              "diameter": 96,
+              "subtitle": "No game apps installed. Add an existing game launcher from App Store.",
+              "artFit": "contain"
+            },
+            "schemaVersion": 1,
+            "categoryId": "library",
+            "family": "app-bar",
+            "appCollection": {
+              "ids": [],
+              "section": "Games",
+              "mode": "all"
+            },
+            "widgetType": "container",
+            "kind": "widget",
+            "id": "game-apps",
+            "name": "Installed game apps",
+            "source": {
+              "kind": "container",
+              "provider": "shell",
+              "schemaVersion": 1
+            }
+          },
+          {
+            "componentType": "button",
+            "placement": {
+              "x": 0,
+              "height": 1,
+              "width": 4,
+              "y": 2
+            },
+            "presentation": {
+              "labelSize": 20,
+              "radius": 16,
+              "variant": "source",
+              "icon": "gamepad"
+            },
+            "action": {
+              "appId": "app-store",
+              "type": "launch-app"
+            },
+            "schemaVersion": 1,
+            "categoryId": "library",
+            "widgetType": "button",
+            "kind": "widget",
+            "id": "game-store",
+            "name": "Add a game app",
+            "source": {
+              "kind": "button",
+              "provider": "shell",
+              "schemaVersion": 1
+            }
+          }
+        ],
+        "theme": {},
+        "categories": [
+          {
+            "id": "library",
+            "name": "Games"
+          }
+        ],
+        "composition": {
+          "pageNavigation": "left",
+          "headerMode": "identity",
+          "grid": {
+            "columns": 4,
+            "mode": "screen",
+            "rows": 3,
+            "overlap": false,
+            "gap": 8,
+            "snap": true,
+            "margin": 16
+          },
+          "headerControls": [
+            "search",
+            "settings",
+            "edit"
+          ],
+          "fit": false,
+          "enabled": true,
+          "identity": "Games",
+          "schemaVersion": 1
+        }
+      },
+      "name": "Games",
+      "id": "library-games"
+    },
+    {
+      "layout": {
+        "schemaVersion": 2,
+        "components": [
+          {
+            "componentType": "library",
+            "source": {
+              "kind": "guide",
+              "libraryKind": "channels",
+              "provider": "kodi",
+              "libraryView": "all",
+              "schemaVersion": 1,
+              "libraryValue": ""
+            },
+            "widgetType": "library",
+            "schemaVersion": 1,
+            "kind": "widget",
+            "placement": {
+              "x": 0,
+              "height": 3,
+              "width": 4,
+              "y": 0
+            },
+            "id": "tv-channels",
+            "name": "TV channels",
+            "presentation": {
+              "libraryCardStyle": "summary",
+              "subtitle": "Programme information unavailable",
+              "icon": "tv",
+              "libraryColumns": 1,
+              "libraryLayout": "list",
+              "libraryView": "all",
+              "libraryChrome": true,
+              "libraryLimit": 50,
+              "libraryKind": "channels"
+            },
+            "categoryId": "library",
+            "family": "tv-guide"
+          },
+          {
+            "presentation": {
+              "radius": 16,
+              "icon": "tv",
+              "labelSize": 20,
+              "variant": "source"
+            },
+            "id": "manage-tv",
+            "placement": {
+              "y": 3,
+              "x": 0,
+              "width": 4,
+              "height": 1
+            },
+            "widgetType": "button",
+            "componentType": "button",
+            "source": {
+              "kind": "button",
+              "schemaVersion": 1,
+              "provider": "shell"
+            },
+            "name": "Manage TV sources in Kodi",
+            "action": {
+              "type": "launch-app",
+              "appId": "kodi"
+            },
+            "kind": "widget",
+            "schemaVersion": 1,
+            "categoryId": "library"
+          }
+        ],
+        "theme": {},
+        "categories": [
+          {
+            "id": "library",
+            "name": "TV Guide"
+          }
+        ],
+        "composition": {
+          "pageNavigation": "left",
+          "headerMode": "identity",
+          "grid": {
+            "columns": 4,
+            "mode": "screen",
+            "rows": 4,
+            "overlap": false,
+            "gap": 8,
+            "snap": true,
+            "margin": 16
+          },
+          "headerControls": [
+            "search",
+            "settings",
+            "edit"
+          ],
+          "fit": false,
+          "enabled": true,
+          "identity": "TV Guide",
+          "schemaVersion": 1,
+          "showClock": true
+        }
+      },
+      "name": "TV Guide",
+      "id": "live-tv"
     }
   ]
 }

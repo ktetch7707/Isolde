@@ -159,6 +159,72 @@ bool HomeLayout::applySkin(const QString &id) {
     if(skin.contains("pagePolicy") && skin["pagePolicy"]!="add-missing") {setError(tr("Unsupported skin page policy."));return false;}
     return applySkinDocument(skin["layout"].toObject(), skin["assets"].toObject(),skin["pagePolicy"]=="add-missing");
 }
+QVariantList HomeLayout::skinPageUpdates(const QString &id) const {
+    if (m_owner || (id != "builtin-pastel" && id != "builtin-lounge")) return {};
+    const auto relative = "skins/" + id.mid(8) + ".json";
+    auto skin = readObject(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath(relative));
+    if (skin.isEmpty()) skin = readObject(":/config/" + relative);
+    const auto recipes = skin["pageUpdates"].toArray();
+    if (skin["schemaVersion"].toInt() != 1 || recipes.size() > MaxPages) return {};
+    const auto document = QJsonDocument::fromJson(committedDocument()).object();
+    auto home = document;
+    if (!m_homePageId.isEmpty()) for (const auto &entry : document["pages"].toArray())
+        if (entry.toObject()["id"] == m_homePageId) home = entry.toObject()["layout"].toObject();
+    QVariantList result;
+    for (const auto &value : recipes) {
+        const auto recipe = value.toObject();
+        const auto componentId = recipe["componentId"].toString();
+        const auto pageId = recipe["targetPageId"].toString();
+        if (recipe.size() != 3 || !ComponentSchema::safeId(componentId) || !ComponentSchema::safeId(pageId)) return {};
+        QJsonObject target;
+        for (const auto &entry : skin["layout"].toObject()["pages"].toArray())
+            if (entry.toObject()["id"] == pageId) target = entry.toObject();
+        if (target.isEmpty()) return {};
+        // Updates contain only data and never import or replace managed artwork.
+        bool hasArtwork = false;
+        artwork(target, [&](const QString &path) { hasArtwork = true; return path; });
+        if (hasArtwork) return {};
+        QString actionError;
+        const auto fromAction = ComponentSchema::action(recipe["fromAction"].toObject().toVariantMap(), &actionError);
+        if (!actionError.isEmpty() || fromAction.isEmpty()) return {};
+        for (const auto &entry : home["components"].toArray()) {
+            const auto component = entry.toObject();
+            if (component["id"] != componentId || component["action"].toObject().toVariantMap() != fromAction) continue;
+            result.append(QVariantMap{{"componentId", componentId}, {"name", component["name"].toString()},
+                {"pageId", pageId}, {"page", target.toVariantMap()}});
+        }
+    }
+    return result;
+}
+bool HomeLayout::applySkinPageUpdates(const QString &id) {
+    const auto updates = skinPageUpdates(id);
+    if (updates.isEmpty()) { setError(tr("No unchanged starter links need updating.")); return false; }
+    auto document = QJsonDocument::fromJson(committedDocument()).object();
+    auto pages = document["pages"].toArray();
+    auto home = document;
+    int homeIndex = -1;
+    if (!m_homePageId.isEmpty()) for (int i = 0; i < pages.size(); ++i)
+        if (pages[i].toObject()["id"] == m_homePageId) { homeIndex = i; home = pages[i].toObject()["layout"].toObject(); }
+    auto components = home["components"].toArray();
+    for (const auto &value : updates) {
+        const auto update = value.toMap();
+        const auto pageId = update["pageId"].toString();
+        bool exists = false;
+        for (const auto &page : pages) if (page.toObject()["id"] == pageId) exists = true;
+        if (!exists) pages.append(QJsonObject::fromVariantMap(update["page"].toMap()));
+        for (int i = 0; i < components.size(); ++i) if (components[i].toObject()["id"].toString() == update["componentId"].toString()) {
+            auto component = components[i].toObject();
+            component["action"] = QJsonObject{{"type", "open-page"}, {"pageId", pageId}};
+            component["source"] = QJsonObject{{"schemaVersion", 1}, {"kind", "page"}, {"provider", "shell"}, {"id", pageId}};
+            components[i] = component;
+        }
+    }
+    home["components"] = components;
+    if (homeIndex >= 0) { auto entry = pages[homeIndex].toObject(); entry["layout"] = home; pages[homeIndex] = entry; }
+    else document["components"] = components;
+    document["pages"] = pages;
+    return applyStudioDraft(QJsonDocument(document).toJson(), m_focusOrigin);
+}
 bool HomeLayout::renameSkin(const QString &id, const QString &name) {
     if (!id.startsWith("user-") || !ComponentSchema::safeId(id) || !validName(name)) { setError(tr("Choose a saved skin and a name of 1–80 characters.")); return false; }
     const auto path = QDir(skinDirectory()).filePath(id + ".json");

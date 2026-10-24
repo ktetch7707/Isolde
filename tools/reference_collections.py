@@ -53,6 +53,9 @@ class ReferenceCollections:
             output = io.BytesIO()
             image.save(output, format="PNG")
             self.art[(item["kind"], item["id"])] = base64.b64encode(output.getvalue()).decode()
+        if self.art:
+            self.art[("album", 301)] = next(iter(self.art.values()))
+            self.art[("song", 401)] = self.art[("album", 301)]
         directory = evidence / "data/Isolde/native-profiles/default/kodi/home/.kodi/userdata/isolde"
         directory.mkdir(parents=True, mode=0o700)
         self.socket = socket.socket(socket.AF_UNIX)
@@ -97,6 +100,24 @@ class ReferenceCollections:
         if method == "Isolde.GetArtwork":
             data = self.art.get((params["kind"], params["id"]), "")
             return {"mime": "image/png" if data else "", "data": data}
+        if method in {"AudioLibrary.GetAlbums", "AudioLibrary.GetSongs", "PVR.GetChannels"}:
+            if method == "AudioLibrary.GetAlbums":
+                field = "albums"
+                items = [{"albumid": 301, "title": "Evening Light", "label": "Evening Light", "artist": ["Acceptance Ensemble"], "year": 2026}]
+            elif method == "AudioLibrary.GetSongs":
+                assert params.get("filter") == {"albumid": 301}
+                field = "songs"
+                items = [{"songid": 401, "albumid": 301, "title": "Quiet Arrival", "label": "Quiet Arrival", "artist": ["Acceptance Ensemble"], "album": "Evening Light", "track": 1, "duration": 180}]
+            else:
+                assert params.get("channelgroupid") == "alltv"
+                field = "channels"
+                items = [{"channelid": 501, "label": "Acceptance TV", "channelnumber": 1, "hidden": False, "locked": False,
+                          "broadcastnow": {"title": "Evening programme", "plot": "Deterministic guide metadata; playback is not exercised."},
+                          "broadcastnext": {"title": "Night programme"}}]
+            start, end = params.get("limits", {}).get("start", 0), params.get("limits", {}).get("end", 50)
+            assert 0 <= start <= end <= start+50
+            page = items[start:end]
+            return {field: page, "limits": {"start": start, "end": start+len(page), "total": len(items)}}
         if method not in {"VideoLibrary.GetMovies", "VideoLibrary.GetEpisodes"}:
             raise ValueError("Unsupported fixture request: " + method)
         kind = "movie" if method.endswith("Movies") else "episode"

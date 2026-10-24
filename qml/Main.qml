@@ -14,6 +14,19 @@ Window {
     property bool ambientActive: false
     property string launchErrorText: ""
     property string launchErrorAppId: ""
+    property bool desktopHidden:false
+    property int desktopRestoreVisibility:Window.FullScreen
+    DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
+    Connections {
+        target:desktopMode
+        function onChanged(){
+            if(desktopMode.active && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
+            else if(!desktopMode.active && window.desktopHidden){window.desktopHidden=false;window.visibility=window.desktopRestoreVisibility;window.raise();window.requestActivate()}
+            if(desktopMode.active || desktopMode.busy)idleTimer.stop();else idleTimer.restart()
+            if(desktopMode.errorString){window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
+        }
+        function onReturned(origin){Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
+    }
     PageBackdrop {
         id: windowWallpaper; anchors.fill: parent; source: homeLayout.wallpaperSource
         config:homeLayout.composition.background || {};startColor:homeLayout.backgroundStart;endColor:homeLayout.backgroundEnd; visible: !sessionManager.active && !pageSurface.open && !window.ambientActive && !!source.toString() && (homeLayout.composition.enabled || !!homeLayout.composition.background)
@@ -40,6 +53,7 @@ Window {
     Component.onCompleted:Qt.callLater(()=>{if(setupState.complete && homeLayout.homePageId)window.showDesignatedHome()})
 
     function handleCommand(command) {
+        if(desktopMode.busy || desktopMode.active){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
         idleTimer.restart()
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
@@ -140,6 +154,17 @@ Window {
     Item {
         anchors.fill: parent
         anchors.margins: window.safeAreaPixels
+        Rectangle {
+            anchors.fill:parent;z:1200;visible:desktopMode.busy;color:homeLayout.homeAppearance.surfaceColor
+            Column {anchors.centerIn:parent;spacing:24
+                Text {text:"Allow the desktop return shortcut in the system dialog.";color:homeLayout.homeAppearance.textColor;font.pixelSize:24}
+                Text {text:"Isolde stays open until a return shortcut is granted.";color:homeLayout.homeAppearance.mutedColor;font.pixelSize:18}
+                Rectangle {width:parent.width;height:56;radius:12;color:homeLayout.homeAppearance.selectedColor
+                    Text {anchors.centerIn:parent;text:"Cancel · Back";color:homeLayout.homeAppearance.textColor;font.pixelSize:20}
+                    MouseArea {anchors.fill:parent;onClicked:desktopMode.cancel()}
+                }
+            }
+        }
 
         Item {
             id: shellSurface
@@ -361,6 +386,7 @@ Window {
         apps: appRegistry.apps
         packages: appCatalog.entries
         searchSettings: searchPreferences
+        appearance:homeLayout.homeAppearance
         movieSearchClient: searchMovies
         showSearchClient: searchShows
         episodeSearchClient: searchEpisodes

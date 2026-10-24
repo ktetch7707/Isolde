@@ -10,6 +10,7 @@
 #include "settings/AmbientSettings.h"
 #include "settings/NetworkSettings.h"
 #include "settings/SearchSettings.h"
+#include "sessions/DesktopMode.h"
 #include "settings/ProfileManager.h"
 #include "settings/SetupState.h"
 #include "settings/ComponentHealth.h"
@@ -51,6 +52,7 @@ struct ProfileRuntime {
     AmbientSettings ambientSettings;
     NetworkSettings networkSettings;
     SearchSettings searchSettings;
+    DesktopMode desktopMode;
     SourceManager sourceManager{&registry};
     ArtPackCatalog artPacks;
     InputManager input;
@@ -74,6 +76,7 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
     engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("desktopMode"), &desktopMode);
     engine.rootContext()->setContextProperty(QStringLiteral("captureController"), &captureController);
     engine.rootContext()->setContextProperty(QStringLiteral("kodiMedia"), &kodi);
     engine.rootContext()->setContextProperty(QStringLiteral("kodiImporter"), &kodiImporter);
@@ -121,6 +124,8 @@ struct ProfileRuntime {
         qWarning("%s", qPrintable(catalog.errorString()));
     if (!homeLayout.load({}, profiles.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
+    desktopMode.setPresentation(homeLayout.studioOptions().value("desktop").toMap());
+    QObject::connect(&actions,&ActionDispatcher::desktopRequested,&desktopMode,&DesktopMode::start);
     QObject::connect(&catalog, &AppCatalog::packageInstalled, &homeLayout, &HomeLayout::addAppTile);
     // Keep user launchers repairable when a package disappears. Registry changes
     // update availability; reinstalling reconnects the same stable binding.
@@ -216,6 +221,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("Isolde"));
     QCoreApplication::setApplicationVersion(QStringLiteral(ISOLDE_VERSION));
+    QGuiApplication::setDesktopFileName(QStringLiteral("isolde"));
     app.setQuitOnLastWindowClosed(false);
     bool switching = false;
     QQuickWindow switchCover;

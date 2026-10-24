@@ -77,7 +77,7 @@ QVariantList StudioSession::actionChoices() const
     const auto document=QJsonDocument::fromJson(m_draft).object();const auto root=document["rootPage"].toObject();
     if(!root.contains("visible") || root["visible"].toBool())choices.append(QVariantMap{{"name",tr("Open page · ")+root.value("name").toString(m_live->studioOptions().value("rootPageName").toString())},{"action",QVariantMap{{"type","root-page"}}}});
     for(const auto &entry:document["pages"].toArray()){const auto page=entry.toObject();choices.append(QVariantMap{{"name",tr("Open page · ")+page["name"].toString()},{"action",QVariantMap{{"type","open-page"},{"pageId",page["id"].toString()}}}});}
-    for(const auto &entry:m_live->registry()->apps()){const auto app=entry.toMap();const auto id=app.value("id").toString();choices.append(QVariantMap{{"name",tr("Open app · ")+app.value("name").toString()},{"appType",app.value("type")},{"action",QVariantMap{{"type","launch-app"},{"appId",id}}}});
+    for(const auto &entry:m_live->registry()->apps()){const auto app=entry.toMap();const auto id=app.value("id").toString();choices.append(QVariantMap{{"name",tr("Open app · ")+app.value("name").toString()},{"appType",app.value("type")},{"appSection",app.value("section")},{"action",QVariantMap{{"type","launch-app"},{"appId",id}}}});
         const auto *definition=m_live->registry()->find(id);if(definition)for(const auto &type:definition->handledActions)if(QStringList{"open-file","open-folder","open-url","open-disc"}.contains(type))choices.append(QVariantMap{{"name",type+" · "+app.value("name").toString()},{"needsTarget",true},{"action",QVariantMap{{"type",type},{"openWith",id}}}});
     }
     for(const auto &entry:m_live->m_collections){const auto collection=entry.toMap();choices.append(QVariantMap{{"name",tr("Open collection · ")+collection.value("name").toString()},{"mediaKind",collection.value("media","movies")},{"action",QVariantMap{{"type","open-collection"},{"collectionId",collection.value("id")}}}});}
@@ -503,7 +503,10 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         for(const auto &entry:entries)if(removed.contains(entry.toObject()["id"].toString()) && entry.toObject().value("locked").toBool()){setError(tr("Unlock the app bar's contents before replacing them."));return false;}
         const auto prototype=componentPrototype("app-bar",a.value("mode")=="all"?QVariantMap{{"appCollection",QVariantMap{{"mode","all"},{"ids",QVariantList{}}}}}:QVariantMap{{"apps",a.value("apps")}});if(prototype.isEmpty())return false;
         const auto newRoot=prototype.value("rootId").toString();QJsonArray result;
-        for(const auto &entry:entries)if(!removed.contains(entry.toObject()["id"].toString())){auto item=entry.toObject();if(item["id"]==id)item["appCollection"]=QJsonObject::fromVariantMap(prototype.value("root").toMap().value("appCollection").toMap());result.append(item);}
+        auto membership=QJsonObject::fromVariantMap(prototype.value("root").toMap().value("appCollection").toMap());
+        const auto group=entries[rootIndex].toObject()["appCollection"].toObject()["section"];
+        if(group.isString())membership["section"]=group;
+        for(const auto &entry:entries)if(!removed.contains(entry.toObject()["id"].toString())){auto item=entry.toObject();if(item["id"]==id)item["appCollection"]=membership;result.append(item);}
         for(const auto &entry:prototype.value("components").toList()){auto child=QJsonObject::fromVariantMap(entry.toMap());if(child["id"]==newRoot)continue;child["parentId"]=id;result.append(child);}
         document["components"]=result;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if(operation=="patch") {

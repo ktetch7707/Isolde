@@ -162,13 +162,17 @@ systemctl --user reset-failed isolde.service
 exec systemctl --user start isolde.service
 ''', 0o700)
     desktop_path = str(launcher).replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`").replace("$", "\\$").replace("%", "%%")
-    atomic_text(config / "autostart/isolde.desktop", f'''[Desktop Entry]
+    desktop_entry = f'''[Desktop Entry]
 Type=Application
 Name=Isolde
 Exec="{desktop_path}"
 Terminal=false
 X-GNOME-Autostart-enabled=true
-''')
+'''
+    atomic_text(config / "autostart/isolde.desktop", desktop_entry)
+    # A stable desktop identity is required by the compositor's global-shortcut
+    # permission portal. This is an Isolde launcher, not an OS shortcut change.
+    atomic_text(prefix.parent / "applications/isolde.desktop", desktop_entry)
 
 
 def enable_startup():

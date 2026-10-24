@@ -24,6 +24,7 @@ signals:
     void settingsRequested(int section);
     void restoreFocusRequested(const QString &originId);
     void captureSessionRequested(int input, const QString &originId);
+    void desktopRequested(const QString &originId);
 private:
     bool launchApp(const QString &id);
     AppRegistry *m_apps;

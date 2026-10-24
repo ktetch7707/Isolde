@@ -102,6 +102,9 @@ bool KodiMedia::canNavigate() const { return !m_playbackActive && (!m_busy || m_
 QString KodiMedia::browseTitle() const
 {
     if (m_mediaKind == "history") return "Recently viewed";
+    if (m_mediaKind == "albums") return "Music · Albums";
+    if (m_mediaKind == "songs") return m_showTitle.isEmpty()?"Music · Tracks":m_showTitle;
+    if (m_mediaKind == "channels") return "TV Guide";
     if (m_viewKind == "manual") return m_viewValue;
     if (m_mediaKind == "movies") return "Movies";
     if (m_mediaKind == "shows") return "Shows";
@@ -140,7 +143,8 @@ void KodiMedia::openLibrary(const QString &kind)
     restoreBrowse({kind, "all", {}, {}, -1, -1, 0, 0});
 }
 void KodiMedia::openView(const QString &kind,const QString &view,const QString &value) {
-    if(!canNavigate() || !QStringList{"movies","shows","episodes","history"}.contains(kind) || !QStringList{"all","recent","watched","continue","search","tag","genre"}.contains(view)
+    if(!canNavigate() || !QStringList{"movies","shows","episodes","history","albums","channels"}.contains(kind) || !QStringList{"all","recent","watched","continue","search","tag","genre"}.contains(view)
+        || ((kind == "albums" || kind == "channels") && (view != "all" || !value.isEmpty()))
         || (kind == "history" && (view != "watched" || !value.isEmpty()))
         || (kind == "episodes" && view != "search")
         || value.trimmed().size()>160 || ((view=="tag"||view=="genre") && (value.trimmed().isEmpty())))return;
@@ -161,7 +165,7 @@ void KodiMedia::openShowResult(const QString &query, int tvShowId, int pageStart
     beginRead(pageStart);
 }
 void KodiMedia::playMedia(const QString &kind,int id,bool resume) {
-    if(!QStringList{"movie","episode"}.contains(kind)||id<1||m_playbackActive)return;
+    if(!QStringList{"movie","episode","song","channel"}.contains(kind)||id<1||m_playbackActive)return;
     if (m_busy) {
         if (m_stage != 0 && m_stage != 1) {
             m_playbackStatus = "Kodi is busy. Wait for the current library operation to finish.";
@@ -180,7 +184,11 @@ void KodiMedia::activate(int index)
     if (m_busy || !m_connected || m_playbackActive || index < 0 || index >= m_movies.size()) return;
     selectIndex(index);
     const auto item = m_movies[index].toMap();
-    if (m_mediaKind == "shows" || m_mediaKind == "seasons") {
+    if (m_mediaKind == "albums") {
+        const int album=item.value("albumid").toInt();if(album<1)return;
+        m_history.append(browseState());
+        restoreBrowse({"songs","album",QString::number(album),item.value("title").toString(),-1,-1,0,0});
+    } else if (m_mediaKind == "shows" || m_mediaKind == "seasons") {
         auto next = browseState();
         if (m_mediaKind == "shows") {
             if (item.value("tvshowid").toInt() < 1) return;
@@ -206,6 +214,8 @@ void KodiMedia::playSelected(bool resume)
     const auto item = m_movies[m_selectedIndex].toMap();
     if (m_mediaKind == "movies") playLibraryItem("movie", item.value("movieid").toInt(), resume);
     else if (m_mediaKind == "episodes") playLibraryItem("episode", item.value("episodeid").toInt(), resume);
+    else if (m_mediaKind == "songs") playLibraryItem("song", item.value("songid").toInt(), false);
+    else if (m_mediaKind == "channels") playLibraryItem("channel", item.value("channelid").toInt(), false);
 }
 void KodiMedia::nextPage()
 {
@@ -229,7 +239,10 @@ void KodiMedia::loadPage(int start)
     else if (m_mediaKind == "seasons") { method = "VideoLibrary.GetSeasons"; fields = {"season", "showtitle", "episode", "watchedepisodes", "tvshowid", "art"}; }
     else if (m_mediaKind == "episodes" || (m_mediaKind == "history" && m_recentEpisodes)) { method = "VideoLibrary.GetEpisodes"; fields = {"title", "plot", "runtime", "resume", "playcount", "season", "episode", "showtitle", "tvshowid", "art"}; }
     if (m_mediaKind == "history") fields.append("lastplayed");
-    const auto sort = (m_viewKind == "continue" || m_viewKind == "watched") ? "lastplayed" : m_viewKind == "recent" ? "dateadded"
+    if (m_mediaKind == "albums") {method="AudioLibrary.GetAlbums";fields={"title","artist","year","art"};}
+    else if (m_mediaKind == "songs") {method="AudioLibrary.GetSongs";fields={"title","artist","album","albumid","track","duration","art"};}
+    else if (m_mediaKind == "channels") {method="PVR.GetChannels";fields={"channelnumber","broadcastnow","broadcastnext","locked","hidden"};}
+    const auto sort = m_mediaKind=="songs"?"track":(m_viewKind == "continue" || m_viewKind == "watched") ? "lastplayed" : m_viewKind == "recent" ? "dateadded"
         : (m_mediaKind == "episodes" || m_mediaKind == "seasons") ? "episode" : "title";
     QJsonObject params{{"properties", fields},
         {"sort", QJsonObject{{"method", sort},
@@ -241,6 +254,8 @@ void KodiMedia::loadPage(int start)
         {"operator", m_viewKind == "search" ? "contains" : "is"}, {"value", m_viewValue}});
     if ((m_mediaKind == "seasons" || m_mediaKind == "episodes") && m_showId > 0) params["tvshowid"] = m_showId;
     if (m_mediaKind == "episodes" && m_season >= 0) params["season"] = m_season;
+    if(m_mediaKind=="songs")params.insert("filter",QJsonObject{{"albumid",m_viewValue.toInt()}});
+    if(m_mediaKind=="channels"){params.remove("sort");params.insert("channelgroupid","alltv");}
     request(method, params);
 }
 void KodiMedia::loadManualPage(int start)
@@ -586,7 +601,7 @@ void KodiMedia::playLibraryItem(const QString &kind, int id, bool resume, bool r
     m_presentationError.clear();
     m_playbackStatus = "Starting " + kind + "…";
     emit changed();
-    request(kind == "movie" ? "Isolde.PlayMovie" : "Isolde.PlayEpisode", {{kind + "id", id}, {"resume", resume}});
+    request(kind == "movie" ? "Isolde.PlayMovie" : kind == "song" ? "Isolde.PlaySong" : kind == "channel" ? "Isolde.PlayChannel" : "Isolde.PlayEpisode", {{kind + "id", id}, {"resume", (kind=="song" || kind=="channel")?false:resume}});
 }
 void KodiMedia::presentationFailed()
 {
@@ -625,7 +640,7 @@ void KodiMedia::consume()
     if (!m_received.endsWith('\n')) return;
     const auto response = QJsonDocument::fromJson(m_received).object();
     if (response.value("jsonrpc") != "2.0" || response.value("id").toInt(-1) != m_id) {
-        fail("Kodi returned an incompatible response."); return;
+        fail(m_mediaKind=="channels"?"TV guide unavailable. Configure a PVR TV source in Kodi, then refresh.":"Kodi returned an incompatible response."); return;
     }
     if (response.contains("error")) {
         if (m_stage == 8) {
@@ -636,7 +651,7 @@ void KodiMedia::consume()
             });
             return;
         }
-        fail("Kodi returned an incompatible response."); return;
+        fail(m_mediaKind=="channels"?"TV guide unavailable. Configure a PVR TV source in Kodi, then refresh.":"Kodi returned an incompatible response."); return;
     }
     if (m_stage != 2 && m_stage != 4 && !response.value("result").isObject()) {
         fail("Kodi returned an incompatible response."); return;
@@ -763,7 +778,7 @@ void KodiMedia::consume()
     m_pageStart = m_requestedStart;
     m_pageCount = entries.size();
     m_totalMovies = total;
-    const auto type = m_mediaKind == "history" ? (m_recentEpisodes ? "episode" : "movie") : m_mediaKind == "movies" ? "movie" : m_mediaKind == "shows" ? "tvshow"
+    const auto type = m_mediaKind == "channels" ? "channel" : m_mediaKind == "albums" ? "album" : m_mediaKind == "songs" ? "song" : m_mediaKind == "history" ? (m_recentEpisodes ? "episode" : "movie") : m_mediaKind == "movies" ? "movie" : m_mediaKind == "shows" ? "tvshow"
         : m_mediaKind == "seasons" ? "season" : "episode";
     QVariantList normalized;
     QSet<int> ids;
@@ -782,6 +797,13 @@ void KodiMedia::consume()
         }
         if (entry.value("title").toString().isEmpty()) entry["title"] = m_mediaKind == "seasons"
             ? (identity == 0 ? QString("Specials") : "Season " + QString::number(identity)) : entry.value("label");
+        if(m_mediaKind=="channels"){
+            if(entry.value("hidden").toBool())continue;
+            const auto now=entry.value("broadcastnow").toMap(),next=entry.value("broadcastnext").toMap();
+            entry["title"]=QString::number(entry.value("channelnumber").toInt())+" · "+entry.value("title").toString();
+            entry["subtitle"]=now.value("title").toString()+(next.value("title").toString().isEmpty()?QString():" · Next: "+next.value("title").toString());
+            entry["plot"]=now.value("plot");
+        }
         normalized.append(entry);
     }
     if (m_mediaKind == "history") {
@@ -805,7 +827,7 @@ void KodiMedia::consume()
     }
     m_movies = normalized;
     m_selectedIndex = qBound(-1, m_selectedIndex, qMax(-1, int(m_movies.size()) - 1));
-    m_status = m_movies.isEmpty() ? (m_mediaKind == "history" ? "Nothing viewed in this profile yet. Kodi viewing history appears here." : m_viewKind == "all" ? "No items in this Kodi library view. Configure sources in Kodi or refresh to retry."
+    m_status = m_movies.isEmpty() ? (m_mediaKind == "channels" ? "No TV channels in this profile. Configure a PVR TV source in Kodi, then refresh." : m_mediaKind == "albums" ? "No albums in this profile's Kodi music library. Add music sources in Kodi, then refresh." : m_mediaKind == "history" ? "Nothing viewed in this profile yet. Kodi viewing history appears here." : m_viewKind == "all" ? "No items in this Kodi library view. Configure sources in Kodi or refresh to retry."
         : m_viewKind == "continue" ? "No items with saved progress in this profile." : "Not found in your Kodi library.")
         : QString("%1 · %2–%3 of %4").arg(browseTitle()).arg(m_pageStart + 1).arg(m_pageStart + m_movies.size()).arg(m_totalMovies);
     m_busy = false;

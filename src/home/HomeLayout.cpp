@@ -153,7 +153,11 @@ QVariantList HomeLayout::items() const
             item.insert("networkRequirement", networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
         }
         const auto logoFile = item.value("customLogo").toString();
-        item.insert("logoSource", resolveArtwork(logoFile));
+        auto logo=resolveArtwork(logoFile);
+        if(logoFile.isEmpty() && action.value("type")=="launch-app"){
+            if(const auto *app=m_registry->find(action.value("appId").toString()))logo=app->iconSource;
+        }
+        item.insert("logoSource", logo);
         auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), m_registry, m_collections);
         if (unavailable.isEmpty() && action.value("type").toString() == "switch-input" && !m_captureInputsReady)
             unavailable = "Configure Settings → System → HDMI Inputs";
@@ -306,6 +310,14 @@ QVariantMap HomeLayout::studioOptions() const
     if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
     if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
+    const auto desktop=object["desktop"].toObject();
+    if(desktop.size()!=8)return {};
+    for(const auto &key:QStringList{"title","returnLabel","returnShortcut"})if(!desktop[key].isString() || desktop[key].toString().trimmed().isEmpty() || desktop[key].toString().size()>80 || desktop[key].toString().contains(QChar::Null))return {};
+    for(const auto &key:QStringList{"width","height","margin","radius","labelSize"}){
+        const auto value=desktop[key];const auto n=value.toDouble(-1);
+        const int low=key=="width"?240:key=="height"?80:key=="labelSize"?14:0,high=key=="width"?600:key=="height"?240:key=="labelSize"?40:100;
+        if(!value.isDouble() || !std::isfinite(n) || n<low || n>high || std::floor(n)!=n)return {};
+    }
     if(object.contains("colorPicker")) {
         const auto picker=object["colorPicker"].toObject();
         if(picker.size()!=1 || !picker["presets"].isArray() || picker["presets"].toArray().isEmpty() || picker["presets"].toArray().size()>8)return {};
@@ -328,7 +340,7 @@ QVariantMap HomeLayout::studioOptions() const
     for(const auto &entry:panel["children"].toArray()){const auto child=ComponentSchema::component(entry.toObject().toVariantMap(),true);if(child.isEmpty())return {};panelItems.append(QJsonObject::fromVariantMap(child));}
     if(!ComponentSchema::hierarchyFits(panelItems,{{"schemaVersion",1},{"enabled",true},{"grid",object["defaultGrid"].toObject().toVariantMap()}},{}))return {};
     const auto presets=object["componentPresets"].toObject();
-    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","library","recently-viewed","carousel","app-bar"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
+    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
     const auto catalog=object["catalog"].toArray();QSet<QString> catalogIds;
     if(presets.isEmpty() || presets.size()>16 || catalog.isEmpty() || catalog.size()>16 || object["inspector"].toObject()["fields"].toArray().size()>160)return {};
     for(const auto &entry:catalog){const auto item=entry.toObject();const auto id=item["id"].toString(),name=item["name"].toString();

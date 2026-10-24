@@ -16,6 +16,7 @@
 #include "sessions/SessionManager.h"
 #include <QLocalServer>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QDir>
 #include <QJsonArray>
 #include <QtTest>
@@ -48,6 +49,9 @@ private slots:
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
+    void searchHeaderSwitchRemoteFocusAndStableResults();
+    void searchPreferenceProfileIsolationAndWriteFailure();
+    void appSuppliedIconsUseManagedArtwork();
     void pageScopedSourcesAppearInSearch();
     void kodiSettingsFollowUserTheme();
     void appearancePreviewCancelAndApply();
@@ -443,6 +447,94 @@ void HomeNavigationTests::universalLocalSearchRemoteFlow()
     QCOMPARE(mediaRequested[0][0].toString(), QString("show"));
     QCOMPARE(mediaRequested[0][1].toInt(), 2);
     QCOMPARE(mediaRequested[0][2].toString(), QString("Pilot"));
+}
+void HomeNavigationTests::appSuppliedIconsUseManagedArtwork()
+{
+    QTemporaryDir dir;const auto previousData=qgetenv("XDG_DATA_HOME"),previousCache=qgetenv("XDG_CACHE_HOME");
+    const auto restore=qScopeGuard([&]{qputenv("XDG_DATA_HOME",previousData);qputenv("XDG_CACHE_HOME",previousCache);});
+    qputenv("XDG_DATA_HOME",dir.filePath("data").toUtf8());qputenv("XDG_CACHE_HOME",dir.filePath("cache").toUtf8());
+    QVERIFY(QDir().mkpath(dir.filePath("data/applications")));QVERIFY(QDir().mkpath(dir.filePath("data/icons/hicolor/128x128/apps")));
+    QImage image(128,128,QImage::Format_ARGB32);image.fill(QColor("#35a477"));
+    const auto source=dir.filePath("data/icons/hicolor/128x128/apps/provided-icon.png");QVERIFY(image.save(source));
+    QFile desktop(dir.filePath("data/applications/provided-app.desktop"));QVERIFY(desktop.open(QIODevice::WriteOnly));
+    desktop.write("[Desktop Entry]\nType=Application\nName=Provided app\nIcon=provided-icon\nExec=/nonexistent/never-run-for-artwork\n");desktop.close();
+    AppDefinition app;app.id="provided-app";app.name="Provided app";app.type="desktop";app.symbol="P";app.launchConfiguration={{"desktopId","provided-app"}};
+    AppRegistry registry;QVERIFY(registry.addApp(app));const auto supplied=registry.apps().first().toMap()["logoSource"].toString();
+    QVERIFY(!supplied.isEmpty());const auto managed=QUrl(supplied).toLocalFile();QVERIFY(managed.startsWith(dir.filePath("cache/")));QVERIFY(managed!=source);
+    QVERIFY(QRegularExpression("^[0-9a-f]{64}\\.png$").match(QFileInfo(managed).fileName()).hasMatch());
+    QImage cached(managed);QVERIFY(!cached.isNull());QVERIFY(cached.width()<=256);QVERIFY(cached.height()<=256);QCOMPARE(cached.pixelColor(cached.width()/2,cached.height()/2),QColor("#35a477"));
+    AppRegistry again;QVERIFY(again.addApp(app));QCOMPARE(again.apps().first().toMap()["logoSource"].toString(),supplied);
+    QFile wrapper(dir.filePath("data/applications/provided-wrapper.desktop"));QVERIFY(wrapper.open(QIODevice::WriteOnly));wrapper.write("[Desktop Entry]\nName=Isolde launch wrapper\n");wrapper.close();
+    auto wrapped=app;wrapped.launchConfiguration["desktopId"]="provided-wrapper";AppRegistry wrappedRegistry;QVERIFY(wrappedRegistry.addApp(wrapped));QCOMPARE(wrappedRegistry.apps().first().toMap()["logoSource"].toString(),supplied);
+    HomeLayout home(&registry);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("layout.json")));home.addAppTile(app.id);
+    bool bound=false;for(const auto &entry:home.items()){const auto item=entry.toMap();if(item["appId"]==app.id){QCOMPARE(item["logoSource"].toString(),supplied);bound=true;}}QVERIFY(bound);
+    auto invalid=app;invalid.id="unsafe-icon";invalid.launchConfiguration["icon"]="../outside";QVERIFY(!registry.addApp(invalid));
+    desktop.open(QIODevice::WriteOnly|QIODevice::Truncate);desktop.write("[Desktop Entry]\nIcon=https://example.invalid/icon.png\n");desktop.close();
+    auto remote=app;remote.id="remote-icon";QVERIFY(registry.addApp(remote));QVERIFY(registry.apps().last().toMap()["logoSource"].toString().isEmpty());
+}
+void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure()
+{
+    QTemporaryDir dir;const auto path=dir.filePath("preferences.ini");
+    const QString one="11111111-1111-4111-8111-111111111111",two="22222222-2222-4222-8222-222222222222";
+    SearchSettings a(nullptr,path,one),b(nullptr,path,two),household(nullptr,path,"default");
+    QVERIFY(!a.webEnabled());QVERIFY(!b.webEnabled());QVERIFY(!household.webEnabled());
+    a.toggleWebEnabled();QVERIFY(a.webEnabled());QVERIFY(a.errorString().isEmpty());
+    SearchSettings restored(nullptr,path,one);QVERIFY(restored.webEnabled());QVERIFY(!b.webEnabled());
+    b.toggleWebEnabled();a.toggleWebEnabled();QVERIFY(b.webEnabled());QVERIFY(!a.webEnabled());
+    SearchSettings restoredA(nullptr,path,one),restoredB(nullptr,path,two);
+    QVERIFY(!restoredA.webEnabled());QVERIFY(restoredB.webEnabled());QVERIFY(!household.webEnabled());
+    QFile blocked(dir.filePath("blocked"));QVERIFY(blocked.open(QIODevice::WriteOnly));blocked.write("retain");blocked.close();
+    SearchSettings failed(nullptr,dir.filePath("blocked/preferences.ini"),one);
+    failed.toggleWebEnabled();QVERIFY(!failed.webEnabled());QVERIFY(!failed.errorString().isEmpty());
+    QVERIFY(blocked.open(QIODevice::ReadOnly));QCOMPARE(blocked.readAll(),QByteArray("retain"));
+    SearchSettings invalid(nullptr,path,"../other");invalid.toggleWebEnabled();QVERIFY(!invalid.webEnabled());QVERIFY(!invalid.errorString().isEmpty());
+}
+void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
+{
+    QTemporaryDir dir;SearchSettings preferences(nullptr,dir.filePath("search.ini"),"default");InputManager input;QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QStringLiteral(COMMAND_CENTER_QML)));
+    QVERIFY2(component.isReady(),qPrintable(component.errorString()));
+    const QVariantList apps{QVariantMap{{"id","local"},{"name","Local app"},{"section","Apps"},{"presentationMode","native-tv"},{"networkRequirement","none"},{"accent","#556677"}}};
+    std::unique_ptr<QObject> root(component.createWithInitialProperties({{"apps",apps},{"packages",QVariantList{}},{"searchSettings",QVariant::fromValue(&preferences)},{"width",1280},{"height",720},{"open",true}}));
+    QVERIFY2(root,qPrintable(component.errorString()));
+    QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem());window.show();
+    auto command=[&](int value){QVERIFY(QMetaObject::invokeMethod(root.get(),"handleCommand",Q_ARG(QVariant,value)));};
+    auto *toggle=root->findChild<QObject *>("searchWebToggle");QVERIFY(toggle);
+    auto list=[](const QVariant &v){return (v.metaType().id()==qMetaTypeId<QJSValue>()?v.value<QJSValue>().toVariant():v).toList();};
+    const auto original=list(root->property("results"));QVERIFY(!original.isEmpty());
+    for(const auto &entry:original)QVERIFY(entry.toMap()["kind"]!="searchToggle");
+    QCOMPARE(root->property("focusArea").toString(),QString("query"));
+    command(InputManager::NavigateRight);QCOMPARE(root->property("focusArea").toString(),QString("web"));QVERIFY(!preferences.webEnabled());
+    command(InputManager::Confirm);QVERIFY(preferences.webEnabled());QTRY_VERIFY(toggle->property("checked").toBool());
+    QCOMPARE(list(root->property("results")),original);QCOMPARE(root->property("selectedIndex").toInt(),0);
+    command(InputManager::NavigateDown);QCOMPARE(root->property("focusArea").toString(),QString("results"));
+    command(InputManager::NavigateUp);QCOMPARE(root->property("focusArea").toString(),QString("web"));
+    root->setProperty("apps",QVariantList{apps[0],QVariantMap{{"id","late"},{"name","Late app"},{"section","Apps"},{"presentationMode","native-tv"},{"networkRequirement","none"},{"accent","#556677"}}});
+    QCOMPARE(root->property("focusArea").toString(),QString("web"));QCOMPARE(root->property("selectedIndex").toInt(),0);
+    command(InputManager::NavigateLeft);command(InputManager::Confirm);QVERIFY(root->property("keyboardOpen").toBool());
+    command(InputManager::Back);QVERIFY(!root->property("keyboardOpen").toBool());QVERIFY(root->property("open").toBool());
+    root->setProperty("query","zzzz-no-matches");QTRY_COMPARE(list(root->property("results")).size(),0);
+    command(InputManager::NavigateRight);command(InputManager::NavigateDown);command(InputManager::NavigateUp);
+    QCOMPARE(root->property("focusArea").toString(),QString("web"));
+    command(InputManager::Confirm);QVERIFY(!preferences.webEnabled());QCOMPARE(root->property("query").toString(),QString("zzzz-no-matches"));
+    auto *toggleItem=qobject_cast<QQuickItem *>(toggle);QVERIFY(toggleItem);QSignalSpy preferenceChanges(&preferences,&SearchSettings::changed);
+    QTest::mouseClick(&window,Qt::LeftButton,Qt::NoModifier,toggleItem->mapToScene(QPointF(toggleItem->width()/2,toggleItem->height()/2)).toPoint());
+    QTRY_VERIFY(preferences.webEnabled());QCOMPARE(preferenceChanges.count(),1);
+    command(InputManager::Confirm);QVERIFY(!preferences.webEnabled());QCOMPARE(preferenceChanges.count(),2);
+    for(const auto &theme:QVariantList{QVariantMap{{"textColor","#f5f1f3"},{"mutedColor","#aaa5af"},{"surfaceColor","#28262f"},{"focusColor","#c994a5"},{"selectedColor","#574052"}},QVariantMap{{"textColor","#514b67"},{"mutedColor","#625b73"},{"surfaceColor","#f5e7f4"},{"focusColor","#9b4568"},{"selectedColor","#edd7ef"}}}) {
+        root->setProperty("appearance",theme);QTest::qWait(50);
+        const auto artifact=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+        if(!artifact.isEmpty())QVERIFY(window.grabWindow().save(artifact+"/studio-test-search-header-"+(theme.toMap()["textColor"]=="#514b67"?"pastel":"dark")+".png"));
+    }
+    command(InputManager::Confirm);QVERIFY(preferences.webEnabled());
+    auto *status=root->findChild<QObject *>("searchWebStatus");QVERIFY(status);QVERIFY(status->property("text").toString().contains("No web provider configured"));
+    QFile blocked(dir.filePath("blocked"));QVERIFY(blocked.open(QIODevice::WriteOnly));blocked.close();
+    SearchSettings failed(nullptr,dir.filePath("blocked/preferences.ini"),"default");root->setProperty("searchSettings",QVariant::fromValue(&failed));
+    command(InputManager::Confirm);QVERIFY(!failed.webEnabled());QVERIFY(!toggle->property("checked").toBool());
+    QVERIFY(status->property("text").toString().contains("Could not save"));
+    QCOMPARE(root->property("focusArea").toString(),QString("web"));QCOMPARE(root->property("query").toString(),QString("zzzz-no-matches"));
+    QSignalSpy closed(root.get(),SIGNAL(closeRequested()));command(InputManager::Back);QCOMPARE(closed.count(),1);
 }
 void HomeNavigationTests::pageScopedSourcesAppearInSearch()
 {
@@ -1450,7 +1542,7 @@ void HomeNavigationTests::studioCatalogAndContextualInspector()
     auto list=[](const QVariant &v){return (v.metaType().id()==qMetaTypeId<QJSValue>()?v.value<QJSValue>().toVariant():v).toList();};
     QVERIFY(session->execute("newPage",{{"name","Destination"},{"preset","blank"}}));QCoreApplication::processEvents();
     const auto namedActions=list(catalog->property("actions"));QVERIFY(std::any_of(namedActions.cbegin(),namedActions.cend(),[](const QVariant &v){return v.toMap()["name"].toString().contains("Destination");}));QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);
-    QVERIFY(key(InputManager::Search));QCOMPARE(root->property("mode").toString(),QString("catalog"));QCOMPARE(list(catalog->property("families")).size(),7);
+    QVERIFY(key(InputManager::Search));QCOMPARE(root->property("mode").toString(),QString("catalog"));QCOMPARE(list(catalog->property("families")).size(),9);
     // Inspect every family's content step and cancel without writes/history.
     for(int i=0;i<6;++i){catalog->setProperty("selected",i);QVERIFY(key(InputManager::Confirm));QVERIFY(catalog->property("view").toString()!="families");QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),baseline);}
     QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));

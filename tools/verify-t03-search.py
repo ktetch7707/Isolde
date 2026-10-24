@@ -4,7 +4,7 @@
 Checks the tree (no Qt build needed) for:
   T03.1: debounce timer, min-length gate, cancel/invalidate on close-or-short-query,
          three per-type clients (movies/shows/episodes), explicit unavailable state.
-  T03.2: persisted SearchSettings webEnabled default OFF, CommandCenter toggle entry,
+  T03.2: persisted SearchSettings webEnabled default OFF, CommandCenter header switch,
          Web ON path stubbed (no external endpoint wired).
 Exit 0 = all checks pass. Prints PASS/FAIL per check.
 """
@@ -46,11 +46,11 @@ check("T03.1 explicit Kodi-unavailable state",
       "unavailable" in cc and "mediaStatus" in cc)
 # T03.2 — persisted toggle, default OFF, stubbed ON path
 check("T03.2 persisted webEnabled default false",
-      "m_webEnabled = false" in ss_h and 'settings.value(QStringLiteral("webEnabled"), false)' in ss_cpp)
-check("T03.2 toggle entry in Command Center",
-      "toggleWebEnabled()" in cc and "searchToggle" in cc)
+      "m_webEnabled = false" in ss_h and 'settings->value(QStringLiteral("webEnabled"), false)' in ss_cpp)
+check("T03.2 actual header switch outside search results",
+      "toggleWebEnabled()" in cc and 'objectName:"searchWebToggle"' in cc and 'Switch {' in cc and "searchToggle" not in cc)
 check("T03.2 Web ON stubbed, no external endpoint",
-      "web-discovery-unavailable" in cc
+      "No web provider configured" in cc
       and not re.search(r"XMLHttpRequest|fetch\(|WebSocket|TcpSocket|NetworkAccessManager", cc)
       and bool(re.search(r"Web ON path is a future", ss_h)))
 

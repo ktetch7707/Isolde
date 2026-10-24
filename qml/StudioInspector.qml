@@ -57,7 +57,8 @@ Item {
     readonly property var targets:!page?[]:structureType?((structureType==="section"?page.categories:page.composition.navigation) || []).filter(i=>i.id===structureId).map(i=>Object.assign({},i,{componentType:structureType})):(page.items || []).filter(i=>selectedIds.indexOf(i.id)>=0)
     readonly property var current:targets[0] || null
     readonly property var actions:session?session.availableActions:[]
-    readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop"))
+    readonly property var allApps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop"))
+    readonly property var apps:allApps.filter(a=>!current || !current.appCollection || !current.appCollection.section || a.appSection===current.appCollection.section)
     readonly property var fields:((options.inspector || {})[pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !f.advanced) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (pageMode || targets.length && targets.every(i=>(!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     readonly property real panelWidth:Math.min(width-48*unit,540*unit)
@@ -74,6 +75,7 @@ Item {
     function local(item,f){
         if(pageMode){if(f.scope==="theme")return (rawPage.theme || {})[f.key];if(f.scope==="background")return ((rawPage.composition || {}).background || {})[f.key];return (rawPage.composition || {})[f.key]}
         if(f.scope==="presentation"){const p=item.presentation || {};return editingState==="base" || f.tab!=="Appearance"?p[f.key]:((p.states || {})[editingState] || {})[f.key]}
+        if(f.scope==="appCollection")return (item.appCollection || {})[f.key]
         return f.scope==="accessibility"?(item.accessibility || {})[f.key]:item[f.key]
     }
     function effective(item,f){
@@ -166,6 +168,11 @@ Item {
         colorTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied.";colorLoader.active=false
     }
     function set(f,value,reset){
+        if(f.scope==="appCollection")return run("batch",{commands:targets.map(item=>{
+            const collection=Object.assign({},item.appCollection || {mode:"all",ids:[]});
+            if(reset || !value)delete collection[f.key];else collection[f.key]=value;
+            return {operation:"patch",arguments:{id:item.id,value:{appCollection:collection}},pageId:pageId}
+        })})
         if(structureType==="navigation")return run("navigation",{kind:"patch",id:structureId,value:{[f.key]:reset?null:value}})
         if(structureType==="section"){
             if(f.key==="name")return run("section",{kind:"rename",id:structureId,name:value})
@@ -215,6 +222,12 @@ Item {
             const collections=actions.filter(a=>a.action.type==="open-collection");openChoices(collections.map(a=>({name:a.name,value:a.action.collectionId})).concat([{name:"Enter search / genre / tag text…",kind:"text"}]));return
         }
         if(f.type==="header"){openChoices((options.headerChoices || []).map(entry=>({name:entry.name,value:entry.value})));return}
+        if(f.type==="appGroup"){
+            const groups=Array.from(new Set(allApps.map(a=>a.appSection).filter(s=>!!s && s.length<=80))).sort();
+            const currentGroup=(current.appCollection || {}).section;if(currentGroup && groups.indexOf(currentGroup)<0)groups.unshift(currentGroup);
+            openChoices([{name:"All app groups",value:""}].concat(groups.map(s=>({name:s,value:s}))));
+            message="Filters this collection. Selected app membership is kept.";return
+        }
         if(f.type==="tab"){openChoices((page.composition.navigation || []).map(t=>({name:t.name,value:t.id})));return}
         if(f.type==="layout"){operation("groupLayout");return}
         if(f.type==="apps"){const ids=new Set(selectedIds);appSelection=current.appCollection?(current.appCollection.ids || []).slice():(page.items || []).filter(i=>ids.has(i.parentId) && i.appId).map(i=>i.appId);view="apps";selected=0;message="Choosing apps replaces this bar's contents as one undoable change.";return}

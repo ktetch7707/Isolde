@@ -21,6 +21,7 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
           "studio_navigation": "isolde_home_navigation_tests",
           "kodi_media_client": "isolde_kodi_media_tests",
+          "desktop_mode": "isolde_desktop_mode_tests",
           "studio_quick": "isolde_studio_quick_tests",
           "studio_selection": "isolde_studio_quick_tests",
           "studio_gestures": "isolde_studio_quick_tests",
@@ -48,10 +49,13 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "desktop": ("home-components-acceptance.py", ["--studio", "--desktop", "--inspect"]),
          "lounge": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
          "pastel": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
+         "repairs": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"])}
 
 
 def visual_result_passed(case, result):
+    if case == "repairs":
+        return all(result.get(key) is True for key in ("passed", "preserving_update", "household_unchanged", "real_compositor_return"))
     if case in ("lounge", "pastel"):
         functional = (result.get("functional_journey_passed") is True
                       if "functional_journey_passed" in result else
@@ -346,6 +350,8 @@ class Oracle:
         return self.run / "payload"
 
     def visual(self, case, installed=False):
+        if case == "repairs" and not installed:
+            raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
         if installed:
             deployed = json.loads((self.run / "deploy-result.json").read_text())
@@ -358,7 +364,7 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
-        if case in ("lounge", "pastel"):
+        if case in ("lounge", "pastel", "repairs"):
             fixture = "home-reference" if case == "lounge" else "home-pastel-reference"
             command += ["--case", str(source / "tests/visual" / fixture)]
         before, links = self.service(), self.links()
@@ -445,7 +451,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

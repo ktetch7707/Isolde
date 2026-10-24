@@ -50,6 +50,7 @@ class PlaybackTests(unittest.TestCase):
         self.active = False
         self.item = 7
         self.kind = "movie"
+        self.channel_locked = False
         self.speed = 1
         self.now = 0
         self.calls, self.builtins = [], []
@@ -60,14 +61,39 @@ class PlaybackTests(unittest.TestCase):
         method, params = request["method"], request["params"]
         self.calls.append((method, params))
         result = "OK"
-        if method == "Player.GetActivePlayers": result = [{"playerid": 1, "type": "video"}] if self.active else []
+        if method == "Player.GetActivePlayers": result = [{"playerid": 1, "type": "audio" if self.kind == "song" else "video"}] if self.active else []
         elif method == "VideoLibrary.GetMovieDetails": result = {"moviedetails": {"file": str(self.path)}}
         elif method == "VideoLibrary.GetEpisodeDetails": result = {"episodedetails": {"file": str(self.path)}}
+        elif method == "AudioLibrary.GetSongDetails": result = {"songdetails": {"file": str(self.path)}}
+        elif method == "PVR.GetChannelDetails": result = {"channeldetails":{"channeltype":"tv","hidden":False,"locked":self.channel_locked}}
         elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item}}
         elif method == "Player.GetProperties": result = {"speed": self.speed}
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
         elif method == "Player.Stop": self.active = False
         return json.dumps({"result": result})
+
+    def test_live_tv_uses_configured_channel_identity_and_refuses_locks(self):
+        self.kind="channel";self.channel_locked=True
+        with self.assertRaises(ValueError): self.player.handle("Isolde.PlayChannel",{"channelid":7,"resume":False})
+        self.assertFalse(any(method=="Player.Open" for method,_ in self.calls))
+        self.channel_locked=False
+        self.assertEqual(self.player.handle("Isolde.PlayChannel",{"channelid":7,"resume":False})["state"],"starting")
+        self.active=True;self.assertEqual(self.player.status()["state"],"playing")
+        self.assertIn(("Player.Open",{"item":{"channelid":7},"options":{"resume":False}}),self.calls)
+        self.assertEqual(self.player.control("home"),{"state":"ended","home":True})
+
+    def test_local_song_ownership_and_audio_controls(self):
+        self.kind = "song"
+        with self.assertRaises(ValueError): self.player.handle("Isolde.PlaySong", {"songid":7,"resume":True})
+        self.assertEqual(self.player.handle("Isolde.PlaySong", {"songid":7,"resume":False})["state"], "starting")
+        self.active = True
+        self.assertEqual(self.player.status()["state"], "playing")
+        self.assertIn("ActivateWindow(visualisation)", self.builtins)
+        self.assertNotIn("ActivateWindow(fullscreenvideo)", self.builtins)
+        self.assertEqual(self.player.control("pause")["state"], "paused")
+        self.item = 99
+        self.assertEqual(self.player.status()["state"], "replaced")
+        self.assertFalse(any(method == "Player.Stop" for method, _ in self.calls))
 
     def start(self):
         self.assertEqual(self.player.handle("Isolde.PlayMovie", {"movieid": 7, "resume": True})["state"], "starting")

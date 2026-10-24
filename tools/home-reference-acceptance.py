@@ -11,6 +11,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 import subprocess
@@ -59,6 +60,7 @@ def main():
     parser.add_argument("--inspect", action="store_true", help="Pause briefly on failure for a VM screenshot")
     parser.add_argument("--skin-from-settings", action="store_true", help="Select the built-in design and save/reapply a personal skin entirely through Settings")
     parser.add_argument("--capture-library", action="store_true", help="Also pause for a screenshot of the skin library")
+    parser.add_argument("--existing-profile", help="Explicit installed repair journey for the active VM acceptance profile")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
     args = parser.parse_args()
     case = args.case.resolve(strict=True)
@@ -94,12 +96,25 @@ def main():
         key, _, value = line.partition("=")
         if key in {"DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}:
             env[key] = value
-    env.update(XDG_CONFIG_HOME=str(evidence / "config"), XDG_DATA_HOME=str(evidence / "data"),
-               XDG_CACHE_HOME=str(evidence / "cache"), QT_QPA_PLATFORM="xcb")
+    if args.existing_profile:
+        if not re.fullmatch(r"[a-f0-9-]{36}", args.existing_profile): raise ValueError("Invalid acceptance profile")
+        normal = Path.home() / ".config/Isolde"
+        profiles = json.loads((normal / "profiles.json").read_text())
+        assert profiles["active"] == args.existing_profile, "Select the authorized acceptance profile first"
+        assert any(p["id"] == args.existing_profile and p["name"] == "Studio Demo" for p in profiles["profiles"])
+        layout = normal / "profiles" / args.existing_profile / "home-layout.json"
+        assert not layout.is_symlink() and layout.resolve().is_relative_to(normal.resolve())
+        original_bytes = layout.read_bytes()
+        original = json.loads(original_bytes)
+        (evidence / "attempt-config.json").write_bytes(original_bytes)
+        env["QT_QPA_PLATFORM"] = "xcb"
+    else:
+        env.update(XDG_CONFIG_HOME=str(evidence / "config"), XDG_DATA_HOME=str(evidence / "data"),
+                   XDG_CACHE_HOME=str(evidence / "cache"), QT_QPA_PLATFORM="xcb")
     from reference_collections import ReferenceCollections
     fixture_path = case / "collections.json"
     collection_provider = ReferenceCollections(evidence, json.loads(fixture_path.read_text()),
-        Path(__file__).resolve().parents[1]) if fixture_path.exists() else None
+        Path(__file__).resolve().parents[1]) if fixture_path.exists() and not args.existing_profile else None
     x11 = ctypes.CDLL(ctypes.util.find_library("X11"))
     x11.XOpenDisplay.argtypes = [ctypes.c_char_p]; x11.XOpenDisplay.restype = ctypes.c_void_p
     x11.XStringToKeysym.argtypes = [ctypes.c_char_p]; x11.XStringToKeysym.restype = ctypes.c_ulong
@@ -195,6 +210,51 @@ def main():
                     if process.poll() is not None: raise RuntimeError("Shell exited")
                     if time.monotonic() > deadline: raise RuntimeError("Screenshot confirmation timed out")
                     time.sleep(0.2)
+            if args.existing_profile:
+                household = Path.home() / ".config/Isolde/home-layout.json"
+                household_before = household.read_bytes()
+                pending = [c for c in original["components"] if c["id"] in {"music", "games", "guide"}
+                           and c["action"]["type"] != "open-page"]
+                if pending:
+                    key("Home"); key("Up", 30); key("Left", 3); key("Right"); key("Return")
+                    key("Up", 10); key("Down"); key("Return")
+                    more = 3 + len(original.get("pages", [])) + int(original.get("rootPage", {}).get("visible", True))
+                    key("Down", more); key("Return"); key("Down", 8); key("Return")
+                    key("Down", 2); key("Right", 4); key("Return")
+                    captured("updatepreview")
+                    assert layout.read_bytes() == original_bytes
+                    key("Escape")
+                    assert layout.read_bytes() == original_bytes
+                    key("Return"); key("Return")
+                    expect(lambda: layout.read_bytes() != original_bytes, "Explicit preserving starter-page update saved")
+                    updated = json.loads(layout.read_bytes())
+                    for name, value in original.items():
+                        if name not in {"components", "pages"}: assert updated[name] == value, name
+                    before_components = {c["id"]: c for c in original["components"]}
+                    for c in updated["components"]:
+                        previous = before_components[c["id"]]
+                        if c["id"] in {p["id"] for p in pending}:
+                            assert c["action"]["type"] == "open-page"
+                            assert {k:v for k,v in c.items() if k not in {"action", "source"}} == {k:v for k,v in previous.items() if k not in {"action", "source"}}
+                        else: assert c == previous
+                    assert updated["pages"][:len(original.get("pages", []))] == original.get("pages", [])
+                    assert household.read_bytes() == household_before
+                    key("Escape", 3); key("Home")
+                captured("updated")
+                # The portal belongs to the real compositor. Host-side bounded
+                # VM key input follows review of its permission screenshot.
+                key("Home"); key("Up", 30); key("Down", 2); key("Left", 10); key("Right", 4); key("Return")
+                captured("desktoppermission")
+                expect(lambda: "Map State: IsUnMapped" in run("xwininfo", "-id", window), "Desktop handoff hid the shell only after a granted shortcut")
+                x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]; x11.XDefaultRootWindow.restype = ctypes.c_ulong
+                x11.XSetInputFocus(display, x11.XDefaultRootWindow(display), 2, 0); x11.XFlush(display)
+                captured("desktop")
+                expect(lambda: "Map State: IsViewable" in run("xwininfo", "-id", window), "Compositor Home shortcut returned to Isolde")
+                captured("desktopreturned")
+                assert household.read_bytes() == household_before
+                (evidence / "result.json").write_text(json.dumps({"passed": True, "profile": args.existing_profile,
+                    "preserving_update": True, "household_unchanged": True, "real_compositor_return": True}))
+                return
             if args.skin_from_settings:
                 # Begin with the packaged default. No Home layout is injected.
                 assert not layout.exists()
@@ -232,6 +292,31 @@ def main():
                        "Production history collection requested local artwork")
                 collection_provider.verify_history()
             captured("custom")
+            if collection_provider:
+                def starter(column):
+                    key("Home"); key("Up", 30); key("Down", 3)
+                    key("Left", 10)
+                    if column: key("Right", column)
+                    key("Return")
+                starter(3)
+                expect(lambda: any(r["method"] == "AudioLibrary.GetAlbums" for r in collection_provider.requests),
+                       "Music page requested Kodi albums")
+                captured("music")
+                key("Return")
+                expect(lambda: any(r["method"] == "AudioLibrary.GetSongs" for r in collection_provider.requests),
+                       "Album activation requested its Kodi tracks")
+                captured("tracks")
+                key("Escape")
+                starter(4)
+                captured("games")
+                starter(0)
+                expect(lambda: any(r["method"] == "PVR.GetChannels" for r in collection_provider.requests),
+                       "Guide page requested configured Kodi channels")
+                captured("guide")
+                key("Home"); key("XF86Search")
+                captured("search")
+                key("Escape"); key("Home")
+                assert layout.read_bytes() == original_bytes
             if args.skin_from_settings:
                 key("Up",30); key("Left",3)
                 if case.name == "home-pastel-reference": key("Right")

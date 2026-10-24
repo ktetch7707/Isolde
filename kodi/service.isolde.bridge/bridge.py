@@ -16,6 +16,8 @@ READ_METHODS = {
     "JSONRPC.Ping", "JSONRPC.Version", "Application.GetProperties",
     "VideoLibrary.GetMovies", "VideoLibrary.GetTVShows", "VideoLibrary.GetSeasons", "VideoLibrary.GetEpisodes",
     "VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails",
+    "AudioLibrary.GetAlbums", "AudioLibrary.GetSongs",
+    "PVR.GetChannels",
     "Player.GetActivePlayers", "Player.GetProperties",
 }
 MOVIE_DETAIL_PROPERTIES = {"title", "year", "plot", "runtime", "resume", "playcount", "art", "genre", "tag"}
@@ -32,7 +34,7 @@ def dispatch(raw, execute, playback=None, artwork=None):
         return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0" or type(request_id) is not int:
         return error(-32600, "Invalid request")
-    playback_methods = {"Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
+    playback_methods = {"Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
     if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetArtwork", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
@@ -81,7 +83,39 @@ def dispatch(raw, execute, playback=None, artwork=None):
             return {"jsonrpc": "2.0", "id": request_id, "result": query("Application.Quit", {})}
         except Exception:
             return error(-32603, "Cannot confirm Kodi is idle; mode was not changed")
-    if request["method"] == "VideoLibrary.Scan":
+    if request["method"] == "PVR.GetChannels":
+        if set(params) - {"channelgroupid", "properties", "limits"} or params.get("channelgroupid") != "alltv":
+            return error(-32602, "Choose the configured Kodi TV channel group")
+        fields = params.get("properties", [])
+        allowed = {"channelnumber", "broadcastnow", "broadcastnext", "locked", "hidden"}
+        if not isinstance(fields, list) or len(fields) > len(allowed) or any(not isinstance(field, str) or field not in allowed for field in fields):
+            return error(-32602, "Unsupported TV guide fields")
+        limits = params.get("limits", {"start":0,"end":50})
+        if (not isinstance(limits, dict) or set(limits) != {"start","end"} or type(limits["start"]) is not int
+            or type(limits["end"]) is not int or not 0 <= limits["start"] <= 10000000 or not 0 < limits["end"]-limits["start"] <= 50):
+            return error(-32602, "TV guide requests require pages of 1 to 50 channels")
+        params = dict(params, limits=limits)
+    elif request["method"].startswith("AudioLibrary."):
+        allowed = {"title", "artist", "year", "art"} if request["method"] == "AudioLibrary.GetAlbums" else {"title", "artist", "album", "albumid", "track", "duration", "art"}
+        if set(params) - {"properties", "limits", "sort", "filter"}:
+            return error(-32602, "Unsupported music query")
+        fields = params.get("properties", [])
+        if not isinstance(fields, list) or len(fields) > len(allowed) or any(not isinstance(field, str) or field not in allowed for field in fields):
+            return error(-32602, "Unsupported music fields")
+        rule = params.get("filter")
+        if rule is not None and (request["method"] != "AudioLibrary.GetSongs" or not isinstance(rule, dict)
+                                 or set(rule) != {"albumid"} or type(rule["albumid"]) is not int or not 1 <= rule["albumid"] <= 2147483647):
+            return error(-32602, "Choose a local Kodi album")
+        limits = params.get("limits", {"start": 0, "end": 50})
+        if (not isinstance(limits, dict) or set(limits) != {"start", "end"}
+            or type(limits["start"]) is not int or type(limits["end"]) is not int
+            or not 0 <= limits["start"] <= 10000000 or not 0 < limits["end"]-limits["start"] <= 50):
+            return error(-32602, "Music requests require pages of 1 to 50 items")
+        order = params.get("sort", {})
+        if not isinstance(order, dict) or set(order) - {"method", "order", "ignorearticle"} or order.get("method", "title") not in {"title", "track"} or order.get("order", "ascending") != "ascending" or ("ignorearticle" in order and type(order["ignorearticle"]) is not bool):
+            return error(-32602, "Unsupported music order")
+        params = dict(params, limits=limits)
+    elif request["method"] == "VideoLibrary.Scan":
         if params:
             return error(-32602, "Scan uses only this profile's configured sources")
         params = {"showdialogs": False}

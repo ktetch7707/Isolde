@@ -13,9 +13,10 @@ Item {
     property bool highlighted:false
     property string selectedId:""
     property string galleryId:""
-    readonly property bool collectionTooLarge:collection.mode==="all" && (registry?registry.apps:[]).filter(a=>a.type==="web" || a.type==="desktop").length>128
+    readonly property var allApps:(registry?registry.apps:[]).filter(a=>(a.type==="web" || a.type==="desktop") && (!collection.section || a.section===collection.section))
+    readonly property bool collectionTooLarge:collection.mode==="all" && allApps.length>128
     readonly property var eligible:{
-        const all=(registry?registry.apps:[]).filter(a=>a.type==="web" || a.type==="desktop")
+        const all=allApps
         return collection.mode==="selected"?(collection.ids || []).map(id=>all.find(a=>a.id===id)).filter(a=>!!a):collectionTooLarge?[]:all
     }
     readonly property int capacity:Math.max(1,(style.layout || {}).visibleColumns || 4)
@@ -54,14 +55,14 @@ Item {
                 required property var modelData
                 objectName:"appCarouselCard-"+modelData.id
                 width:(root.width-(Math.min(root.capacity,root.cards.length)-1)*parent.spacing)/Math.max(1,Math.min(root.capacity,root.cards.length));height:root.height
-                item:({name:modelData.name,appSymbol:modelData.id==="__more__"?"":modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{icon:root.style.icon || "grid"})})
+                item:({name:modelData.name,logoSource:modelData.logoSource || "",appSymbol:modelData.id==="__more__"?"":modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{icon:root.style.icon || "grid",artFit:root.style.artFit || "contain"})})
                 appearance:root.appearance;unit:root.unit
                 selected:(root.engaged || root.highlighted) && root.selectedId===modelData.id
                 onActivated:{root.engage();root.selectedId=modelData.id;root.activate(modelData.id)}
             }
         }
     }
-    Text {anchors.centerIn:parent;visible:!root.cards.length;text:root.collectionTooLarge?"Choose up to 128 apps":root.collection.mode==="selected"?"Choose apps":"No installed apps";color:root.appearance.textColor;font.pixelSize:18*root.unit}
+    Text {anchors.centerIn:parent;width:parent.width;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;visible:!root.cards.length;text:root.collectionTooLarge?"Choose up to 128 apps":root.style.subtitle || (root.collection.mode==="selected"?"Choose apps":"No installed apps");color:root.appearance.textColor;font.pixelSize:18*root.unit}
     Popup {
         id:gallery;objectName:"appCarouselGallery";parent:Overlay.overlay
         width:Math.min(parent?parent.width-48:900,900);height:Math.min(parent?parent.height-48:500,500)
@@ -78,7 +79,7 @@ Item {
                 delegate:HomeCard {
                     required property var modelData
                     width:galleryGrid.cellWidth;height:galleryGrid.cellHeight
-                    item:({name:modelData.name,appSymbol:modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{variant:"orb",diameter:78,icon:root.style.icon || "grid"})})
+                    item:({name:modelData.name,logoSource:modelData.logoSource || "",appSymbol:modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{variant:"orb",diameter:78,icon:root.style.icon || "grid",artFit:root.style.artFit || "contain"})})
                     appearance:root.appearance;selected:root.galleryId===modelData.id
                     onActivated:{root.galleryId=modelData.id;root.activate(modelData.id)}
                 }

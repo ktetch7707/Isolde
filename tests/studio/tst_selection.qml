@@ -14,7 +14,7 @@ Item {
         SignalSpy {id:launchSpy;signalName:"launch"}
         SignalSpy {id:switchSpy;signalName:"clicked"}
         function test_app_collection_registry_membership_overflow_and_return() {
-            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"},{id:"mock",name:"Fake",type:"mock"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"desktop"}]
+            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop",section:"Games"},{id:"mock",name:"Fake",type:"mock"},{id:"two",name:"Two",type:"web",section:"Music"},{id:"three",name:"Three",type:"desktop",section:"Games"}]
             const carousel=createTemporaryObject(carouselComponent,tests.parent)
             verify(carousel!==null);launchSpy.target=carousel;launchSpy.clear()
             compare(carousel.eligible.length,3);compare(carousel.cards.length,2)
@@ -29,7 +29,17 @@ Item {
             carousel.handleCommand(inputManager.back);compare(carousel.selectedId,"__more__")
             carousel.collection={mode:"selected",ids:["three","one"]}
             compare(carousel.eligible[0].id,"three");compare(carousel.eligible[1].id,"one");compare(carousel.overflow,false)
-            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"}]
+            carousel.collection={mode:"all",ids:[],section:"Games"};compare(carousel.eligible.length,2)
+            carousel.style={variant:"orb",layout:{visibleColumns:1}}
+            compare(carousel.cards.length,1);compare(carousel.cards[0].id,"__more__")
+            carousel.activate("__more__");tryCompare(gallery,"opened",true);compare(findChild(carousel,"appCarouselGalleryGrid").count,2)
+            compare(carousel.eligible[0].id,"one");compare(carousel.eligible[1].id,"three")
+            carousel.handleCommand(inputManager.back);compare(carousel.selectedId,"__more__")
+            fakeRegistry.apps=fakeRegistry.apps.concat(Array.from({length:130},(_,i)=>({id:"music-"+i,name:"Music "+i,type:"desktop",section:"Music"})))
+            compare(carousel.eligible.length,2);compare(carousel.collectionTooLarge,false)
+            carousel.collection={mode:"all",ids:[]};compare(carousel.collectionTooLarge,true);compare(carousel.eligible.length,0)
+            carousel.collection={mode:"selected",ids:["three","one"],section:"Games"};compare(carousel.eligible.length,2)
+            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop",section:"Games"}]
             compare(carousel.eligible.length,1);compare(carousel.selectedId,"one")
             carousel.readOnly=true;carousel.activate("one");compare(launchSpy.count,1)
             launchSpy.target=null

@@ -1,0 +1,14 @@
+{
+  "schemaVersion":1,
+  "packageId":"steam",
+  "version":"1.0.0",
+  "minIsoldeVersion":"0.0.1.2",
+  "name":"Steam",
+  "description":"Launch an existing Steam desktop installation. The Steam program and games must already be installed; registering this launcher does not install them.",
+  "category":"Games",
+  "publisher":"Valve",
+  "provenance":"Existing system Steam desktop entry",
+  "capabilities":["desktop.external","input.gamepad","audio.output"],
+  "setup":{"required":true,"prompt":"An existing Steam desktop installation is required. Isolde does not install Steam or games when adding this launcher."},
+  "app":{"id":"steam","type":"desktop","presentationMode":"game-hub","networkRequirement":"none","desktopId":"steam","section":"Games","accent":"#263a50","symbol":"S"}
+}

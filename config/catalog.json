@@ -8,6 +8,7 @@
     "packages/home-assistant/manifest.json",
     "packages/kodi/manifest.json",
     "packages/retro-arcade/manifest.json",
-    "packages/spotify/manifest.json"
+    "packages/spotify/manifest.json",
+    "packages/steam/manifest.json"
   ]
 }

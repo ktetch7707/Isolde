@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 
 Item {
     id: root
@@ -11,11 +12,20 @@ Item {
     property string pageId: ""
     property var pageSources: []
     property var searchSettings: null
+    property var appearance: ({})
+    SystemPalette {id:systemPalette}
+    readonly property color ink:appearance.textColor || systemPalette.text
+    readonly property color muted:appearance.mutedColor || systemPalette.mid
+    readonly property color surface:appearance.surfaceColor || systemPalette.window
+    readonly property color focusInk:appearance.focusColor || systemPalette.highlight
+    readonly property color selectedSurface:appearance.selectedColor || systemPalette.highlight
     readonly property bool webSearchEnabled: searchSettings ? searchSettings.webEnabled : false
     property bool open: false
     property bool keyboardOpen: false
     property string query: ""
     property int selectedIndex: 0
+    property string focusArea:"query"
+    property string lastHeader:"query"
     signal launchApp(string appId)
     signal openSettings(int section)
     signal installPackage(string packageId)
@@ -102,16 +112,9 @@ Item {
     function resultItems() {
         const q = query.trim().toLowerCase()
         let result = []
-        if (searchSettings) {
-            result.push({ kind: "searchToggle", id: "search-web-toggle", name: "Web search",
-                description: webSearchEnabled
-                    ? "ON · online discovery is enabled, but no discovery provider is configured yet — only Kodi results are shown"
-                    : "OFF · searches only titles already in this profile's Kodi library (network boundary)",
-                action: webSearchEnabled ? "Turn OFF" : "Turn ON", accent: "#D58A45", symbol: "W" })
-        }
         for (let i = 0; i < apps.length; ++i) {
             const app = apps[i]
-            const item = { kind: "app", id: app.id, name: app.name, description: app.section + " · " + app.presentationMode + " · " + networkLabel(app.networkRequirement), action: "Launch", accent: app.accent, symbol: app.symbol || app.name[0] || "A" }
+            const item = { kind: "app", id: app.id, name: app.name, description: app.section + " · " + app.presentationMode + " · " + networkLabel(app.networkRequirement), action: "Launch", accent: app.accent, logoSource: app.logoSource || "", symbol: app.symbol || app.name[0] || "A" }
             if (!q || contains(item.name, q) || contains(item.description, q))
                 result.push(item)
         }
@@ -143,9 +146,6 @@ Item {
             appendMediaResults(result, movieSearchClient, "movie", q)
             appendMediaResults(result, showSearchClient, "show", q)
             appendMediaResults(result, episodeSearchClient, "episode", q)
-            if (webSearchEnabled) result.push({ kind: "mediaStatus", id: "web-discovery-unavailable",
-                name: "Web discovery not configured", action: "Unavailable", accent: "#6A4545", symbol: "!",
-                description: "Web search is ON, but no online discovery provider is set up yet. Only Kodi results are shown." })
             for (let c = 0; c < mediaCollections.length; ++c) {
                 const collection = mediaCollections[c]
                 if (contains(collection.name, q)) result.push({ kind: "mediaCollection", id: "collection-" + collection.id,
@@ -177,6 +177,7 @@ Item {
     onOpenChanged: {
         if (open) {
             selectedIndex = 0
+            focusArea="query";lastHeader="query"
             keyboardOpen = false
             searchKeyboard.value = query
             searchKeyboard.selectedIndex = 0
@@ -200,20 +201,22 @@ Item {
         }
         if (command === inputManager.back) {
             closeRequested()
-        } else if (command === inputManager.navigateLeft) {
-            keyboardOpen = true
-            searchKeyboard.value = query
-            searchKeyboard.selectedIndex = 0
-        } else if (command === inputManager.navigateRight) {
-            query = ""
-            selectedIndex = 0
-        } else if (command === inputManager.navigateUp) {
-            selectedIndex = Math.max(0, selectedIndex - 1)
-        } else if (command === inputManager.navigateDown) {
-            selectedIndex = Math.min(results.length - 1, selectedIndex + 1)
-        } else if (command === inputManager.confirm) {
-            activateSelected()
+            return
         }
+        if(focusArea!=="results"){
+            if(command===inputManager.navigateRight && searchSettings){focusArea="web";lastHeader="web"}
+            else if(command===inputManager.navigateLeft){focusArea="query";lastHeader="query"}
+            else if(command===inputManager.navigateDown)focusArea="results"
+            else if(command===inputManager.confirm){
+                if(focusArea==="web"){if(searchSettings)searchSettings.toggleWebEnabled()}
+                else {keyboardOpen=true;searchKeyboard.value=query;searchKeyboard.selectedIndex=0}
+            }
+            return
+        }
+        if(command===inputManager.navigateUp){if(selectedIndex<=0)focusArea=lastHeader;else --selectedIndex}
+        else if(command===inputManager.navigateDown)selectedIndex=Math.min(results.length-1,selectedIndex+1)
+        else if(command===inputManager.navigateLeft){focusArea="query";lastHeader="query"}
+        else if(command===inputManager.confirm){if(results.length)activateSelected();else focusArea="query"}
     }
 
     function activateSelected() {
@@ -234,8 +237,6 @@ Item {
                 launchApp(item.id)
             else
                 installPackage(item.id)
-        } else if (item.kind === "searchToggle") {
-            if (searchSettings) searchSettings.toggleWebEnabled()
         } else if (item.kind === "media") {
             closeRequested()
             mediaRequested(item.mediaType, item.mediaId, query.trim(), "", item.pageStart)
@@ -267,52 +268,67 @@ Item {
         width: Math.min(parent.width - 90, 980)
         height: Math.min(parent.height - 70, 610)
         radius: 18
-        color: "#111A2D"
+        color: root.surface
         border.width: 2
-        border.color: "#4D7ED8"
+        border.color: root.focusInk
 
         Column {
             anchors.fill: parent
             anchors.margins: 28
             spacing: 18
 
-            Row {
+            Item {
+                id:searchHeader
                 width: parent.width
-                spacing: 18
-                Text { text: "SEARCH"; color: "#F8FAFC"; font.pixelSize: 38; font.weight: Font.DemiBold; font.letterSpacing: 5 }
-                Text { anchors.baseline: parent.children[0].baseline; text: "Apps · Store · Settings · Kodi Library · Web " + (root.webSearchEnabled ? "ON" : "OFF"); color: "#91A0BC"; font.pixelSize: 18; elide: Text.ElideRight }
+                height:56
+                Text {anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter; text: "Search"; color: root.ink; font.pixelSize: 34*(root.appearance.typographyScale || 1); font.weight: Font.DemiBold}
+                Switch {
+                    id:webSwitch;objectName:"searchWebToggle";anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
+                    visible:!!root.searchSettings;checked:root.webSearchEnabled
+                    text:"Web search · "+(checked?"On":"Off")
+                    Accessible.name:"Web search";Accessible.description:checked?"On. No web provider configured; local results only.":"Off. Local results only."
+                    onClicked:{root.focusArea="web";root.lastHeader="web";root.searchSettings.toggleWebEnabled();checked=Qt.binding(()=>root.webSearchEnabled)}
+                    contentItem:Text {text:webSwitch.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter;rightPadding:webSwitch.indicator.width+12}
+                    indicator:Rectangle {x:webSwitch.width-width;y:(webSwitch.height-height)/2;width:54;height:30;radius:height/2;color:webSwitch.checked?root.focusInk:root.muted
+                        Rectangle {width:24;height:24;radius:12;x:webSwitch.checked?parent.width-width-3:3;y:3;color:root.surface}
+                    }
+                    background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="web"?2:0;border.color:root.focusInk}
+                }
             }
 
             Rectangle {
+                id:queryControl;objectName:"searchQueryControl"
                 width: parent.width
                 height: 58
                 radius: 999
-                color: "#0B1324"
-                border.width: root.keyboardOpen ? 3 : 1
-                border.color: root.keyboardOpen ? "#F8FAFC" : "#354462"
+                color: root.surface
+                border.width: root.keyboardOpen || root.focusArea==="query" ? 3 : 1
+                border.color: root.focusArea==="query" ? root.focusInk : root.muted
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 24
-                    text: root.query.length ? root.query : "Press ← to type, or browse everything"
-                    color: root.query.length ? "#F8FAFC" : "#71809F"
+                    text: root.query.length ? root.query : "Search your library, apps and settings"
+                    color: root.query.length ? root.ink : root.muted
                     font.pixelSize: 22
                 }
+                MouseArea {anchors.fill:parent;onClicked:{root.focusArea="query";root.lastHeader="query";root.keyboardOpen=true;searchKeyboard.value=root.query;searchKeyboard.selectedIndex=0}}
             }
 
             Text {
+                id:resultCount
                 text: root.results.length + " result" + (root.results.length === 1 ? "" : "s")
-                color: "#91A0BC"
+                color: root.muted
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
                 font.letterSpacing: 3
             }
-            Text { visible: root.query.trim().length > 0 && root.query.trim().length < 2; text: "Type at least 2 characters to search the local Kodi library. Web search is " + (root.webSearchEnabled ? "on." : "off."); color: "#91A0BC"; font.pixelSize: 14 }
+            Text {id:searchStatus;objectName:"searchWebStatus";width:parent.width;wrapMode:Text.WordWrap;text:root.searchSettings && root.searchSettings.errorString?root.searchSettings.errorString:root.webSearchEnabled?"No web provider configured — local results only":root.query.trim().length===1?"Type at least 2 characters to search your Kodi library":"Local results only";color:root.muted;font.pixelSize:14}
 
             Flickable {
                 id: resultScroller
                 width: parent.width
-                height: parent.height - 174
+                height:Math.max(60,parent.height-searchHeader.height-queryControl.height-resultCount.height-searchStatus.height-searchFooter.height-5*parent.spacing)
                 contentHeight: resultColumn.height
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -330,28 +346,29 @@ Item {
                             width: resultColumn.width
                             height: 76
                             radius: 12
-                            color: root.selectedIndex === index ? "#2B416B" : "#151F33"
-                            border.width: root.selectedIndex === index ? 3 : 1
-                            border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                            color: root.selectedIndex === index && root.focusArea==="results" ? root.selectedSurface : root.surface
+                            border.width: root.selectedIndex === index && root.focusArea==="results" ? 3 : 1
+                            border.color: root.selectedIndex===index && root.focusArea==="results" ? root.focusInk : root.muted
                             Rectangle {
                                 width: 48; height: 48; radius: 12
                                 anchors.left: parent.left; anchors.leftMargin: 14; anchors.verticalCenter: parent.verticalCenter
-                                color: modelData.accent
-                                Text { anchors.centerIn: parent; text: modelData.symbol; color: "#F8FAFC"; font.pixelSize: 20; font.weight: Font.DemiBold }
+                                color: modelData.logoSource ? "transparent" : modelData.accent
+                                Image { anchors.fill:parent; source:modelData.logoSource || ""; fillMode:Image.PreserveAspectFit; visible:!!modelData.logoSource }
+                                Text { anchors.centerIn: parent; visible:!modelData.logoSource; text: modelData.symbol; color: root.ink; font.pixelSize: 20; font.weight: Font.DemiBold }
                             }
                             Column {
                                 anchors.left: parent.left; anchors.leftMargin: 76
                                 anchors.right: actionLabel.left; anchors.rightMargin: 18
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: 3
-                                Text { text: modelData.name; color: "#F8FAFC"; font.pixelSize: 21; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                                Text { text: modelData.description; color: "#9EABC1"; font.pixelSize: 14; elide: Text.ElideRight; width: parent.width }
+                                Text { text: modelData.name; color: root.ink; font.pixelSize: 21; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
+                                Text { text: modelData.description; color: root.muted; font.pixelSize: 14; elide: Text.ElideRight; width: parent.width }
                             }
                             Text {
                                 id: actionLabel
                                 anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.action
-                                color: "#D5B083"
+                                color: root.focusInk
                                 font.pixelSize: 15
                                 font.weight: Font.DemiBold
                             }
@@ -359,8 +376,8 @@ Item {
                     }
                     Text {
                         visible: root.results.length === 0
-                        text: "No matches. Press ← to edit search or → to clear."
-                        color: "#9EABC1"
+                        text: "No matches. Select the search field to edit."
+                        color: root.muted
                         font.pixelSize: 22
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
@@ -370,8 +387,9 @@ Item {
             }
 
             Text {
-                text: root.keyboardOpen ? "D-pad type    Enter select key    Esc close keyboard" : "← Type    → Clear    ↑↓ Browse    Enter activate    Esc close"
-                color: "#91A0BC"
+                id:searchFooter
+                text: root.keyboardOpen ? "D-pad type · Confirm selects · Back closes keyboard" : "D-pad navigate · Confirm selects · Back closes Search"
+                color: root.muted
                 font.pixelSize: 15
             }
         }
@@ -391,6 +409,7 @@ Item {
             root.query = text
             root.keyboardOpen = false
             root.selectedIndex = 0
+            root.focusArea="results"
         }
         onCanceled: root.keyboardOpen = false
     }

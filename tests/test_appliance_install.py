@@ -79,6 +79,7 @@ class InstallationTests(unittest.TestCase):
         self.assertNotIn("current/bin/isolde-recovery", recovery)
         self.assertIn("Restart=no", recovery)
         self.assertTrue((config / "autostart/isolde.desktop").exists())
+        self.assertEqual((self.prefix.parent / "applications/isolde.desktop").read_bytes(),(config / "autostart/isolde.desktop").read_bytes())
 
     def test_startup_is_enabled_and_verified_without_starting_app(self):
         with patch.object(installer, "run") as run:

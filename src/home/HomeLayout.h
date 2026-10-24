@@ -106,6 +106,8 @@ public:
     [[nodiscard]] QVariantList skins() const;
     Q_INVOKABLE QString saveSkin(const QString &name);
     Q_INVOKABLE bool applySkin(const QString &id);
+    Q_INVOKABLE QVariantList skinPageUpdates(const QString &id) const;
+    Q_INVOKABLE bool applySkinPageUpdates(const QString &id);
     Q_INVOKABLE bool renameSkin(const QString &id, const QString &name);
     Q_INVOKABLE bool deleteSkin(const QString &id);
     QVariantList pages() const { return m_pages.toVariantList(); }

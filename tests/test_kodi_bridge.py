@@ -13,6 +13,29 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    def test_guide_reads_only_bounded_configured_tv_channels(self):
+        calls=[]
+        def execute(raw):
+            calls.append(json.loads(raw));return '{"jsonrpc":"2.0","id":7,"result":{}}'
+        valid={"channelgroupid":"alltv","properties":["channelnumber","broadcastnow","broadcastnext"],"limits":{"start":0,"end":50}}
+        self.assertNotIn("error",bridge.dispatch(self.request("PVR.GetChannels",valid),execute))
+        for change in ({"channelgroupid":"allradio"},{"limits":{"start":0,"end":51}},{"properties":["file"]},{"url":"https://example.invalid"}):
+            self.assertIn("error",bridge.dispatch(self.request("PVR.GetChannels",dict(valid,**change)),execute))
+        self.assertEqual(len(calls),1)
+
+    def test_music_reads_are_bounded_and_reject_arbitrary_filters(self):
+        calls = []
+        def execute(raw):
+            calls.append(json.loads(raw))
+            return '{"jsonrpc":"2.0","id":7,"result":{}}'
+        for method, params in (("AudioLibrary.GetAlbums", {"properties":["title","artist","art"],"limits":{"start":0,"end":50}}),
+                               ("AudioLibrary.GetSongs", {"properties":["title","track"],"filter":{"albumid":41},"limits":{"start":50,"end":100}})):
+            self.assertNotIn("error", bridge.dispatch(self.request(method, params), execute))
+        for params in ({"filter":{"file":"/private/path"}}, {"filter":{"albumid":True}}, {"filter":{"albumid":0}},
+                       {"limits":{"start":0,"end":51}}, {"properties":["file"]}, {"sort":{"method":"random"}}, {"directory":"/private"}):
+            self.assertIn("error", bridge.dispatch(self.request("AudioLibrary.GetSongs", params), execute))
+        self.assertEqual(len(calls),2)
+
     def test_local_search_boundary(self):
         calls = []
         def execute(raw):

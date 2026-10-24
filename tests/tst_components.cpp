@@ -45,6 +45,7 @@ private slots:
     void failedEditRetainsProfileLayout();
     void skinSnapshotsSurviveResetAndArtworkChanges();
     void skinsRejectInvalidAndFailedApplications();
+    void starterPageUpdatesPreserveDesignAndRollback();
     void pagesPersistAndRouteAndTravelWithSkins();
     void studioSessionDraftUndoBoundsAndNoWrite();
     void studioSessionCanonicalIdsAndRevisionConflict();
@@ -131,7 +132,7 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     auto *restoredPage=qobject_cast<PageModel *>(restored.pageModel(movies));QVERIFY(restoredPage);
     QCOMPARE(restoredPage->appearance()["focusColor"].toString(),QString("#123456"));
     const auto snapshot=layout.saveSkin("Whole interface");QVERIFY(!snapshot.isEmpty());
-    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));QCOMPARE(layout.pages().size(),4); // Add starter pages without replacing authored pages.
+    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));QCOMPARE(layout.pages().size(),7); // Five starter pages preserve both authored pages.
     const auto linkedState=layout.committedDocument();
     QVERIFY(!layout.removePage(shows));QCOMPARE(layout.committedDocument(),linkedState);
     QVERIFY(page->setItemAction(button,{{"type","open-page"},{"pageId",movies}})); // Explicitly repair the incoming link.
@@ -166,14 +167,14 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     const auto savedComposition = layout.composition();
     const auto savedItems = layout.components();
     QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));
-    QCOMPARE(layout.pages().size(),2);
+    QCOMPARE(layout.pages().size(),5);
     auto *moviePage=qobject_cast<PageModel *>(layout.pageModel("library-movies"));QVERIFY(moviePage);
     QCOMPARE(moviePage->items().first().toMap()["componentType"].toString(),QString("library"));
     const auto moviesLink=layout.components()[6].toMap()["action"].toMap();
     QCOMPARE(moviesLink["type"].toString(),QString("open-page"));
     QCOMPARE(moviesLink["pageId"].toString(),QString("library-movies"));
     QVERIFY(moviePage->setAppearance({{"focusColor","#123456"}}));
-    QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),2);
+    QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),5);
     QCOMPARE(moviePage->appearance()["focusColor"].toString(),QString("#123456"));
     QVERIFY(!layout.wallpaperSource().isEmpty());
     QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),4);
@@ -192,6 +193,45 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     QVERIFY(!restored.deleteSkin("builtin-default"));
     QVERIFY(restored.applySkin("builtin-default")); QVERIFY(restored.composition().isEmpty());
     HomeLayout other(&registry); QVERIFY(other.load(defaults,dir.filePath("other/home.json"))); QCOMPARE(other.skins().size(),3);
+}
+void ComponentTests::starterPageUpdatesPreserveDesignAndRollback()
+{
+    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    HomeLayout layout(&registry);
+    QVERIFY(layout.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("home.json")));
+    QVERIFY(layout.applySkin("builtin-pastel"));
+    auto document = QJsonDocument::fromJson(layout.committedDocument()).object();
+    auto components = document["components"].toArray();
+    for (int i = 0; i < components.size(); ++i) {
+        auto c = components[i].toObject(); const auto id = c["id"].toString();
+        if (id == "music" || id == "games" || id == "guide") {
+            c["action"] = id == "guide" ? QJsonObject{{"type","settings"},{"section",4}} : QJsonObject{{"type","app-drawer"}};
+            c["source"] = QJsonObject{{"schemaVersion",1},{"kind",id == "guide" ? "settings" : "app-drawer"},{"provider","shell"}};
+            components[i] = c;
+        }
+    }
+    document["components"] = components;
+    auto pages = document["pages"].toArray();
+    while (pages.size() > 2) pages.removeLast();
+    document["pages"] = pages;
+    QVERIFY2(layout.applyStudioDraft(QJsonDocument(document).toJson()), qPrintable(layout.errorString()));
+    QVERIFY(layout.setAppearance({{"fontFamily","Serif"}}));
+    const auto before = layout.committedDocument();
+    const auto disk = readFile(dir.filePath("home.json"));
+    QCOMPARE(layout.skinPageUpdates("builtin-pastel").size(), 3);
+    QCOMPARE(layout.committedDocument(), before); QCOMPARE(readFile(dir.filePath("home.json")), disk);
+    QVERIFY(QFile::rename(dir.filePath("home.json"), dir.filePath("home.held")));
+    QVERIFY(QDir().mkdir(dir.filePath("home.json")));
+    QVERIFY(!layout.applySkinPageUpdates("builtin-pastel")); QCOMPARE(layout.committedDocument(), before);
+    QVERIFY(QDir().rmdir(dir.filePath("home.json")));
+    QVERIFY(QFile::rename(dir.filePath("home.held"), dir.filePath("home.json")));
+    QVERIFY2(layout.applySkinPageUpdates("builtin-pastel"), qPrintable(layout.errorString()));
+    QCOMPARE(layout.pages().size(), 5); QCOMPARE(layout.appearance()["fontFamily"].toString(), QString("Serif"));
+    const auto after = QJsonDocument::fromJson(layout.committedDocument()).object();
+    QCOMPARE(after["pages"].toArray().at(0), pages.at(0)); QCOMPARE(after["pages"].toArray().at(1), pages.at(1));
+    QVERIFY(layout.skinPageUpdates("builtin-pastel").isEmpty());
+    const auto saved = readFile(dir.filePath("home.json"));
+    QVERIFY(!layout.applySkinPageUpdates("builtin-pastel")); QCOMPARE(readFile(dir.filePath("home.json")), saved);
 }
 void ComponentTests::skinsRejectInvalidAndFailedApplications()
 {
@@ -1185,15 +1225,19 @@ void ComponentTests::studioNestedGroupsValidateAndReparentAtomically()
 void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
 {
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);const auto user=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
-    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),7);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
+    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),9);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
     doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(options["defaultGrid"].toMap())}};QVERIFY(session->pushEdit(QJsonDocument(doc).toJson()));const auto empty=session->draft();
-    for(const auto &type:QStringList{"button","image","library","recently-viewed","carousel","app-bar"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
+    for(const auto &type:QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
     const auto appPrototype=session->componentPrototype("app-bar");
     const auto historyPrototype=session->componentPrototype("recently-viewed");
     const auto historyRoot=historyPrototype["root"].toMap();
     QCOMPARE(historyRoot["family"].toString(),QString("recently-viewed"));
     QCOMPARE(historyRoot["source"].toMap()["kind"].toString(),QString("recently-viewed"));
+    const auto musicRoot=session->componentPrototype("music-library")["root"].toMap();
+    QCOMPARE(musicRoot["source"].toMap()["kind"].toString(),QString("music"));
+    auto wrongMusic=musicRoot;auto musicStyle=musicRoot["presentation"].toMap();musicStyle["libraryView"]="continue";wrongMusic["presentation"]=musicStyle;
+    QVERIFY(ComponentSchema::component(wrongMusic,true).isEmpty());wrongMusic=musicRoot;wrongMusic.remove("family");QVERIFY(ComponentSchema::component(wrongMusic,true).isEmpty());
     auto wrongHistory=historyRoot;auto historyStyle=historyRoot["presentation"].toMap();
     historyStyle["libraryView"]="recent";wrongHistory["presentation"]=historyStyle;
     QVERIFY(ComponentSchema::component(wrongHistory,true).isEmpty());
@@ -1201,6 +1245,11 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     QVERIFY(ComponentSchema::component(wrongHistory,true).isEmpty());
     QCOMPARE(appPrototype["components"].toList().size(),1);
     auto appNode=appPrototype["root"].toMap();
+    appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{}},{"section","Games"}};
+    QVERIFY(!ComponentSchema::component(appNode,true).isEmpty());
+    appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{}},{"section",""}};
+    QVERIFY(ComponentSchema::component(appNode,true).isEmpty());
+    appNode=appPrototype["root"].toMap();
     QCOMPARE(appNode["appCollection"].toMap()["mode"].toString(),QString("all"));
     appNode["appCollection"]=QVariantMap{{"mode","selected"},{"ids",QVariantList{"duplicate","duplicate"}}};
     QVERIFY(ComponentSchema::component(appNode,true).isEmpty());

@@ -27,6 +27,8 @@ QObject *PageData::client(const QString &key,const QVariantMap &source) {
     QVariantMap query{{"libraryKind",source.value("libraryKind","movies")},{"libraryView",source.value("libraryView","all")},{"libraryValue",source.value("libraryValue","")}};
     const auto kind=query["libraryKind"].toString(),view=query["libraryView"].toString(),value=query["libraryValue"].toString();
     if(kind=="history" && (view!="watched" || !value.isEmpty()))return nullptr;
+    if(kind=="albums" && (view!="all" || !value.isEmpty()))return nullptr;
+    if(kind=="channels" && (view!="all" || !value.isEmpty()))return nullptr;
     if((view=="tag"||view=="genre")&&(kind!="movies"||value.trimmed().isEmpty()))return nullptr;
     if(view=="collection"&&!ComponentSchema::safeId(value))return nullptr;
     if(!m_clients.contains(key)) {
@@ -39,7 +41,7 @@ QObject *PageData::client(const QString &key,const QVariantMap &source) {
 }
 QObject *PageData::artwork(const QString &kind,int id) {
     if(!m_valid)return nullptr;
-    if(!QStringList{"movie","episode","tvshow","season"}.contains(kind)||id<1)return nullptr;
+    if(!QStringList{"movie","episode","tvshow","season","album","song","channel"}.contains(kind)||id<1)return nullptr;
     const auto key=kind+":"+QString::number(id);
     if(!m_artwork.contains(key)) {
         if(m_artwork.size()>=ComponentSchema::MaxPageDataArtwork)return nullptr;
@@ -53,7 +55,7 @@ void PageData::activate(QObject *object,int index,bool resume) {
     bool owned=false;for(const auto &entry:m_clients)if(entry.client==client)owned=true;
     if(!owned||!client||client->busy()||index<0||index>=client->movies().size()||m_player->playbackActive())return;
     const auto item=client->movies()[index].toMap();
-    if(item["mediaType"]=="tvshow"||item["mediaType"]=="season")client->activate(index);
+    if(item["mediaType"]=="tvshow"||item["mediaType"]=="season"||item["mediaType"]=="album")client->activate(index);
     else m_player->playMedia(item["mediaType"].toString(),item["mediaId"].toInt(),resume);
 }
 void PageData::refresh(QObject *object){

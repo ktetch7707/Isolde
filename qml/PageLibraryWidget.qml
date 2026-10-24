@@ -38,7 +38,10 @@ Item {
         }
     }
     readonly property bool history:style.libraryKind==="history"
-    readonly property var actions:history?["Refresh"]:["Refresh","Previous","Next","All","Recent","Continue"]
+    readonly property bool music:style.libraryKind==="albums"
+    readonly property bool guide:style.libraryKind==="channels"
+    readonly property var actions:history?["Refresh"]:music || guide?["Refresh","Previous","Next"]:["Refresh","Previous","Next","All","Recent","Continue"]
+    function subtitleFor(item){return guide?item.subtitle || style.subtitle || "":music?(Array.isArray(item.artist)?item.artist.join(", "):String(item.artist || "")):item.year?String(item.year):item.showtitle || ""}
     readonly property bool listMode:style.libraryLayout === "list"
     readonly property bool rowMode:style.libraryLayout === "row"
     readonly property bool chrome:style.libraryChrome!==false
@@ -56,7 +59,7 @@ Item {
         if(!client)return command !== inputManager.back && command !== inputManager.navigateUp
         const index=client.selectedIndex, step=columns
         if(command===inputManager.back){if(details){details=null;return true}if(client.goBack())return true;return false}
-        if(details){if(command===inputManager.confirm || command===inputManager.navigateRight){rememberSelection();provider.activate(client,index,command!==inputManager.navigateRight);details=null}return true}
+        if(details){if(command===inputManager.confirm || !guide && !music && command===inputManager.navigateRight){rememberSelection();provider.activate(client,index,command!==inputManager.navigateRight);details=null}return true}
         if(command===inputManager.menu && index>=0){details=client.items[index];return true}
         if(index<0){
             if(command===inputManager.navigateUp || command===inputManager.navigateLeft && toolbarIndex===0)return false
@@ -75,7 +78,7 @@ Item {
     }
     Rectangle { anchors.fill:parent; color:"transparent"; radius:root.style.radius || 12; border.width:root.engaged || root.highlighted?2:0; border.color:root.appearance.focusColor || "#C994A5" }
     Column {
-        anchors.fill:parent; anchors.margins:5; spacing:8
+        anchors.fill:parent; anchors.margins:root.chrome?5:0; spacing:root.chrome?8:0
         Row {
             visible:root.chrome;width:parent.width; height:visible?36:0; spacing:5
             Repeater { model:root.actions
@@ -89,7 +92,7 @@ Item {
             }
         }
         GridView {
-            id:grid; objectName:"pageLibraryGrid";width:parent.width;height:Math.max(50,parent.height-(root.chrome?84:8));clip:true
+            id:grid; objectName:"pageLibraryGrid";width:parent.width;height:Math.max(50,parent.height-(root.chrome?84:0));clip:true
             flow:root.rowMode?GridView.FlowTopToBottom:GridView.FlowLeftToRight
             cellWidth:width/root.columns;cellHeight:root.listMode?78:root.rowMode?height:Math.max(140,root.style.artHeight || 230)
             model:root.displayedItems;currentIndex:root.client?root.client.selectedIndex:-1;highlightRangeMode:GridView.ApplyRange;highlightMoveDuration:0
@@ -99,8 +102,12 @@ Item {
                 readonly property var art: { const revision=root.provider ? root.provider.revision : 0; return root.provider && !root.usingSamples && !root.listMode ? root.provider.artwork(modelData.mediaType,modelData.mediaId) : null }
                 HomeCard {
                     objectName:"libraryCard-"+index
-                    anchors.fill:parent;anchors.margins:8
-                    item:({name:modelData.title || modelData.label || "Untitled",logoSource:parent.art?parent.art.source:"",presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || (root.listMode?"summary":"media"),subtitle:modelData.year?String(modelData.year):modelData.showtitle || "",progress:modelData.resume && modelData.resume.total>0?modelData.resume.position/modelData.resume.total:0})})
+                    anchors.fill:parent
+                    anchors.leftMargin:(root.style.cardGap===undefined?16:root.style.cardGap)/2
+                    anchors.rightMargin:anchors.leftMargin
+                    anchors.topMargin:root.rowMode?0:anchors.leftMargin
+                    anchors.bottomMargin:anchors.topMargin
+                    item:({name:modelData.title || modelData.label || "Untitled",logoSource:parent.art?parent.art.source:"",presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || (root.listMode?"summary":"media"),subtitle:root.subtitleFor(modelData),progress:modelData.resume && modelData.resume.total>0?modelData.resume.position/modelData.resume.total:undefined})})
                     appearance:root.appearance;selected:root.engaged && root.client && root.client.selectedIndex===index
                     onActivated:{root.engage();if(root.client && !root.readOnly && !root.frozen){root.returnMediaKey="";root.client.selectIndex(index);root.rememberSelection();root.provider.activate(root.client,index)}}
                 }
@@ -114,7 +121,7 @@ Item {
         Column { anchors.fill:parent;anchors.margins:22;spacing:12
             Text {textFormat:Text.PlainText; text:root.details?root.details.title || "":"";color:root.appearance.textColor || "white";font.pixelSize:24;width:parent.width;elide:Text.ElideRight }
             Text {textFormat:Text.PlainText; text:root.details?root.details.plot || "No description supplied by Kodi.":"";color:root.appearance.mutedColor || "#AAA5AF";font.pixelSize:17;width:parent.width;wrapMode:Text.WordWrap;maximumLineCount:Math.max(1,Math.floor((root.height-130)/22));elide:Text.ElideRight }
-            Text {textFormat:Text.PlainText; text:"OK resume / browse · Right restart · Back close";color:root.appearance.focusColor || "#C994A5";font.pixelSize:15 }
+            Text {textFormat:Text.PlainText; text:root.guide?"Confirm watches channel · Back closes":root.music?"Confirm plays track · Back closes":"OK resume / browse · Right restart · Back close";color:root.appearance.focusColor || "#C994A5";font.pixelSize:15 }
         }
         MouseArea { anchors.right:parent.right;anchors.top:parent.top;width:80;height:40;onClicked:root.details=null;Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:"Back";color:root.appearance.textColor || "white"} }
     }

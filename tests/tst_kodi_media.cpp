@@ -22,6 +22,8 @@ private slots:
     void mediaFolderPermissions();
     void readsLibraryThroughTwoRequests();
     void recentlyViewedMergesKodiHistoryAndStaysBounded();
+    void musicAlbumsTracksAndKodiPlayback();
+    void tvGuideReadsChannelsAndKeepsUnavailableStateHonest();
     void pagesLibraryAndResets();
     void playbackLifecycle();
     void localViewsAndCollections();
@@ -225,6 +227,56 @@ void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
     server.setProperty("total",60);media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QCOMPARE(media.items().size(),50);QVERIFY(!media.hasNextPage());
     server.setProperty("total",0);media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QVERIFY(media.items().isEmpty());QVERIFY(media.status().contains("Nothing viewed"));
     media.refresh();media.invalidate("Profile closed");QTest::qWait(30);QVERIFY(!media.connected());QVERIFY(media.items().isEmpty());QCOMPARE(media.status(),QString("Profile closed"));
+}
+void KodiMediaTests::musicAlbumsTracksAndKodiPlayback()
+{
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));QList<QJsonObject> calls;
+    connect(&server,&QLocalServer::newConnection,&server,[&]{while(server.hasPendingConnections()){
+        auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
+        connect(socket,&QLocalSocket::readyRead,socket,[&,socket]{
+            auto bytes=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",bytes);if(!bytes.endsWith('\n'))return;
+            const auto request=QJsonDocument::fromJson(bytes).object();calls.append(request);const auto method=request["method"].toString();QJsonObject result;
+            if(method=="JSONRPC.Version")result={{"version",QJsonObject{{"major",13}}}};
+            else if(method=="AudioLibrary.GetAlbums" || method=="AudioLibrary.GetSongs"){
+                const bool albums=method.endsWith("Albums");const auto params=request["params"].toObject();QCOMPARE(params["limits"].toObject()["end"].toInt(),50);
+                if(!albums)QCOMPARE(params["filter"].toObject()["albumid"].toInt(),41);
+                const QJsonObject item{{albums?"albumid":"songid",albums?41:23},{"title",albums?"An actual Kodi album":"First track"},{"artist",QJsonArray{"Composer"}},{"duration",120}};
+                result={{albums?"albums":"songs",QJsonArray{item}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+            } else if(method=="Isolde.PlaySong") {QCOMPARE(request["params"].toObject()["songid"].toInt(),23);QVERIFY(!request["params"].toObject()["resume"].toBool());result={{"state","playing"},{"home",false}};}
+            else result={{"state",method=="Isolde.PlaybackControl"?"ended":"playing"},{"home",false}};
+            socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
+        });}});
+    KodiMedia media("music-profile",nullptr,dir.path());media.openView("albums","all");QTRY_VERIFY(media.connected());
+    QCOMPARE(media.items().first().toMap()["mediaType"].toString(),QString("album"));QCOMPARE(media.browseTitle(),QString("Music · Albums"));
+    const auto before=calls.size();media.openView("albums","continue");QTest::qWait(20);QCOMPARE(calls.size(),before);
+    media.activate(0);QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QCOMPARE(media.mediaKind(),QString("songs"));QCOMPARE(media.browseTitle(),QString("An actual Kodi album"));
+    QCOMPARE(media.items().first().toMap()["mediaType"].toString(),QString("song"));media.playSelected(true);QTRY_VERIFY(media.playbackActive() && !media.busy());
+    media.playbackControl("stop");QTRY_VERIFY(!media.playbackActive());QVERIFY(media.goBack());QTRY_VERIFY(!media.busy());QCOMPARE(media.mediaKind(),QString("albums"));QCOMPARE(media.selectedIndex(),0);
+    media.invalidate("Profile closed");QVERIFY(media.items().isEmpty());QVERIFY(!media.connected());
+}
+void KodiMediaTests::tvGuideReadsChannelsAndKeepsUnavailableStateHonest()
+{
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));bool empty=false,reject=false;int plays=0;
+    connect(&server,&QLocalServer::newConnection,&server,[&]{while(server.hasPendingConnections()){
+        auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
+        connect(socket,&QLocalSocket::readyRead,socket,[&,socket]{
+            auto bytes=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",bytes);if(!bytes.endsWith('\n'))return;
+            const auto request=QJsonDocument::fromJson(bytes).object();const auto method=request["method"].toString();QJsonObject result;
+            if(method=="JSONRPC.Version")result={{"version",QJsonObject{{"major",13}}}};
+            else if(method=="PVR.GetChannels"){
+                const auto params=request["params"].toObject();QCOMPARE(params["channelgroupid"].toString(),QString("alltv"));QCOMPARE(params["limits"].toObject()["end"].toInt(),50);QVERIFY(!params.contains("sort"));
+                if(reject){socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","PVR unavailable"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;}
+                QJsonArray channels;if(!empty)for(int i=1;i<=3;++i)channels.append(QJsonObject{{"channelid",i},{"channelnumber",i},{"label",QString("Channel %1").arg(i)},{"hidden",i==3},{"locked",i==2},{"broadcastnow",QJsonObject{{"title","Current programme"}}},{"broadcastnext",QJsonObject{{"title","Next programme"}}}});
+                result={{"channels",channels},{"limits",QJsonObject{{"start",0},{"end",channels.size()},{"total",channels.size()}}}};
+            } else if(method=="Isolde.PlayChannel"){++plays;QCOMPARE(request["params"].toObject()["channelid"].toInt(),1);QVERIFY(!request["params"].toObject()["resume"].toBool());result={{"state","playing"},{"home",false}};}
+            else result={{"state",method=="Isolde.PlaybackControl"?"ended":"playing"},{"home",false}};
+            socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
+        });}});
+    KodiMedia media("guide-profile",nullptr,dir.path());media.openView("channels","all");QTRY_VERIFY(media.connected());QCOMPARE(media.items().size(),2);QCOMPARE(media.browseTitle(),QString("TV Guide"));
+    QCOMPARE(media.items().first().toMap()["mediaType"].toString(),QString("channel"));QVERIFY(media.items().first().toMap()["subtitle"].toString().contains("Next programme"));
+    media.activate(0);QTRY_COMPARE(plays,1);QTRY_VERIFY(!media.busy());media.playbackControl("stop");QTRY_VERIFY(!media.playbackActive());
+    empty=true;media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QVERIFY(media.items().isEmpty());QVERIFY(media.status().contains("No TV channels"));
+    reject=true;media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(!media.connected());QVERIFY(media.status().contains("PVR TV source"));
 }
 void KodiMediaTests::artworkSelectionCancellation()
 {

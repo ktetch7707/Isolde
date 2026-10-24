@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network Qml Quick Test WebEngineQuick WebChannel Multimedia SerialPort)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network DBus Qml Quick Test WebEngineQuick WebChannel Multimedia SerialPort)
 qt_standard_project_setup(REQUIRES 6.4)
 qt_policy(SET QTP0001 NEW)
 if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
@@ -77,13 +77,15 @@ add_library(isolde_core STATIC
     src/sessions/MockSession.h
     src/sessions/DesktopSession.cpp
     src/sessions/DesktopSession.h
+    src/sessions/DesktopMode.cpp
+    src/sessions/DesktopMode.h
     src/sessions/NativeSandbox.cpp
     src/sessions/NativeSandbox.h
     src/sessions/SessionManager.cpp
     src/sessions/SessionManager.h
 )
 target_include_directories(isolde_core PUBLIC src)
-target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::Multimedia Qt6::SerialPort)
+target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort)
 
 qt_add_executable(isolde src/main.cpp)
 qt_add_executable(isolde-recovery src/recovery/main.cpp)
@@ -101,6 +103,7 @@ qt_add_qml_module(isolde
     NO_IMPORT_SCAN
     QML_FILES
         qml/Main.qml
+        qml/DesktopReturnWindow.qml
         qml/ComponentSettingsView.qml
         qml/CaptureSettingsView.qml
         qml/CaptureSessionView.qml
@@ -161,6 +164,7 @@ qt_add_resources(isolde "isolde_config"
     PREFIX "/"
     FILES
         config/apps.json
+        config/app-icons/youtube.svg
         config/art-packs.json
         config/catalog.json
         config/default-home-layout.json
@@ -175,6 +179,7 @@ qt_add_resources(isolde "isolde_config"
         config/packages/kodi/manifest.json
         config/packages/retro-arcade/manifest.json
         config/packages/spotify/manifest.json
+        config/packages/steam/manifest.json
 )
 
 qt_add_resources(isolde "isolde_store_web"
@@ -199,6 +204,7 @@ set(ISOLDE_PACKAGE_MANIFESTS
     config/packages/kodi/manifest.json
     config/packages/retro-arcade/manifest.json
     config/packages/spotify/manifest.json
+    config/packages/steam/manifest.json
 )
 foreach(package_manifest IN LISTS ISOLDE_PACKAGE_MANIFESTS)
     get_filename_component(package_dir "${package_manifest}" DIRECTORY)
@@ -262,6 +268,11 @@ if(BUILD_TESTING)
         tests/tst_isolde.cpp
     )
     target_link_libraries(isolde_tests PRIVATE isolde_core Qt6::Test)
+    qt_add_executable(isolde_desktop_mode_tests tests/tst_desktop_mode.cpp)
+    target_link_libraries(isolde_desktop_mode_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
+    target_compile_definitions(isolde_desktop_mode_tests PRIVATE STUDIO_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/studio-defaults.json" DESKTOP_RETURN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/DesktopReturnWindow.qml")
+    add_test(NAME desktop_mode COMMAND isolde_desktop_mode_tests)
+    set_tests_properties(desktop_mode PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME isolde_tests COMMAND isolde_tests)
     qt_add_executable(isolde_capture_tests tests/tst_capture.cpp)
     target_link_libraries(isolde_capture_tests PRIVATE isolde_core Qt6::Test)
@@ -286,6 +297,8 @@ if(BUILD_TESTING)
     set(ISOLDE_RUNTIME_NAVIGATION_CASES
         retainsExactOriginAndRecoversWithoutHomeButton repairsSourceWithRemoteAndCanCancel
         televisionLibraryRemoteFlow universalLocalSearchRemoteFlow pageScopedSourcesAppearInSearch
+        searchHeaderSwitchRemoteFocusAndStableResults searchPreferenceProfileIsolationAndWriteFailure
+        appSuppliedIconsUseManagedArtwork
         kodiSettingsFollowUserTheme appearancePreviewCancelAndApply composedReferenceNavigationAndGeometry
         pastelReferenceNavigationAndGeometry skinsAndDesignAreReachableFromSettings
         pageComposerAndIndependentKodiWidgets gridEditorMoveResizeDuplicateRemove)

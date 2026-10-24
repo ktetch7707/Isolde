@@ -14,6 +14,7 @@ struct AppDefinition {
     QStringList handledActions;
     QString section;
     QString symbol;
+    QString iconSource; // Resolved managed artwork, never a launch command or remote URL.
     QColor accent;
     QVariantMap launchConfiguration;
 
