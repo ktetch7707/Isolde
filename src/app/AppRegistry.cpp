@@ -1,4 +1,5 @@
 #include "app/AppRegistry.h"
+#include "app/AppArtwork.h"
 
 #include <QFile>
 #include <QCoreApplication>
@@ -29,7 +30,7 @@ static bool validIconName(const AppDefinition &app)
     return !value.isValid() || (value.metaType().id()==QMetaType::QString && name.match(value.toString()).hasMatch());
 }
 
-static QString appIcon(const AppDefinition &app)
+static QString appIcon(const AppDefinition &app, bool cutout=false)
 {
     if((app.type!="web" && app.type!="desktop") || !qobject_cast<QGuiApplication *>(QCoreApplication::instance()))return {};
     auto name=app.launchConfiguration.value("icon",app.id).toString();
@@ -81,7 +82,8 @@ static QString appIcon(const AppDefinition &app)
         }
     }
     if(icon.isNull())return {};
-    const auto image=icon.pixmap(256,256).toImage();if(image.isNull())return {};
+    auto image=icon.pixmap(512,512).toImage();if(image.isNull())return {};
+    if(cutout)image=AppArtwork::cutout(image);
     QByteArray bytes;QBuffer buffer(&bytes);buffer.open(QIODevice::WriteOnly);
     if(!image.save(&buffer,"PNG") || bytes.size()>1024*1024)return {};
     auto profile=QCoreApplication::instance()->property("isoldeProfile").toString();
@@ -132,7 +134,7 @@ QVariantList AppRegistry::apps() const
                                   {"networkRequirement", app.networkRequirement},
                                   {"handledActions", app.handledActions},
                                   {"section", app.section}, {"symbol", app.symbol},
-                                  {"accent", app.accent.name()},{"logoSource",app.iconSource}});
+                                  {"accent", app.accent.name()},{"logoSource",app.iconSource},{"cutoutLogoSource",app.cutoutIconSource}});
     }
     return result;
 }
@@ -153,7 +155,7 @@ bool AppRegistry::addApp(const AppDefinition &app)
     if (!app.isValid() || find(app.id) || !validIconName(app))
         return false;
     for(const auto &alias:app.legacyIds())if(find(alias))return false;
-    auto resolved=app;resolved.iconSource=appIcon(app);m_apps.append(resolved);
+    auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,true);m_apps.append(resolved);
     emit appsChanged();
     return true;
 }
@@ -246,6 +248,7 @@ bool AppRegistry::loadFromData(const QByteArray &data)
         }
         if(!validIconName(app)){setError(tr("Choose a local registered app icon name."));return false;}
         app.iconSource=appIcon(app);
+        app.cutoutIconSource=appIcon(app,true);
         ids.insert(app.id);
         for(const auto &alias:app.legacyIds()){
             if(ids.contains(alias)){setError(tr("App compatibility IDs must be unique."));return false;}

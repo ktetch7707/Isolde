@@ -1204,6 +1204,11 @@ QVariantMap StudioSession::additionProposal(const QString &type, const QVariantM
         if(!parentId.isEmpty() || !categoryId.isEmpty())return {{"valid",false},{"reason",tr("Choose the page before enabling vertical scrolling.")}};
         auto composition=document["composition"].toObject();composition["verticalScrolling"]=true;document["composition"]=composition;
     }
+    // Explicit Add is the conversion boundary. Loading an existing document
+    // never migrates its fixed menu; cancel and Undo retain the whole page.
+    if(type=="page-menu" && !pageId.isEmpty()){
+        auto composition=document["composition"].toObject();composition["pageNavigation"]="none";document["composition"]=composition;
+    }
     auto entries=document["components"].toArray();
     for(const auto &value:prototype.value("components").toList()) {
         auto item=QJsonObject::fromVariantMap(value.toMap());

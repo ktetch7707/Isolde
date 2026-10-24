@@ -260,7 +260,7 @@ Item {
         sectionActionId=entry.sectionAction || entry.widget?entry.id:""
         if(!entry.sectionAction && !entry.widget)host.focusedIndex=host.itemIndex(entry.id)
         const item=(host.items || []).find(i=>i.id===entry.id)
-        const collection=entry.widget || item && (item.componentType==="library" || item.appCollection)
+        const collection=entry.widget || item && (item.componentType==="library" || item.appCollection || item.family==="page-menu")
         if(collection && widgets[entry.id])activeWidget=entry.id
     }
     function handleCommand(command) {
@@ -289,17 +289,19 @@ Item {
         const entries = focusEntries(), current = entries.find(e => sectionActionId ? e.id === sectionActionId : !e.sectionAction && host.itemIndex(e.id) === host.focusedIndex) || entries[0]
         if (!current) { host.recoveryFocused = true; return }
         const focusedItem=(host.items || []).find(i=>i.id===current.id)
-        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection)) && widgets[current.id]
-            && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm)) {
+        const pageMenu=focusedItem && focusedItem.family==="page-menu"
+        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || focusedItem.family==="page-menu")) && widgets[current.id]
+            && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm || pageMenu && (command===inputManager.navigateUp || command===inputManager.navigateDown))) {
             activeWidget=current.id
-            widgets[current.id].handleCommand(command)
-            return
+            const handled=widgets[current.id].handleCommand(command)
+            if(!pageMenu || handled)return
+            activeWidget=""
         }
         if (command === inputManager.confirm) {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
             if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) host.actionActivated(section.presentation.trailingAction,current.id); return }
             const item = host.items[host.itemIndex(current.id)]
-            if(item && (item.componentType==="library" || item.appCollection)){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
+            if(item && (item.componentType==="library" || item.appCollection || item.family==="page-menu")){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
             if(item && item.componentType==="container"){
                 const children=(host.items || []).filter(i=>(i.parentId || "")===item.id && host.focusable(i))
                 if(children.length){activeGroup=item.id;host.focusedIndex=host.itemIndex(children[0].id)}

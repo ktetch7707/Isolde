@@ -126,8 +126,8 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
                 || it.value().toMap().value("mode","screen")!="screen") return false;
         } else if (key == "variant") {
             if (!QStringList{"banner", "media", "source", "summary", "launcher", "orb", "recent", "library", "text", "image"}.contains(it.value().toString())) return false;
-        } else if(key=="artFit" || key=="labelPosition" || key=="textAlign") {
-            const auto choices=key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
+        } else if(key=="artFit" || key=="labelPosition" || key=="textAlign" || key=="logoMode") {
+            const auto choices=key=="logoMode"?QStringList{"cutout","original","tile"}:key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
             if(it.value().metaType().id()!=QMetaType::QString || !choices.contains(it.value().toString()))return false;
         } else if(key=="labelBold" || key=="labelWrap" || key=="focusEnabled") {
             if(it.value().metaType().id()!=QMetaType::Bool)return false;
@@ -364,7 +364,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     if (type.isEmpty() && legacy) type = kind == "widget" ? (QStringList{"clock","text","container"}.contains(input.value("widgetType").toString())?input.value("widgetType").toString():"clock") : "launcher";
     if (!QStringList{"launcher", "clock", "text", "media-shelf","container","button","image","library"}.contains(type)) return reject(error, "Unsupported component type.");
     if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>MaxComponentNameLength || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
-    if(input.contains("family") && !((type=="container" && QStringList{"carousel","app-bar"}.contains(input["family"].toString())) || (type=="library" && QStringList{"recently-viewed","music-library","tv-guide"}.contains(input["family"].toString()))))return reject(error,"Unsupported component family.");
+    if(input.contains("family") && !((type=="container" && QStringList{"carousel","app-bar","page-menu"}.contains(input["family"].toString())) || (type=="library" && QStringList{"recently-viewed","music-library","tv-guide"}.contains(input["family"].toString()))))return reject(error,"Unsupported component family.");
     if(input.contains("appCollection")) {
         if(type!="container" || input.value("family")!="app-bar" || input["appCollection"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Choose an app carousel for an app collection.");
         const auto collection=input["appCollection"].toMap();
@@ -584,6 +584,7 @@ bool ComponentSchema::hierarchyFits(const QJsonArray &items,const QVariantMap &c
     if(containers && (!composition.value("enabled").toBool() || !composition.contains("grid")))return fail("Groups require an enabled page grid. Preview grid conversion first.");
     for(auto it=byId.cbegin();it!=byId.cend();++it)if(it.value()["componentType"]=="container"){
         if(it.value().contains("appCollection") && !children.value(it.key()).isEmpty())return fail("An app collection uses registry membership, not placed children.");
+        if(it.value().value("family")=="page-menu" && !children.value(it.key()).isEmpty())return fail("A page menu uses page membership, not placed children.");
         if(!it.value().contains("placement") || !validChildLayout(it.value()["presentation"].toObject()["layout"].toObject().toVariantMap()))return fail("A group needs a bounded placement and internal layout.");
         if(!placementsFit(children.value(it.key()),componentGrid(items,composition,categories,it.key(),{})))return fail("Group contents overlap or do not fit their local grid.");
     }

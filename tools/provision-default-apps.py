@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import struct
 import urllib.request
 from urllib.parse import urlparse, urljoin
 from html.parser import HTMLParser
@@ -192,28 +193,51 @@ def provider_icon(url, destination, page_url=None):
         def fetch(candidate):
             digest = download(candidate, path, 1024*1024, timeout=8)
             content = path.read_bytes()
-            suffix = ".ico" if content.startswith(b"\x00\x00\x01\x00") else ".png" if content.startswith(b"\x89PNG\r\n\x1a\n") else ".svg" if b"<svg" in content[:1024] else ""
-            if not suffix: raise ValueError("Provider did not return an icon image")
-            output = destination / (digest+suffix)
-            atomic(output, content, 0o644)
-            return str(output)
-        try: return fetch(url)
-        except (OSError, ValueError) as error:
-            if not page_url: raise
-            last_error = error
+            suffix, quality = icon_quality(content)
+            return quality, digest, suffix, content
         class Links(HTMLParser):
             def __init__(self): super().__init__(); self.icons = []
             def handle_starttag(self, tag, attributes):
                 values = dict(attributes)
-                if tag == "link" and "icon" in values.get("rel", "") and values.get("href"):
-                    self.icons.append(urljoin(page_url, values["href"]))
-        page = Path(temporary)/"page"
-        download(page_url, page, 1024*1024, timeout=8)
-        links = Links(); links.feed(page.read_text(errors="replace"))
-        for candidate in list(dict.fromkeys(links.icons))[:3]:
-            try: return fetch(candidate)
-            except (OSError, ValueError) as error: last_error = error
-        raise ValueError("Provider artwork unavailable: " + str(last_error))
+                if tag == "link" and set(values.get("rel", "").lower().split()) & {"icon", "apple-touch-icon", "apple-touch-icon-precomposed", "mask-icon"} and values.get("href"):
+                    sizes = re.findall(r"(?:^|\s)(\d+)x\d+", values.get("sizes", ""))
+                    score = 4096 if values.get("type") == "image/svg+xml" else max([int(n) for n in sizes] or [180 if "apple-touch" in values.get("rel", "") else 0])
+                    self.icons.append((score, urljoin(page_url, values["href"])))
+        candidates = []
+        if page_url:
+            try:
+                page = Path(temporary)/"page"
+                download(page_url, page, 1024*1024, timeout=8)
+                links = Links(); links.feed(page.read_text(errors="replace"))
+                candidates = [value for _, value in sorted(links.icons, reverse=True)]
+            except (OSError, ValueError): pass
+        # Inspect actual image dimensions, not just advertised HTML sizes. A
+        # working 16px favicon must not suppress a provider's 512px app logo.
+        best = None; last_error = "No supported artwork"
+        for candidate in list(dict.fromkeys(candidates))[:5] + [url]:
+            try:
+                result = fetch(candidate)
+                if best is None or result[0] > best[0]: best = result
+            except (OSError, ValueError) as error: last_error = str(error)
+        if best is None: raise ValueError("Provider artwork unavailable: " + last_error)
+        _, digest, suffix, content = best
+        output = destination / (digest+suffix)
+        atomic(output, content, 0o644)
+        return str(output)
+
+
+def icon_quality(content):
+    if content.startswith(b"\x89PNG\r\n\x1a\n") and len(content) >= 24:
+        width, height = struct.unpack(">II", content[16:24])
+        if not 1 <= min(width, height) <= max(width, height) <= 4096: raise ValueError("Unbounded icon dimensions")
+        return ".png", min(width, height)
+    if content.startswith(b"\x00\x00\x01\x00") and len(content) >= 6:
+        count = int.from_bytes(content[4:6], "little")
+        if not 1 <= count <= 64 or len(content) < 6+count*16: raise ValueError("Invalid icon directory")
+        return ".ico", max(min(content[6+i*16] or 256, content[7+i*16] or 256) for i in range(count))
+    # SVGs may contain active/external content. Keep acquisition to bounded
+    # raster provider icons until the managed SVG sanitizer owns this path.
+    raise ValueError("Provider did not return a supported raster icon")
 
 
 def native_icon(app_id, fallback, root=Path("/usr/share")):

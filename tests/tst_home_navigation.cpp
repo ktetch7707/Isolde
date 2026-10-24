@@ -1542,7 +1542,7 @@ void HomeNavigationTests::studioCatalogAndContextualInspector()
     auto list=[](const QVariant &v){return (v.metaType().id()==qMetaTypeId<QJSValue>()?v.value<QJSValue>().toVariant():v).toList();};
     QVERIFY(session->execute("newPage",{{"name","Destination"},{"preset","blank"}}));QCoreApplication::processEvents();
     const auto namedActions=list(catalog->property("actions"));QVERIFY(std::any_of(namedActions.cbegin(),namedActions.cend(),[](const QVariant &v){return v.toMap()["name"].toString().contains("Destination");}));QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);
-    QVERIFY(key(InputManager::Search));QCOMPARE(root->property("mode").toString(),QString("catalog"));QCOMPARE(list(catalog->property("families")).size(),9);
+    QVERIFY(key(InputManager::Search));QCOMPARE(root->property("mode").toString(),QString("catalog"));QCOMPARE(list(catalog->property("families")).size(),10);
     // Inspect every family's content step and cancel without writes/history.
     for(int i=0;i<6;++i){catalog->setProperty("selected",i);QVERIFY(key(InputManager::Confirm));QVERIFY(catalog->property("view").toString()!="families");QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),baseline);}
     QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));

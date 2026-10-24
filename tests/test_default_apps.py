@@ -13,6 +13,29 @@ spec.loader.exec_module(apps)
 
 
 class DefaultAppsTests(unittest.TestCase):
+    def test_provider_prefers_large_supplied_icon_over_working_favicon(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            def png(size): return b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + size.to_bytes(4,"big")*2
+            replies={"https://provider.test/favicon.ico":png(16),"https://provider.test/":b'<link rel="icon" sizes="32x32" href="/small.png"><link rel="apple-touch-icon" sizes="512x512" href="/large.png">',"https://provider.test/small.png":png(32),"https://provider.test/large.png":png(512)}
+            def fetch(url,path,*args,**kwargs):
+                data=replies[url];path.write_bytes(data);return apps.hashlib.sha256(data).hexdigest()
+            with patch.object(apps,"download",side_effect=fetch):
+                output=apps.provider_icon("https://provider.test/favicon.ico",root,"https://provider.test/")
+            self.assertEqual(Path(output).read_bytes(),png(512))
+            self.assertEqual(len(list(root.iterdir())),1)
+    def test_provider_offline_metadata_retains_configured_icon(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data=b"\x89PNG\r\n\x1a\n"+b"\x00\x00\x00\x0dIHDR"+(256).to_bytes(4,"big")*2
+            def fetch(url,path,*args,**kwargs):
+                if url.endswith("/"): raise OSError("offline")
+                path.write_bytes(data);return apps.hashlib.sha256(data).hexdigest()
+            with patch.object(apps,"download",side_effect=fetch):
+                output=apps.provider_icon("https://provider.test/icon.png",Path(temporary),"https://provider.test/")
+            self.assertEqual(Path(output).read_bytes(),data)
+    def test_provider_rejects_unbounded_or_active_images(self):
+        for data in [b"<svg onload='bad()'/>",b"\x89PNG\r\n\x1a\n"+b"\x00\x00\x00\x0dIHDR"+(100000).to_bytes(4,"big")*2,b"\x00\x00\x01\x00\xff\xff"]:
+            with self.assertRaises(ValueError):apps.icon_quality(data)
     def test_isolation_install_and_failed_reload_roll_back(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)

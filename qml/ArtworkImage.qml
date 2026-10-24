@@ -11,6 +11,8 @@ Canvas {
     property real focalX:0.5
     property real focalY:0.5
     property real zoom:1
+    property real outlineWidth:0
+    property color outlineColor:"transparent"
     readonly property int status: probe.status
     onSourceChanged: { if (source.toString()) loadImage(source); requestPaint() }
     onCropChanged: requestPaint()
@@ -19,9 +21,12 @@ Canvas {
     onFocalXChanged:requestPaint()
     onFocalYChanged:requestPaint()
     onZoomChanged:requestPaint()
+    onOutlineWidthChanged:requestPaint()
+    onOutlineColorChanged:requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
     onImageLoaded: requestPaint()
+    onVisibleChanged: if(visible) requestPaint()
     Image { id: probe; source: root.source; visible: false; asynchronous: true; onStatusChanged: root.requestPaint() }
     onPaint: {
         const c = getContext("2d"); c.reset()
@@ -37,6 +42,10 @@ Canvas {
             const zw=w/zoom,zh=h/zoom;x+=(w-zw)*focalX;y+=(h-zh)*focalY;w=zw;h=zh
         }
         c.save(); c.beginPath(); c.roundedRect(0,0,width,height,Math.min(radius,width/2),Math.min(radius,height/2)); c.clip()
+        if(outlineWidth>0){
+            for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++)if(ox || oy)c.drawImage(source,x,y,w,h,dx+ox*outlineWidth,dy+oy*outlineWidth,dw,dh)
+            c.globalCompositeOperation="source-in";c.fillStyle=outlineColor;c.fillRect(0,0,width,height);c.globalCompositeOperation="source-over"
+        }
         c.drawImage(source,x,y,w,h,dx,dy,dw,dh); c.restore()
     }
 }

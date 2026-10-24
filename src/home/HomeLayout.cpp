@@ -340,7 +340,7 @@ QVariantMap HomeLayout::studioOptions() const
     for(const auto &entry:panel["children"].toArray()){const auto child=ComponentSchema::component(entry.toObject().toVariantMap(),true);if(child.isEmpty())return {};panelItems.append(QJsonObject::fromVariantMap(child));}
     if(!ComponentSchema::hierarchyFits(panelItems,{{"schemaVersion",1},{"enabled",true},{"grid",object["defaultGrid"].toObject().toVariantMap()}},{}))return {};
     const auto presets=object["componentPresets"].toObject();
-    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
+    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
     const auto catalog=object["catalog"].toArray();QSet<QString> catalogIds;
     if(presets.isEmpty() || presets.size()>16 || catalog.isEmpty() || catalog.size()>16 || object["inspector"].toObject()["fields"].toArray().size()>160)return {};
     for(const auto &entry:catalog){const auto item=entry.toObject();const auto id=item["id"].toString(),name=item["name"].toString();

@@ -26,6 +26,7 @@ Item {
     onEligibleChanged:if(!eligible.some(a=>a.id===galleryId))galleryId=eligible.length?eligible[0].id:""
     signal engage()
     signal launch(var action)
+    function logoSource(app){return (style.logoMode || "cutout")==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
     function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened}}
     function restoreFocusState(state){
         if(!state)return
@@ -62,7 +63,7 @@ Item {
                 required property var modelData
                 objectName:"appCarouselCard-"+modelData.id
                 width:(root.width-(Math.min(root.capacity,root.cards.length)-1)*parent.spacing)/Math.max(1,Math.min(root.capacity,root.cards.length));height:root.height
-                item:({name:modelData.name,logoSource:modelData.logoSource || "",appSymbol:modelData.id==="__more__"?"":modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{icon:root.style.icon || "grid",artFit:root.style.artFit || "contain"})})
+                item:({name:modelData.name,logoSource:root.logoSource(modelData),appSymbol:modelData.id==="__more__"?"":modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{icon:root.style.icon || "grid",logoMode:root.style.logoMode || "cutout",artFit:root.style.artFit || "contain"})})
                 appearance:root.appearance;unit:root.unit
                 selected:(root.engaged || root.highlighted) && root.selectedId===modelData.id
                 onActivated:{root.engage();root.selectedId=modelData.id;root.activate(modelData.id)}
@@ -86,7 +87,7 @@ Item {
                 delegate:HomeCard {
                     required property var modelData
                     width:galleryGrid.cellWidth;height:galleryGrid.cellHeight
-                    item:({name:modelData.name,logoSource:modelData.logoSource || "",appSymbol:modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{variant:"orb",diameter:78,icon:root.style.icon || "grid",artFit:root.style.artFit || "contain"})})
+                    item:({name:modelData.name,logoSource:root.logoSource(modelData),appSymbol:modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.style,{variant:"orb",diameter:78,icon:root.style.icon || "grid",logoMode:root.style.logoMode || "cutout",artFit:root.style.artFit || "contain"})})
                     appearance:root.appearance;selected:root.galleryId===modelData.id
                     onActivated:{root.galleryId=modelData.id;root.activate(modelData.id)}
                 }

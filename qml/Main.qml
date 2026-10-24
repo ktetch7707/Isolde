@@ -29,7 +29,7 @@ Window {
     }
     PageBackdrop {
         id: windowWallpaper; anchors.fill: parent; source: homeLayout.wallpaperSource
-        config:homeLayout.composition.background || {};startColor:homeLayout.backgroundStart;endColor:homeLayout.backgroundEnd; visible: !sessionManager.active && !pageSurface.open && !window.ambientActive && !!source.toString() && (homeLayout.composition.enabled || !!homeLayout.composition.background)
+        config:homeLayout.composition.background || {};startColor:homeLayout.backgroundStart;endColor:homeLayout.backgroundEnd; visible: (!sessionManager.active || sessionManager.currentAppType === "desktop") && !pageSurface.open && !window.ambientActive && !!source.toString() && (homeLayout.composition.enabled || !!homeLayout.composition.background)
     }
 
     function launchAppFromShell(appId, originId) {

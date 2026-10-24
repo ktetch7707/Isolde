@@ -9,10 +9,86 @@ Item {
         property var editor:null
         property string diskBaseline:""
         Component {id:editorComponent;App.PageStudioView {width:1280;height:720;layoutModel:homeLayout}}
+        Component {id:backdropComponent;App.PageBackdrop {width:320;height:180;startColor:"black";endColor:"blue"}}
+        Component {id:orbComponent;App.OrbCard {width:140;height:150;item:({name:"Logo",logoSource:Qt.resolvedUrl("../visual/home-pastel-reference/wallpaper.png")})}}
+        Component {id:menuComponent;App.PageMenuWidget {width:600;height:120;appearance:({textColor:"white",surfaceColor:"#202126",focusColor:"pink"});style:({layout:{mode:"row",columns:3,rows:1,padding:8,gap:8}})}}
+        Component {id:menuHomeComponent;App.HomeScreen {width:1280;height:720;sections:[];brandVisible:false;backgroundStart:"black";backgroundEnd:"black";tileRoundness:0.2;internetAvailable:false;localNetworkAvailable:false;hasContextualSources:false}}
+        SignalSpy {id:menuSpy;signalName:"launch"}
+        SignalSpy {id:menuHomeSpy;signalName:"actionActivated"}
         QtObject {id:fakeRegistry;property var apps:[]}
         Component {id:carouselComponent;App.PageAppCarousel {width:900;height:160;registry:fakeRegistry;appearance:({textColor:"#514b67",surfaceColor:"#f7edff",focusColor:"#bd8198"});style:({variant:"orb",layout:{visibleColumns:2}})}}
         SignalSpy {id:launchSpy;signalName:"launch"}
         SignalSpy {id:switchSpy;signalName:"clicked"}
+        function test_page_menu_remote_navigation_and_preview() {
+            const menu=createTemporaryObject(menuComponent,tests.parent,{pages:[{id:"",name:"Home"},{id:"movies",name:"Movies"},{id:"shows",name:"Shows"}]})
+            verify(menu!==null);menuSpy.target=menu;menuSpy.clear()
+            verify(menu.handleCommand(inputManager.confirm));compare(menuSpy.signalArguments[0][0].type,"root-page")
+            verify(menu.handleCommand(inputManager.navigateRight));verify(menu.handleCommand(inputManager.confirm))
+            compare(menuSpy.signalArguments[1][0].pageId,"movies")
+            compare(menu.handleCommand(inputManager.back),false)
+            menu.readOnly=true;compare(menu.handleCommand(inputManager.confirm),false);compare(menuSpy.count,2)
+            menu.readOnly=false;menu.pages=[];menu.handleCommand(inputManager.confirm);compare(menuSpy.count,2)
+            menu.pages=[{id:"",name:"Home"},{id:"movies",name:"Movies"}];menu.activeId="movies";compare(menu.selected,1)
+            menu.style={layout:{mode:"row",columns:16,rows:1,padding:80,gap:80}};compare(menu.validGeometry,false);compare(menu.handleCommand(inputManager.confirm),false)
+            menuSpy.target=null
+        }
+        function test_page_menu_conversion_is_one_undoable_draft_transaction() {
+            const grid=editor.page.grid
+            verify(editor.session.execute("newPage",{name:"Movies",preset:"blank"}),editor.session.errorString)
+            const id=editor.session.document.pages[editor.session.document.pages.length-1].id
+            verify(editor.session.execute("pagePatch",{scope:"composition",value:{grid:grid,pageNavigation:"left"}},id),editor.session.errorString)
+            const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
+            verify(editor.session.execute("addResolved",{type:"page-menu",placement:{x:0,y:0,width:4,height:1}},id),editor.session.errorString)
+            const page=editor.session.document.pages.find(p=>p.id===id).layout
+            compare(page.composition.pageNavigation,"none");compare(page.components.length,1)
+            compare(page.components[0].family,"page-menu");compare(editor.session.changeCount,count+1)
+            verify(editor.session.undo());compare(JSON.stringify(editor.session.document),before)
+            compare(studioFixture.disk(),diskBaseline)
+        }
+        function test_page_menu_uses_production_home_remote_dispatch() {
+            const prototype=editor.session.componentPrototype("page-menu")
+            verify(!!prototype.root)
+            const item=Object.assign({},prototype.root,{placement:{x:0,y:0,width:4,height:1}})
+            const screen=createTemporaryObject(menuHomeComponent,tests.parent,{items:[item],authoredItems:[item],placements:[{id:item.id,placement:item.placement}],composition:editor.page.composition,grid:editor.page.grid,appearance:editor.page.appearance,menuPages:[{id:"",name:"Home"},{id:"movies",name:"Movies"}]})
+            verify(screen!==null);menuHomeSpy.target=screen;menuHomeSpy.clear();settle()
+            screen.recoveryFocused=false;screen.focusedIndex=0
+            screen.handleCommand(inputManager.navigateRight);screen.handleCommand(inputManager.confirm)
+            compare(menuHomeSpy.count,1);compare(menuHomeSpy.signalArguments[0][0].pageId,"movies")
+            menuHomeSpy.clear();screen.handleCommand(inputManager.back)
+            const vertical=Object.assign({},item,{placement:{x:0,y:0,width:4,height:3},presentation:Object.assign({},item.presentation,{layout:{schemaVersion:1,mode:"column",columns:1,rows:3,gap:8,padding:8}})})
+            screen.items=[vertical];screen.authoredItems=[vertical];screen.placements=[{id:vertical.id,placement:vertical.placement}];settle()
+            screen.recoveryFocused=false;screen.focusedIndex=0
+            screen.handleCommand(inputManager.navigateDown);screen.handleCommand(inputManager.confirm)
+            compare(menuHomeSpy.count,1);compare(menuHomeSpy.signalArguments[0][0].pageId,"movies")
+            menuHomeSpy.target=null
+        }
+        function test_logo_treatment_and_shape_following_focus() {
+            const orb=createTemporaryObject(orbComponent,tests.parent,{style:{logoMode:"cutout",focusWidth:5,artFit:"contain"},selected:true})
+            verify(orb!==null);compare(orb.logoOnly,true)
+            const art=findChild(orb,"orbArtwork"),surface=findChild(orb,"orbSurface")
+            compare(surface.border.width,0);compare(art.radius,0);compare(art.outlineWidth,5)
+            orb.selected=false;compare(art.outlineWidth,0)
+            orb.style={logoMode:"tile"};compare(orb.logoOnly,false);verify(art.radius>0)
+            orb.style={logoMode:"original"};compare(orb.logoOnly,true)
+            orb.item={name:"Missing artwork"};compare(orb.logoOnly,false)
+        }
+        function test_wallpaper_return_retains_ready_image_and_custom_crop() {
+            const backdrop=createTemporaryObject(backdropComponent,tests.parent,{source:Qt.resolvedUrl("../visual/home-pastel-reference/wallpaper.png"),config:{mode:"image",artFit:"cover"}})
+            verify(backdrop!==null)
+            tryCompare(backdrop,"status",Image.Ready)
+            compare(backdrop.directImage,true)
+            const image=findChild(backdrop,"backdropImage")
+            const original=image.source.toString()
+            for(let i=0;i<5;i++) {backdrop.visible=false;wait(20);backdrop.visible=true;compare(backdrop.status,Image.Ready);compare(image.source.toString(),original)}
+            backdrop.config={mode:"image",artFit:"contain"}
+            compare(image.fillMode,Image.PreserveAspectFit)
+            backdrop.config={mode:"image",artZoom:2,artFocalX:0.2}
+            compare(backdrop.directImage,false)
+            compare(image.source.toString(),"")
+            tryCompare(backdrop,"status",Image.Ready)
+            backdrop.config={mode:"solid"}
+            compare(backdrop.status,Image.Null)
+        }
         function test_app_collection_registry_membership_overflow_and_return() {
             fakeRegistry.apps=[{id:"one",name:"One",type:"desktop",section:"Games"},{id:"mock",name:"Fake",type:"mock"},{id:"two",name:"Two",type:"web",section:"Music"},{id:"three",name:"Three",type:"desktop",section:"Games"}]
             const carousel=createTemporaryObject(carouselComponent,tests.parent)

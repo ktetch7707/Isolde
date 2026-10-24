@@ -123,6 +123,8 @@ Item {
     property bool samplePreview:false
     property var sampleItems:[]
     property string pageKey: "home"
+    property var menuPages:typeof homeLayout!=="undefined"?homeLayout.studioPages:[]
+    property string menuActiveId:""
     property string editLabel: "Edit Home"
     property string selectMode: "single"
     property string selectTrigger: "click"
@@ -332,7 +334,7 @@ Item {
             GradientStop { position: 1.0; color: (root.composition.background || {}).mode==="solid"?root.backgroundStart:root.backgroundEnd }
         }
     }
-    PageBackdrop {id:localWallpaper;anchors.fill:parent;source:root.wallpaperSource;config:root.composition.background || {};startColor:root.backgroundStart;endColor:root.backgroundEnd;visible:(!!root.composition.enabled || !!root.composition.background) && !root.wallpaperItem}
+    PageBackdrop {id:localWallpaper;anchors.fill:parent;source:root.wallpaperItem?"":root.wallpaperSource;config:root.composition.background || {};startColor:root.backgroundStart;endColor:root.backgroundEnd;visible:(!!root.composition.enabled || !!root.composition.background) && !root.wallpaperItem}
 
     Column {
         visible: !root.composition.enabled

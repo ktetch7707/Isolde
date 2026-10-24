@@ -139,6 +139,7 @@ qt_add_qml_module(isolde
         qml/StudioLayoutEditor.qml
         qml/StudioGridEditor.qml
         qml/PageBackdrop.qml
+        qml/PageMenuWidget.qml
         qml/StudioInspector.qml
         qml/StudioColorPicker.qml
         qml/StudioMediaPicker.qml

@@ -1,4 +1,5 @@
 #include "app/AppRegistry.h"
+#include "app/AppArtwork.h"
 #include "app/AppCatalog.h"
 #include "input/InputManager.h"
 #include "sessions/SessionManager.h"
@@ -25,6 +26,21 @@ class IsoldeTests final : public QObject {
     Q_OBJECT
 
 private slots:
+    void appArtworkRemovesOnlyConnectedBackground() {
+        QImage logo(20,20,QImage::Format_ARGB32);logo.fill(Qt::white);
+        for(int y=4;y<16;++y)for(int x=4;x<16;++x)logo.setPixelColor(x,y,Qt::red);
+        logo.setPixelColor(10,10,Qt::white);
+        const auto result=AppArtwork::cutout(logo);
+        QCOMPARE(result.pixelColor(0,0).alpha(),0);
+        QCOMPARE(result.pixelColor(4,4),QColor(Qt::red));
+        QCOMPARE(result.pixelColor(10,10),QColor(Qt::white));
+        QCOMPARE(logo.pixelColor(0,0),QColor(Qt::white));
+        logo.setPixelColor(0,0,Qt::transparent);
+        QCOMPARE(AppArtwork::cutout(logo),logo);
+        logo.fill(Qt::blue);QCOMPARE(AppArtwork::cutout(logo),logo);
+        logo.fill(Qt::white);logo.setPixelColor(19,0,Qt::black);
+        QCOMPARE(AppArtwork::cutout(logo),logo);
+    }
     void setupProgressPersistsAndHandlesFailure();
     void profilesPersistAndIsolatePersonalSettings();
     void registryLoadsConfig();

@@ -23,7 +23,8 @@ Item {
             Accessible.name:(modelData.item.accessibility || {}).name || modelData.item.name || "Component"
             Accessible.description:(modelData.item.accessibility || {}).hint || modelData.item.unavailableReason || ""
             readonly property bool apps:!!modelData.item.appCollection
-            readonly property bool group:modelData.item.componentType==="container" && !apps
+            readonly property bool pageMenu:modelData.item.family==="page-menu"
+            readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu
             readonly property bool library:modelData.item.componentType==="library"
             readonly property bool selected:surface.host.editMode ? surface.editorSelectionId===modelData.item.id : !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(modelData.item.id)
             readonly property var baseStyle:modelData.item.presentation || ({})
@@ -50,7 +51,7 @@ Item {
             HomeCard {
                 id:card
                 objectName:"placedCard-"+node.modelData.item.id
-                visible:!node.group && !node.library && !node.apps
+                visible:!node.group && !node.library && !node.apps && !node.pageMenu
                 anchors.fill:parent;item:modelData.item;appearance:surface.host.appearance;unit:surface.unit
                 selectMode:surface.host.selectMode;selectTrigger:surface.host.selectTrigger
                 selectAction:surface.host.selectAction;selectionColor:surface.host.selectionColor
@@ -116,6 +117,19 @@ Item {
                 }
                 onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
                 Component.onDestruction:if(!surface.previewOverlay && node.apps && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
+            }
+            Loader {
+                id:menuLoader;anchors.fill:parent;active:node.pageMenu
+                sourceComponent:PageMenuWidget {
+                    pages:surface.host.menuPages;activeId:surface.host.menuActiveId
+                    style:node.style;appearance:surface.host.appearance;unit:surface.unit
+                    readOnly:surface.host.editMode || surface.host.previewOnly
+                    engaged:surface.host.activeMediaWidgetId===node.modelData.item.id;highlighted:node.selected
+                    onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
+                    onLaunch:action=>surface.host.actionActivated(action,node.modelData.item.id)
+                }
+                onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
+                Component.onDestruction:if(!surface.previewOverlay && node.pageMenu && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
             }
             Loader {
                 id:media;anchors.fill:parent;active:node.library

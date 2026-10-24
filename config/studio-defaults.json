@@ -368,6 +368,11 @@
       },
       "family": "carousel"
     },
+    "page-menu": {
+      "id":"page-menu", "name":"Pages", "kind":"widget", "widgetType":"container", "componentType":"container", "family":"page-menu",
+      "placement":{"x":0,"y":0,"width":4,"height":1},
+      "presentation":{"radius":12,"surfaceOpacity":1,"labelSize":20,"focusWidth":3,"layout":{"schemaVersion":1,"mode":"row","columns":6,"rows":1,"visibleColumns":4,"gap":8,"padding":8,"wrap":false}}
+    },
     "app-bar": {
       "id": "app-bar",
       "name": "App bar",
@@ -464,7 +469,8 @@
     {
       "id":"tv-guide", "name":"TV Guide",
       "description":"Configured Kodi TV channels and current/next programmes", "icon":"tv"
-    }
+    },
+    {"id":"page-menu","name":"Page menu","description":"Movable page links. On named pages, replaces the fixed menu when placed; Undo restores it.","icon":"grid"}
   ],
   "actions": [
     {
@@ -738,12 +744,14 @@
         ]
       },
       {"tab":"Content","scope":"appCollection","key":"section","label":"App group","type":"appGroup","families":["app-bar"],"fallback":"All app groups"},
+      {"tab":"Appearance","scope":"presentation","key":"logoMode","label":"App logo treatment","type":"choice","choices":["cutout","original","tile"],"families":["app-bar"],"fallback":"cutout"},
       {
         "tab": "Content",
         "scope": "component",
         "key": "addChild",
         "label": "Add a child component",
         "type": "children",
+        "excludeFamilies": ["app-bar","page-menu"],
         "types": [
           "container"
         ],
@@ -1872,6 +1880,7 @@
         "needsNamedPage": true,
         "needsComposition": true
       },
+      {"tab":"Layout","scope":"composition","key":"editableMenu","label":"Edit page menu as a component…","type":"editableMenu","needsNamedPage":true,"needsComposition":true},
       {
         "tab": "Layout",
         "scope": "composition",

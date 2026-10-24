@@ -1234,10 +1234,10 @@ void ComponentTests::studioNestedGroupsValidateAndReparentAtomically()
 void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
 {
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);const auto user=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
-    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),9);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
+    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),10);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
     doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(options["defaultGrid"].toMap())}};QVERIFY(session->pushEdit(QJsonDocument(doc).toJson()));const auto empty=session->draft();
-    for(const auto &type:QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
+    for(const auto &type:QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
     const auto appPrototype=session->componentPrototype("app-bar");
     const auto historyPrototype=session->componentPrototype("recently-viewed");
     const auto historyRoot=historyPrototype["root"].toMap();

@@ -137,7 +137,7 @@ Item {
     readonly property var relativeItems:current?items.filter(i=>i.id!==selectedId && (i.parentId || "")===(current.parentId || "") && (i.categoryId || "")===(current.categoryId || "")):[]
     readonly property var destinationSections:sectionMode?page.sections.filter(s=>(s.presentation || {}).variant!=="library"):[]
     function groupDestinationAllowed(group) {
-        if(group.componentType!=="container" || group.appCollection)return false
+        if(group.componentType!=="container" || group.appCollection || group.family==="page-menu")return false
         let node=group
         for(let depth=0;node && depth<=4;++depth){
             if(node.id===selectedId || node.locked || node.hidden)return false
@@ -235,6 +235,14 @@ Item {
     function projected(item){return mode==="inspector" && inspector.editingState!=="base" && (inspector.structureType==="section"?item.categoryId===inspector.structureId:inspector.selectedIds.indexOf(item.id)>=0)?Object.assign({},item,{designState:inspector.editingState}):item}
     function inspectorOperation(name){
         inspectorReturn=false
+        if(name==="editableMenu"){
+            const menu=items.find(i=>i.family==="page-menu")
+            if(menu){selectedId=menu.id;toolbarFocus=false;mode="context";choice=0;return}
+            if(!gridMode || sectionMode){beginGrid();message="Choose a grid first, then return to Edit page menu as a component.";return}
+            parentScopeId="";scopeId="";startAddition("page-menu",{})
+            if(mode==="move")message="Place the editable menu to replace the fixed menu. The page expands to full width. Back cancels; Undo restores both."
+            return
+        }
         if(name==="groupLayout"){beginChildLayout(true);return}
         if(name==="scrolling"){
             if(!gridMode || sectionMode){inspector.message="This layout uses automatic sizing or scrolling sections. Use Grid to preview a different layout.";return}
@@ -454,7 +462,7 @@ Item {
         else if(index===10){if(command("state",{id:selectedId,key:"locked",value:!current.locked})){mode="canvas";toolbarFocus=false}}
         else if(index===11 || index===12)beginRelative(index===11)
         else if(index===13){beginGestureInScope(false,true);if(mode==="move"){mode="destination";choice=0}}
-        else if(index===14){if(current.appCollection){openInspector(false);inspector.controlsShown=true;inspector.activateField({type:"apps"});return}if(current.componentType!=="container"){message="Choose a group to edit its contents.";return}parentScopeId=current.id;const children=items.filter(i=>(i.parentId || "")===parentScopeId);selectedId=children.length?children[0].id:"";mode="canvas";toolbarFocus=false}
+        else if(index===14){if(current.family==="page-menu"){message="Page menu entries follow Pages. Use Internal layout to change its arrangement.";openInspector(false);return}if(current.appCollection){openInspector(false);inspector.controlsShown=true;inspector.activateField({type:"apps"});return}if(current.componentType!=="container"){message="Choose a group to edit its contents.";return}parentScopeId=current.id;const children=items.filter(i=>(i.parentId || "")===parentScopeId);selectedId=children.length?children[0].id:"";mode="canvas";toolbarFocus=false}
         else if(index===15){if(command("ungroup",{id:selectedId})){selectedId="";mode="canvas";toolbarFocus=false}}
         else if(index===16){beginGestureInScope(false,true);if(mode==="move"){mode="groupDestination";choice=0}}
         else if(index===18)beginChildLayout()
@@ -840,6 +848,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 x:(canvasArea.width-width*scale)/2+panX;y:(canvasArea.height-height*scale)/2+panY
                 HomeScreen {
                     id:preview;objectName:"studioPreview"
+                    menuPages:studio.pageEntries;menuActiveId:studio.pageId
                     x:draftNavigation.contentLeft;y:draftNavigation.contentTop;width:parent.width-x;height:parent.height-y
                     items:studio.page?studio.page.items.filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i)):[]
                     sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i))})):[]
