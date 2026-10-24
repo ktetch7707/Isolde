@@ -20,12 +20,12 @@ Window {
     Connections {
         target:desktopMode
         function onChanged(){
-            if(desktopMode.active && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
+            if(desktopMode.active && !desktopMode.nativeMode && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
             else if(!desktopMode.active && window.desktopHidden){window.desktopHidden=false;window.visibility=window.desktopRestoreVisibility;window.raise();window.requestActivate()}
             if(desktopMode.active || desktopMode.busy)idleTimer.stop();else idleTimer.restart()
             if(desktopMode.errorString){window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
         }
-        function onReturned(origin){Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
+        function onReturned(origin){window.raise();window.requestActivate();if(!desktopMode.nativeMode)Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
     }
     PageBackdrop {
         id: windowWallpaper; anchors.fill: parent; source: homeLayout.wallpaperSource
@@ -53,7 +53,8 @@ Window {
     Component.onCompleted:Qt.callLater(()=>{if(setupState.complete && homeLayout.homePageId)window.showDesignatedHome()})
 
     function handleCommand(command) {
-        if(desktopMode.busy || desktopMode.active){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
+        if(desktopMode.busy || desktopMode.active && !desktopMode.nativeMode){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
+        if(desktopMode.active && desktopMode.nativeMode && (command===inputManager.home || command===inputManager.back)){desktopMode.cancel();return}
         idleTimer.restart()
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
@@ -184,7 +185,7 @@ Window {
             HomeScreen {
                 id: home
                 anchors.fill: parent
-                visible: !sessionManager.active && !pageSurface.open
+                visible: (!sessionManager.active || sessionManager.currentAppType === "desktop") && !pageSurface.open
                 items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
                 authoredItems: homeLayout.components
                 sections: sourceManager.sections.concat(homeLayout.sections).concat(kodiShelves.sections)
@@ -229,7 +230,7 @@ Window {
 
             MockSessionView {
                 anchors.fill: parent
-                visible: sessionManager.active && sessionManager.currentAppType !== "store" && sessionManager.currentAppType !== "settings" && sessionManager.currentAppType !== "web"
+                visible: sessionManager.active && sessionManager.currentAppType !== "desktop" && sessionManager.currentAppType !== "store" && sessionManager.currentAppType !== "settings" && sessionManager.currentAppType !== "web"
                 appName: sessionManager.currentAppName
                 accent: sessionManager.currentAppAccent
                 presentationMode: sessionManager.currentPresentationMode
@@ -266,7 +267,7 @@ Window {
             }
 
             PageSurface {
-                id:pageSurface;anchors.fill:parent;visible:open && !sessionManager.active
+                id:pageSurface;anchors.fill:parent;visible:open && (!sessionManager.active || sessionManager.currentAppType === "desktop")
                 layoutModel:homeLayout;provider:pageData;availableApps:appRegistry.apps;artwork:artPacks.artwork;themes:artPacks.themes
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}

@@ -58,7 +58,16 @@ void DesktopMode::request(const QString &method,const QVariantList &arguments,co
 }
 void DesktopMode::start(const QString &origin)
 {
+    begin(origin,false);
+}
+void DesktopMode::prepareNative(const QString &origin)
+{
+    begin(origin,true);
+}
+void DesktopMode::begin(const QString &origin,bool native)
+{
     if(m_active || m_busy)return;
+    m_nativeMode=native;
     m_error.clear();m_shortcut.clear();m_origin=origin.left(320);
     if(!m_bus.isConnected() || m_presentation.value("returnShortcut").toString().isEmpty()){
         fail("Desktop return support is unavailable. Isolde stayed open.");return;

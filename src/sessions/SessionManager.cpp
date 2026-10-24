@@ -5,6 +5,7 @@
 #include "home/ComponentSchema.h"
 
 #include <QUrl>
+#include <QScopedValueRollback>
 
 SessionManager::SessionManager(AppRegistry *registry, QObject *parent)
     : QObject(parent), m_registry(registry) {}
@@ -38,6 +39,11 @@ QStringList SessionManager::currentAllowedOrigins() const
     return QStringList{origin};
 }
 QString SessionManager::previousFocusId() const { return m_previousFocusId; }
+bool SessionManager::resumePreparedLaunch(const AppDefinition &definition)
+{
+    QScopedValueRollback<bool> resuming(m_resumingPrepared,true);
+    return launchDefinition(definition);
+}
 
 bool SessionManager::launch(const QString &appId)
 {
@@ -72,6 +78,9 @@ bool SessionManager::launchDefinition(AppDefinition definition)
         return false;
     }
 
+    if(m_launchPreparation && !m_launchPreparation(definition)){
+        return true;
+    }
     m_previousFocusId = definition.id;
     emit launching(definition.id);
     emit previousFocusIdChanged();

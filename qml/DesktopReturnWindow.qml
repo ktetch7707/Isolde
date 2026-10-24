@@ -12,7 +12,7 @@ Window {
     title:style.returnLabel || "";color:"transparent"
     flags:Qt.Tool | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint
     transientParent:null
-    visible:controller.active
+    visible:controller.active && !controller.nativeMode
     onVisibleChanged:if(visible){requestActivate();Qt.callLater(()=>returnButton.forceActiveFocus())}
     Rectangle {
         anchors.fill:parent;radius:root.style.radius || 0;color:root.appearance.surfaceColor

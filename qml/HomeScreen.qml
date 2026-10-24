@@ -111,6 +111,8 @@ Item {
         for(const id of Object.keys(state.groups || {})){const surface=groupSurface(id);if(surface && surface.restoreEditorViewport)surface.restoreEditorViewport(state.groups[id])}
     }
     function registerMediaWidget(id,widget,remove){composed.registerWidget(id,widget,remove)}
+    property var appCollectionFocus:({})
+    function rememberAppFocus(id,state){let saved=Object.assign({},appCollectionFocus);saved[id]=state;appCollectionFocus=saved}
     function engageMediaWidget(id){focusedIndex=itemIndex(id);recoveryFocused=false;composed.activeWidget=id}
     property var setItemPlacement: null
     property var gridCollisions: null

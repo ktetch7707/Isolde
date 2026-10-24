@@ -53,6 +53,8 @@ struct ProfileRuntime {
     NetworkSettings networkSettings;
     SearchSettings searchSettings;
     DesktopMode desktopMode;
+    AppDefinition pendingNativeDefinition;
+    bool pendingNativeLaunch=false;
     SourceManager sourceManager{&registry};
     ArtPackCatalog artPacks;
     InputManager input;
@@ -125,6 +127,24 @@ struct ProfileRuntime {
     if (!homeLayout.load({}, profiles.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
     desktopMode.setPresentation(homeLayout.studioOptions().value("desktop").toMap());
+    sessions.setLaunchPreparation([this](const AppDefinition &definition){
+        if(definition.type!="desktop" || (desktopMode.active() && desktopMode.nativeMode()))return true;
+        pendingNativeDefinition=definition;pendingNativeLaunch=true;
+        desktopMode.prepareNative(definition.id);
+        return false;
+    });
+    QObject::connect(&desktopMode,&DesktopMode::changed,&sessions,[this]{
+        if(!pendingNativeLaunch || !desktopMode.active() || !desktopMode.nativeMode())return;
+        const auto definition=pendingNativeDefinition;pendingNativeLaunch=false;
+        sessions.resumePreparedLaunch(definition);
+    });
+    QObject::connect(&desktopMode,&DesktopMode::returned,&sessions,[this](const QString &){
+        pendingNativeLaunch=false;
+        if(desktopMode.nativeMode())sessions.goHome();
+    });
+    QObject::connect(&sessions,&SessionManager::currentAppChanged,&desktopMode,[this]{
+        if(!sessions.hasActiveSession() && desktopMode.active() && desktopMode.nativeMode())desktopMode.cancel();
+    });
     QObject::connect(&actions,&ActionDispatcher::desktopRequested,&desktopMode,&DesktopMode::start);
     QObject::connect(&catalog, &AppCatalog::packageInstalled, &homeLayout, &HomeLayout::addAppTile);
     // Keep user launchers repairable when a package disappears. Registry changes

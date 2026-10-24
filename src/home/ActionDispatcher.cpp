@@ -12,7 +12,7 @@ ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, 
     KodiService *service, AppCatalog *catalog, CaptureController *capture, QObject *parent)
     : QObject(parent), m_apps(apps), m_sessions(sessions), m_media(media), m_service(service), m_catalog(catalog), m_capture(capture)
 {
-    connect(sessions, &SessionManager::launching, this, [this](const QString &) { if (!m_dispatching) m_origin.clear(); });
+    connect(sessions, &SessionManager::launching, this, [this](const QString &) { if (!m_dispatching && !m_sessions->resumingPreparedLaunch()) m_origin.clear(); });
     connect(sessions, &SessionManager::returnedHome, this, [this](const QString &app) {
         emit restoreFocusRequested(m_origin.isEmpty() ? app : m_origin);
     });

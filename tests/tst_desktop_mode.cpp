@@ -89,6 +89,13 @@ private slots:
         mode.start("old");QTest::qWait(20);mode.cancel();mode.start("new");QTRY_VERIFY(mode.active());QCOMPARE(portal->registrations,1);
         mode.returnHome();portal->objectPathResult=true;mode.start("again");QTRY_VERIFY(mode.active());QCOMPARE(portal->registrations,1);
     }
+    void nativeReturnRequiresGrantAndPreservesOrigin(){
+        DesktopMode mode(nullptr,*client);mode.setPresentation(options);QSignalSpy returned(&mode,&DesktopMode::returned);
+        mode.prepareNative("freetube");QVERIFY(mode.nativeMode());QVERIFY(!mode.active());QTRY_VERIFY(mode.active());
+        portal->activate(*server,"/wrong/session");QTest::qWait(30);QVERIFY(mode.active());
+        portal->activate(*server);QTRY_VERIFY(!mode.active());QCOMPARE(returned.count(),1);QCOMPARE(returned.first().first().toString(),QString("freetube"));
+        portal->deny=true;mode.prepareNative("cbc-gem");QTRY_VERIFY(!mode.busy());QVERIFY(!mode.active());QVERIFY(!mode.errorString().isEmpty());
+    }
     void identityRejectionNeverCreatesSession(){
         DesktopMode mode(nullptr,*client);mode.setPresentation(options);portal->rejectRegistration=true;mode.start("origin");QTRY_VERIFY(!mode.busy());QVERIFY(!mode.active());QCOMPARE(portal->creates,0);QVERIFY(!mode.errorString().isEmpty());
     }

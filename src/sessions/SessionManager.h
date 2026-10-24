@@ -24,6 +24,9 @@ class SessionManager final : public QObject {
 public:
     explicit SessionManager(AppRegistry *registry, QObject *parent = nullptr);
     void setLaunchGuard(std::function<QString(const QString &)> guard) { m_launchGuard = std::move(guard); }
+    void setLaunchPreparation(std::function<bool(const AppDefinition &)> prepare) { m_launchPreparation=std::move(prepare); }
+    bool resumePreparedLaunch(const AppDefinition &definition);
+    bool resumingPreparedLaunch() const { return m_resumingPrepared; }
 
     [[nodiscard]] bool hasActiveSession() const;
     [[nodiscard]] QString currentAppId() const;
@@ -57,5 +60,7 @@ private:
     std::unique_ptr<AppSession> m_session;
     QString m_previousFocusId;
     bool m_intentionalExit = false;
+    bool m_resumingPrepared=false;
     std::function<QString(const QString &)> m_launchGuard;
+    std::function<bool(const AppDefinition &)> m_launchPreparation;
 };

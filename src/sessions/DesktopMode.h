@@ -19,6 +19,7 @@ class DesktopMode final : public QObject, protected QDBusContext {
     Q_OBJECT
     Q_PROPERTY(bool active READ active NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
+    Q_PROPERTY(bool nativeMode READ nativeMode NOTIFY changed)
     Q_PROPERTY(QString errorString READ errorString NOTIFY changed)
     Q_PROPERTY(QString shortcutDescription READ shortcutDescription NOTIFY changed)
     Q_PROPERTY(QVariantMap presentation READ presentation NOTIFY changed)
@@ -29,11 +30,13 @@ public:
     ~DesktopMode() override;
     bool active() const{return m_active;}
     bool busy() const{return m_busy;}
+    bool nativeMode() const{return m_nativeMode;}
     QString errorString() const{return m_error;}
     QString shortcutDescription() const{return m_shortcut;}
     QVariantMap presentation() const{return m_presentation;}
     void setPresentation(const QVariantMap &value){m_presentation=value;emit changed();}
     Q_INVOKABLE void start(const QString &origin={});
+    void prepareNative(const QString &origin);
     Q_INVOKABLE void returnHome();
     Q_INVOKABLE void cancel();
 signals:
@@ -46,6 +49,7 @@ private slots:
 private:
     void request(const QString &method,const QVariantList &arguments,const QString &token);
     void beginSession();
+    void begin(const QString &origin,bool native);
     void closePortal();
     void fail(const QString &message);
     QString requestPath(const QString &token) const;
@@ -54,6 +58,6 @@ private:
     QVariantMap m_presentation;
     QString m_origin,m_error,m_shortcut,m_request,m_session,m_sessionToken,m_connectionName;
     enum Phase {Idle,Registering,Creating,Binding} m_phase=Idle;
-    bool m_active=false,m_busy=false,m_registered=false,m_registering=false;
+    bool m_active=false,m_busy=false,m_registered=false,m_registering=false,m_nativeMode=false;
     quint64 m_generation=0,m_identityGeneration=0;
 };

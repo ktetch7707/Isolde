@@ -46,11 +46,13 @@ $captureLine = {
             -Arguments @('controlvm',$VmName,'screenshotpng',$capture) -TimeoutSeconds 20 `
             -Log (Join-Path $outputPath 'capture.log')
         if (!(Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).Length -eq 0) { throw "Screenshot missing: $phase" }
-        if (($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) -or ($Case -eq 'apps' -and $phase -eq 'steaminstall')) {
+        $nativePermission = $Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')
+        $nativeReturn = $Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')
+        if (($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) -or ($Case -eq 'apps' -and $phase -eq 'steaminstall') -or $nativePermission -or $nativeReturn) {
             if ($VmName -ne 'Isolde-Test') { throw 'Compositor input is restricted to the Isolde-Test guest.' }
             $keys = @('Home')
-            if ($phase -in @('desktoppermission','steaminstall')) {
-                $instructions = Join-Path $outputPath $(if ($phase -eq 'desktoppermission') {'desktop-permission-keys.json'} else {'steam-install-keys.json'})
+            if ($phase -in @('desktoppermission','steaminstall') -or $nativePermission) {
+                $instructions = Join-Path $outputPath $(if ($phase -eq 'desktoppermission') {'desktop-permission-keys.json'} elseif($phase -eq 'steaminstall') {'steam-install-keys.json'} else {$phase+'-keys.json'})
                 Write-Host "Review $capture then provide bounded guest keys in $instructions"
                 $deadline = [DateTime]::UtcNow.AddSeconds(110)
                 while (!(Test-Path -LiteralPath $instructions)) {
@@ -61,7 +63,7 @@ $captureLine = {
                 $keys = @(([IO.File]::ReadAllText($instructions) | ConvertFrom-Json).keys)
             }
             $scancodes = @{Home=@('e0','47','e0','c7');Return=@('1c','9c');Tab=@('0f','8f');Space=@('39','b9');Escape=@('01','81');Left=@('e0','4b','e0','cb');Right=@('e0','4d','e0','cd');Up=@('e0','48','e0','c8');Down=@('e0','50','e0','d0');ShiftTab=@('2a','0f','8f','aa')}
-            if (!$keys.Count -or $keys.Count -gt 20) { throw 'Guest input must contain 1–20 complete keystrokes.' }
+            if ((!$keys.Count -and !$nativePermission -and $phase -ne 'steaminstall') -or $keys.Count -gt 20) { throw 'Invalid bounded guest keystroke count.' }
             foreach ($key in $keys) {
                 if (!$scancodes.ContainsKey([string]$key)) { throw "Unsupported guest key: $key" }
             }

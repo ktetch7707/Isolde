@@ -112,7 +112,7 @@ Item {
                     readOnly:surface.host.editMode || surface.host.previewOnly
                     engaged:surface.host.activeMediaWidgetId===node.modelData.item.id;highlighted:node.selected
                     onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
-                    onLaunch:action=>surface.host.actionActivated(action,node.modelData.item.id)
+                    onLaunch:action=>{if(surface.host.rememberAppFocus)surface.host.rememberAppFocus(node.modelData.item.id,focusState());surface.host.actionActivated(action,node.modelData.item.id)}
                 }
                 onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
                 Component.onDestruction:if(!surface.previewOverlay && node.apps && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)

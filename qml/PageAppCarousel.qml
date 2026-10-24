@@ -26,6 +26,13 @@ Item {
     onEligibleChanged:if(!eligible.some(a=>a.id===galleryId))galleryId=eligible.length?eligible[0].id:""
     signal engage()
     signal launch(var action)
+    function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened}}
+    function restoreFocusState(state){
+        if(!state)return
+        if(cards.some(a=>a.id===state.selectedId))selectedId=state.selectedId
+        if(eligible.some(a=>a.id===state.galleryId))galleryId=state.galleryId
+        if(state.galleryOpen && overflow)gallery.open()
+    }
     function activate(id){
         if(readOnly)return
         if(id==="__more__"){galleryId=eligible.length?eligible[0].id:"";gallery.open();return}

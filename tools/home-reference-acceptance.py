@@ -267,11 +267,14 @@ def main():
                     def steam_ready():
                         folders = [steam_home/".steam/debian-installation", steam_home/".local/share/Steam", steam_home/".steam/steam"]
                         client = any(p.resolve().is_relative_to(steam_home.resolve()) and (p/"ubuntu12_32/steam").is_file() and (p/"package/steam_client_ubuntu12.installed").is_file() for p in folders)
-                        return client and "steam" in run("wmctrl", "-lx", env=env).lower()
+                        windows=subprocess.run(["wmctrl","-lx"],env=env,text=True,capture_output=True)
+                        return client and windows.returncode==0 and "steam" in windows.stdout.lower()
                     if not args.skip_steam:
                         starter(4); captured("steamgames"); key("Return")
+                        time.sleep(1); captured("steampermission")
                         time.sleep(3); captured("steaminstall")
                         expect(steam_ready, "Steam client finished its first download and opened its own UI", 300)
+                        time.sleep(20)
                         captured("steam"); key("Home")
                     # Registry order comes from declarative packaged definitions.
                     source = Path(__file__).resolve().parents[1]
@@ -283,12 +286,24 @@ def main():
                     definitions += [packages[app_id] for app_id in installed if app_id in packages]
                     ids = [a["id"] for a in definitions if a["type"] in {"web", "desktop"}]
                     for app_id, phase in (("freetube", "freetube"), ("cbc-gem", "streaming")):
+                        state_path=Path.home()/".config/Isolde/installed-apps.json"
+                        if json.loads(state_path.read_text()).get("packageStates",{}).get(app_id)=="failed":
+                            # Exercise the visible, explicit Retry Setup action;
+                            # never erase failure records behind the application's back.
+                            key("Home"); key("Menu"); key("Down")
+                            key("Down",len(definitions)+list(packages).index(app_id))
+                            captured(phase+"retry"); key("Return")
+                            expect(lambda: json.loads(state_path.read_text()).get("packageStates",{}).get(app_id)=="ready", "Explicit Retry Setup completed: "+app_id)
+                            key("Home")
                         index = ids.index(app_id)
                         assert collection and index < capacity-1, "Default test client is outside this saved collection's visible slots"
                         key("Home"); key("Up", 30); key("Down", 4); key("Left", 30); key("Right", index); key("Return")
+                        time.sleep(1); captured(phase+"permission")
                         marker = "freetube" if app_id == "freetube" else "isolde-cbc-gem"
                         expect(lambda: marker in run("wmctrl", "-lx", env=env).lower(), "Private native client opened: "+app_id, 30)
-                        captured(phase); key("Home")
+                        captured(phase)
+                        expect(lambda: int(run("xprop","-root","_NET_ACTIVE_WINDOW",env=env).split()[-1],16)==int(window,16), "Physical Home restored Isolde focus: "+app_id)
+                        captured(phase+"return")
                     assert household.read_bytes() == household_before
                     assert layout.read_bytes() == post_update
                     (evidence/"result.json").write_text(json.dumps({"passed": True, "native_clients": True, "steam_client_downloaded": not args.skip_steam, "subscriptionPlaybackVerified": False, "household_unchanged": True}))

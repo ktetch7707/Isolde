@@ -239,6 +239,7 @@ Item {
         else { activeTabId = tab.id; const first = focusEntries()[0]; if (first) host.focusedIndex = host.itemIndex(first.id) }
     }
     function restoreFocus(id) {
+        Qt.callLater(()=>{const widget=widgets[id];const saved=(host.appCollectionFocus || {})[id];if(widget && saved && widget.restoreFocusState){activeWidget=id;widget.restoreFocusState(saved)}})
         if(scrollingPage)Qt.callLater(revealFocusedPlacement)
         const component=(host.items || []).find(i=>i.id===id);activeGroup=component?component.parentId || "":""
         sectionActionId = id.startsWith("section-") ? id : ""

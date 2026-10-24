@@ -566,6 +566,15 @@ void ComponentTests::dispatchesValidatedActionsAndOrigins()
         QCOMPARE(library.size(), 1);
         media.invalidate("Done");
         QVERIFY(!sessions.launchAction({{"type", "shell"}, {"target", "bad"}, {"openWith", "other"}}));
+        AppDefinition pending;
+        sessions.setLaunchPreparation([&](const AppDefinition &definition){pending=definition;return false;});
+        QSignalSpy deferred(&sessions,&SessionManager::launchDeferred);
+        QVERIFY(dispatcher.dispatch({{"type","open-folder"},{"target","/media/movies"},{"openWith","other"}},"deferred-folder"));
+        QCOMPARE(deferred.size(),0);QVERIFY(!sessions.hasActiveSession());
+        QCOMPARE(pending.launchConfiguration.value("actionTarget").toString(),QString("/media/movies"));
+        sessions.setLaunchPreparation([](const AppDefinition &){return true;});
+        QVERIFY(sessions.resumePreparedLaunch(pending));QVERIFY(sessions.hasActiveSession());
+        sessions.goHome();QCOMPARE(focus.last()[0].toString(),QString("deferred-folder"));
     }
     QSettings::setDefaultFormat(format);
 }

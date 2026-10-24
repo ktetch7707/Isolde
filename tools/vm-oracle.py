@@ -472,7 +472,8 @@ class Oracle:
             self.stage("native-diagnostic-stop", ["systemctl", "--user", "stop", "isolde.service"], 30)
             # Existing production-bridge helper, same explicitly authorized
             # Studio Demo profile. No shell, shared home, login or policy change.
-            self.stage("native-"+app_id+"-diagnostic", [str(executable), app_id, profile_id, "5"], 20, env=environment)
+            seconds=30 if app_id=="steam" else 5
+            self.stage("native-"+app_id+"-diagnostic", [str(executable), app_id, profile_id, str(seconds)], seconds+15, env=environment)
         finally:
             self.update(service=self.restore(before), normalLayoutsBefore=layouts, normalLayoutsAfter=self.layout_hashes(), diagnosticOnly=True)
             (self.root/"service-lease.json").unlink(missing_ok=True)
