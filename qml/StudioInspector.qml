@@ -170,7 +170,7 @@ Item {
     function set(f,value,reset){
         if(f.scope==="appCollection")return run("batch",{commands:targets.map(item=>{
             const collection=Object.assign({},item.appCollection || {mode:"all",ids:[]});
-            if(reset || !value)delete collection[f.key];else collection[f.key]=value;
+            if(reset || value===undefined || value===null || value==="")delete collection[f.key];else collection[f.key]=value;
             return {operation:"patch",arguments:{id:item.id,value:{appCollection:collection}},pageId:pageId}
         })})
         if(structureType==="navigation")return run("navigation",{kind:"patch",id:structureId,value:{[f.key]:reset?null:value}})

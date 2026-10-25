@@ -506,6 +506,8 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         auto membership=QJsonObject::fromVariantMap(prototype.value("root").toMap().value("appCollection").toMap());
         const auto group=entries[rootIndex].toObject()["appCollection"].toObject()["section"];
         if(group.isString())membership["section"]=group;
+        const auto showStore=entries[rootIndex].toObject()["appCollection"].toObject()["showStore"];
+        if(showStore.isBool())membership["showStore"]=showStore;
         for(const auto &entry:entries)if(!removed.contains(entry.toObject()["id"].toString())){auto item=entry.toObject();if(item["id"]==id)item["appCollection"]=membership;result.append(item);}
         for(const auto &entry:prototype.value("components").toList()){auto child=QJsonObject::fromVariantMap(entry.toMap());if(child["id"]==newRoot)continue;child["parentId"]=id;result.append(child);}
         document["components"]=result;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);

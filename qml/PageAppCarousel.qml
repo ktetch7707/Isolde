@@ -13,6 +13,7 @@ Item {
     property bool highlighted:false
     property string selectedId:""
     property string galleryId:""
+    property bool pendingGalleryRestore:false
     readonly property var allApps:(registry?registry.apps:[]).filter(a=>(a.type==="web" || a.type==="desktop") && (!collection.section || a.section===collection.section))
     readonly property bool collectionTooLarge:collection.mode==="all" && allApps.length>128
     readonly property var eligible:{
@@ -21,31 +22,38 @@ Item {
     }
     readonly property int capacity:Math.max(1,(style.layout || {}).visibleColumns || 4)
     readonly property bool overflow:eligible.length>capacity
+    readonly property var storeApp:collection.showStore===false?null:(registry?registry.apps:[]).find(a=>a.type==="store") || null
+    readonly property var galleryApps:eligible.concat(storeApp?[storeApp]:[])
     readonly property var cards:eligible.slice(0,overflow?capacity-1:capacity).concat(overflow?[{id:"__more__",name:"More apps"}]:[])
     onCardsChanged:if(!cards.some(a=>a.id===selectedId))selectedId=cards.length?cards[0].id:""
-    onEligibleChanged:if(!eligible.some(a=>a.id===galleryId))galleryId=eligible.length?eligible[0].id:""
+    onGalleryAppsChanged:if(!galleryApps.some(a=>a.id===galleryId))galleryId=galleryApps.length?galleryApps[0].id:""
     signal engage()
     signal launch(var action)
     function logoSource(app){return (style.logoMode || "cutout")==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
-    function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened}}
+    function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened || pendingGalleryRestore}}
     function restoreFocusState(state){
         if(!state)return
         if(cards.some(a=>a.id===state.selectedId))selectedId=state.selectedId
-        if(eligible.some(a=>a.id===state.galleryId))galleryId=state.galleryId
+        pendingGalleryRestore=false
+        if(galleryApps.some(a=>a.id===state.galleryId))galleryId=state.galleryId
         if(state.galleryOpen && overflow)gallery.open()
     }
     function activate(id){
         if(readOnly)return
-        if(id==="__more__"){galleryId=eligible.length?eligible[0].id:"";gallery.open();return}
-        if(eligible.some(a=>a.id===id))launch({type:"launch-app",appId:id})
+        if(id==="__more__"){pendingGalleryRestore=false;galleryId=galleryApps.length?galleryApps[0].id:"";gallery.open();return}
+        if(galleryApps.some(a=>a.id===id)){
+            pendingGalleryRestore=gallery.opened
+            if(gallery.opened)gallery.close()
+            launch({type:"launch-app",appId:id})
+        }
     }
     function handleCommand(command){
         if(readOnly)return false
         if(gallery.opened){
-            if(command===inputManager.back){gallery.close();return true}
-            const index=eligible.findIndex(a=>a.id===galleryId)
+            if(command===inputManager.back){pendingGalleryRestore=false;gallery.close();return true}
+            const index=galleryApps.findIndex(a=>a.id===galleryId)
             const delta=command===inputManager.navigateLeft?-1:command===inputManager.navigateRight?1:command===inputManager.navigateUp?-4:command===inputManager.navigateDown?4:0
-            if(delta){const next=eligible[Math.max(0,Math.min(eligible.length-1,index+delta))];if(next)galleryId=next.id;return true}
+            if(delta){const next=galleryApps[Math.max(0,Math.min(galleryApps.length-1,index+delta))];if(next)galleryId=next.id;return true}
             if(command===inputManager.confirm)activate(galleryId)
             return true
         }
@@ -82,7 +90,7 @@ Item {
             Text {text:"Apps";color:root.appearance.textColor;font.pixelSize:28}
             GridView {
                 id:galleryGrid;objectName:"appCarouselGalleryGrid";width:parent.width;height:parent.height-50;clip:true
-                cellWidth:width/4;cellHeight:130;model:root.eligible;currentIndex:root.eligible.findIndex(a=>a.id===root.galleryId)
+                cellWidth:width/4;cellHeight:130;model:root.galleryApps;currentIndex:root.galleryApps.findIndex(a=>a.id===root.galleryId)
                 highlightMoveDuration:0;highlightRangeMode:GridView.ApplyRange
                 delegate:HomeCard {
                     required property var modelData

@@ -1254,6 +1254,10 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     QVERIFY(ComponentSchema::component(wrongHistory,true).isEmpty());
     QCOMPARE(appPrototype["components"].toList().size(),1);
     auto appNode=appPrototype["root"].toMap();
+    appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{}},{"showStore",false}};
+    QVERIFY(!ComponentSchema::component(appNode,true).isEmpty());
+    appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{}},{"showStore","false"}};
+    QVERIFY(ComponentSchema::component(appNode,true).isEmpty());
     appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{}},{"section","Games"}};
     QVERIFY(!ComponentSchema::component(appNode,true).isEmpty());
     appNode["appCollection"]=QVariantMap{{"mode","all"},{"ids",QVariantList{}},{"section",""}};

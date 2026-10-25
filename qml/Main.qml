@@ -280,9 +280,9 @@ Window {
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
             }
 
-            AmbientScreen {
+            AmbientOverlay {
                 id: ambientScreen
-                anchors.fill: parent
+                scaleFactor: window.uiScaleFactor
                 active: window.ambientActive
                 onDismissRequested: window.ambientActive = false
             }

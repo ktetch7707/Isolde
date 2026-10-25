@@ -19,6 +19,46 @@ Item {
         Component {id:carouselComponent;App.PageAppCarousel {width:900;height:160;registry:fakeRegistry;appearance:({textColor:"#514b67",surfaceColor:"#f7edff",focusColor:"#bd8198"});style:({variant:"orb",layout:{visibleColumns:2}})}}
         SignalSpy {id:launchSpy;signalName:"launch"}
         SignalSpy {id:switchSpy;signalName:"clicked"}
+        Component {id:ambientComponent;App.AmbientOverlay {}}
+        SignalSpy {id:ambientSpy;signalName:"dismissRequested"}
+        function test_screensaver_covers_gallery_and_restores_selection() {
+            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"desktop"}]
+            const carousel=createTemporaryObject(carouselComponent,tests.parent)
+            carousel.activate("__more__");carousel.handleCommand(inputManager.navigateRight)
+            const gallery=findChild(carousel,"appCarouselGallery")
+            tryCompare(gallery,"opened",true);compare(carousel.galleryId,"two")
+            const ambient=createTemporaryObject(ambientComponent,tests.parent,{settings:{photoUrls:[],photoDirectory:"",mode:"dim",imageFit:"fit",shuffle:false,slideshowSeconds:30,showClock:false,showDate:false,showSystemHint:false}})
+            verify(ambient!==null);ambientSpy.target=ambient;ambientSpy.clear()
+            ambient.active=true;tryCompare(ambient,"opened",true)
+            compare(ambient.parent,gallery.parent);verify(ambient.z>gallery.z)
+            const image=grabImage(ambient.parent)
+            compare(image.pixel(10,10),Qt.rgba(2/255,4/255,10/255,1))
+            keyClick(Qt.Key_Left);compare(ambientSpy.count,1)
+            ambient.active=false;tryCompare(ambient,"opened",false)
+            compare(gallery.opened,true);compare(carousel.galleryId,"two")
+            carousel.handleCommand(inputManager.back);ambientSpy.target=null
+        }
+        function test_more_apps_store_launch_and_return() {
+            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"desktop"},{id:"registered-store",name:"App Store",type:"store"}]
+            const carousel=createTemporaryObject(carouselComponent,tests.parent)
+            launchSpy.target=carousel;launchSpy.clear()
+            compare(carousel.eligible.length,3);compare(carousel.galleryApps.length,4)
+            carousel.selectedId="__more__";carousel.activate("__more__")
+            const gallery=findChild(carousel,"appCarouselGallery")
+            tryCompare(gallery,"opened",true)
+            for(let i=0;i<3;i++)carousel.handleCommand(inputManager.navigateRight)
+            compare(carousel.galleryId,"registered-store")
+            carousel.handleCommand(inputManager.confirm)
+            compare(launchSpy.count,1);compare(launchSpy.signalArguments[0][0].appId,"registered-store")
+            tryCompare(gallery,"opened",false)
+            const state=carousel.focusState();verify(state.galleryOpen)
+            carousel.restoreFocusState(state);tryCompare(gallery,"opened",true)
+            compare(carousel.galleryId,"registered-store")
+            carousel.collection={mode:"all",ids:[],showStore:false}
+            compare(carousel.galleryApps.length,3);compare(carousel.galleryId,"one")
+            carousel.handleCommand(inputManager.back);compare(carousel.selectedId,"__more__")
+            launchSpy.target=null
+        }
         function test_page_menu_remote_navigation_and_preview() {
             const menu=createTemporaryObject(menuComponent,tests.parent,{pages:[{id:"",name:"Home"},{id:"movies",name:"Movies"},{id:"shows",name:"Shows"}]})
             verify(menu!==null);menuSpy.target=menu;menuSpy.clear()

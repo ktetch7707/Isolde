@@ -123,6 +123,7 @@ qt_add_qml_module(isolde
         qml/OnScreenKeyboard.qml
         qml/AppStoreView.qml
         qml/AmbientScreen.qml
+        qml/AmbientOverlay.qml
         qml/AmbientSettingsView.qml
         qml/AudioSettingsView.qml
         qml/ClockWidget.qml

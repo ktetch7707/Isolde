@@ -368,7 +368,8 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     if(input.contains("appCollection")) {
         if(type!="container" || input.value("family")!="app-bar" || input["appCollection"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Choose an app carousel for an app collection.");
         const auto collection=input["appCollection"].toMap();
-        if(collection.size()!=(collection.contains("section")?3:2) || !QStringList{"all","selected"}.contains(collection.value("mode").toString()) || collection.value("ids").metaType().id()!=QMetaType::QVariantList || collection.value("ids").toList().size()>128)return reject(error,"Choose All installed or up to 128 selected apps.");
+        if(collection.size()!=2+int(collection.contains("section"))+int(collection.contains("showStore")) || !QStringList{"all","selected"}.contains(collection.value("mode").toString()) || collection.value("ids").metaType().id()!=QMetaType::QVariantList || collection.value("ids").toList().size()>128)return reject(error,"Choose All installed or up to 128 selected apps.");
+        if(collection.contains("showStore") && collection["showStore"].metaType().id()!=QMetaType::Bool)return reject(error,"Choose whether More apps shows the App Store.");
         if(collection.contains("section") && (collection["section"].metaType().id()!=QMetaType::QString || collection["section"].toString().trimmed().isEmpty() || collection["section"].toString().size()>80 || collection["section"].toString().contains(QChar::Null)))return reject(error,"Choose a named app group of up to 80 characters.");
         QSet<QString> ids;
         for(const auto &id:collection.value("ids").toList()) {if(id.metaType().id()!=QMetaType::QString || !safeId(id.toString()) || ids.contains(id.toString()))return reject(error,"Choose distinct safe app identities.");ids.insert(id.toString());}

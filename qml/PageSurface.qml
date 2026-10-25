@@ -31,7 +31,9 @@ Item {
         content.recoveryFocused=false;content.focusedIndex=0
     }
     function closeAll(){const origin=homeOrigin;activeId="";history=[];editing=false;closed(origin)}
-    function restoreOrigin(origin){if(!content.widgetActive)content.restoreFocus(origin)}
+    function restoreOrigin(origin){
+        if(!content.widgetActive || Object.prototype.hasOwnProperty.call(content.appCollectionFocus,origin))content.restoreFocus(origin)
+    }
     function back(){
         if(history.length){let stack=history.slice();const previous=stack.pop();history=stack;showPage(previous.id,"",true);Qt.callLater(()=>content.restoreFocus(previous.focus))}
         else closeAll()

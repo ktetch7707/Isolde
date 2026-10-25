@@ -930,6 +930,8 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
     const auto id=home.createPage("Library","blank");QVERIFY(!id.isEmpty());
     auto *page=qobject_cast<PageModel *>(home.pageModel(id));QVERIFY(page);
     QCOMPARE(page->composition().value("pageNavigation").toString(),QString("none"));
+    QVERIFY(page->addButton());QVERIFY(page->addButton());
+    const auto appOrigin=page->items()[0].toMap()["id"].toString(),otherOrigin=page->items()[1].toMap()["id"].toString();
     QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
     engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
     const auto qmlDir=QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir();
@@ -954,6 +956,17 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
             QCOMPARE(preview->x(),content->x());QCOMPARE(preview->y(),content->y());
             QCOMPARE(preview->width(),content->width());QCOMPARE(preview->height(),content->height());
         }
+        // The Store can leave gallery engagement active while its own page is
+        // shown. Its saved origin must still restore on a named page.
+        const QVariant galleryState=QVariantMap{{"galleryOpen",true}};
+        QVERIFY(QMetaObject::invokeMethod(content,"rememberAppFocus",Q_ARG(QVariant,appOrigin),Q_ARG(QVariant,galleryState)));
+        QVERIFY(QMetaObject::invokeMethod(content,"engageMediaWidget",Q_ARG(QVariant,appOrigin)));
+        QVERIFY(content->property("widgetActive").toBool());
+        content->setProperty("focusedIndex",1);content->setProperty("focusedItemId",otherOrigin);
+        QVERIFY(QMetaObject::invokeMethod(live.get(),"restoreOrigin",Q_ARG(QVariant,appOrigin)));
+        QCOMPARE(content->property("focusedItemId").toString(),appOrigin);
+        QVERIFY(QMetaObject::invokeMethod(live.get(),"restoreOrigin",Q_ARG(QVariant,otherOrigin)));
+        QCOMPARE(content->property("focusedItemId").toString(),appOrigin);
         qobject_cast<StudioSession *>(draft->property("session").value<QObject *>())->invalidate();
     }
 }
