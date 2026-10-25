@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtTest
 import "../../qml" as App
 
@@ -61,9 +62,14 @@ Item {
                 verify(editor.session.undo());compare(document(),before)
                 settle();command(inputManager.confirm);compare(editor.mode,"context")
                 tryVerify(()=>findChild(editor,"studioDialogChoice-0") !== null);settle()
-                mouseClick(findChild(editor,"studioDialogChoice-0"));compare(editor.mode,"flowMove");settle()
-                mouseClick(findChild(editor,"studioFlowTarget-2"));compare(editor.flowTargetIndex,2)
-                compare(document(),before);mouseClick(findChild(editor,"studioMovePlace"));compare(document(),remote)
+                const moveChoice=findChild(editor,"studioDialogChoice-0")
+                tryVerify(()=>moveChoice.visible && moveChoice.enabled);verify(waitForPolish(editor.Window.window))
+                mouseClick(moveChoice);tryCompare(editor,"mode","flowMove");settle()
+                const target=findChild(editor,"studioFlowTarget-2")
+                verify(waitForPolish(editor.Window.window));mouseClick(target);tryCompare(editor,"flowTargetIndex",2)
+                compare(document(),before)
+                const place=findChild(editor,"studioMovePlace")
+                verify(waitForPolish(editor.Window.window));mouseClick(place);tryVerify(()=>document()===remote)
                 verify(editor.session.undo());compare(document(),before)
                 compare(studioFixture.disk(),diskBaseline)
             })
