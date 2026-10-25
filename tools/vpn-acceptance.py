@@ -32,6 +32,7 @@ def main():
     spec = importlib.util.spec_from_file_location("vpn_support", support_path)
     support = importlib.util.module_from_spec(spec); spec.loader.exec_module(support)
     support.PROFILE = profile
+    support.guest_only()
     before = support.status()
     if not all(p["installed"] for p in before["providers"]):
         raise RuntimeError("Default VPN providers are not both installed.")
@@ -66,6 +67,22 @@ def main():
         while not (evidence/(phase.lower()+"-captured")).exists():
             if time.monotonic()>deadline:raise RuntimeError("Capture acknowledgement timed out: "+phase)
             time.sleep(.1)
+        point_file=evidence/(phase+"-click.json")
+        if point_file.exists():
+            if phase not in {"vpnpermission","vpnprovider","vpnsettings","vpnprotocol","vpnprotocolconfirm","vpnconnection","vpnproviderstate","vpnusprovider","vpnussearch","vpnusconnect"} or point_file.stat().st_size>128:
+                raise RuntimeError("Invalid guest provider point")
+            point=json.loads(point_file.read_text())
+            if set(point)!={"x","y"} or any(type(point[k]) is not int for k in point):raise RuntimeError("Invalid guest point coordinates")
+            x11.XDefaultScreen.argtypes=[ctypes.c_void_p];x11.XDefaultScreen.restype=ctypes.c_int
+            x11.XDisplayWidth.argtypes=[ctypes.c_void_p,ctypes.c_int];x11.XDisplayHeight.argtypes=[ctypes.c_void_p,ctypes.c_int]
+            screen=x11.XDefaultScreen(display)
+            if not (0<=point["x"]<min(3840,x11.XDisplayWidth(display,screen)) and 0<=point["y"]<min(2160,x11.XDisplayHeight(display,screen))):raise RuntimeError("Guest point outside display")
+            xtst=ctypes.CDLL(ctypes.util.find_library("Xtst") or "libXtst.so.6")
+            xtst.XTestFakeMotionEvent.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_ulong]
+            xtst.XTestFakeButtonEvent.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_int,ctypes.c_ulong]
+            xtst.XTestFakeMotionEvent(display,screen,point["x"],point["y"],0)
+            for pressed in (1,0):xtst.XTestFakeButtonEvent(display,1,pressed,0)
+            x11.XFlush(display);time.sleep(.5)
     def wait(predicate, message, seconds=20):
         deadline=time.monotonic()+seconds
         while time.monotonic()<deadline:
@@ -102,23 +119,19 @@ def main():
             capture("vpnnavigation")
             time.sleep(1)
             capture("vpnsetup")
+            # Review the actual provider settings even if its current country
+            # already matches. Native transport/firewall choices affect handoff.
+            key("Down",4);key("Return");time.sleep(2)
+            for phase in ("vpnpermission","vpnprovider","vpnsettings","vpnprotocol","vpnprotocolconfirm","vpnconnection","vpnproviderstate"):
+                capture(phase)
+            # Bounded guest Home returns through the app's granted shortcut.
+            capture("vpnproviderreturn")
+            time.sleep(1);activate()
             current=support.active_connections()
             country=support.observed_country(current[0]["uuid"]) if len(current)==1 else None
-            if country != "CA":
-                key("Down",4);key("Return");time.sleep(2)
-                capture("vpnpermission")
-                capture("vpnprovider")
-                capture("vpnproviderstate")
-                # Bounded guest Home returns through the app's granted shortcut.
-                capture("vpnproviderreturn")
-                time.sleep(1);activate()
-                current=support.active_connections()
-                country=support.observed_country(current[0]["uuid"]) if len(current)==1 else None
-                if country!="CA":raise RuntimeError("Native provider is not connected to Canada; no CBC acceptance claim.")
-                # Settings retains the exact Open-provider row.
-                key("Down")
-            else:
-                key("Down",5)
+            if country!="CA":raise RuntimeError("Native provider is not connected to Canada; no CBC acceptance claim.")
+            # Settings retains the exact Open-provider row.
+            key("Down")
             # Save connected location through production UI, with Back cancellation first.
             key("Return");capture("vpnconsent")
             owned_before={c["uuid"] for c in support.managed_connections()}

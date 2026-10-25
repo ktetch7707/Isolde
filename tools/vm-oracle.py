@@ -56,10 +56,14 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "apps": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--inspect"]),
          "clients": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--skip-steam", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
-         "vpn": ("vpn-acceptance.py", [])}
+         "vpn": ("vpn-acceptance.py", []),
+         "shell": ("shell-acceptance.py", [])}
 
 
 def visual_result_passed(case, result):
+    if case == "shell":
+        return (result.get("passed") is True and result.get("reviewSequenceCaptured")==["shellnavigation","shellgallery","shellstore","shellreturn","shellambient","shellwake"]
+                and result.get("hostUiAutomationUsed") is False and result.get("layoutWrites") is False and result.get("semanticAcceptance")=="not_verified")
     if case == "vpn":
         return (all(result.get(k) is True for k in ("passed", "defaultProvidersInstalled", "uiAuthoredRule", "countryVerified", "nativeClientOpened"))
                 and result.get("app")=="cbc-gem" and result.get("country")=="CA"
@@ -504,7 +508,7 @@ class Oracle:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
     def visual(self, case, installed=False):
-        if case in ("repairs", "apps", "clients", "vpn") and not installed:
+        if case in ("repairs", "apps", "clients", "vpn", "shell") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
         if installed:
@@ -674,7 +678,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
