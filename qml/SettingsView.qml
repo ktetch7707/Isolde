@@ -17,7 +17,8 @@ Item {
         { name: "Sources", description: "Detected discs, drives, media folders, and automatic Home tiles" },
         { name: "Remotes", description: "Physical remotes, controllers, pairing, button tests, and mappings" },
         { name: "System", description: "Display, audio, power, support, updates, and about" },
-        { name: "Profiles", description: "People, personal layouts, and separate web sign-ins" }
+        { name: "Profiles", description: "People, personal layouts, and separate web sign-ins" },
+        { name: "VPN", description: "Install and configure Surfshark and Proton VPN" }
     ]
 
     function openSection(index) {
@@ -26,6 +27,10 @@ Item {
     }
 
     function handleCommand(command) {
+        if (inPage && selectedSection === 6 && (vpnPage.editing || command !== inputManager.back)) {
+            vpnPage.handleCommand(command)
+            return
+        }
         if (inPage && selectedSection === 1 && homePage.editing) { homePage.handleCommand(command); return }
         if (inPage && selectedSection === 5 && (profilePage.editing || command !== inputManager.back)) {
             profilePage.handleCommand(command)
@@ -103,7 +108,7 @@ Item {
                 delegate: Rectangle {
                     required property int index
                     required property var modelData
-                    width: parent.width; height: Math.max(52, (root.height - 208) / 6 - 12); radius: 8
+                    width: parent.width; height: Math.max(52, (root.height - 208) / root.sections.length - 12); radius: 8
                     color: root.selectedSection === index ? "#2B416B" : "#111A2A"
                     border.width: root.selectedSection === index ? 3 : 1
                     border.color: root.selectedSection === index ? "#F8FAFC" : "#2B3853"
@@ -126,6 +131,7 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 26
                 NetworkSettingsView { id: networkPage; anchors.fill: parent; visible: root.selectedSection === 0 }
+                VpnSettingsView { id: vpnPage; anchors.fill: parent; appearance: root.appearance; visible: root.inPage && root.selectedSection === 6 }
                 Column {
                     visible: root.selectedSection === 1
                     anchors.centerIn: parent

@@ -83,6 +83,13 @@ class OracleTests(unittest.TestCase):
         self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))
         self.assertEqual(oracle.suite_selection("studio_quick"), (["isolde_studio_quick_tests"], "^studio_quick$"))
 
+    def test_vpn_suite_selects_backend_and_remote_launch_contracts(self):
+        targets, pattern = oracle.suite_selection("vpn")
+        self.assertEqual(targets, ["isolde_vpn_tests"])
+        self.assertIsNotNone(re.fullmatch(pattern, "vpn_setup"))
+        self.assertIsNotNone(re.fullmatch(pattern, "vpn_launch"))
+        self.assertIsNone(re.fullmatch(pattern, "vpn_unrelated"))
+
     def test_targeted_studio_run_cannot_be_used_as_deploy_payload(self):
         runner = oracle.Oracle(self.root, "targeted")
         (runner.run / "test-result.json").write_text(json.dumps({"passed": True, "fullSuite": False, "suite": "studio"}))

@@ -14,6 +14,7 @@ Window {
     property bool ambientActive: false
     property string launchErrorText: ""
     property string launchErrorAppId: ""
+    property bool launchErrorVpn: false
     property bool desktopHidden:false
     property int desktopRestoreVisibility:Window.FullScreen
     DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
@@ -53,6 +54,10 @@ Window {
     Component.onCompleted:Qt.callLater(()=>{if(setupState.complete && homeLayout.homePageId)window.showDesignatedHome()})
 
     function handleCommand(command) {
+        if(appVpn.busy && appVpn.pendingApp){
+            if(command===inputManager.back || command===inputManager.home)appVpn.cancel()
+            return
+        }
         if(desktopMode.busy || desktopMode.active && !desktopMode.nativeMode){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
         if(desktopMode.active && desktopMode.nativeMode && (command===inputManager.home || command===inputManager.back)){desktopMode.cancel();return}
         idleTimer.restart()
@@ -301,8 +306,9 @@ Window {
                     } else if (command === inputManager.navigateRight) {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
-                        sessionManager.launch("app-store")
-                    } else if (command === inputManager.navigateLeft && window.launchErrorAppId.length && appCatalog.isInstalled(window.launchErrorAppId)) {
+                        sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")
+                        if(window.launchErrorVpn)settings.openSection(6)
+                    } else if (!window.launchErrorVpn && command === inputManager.navigateLeft && window.launchErrorAppId.length && appCatalog.isInstalled(window.launchErrorAppId)) {
                         appCatalog.uninstall(window.launchErrorAppId)
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
@@ -345,7 +351,7 @@ Window {
                         }
                         Rectangle { width: parent.width; height: 1; color: "#2B3853" }
                         Text {
-                            text: window.launchErrorAppId.length ? "Enter Retry    → App Store    ← Uninstall    Esc Close" : "Esc Close"
+                            text: window.launchErrorVpn ? "Enter Retry    → VPN settings    Esc Close" : window.launchErrorAppId.length ? "Enter Retry    → App Store    ← Uninstall    Esc Close" : "Esc Close"
                             color: "#D5B083"
                             font.pixelSize: 18
                             font.weight: Font.DemiBold
@@ -428,16 +434,33 @@ Window {
     }
 
     Connections {
+        target: appVpn
+        function onFailed(appId,message){window.launchErrorVpn=true;window.launchErrorAppId=appId;window.launchErrorText=message}
+    }
+    Rectangle {
+        anchors.fill:parent;z:1200
+        visible:appVpn.busy && !!appVpn.pendingApp
+        color:homeLayout.homeAppearance.surfaceColor
+        Column {
+            anchors.centerIn:parent;width:parent.width*0.7;spacing:24
+            Text {width:parent.width;wrapMode:Text.WordWrap;text:"Connecting to your app’s VPN location…";color:homeLayout.homeAppearance.textColor;font.pixelSize:28}
+            Text {width:parent.width;wrapMode:Text.WordWrap;text:"Checking the country before opening the app. Back cancels and restores the previous connection.";color:homeLayout.homeAppearance.textColor;font.pixelSize:20}
+        }
+    }
+    Connections {
         target: sessionManager
         function onSessionRejected(reason) {
+            window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onLaunchDeferred(reason) {
+            window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onSessionFailed(appId, reason) {
+            window.launchErrorVpn=false
             if (appCatalog.isInstalled(appId))
                 appCatalog.markFailed(appId, reason)
             window.launchErrorAppId = appId

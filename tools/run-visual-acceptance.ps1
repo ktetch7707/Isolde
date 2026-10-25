@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients')][string]$Case = 'pages',
+    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -46,8 +46,9 @@ $captureLine = {
             -Arguments @('controlvm',$VmName,'screenshotpng',$capture) -TimeoutSeconds 20 `
             -Log (Join-Path $outputPath 'capture.log')
         if (!(Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).Length -eq 0) { throw "Screenshot missing: $phase" }
-        $nativePermission = $Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')
-        $nativeReturn = $Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')
+        $vpnInput = $Case -eq 'vpn' -and $phase -in @('vpnnavigation','vpnpermission','vpnprovider','vpnproviderstate','vpnassign','vpnuspermission','vpnusprovider','vpnussearch','vpnusconnect','cbcvpnpermission')
+        $nativePermission = ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput
+        $nativeReturn = ($Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')) -or ($Case -eq 'vpn' -and $phase -in @('vpnproviderreturn','vpnusreturn','cbcvpn'))
         if (($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) -or ($Case -eq 'apps' -and $phase -eq 'steaminstall') -or $nativePermission -or $nativeReturn) {
             if ($VmName -ne 'Isolde-Test') { throw 'Compositor input is restricted to the Isolde-Test guest.' }
             $keys = @('Home')
@@ -60,9 +61,10 @@ $captureLine = {
                     Start-Sleep -Milliseconds 250
                 }
                 if ((Get-Item -LiteralPath $instructions).Length -gt 2048) { throw 'Oversized guest key instruction.' }
-                $keys = @(([IO.File]::ReadAllText($instructions) | ConvertFrom-Json).keys)
+                $keyDocument = [IO.File]::ReadAllText($instructions) | ConvertFrom-Json
+                $keys = @($keyDocument.keys)
             }
-            $scancodes = @{Home=@('e0','47','e0','c7');Return=@('1c','9c');Tab=@('0f','8f');Space=@('39','b9');Escape=@('01','81');Left=@('e0','4b','e0','cb');Right=@('e0','4d','e0','cd');Up=@('e0','48','e0','c8');Down=@('e0','50','e0','d0');ShiftTab=@('2a','0f','8f','aa')}
+            $scancodes = @{Home=@('e0','47','e0','c7');Return=@('1c','9c');Tab=@('0f','8f');Space=@('39','b9');Escape=@('01','81');Left=@('e0','4b','e0','cb');Right=@('e0','4d','e0','cd');Up=@('e0','48','e0','c8');Down=@('e0','50','e0','d0');ShiftTab=@('2a','0f','8f','aa');CtrlF=@('1d','21','a1','9d')}
             if ((!$keys.Count -and !$nativePermission -and $phase -ne 'steaminstall') -or $keys.Count -gt 20) { throw 'Invalid bounded guest keystroke count.' }
             foreach ($key in $keys) {
                 if (!$scancodes.ContainsKey([string]$key)) { throw "Unsupported guest key: $key" }
@@ -70,6 +72,10 @@ $captureLine = {
             foreach ($key in $keys) {
                 $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments (@('controlvm',$VmName,'keyboardputscancode') + $scancodes[[string]$key]) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
                 Start-Sleep -Milliseconds 300
+            }
+            if ($vpnInput -and $keyDocument.text) {
+                if ($phase -notin @('vpnprovider','vpnproviderstate','vpnusprovider','vpnussearch','vpnusconnect') -or $keyDocument.text -notin @('Canada','United States')) { throw 'Only reviewed country names may be typed into the guest provider UI.' }
+                $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm',$VmName,'keyboardputstring',[string]$keyDocument.text) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
             }
         }
         $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "touch $evidence/$phase-captured") `

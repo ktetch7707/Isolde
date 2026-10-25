@@ -57,6 +57,10 @@ add_library(isolde_core STATIC
     src/input/InputManager.h
     src/settings/NetworkSettings.cpp
     src/settings/NetworkSettings.h
+    src/settings/VpnSettings.cpp
+    src/settings/VpnSettings.h
+    src/settings/AppVpn.cpp
+    src/settings/AppVpn.h
     src/settings/DisplaySettings.cpp
     src/settings/DisplaySettings.h
     src/settings/AudioSettings.cpp
@@ -152,6 +156,7 @@ qt_add_qml_module(isolde
         qml/OrbCard.qml
         qml/DisplaySettingsView.qml
         qml/NetworkSettingsView.qml
+        qml/VpnSettingsView.qml
         qml/RemoteSettingsView.qml
         qml/SettingsView.qml
         qml/ProfileSettingsView.qml
@@ -233,6 +238,11 @@ endforeach()
 install(TARGETS isolde RUNTIME DESTINATION bin)
 install(FILES tools/component-health.py DESTINATION share/isolde)
 install(FILES tools/provision-default-apps.py DESTINATION share/isolde)
+install(FILES tools/vpn-setup.py DESTINATION share/isolde)
+install(FILES config/vpn-providers.json DESTINATION share/isolde/config)
+configure_file(tools/vpn-setup.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/vpn-setup.py COPYONLY)
+configure_file(tools/provision-default-apps.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/provision-default-apps.py COPYONLY)
+configure_file(config/vpn-providers.json ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/config/vpn-providers.json COPYONLY)
 install(FILES tools/kodi-window.py DESTINATION share/isolde)
 configure_file(tools/kodi-window.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/kodi-window.py COPYONLY)
 configure_file(tools/component-health.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/component-health.py COPYONLY)
@@ -347,6 +357,12 @@ if(BUILD_TESTING)
         add_test(NAME audio_backend COMMAND isolde_audio_tests)
         add_test(NAME appliance_installation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appliance_install.py)
         add_test(NAME default_app_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_apps.py)
+        add_test(NAME vpn_setup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_vpn_setup.py)
+        qt_add_executable(isolde_vpn_tests tests/tst_vpn.cpp)
+        target_link_libraries(isolde_vpn_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
+        target_compile_definitions(isolde_vpn_tests PRIVATE VPN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/VpnSettingsView.qml")
+        add_test(NAME vpn_launch COMMAND isolde_vpn_tests)
+        set_tests_properties(vpn_launch PROPERTIES TIMEOUT 40 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
         add_test(NAME appliance_recovery COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_recovery.py)
         add_test(NAME kodi_local_bridge COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_bridge.py)
         add_test(NAME kodi_playback COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_playback.py)

@@ -9,6 +9,8 @@
 #include "settings/RemoteSettings.h"
 #include "settings/AmbientSettings.h"
 #include "settings/NetworkSettings.h"
+#include "settings/VpnSettings.h"
+#include "settings/AppVpn.h"
 #include "settings/SearchSettings.h"
 #include "sessions/DesktopMode.h"
 #include "settings/ProfileManager.h"
@@ -51,10 +53,13 @@ struct ProfileRuntime {
     RemoteSettings remoteSettings;
     AmbientSettings ambientSettings;
     NetworkSettings networkSettings;
+    VpnSettings vpnSettings{qApp->property("isoldeProfile").toString()};
+    AppVpn appVpn;
     SearchSettings searchSettings;
     DesktopMode desktopMode;
     AppDefinition pendingNativeDefinition;
     bool pendingNativeLaunch=false;
+    bool pendingLaunch=false,pendingVpnReady=false;
     SourceManager sourceManager{&registry};
     ArtPackCatalog artPacks;
     InputManager input;
@@ -73,7 +78,7 @@ struct ProfileRuntime {
     QQmlApplicationEngine engine;
 
     explicit ProfileRuntime(ProfileManager &profiles, bool initialLaunch, AudioSettings &audio, CaptureController &capture)
-        : audioSettings(audio), captureController(capture) {
+        : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()) {
     if (initialLaunch && QCoreApplication::arguments().contains("--setup")) setup.restart();
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
@@ -105,6 +110,9 @@ struct ProfileRuntime {
         QTimer::singleShot(1500, &kodiShelves, [this] { kodiShelves.refresh(); });
     });
     sessions.setLaunchGuard([this](const QString &id) -> QString {
+        const auto *app=registry.find(id);
+        if(vpnSettings.busy() && app && app->type!="settings" && app->type!="store" && app->type!="customize")
+            return "Finish the current VPN setup operation before opening another app.";
         if (id == "kodi" && !kodiService.canOpenApplication())
             return "Switch to Kodi application mode in Settings → System → Media Library first. This lets Kodi save your setup before opening its interface.";
         return {};
@@ -128,18 +136,45 @@ struct ProfileRuntime {
         qFatal("%s", qPrintable(homeLayout.errorString()));
     desktopMode.setPresentation(homeLayout.studioOptions().value("desktop").toMap());
     sessions.setLaunchPreparation([this](const AppDefinition &definition){
-        if(definition.type!="desktop" || (desktopMode.active() && desktopMode.nativeMode()))return true;
+        if(definition.type!="settings" && definition.type!="store" && definition.type!="customize"){
+            if(pendingLaunch && pendingNativeDefinition.id!=definition.id)return false;
+            if(!pendingLaunch){pendingNativeDefinition=definition;pendingLaunch=true;pendingVpnReady=false;}
+            if(!pendingVpnReady){
+                if(!appVpn.prepare(definition.id))return false;
+                pendingVpnReady=true;
+            }
+        }
+        if(definition.type!="desktop" || (desktopMode.active() && desktopMode.nativeMode())){pendingLaunch=false;pendingVpnReady=false;return true;}
         pendingNativeDefinition=definition;pendingNativeLaunch=true;
         desktopMode.prepareNative(definition.id);
         return false;
     });
+    QObject::connect(&appVpn,&AppVpn::ready,&sessions,[this](const QString &id){
+        if(pendingLaunch && pendingNativeDefinition.id==id)sessions.resumePreparedLaunch(pendingNativeDefinition);
+    });
+    QObject::connect(&appVpn,&AppVpn::failed,&sessions,[this](const QString &id,const QString &message){
+        pendingLaunch=false;pendingNativeLaunch=false;pendingVpnReady=false;
+        Q_UNUSED(id);Q_UNUSED(message);sessions.goHome();
+    });
+    QObject::connect(&vpnSettings,&VpnSettings::refreshed,&appVpn,[this]{appVpn.refresh();});
+    QObject::connect(&vpnSettings,&VpnSettings::externalOpening,&desktopMode,[this]{
+        desktopMode.start("settings-vpn");
+        if(desktopMode.active() && !desktopMode.nativeMode())vpnSettings.resumeExternal();
+    });
     QObject::connect(&desktopMode,&DesktopMode::changed,&sessions,[this]{
+        if(vpnSettings.waitingExternal()){
+            if(desktopMode.active() && !desktopMode.nativeMode())vpnSettings.resumeExternal();
+            else if(!desktopMode.busy() && !desktopMode.active() && !desktopMode.errorString().isEmpty())vpnSettings.cancelExternal();
+        }
         if(!pendingNativeLaunch || !desktopMode.active() || !desktopMode.nativeMode())return;
         const auto definition=pendingNativeDefinition;pendingNativeLaunch=false;
+        pendingVpnReady=false;
         sessions.resumePreparedLaunch(definition);
     });
     QObject::connect(&desktopMode,&DesktopMode::returned,&sessions,[this](const QString &){
+        vpnSettings.cancelExternal();
         pendingNativeLaunch=false;
+        pendingLaunch=false;pendingVpnReady=false;
         if(desktopMode.nativeMode())sessions.goHome();
     });
     QObject::connect(&sessions,&SessionManager::currentAppChanged,&desktopMode,[this]{
@@ -163,6 +198,8 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("remoteSettings"), &remoteSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("ambientSettings"), &ambientSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("networkSettings"), &networkSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("vpnSettings"), &vpnSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("appVpn"), &appVpn);
     engine.rootContext()->setContextProperty(QStringLiteral("sourceManager"), &sourceManager);
     engine.rootContext()->setContextProperty(QStringLiteral("artPacks"), &artPacks);
     engine.rootContext()->setContextProperty(QStringLiteral("inputManager"), &input);
@@ -229,6 +266,7 @@ struct ProfileRuntime {
     }
     }
     ~ProfileRuntime() {
+        appVpn.cancel();
         QObject::disconnect(&sessions, nullptr, &kodiService, nullptr);
         kodiService.stop();
         sessions.exitCurrent();

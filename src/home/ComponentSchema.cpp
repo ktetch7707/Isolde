@@ -52,7 +52,7 @@ constexpr int MaxPageDataArtwork = 512;            // artwork items
 constexpr int MinMediaId = 1;                      // media ids are 1-based
 constexpr int MaxMediaId = 2147483647;             // INT_MAX, bounded for safe JSON double decoding
 constexpr int MinSettingsSection = -1;             // "no section" sentinel
-constexpr int MaxSettingsSection = 5;
+constexpr int MaxSettingsSection = 6;
 
 // HDMI input bounds are declared in ComponentSchema.h (shared with the shell).
 

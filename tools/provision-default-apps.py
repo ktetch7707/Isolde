@@ -352,7 +352,9 @@ def main():
         import socket
         if socket.gethostname() != "isolde-test": raise RuntimeError("This sandbox exception is authorized only in Isolde-Test")
         print(json.dumps(install_native_isolation())); return
-    if args.action == "system": system(document, args.sudo_apt)
+    if args.action == "system":
+        system(document, args.sudo_apt)
+        run(sys.executable, str(source/"tools/vpn-setup.py"), "defaults", timeout=1800)
     else: print(json.dumps(activate(source, document)))
 
 

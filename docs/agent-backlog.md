@@ -17,6 +17,8 @@ User feedback slice (2026-10-24): [Home background, app logos, editable page men
 
 ## Execution priority — Page Studio first (user, 2026-10-19)
 
+User-requested VPN implementation (2026-10-24): [setup, automatic app-location scope and verification ledger](vpn-setup-2026-10-24.md) records the explicitly authorized T12/network slice for default Surfshark/Proton VPN clients and per-app automatic country switching. Local Python tests pass 27/27 and full AD passes 30/30; both providers and the root-owned copy tool are installed through the provisioner. K passes two consecutive provisioning runs, verifying repeatability. The user explicitly approves the account-specific capture permission and selected-interface kernel copy after separate review blocks. The bounded multi-peer/required-identity and rollback fixes pass AD and its provisioning; all three installed functional graphical journeys pass, all 28 frames reviewed, with prior Pastel/design gaps open. Live capture reaches switching; read-only Status confirms guest NetworkManager requires authentication. The original Surfshark connection stays active. A separate, profile-only switch grant is proposed for explicit approval, with no new permission installed. Saved Canada/US locations and automatic CBC Canada acceptance remain open. No completion credit: T12 0%, T20 80%, T21 36%, Overall round(866/24) = 36%.
+
 Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **Finish reopened T19.6, then T20.5, then T21.6-T21.14 before T22. These gates implement the user's revised movement/color/context UX and real component semantics. T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
 
 Next complete the related shell improvements: **T27 → T25 → T26 → T28** (shared theme, contained source notices, All Apps gallery, genuine Web switch). These extend the accepted Studio and no longer block its templates, Preview/Apply or core cutover. Then follow the remaining ranked rows for evidence repair, media preservation, input/system polish, playback, hardware/guide, appliance distribution and optional online work.
@@ -46,7 +48,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T05 | 16 | Studio grid renderer consumes placements | 67% | verification incomplete |
 | T03 | 17 | Local search: Kodi titles via bridge (no curation adapters) | 75% | installed acceptance pending |
 | T04 | 18 | Kodi preservation + desktop import | 33% | in progress |
-| T12 | 19 | System polish + input + on-screen keyboard | 0% | not started |
+| T12 | 19 | System polish + input + on-screen keyboard | 0% | VPN slice in progress; live capture/CBC gates open |
 | T09 | 20 | Playback preference + viewing options | 0% | not started |
 | T10 | 21 | Capture + HDMI + audio editors (gated) | 33% | in progress |
 | T11 | 22 | Guide / PseudoTV | 0% | not started |

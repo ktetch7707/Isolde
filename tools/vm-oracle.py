@@ -22,6 +22,7 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "studio_navigation": "isolde_home_navigation_tests",
           "kodi_media_client": "isolde_kodi_media_tests",
           "desktop_mode": "isolde_desktop_mode_tests",
+          "vpn": "isolde_vpn_tests",
           "studio_quick": "isolde_studio_quick_tests",
           "studio_selection": "isolde_studio_quick_tests",
           "studio_gestures": "isolde_studio_quick_tests",
@@ -42,6 +43,8 @@ def suite_selection(suite):
     pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "studio_grid":
         pattern = "^(studio_grid|studio_grid_controls)$"
+    if suite == "vpn":
+        pattern = "^(vpn_setup|vpn_launch)$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
@@ -52,10 +55,15 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "repairs": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--inspect"]),
          "apps": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--inspect"]),
          "clients": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--skip-steam", "--inspect"]),
-         "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"])}
+         "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
+         "vpn": ("vpn-acceptance.py", [])}
 
 
 def visual_result_passed(case, result):
+    if case == "vpn":
+        return (all(result.get(k) is True for k in ("passed", "defaultProvidersInstalled", "uiAuthoredRule", "countryVerified", "nativeClientOpened"))
+                and result.get("app")=="cbc-gem" and result.get("country")=="CA"
+                and result.get("browserUsedForSetup") is False and result.get("hostUiAutomationUsed") is False)
     if case == "clients":
         return all(result.get(key) is True for key in ("passed", "native_clients", "household_unchanged")) and result.get("steam_client_downloaded") is False and result.get("subscriptionPlaybackVerified") is False
     if case == "apps":
@@ -386,6 +394,8 @@ class Oracle:
                 expected = {"studio_grid", "studio_grid_controls"}
             if suite == "home_component_navigation":
                 expected = {"home_component_navigation", "studio_navigation"}
+            if suite == "vpn":
+                expected = {"vpn_setup", "vpn_launch"}
             if {c.get("name") for c in cases} != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
@@ -494,7 +504,7 @@ class Oracle:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
     def visual(self, case, installed=False):
-        if case in ("repairs", "apps", "clients") and not installed:
+        if case in ("repairs", "apps", "clients", "vpn") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
         if installed:
@@ -664,7 +674,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -686,6 +696,37 @@ def interrupted(signum, _frame):
     # selectors treats InterruptedError as a retryable interrupted system call.
     # Cancellation must escape that retry and reach the stage/service finally.
     raise RuntimeError("Oracle interrupted by signal " + str(signum))
+
+
+def vpn_platform():
+    """Public installed-package/NetworkManager metadata, never account storage."""
+    def query(arguments):
+        result=subprocess.run(arguments,capture_output=True,text=True,timeout=5)
+        return result.stdout[:65536] if result.returncode==0 else ""
+    version=query(["dpkg-query","-W","-f=${Version}","surfshark"]).strip()
+    files=query(["dpkg-query","-L","surfshark"]).splitlines() if version else []
+    metadata=[]
+    for name in files:
+        if not (name.startswith(("/usr/bin/","/usr/share/applications/","/usr/lib/systemd/system/","/lib/systemd/system/")) and (name.endswith((".desktop",".service")) or name.startswith("/usr/bin/"))):continue
+        path=Path(name)
+        if not path.is_file():continue
+        entry={"path":name}
+        if path.stat().st_size<=16384:
+            content=path.read_bytes()
+            if name.endswith((".desktop",".service")):
+                entry["declarations"]=[line for line in content.decode("utf-8","replace").splitlines() if line.startswith(("Exec=","ExecStart=","BusName="))][:8]
+            elif content.startswith(b"#!"):
+                entry["launcher"]=content.decode("utf-8","replace")
+        metadata.append(entry)
+    connections=[]
+    for line in query(["nmcli","-t","-f","UUID,TYPE,DEVICE","connection","show"]).splitlines()[:128]:
+        cells=line.split(":")
+        if len(cells)==3 and cells[1] in {"wireguard","vpn"}:connections.append({"uuid":cells[0],"type":cells[1],"device":cells[2]})
+    bindings=query(["python3","-c","import gi;gi.require_version('NM','1.0');from gi.repository import NM;print(NM.MAJOR_VERSION)"]).strip()
+    proton=query(["dpkg-query","-W","-f=${Status} ${Version}","proton-vpn-gnome-desktop"]).strip()
+    proton_files=query(["dpkg-query","-L","proton-vpn-cli"]).splitlines()
+    permissions=query(["nmcli","-t","-f","PERMISSION,VALUE","general","permissions"]).splitlines()
+    return {"installedVersion":version,"protonPackage":proton,"protonCliFiles":[p for p in proton_files if p.startswith('/usr/bin/')],"nmBindings":bindings,"packageFiles":metadata[:32],"vpnConnections":connections,"networkManagerPermissions":permissions}
 
 
 def cancel_owned(root, run_id):
@@ -743,6 +784,7 @@ def main():
             if key in {"DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}: environment[key] = value
         windows = subprocess.run(["wmctrl", "-lpx"], env=environment, capture_output=True, text=True, timeout=10)
         status["windowClasses"] = [line.split(None, 5)[:4] for line in windows.stdout.splitlines()[:64]]
+        status["vpnPlatform"]=vpn_platform()
         print(json.dumps(status))
         return
     if args.action == "cancel":
