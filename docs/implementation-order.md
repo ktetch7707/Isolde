@@ -1,5 +1,7 @@
 # Product implementation order
 
+User scope revision (2026-10-25): [the complete Kodi interface requirement](kodi-complete-interface-2026-10-25.md) supersedes the earlier requirement to manage curation in Kodi. Isolde must provide playlist authoring, library/source settings and refresh, title poster editing, playback and automatic background backend management. Continue the active playlist verification into these Kodi-owned operations through Isolde UI; opening Kodi menus is not a completed workflow. Preserve the remaining twelve repairs and VPN acceptance work. Use the backlog's updated T04 gates/accounting and keep Kodi authoritative without direct database writes.
+
 Optional scrolling pages (user, 2026-10-21): [scrolling requirements](design/page-studio/scrolling-pages-2026-10-21.md) extend open T19–T24 gates with a per-page checkbox, downward content growth, no-room Add recovery and safe disable/cancel behavior. Existing viewport-grid bounds remain distinct from the proposed bounded document extent. Preserve backlog order and completion credit.
 
 Approved usability expansion (user, 2026-10-21): [selected feature requirements](design/page-studio/usability-expansion-2026-10-21.md) extend existing open T21–T24 gates. Preserve T19.6 → T20.5 → T21 → T22 → T23 → T24 sequencing; integrate each requirement into its owning gate before closing it. This planning addition changes neither task count nor completion credit.

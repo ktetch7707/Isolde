@@ -9,13 +9,15 @@ Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unifie
 - `100% x 24 = active backlog implemented` ONLY if every active box is `[x]` AND `Evidence` has log/screenshot paths. No evidence = max 90%.
 - Workflow: use the priority-ranked table below, not numerical task ID. Select its first unfinished ACTIVE task whose Depends tasks are 100%; do not skip a blocker silently. Read only its Entry docs/files, implement its Scope, run Verify, then update checked evidence and percentages.
 - Standing gates for every task: `tests/visual/home-reference/` + `tests/visual/home-pastel-reference/` recreation+reset pass; profile isolation; atomic save+rollback; Kodi owns media/progress/playback (no parallel DB/player); offline Generator Test; Settings/Edit Home always reachable.
-- Scope decision (user, 2026-10-19): collection curation is the USER's responsibility via Kodi. Isolde does not build episode/tag/playlist/exclusion/template curation. T02 struck. Existing movie/show manual-collection code stays as-is (no removal, no extension).
+- Scope revision (user, 2026-10-25): [complete Kodi interface](kodi-complete-interface-2026-10-25.md) supersedes the October 19 restriction on Isolde curation UI. Isolde must expose Kodi-owned playlist authoring, library/source settings and refresh, poster editing, playback and backend lifecycle without requiring Kodi menus. Keep Kodi authoritative; no parallel media DB or direct Kodi DB writes. Extend T04/T21/T09/T12; T02 stays archived as an older superseded scope.
 
 Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-update-2026-10-19.md](vm-update-2026-10-19.md). The user-selected Page Studio redesign now has priority; the existing editor code is committed in `25f56bf`, not an accepted replacement design. Read [vm-oracle.md](vm-oracle.md) before VM testing.
 
 User feedback slice (2026-10-24): [Home background, app logos, editable page menus and Surfshark dependency](home-feedback-2026-10-24.md) records the explicitly requested related shell/T21 work. Combined J and final `surfshark-20261024-full-l` pass 28/28 and are deployed; the first graphical capture is rejected for showing GNOME overview, so visual gates remain open. [Bounded cancellation is repaired and verified](vm-cancellation-2026-10-24.md). [Surfshark 3.14.0 is installed and running in the guest](surfshark-install-2026-10-24.md); private login/keyring resolution and tunnel verification remain open. Automatic VPN switching and universal third-party Store onboarding remain open. No broad checkbox credit: T20 80%, T21 36%, Overall round(866/24) = 36%.
 
 ## Execution priority — Page Studio first (user, 2026-10-19)
+
+Latest media scope (user, 2026-10-25): [complete Kodi interface](kodi-complete-interface-2026-10-25.md) extends the active playlist slice into Kodi-owned authoring, library settings/refresh, poster editing and full playback/backend integration. Finish the healthy current verification, then continue this explicitly requested media work without requiring Kodi's GUI. Preserve all twelve repairs and unfinished VPN proof. T04 expands from three to seven gates, with its one historical checked gate retained: round(1/7×100) = 14%. Active count remains 24; sum 866−33+14 = 847, Overall round(847/24) = **35%**. The lower percentage records expanded scope, not lost implementation.
 
 User acceptance repair scope (2026-10-25): [twelve reported issues and acceptance requirements](product-feedback-2026-10-25.md) records the latest explicit implementation request. First address automatic non-Home sidebars using the existing Page menu component and common runtime/editor canvas, then continue the mapped component, media, Settings/VPN, screensaver, app-return, Kodi, Steam, Store and artwork repairs. This is an authorized related T21/shell slice, not a replacement for the unfinished VPN proof or existing Studio gates. No completion credit: T12 0%, T20 80%, T21 36%, Overall round(866/24) = 36%.
 
@@ -49,7 +51,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T01 | 15 | Bootstrap + gate check | 67% | verification incomplete |
 | T05 | 16 | Studio grid renderer consumes placements | 67% | verification incomplete |
 | T03 | 17 | Local search: Kodi titles via bridge (no curation adapters) | 75% | installed acceptance pending |
-| T04 | 18 | Kodi preservation + desktop import | 33% | in progress |
+| T04 | 18 | Complete Kodi interface, preservation and import | 14% | expanded: Kodi-only backend; playlist/library/poster/playback UI open |
 | T12 | 19 | System polish + input + on-screen keyboard | 0% | VPN slice in progress; live capture/CBC gates open |
 | T09 | 20 | Playback preference + viewing options | 0% | not started |
 | T10 | 21 | Capture + HDMI + audio editors (gated) | 33% | in progress |
@@ -60,7 +62,7 @@ The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This addi
 | T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
 | T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
 | T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **36%** | T15 provisional; T20/T21 usability gates remain open |
+| **Overall** | — | **average of 24 active tasks** | **35%** | T04 expanded; T15 provisional and T20/T21 gates open |
 
 ## Highest priority: core Page Studio
 
@@ -347,14 +349,19 @@ Scope (Kodi-bridge only â€” no tag/playlist/curation adapters; those were T
 Done when: offscreen Command Center + bridge bounds tests pass, Web OFF provably silent.
 Verify: component suite `pagesPersistAndRouteAndTravelWithSkins`, network-denial check. Evidence: T03.3 done per Oct-18 M4 (PageModel::pageSearchSources, CommandCenter pageSources, Main openSearchFromPage). T03.1/T03.2/T03.3 done per Oct-18 M4 with 8/8 static checks passing (verify-t03-search.py). T03.4 manual acceptance only.
 
-## T04 â€” Kodi preservation + desktop import (M, depends: T01)
+## T04 â€” Complete Kodi interface, preservation and import (L, depends: T01)
 Entry docs: `docs/master-roadmap.md` steps 1-2, `docs/install.md`.
 Entry files: `src/media/KodiService.h`, `src/sessions/DesktopSession.h`, `src/media/KodiImporter.{h,cpp}`, `qml/KodiImportView.qml`.
 Scope:
 - [ ] T04.1 Explicit backup/preview/import/conflict flow for non-default skin/sources/add-ons/watch-resume, rollback supported
 - [ ] T04.2 Clean ownership handoff + guided first-library setup + Desktop/Return workflow
 - [x] T04.3 Nested-folder scan to direct playback, no media moves/renames, no Kodi DB edits
-Done when: real round-trip preserves skin+sources+watch-state; import rollback tested.
+- [ ] T04.4 Create/edit/reorder/delete real Kodi-owned playlists through Isolde, with bounded members/rules, preview, atomic save/rollback and shelf selection; no required Kodi editor.
+- [ ] T04.5 Manage library sources/content/scanner settings, refresh/progress/errors and title poster/artwork through themed Isolde controls, with cancel/rollback and profile isolation.
+- [ ] T04.6 Expose the complete relevant Kodi capability/settings inventory through remote-operable Isolde UI; reuse Kodi playback/progress, including audio/subtitle/viewing controls under T09, without another media DB/player.
+- [ ] T04.7 Prove fresh setup and normal media use require no Kodi menus or settings: automatic background backend start/recovery, Isolde browsing/editing/playback/return, real data and both standing fixtures. Kodi-dialog fixture bootstrapping is not product-UI acceptance.
+Additional Entry docs: `docs/kodi-complete-interface-2026-10-25.md`, `docs/kodi-media.md`. Additional Entry files: `src/media/KodiMedia.{h,cpp}`, `src/home/PageData.{h,cpp}`, `qml/StudioInspector.qml`, `qml/PageLibraryWidget.qml`, `qml/KodiLibraryView.qml`, `kodi/service.isolde.bridge/{bridge,playback,artwork}.py`; follow existing dispatcher/provider interfaces for each slice.
+Done when: real round-trip preserves skin+sources+watch-state, import rollback is tested, and T04.4–T04.7 complete through Isolde without required Kodi menus/settings. Playback controls share T09 gates; all profile, offline and visual requirements remain.
 Verify: appliance/vm acceptance with disposable fixture (hashes unchanged). Evidence: docs/kodi-media.md remembered media folders + nested discovery + direct playback done (hashes unchanged); T04.1/T04.2 remain open: importer/UI/setup source exists (`6ff2bcb`), but import does not transfer settings and rollback copies onto existing files. No safe installed preservation/rollback evidence; see `docs/planning-audit.md`.
 
 ## T12 â€” System polish + input + on-screen keyboard (M, depends: T05)
