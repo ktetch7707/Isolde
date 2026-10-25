@@ -849,7 +849,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 HomeScreen {
                     id:preview;objectName:"studioPreview"
                     menuPages:studio.pageEntries;menuActiveId:studio.pageId
-                    x:draftNavigation.contentLeft;y:draftNavigation.contentTop;width:parent.width-x;height:parent.height-y
+                    anchors.fill:parent
                     items:studio.page?studio.page.items.filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i)):[]
                     sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i))})):[]
                     appearance:studio.page?studio.page.appearance:studio.palette;composition:studio.page?Object.assign({},studio.page.composition,studio.pendingScrollEnable?{verticalScrolling:true}:{}):({})
@@ -869,13 +869,6 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     onActionActivated:(action,originId)=>studio.message="Preview only: would invoke "+action.type
                     onSettingsRequested:section=>studio.message="Return to editing to change settings."
                     onSearchRequested:studio.message="Search is unavailable in draft preview."
-                }
-                PageNavigation {
-                    id:draftNavigation;anchors.fill:parent;enabledNavigation:studio.pageId!==""
-                    composition:studio.page?studio.page.composition:({});appearance:studio.page?studio.page.appearance:({})
-                    pages:studio.pageEntries;activeId:studio.pageId
-                    selectedPage:Math.max(0,studio.pageEntries.findIndex(p=>p.id===studio.pageId))
-                    onChosen:index=>{studio.message="Page navigation · use the Pages menu to choose an editing page."}
                 }
                 Item {
                     readonly property real scrollClipTop:studio.scrollingEnabled?preview.pageViewport.y:0

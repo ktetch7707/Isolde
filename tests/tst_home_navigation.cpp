@@ -929,6 +929,7 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
     QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
     const auto id=home.createPage("Library","blank");QVERIFY(!id.isEmpty());
     auto *page=qobject_cast<PageModel *>(home.pageModel(id));QVERIFY(page);
+    QCOMPARE(page->composition().value("pageNavigation").toString(),QString("none"));
     QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
     engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
     const auto qmlDir=QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir();
@@ -948,6 +949,8 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
         for(const auto size:{QSize(1280,720),QSize(1920,1080),QSize(3840,2160)}) {
             for(auto *view:{live.get(),draft.get()}){view->setProperty("width",size.width());view->setProperty("height",size.height());}
             QCoreApplication::processEvents();
+            QCOMPARE(content->x(),0.0);QCOMPARE(content->y(),0.0);
+            QCOMPARE(content->width(),double(size.width()));QCOMPARE(content->height(),double(size.height()));
             QCOMPARE(preview->x(),content->x());QCOMPARE(preview->y(),content->y());
             QCOMPARE(preview->width(),content->width());QCOMPARE(preview->height(),content->height());
         }

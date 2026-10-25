@@ -32,7 +32,7 @@ QString HomeLayout::createPage(const QString &name, const QString &preset) {
     }
     const auto id="page-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     QJsonObject config{{"schemaVersion",1},{"enabled",true},{"fit",false},{"columns",1},{"margin",DefaultHomeMargin},{"gap",DefaultHomeGap},{"headerMode","identity"},
-        {"identity",name.trimmed()},{"headerControls",QJsonArray{"settings","edit"}},{"pageNavigation",preset=="standalone"?"none":"left"},{"sidebarWidth",DefaultSidebarWidth}};
+        {"identity",name.trimmed()},{"headerControls",QJsonArray{"settings","edit"}},{"pageNavigation","none"}};
     QJsonArray sections;
     if(preset!="blank")sections.append(QJsonObject{{"id","library"},{"name",preset=="shows"?"Shows":"Movies"},{"presentation",QJsonObject{
         {"variant","library"},{"height",PresetLibrarySectionHeight},{"libraryKind",preset=="shows"?"shows":"movies"},{"libraryView","all"},{"libraryLayout","grid"},{"libraryColumns",DefaultLibraryColumns},{"padding",DefaultLibraryPadding},{"radius",DefaultLibraryRadius},{"panelOpacity",DefaultPanelOpacity}}}});
