@@ -1,6 +1,6 @@
 # VPN setup in Isolde
 
-**Verification status:** both providers install successfully in Isolde-Test. Saved-location identity is verified. Unattended switching is still awaiting its separate permission and live acceptance; this is the intended setup flow, not a completed acceptance claim.
+**Verification status:** both providers install successfully in Isolde-Test. Saved-location identity is verified. The approved profile-only switching permission is installed and repeated installation has passed. Live Canada/US saving and automatic app switching are still being verified. This is the intended setup flow, not a completed acceptance claim.
 
 1. Open **Settings → VPN**.
 2. Select **Install default VPN providers (Surfshark + Proton VPN)**, then **Install**. The installer downloads both official clients and Isolde's location-saving support. Repeating installation is supported.

@@ -132,7 +132,7 @@ def main():
                 if "VPN_SETUP_FAILED" in (evidence/"shell.log").read_text():
                     raise RuntimeError("Isolde reports VPN setup failure; inspect the safe log and failure frame.")
                 saved[:]=[c for c in support.managed_connections() if c["uuid"] not in owned_before and c["country"]=="CA"]
-                return bool(saved)
+                return bool(saved) and "VPN_LOCATION_SAVED_VERIFIED" in (evidence/"shell.log").read_text()
             try:
                 wait(saved_location,"Save connected location did not finish; inspect VPN screen/log.",90)
             except RuntimeError:

@@ -726,7 +726,15 @@ def vpn_platform():
     proton=query(["dpkg-query","-W","-f=${Status} ${Version}","proton-vpn-gnome-desktop"]).strip()
     proton_files=query(["dpkg-query","-L","proton-vpn-cli"]).splitlines()
     permissions=query(["nmcli","-t","-f","PERMISSION,VALUE","general","permissions"]).splitlines()
-    return {"installedVersion":version,"protonPackage":proton,"protonCliFiles":[p for p in proton_files if p.startswith('/usr/bin/')],"nmBindings":bindings,"packageFiles":metadata[:32],"vpnConnections":connections,"networkManagerPermissions":permissions}
+    reasons=[]
+    for line in query(["journalctl","-u","NetworkManager","--since=-10min","-n","200","--no-pager","-o","cat"]).splitlines():
+        match=re.search(r"\(ivpn[0-9a-f]{10}\).*reason '([a-z-]+)'",line)
+        if match:reasons.append(match[1])
+    routing={}
+    for family in ("-4","-6"):
+        rules=json.loads(query(["ip","-j",family,"rule","show"]) or "[]")
+        routing[family]=[{k:r[k] for k in ("priority","table","fwmark","fwmask","not","suppress_prefixlength") if k in r} for r in rules[:64]]
+    return {"installedVersion":version,"protonPackage":proton,"protonCliFiles":[p for p in proton_files if p.startswith('/usr/bin/')],"nmBindings":bindings,"packageFiles":metadata[:32],"vpnConnections":connections,"networkManagerPermissions":permissions,"recentIsoldeActivationReasons":reasons[-20:],"routingPolicy":routing}
 
 
 def cancel_owned(root, run_id):

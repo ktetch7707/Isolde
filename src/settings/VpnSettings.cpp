@@ -28,6 +28,7 @@ VpnSettings::VpnSettings(QString profile,QObject *parent):QObject(parent),m_prof
             ?result["message"].toString(tr("Local VPN status refreshed. Check sign-in and country in the provider app."))
             :result["error"].toString(tr("VPN setup failed or timed out. Refresh and retry."));
         if(code!=0 || exit!=QProcess::NormalExit)qWarning().noquote()<<"VPN_SETUP_FAILED"<<m_message<<result["diagnostic"].toString();
+        else if(result.contains("verifiedAt"))qInfo()<<"VPN_LOCATION_SAVED_VERIFIED";
         emit changed();
         if(result.contains("connections"))emit refreshed();
     });

@@ -74,7 +74,7 @@ class VpnSetupTests(unittest.TestCase):
 
     def test_activation_requires_verification(self):
         state = {"connections": [{"uuid": UUID, "active": False}], "activeVpnCount": 0}
-        with patch.object(vpn, "status", return_value=state), patch.object(vpn, "command"), patch.object(vpn, "switch_location", side_effect=RuntimeError("unverified")):
+        with patch.object(vpn, "status", return_value=state), patch.object(vpn, "command"), patch.object(vpn, "privileged_switch", side_effect=RuntimeError("unverified")):
             with self.assertRaises(RuntimeError): vpn.connection_action("connect", UUID)
 
     def test_proton_checksum_mismatch_never_elevates(self):
@@ -105,6 +105,7 @@ class VpnSetupTests(unittest.TestCase):
             connection = NM.conn_wireguard_import.return_value
             connection.get_setting_by_name.return_value.get_peers_len.return_value = 1
             connection.get_setting_by_name.return_value.get_private_key.return_value = "synthetic-key"
+            connection.get_setting_by_name.return_value.get_property.return_value = 0
             peer = connection.get_setting_by_name.return_value.get_peer.return_value.new_clone.return_value
             peer.get_allowed_ips_len.return_value = 1
             peer.get_allowed_ip.return_value = "0.0.0.0/0"
@@ -203,15 +204,15 @@ class VpnSetupTests(unittest.TestCase):
              patch.object(vpn, "transport_configuration", side_effect=lambda connection,device:connection), \
              patch.object(vpn, "nm_async", return_value="opaque-local-variant"), \
              patch.object(vpn, "save_location", return_value=saved), \
-             patch.object(vpn, "switch_location", return_value={"country": "CA"}) as switch, \
+             patch.object(vpn, "handoff_location", return_value={"country": "CA"}) as switch, \
              patch.object(vpn, "status", return_value={}):
             result = vpn.capture_location("surfshark")
         self.assertEqual(result["country"], "CA")
         self.assertEqual(result["savedUuid"],UUID)
-        switch.assert_not_called()
-        source.get_secrets_async.assert_not_called()  # the nm_async boundary was mocked
+        switch.assert_called_once_with(UUID,OTHER,"CA")
+        source.get_secrets_async.assert_not_called()
         source.update_secrets.assert_not_called()
-        NM.SimpleConnection.new_clone.return_value.update_secrets.assert_called_once_with("wireguard", "opaque-local-variant")
+        NM.SimpleConnection.new_clone.return_value.update_secrets.assert_not_called()
 
     def test_capture_refuses_another_profiles_keys_before_secret_request(self):
         NM = MagicMock();source = NM.Client.new.return_value.get_connection_by_uuid.return_value
@@ -232,10 +233,10 @@ class VpnSetupTests(unittest.TestCase):
              patch.object(vpn, "active_connections", return_value=[{"uuid":OTHER,"device":"provider"}]), \
              patch.object(vpn, "copy_helper_installed", return_value=True), \
              patch.object(vpn.subprocess, "run", return_value=response) as execute, \
-             patch.object(vpn,"switch_location",return_value={"country":"CA"}) as switch, \
+             patch.object(vpn,"verify_location",return_value={"country":"CA"}) as switch, \
              patch.object(vpn,"status",return_value={}):
             self.assertEqual(vpn.capture_location("surfshark")["country"],"CA")
-        switch.assert_called_once_with(UUID,handoff_from=OTHER)
+        switch.assert_called_once_with(UUID,"CA")
         source.get_secrets_async.assert_not_called()
         self.assertEqual(execute.call_args.args[0], ["pkexec", str(vpn.COPY_HELPER), "capture", "surfshark", "--profile", vpn.PROFILE])
 
@@ -259,6 +260,13 @@ class VpnSetupTests(unittest.TestCase):
             self.assertTrue((staging/"usr/libexec/isolde/vpn-copy").read_bytes().startswith(b"#!/usr/bin/python3 -I\n"))
             rule = (staging/"usr/share/polkit-1/rules.d/50-isolde-vpn.rules").read_text()
             self.assertIn('action.id === "org.isolde.vpn.capture"', rule)
+            self.assertIn('action.id === "org.isolde.vpn.switch"',rule)
+            import xml.etree.ElementTree as ET
+            policy=ET.fromstring((staging/"usr/share/polkit-1/actions/org.isolde.vpn.policy").read_bytes())
+            actions={action.attrib["id"]:{item.attrib["key"]:item.text for item in action.findall("annotate")} for action in policy.findall("action")}
+            self.assertEqual(set(actions),{"org.isolde.vpn.capture","org.isolde.vpn.switch"})
+            for verb in ("capture","switch"):
+                self.assertEqual(actions["org.isolde.vpn."+verb],{"org.freedesktop.policykit.exec.path":vpn.COPY_HELPER.as_posix(),"org.freedesktop.policykit.exec.argv1":verb})
             self.assertIn('subject.user === ', rule)
             self.assertNotIn('org.freedesktop.NetworkManager', rule)
             self.assertIn("--root-owner-group", args)
@@ -276,6 +284,58 @@ class VpnSetupTests(unittest.TestCase):
             vpn.install_copy_helper()
         execute.assert_not_called();install.assert_not_called()
 
+    def test_switch_delegates_only_fixed_owned_tool_without_key_access(self):
+        response=MagicMock(returncode=0,stdout='{"country":"CA","verifiedAt":123}')
+        with patch.object(vpn,"copy_helper_installed",return_value=True),patch.object(vpn.subprocess,"run",return_value=response) as run,patch.object(vpn,"nm_bindings") as keys:
+            self.assertEqual(vpn.privileged_switch(UUID)["country"],"CA")
+            run.assert_called_once_with(["pkexec",str(vpn.COPY_HELPER),"switch",UUID,"--profile",vpn.PROFILE],capture_output=True,text=True,timeout=100)
+            keys.assert_not_called()
+
+    def test_root_listing_refuses_other_linux_users_tagged_location(self):
+        NM=MagicMock();connection=NM.Client.new.return_value.get_connections.return_value=[MagicMock()]
+        connection=connection[0];connection.get_id.return_value="IsoldeVPN/1/"+vpn.PROFILE+"/surfshark/CA — Canada"
+        connection.get_setting_by_name.return_value=None;connection.get_connection_type.return_value="wireguard"
+        connection.get_setting_connection.return_value.get_property.return_value=["user:someone-else:"]
+        with patch.object(vpn,"OWNER_USER","isolde-dev"),patch.object(vpn,"nm_bindings",return_value=(NM,None,None)):
+            self.assertEqual(vpn.managed_connections(),[])
+
+    def test_handoff_failure_keeps_native_source_connected(self):
+        active=[{"uuid":OTHER,"device":"native"}]
+        with patch.object(vpn,"ROOT_COPY",True),patch.object(vpn,"managed_connections",return_value=[{"uuid":UUID}]), \
+             patch.object(vpn,"active_connections",return_value=active),patch.object(vpn,"vpn_device",return_value="native"), \
+             patch.object(vpn,"verify_location",side_effect=RuntimeError("wrong route")),patch.object(vpn.signal,"signal"),patch.object(vpn,"command") as run:
+            with self.assertRaisesRegex(RuntimeError,"wrong route"):vpn.handoff_location(UUID,OTHER,"CA")
+        self.assertFalse(any("down" in c.args and OTHER in c.args for c in run.call_args_list))
+        self.assertEqual(run.call_args_list[-1].args,("nmcli","--wait","10","connection","down","uuid",UUID))
+
+    def test_handoff_proves_bound_tunnel_then_global_route(self):
+        with patch.object(vpn,"ROOT_COPY",True),patch.object(vpn,"managed_connections",return_value=[{"uuid":UUID}]), \
+             patch.object(vpn,"active_connections",return_value=[{"uuid":OTHER,"device":"native"}]), \
+             patch.object(vpn,"vpn_device",return_value="native"),patch.object(vpn,"command"), \
+             patch.object(vpn,"verify_location",side_effect=[{"country":"CA"},{"country":"CA"}]) as verify:
+            self.assertEqual(vpn.handoff_location(UUID,OTHER,"CA"),{"country":"CA"})
+        self.assertEqual([c.args for c in verify.call_args_list],[(UUID,"CA",OTHER),(UUID,"CA")])
+
+    def test_capture_preflight_route_is_bound_to_new_interface(self):
+        with patch.object(vpn,"vpn_device",return_value="ivpn1234567890"), \
+             patch.object(vpn,"observed_country",return_value="CA"), \
+             patch.object(vpn,"command",return_value='[{"dev":"ivpn1234567890"}]') as run:
+            vpn.verify_location(UUID,"CA",OTHER)
+        self.assertTrue(all(c.args[-2:]==("oif","ivpn1234567890") for c in run.call_args_list))
+
+    def test_native_packet_mark_requires_unambiguous_nonconflicting_rules(self):
+        NM=MagicMock();connection=MagicMock();connection.get_uuid.return_value=UUID
+        connection.get_setting_by_name.return_value.get_property.return_value=300000
+        rules=[{"priority":0,"table":"local"},{"priority":30901,"table":"300000","fwmark":"0x493e0","not":None}]
+        with patch.object(vpn,"nm_bindings",return_value=(NM,None,None)),patch.object(vpn,"command",return_value=json.dumps(rules)):
+            vpn.preserve_transport_routing(connection)
+        self.assertEqual(NM.IPRoutingRule.new.call_count,4)
+        for setting in (connection.get_setting_ip4_config(),connection.get_setting_ip6_config()):
+            self.assertEqual(setting.add_routing_rule.call_count,2)
+        for invalid in ([],rules+[{'priority':30898,'table':'main'}],rules+[rules[-1]]):
+            with patch.object(vpn,"nm_bindings",return_value=(NM,None,None)),patch.object(vpn,"command",return_value=json.dumps(invalid)):
+                with self.assertRaises(ValueError):vpn.preserve_transport_routing(connection)
+
     def test_disappeared_requester_stops_privileged_work_but_allows_rollback(self):
         with patch.object(vpn, "ROOT_COPY", True), patch.object(vpn, "ROOT_ABORTED", False), \
              patch.object(vpn, "OWNER_PROCESS", (123,"456",1000)), patch.object(vpn.Path, "stat", side_effect=FileNotFoundError):
@@ -285,7 +345,10 @@ class VpnSetupTests(unittest.TestCase):
 
     def test_kernel_transport_snapshot_is_selected_private_and_removed(self):
         NM = MagicMock();connection = MagicMock()
-        connection.get_setting_by_name.return_value = None
+        # Stored settings can look complete while daemon-adjusted kernel
+        # transport differs. They must never bypass the selected snapshot.
+        connection.get_setting_by_name.return_value.get_peers_len.return_value = 2
+        connection.get_setting_by_name.return_value.get_private_key.return_value = "stored-key"
         connection.get_setting_ip4_config.return_value.get_num_dns.return_value = 0
         dump = "A"*43+"=\t"+"B"*43+"=\t51820\t0\n"+"B"*43+"=\t(none)\t192.0.2.10:51820\t0.0.0.0/0\t1\t2\t3\t25\n"
         dump += "C"*43+"=\t(none)\t(none)\t(none)\t0\t0\t0\toff\n"
@@ -293,12 +356,13 @@ class VpnSetupTests(unittest.TestCase):
         def imported(name):
             path = Path(name);paths.append(path)
             self.assertIn("DNS=10.2.0.1",path.read_text())
+            self.assertIn("MTU=1280",path.read_text())
             self.assertEqual(path.read_text().count("[Peer]"),2)
             self.assertIn("PersistentKeepalive=0",path.read_text())
             if vpn.os.name=="posix":self.assertEqual(path.stat().st_mode & 0o777,0o600)
             return "imported-connection"
         NM.conn_wireguard_import.side_effect = imported
-        addresses = json.dumps([{"addr_info":[{"family":"inet","scope":"global","local":"10.2.0.2","prefixlen":32}]}])
+        addresses = json.dumps([{"mtu":1280,"addr_info":[{"family":"inet","scope":"global","local":"10.2.0.2","prefixlen":32}]}])
         with patch.object(vpn,"ROOT_COPY",True), patch.object(vpn,"nm_bindings",return_value=(NM,None,None)), \
              patch.object(vpn,"command",side_effect=[dump,addresses,"Link 7 (provider): 10.2.0.1"]) as execute:
             self.assertEqual(vpn.transport_configuration(connection,"provider"),"imported-connection")
@@ -321,6 +385,8 @@ class VpnSetupTests(unittest.TestCase):
             private = base64.b64encode(bytes([1]) * 32).decode()
             public = base64.b64encode(bytes([2]) * 32).decode()
             data = CONFIG.replace("A" * 43 + "=", private).replace("B" * 43 + "=", public)
+            preshared = base64.b64encode(bytes([4])*32).decode()
+            data = data.replace("[Peer]\n","[Peer]\nPresharedKey="+preshared+"\n",1)
             second = base64.b64encode(bytes([3]) * 32).decode()
             data += "\n[Peer]\nPublicKey="+second+"\nAllowedIPs=10.2.0.1/32\nEndpoint=192.0.2.20:51820\n"
             with tempfile.TemporaryDirectory() as directory:
@@ -338,10 +404,22 @@ class VpnSetupTests(unittest.TestCase):
                 self.assertEqual(prepared.get_setting_by_name("user").get_data("org.isolde.profile"), vpn.PROFILE)
                 serialized = prepared.to_dbus(NM.ConnectionSerializationFlags.ALL).unpack()
                 self.assertEqual(serialized["user"]["data"]["org.isolde.profile"],vpn.PROFILE)
+                self.assertEqual(serialized["wireguard"]["private-key"],private)
                 self.assertGreater(prepared.get_setting_ip6_config().get_num_addresses(), 0)
                 peers = prepared.get_setting_by_name("wireguard")
                 self.assertEqual(peers.get_peers_len(),2)
+                self.assertEqual(peers.get_peer(0).get_preshared_key_flags(),NM.SettingSecretFlags.NONE)
+                self.assertEqual(peers.get_peer(1).get_preshared_key_flags(),NM.SettingSecretFlags.NOT_REQUIRED)
                 self.assertEqual(peers.get_peer(1).get_allowed_ip(0,None),"10.2.0.1/32")
+                peers.set_property("fwmark",300000)
+                rules=json.dumps([{"priority":30901,"table":"300000","fwmark":"0x493e0","not":None}])
+                with patch.object(vpn,"command",return_value=rules):vpn.preserve_transport_routing(prepared)
+                self.assertTrue(prepared.verify())
+                for setting in (prepared.get_setting_ip4_config(),prepared.get_setting_ip6_config()):
+                    self.assertEqual(setting.get_num_routing_rules(),2)
+                    self.assertEqual(setting.get_routing_rule(1).get_fwmark(),300000)
+                    self.assertTrue(setting.get_routing_rule(1).get_invert())
+                    self.assertNotEqual(setting.get_route_table(),300000)
 
 
 if __name__ == "__main__": unittest.main()
