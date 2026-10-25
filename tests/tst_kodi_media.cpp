@@ -156,6 +156,10 @@ static void serve(QLocalServer &server, int version)
                 else if (request.value("method") == "Isolde.GetPlaylists") {
                     result=QJsonObject{{"playlists",QJsonArray{QJsonObject{{"playlistid",1},{"title","Family films"},{"playlistName","Family films.xsp"}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
                 }
+                else if (request.value("method") == "Isolde.CreatePlaylist") {
+                    const auto params=request.value("params").toObject();server.setProperty("savedPlaylist",params.toVariantMap());
+                    result=QJsonObject{{"saved",!server.property("rejectPlaylist").toBool()},{"name",params["name"]},{"kind",params["kind"]},{"playlistName","Isolde-12345678.xsp"}};
+                }
                 else if (request.value("method") == "Isolde.GetPlaylistItems") {
                     server.setProperty("playlistParams",request.value("params").toObject().toVariantMap());
                     const auto params=request.value("params").toObject();const int start=params["start"].toInt();
@@ -225,6 +229,14 @@ void KodiMediaTests::savedKodiPlaylistCatalogAndShelf()
     shelf.nextPage();QTRY_COMPARE(shelf.pageStart(),50);QCOMPARE(shelf.items()[0].toMap()["mediaId"].toInt(),91);
     const auto before=shelf.items();shelf.openView("movies","playlist","../secret.xsp");QCOMPARE(shelf.items(),before);
     shelf.refresh();QTRY_VERIFY(!shelf.busy());QCOMPARE(shelf.viewKind(),QString("playlist"));
+    shelf.openView("movies","genre","Adventure");QTRY_VERIFY(!shelf.busy());
+    const auto library=shelf.items();QSignalSpy saved(&shelf,&KodiMedia::playlistSaved);
+    shelf.savePlaylist("Family & friends");QTRY_COMPARE(saved.size(),1);
+    QCOMPARE(server.property("savedPlaylist").toMap()["view"].toString(),QString("genre"));
+    QCOMPARE(server.property("savedPlaylist").toMap()["value"].toString(),QString("Adventure"));
+    QCOMPARE(shelf.items(),library);QVERIFY(shelf.playlistStatus().contains("saved"));
+    server.setProperty("rejectPlaylist",true);shelf.savePlaylist("Refused");QTRY_VERIFY(!shelf.busy());
+    QCOMPARE(saved.size(),1);QCOMPARE(shelf.items(),library);QVERIFY(shelf.playlistStatus().contains("invalid"));
     catalog.invalidate("Profile closed");QVERIFY(catalog.items().isEmpty());
 }
 void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()

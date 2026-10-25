@@ -4,6 +4,7 @@ Rectangle {
     id: root
     objectName: "kodiLibrary"
     property var appearance: ({})
+    property var provider: null
     readonly property real textScale: appearance.typographyScale || 1
     color: root.appearance.backgroundEnd || "#101014"
     property bool open: false
@@ -17,7 +18,8 @@ Rectangle {
     readonly property var toolbar: {
         let rows = [{ label: "Movies", action: "movies" }, { label: "Shows", action: "shows" }]
         if (kodiMedia.mediaKind !== "seasons") rows = rows.concat([{ label: "Recently Added", action: "recent" }, { label: "Continue Watching", action: "continue" }, { label: "Search", action: "search" }])
-        if (kodiMedia.mediaKind === "movies" || kodiMedia.mediaKind === "shows") rows = rows.concat([{ label: "Collections", action: "collections" }, { label: "Save view", action: "save" }])
+        if (kodiMedia.mediaKind === "movies" || kodiMedia.mediaKind === "shows") rows = rows.concat([{ label: "Collections", action: "collections" }, { label: "Save playlist", action: "save" }])
+        if(kodiMedia.mediaKind==="movies" || kodiMedia.mediaKind==="shows")rows.push({label:"Playlists",action:"playlists"})
         return rows.concat([{ label: "Refresh", action: "refresh" }])
     }
     onToolbarChanged: toolbarIndex = Math.min(toolbarIndex, toolbar.length - 1)
@@ -28,7 +30,7 @@ Rectangle {
         if (row.action === "movies" || row.action === "shows") kodiMedia.openLibrary(row.action)
         else if (row.action === "recent" || row.action === "continue") kodiMedia.setView(row.action)
         else if (row.action === "search") searchRequested()
-        else if (row.action === "collections" || row.action === "save") browseControls.begin(row.action)
+        else if (row.action === "collections" || row.action === "save" || row.action === "playlists") browseControls.begin(row.action==="save"?"savePlaylist":row.action)
         else kodiMedia.refresh()
     }
     function subtitle(item) {
@@ -154,5 +156,5 @@ Rectangle {
         MouseArea { anchors.right: parent.right; anchors.top: parent.top; width: 90; height: 45; onClicked: root.details = null
             Text { anchors.centerIn: parent; text: "Back"; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 20 * root.textScale } }
     }
-    LibraryBrowseControls { id: browseControls; anchors.fill: parent; anchors.margins: 35; z: 10 }
+    LibraryBrowseControls { id: browseControls; provider:root.provider;appearance:root.appearance;anchors.fill: parent; anchors.margins: 35; z: 10 }
 }

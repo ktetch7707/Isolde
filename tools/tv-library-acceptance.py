@@ -186,7 +186,14 @@ if ''' + repr(str(imported)) + ''' in selected:
             if process.poll() is not None: raise RuntimeError("Shell exited; " + str(evidence))
             time.sleep(0.2)
         raise RuntimeError(label + " timed out; " + str(evidence))
-    def windows(): return [line.split(None, 4) for line in run("wmctrl", "-lp", env=env).splitlines()]
+    def windows():
+        result = subprocess.run(["wmctrl", "-lp"], env=env, text=True, capture_output=True, timeout=5)
+        # XWayland may exist before the compositor publishes its client list.
+        # Retain diagnostics and let the existing bounded ready-wait observe it.
+        if result.returncode:
+            (evidence/"window-discovery.json").write_text(json.dumps({"exit":result.returncode,"error":result.stderr[:2048]}))
+            return []
+        return [line.split(None, 4) for line in result.stdout.splitlines() if len(line.split(None, 4)) >= 5]
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
     try:
@@ -211,15 +218,39 @@ if ''' + repr(str(imported)) + ''' in selected:
             eps = rpc(directory, "VideoLibrary.GetEpisodes", {"tvshowid": show_id, "properties": ["season", "episode", "resume"]})["episodes"]
             assert len(eps) == 3
             if args.playlists:
+                def playlist_capture(phase):
+                    print(phase.upper()+"_READY "+str(evidence),flush=True)
+                    wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" captured",seconds=110)
+                def press(name,count=1):
+                    for _ in range(count):key(shell,name,0.05)
+                    time.sleep(.3)
+                run("wmctrl","-i","-a",shell,env=env)
+                press("Up");press("Left",20);press("Right",8);press("Return");time.sleep(1)
+                press("Up");press("Left",20);press("Right",6);press("Return")
+                playlist_capture("playlistname")
+                press("Escape")
+                assert not list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Cancel must not create a playlist"
+                press("Return");press("Return") # Type '1' using the actual remote keyboard.
+                press("Right",80);press("Return") # Bounded movement to Done.
+                created=wait(lambda:list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Playlist saved from Isolde UI")
+                assert len(created)==1
+                import xml.etree.ElementTree as ET
+                definition=ET.fromstring(created[0].read_bytes())
+                assert definition.attrib["type"]=="tvshows" and definition.findtext("name")=="1"
+                playlist_capture("playlistsaved")
+                press("Escape");press("Right");press("Return");time.sleep(1)
+                playlist_capture("playlistcatalog")
                 catalog=rpc(directory,"Isolde.GetPlaylists")["playlists"]
                 assert any(p["playlistName"]=="Fixture episodes.xsp" for p in catalog)
+                created_index=next(i for i,p in enumerate(catalog) if p["playlistName"]==created[0].name)
+                press("Down",created_index+2);press("Return");time.sleep(1)
+                playlist_capture("playlistlibrary")
+                saved_items=rpc(directory,"Isolde.GetPlaylistItems",{"name":created[0].name,"kind":"shows","start":0,"end":50})["tvshows"]
+                assert {i["tvshowid"] for i in saved_items}=={show_id}
                 result=rpc(directory,"Isolde.GetPlaylistItems",{"name":"Fixture episodes.xsp","kind":"shows","start":0,"end":50})
                 items=result["tvshows"]
                 assert len(items)==3 and {i["episodeid"] for i in items}=={i["episodeid"] for i in eps}
                 assert all(i["playlistMediaType"]=="episode" and "file" not in i for i in items)
-                def playlist_capture(phase):
-                    print(phase.upper()+"_READY "+str(evidence),flush=True)
-                    wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" captured",seconds=110)
                 rpc(directory,"Isolde.PlayEpisode",{"episodeid":items[0]["episodeid"],"resume":False})
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Real playlist episode playing")
                 playlist_capture("playlistplaying")
@@ -231,7 +262,7 @@ if ''' + repr(str(imported)) + ''' in selected:
                 run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
                 playlist_capture("playlistreturned")
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
-                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False},indent=2))
+                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False},indent=2))
                 print("Evidence: "+str(evidence),flush=True);return
             art = wait(lambda: (a if (a := rpc(directory, "Isolde.GetArtwork", {"kind": "tvshow", "id": show_id})).get("data") else None), "Kodi local artwork ready")
             artwork = base64.b64decode(art["data"])

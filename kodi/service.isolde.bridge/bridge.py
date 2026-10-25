@@ -79,7 +79,7 @@ MOVIE_DETAIL_PROPERTIES = {"title", "year", "plot", "runtime", "resume", "playco
 TVSHOW_DETAIL_PROPERTIES = {"title", "year", "plot", "episode", "watchedepisodes", "art", "genre", "tag"}
 
 
-def dispatch(raw, execute, playback=None, artwork=None):
+def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
     try:
         request = json.loads(raw)
     except (ValueError, UnicodeDecodeError):
@@ -90,11 +90,17 @@ def dispatch(raw, execute, playback=None, artwork=None):
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0" or type(request_id) is not int:
         return error(-32600, "Invalid request")
     playback_methods = {"Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
-    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
+    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
     if not isinstance(params, dict):
         return error(-32602, "Parameters must be an object")
+    if request["method"]=="Isolde.CreatePlaylist":
+        try:
+            if playlists is None:raise ValueError("Managed playlists unavailable")
+            return {"jsonrpc":"2.0","id":request_id,"result":playlists.create(params)}
+        except Exception:
+            return error(-32000,"Could not save this Kodi playlist. Check the name, view and profile storage; previous playlists are unchanged.")
     if request["method"] in ("Isolde.GetPlaylists", "Isolde.GetPlaylistItems"):
         try:
             return {"jsonrpc":"2.0","id":request_id,"result":read_playlist(request["method"],params,execute)}
@@ -221,11 +227,12 @@ def dispatch(raw, execute, playback=None, artwork=None):
 
 
 class LocalBridge:
-    def __init__(self, directory, execute, playback=None, artwork=None):
+    def __init__(self, directory, execute, playback=None, artwork=None, playlists=None):
         self.directory = Path(directory)
         self.execute = execute
         self.playback = playback
         self.artwork = artwork
+        self.playlists = playlists
         self.listener = None
         self.socket_path = self.directory / "rpc.sock"
         self.identity = None
@@ -276,7 +283,7 @@ class LocalBridge:
                     raw += part
                 if len(raw) > MAX_REQUEST or not raw.endswith(b"\n"):
                     return
-                response = json.dumps(dispatch(raw, self.execute, self.playback, self.artwork)).encode() + b"\n"
+                response = json.dumps(dispatch(raw, self.execute, self.playback, self.artwork, self.playlists)).encode() + b"\n"
                 if len(response) <= MAX_RESPONSE:
                     client.sendall(response)
             except (OSError, ValueError):

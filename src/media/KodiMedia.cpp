@@ -46,6 +46,7 @@ void KodiMedia::releaseSocket()
 }
 void KodiMedia::fail(const QString &message)
 {
+    if(m_stage==9 && m_busy)m_playlistStatus="Playlist save could not be confirmed. Refresh the saved-playlist list before retrying. "+message;
     m_pendingMovie = m_pendingShow = 0;
     m_pendingDirectKind.clear(); m_pendingDirectId = 0;
     const bool wasPlaying = m_playbackActive;
@@ -152,6 +153,13 @@ void KodiMedia::openPlaylists() {
     if(!canNavigate())return;
     m_history.clear();m_pendingMovie=0;m_pendingDirectKind.clear();m_pendingDirectId=0;
     restoreBrowse({"playlists","all",{},{},-1,-1,0,0});
+}
+void KodiMedia::savePlaylist(const QString &name) {
+    if(m_busy || m_playbackActive || !QStringList{"movies","shows"}.contains(m_mediaKind)
+       || !QStringList{"all","recent","continue","watched","search","tag","genre"}.contains(m_viewKind)
+       || name.trimmed().isEmpty() || name.trimmed().size()>80){m_playlistStatus="Choose a movie/show library view and a playlist name of 1–80 characters, then retry.";emit changed();return;}
+    ++m_generation;m_busy=true;m_stage=9;m_playlistStatus="Saving playlist in this Kodi profile…";emit changed();
+    request("Isolde.CreatePlaylist",{{"name",name.trimmed()},{"kind",m_mediaKind},{"view",m_viewKind},{"value",m_viewValue}});
 }
 void KodiMedia::openView(const QString &kind,const QString &view,const QString &value) {
     if(!canNavigate() || !QStringList{"movies","shows","episodes","history","albums","channels"}.contains(kind) || !QStringList{"all","recent","watched","continue","search","tag","genre","playlist"}.contains(view)
@@ -659,6 +667,7 @@ void KodiMedia::consume()
         fail(m_mediaKind=="channels"?"TV guide unavailable. Configure a PVR TV source in Kodi, then refresh.":"Kodi returned an incompatible response."); return;
     }
     if (response.contains("error")) {
+        if(m_stage==9){m_busy=false;m_timeout.stop();releaseSocket();m_playlistStatus="Could not save this Kodi playlist. Previous playlists are unchanged. Check storage and retry.";emit changed();return;}
         if(m_mediaKind=="playlists" || m_viewKind=="playlist"){
             fail("Kodi video playlist unavailable. Refresh to retry; choose a library playlist of the selected kind. Catalog limit: 128 saved playlists.");return;
         }
@@ -678,6 +687,13 @@ void KodiMedia::consume()
     const auto result = response.value("result").toObject();
     // Finish this reply before initiating a new connection (no reentrant socket reads).
     m_timeout.stop();
+    if(m_stage==9){
+        m_busy=false;releaseSocket();const auto filename=result["playlistName"].toString();
+        if(!result["saved"].toBool() || !validPlaylistName(filename) || !filename.startsWith("Isolde-")){
+            m_playlistStatus="Kodi returned an invalid playlist-save acknowledgement. Refresh the playlist list before retrying.";emit changed();return;
+        }
+        m_playlistStatus="Playlist saved in Kodi · "+result["name"].toString();emit changed();emit playlistSaved(filename);return;
+    }
     if (m_stage == 5 || m_stage == 6 || m_stage == 7) {
         const auto state = result.value("state").toString();
         if (!QStringList{"starting", "playing", "paused", "ended", "failed", "replaced", "idle"}.contains(state)

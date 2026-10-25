@@ -6,6 +6,8 @@ import socket
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
+import xml.etree.ElementTree as ET
 
 spec = importlib.util.spec_from_file_location("bridge", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/bridge.py")
 bridge = importlib.util.module_from_spec(spec)
@@ -13,6 +15,39 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    @unittest.skipUnless(os.name=="posix","Kodi playlist writes run inside the Linux guest")
+    def test_create_playlist_is_kodi_owned_atomic_and_profile_bounded(self):
+        module_spec=importlib.util.spec_from_file_location("isolde_playlists",Path(__file__).resolve().parents[1]/"kodi/service.isolde.bridge/playlists.py")
+        module=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            profile=Path(directory)/"profile";profile.mkdir()
+            store=module.Playlists(profile,True)
+            params={"name":"Family & friends","kind":"movies","view":"genre","value":"Adventure"}
+            result=store.create(params);folder=profile/"playlists/video";saved=folder/result["playlistName"]
+            self.assertTrue(saved.is_file());self.assertEqual(saved.stat().st_mode & 0o777,0o600)
+            xml=ET.fromstring(saved.read_bytes());self.assertEqual(xml.attrib["type"],"movies")
+            self.assertEqual(xml.findtext("name"),"Family & friends");self.assertEqual(xml.find("rule").attrib,{"field":"genre","operator":"is"})
+            self.assertEqual(xml.findtext("rule/value"),"Adventure")
+            before={p.name:p.read_bytes() for p in folder.iterdir()}
+            real_fsync=module.os.fsync;count=0
+            def fail_publication(descriptor):
+                nonlocal count
+                count+=1
+                if count==2:raise OSError("Injected directory fsync failure")
+                return real_fsync(descriptor)
+            with patch.object(module.os,"fsync",side_effect=fail_publication):
+                with self.assertRaises(OSError):store.create(dict(params,name="Should roll back"))
+            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
+            for invalid in (dict(params,name=""),dict(params,view="shell"),dict(params,value="x\x00y"),dict(params,directory="/private")):
+                with self.assertRaises(ValueError):store.create(invalid)
+            with self.assertRaises(ValueError):module.Playlists(profile,False).create(params)
+            other=Path(directory)/"other";other.mkdir();linked=Path(directory)/"linked";linked.symlink_to(other,target_is_directory=True)
+            with self.assertRaises(OSError):module.Playlists(linked,True).create(params)
+            self.assertEqual(list(other.iterdir()),[])
+            reply=bridge.dispatch(self.request("Isolde.CreatePlaylist",params),lambda _:self.fail("No generic RPC for playlist write"),playlists=store)
+            self.assertTrue(reply["result"]["saved"])
+            self.assertIn("error",bridge.dispatch(self.request("Isolde.CreatePlaylist",params),lambda _:None))
+
     def test_saved_playlist_catalog_and_members_are_read_only_and_bounded(self):
         calls=[]
         def execute(raw):

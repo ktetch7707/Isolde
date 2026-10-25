@@ -26,6 +26,7 @@ class KodiMedia final : public QObject {
     Q_PROPERTY(QString viewValue READ viewValue NOTIFY changed)
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
     Q_PROPERTY(QString collectionStatus READ collectionStatus NOTIFY changed)
+    Q_PROPERTY(QString playlistStatus READ playlistStatus NOTIFY changed)
 public:
     explicit KodiMedia(const QString &profile, QObject *parent = nullptr, const QString &testDirectory = {});
     ~KodiMedia() override;
@@ -38,6 +39,8 @@ public:
     bool canGoBack() const { return !m_history.isEmpty(); }
     Q_INVOKABLE void selectIndex(int index);
     Q_INVOKABLE void openLibrary(const QString &kind);
+    Q_INVOKABLE void savePlaylist(const QString &name);
+    QString playlistStatus() const { return m_playlistStatus; }
     void openPlaylists();
     static bool validPlaylistName(const QString &name);
     Q_INVOKABLE void openView(const QString &kind, const QString &view, const QString &value = {});
@@ -88,6 +91,7 @@ signals:
     void quitReply(bool accepted);
     void playbackStarted();
     void playbackReturned(bool home);
+    void playlistSaved(const QString &filename);
 private:
     void request(const QString &method, const QJsonObject &params = {});
     void consume();
@@ -104,6 +108,7 @@ private:
     void restoreBrowse(const BrowseState &state);
     bool storeCollections(const QVariantList &entries);
     QString m_profile, m_viewKind = "all", m_viewValue, m_collectionStatus;
+    QString m_playlistStatus;
     QString m_directory, m_status = "Open Kodi with the Isolde bridge enabled to browse this profile's library.";
     QLocalSocket m_socket;
     QTimer m_timeout;

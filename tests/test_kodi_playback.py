@@ -37,7 +37,8 @@ class PlaybackTests(unittest.TestCase):
             executebuiltin=lambda _: None, log=lambda *args: None, LOGINFO=1, LOGWARNING=2, LOGERROR=3)
         modules = {"xbmc": fake, "xbmcvfs": types.SimpleNamespace(translatePath=lambda p: p),
                    "bridge": types.SimpleNamespace(LocalBridge=Bridge), "playback": types.SimpleNamespace(Playback=Player),
-                   "artwork": types.SimpleNamespace(Artwork=lambda *args: None)}
+                   "artwork": types.SimpleNamespace(Artwork=lambda *args: None),
+                   "playlists": types.SimpleNamespace(Playlists=lambda *args: None)}
         with patch.dict(sys.modules, modules):
             runpy.run_path(str(Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/service.py"))
         self.assertEqual(events, ["pause", "pump", "closed"])

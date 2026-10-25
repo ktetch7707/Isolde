@@ -753,6 +753,10 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
                 const auto method = request["method"].toString();
                 QJsonObject result;
                 if (method == "JSONRPC.Version") result = {{"version", QJsonObject{{"major", 13}}}};
+                else if (method == "Isolde.CreatePlaylist") {
+                    const auto params=request["params"].toObject();server.setProperty("savedPlaylist",params.toVariantMap());
+                    result={{"saved",true},{"name",params["name"]},{"kind",params["kind"]},{"playlistName","Isolde-ui-fixture.xsp"}};
+                }
                 else if (method == "Isolde.GetArtwork") result = {{"mime", ""}, {"data", ""}};
                 else if (method.startsWith("Isolde.Play")) {
                     const auto state = method == "Isolde.PlaybackControl" ? "ended" : "playing";
@@ -800,6 +804,15 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QVERIFY(command(InputManager::Back)); // details close
     QVERIFY(command(InputManager::Back)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("seasons"));
     QVERIFY(command(InputManager::Back)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("shows"));
+    media.selectIndex(-1);root->setProperty("toolbarIndex",6);QVERIFY(command(InputManager::Confirm));
+    auto *playlistKeyboard=root->findChild<QObject *>("libraryPlaylistKeyboard");QVERIFY(playlistKeyboard);QVERIFY(playlistKeyboard->property("visible").toBool());
+    QVERIFY(command(InputManager::Back));QVERIFY(!server.property("savedPlaylist").isValid());
+    QVERIFY(command(InputManager::Confirm));const auto beforeSave=media.items();
+    QVERIFY(QMetaObject::invokeMethod(playlistKeyboard,"accepted",Q_ARG(QString,QString("Shows I like"))));
+    QTRY_VERIFY(!media.busy());QCOMPARE(server.property("savedPlaylist").toMap()["name"].toString(),QString("Shows I like"));
+    QCOMPARE(media.items(),beforeSave);QVERIFY(media.playlistStatus().contains("saved"));
+    auto *playlistControls=root->findChild<QObject *>("libraryBrowseControls");QVERIFY(playlistControls);QCOMPARE(playlistControls->property("mode").toString(),QString("playlistSaveState"));
+    QVERIFY(command(InputManager::Back));QCOMPARE(playlistControls->property("mode").toString(),QString());root->setProperty("toolbarIndex",0);
     QVERIFY(command(InputManager::NavigateUp)); QCOMPARE(media.selectedIndex(), -1);
     QVERIFY(command(InputManager::NavigateRight)); QVERIFY(command(InputManager::NavigateRight));
     QVERIFY(command(InputManager::Confirm)); QTRY_VERIFY(!media.busy());

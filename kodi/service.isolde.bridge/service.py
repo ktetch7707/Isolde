@@ -6,6 +6,7 @@ import time
 from bridge import LocalBridge
 from playback import Playback
 from artwork import Artwork
+from playlists import Playlists
 
 commands = queue.SimpleQueue()
 class Monitor(xbmc.Monitor):
@@ -18,7 +19,8 @@ class Monitor(xbmc.Monitor):
 monitor = Monitor()
 playback = Playback(xbmc.executeJSONRPC, xbmc.executebuiltin, os.environ.get("ISOLDE_MANAGED_KODI") == "1")
 bridge = LocalBridge(xbmcvfs.translatePath("special://profile/isolde"), xbmc.executeJSONRPC, playback,
-                     Artwork(xbmc.executeJSONRPC, xbmcvfs.translatePath("special://profile/Thumbnails")))
+                     Artwork(xbmc.executeJSONRPC, xbmcvfs.translatePath("special://profile/Thumbnails")),
+                     Playlists(xbmcvfs.translatePath("special://profile/"),playback.managed))
 try:
     bridge.start()
     if os.environ.get("ISOLDE_MANAGED_KODI") == "1":

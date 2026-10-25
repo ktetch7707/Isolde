@@ -259,7 +259,7 @@ install(FILES config/studio-defaults.json DESTINATION bin/config)
 install(DIRECTORY config/packages DESTINATION bin/config)
 install(DIRECTORY config/skins DESTINATION bin/config)
 install(DIRECTORY kodi/service.isolde.bridge DESTINATION share/isolde/kodi PATTERN "__pycache__" EXCLUDE)
-foreach(bridge_file addon.xml bridge.py service.py playback.py artwork.py)
+foreach(bridge_file addon.xml bridge.py service.py playback.py artwork.py playlists.py)
     configure_file(kodi/service.isolde.bridge/${bridge_file} ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/kodi/service.isolde.bridge/${bridge_file} COPYONLY)
 endforeach()
 

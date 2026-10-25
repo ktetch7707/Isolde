@@ -63,7 +63,7 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
 
 def visual_result_passed(case, result):
     if case == "playlists":
-        return (all(result.get(key) is True for key in ("passed","real_kodi_saved_playlist","play_pause_stop","media_unchanged"))
+        return (all(result.get(key) is True for key in ("passed","real_kodi_saved_playlist","playlist_creation_ui_verified","playlist_cancel_no_write","play_pause_stop","media_unchanged"))
                 and result.get("normal_profile_used") is False and result.get("picker_ui_verified") is False and result.get("episodes")==3)
     if case == "shell":
         return (result.get("passed") is True and result.get("reviewSequenceCaptured")==["shellnavigation","shellgallery","shellstore","shellreturn","shellambient","shellwake"]

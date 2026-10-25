@@ -380,7 +380,7 @@ Window {
         }
     }
 
-    KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; appearance: homeLayout.appearance }
+    KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; provider:pageData;appearance: homeLayout.homeAppearance }
     CommandCenter {
         id: commandCenter
         x: window.safeAreaPixels
