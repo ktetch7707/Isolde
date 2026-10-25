@@ -21,6 +21,7 @@ private slots:
     void frontendPreferenceRoundTrip();
     void mediaFolderPermissions();
     void readsLibraryThroughTwoRequests();
+    void savedKodiPlaylistCatalogAndShelf();
     void recentlyViewedMergesKodiHistoryAndStaysBounded();
     void musicAlbumsTracksAndKodiPlayback();
     void tvGuideReadsChannelsAndKeepsUnavailableStateHonest();
@@ -152,6 +153,14 @@ static void serve(QLocalServer &server, int version)
                     server.setProperty("playRequests", server.property("playRequests").toInt() + 1);
                     result = QJsonObject{{"state", server.property("playState").toString()}, {"home", server.property("playHome").toBool()}};
                 }
+                else if (request.value("method") == "Isolde.GetPlaylists") {
+                    result=QJsonObject{{"playlists",QJsonArray{QJsonObject{{"playlistid",1},{"title","Family films"},{"playlistName","Family films.xsp"}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+                }
+                else if (request.value("method") == "Isolde.GetPlaylistItems") {
+                    server.setProperty("playlistParams",request.value("params").toObject().toVariantMap());
+                    const auto params=request.value("params").toObject();const int start=params["start"].toInt();
+                    result=QJsonObject{{"movies",QJsonArray{QJsonObject{{"movieid",start+41},{"title","Local film"},{"playlistMediaType","movie"}}}},{"limits",QJsonObject{{"start",start},{"end",start+1},{"total",51}}}};
+                }
                 else if (request.value("method") == "VideoLibrary.Scan") {
                     result = server.property("rejectScan").toBool() ? "rejected" : "OK";
                     server.setProperty("scanRequests", server.property("scanRequests").toInt() + 1);
@@ -204,6 +213,19 @@ static void serve(QLocalServer &server, int version)
             });
         }
     });
+}
+void KodiMediaTests::savedKodiPlaylistCatalogAndShelf()
+{
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server,13);
+    KodiMedia catalog("playlist-profile",nullptr,dir.path());catalog.openPlaylists();QTRY_VERIFY(catalog.connected());
+    QCOMPARE(catalog.items().size(),1);QCOMPARE(catalog.items()[0].toMap()["playlistName"].toString(),QString("Family films.xsp"));
+    KodiMedia shelf("playlist-profile",nullptr,dir.path());shelf.openView("movies","playlist","Family films.xsp");QTRY_VERIFY(shelf.connected());
+    QCOMPARE(shelf.items()[0].toMap()["mediaType"].toString(),QString("movie"));QCOMPARE(shelf.items()[0].toMap()["mediaId"].toInt(),41);
+    QCOMPARE(server.property("playlistParams").toMap()["name"].toString(),QString("Family films.xsp"));
+    shelf.nextPage();QTRY_COMPARE(shelf.pageStart(),50);QCOMPARE(shelf.items()[0].toMap()["mediaId"].toInt(),91);
+    const auto before=shelf.items();shelf.openView("movies","playlist","../secret.xsp");QCOMPARE(shelf.items(),before);
+    shelf.refresh();QTRY_VERIFY(!shelf.busy());QCOMPARE(shelf.viewKind(),QString("playlist"));
+    catalog.invalidate("Profile closed");QVERIFY(catalog.items().isEmpty());
 }
 void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
 {

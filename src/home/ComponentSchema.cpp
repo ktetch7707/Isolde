@@ -140,7 +140,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
             if (key == "libraryKind" && !QStringList{"movies","shows","history","albums","channels"}.contains(it.value().toString())) return false;
-            if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection"}.contains(it.value().toString())) return false;
+            if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection","playlist"}.contains(it.value().toString())) return false;
             if (key == "libraryLayout" && !QStringList{"grid","list","row"}.contains(it.value().toString())) return false;
             if (key == "libraryCardStyle" && !QStringList{"media","recent","orb","source","summary","banner"}.contains(it.value().toString())) return false;
             if (key == "libraryValue" && (it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>160)) return false;
@@ -174,6 +174,11 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if (QStringList{"padding", "radius", "headingSize", "diameter", "labelSize", "iconSize", "cardGap", "artHeight"}.contains(key) && (number < 0 || number > 400)) return false;
             if (key == "contentWidth" && (!section || number < 100 || number > 3840)) return false;
         } else return false;
+    }
+    if(value.value("libraryView")=="playlist" && !value.value("libraryValue").toString().isEmpty()){
+        const auto name=value.value("libraryValue").toString();
+        if(name.size()>128 || name.contains(QRegularExpression("[/\\\\:%\\x00-\\x1f]"))
+           || !(name.endsWith(".xsp",Qt::CaseInsensitive) || name.endsWith(".m3u",Qt::CaseInsensitive) || name.endsWith(".m3u8",Qt::CaseInsensitive)))return false;
     }
     return true;
 }

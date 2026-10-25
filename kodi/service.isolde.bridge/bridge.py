@@ -10,6 +10,61 @@ import socket
 import stat
 import struct
 
+def playlist_name(value):
+    return (isinstance(value, str) and 1 <= len(value) <= 128
+            and value not in (".", "..") and not any(c in value for c in '/\\:%\x00')
+            and not any(ord(c) < 32 for c in value)
+            and value.lower().endswith((".xsp", ".m3u", ".m3u8")))
+
+def read_playlist(method, params, execute):
+    """Read only Kodi's active profile video playlists; never accept a path."""
+    root = "special://profile/playlists/video/"
+    def query(directory, start, end, properties):
+        reply = json.loads(execute(json.dumps({"jsonrpc":"2.0", "id":1, "method":"Files.GetDirectory",
+            "params":{"directory":directory,"media":"video" if properties else "files",
+                      "properties":properties,"limits":{"start":start,"end":end}}})))
+        result = reply.get("result", {})
+        files = result.get("files")
+        limits = result.get("limits", {})
+        if (not isinstance(files,list) or len(files)>50 or limits.get("start")!=start
+            or limits.get("end")!=start+len(files) or type(limits.get("total")) is not int
+            or limits["total"]<start+len(files) or (not files and limits["total"]>start)):
+            raise ValueError("Invalid Kodi playlist response")
+        return files, limits
+    if method == "Isolde.GetPlaylists":
+        if params: raise ValueError("Playlist catalog accepts no parameters")
+        result=[]; start=0
+        for _ in range(3):
+            files, limits=query(root,start,start+50,[])
+            if limits["total"]>128: raise ValueError("Playlist catalog exceeds 128 entries")
+            for item in files:
+                path=item.get("file", "")
+                name=path[len(root):] if isinstance(path,str) and path.startswith(root) else ""
+                if playlist_name(name):
+                    result.append({"title":str(item.get("label") or name)[:160],"playlistName":name,
+                                   "playlistid":len(result)+1})
+            start=limits["end"]
+            if start>=limits["total"]:break
+        return {"playlists":result,"limits":{"start":0,"end":len(result),"total":len(result)}}
+    if (set(params)!={"name","kind","start","end"} or not playlist_name(params.get("name"))
+        or params.get("kind") not in ("movies","shows")
+        or type(params.get("start")) is not int or type(params.get("end")) is not int
+        or not 0<=params["start"]<=10000000 or not 0<params["end"]-params["start"]<=50):
+        raise ValueError("Choose a Kodi video playlist and a page of at most 50 items")
+    fields=["title","year","plot","runtime","resume","playcount","art","season","episode","showtitle","tvshowid"]
+    files,limits=query(root+params["name"],params["start"],params["end"],fields)
+    entries=[]
+    for item in files:
+        kind=item.get("type")
+        if kind not in (("movie",) if params["kind"]=="movies" else ("tvshow","episode")):
+            raise ValueError("Playlist must contain library movies or shows/episodes of the selected kind")
+        identity=item.get("id")
+        if type(identity) is not int or identity<1:raise ValueError("Playlist item has no Kodi library identity")
+        entry={key:value for key,value in item.items() if key in fields}
+        entry.update({kind+"id":identity,"playlistMediaType":kind})
+        entries.append(entry)
+    return {params["kind"] if params["kind"]=="movies" else "tvshows":entries,"limits":limits}
+
 MAX_REQUEST = 32768
 MAX_RESPONSE = 4 * 1024 * 1024
 READ_METHODS = {
@@ -35,11 +90,16 @@ def dispatch(raw, execute, playback=None, artwork=None):
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0" or type(request_id) is not int:
         return error(-32600, "Invalid request")
     playback_methods = {"Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
-    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetArtwork", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
+    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
     if not isinstance(params, dict):
         return error(-32602, "Parameters must be an object")
+    if request["method"] in ("Isolde.GetPlaylists", "Isolde.GetPlaylistItems"):
+        try:
+            return {"jsonrpc":"2.0","id":request_id,"result":read_playlist(request["method"],params,execute)}
+        except Exception:
+            return error(-32000,"Kodi playlist unavailable. Choose a video library playlist of the selected kind, with at most 128 saved playlists; refresh to retry.")
     if request["method"] == "Isolde.GetArtwork":
         try:
             if artwork is None:

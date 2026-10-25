@@ -38,6 +38,8 @@ public:
     bool canGoBack() const { return !m_history.isEmpty(); }
     Q_INVOKABLE void selectIndex(int index);
     Q_INVOKABLE void openLibrary(const QString &kind);
+    void openPlaylists();
+    static bool validPlaylistName(const QString &name);
     Q_INVOKABLE void openView(const QString &kind, const QString &view, const QString &value = {});
     Q_INVOKABLE void openShowResult(const QString &query, int tvShowId, int pageStart = 0);
     Q_INVOKABLE void playMedia(const QString &kind, int id, bool resume = true);

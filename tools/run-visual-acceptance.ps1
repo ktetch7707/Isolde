@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell')][string]$Case = 'pages',
+    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -27,6 +27,8 @@ if ($GuestRunner) {
     $command = "python3 $SourceRoot/tools/home-components-acceptance.py $Executable --studio --inspect$desktopFlag"
 } elseif ($Case -eq 'pages') {
     $command = "python3 $SourceRoot/tools/tv-library-acceptance.py $Executable --pages --inspect"
+} elseif ($Case -eq 'playlists') {
+    $command = "python3 $SourceRoot/tools/tv-library-acceptance.py $Executable --playlists --inspect"
 } else {
     $fixture = if ($Case -eq 'pastel') { 'home-pastel-reference' } else { 'home-reference' }
     $command = "python3 $SourceRoot/tools/home-reference-acceptance.py $Executable --case $SourceRoot/tests/visual/$fixture --skin-from-settings --inspect"

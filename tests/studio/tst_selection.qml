@@ -20,7 +20,36 @@ Item {
         SignalSpy {id:launchSpy;signalName:"launch"}
         SignalSpy {id:switchSpy;signalName:"clicked"}
         Component {id:ambientComponent;App.AmbientOverlay {}}
+        QtObject {id:fakePlaylistCatalog;property var items:[{title:"Family films",playlistName:"Family films.xsp"}];property string status:"Kodi video playlists · 1 of 1"}
+        QtObject {id:playlistProvider;property int refreshes:0;function playlistCatalog(){return fakePlaylistCatalog}function refresh(client){refreshes++}}
+        Component {id:playlistInspector;App.StudioInspector {width:1280;height:720}}
         SignalSpy {id:ambientSpy;signalName:"dismissRequested"}
+        function test_kodi_playlist_picker_is_remote_and_draft_only() {
+            verify(editor.session.execute("newPage",{name:"Playlist room",preset:"blank"}),editor.session.errorString)
+            const pageId=editor.session.document.pages[editor.session.document.pages.length-1].id
+            verify(editor.session.execute("addResolved",{type:"library",placement:{x:0,y:0,width:4,height:2}},pageId),editor.session.errorString)
+            editor.pageId=pageId;settle()
+            const item=editor.page.items[0],inspector=createTemporaryObject(playlistInspector,tests.parent,{session:editor.session,page:editor.page,pageId:pageId,options:homeLayout.studioOptions,appearance:editor.page.appearance,selectedIds:[item.id],provider:playlistProvider})
+            verify(inspector!==null);inspector.advanced=true
+            const field={scope:"presentation",key:"libraryView",type:"choice",choices:["all","playlist"]}
+            const before=JSON.stringify(editor.session.document)
+            verify(inspector.set(field,"playlist",false));compare(inspector.current.presentation.libraryView,"playlist")
+            const source={scope:"presentation",key:"libraryValue",type:"source"}
+            inspector.activateField(source);compare(inspector.view,"playlistSource");compare(inspector.labels()[1],"Family films")
+            const unchanged=JSON.stringify(editor.session.document)
+            inspector.handleCommand(inputManager.back);compare(JSON.stringify(editor.session.document),unchanged)
+            inspector.activateField(source);inspector.selected=0;inspector.handleCommand(inputManager.confirm);verify(playlistProvider.refreshes>0)
+            inspector.handleCommand(inputManager.navigateDown);inspector.handleCommand(inputManager.confirm)
+            compare(inspector.view,"fields");compare(inspector.current.presentation.libraryValue,"Family films.xsp")
+            verify(editor.session.undo());compare(JSON.stringify(editor.session.document),unchanged)
+            verify(editor.session.undo());compare(JSON.stringify(editor.session.document),before);compare(studioFixture.disk(),diskBaseline)
+            inspector.activateField(source);compare(inspector.view,"choices")
+            inspector.selected=inspector.choices.findIndex(c=>c.kind==="playlist");verify(inspector.selected>=0)
+            inspector.handleCommand(inputManager.confirm);compare(inspector.view,"playlistSource")
+            inspector.handleCommand(inputManager.navigateDown);inspector.handleCommand(inputManager.confirm)
+            compare(inspector.current.presentation.libraryView,"playlist");compare(inspector.current.presentation.libraryValue,"Family films.xsp")
+            verify(editor.session.undo());compare(JSON.stringify(editor.session.document),before);compare(studioFixture.disk(),diskBaseline)
+        }
         function test_screensaver_covers_gallery_and_restores_selection() {
             fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"desktop"}]
             const carousel=createTemporaryObject(carouselComponent,tests.parent)

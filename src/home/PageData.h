@@ -10,6 +10,7 @@ class PageData final : public QObject {
 public:
     PageData(const QString &profile,KodiMedia *player,QObject *parent=nullptr,const QString &directory={});
     Q_INVOKABLE QObject *client(const QString &key,const QVariantMap &source);
+    Q_INVOKABLE QObject *playlistCatalog();
     Q_INVOKABLE QObject *artwork(const QString &kind,int id);
     Q_INVOKABLE void activate(QObject *client,int index,bool resume=true);
     Q_INVOKABLE void refresh(QObject *client);

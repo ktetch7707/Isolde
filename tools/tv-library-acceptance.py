@@ -52,6 +52,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--pages", action="store_true", help="Create and customize a page through Settings, then exercise its widget against real Kodi")
+    parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
     args = parser.parse_args()
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a"); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     profile = str(uuid.uuid4())
@@ -62,6 +63,9 @@ def main():
     userdata = data / "Isolde/native-profiles" / profile / "kodi/home/.kodi/userdata"
     if media.exists() or userdata.exists(): raise RuntimeError("Fixture must be new")
     media.mkdir(parents=True); userdata.mkdir(parents=True, mode=0o700)
+    if args.playlists:
+        playlists=userdata/"playlists/video";playlists.mkdir(parents=True)
+        (playlists/"Fixture episodes.xsp").write_text('<smartplaylist type="episodes"><name>Fixture episodes</name><match>all</match><rule field="tvshow" operator="is"><value>Isolde Television Fixture</value></rule><order direction="ascending">episode</order></smartplaylist>')
     show = media / "Isolde Television Fixture"; show.mkdir()
     clip = show / "Fixture S01E01.ogv"
     run("gst-launch-1.0", "-q", "videotestsrc", f"num-buffers={600 if args.pages else 1800}", "!", "video/x-raw,width=320,height=180,framerate=15/1",
@@ -206,6 +210,29 @@ if ''' + repr(str(imported)) + ''' in selected:
             assert {s["season"] for s in seasons} == {0, 1}
             eps = rpc(directory, "VideoLibrary.GetEpisodes", {"tvshowid": show_id, "properties": ["season", "episode", "resume"]})["episodes"]
             assert len(eps) == 3
+            if args.playlists:
+                catalog=rpc(directory,"Isolde.GetPlaylists")["playlists"]
+                assert any(p["playlistName"]=="Fixture episodes.xsp" for p in catalog)
+                result=rpc(directory,"Isolde.GetPlaylistItems",{"name":"Fixture episodes.xsp","kind":"shows","start":0,"end":50})
+                items=result["tvshows"]
+                assert len(items)==3 and {i["episodeid"] for i in items}=={i["episodeid"] for i in eps}
+                assert all(i["playlistMediaType"]=="episode" and "file" not in i for i in items)
+                def playlist_capture(phase):
+                    print(phase.upper()+"_READY "+str(evidence),flush=True)
+                    wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" captured",seconds=110)
+                rpc(directory,"Isolde.PlayEpisode",{"episodeid":items[0]["episodeid"],"resume":False})
+                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Real playlist episode playing")
+                playlist_capture("playlistplaying")
+                rpc(directory,"Isolde.PlaybackControl",{"action":"pause"})
+                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Real playlist episode paused")
+                playlist_capture("playlistpaused")
+                rpc(directory,"Isolde.PlaybackControl",{"action":"stop"})
+                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Real playlist episode stopped")
+                run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
+                playlist_capture("playlistreturned")
+                for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False},indent=2))
+                print("Evidence: "+str(evidence),flush=True);return
             art = wait(lambda: (a if (a := rpc(directory, "Isolde.GetArtwork", {"kind": "tvshow", "id": show_id})).get("data") else None), "Kodi local artwork ready")
             artwork = base64.b64decode(art["data"])
             assert artwork and art["mime"] in {"image/png", "image/jpeg"}

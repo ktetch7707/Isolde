@@ -1233,6 +1233,9 @@ void ComponentTests::studioNestedGroupsValidateAndReparentAtomically()
 }
 void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
 {
+    QVERIFY(ComponentSchema::validPresentation({{"libraryKind","movies"},{"libraryView","playlist"},{"libraryValue","Family films.xsp"}},true));
+    QVERIFY(!ComponentSchema::validPresentation({{"libraryView","playlist"},{"libraryValue","../private.xsp"}},true));
+    QVERIFY(!ComponentSchema::validPresentation({{"libraryView","playlist"},{"libraryValue","https://private.xsp"}},true));
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);const auto user=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
     const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),10);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};

@@ -9,6 +9,7 @@ Item {
     required property var page
     required property var options
     property var provider:null
+    readonly property var playlistClient:view==="playlistSource" && provider && provider.playlistCatalog ? provider.playlistCatalog() : null
     required property var appearance
     property string pageId:""
     property var selectedIds:[]
@@ -168,6 +169,10 @@ Item {
         colorTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied.";colorLoader.active=false
     }
     function set(f,value,reset){
+        if(f.scope==="presentation" && f.key==="libraryView" && !pageMode && (value==="playlist" || (current.presentation || {}).libraryView==="playlist")){
+            if(structureType==="section")return run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},{libraryView:reset?"all":value,libraryValue:""})})
+            return run("batch",{commands:targets.map(item=>({operation:"patch",arguments:{id:item.id,value:{presentation:{libraryView:reset?"all":value,libraryValue:""}}},pageId:pageId}))})
+        }
         if(f.scope==="appCollection")return run("batch",{commands:targets.map(item=>{
             const collection=Object.assign({},item.appCollection || {mode:"all",ids:[]});
             if(reset || value===undefined || value===null || value==="")delete collection[f.key];else collection[f.key]=value;
@@ -219,7 +224,8 @@ Item {
         if(f.type==="repair"){openChoices(session.sourceChoices(current.id,pageId).map(c=>({name:c.name || c.label || c.id,value:c.id,kind:"repair"})));return}
         if(f.type==="section"){openChoices([{name:"Uncategorized",value:""}].concat((page.categories || []).map(c=>({name:c.name,value:c.id}))));return}
         if(f.type==="source"){
-            const collections=actions.filter(a=>a.action.type==="open-collection");openChoices(collections.map(a=>({name:a.name,value:a.action.collectionId})).concat([{name:"Enter search / genre / tag text…",kind:"text"}]));return
+            if((current.presentation || {}).libraryView==="playlist"){view="playlistSource";selected=0;message="Choose a video playlist saved in Kodi. Refresh retries unavailable Kodi; Back keeps the draft unchanged.";return}
+            const collections=actions.filter(a=>a.action.type==="open-collection");openChoices([{name:"Kodi playlists…",kind:"playlist"}].concat(collections.map(a=>({name:a.name,value:a.action.collectionId}))).concat([{name:"Enter search / genre / tag text…",kind:"text"}]));return
         }
         if(f.type==="header"){openChoices((options.headerChoices || []).map(entry=>({name:entry.name,value:entry.value})));return}
         if(f.type==="appGroup"){
@@ -242,6 +248,7 @@ Item {
             return fields.map(f=>f.label+": "+summary(f)).concat([advanced?"Hide advanced controls":"Show advanced controls",...(tabs[tab]==="Appearance"?["Appearance state: "+editingState]:[]),"Back to property groups"])
         }
         if(view==="choices")return choices.map(c=>c.name)
+        if(view==="playlistSource")return ["Refresh Kodi playlists"].concat(playlistClient?(playlistClient.items || []).map(i=>i.title || i.playlistName):[])
 if(view==="colorWheel")return ["Back"]
         if(view==="artwork")return ["Import local PNG / JPEG…","Clear image"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
         if(view==="crop")return ["Fit: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFit",fallback:"cover"}),"Focal X: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalX",fallback:.5}),"Focal Y: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalY",fallback:.5}),"Zoom: "+effective(current,{scope:pageMode?"background":"presentation",key:"artZoom",fallback:1}),"Pixel crop…","Use full artwork","Back"]
@@ -252,6 +259,14 @@ if(view==="colorWheel")return ["Back"]
         return []
     }
     function activate(){
+        if(view==="playlistSource"){
+            if(!playlistClient){message="Kodi unavailable. Back returns without changes.";return}
+            if(selected===0){provider.refresh(playlistClient);message=playlistClient.status;return}
+            const item=(playlistClient.items || [])[selected-1];if(!item)return
+            const source={libraryView:"playlist",libraryValue:item.playlistName}
+            const saved=structureType==="section"?run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},source)}):run("batch",{commands:targets.map(target=>({operation:"patch",arguments:{id:target.id,value:{presentation:source}},pageId:pageId}))})
+            if(saved){view="fields";selected=returnSelection}return
+        }
         if(view==="tabs"){tab=selected;selected=0;view="fields";return}
         if(view==="fields"){
             if(tabs[tab]==="More"){
@@ -267,6 +282,7 @@ if(view==="colorWheel")return ["Back"]
 if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(view==="choices"){
             const entry=choices[selected];if(!entry)return
+            if(entry.kind==="playlist"){view="playlistSource";selected=0;message="Choose a video playlist saved in Kodi. Back keeps the source unchanged.";return}
             if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
             if(entry.kind==="repair" || activeField.type==="section"){if(run(entry.kind==="repair"?"repairSource":"assignSection",Object.assign({id:current.id},entry.kind==="repair"?{sourceId:entry.value}:{categoryId:entry.value}))){view="fields";selected=returnSelection}return}
             if(entry.kind==="custom" || entry.kind==="text"){beginKeyboard("text","");return}
@@ -429,7 +445,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             anchors.fill:parent;anchors.margins:22*root.unit;spacing:10*root.unit
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:titleText;width:parent.width;text:root.pageMode?"Page appearance":root.targets.length>1?root.targets.length+" selected components":root.current?root.current.name || "Component":"Component";color:root.appearance.textColor;font.pixelSize:26*root.unit;elide:Text.ElideRight}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:detailText;width:parent.width;text:root.view==="fields"?root.tabs[root.tab]+" · "+root.contrast():root.view==="tabs"?"Choose what to edit":root.view;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
-            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:statusText;width:parent.width;text:root.current && root.current.unavailableReason?root.current.unavailableReason+" · Change its source or On select link.":root.message;color:root.appearance.mutedColor;font.pixelSize:16*root.unit;wrapMode:Text.Wrap;maximumLineCount:3;elide:Text.ElideRight}
+            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:statusText;width:parent.width;text:root.view==="playlistSource"?(root.playlistClient?root.playlistClient.status:"Kodi unavailable · Back returns without changes"):root.current && root.current.unavailableReason?root.current.unavailableReason+" · Change its source or On select link.":root.message;color:root.appearance.mutedColor;font.pixelSize:16*root.unit;wrapMode:Text.Wrap;maximumLineCount:3;elide:Text.ElideRight}
             ListView {
                 id:list;objectName:"studioInspectorFields";width:parent.width;height:Math.max(48*root.unit,parent.height-titleText.height-detailText.height-statusText.height-footerText.height-4*parent.spacing);clip:true;spacing:5*root.unit;currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
                 model:root.labels()

@@ -13,6 +13,33 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    def test_saved_playlist_catalog_and_members_are_read_only_and_bounded(self):
+        calls=[]
+        def execute(raw):
+            req=json.loads(raw);calls.append(req)
+            self.assertEqual(req["method"],"Files.GetDirectory")
+            params=req["params"];start=params["limits"]["start"]
+            self.assertLessEqual(params["limits"]["end"]-start,50)
+            if params["directory"].endswith("/video/"):
+                files=[{"file":"special://profile/playlists/video/Family films.xsp","label":"Family films"},
+                       {"file":"/private/secret.xsp","label":"Foreign"}]
+            else:
+                self.assertEqual(params["directory"],"special://profile/playlists/video/Family films.xsp")
+                files=[{"id":41,"type":"movie","title":"Local film","file":"/private/media.mkv","resume":{"position":7}}]
+            return json.dumps({"result":{"files":files,"limits":{"start":start,"end":start+len(files),"total":start+len(files)}}})
+        catalog=bridge.dispatch(self.request("Isolde.GetPlaylists"),execute)["result"]
+        self.assertEqual([p["playlistName"] for p in catalog["playlists"]],["Family films.xsp"])
+        result=bridge.dispatch(self.request("Isolde.GetPlaylistItems",{"name":"Family films.xsp","kind":"movies","start":0,"end":50}),execute)["result"]
+        self.assertEqual(result["movies"][0]["movieid"],41)
+        self.assertNotIn("file",result["movies"][0])
+        self.assertEqual(result["movies"][0]["resume"]["position"],7)
+        count=len(calls)
+        for name in ("../secret.xsp","/secret.xsp","https://private.xsp","%2e%2e.xsp","bad\x00.xsp","x.txt"):
+            self.assertIn("error",bridge.dispatch(self.request("Isolde.GetPlaylistItems",{"name":name,"kind":"movies","start":0,"end":50}),execute))
+        self.assertIn("error",bridge.dispatch(self.request("Isolde.GetPlaylistItems",{"name":"Family films.xsp","kind":"movies","start":0,"end":51}),execute))
+        self.assertIn("error",bridge.dispatch(self.request("Isolde.GetPlaylists",{"directory":"/private"}),execute))
+        self.assertEqual(len(calls),count)
+
     def test_guide_reads_only_bounded_configured_tv_channels(self):
         calls=[]
         def execute(raw):

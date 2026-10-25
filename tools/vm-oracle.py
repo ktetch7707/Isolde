@@ -57,10 +57,14 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "clients": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--skip-steam", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
-         "shell": ("shell-acceptance.py", [])}
+         "shell": ("shell-acceptance.py", []),
+         "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"])}
 
 
 def visual_result_passed(case, result):
+    if case == "playlists":
+        return (all(result.get(key) is True for key in ("passed","real_kodi_saved_playlist","play_pause_stop","media_unchanged"))
+                and result.get("normal_profile_used") is False and result.get("picker_ui_verified") is False and result.get("episodes")==3)
     if case == "shell":
         return (result.get("passed") is True and result.get("reviewSequenceCaptured")==["shellnavigation","shellgallery","shellstore","shellreturn","shellambient","shellwake"]
                 and result.get("hostUiAutomationUsed") is False and result.get("layoutWrites") is False and result.get("semanticAcceptance")=="not_verified")
@@ -538,7 +542,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 480 if case != "pages" else 900, on_line=line_output)
+            self.stage("visual-" + case, command, 900 if case in ("pages","playlists") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -678,7 +682,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

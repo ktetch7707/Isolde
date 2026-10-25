@@ -31,6 +31,7 @@ QObject *PageData::client(const QString &key,const QVariantMap &source) {
     if(kind=="channels" && (view!="all" || !value.isEmpty()))return nullptr;
     if((view=="tag"||view=="genre")&&(kind!="movies"||value.trimmed().isEmpty()))return nullptr;
     if(view=="collection"&&!ComponentSchema::safeId(value))return nullptr;
+    if(view=="playlist" && (!QStringList{"movies","shows"}.contains(kind) || !KodiMedia::validPlaylistName(value)))return nullptr;
     if(!m_clients.contains(key)) {
         if(m_clients.size()>=ComponentSchema::MaxPageDataClients)return nullptr;
         m_clients.insert(key,{new KodiMedia(m_profile,this,m_directory),{}});
@@ -38,6 +39,16 @@ QObject *PageData::client(const QString &key,const QVariantMap &source) {
     auto &entry=m_clients[key];
     if(entry.source!=query){entry.source=query;if(view=="collection")entry.client->openCollection(value);else entry.client->openView(kind,view,value);}
     return entry.client;
+}
+QObject *PageData::playlistCatalog() {
+    if(!m_valid)return nullptr;
+    const QString key=":studio-playlist-catalog";
+    if(!m_clients.contains(key)){
+        if(m_clients.size()>=ComponentSchema::MaxPageDataClients)return nullptr;
+        auto *catalog=new KodiMedia(m_profile,this,m_directory);
+        m_clients.insert(key,{catalog,{{"catalog",true}}});catalog->openPlaylists();
+    }
+    return m_clients[key].client;
 }
 QObject *PageData::artwork(const QString &kind,int id) {
     if(!m_valid)return nullptr;

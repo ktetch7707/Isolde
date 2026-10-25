@@ -714,7 +714,8 @@
           "search",
           "genre",
           "tag",
-          "collection"
+          "collection",
+          "playlist"
         ]
       },
       {
