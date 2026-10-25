@@ -62,7 +62,7 @@ Window {
             if (!result) return
             poll.stop()
             console.log(testPhase + ": " + result)
-            Qt.exit(result === "PASS" ? 0 : 1)
+            testCompletion.complete(result === "PASS" ? 0 : 1)
         })
     }
 }
