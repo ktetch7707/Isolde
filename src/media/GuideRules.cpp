@@ -71,6 +71,32 @@ bool validRule(const QVariantMap &v, int depth, int &count) {
 }
 }
 
+QVariantMap ComponentSchema::guideOptions(const QVariantMap &value, QString *error) {
+    if(!keys(value,{"rows","minutes","channelWidth","labelSize","gap","radius","sourceBadges","labels","toolbar","sources"})
+        || !integer(value.value("rows"),3,12) || !integer(value.value("minutes"),30,240)
+        || !integer(value.value("channelWidth"),120,400) || !integer(value.value("labelSize"),14,40)
+        || !integer(value.value("gap"),0,32) || !integer(value.value("radius"),0,60)
+        || value.value("sourceBadges").metaType().id()!=QMetaType::Bool || value.value("labels").metaType().id()!=QMetaType::Bool
+        || value.value("toolbar").metaType().id()!=QMetaType::QVariantList || value.value("sources").metaType().id()!=QMetaType::QVariantList)
+        return reject(error,"Invalid guide appearance and controls.");
+    QSet<QString> seen;
+    for(const auto &v:value.value("toolbar").toList()) {
+        const auto item=v.toMap();const auto id=item.value("id").toString();
+        if(!keys(item,{"id","label"}) || !QStringList{"now","add","manage","sources","close"}.contains(id)
+            || seen.contains(id) || !text(item.value("label"),60))return reject(error,"Invalid guide toolbar.");
+        seen.insert(id);
+    }
+    if(seen!=QSet<QString>{"now","add","manage","sources","close"})return reject(error,"Keep guide recovery and creation controls reachable.");
+    seen.clear();const auto sources=value.value("sources").toList();if(sources.size()>32)return reject(error,"Too many guide service destinations.");
+    for(const auto &v:sources) {
+        const auto item=v.toMap();const auto id=item.value("id").toString();const auto launch=action(item.value("action").toMap());
+        if(!keys(item,{"id","name","description","action"}) || !safeId(id) || seen.contains(id)
+            || !text(item.value("name"),80) || !text(item.value("description"),256)
+            || !QStringList{"launch-app","open-url"}.contains(launch.value("type").toString()))return reject(error,"Invalid guide service destination.");
+        seen.insert(id);
+    }
+    if(error)error->clear();return value;
+}
 QVariantMap ComponentSchema::guideRule(const QVariantMap &value, QString *error) {
     int count=0;
     if (QJsonDocument::fromVariant(value).toJson(QJsonDocument::Compact).size()>65536 || !validRule(value,0,count))
@@ -79,7 +105,7 @@ QVariantMap ComponentSchema::guideRule(const QVariantMap &value, QString *error)
     return value;
 }
 QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) {
-    if (!keys(v,{"schemaVersion","id","name","number","clock","sequence","seed","timezone","rule"})
+    if (!keys(v,{"schemaVersion","id","name","number","clock","sequence","seed","timezone","rule","mediaKinds"})
         || !integer(v.value("schemaVersion"),1,1) || !text(v.value("id"),160) || !safeId(v.value("id").toString())
         || !text(v.value("name"),160) || !integer(v.value("number"),1,99999)
         || !QStringList{"real-time","pause-when-off"}.contains(v.value("clock").toString())
@@ -88,6 +114,14 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
         || !QTimeZone(v.value("timezone").toString().toUtf8()).isValid()
         || v.value("rule").metaType().id()!=QMetaType::QVariantMap || guideRule(v.value("rule").toMap()).isEmpty())
         return reject(error,"Invalid local channel definition. Check its version, name, number, clock, sequencing, timezone and rules.");
+    if(v.contains("mediaKinds")) {
+        if(v.value("mediaKinds").metaType().id()!=QMetaType::QVariantList || v.value("mediaKinds").toList().isEmpty() || v.value("mediaKinds").toList().size()>4)return reject(error,"Choose one to four local media types.");
+        QSet<QString> kinds;
+        for(const auto &kind:v.value("mediaKinds").toList()) {
+            if(kind.metaType().id()!=QMetaType::QString || !QStringList{"movie","episode","musicvideo","song"}.contains(kind.toString()) || kinds.contains(kind.toString()))return reject(error,"Invalid or duplicate local media type.");
+            kinds.insert(kind.toString());
+        }
+    }
     if (error) error->clear();
     return v;
 }

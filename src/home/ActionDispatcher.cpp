@@ -7,6 +7,7 @@
 #include "media/KodiMedia.h"
 #include "media/CaptureController.h"
 #include "media/KodiService.h"
+#include "media/GuideController.h"
 #include <QScopedValueRollback>
 
 ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, KodiMedia *media,
@@ -42,6 +43,16 @@ bool ActionDispatcher::launchApp(const QString &id)
     }
     return m_sessions->launch(id);
 }
+void ActionDispatcher::setGuide(GuideController *guide) {
+    if(m_guide)disconnect(m_guide,nullptr,this,nullptr);m_guide=guide;if(!guide)return;
+    connect(guide,&GuideController::targetReady,this,[this](const QVariantMap &target,const QString &origin){
+        if(m_sessions->hasActiveSession() || m_media->busy() || m_media->playbackActive() || m_service->switching() || m_service->frontend()!="isolde") {
+            emit rejected("Kodi is busy or in application mode. Return to Isolde playback mode and retry.");return;
+        }
+        m_origin=origin;
+        if(!m_media->playScheduled(target.value("mediaType").toString(),target.value("mediaId").toInt(),target.value("offsetSeconds").toInt()))emit rejected("This channel could not start. Return to the guide and retry.");
+    });
+}
 bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originId)
 {
     QString error;
@@ -73,6 +84,11 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         const auto id=value.value("pageId").toString();
         if(m_layout && m_layout->pageModel(id)){emit pageRequested(id,originId);accepted=true;}
         else emit rejected("This page was removed. Open Settings → Home → Pages to repair its link.");
+    }
+    else if (type == "open-guide") { emit guideRequested(originId,value.value("presentation").toMap());accepted=true; }
+    else if (type == "tune-channel") {
+        if(!m_guide)emit rejected("The guide is unavailable for this profile.");
+        else accepted=m_guide->tune(value.value("channelId").toString(),originId);
     }
     else if (type == "app-drawer") { emit drawerRequested(); accepted = true; }
     else if (type == "launch-app") accepted = launchApp(value.value("appId").toString());

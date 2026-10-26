@@ -1,6 +1,15 @@
 {
   "schemaVersion": 1,
   "rootPageName": "Home",
+  "guide": {
+    "rows": 5, "minutes": 120, "channelWidth": 220, "labelSize": 20, "gap": 8, "radius": 12,
+    "sourceBadges": true, "labels": true,
+    "toolbar": [{"id":"now","label":"Now"},{"id":"add","label":"Add"},{"id":"manage","label":"Manage channels"},{"id":"sources","label":"Sources"},{"id":"close","label":"Back"}],
+    "sources": [
+      {"id":"plex","name":"Plex","description":"Opens Plex. Channel catalog, listings and exact channel tuning have not been verified.","action":{"type":"launch-app","appId":"plex"}},
+      {"id":"youtube-tv","name":"YouTube TV","description":"Opens the YouTube TV web destination. Sign-in and playback support require verification; channels cannot currently be imported.","action":{"type":"launch-app","appId":"youtube-tv"}}
+    ]
+  },
   "desktop": {"title":"Desktop","returnLabel":"Return to Isolde","returnShortcut":"Home","width":360,"height":120,"margin":24,"radius":18,"labelSize":20},
   "colorPicker": {
     "presets": [
@@ -251,7 +260,7 @@
     "tv-guide": {
       "id":"tv-guide", "name":"TV Guide", "kind":"widget", "widgetType":"library",
       "componentType":"library", "family":"tv-guide", "placement":{"x":0,"y":0,"width":6,"height":4},
-      "presentation":{"libraryKind":"channels","libraryView":"all","libraryLimit":50,"libraryColumns":1,"libraryLayout":"list","libraryCardStyle":"summary","libraryChrome":true,"icon":"tv","subtitle":"Programme information unavailable"}
+      "presentation":{"libraryKind":"channels","libraryView":"all","libraryLimit":5,"libraryColumns":1,"libraryLayout":"list","libraryCardStyle":"summary","libraryChrome":true,"icon":"tv","subtitle":"Local and connected channels","labelSize":20,"radius":12,"cardGap":8,"focusWidth":2,"surfaceOpacity":1,"guideRows":5,"guideMinutes":120,"guideChannelWidth":220,"guideLabels":true,"guideSourceBadges":true}
     },
     "music-library": {
       "id":"music-library", "name":"Music library", "kind":"widget", "widgetType":"library",
@@ -474,6 +483,7 @@
     {"id":"page-menu","name":"Page menu","description":"Movable page links. On named pages, replaces the fixed menu when placed; Undo restores it.","icon":"grid"}
   ],
   "actions": [
+    {"name":"Open TV Guide","action":{"type":"open-guide"}},
     {
       "name": "Open Settings",
       "action": {
@@ -1288,6 +1298,11 @@
         "step": 1,
         "fallback": 4
       },
+      {"tab":"Layout","scope":"presentation","key":"guideRows","control":"slider","label":"Guide visible rows","type":"number","types":["library"],"families":["tv-guide"],"min":3,"max":12,"step":1,"fallback":5},
+      {"tab":"Layout","scope":"presentation","key":"guideMinutes","control":"slider","label":"Guide time window (minutes)","type":"number","types":["library"],"families":["tv-guide"],"min":30,"max":240,"step":30,"fallback":120},
+      {"tab":"Layout","scope":"presentation","key":"guideChannelWidth","control":"slider","label":"Guide channel column width","type":"number","types":["library"],"families":["tv-guide"],"min":120,"max":400,"step":10,"fallback":220},
+      {"tab":"Appearance","scope":"presentation","key":"guideLabels","label":"Guide program labels","type":"toggle","types":["library"],"families":["tv-guide"],"fallback":true},
+      {"tab":"Appearance","scope":"presentation","key":"guideSourceBadges","label":"Guide source badges","type":"toggle","types":["library"],"families":["tv-guide"],"fallback":true},
       {
         "tab": "Layout",
         "scope": "component",

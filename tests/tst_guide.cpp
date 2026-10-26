@@ -37,6 +37,7 @@ private slots:
     void virtualClockPausesWhileProfileIsOff();
     void unknownDatabaseIsNeverRewritten();
     void intervalOverlapRejectedAtDatabaseBoundary();
+    void cancelledTransactionsAndInterruptedVirtualClock();
 };
 
 void GuideTests::rulesAreBoundedAndMixedMediaMatches() {
@@ -151,10 +152,12 @@ void GuideTests::lineupPreferencesSurviveRestart() {
         QVERIFY(store.createLocal(definition("second",102),media(),Now,1));
         QVERIFY(store.setPreferences("cartoons",{{"favorite",true},{"hidden",true}},1));
         QVERIFY(!store.setPreferences("cartoons",{{"favorite",false}},1));
-        QVERIFY(!store.reorder({"cartoons","cartoons"}));
-        store.failNextCommitForTest(); QVERIFY(!store.reorder({"second","cartoons"}));
+        const QVariantMap revisions{{"cartoons",2},{"second",1}};
+        QVERIFY(!store.reorder({"cartoons","cartoons"},revisions));
+        store.failNextCommitForTest(); QVERIFY(!store.reorder({"second","cartoons"},revisions));
         QCOMPARE(store.channels().first().toMap().value("id").toString(),QString("cartoons"));
-        QVERIFY(store.reorder({"second","cartoons"}));
+        QVERIFY(store.reorder({"second","cartoons"},revisions));
+        QVERIFY(!store.reorder({"cartoons","second"},revisions));
         QVERIFY(store.tuneTarget("cartoons",Now).isEmpty());
     }
     GuideStore store(path); const auto list=store.channels(); QCOMPARE(list.size(),2);
@@ -190,6 +193,23 @@ void GuideTests::unknownDatabaseIsNeverRewritten() {
     QSqlDatabase::removeDatabase("unknown-guide"); const auto before=bytes(path); QVERIFY(!before.isEmpty());
     { GuideStore store(path); QVERIFY(!store.ready()); QVERIFY(!store.errorString().isEmpty()); }
     QCOMPARE(bytes(path),before);
+}
+void GuideTests::cancelledTransactionsAndInterruptedVirtualClock() {
+    QTemporaryDir dir;const auto path=dir.filePath("guide.sqlite");auto def=definition();def["clock"]="pause-when-off";
+    {
+        GuideStore store(path);store.setCancellationCheck([]{return true;});
+        QVERIFY(!store.createLocal(def,media(),Now));QVERIFY(store.channels().isEmpty());
+        store.setCancellationCheck({});QVERIFY(store.createLocal(def,media(),Now));
+        QVERIFY(store.setActive(true,Now+800)); // durable checkpoint; simulate crash without shutdown checkpoint
+        QVERIFY(store.setMetadata("cartoons",{{"name","Renamed"},{"number",202}},1));
+        QCOMPARE(store.channel("cartoons").value("name").toString(),QString("Renamed"));
+        QVERIFY(!store.setMetadata("cartoons",{{"name","Stale"}},1));
+        QVERIFY(!store.setMetadata("cartoons",{{"number",true}},2));
+    }
+    GuideStore reopened(path);QVERIFY(reopened.resumeClocks(Now+12*3600));
+    const auto target=reopened.tuneTarget("cartoons",Now+12*3600);
+    QCOMPARE(target.value("clockUtc").toLongLong(),Now+800);
+    QCOMPARE(reopened.channel("cartoons").value("number").toInt(),202);
 }
 void GuideTests::intervalOverlapRejectedAtDatabaseBoundary() {
     QTemporaryDir dir; const auto path=dir.filePath("guide.sqlite");

@@ -1,4 +1,5 @@
 [
+  { "id": "youtube-tv", "name": "YouTube TV", "type": "web", "presentationMode": "web-kiosk", "networkRequirement": "internet", "url": "https://tv.youtube.com/", "allowedOrigins": ["https://tv.youtube.com", "https://accounts.google.com", "https://www.youtube.com"], "section": "Apps", "accent": "#E45252", "symbol": "TV" },
   { "id": "movies",        "name": "Movies",        "type": "mock", "presentationMode": "native-tv", "handledActions": ["open-folder", "open-file", "open-disc"], "section": "Library", "accent": "#5B8DEF", "symbol": "M" },
   { "id": "shows", "name": "Shows", "type": "mock", "presentationMode": "native-tv", "section": "Library", "accent": "#9575CD", "symbol": "TV" },
   { "id": "youtube", "icon": "youtube",       "name": "YouTube",       "type": "web", "presentationMode": "web-kiosk", "networkRequirement": "internet", "url": "https://www.youtube.com/tv", "allowedOrigins": ["https://www.youtube.com", "https://accounts.google.com"], "section": "Apps",    "accent": "#E45252", "symbol": "Y" },

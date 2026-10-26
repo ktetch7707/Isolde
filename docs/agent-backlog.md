@@ -377,7 +377,7 @@ Scope:
 - [ ] T11.2 SQLite WAL store (channels/rules/slots/migrations), persisted broadcast clock (real-time/pause-when-off/fixed/shuffle), stable committed slots, targeted repair, no global reindex on guide open
 - [ ] T11.3 12-hour-off seek test + restart-stability (7-day shuffle unchanged) + Cartoon-Network-in-one-save + offline cached listings
 Done when: Sec-10 acceptance tests pass with evidence.
-Verify: guide acceptance log + DB slot-stability tests. Evidence: none — no guide store/widget/EPG in tree; guide-summary cards are static config per docs/home-composition.md (no backend). All open.
+Verify: guide acceptance log + DB slot-stability tests. Evidence: [implementation ledger](live-tv-implementation-2026-10-26.md); store/rule and explicit-offset playback foundations passed full 35/35, initial guide UI passed five focused suites. Latest integrated run passed 32/36; four Studio suites exposed default-item order changes. Appending cleared three suites (35/36 passed); the remaining resize parity collision is addressed by preserving the legacy defaults and using configured command-palette/Studio Guide entry points. Full regression `guide-regression-20261026-b` passed 36/36, including all four previously failing suites and both guide suites; source identity and evidence are in the ledger. Installed playback, provider adapters, scheduling depth, visual/usability and offline gates remain open. T11 stays 0/3 = 0%; Overall stays 32% across 27 ACTIVE tasks.
 
 ## T14 — Optional online discovery + linguist subtitles (M, depends: T03; retained in first-product software scope)
 Entry docs: `docs/implementation-order.md:53-54`, `docs/unified-master-plan.txt` Sec 13-15.

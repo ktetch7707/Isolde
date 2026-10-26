@@ -41,6 +41,7 @@ static QByteArray readFile(const QString &path) { QFile file(path); if (!file.op
 class ComponentTests : public QObject {
     Q_OBJECT
 private slots:
+    void guideActionsValidateIdentityAndAppearance();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
     void gamesLaunchRejectsMissingAndRedirectedTargets();
     void gamesContractsRejectExecutableData();
@@ -89,6 +90,16 @@ static AppDefinition gamesRuntime(const QString &id="psp-test") {
 }
 static QVariantMap gameRegistration(const QString &root,const QString &target="game.iso") {
     return {{"schemaVersion",1},{"title","Local title"},{"platform","PSP"},{"runtimeId","psp-test"},{"root",root},{"target",target}};
+}
+void ComponentTests::guideActionsValidateIdentityAndAppearance() {
+    QVERIFY(!ComponentSchema::action({{"type","open-guide"}}).isEmpty());
+    QVERIFY(!ComponentSchema::action({{"type","tune-channel"},{"channelId","local-station"}}).isEmpty());
+    QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","../other"}}).isEmpty());
+    QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","station"},{"offsetSeconds",9}}).isEmpty());
+    QVERIFY(ComponentSchema::action({{"type","open-guide"},{"target","https://example.invalid"}}).isEmpty());
+    QVERIFY(!ComponentSchema::validPresentation({{"guideRows",2}}));
+    QVERIFY(!ComponentSchema::validPresentation({{"guideMinutes","120"}}));
+    QVERIFY(ComponentSchema::validPresentation({{"guideRows",5},{"guideMinutes",120},{"guideChannelWidth",220},{"guideLabels",true},{"guideSourceBadges",false}}));
 }
 void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCoreApplication::setApplicationVersion("0.0.1.2");

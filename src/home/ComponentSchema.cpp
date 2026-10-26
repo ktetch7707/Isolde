@@ -149,6 +149,12 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().size() > 160) return false;
         } else if (QStringList{"surfaceColor", "panelColor", "headingColor", "iconColor", "labelColor", "selectedLabelColor"}.contains(key)) {
             const QColor color(it.value().toString()); if (!color.isValid() || color.alpha() != 255) return false;
+        } else if(key=="guideRows" || key=="guideMinutes" || key=="guideChannelWidth") {
+            const int low=key=="guideRows"?3:key=="guideMinutes"?30:120,high=key=="guideRows"?12:key=="guideMinutes"?240:400;
+            bool ok=false;const auto n=it.value().toDouble(&ok);
+            if(!ok || it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool || !std::isfinite(n) || n<low || n>high || n!=std::floor(n))return false;
+        } else if(key=="guideLabels" || key=="guideSourceBadges") {
+            if(it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if (key == "libraryChrome") {
             if(!section || it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if (key == "showHeading" || key == "labelPill" || key == "headingBold") {
@@ -336,6 +342,19 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
             if(input.value("editionId").metaType().id()!=QMetaType::QString || !safeId(input.value("editionId").toString()))return reject(error,"Choose a valid edition.");
             result["editionId"]=input.value("editionId");
         }
+    } else if(type=="open-guide" || type=="tune-channel") {
+        for(auto it=input.cbegin();it!=input.cend();++it)
+            if(!QStringList{"schemaVersion","type","channelId","presentation"}.contains(it.key()))return reject(error,"Guide actions contain identities and validated presentation only.");
+        if(type=="tune-channel") {
+            if(!safeId(input.value("channelId").toString()) || input.contains("presentation"))return reject(error,"Choose a valid guide channel.");
+            result["channelId"]=input.value("channelId");
+        } else {
+            if(input.contains("channelId"))return reject(error,"Open Guide does not tune a channel.");
+            if(input.contains("presentation")) {
+                if(input.value("presentation").metaType().id()!=QMetaType::QVariantMap || !validPresentation(input.value("presentation").toMap(),true))return reject(error,"Invalid guide presentation.");
+                result["presentation"]=input.value("presentation");
+            }
+        }
     } else if (type == "launch-app") {
         const auto id = input.value("appId").toString();
         if (!safeId(id)) return reject(error, "Choose a valid app.");
@@ -495,6 +514,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         else if (actionType == "open-collection" || actionType == "play-movie" || actionType == "open-show")
             source.insert({{"provider", "kodi"}, {"kind", "collection"}, {"id", normalized.value("collectionId")}});
         else if (actionType == "open-page") source.insert({{"provider","shell"},{"kind","page"},{"id",normalized.value("pageId")}});
+        else if (actionType == "open-guide") source.insert({{"provider","isolde"},{"kind","guide"}});
         else if (actionType == "switch-input") source.insert({{"provider", "isolde"}, {"kind", "capture-input"}, {"id", QString::number(normalized.value("input").toInt())}});
         else if (actionType.startsWith("open-")) source.insert({{"provider", "handler"}, {"kind", actionType}, {"id", normalized.value("openWith")}});
         else source.insert({{"provider", "shell"}, {"kind", actionType}});
@@ -521,7 +541,7 @@ QString ComponentSchema::unavailable(const QVariantMap &value, const AppRegistry
         }
         return "Collection missing · repair source";
     }
-    if (type.startsWith("open-")) {
+    if (type.startsWith("open-") && type!="open-guide") {
         const auto handler = apps->find(value.value("openWith").toString());
         if (!handler) return "Open With app missing · repair source";
         if (!handler->handledActions.contains(type)) return "Incompatible Open With app · repair source";

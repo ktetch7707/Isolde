@@ -87,6 +87,7 @@ GuideStore::~GuideStore() {
 }
 bool GuideStore::fail(const QString &message) { m_error=message; emit errorChanged(); return false; }
 bool GuideStore::commit() {
+    if (m_cancelled && m_cancelled()) { m_db.rollback(); return fail(tr("Cancelled. Previous channels and schedules were preserved.")); }
     if (m_failCommit) {
         m_failCommit=false; m_db.rollback(); return fail(tr("Guide save failed. Previous channels and schedules were preserved."));
     }
@@ -124,7 +125,8 @@ QVariantList GuideStore::eligible(const QVariantMap &definition, const QVariantL
             *error=tr("Each channel item needs a unique Kodi identity, title and known positive duration (at most one day)."); return {};
         }
         seen.insert(mediaKey(item));
-        if (GuideRules::matches(definition.value("rule").toMap(),item)) result.append(item);
+        if ((!definition.contains("mediaKinds") || definition.value("mediaKinds").toList().contains(kind))
+            && GuideRules::matches(definition.value("rule").toMap(),item)) result.append(item);
     }
     if (result.isEmpty()) *error=tr("No media matches these channel rules. Adjust the rules before saving.");
     return result;
@@ -171,6 +173,7 @@ bool GuideStore::appendSlots(const QString &id, qint64 until) {
     QVariantList ordered; qint64 currentCycle=-1;
     QSqlQuery insert(m_db); insert.prepare("INSERT INTO slots(id,channel,media_type,media_id,title,start_utc,end_utc) VALUES(?,?,?,?,?,?,?)");
     while (start<until) {
+        if (m_cancelled && m_cancelled()) return fail(tr("Cancelled. Previous channels and schedules were preserved."));
         if (++count>MaxSlotsPerChannel || cursor>=1000000000LL) return fail(tr("The channel schedule limit was reached. Shorten the horizon or remove expired history."));
         const qint64 cycle=cursor/items.size();
         if (currentCycle!=cycle) {
@@ -270,14 +273,50 @@ bool GuideStore::setPreferences(const QString &id, const QVariantMap &prefs, int
     if (!q.exec() || q.numRowsAffected()!=1) { m_db.rollback(); return fail(tr("Cannot save channel preferences.")); }
     return commit();
 }
-bool GuideStore::reorder(const QStringList &ids) {
+bool GuideStore::setMetadata(const QString &id,const QVariantMap &metadata,int revision) {
+    if(!m_ready || !ComponentSchema::safeId(id) || metadata.isEmpty())return fail(tr("Invalid channel metadata."));
+    for(auto it=metadata.cbegin();it!=metadata.cend();++it)if(it.key()!="name" && it.key()!="number")return fail(tr("Unknown channel metadata."));
+    if(!m_db.transaction())return fail(tr("The guide is busy."));
+    const auto state=channel(id);if(state.isEmpty() || state.value("revision").toInt()!=revision){m_db.rollback();return fail(tr("Channel changed. Refresh before saving."));}
+    QSqlQuery q(m_db);q.prepare("SELECT definition FROM channels WHERE id=?");q.addBindValue(id);
+    if(!q.exec() || !q.next()){m_db.rollback();return fail(tr("Cannot read channel metadata."));}
+    auto definition=object(q.value(0));q.finish();for(auto it=metadata.cbegin();it!=metadata.cend();++it)definition[it.key()]=it.value();
+    QString error;if(ComponentSchema::guideChannel(definition,&error).isEmpty()){m_db.rollback();return fail(error);}
+    q.prepare("UPDATE channels SET number=?,definition=?,revision=revision+1 WHERE id=? AND revision=?");q.addBindValue(definition.value("number"));q.addBindValue(json(definition));q.addBindValue(id);q.addBindValue(revision);
+    if(!q.exec() || q.numRowsAffected()!=1){m_db.rollback();return fail(tr("Channel number is already in use or storage is unavailable. Choose another number; nothing was changed."));}
+    return commit();
+}
+bool GuideStore::reorder(const QStringList &ids, const QVariantMap &revisions) {
     if (!m_ready || ids.isEmpty() || ids.size()>MaxChannels) return fail(tr("Invalid channel order."));
     if (!m_db.transaction()) return fail(tr("The guide is busy."));
-    QSet<QString> expected; for (const auto &v:channels()) expected.insert(v.toMap().value("id").toString());
+    QSet<QString> expected;
+    for (const auto &v:channels()) {
+        const auto state=v.toMap(); const auto id=state.value("id").toString(); expected.insert(id);
+        if (!number(revisions.value(id),1,2147483647) || revisions.value(id).toInt()!=state.value("revision").toInt()) {
+            m_db.rollback(); return fail(tr("Channel lineup changed. Refresh the move preview."));
+        }
+    }
     QSet<QString> supplied; for (const auto &id:ids) supplied.insert(id);
-    if (expected!=supplied || supplied.size()!=ids.size()) { m_db.rollback(); return fail(tr("Channel lineup changed. Refresh the move preview.")); }
+    if (expected!=supplied || supplied.size()!=ids.size() || revisions.size()!=ids.size()) { m_db.rollback(); return fail(tr("Channel lineup changed. Refresh the move preview.")); }
     QSqlQuery q(m_db); q.prepare("UPDATE channels SET position=?,revision=revision+1 WHERE id=?");
     for (int i=0;i<ids.size();++i) { q.bindValue(0,i); q.bindValue(1,ids[i]); if (!q.exec()) { m_db.rollback(); return fail(tr("Cannot save channel order.")); } }
+    return commit();
+}
+qint64 GuideStore::broadcastTime(const QString &id, qint64 now) const {
+    const auto state=channel(id); return state.isEmpty() || !instant(now) ? -1 : clockTime(state,now);
+}
+bool GuideStore::resumeClocks(qint64 now) {
+    if (!m_ready || !instant(now)) return fail(tr("Invalid broadcast clock."));
+    if (!m_db.transaction()) return fail(tr("The guide is busy."));
+    // On restart, a virtual channel resumes from its last durable checkpoint.
+    // A previously active flag indicates an interrupted shutdown, not a reason
+    // to advance a pause-when-off channel through the whole outage.
+    QSqlQuery q(m_db); q.prepare("UPDATE channels SET anchor_utc=?,active=1 WHERE id=?");
+    for (const auto &v:channels()) {
+        const auto channel=v.toMap();if(channel.value("clock")!="pause-when-off")continue;
+        q.bindValue(0,now);q.bindValue(1,channel.value("id"));
+        if (!q.exec()) { m_db.rollback(); return fail(tr("Cannot resume the saved broadcast clocks.")); }
+    }
     return commit();
 }
 bool GuideStore::remove(const QString &id, int revision) {

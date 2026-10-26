@@ -12,6 +12,7 @@ Item {
     property string pageId: ""
     property var pageSources: []
     property var searchSettings: null
+    property var shellActions: []
     property var appearance: ({})
     SystemPalette {id:systemPalette}
     readonly property color ink:appearance.textColor || systemPalette.text
@@ -33,6 +34,7 @@ Item {
     signal mediaRequested(string mediaType, int mediaId, string query, string collectionId, int pageStart)
     signal pageSourceRequested(string pageId, string sourceId, string kind, string view, string value)
     signal closeRequested()
+    signal shellActionRequested(var action)
 
     readonly property var settingsTargets: [
         { kind: "setting", id: "settings-network", name: "Network", description: "Wi-Fi, saved networks, connection details", action: "Open Settings", section: 0, accent: "#4D7ED8", symbol: "N" },
@@ -142,6 +144,10 @@ Item {
             if (!q || contains(setting.name, q) || contains(setting.description, q))
                 result.push(setting)
         }
+        for(let a=0;a<shellActions.length;++a){
+            const entry=shellActions[a]
+            if(!q || contains(entry.name,q))result.push({kind:"shellAction",id:"shell-action-"+a,name:entry.name,description:"Isolde action",action:"Open",targetAction:entry.action,accent:root.focusInk,symbol:"↗"})
+        }
         if (q.length >= 2) {
             appendMediaResults(result, movieSearchClient, "movie", q)
             appendMediaResults(result, showSearchClient, "show", q)
@@ -237,6 +243,9 @@ Item {
                 launchApp(item.id)
             else
                 installPackage(item.id)
+        } else if (item.kind === "shellAction") {
+            closeRequested()
+            shellActionRequested(item.targetAction)
         } else if (item.kind === "media") {
             closeRequested()
             mediaRequested(item.mediaType, item.mediaId, query.trim(), "", item.pageStart)

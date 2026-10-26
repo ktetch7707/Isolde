@@ -10,6 +10,7 @@ namespace ComponentSchema {
 // Versioned native-channel definitions and bounded nested rule trees.
 QVariantMap guideChannel(const QVariantMap &value, QString *error = nullptr);
 QVariantMap guideRule(const QVariantMap &value, QString *error = nullptr);
+QVariantMap guideOptions(const QVariantMap &value, QString *error = nullptr);
 QVariantMap gameRegistration(const QVariantMap &value, QString *error = nullptr);
 // Logical page extent is independent of the bounded TV viewport grid.
 inline constexpr int MaxScrollableRows = 10240;

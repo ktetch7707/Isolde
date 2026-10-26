@@ -316,6 +316,7 @@ QVariantMap HomeLayout::studioOptions() const
     if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
     if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
+    if(object.contains("guide") && ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap()).isEmpty())return {};
     const auto desktop=object["desktop"].toObject();
     if(desktop.size()!=8)return {};
     for(const auto &key:QStringList{"title","returnLabel","returnShortcut"})if(!desktop[key].isString() || desktop[key].toString().trimmed().isEmpty() || desktop[key].toString().size()>80 || desktop[key].toString().contains(QChar::Null))return {};

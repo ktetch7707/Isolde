@@ -15,6 +15,27 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    def test_guide_candidates_join_show_metadata_without_scanning_or_mutating(self):
+        calls=[]
+        def execute(raw):
+            request=json.loads(raw);calls.append(request);method=request["method"];params=request["params"]
+            if method=="VideoLibrary.GetEpisodes":
+                self.assertEqual(params["limits"],{"start":0,"end":50})
+                result={"episodes":[{"episodeid":7,"tvshowid":9,"title":"Local cartoon","runtime":1200,"file":"/media/cartoon.mkv","showtitle":"Series","season":1,"episode":1,"firstaired":"2020-01-02"},
+                    {"episodeid":8,"tvshowid":9,"title":"Remote","runtime":1200,"file":"https://example.invalid/video"}],"limits":{"start":0,"end":2,"total":2}}
+            elif method=="VideoLibrary.GetTVShowDetails":
+                self.assertEqual(params["tvshowid"],9);result={"tvshowdetails":{"studio":["Cartoon Network"],"genre":["Animation"],"tag":["Family"],"year":2019}}
+            else:self.fail("Unexpected/mutating guide method: "+method)
+            return json.dumps({"result":result})
+        result=bridge.dispatch(self.request("Isolde.GuideCandidates",{"kind":"episode","start":0,"end":50}),execute)["result"]
+        self.assertEqual(result["skipped"],1);self.assertEqual(len(result["items"]),1)
+        item=result["items"][0];self.assertEqual(item["mediaType"],"episode");self.assertEqual(item["mediaId"],7)
+        self.assertEqual(item["studio"],["Cartoon Network"]);self.assertEqual(item["genre"],["Animation"]);self.assertEqual(item["year"],2020)
+        self.assertEqual([r["method"] for r in calls],["VideoLibrary.GetEpisodes","VideoLibrary.GetTVShowDetails"])
+        for invalid in ({"kind":"shell","start":0,"end":50},{"kind":"movie","start":False,"end":50},{"kind":"movie","start":0,"end":51},{"kind":"movie","start":0,"end":50,"file":"/private"}):
+            result=bridge.dispatch(self.request("Isolde.GuideCandidates",invalid),lambda _:self.fail("Invalid parameters reached Kodi"))
+            self.assertIn("error",result)
+
     @unittest.skipUnless(os.name=="posix","Kodi playlist writes run inside the Linux guest")
     def test_create_playlist_is_kodi_owned_atomic_and_profile_bounded(self):
         module_spec=importlib.util.spec_from_file_location("isolde_playlists",Path(__file__).resolve().parents[1]/"kodi/service.isolde.bridge/playlists.py")

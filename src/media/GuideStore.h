@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QVariantList>
+#include <functional>
 
 // Profile-local presentation/schedule data only. No media scan, network,
 // playback, account secrets or writes to Kodi. All times are UTC seconds.
@@ -26,7 +27,11 @@ public:
     bool updateRules(const QVariantMap &definition, const QVariantList &candidates, int expectedRevision);
     bool setActive(bool active, qint64 nowUtc);
     bool setPreferences(const QString &id, const QVariantMap &preferences, int expectedRevision);
-    bool reorder(const QStringList &ids);
+    bool setMetadata(const QString &id,const QVariantMap &metadata,int expectedRevision);
+    bool reorder(const QStringList &ids, const QVariantMap &expectedRevisions);
+    bool resumeClocks(qint64 nowUtc);
+    qint64 broadcastTime(const QString &id, qint64 nowUtc) const;
+    void setCancellationCheck(std::function<bool()> check) { m_cancelled=std::move(check); }
     bool remove(const QString &id, int expectedRevision);
     // Only affected slots change; an unavailable slate retains the interval.
     bool markUnavailable(const QString &kind, int mediaId);
@@ -45,4 +50,5 @@ private:
     QSqlDatabase m_db;
     QString m_connection, m_error;
     bool m_ready=false, m_failCommit=false;
+    std::function<bool()> m_cancelled;
 };

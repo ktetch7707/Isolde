@@ -47,6 +47,8 @@ Window {
     }
 
     function showDesignatedHome() {
+        guideSearchReturn=null
+        if(tvGuide.open){guideController.cancel();tvGuide.open=false}
         sessionManager.goHome()
         if(homeLayout.homePageId)pageSurface.showPage(homeLayout.homePageId,"",true)
         else if(pageSurface.open)pageSurface.closeAll()
@@ -100,11 +102,14 @@ Window {
         }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
         if(command===inputManager.home){window.showDesignatedHome();return}
+        if(tvGuide.open && !sessionManager.active && !launchErrorOverlay.visible){tvGuide.handleCommand(command);return}
         if (kodiLibrary.open) { kodiLibrary.handleCommand(command); return }
         if (launchErrorOverlay.visible) {
             launchErrorOverlay.handleCommand(command)
         } else if (!sessionManager.active && pageSurface.open) {
             pageSurface.handleCommand(command)
+        } else if (!sessionManager.active && command===inputManager.menu && (home.widgetActive || home.groupActive)) {
+            home.handleCommand(command)
         } else if (!sessionManager.active && (command === inputManager.menu || command === inputManager.search)) {
             window.openSearchFromPage()
         } else if (command === inputManager.back && sessionManager.active && sessionManager.currentAppType === "settings" && settings.inPage) {
@@ -390,6 +395,21 @@ Window {
     }
 
     KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; provider:pageData;appearance: homeLayout.homeAppearance }
+    property var pendingGuideSearchReturn:null
+    property var guideSearchReturn:null
+    GuideView {
+        id:tvGuide;x:window.safeAreaPixels;y:window.safeAreaPixels
+        width:Math.max(1,(parent.width-2*window.safeAreaPixels)/window.uiScaleFactor)
+        height:Math.max(1,(parent.height-2*window.safeAreaPixels)/window.uiScaleFactor)
+        scale:window.uiScaleFactor;transformOrigin:Item.TopLeft;z:950
+        controller:guideController;dispatcher:actionDispatcher;options:homeLayout.studioOptions.guide;appearance:homeLayout.homeAppearance
+        suppressed:sessionManager.active || kodiMedia.playbackActive
+        onClosed:origin=>{
+            const state=window.guideSearchReturn;window.guideSearchReturn=null
+            if(state){commandCenter.open=true;Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})}
+            else if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)
+        }
+    }
     CommandCenter {
         id: commandCenter
         x: window.safeAreaPixels
@@ -407,6 +427,12 @@ Window {
         showSearchClient: searchShows
         episodeSearchClient: searchEpisodes
         mediaCollections: kodiMedia.collections
+        shellActions:homeLayout.studioOptions.actions || []
+        onShellActionRequested:action=>{
+            window.pendingGuideSearchReturn={index:commandCenter.selectedIndex,area:commandCenter.focusArea,header:commandCenter.lastHeader}
+            actionDispatcher.dispatch(action,"")
+            window.pendingGuideSearchReturn=null
+        }
         onCloseRequested: open = false
         onLaunchApp: appId => { kodiLibrary.open = false; window.launchAppFromShell(appId) }
         onInstallPackage: packageId => {
@@ -481,12 +507,17 @@ Window {
     }
     Connections {
         target:kodiMedia
-        function onPlaybackReturned(home){if(home && pageSurface.open && !kodiLibrary.returnToSearchAfterPlayback)pageSurface.closeAll()}
+        function onPlaybackReturned(home){
+            if(tvGuide.open){if(home){tvGuide.open=false;window.showDesignatedHome()}else guideController.refresh()}
+            if(home && pageSurface.open && !kodiLibrary.returnToSearchAfterPlayback)pageSurface.closeAll()
+        }
     }
     Connections {
         target: actionDispatcher
         function onDrawerRequested() { commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
+        function onGuideRequested(origin,presentation){window.guideSearchReturn=window.pendingGuideSearchReturn;commandCenter.open=false;kodiLibrary.open=false;tvGuide.show(origin,presentation)}
         function onRestoreFocusRequested(originId) {
+            if(tvGuide.open)return
             if (kodiLibrary.returnToSearchAfterPlayback) return
             if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
         }

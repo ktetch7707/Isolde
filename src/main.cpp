@@ -23,6 +23,7 @@
 #include "media/KodiArtwork.h"
 #include "media/KodiService.h"
 #include "media/KodiImporter.h"
+#include "media/GuideController.h"
 #include "sessions/SessionManager.h"
 #include "sources/SourceManager.h"
 #include "theme/ArtPackCatalog.h"
@@ -76,6 +77,7 @@ struct ProfileRuntime {
     KodiArtwork kodiArtwork{qApp->property("isoldeProfile").toString()};
     PageData pageData{qApp->property("isoldeProfile").toString(), &kodi};
     std::unique_ptr<GameLibrary> games;
+    std::unique_ptr<GuideController> guide;
     ActionDispatcher actions{&registry, &sessions, &kodi, &kodiService, &catalog, &captureController};
     QQmlApplicationEngine engine;
 
@@ -142,6 +144,9 @@ struct ProfileRuntime {
     if (!homeLayout.load({}, profiles.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
     desktopMode.setPresentation(homeLayout.studioOptions().value("desktop").toMap());
+    guide=std::make_unique<GuideController>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("guide.sqlite"),profiles.activeId());
+    actions.setGuide(guide.get());
+    engine.rootContext()->setContextProperty(QStringLiteral("guideController"),guide.get());
     sessions.setLaunchPreparation([this](const AppDefinition &definition){
         if(definition.type!="settings" && definition.type!="store" && definition.type!="customize"){
             if(pendingLaunch && pendingNativeDefinition.id!=definition.id)return false;
@@ -273,6 +278,7 @@ struct ProfileRuntime {
     }
     }
     ~ProfileRuntime() {
+        guide->invalidate();
         games->invalidate();
         appVpn.cancel();
         QObject::disconnect(&sessions, nullptr, &kodiService, nullptr);

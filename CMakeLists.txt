@@ -16,6 +16,8 @@ endif()
 add_library(isolde_core STATIC
     src/media/GuideStore.cpp
     src/media/GuideStore.h
+    src/media/GuideController.cpp
+    src/media/GuideController.h
     src/media/GuideRules.cpp
     src/media/GuideRules.h
     src/games/GameLibrary.cpp
@@ -129,6 +131,9 @@ qt_add_qml_module(isolde
         qml/CaptureSettingsView.qml
         qml/CaptureSessionView.qml
         qml/KodiLibraryView.qml
+        qml/GuideView.qml
+        qml/GuideRuleEditor.qml
+        qml/GuideWidget.qml
         qml/LibraryBrowseControls.qml
         qml/KodiSettingsView.qml
         qml/KodiImportView.qml
@@ -373,6 +378,11 @@ if(BUILD_TESTING)
     qt_add_executable(isolde_guide_tests tests/tst_guide.cpp)
     target_link_libraries(isolde_guide_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME guide_contracts COMMAND isolde_guide_tests)
+    qt_add_executable(isolde_guide_ui_tests tests/guide_ui.cpp)
+    target_link_libraries(isolde_guide_ui_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
+    target_compile_definitions(isolde_guide_ui_tests PRIVATE GUIDE_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/studio-defaults.json" GUIDE_VIEW_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/GuideView.qml" GUIDE_RULE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/GuideRuleEditor.qml" GUIDE_COMMAND_CENTER_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CommandCenter.qml")
+    add_test(NAME guide_remote_ui COMMAND isolde_guide_ui_tests)
+    set_tests_properties(guide_remote_ui PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(guide_contracts PROPERTIES TIMEOUT 60 LABELS "guide;unit")
     qt_add_executable(isolde_games_ui_tests tests/games_ui.cpp)
     target_link_libraries(isolde_games_ui_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)

@@ -1,0 +1,93 @@
+#pragma once
+#include <QObject>
+#include <QThread>
+#include <QTimer>
+#include <QLocalSocket>
+#include <QVariantList>
+#include <atomic>
+#include <functional>
+#include <memory>
+class GuideStore;
+class GuideWorker;
+
+// One coordinator per profile. SQLite objects live exclusively on its worker;
+// QML receives bounded immutable snapshots. Viewing never starts a catalog read.
+class GuideController final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool ready READ ready NOTIFY changed)
+    Q_PROPERTY(bool busy READ busy NOTIFY changed)
+    Q_PROPERTY(bool backgroundBusy READ backgroundBusy NOTIFY changed)
+    Q_PROPERTY(QString errorString READ errorString NOTIFY changed)
+    Q_PROPERTY(QString status READ status NOTIFY changed)
+    Q_PROPERTY(QVariantList channels READ channels NOTIFY changed)
+    Q_PROPERTY(QVariantList rows READ rows NOTIFY changed)
+    Q_PROPERTY(QVariantList compactRows READ compactRows NOTIFY changed)
+    Q_PROPERTY(QVariantList previewItems READ previewItems NOTIFY changed)
+    Q_PROPERTY(int previewCount READ previewCount NOTIFY changed)
+    Q_PROPERTY(int skippedCount READ skippedCount NOTIFY changed)
+    Q_PROPERTY(bool previewReady READ previewReady NOTIFY changed)
+    Q_PROPERTY(QVariantMap previewDefinition READ previewDefinition NOTIFY changed)
+public:
+    GuideController(const QString &databasePath,const QString &profile,QObject *parent=nullptr,const QString &bridgeDirectory={});
+    ~GuideController() override;
+    bool ready() const { return m_ready; }
+    bool busy() const { return m_busy || bool(m_pendingJob) || !m_pendingDefinition.isEmpty(); }
+    bool backgroundBusy() const { return m_busy && m_background && !m_pendingJob && m_pendingDefinition.isEmpty(); }
+    QString errorString() const { return m_error; }
+    QString status() const { return m_status; }
+    QVariantList channels() const { return m_channels; }
+    QVariantList rows() const { return m_rows; }
+    QVariantList compactRows() const { return m_compactRows; }
+    QVariantList previewItems() const { return m_candidates.mid(0,8); }
+    int previewCount() const { return int(m_candidates.size()); }
+    int skippedCount() const { return m_skipped; }
+    bool previewReady() const { return m_previewReady; }
+    QVariantMap previewDefinition() const { return m_previewDefinition; }
+    Q_INVOKABLE void refresh();
+    Q_INVOKABLE void setWindow(qint64 fromUtc,qint64 toUtc,int firstRow=0);
+    Q_INVOKABLE QVariantMap newDefinition() const;
+    Q_INVOKABLE bool previewLocal(const QVariantMap &definition,const QString &mediaKind);
+    Q_INVOKABLE bool createLocal(const QVariantMap &definition);
+    Q_INVOKABLE void cancel();
+    Q_INVOKABLE bool setPreferences(const QString &id,const QVariantMap &preferences,int revision);
+    Q_INVOKABLE bool setMetadata(const QString &id,const QVariantMap &metadata,int revision);
+    Q_INVOKABLE bool reorder(const QStringList &ids,const QVariantMap &revisions);
+    Q_INVOKABLE bool remove(const QString &id,int revision);
+    // Execution is routed through ActionDispatcher; QML cannot launch IDs or
+    // offsets obtained from an arbitrary source.
+    bool tune(const QString &id,const QString &origin);
+    void invalidate();
+signals:
+    void changed();
+    void channelCreated(const QString &id);
+    void targetReady(const QVariantMap &target,const QString &origin);
+private:
+    using Job=std::function<QVariantMap(GuideStore &)>;
+    bool submit(Job job,std::function<void(const QVariantMap &)> completion={},bool background=false);
+    bool fail(const QString &message);
+    void requestPage();
+    void consume();
+    void closeBridge();
+    void readFailure(const QString &message);
+    QThread m_thread;
+    GuideWorker *m_worker=nullptr;
+    std::shared_ptr<std::atomic_bool> m_cancel;
+    std::function<void(const QVariantMap &)> m_completion;
+    Job m_pendingJob;
+    std::function<void(const QVariantMap &)> m_pendingCompletion;
+    QVariantMap m_pendingDefinition;
+    QString m_pendingKind;
+    QTimer m_checkpoint,m_requestDeadline,m_catalogDeadline;
+    QLocalSocket m_socket;
+    QByteArray m_input,m_request;
+    QString m_directory,m_error,m_status;
+    QVariantList m_channels,m_rows,m_compactRows,m_candidates;
+    QVariantMap m_previewDefinition;
+    QStringList m_kinds;
+    qint64 m_from=0,m_to=0;
+    int m_first=0,m_page=0,m_requestId=0,m_descriptor=-1,m_skipped=0,m_kindIndex=0,m_snapshotBytes=0;
+    quint64 m_jobId=0;
+    quint64 m_catalogGeneration=0;
+    bool m_ready=false,m_busy=false,m_valid=true,m_reading=false,m_previewReady=false,m_refreshPending=false;
+    bool m_background=false;
+};
