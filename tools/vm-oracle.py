@@ -321,6 +321,18 @@ class Oracle:
         return after
 
     def check(self):
+        # T30 capability discovery is read-only and bounded. No client startup,
+        # account enumeration, ROM scan or runtime installation occurs here.
+        game_tools = {name: shutil.which(name) for name in
+                      ("PPSSPPSDL", "PPSSPPQt", "ppsspp", "dolphin-emu", "pcsx2-qt", "flatpak", "wine", "wine64", "neverball", "supertux2")}
+        package_probe = subprocess.run(
+            ["apt-cache", "policy", "ppsspp", "dolphin-emu", "pcsx2", "neverball", "supertux", "libsdl2-dev", "libqt6sql6-sqlite"],
+            capture_output=True, text=True, timeout=15)
+        atomic_json(self.run / "games-runtime-capabilities.json", {
+            "executables": game_tools, "architecture": os.uname().machine,
+            "packagePolicyExit": package_probe.returncode,
+            "packagePolicy": package_probe.stdout[:16384], "error": package_probe.stderr[:2048],
+            "physicalControllerQualified": False, "physicalOpticalQualified": False})
         for tool in ("cmake", "ninja", "ctest", "python3", "tar"):
             if not shutil.which(tool):
                 raise RuntimeError("Required guest tool missing: " + tool)
@@ -488,8 +500,13 @@ class Oracle:
         return self.run / "payload"
 
     def configure_native(self, target="native"):
-        if target not in {"native","surfshark","android","android-repair"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair","games"}: raise ValueError("Unsupported guest configuration target")
         payload=self.tested_payload()
+        if target=="games":
+            if self.command("hostname")!="isolde-test":raise RuntimeError("Games setup is restricted to Isolde-Test")
+            self.prepare_guest_space()
+            self.stage("games-runtime-install",["python3",str(self.run/"source/tools/provision-games.py"),"--install","--fixture","--receipt",str(self.run/"games-runtime-install.json")],1200)
+            return
         deployed=json.loads((self.run/"deploy-result.json").read_text())
         if self.command("hostname")!="isolde-test" or self.links()["current"]!=deployed["release"] or digest(Path(deployed["release"])/"bin/isolde")!=digest(payload/"bin/isolde"):
             raise RuntimeError("Native configuration requires this deployed snapshot in Isolde-Test")
@@ -854,7 +871,7 @@ def main():
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games"],default="native")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.run_id):
         parser.error("Invalid run ID")

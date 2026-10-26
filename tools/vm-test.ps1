@@ -6,7 +6,7 @@ param(
     [switch]$Installed,
     [switch]$Capture,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','games')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
