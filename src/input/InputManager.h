@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QVariantMap>
 
 class InputManager final : public QObject {
     Q_OBJECT
@@ -44,6 +45,7 @@ public:
     explicit InputManager(QObject *parent = nullptr);
     Q_INVOKABLE Command commandForKey(int key) const;
     Q_INVOKABLE QString labelForCommand(Command command) const;
+    Q_INVOKABLE QString webRemoteScript(const QVariantMap &appearance) const;
 
     Command none() const { return None; }
     Command navigateUp() const { return NavigateUp; }

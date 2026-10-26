@@ -115,6 +115,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     args << "--chdir" << userHome;
     const auto setenv = [&](const QString &key, const QString &value) { args << "--setenv" << key << value; };
     setenv("HOME", userHome);
+    setenv("ISOLDE_NATIVE_NAMESPACE", "1");
     setenv("PATH", "/usr/local/bin:/usr/bin:/bin");
     setenv("USER", host.value("USER", "isolde"));
     setenv("LOGNAME", host.value("USER", "isolde"));

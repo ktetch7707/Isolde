@@ -36,3 +36,31 @@ The installer now applies a bounded AST-checked selector cleanup to the pinned r
 Retained G reports now record 31/31 full tests, deployed release `014674ec29d7dfb787fd8ca9`, and a successful functional Store journey through both Android and Plex install/open/close/remove phases. `build/vm-oracle/store-20261025-g/report/status.json` records unchanged normal layouts, service active/running with zero restarts and `visualPassed: true`, while `visualReview`/`visualAcceptance` remain pending and `semanticAcceptance` is `not_verified`. This audit read the reports/logs; it does not newly review the 14 captured frames or mark these delivery boxes complete. The retained reports take precedence over the earlier pending-run wording, but a broad accepted lifecycle still requires the missing review and full T29.8 cases.
 
 The later `store-online-20261025-c/report/status.json` records three passing focused Store registrations with `fullSuite: false`; it is not a full-regression or real-source/remote-bridge acceptance result. Current source work continues separately. See [scope/evidence audit](first-product-software-scope.md) and T29/T31 in [the backlog](agent-backlog.md).
+
+## Subsequent direct review and remote clarification
+
+After the audit above, the implementing agent directly viewed all 14 G Store
+frames at `visual/store/attempt-20261025-222033-771/`, and all 28 G standing
+Studio/lounge/Pastel captures, comparing both reference recreation/reset pairs.
+Plex reaches its provider interface; SmartTube shows its UI with a loading
+spinner and an Android network notice. Both return to the selected Store card
+and are removed, with package absence verified for Android. This accepts the
+narrow functional lifecycle; it does not accept playback, broad visual design,
+two-profile account isolation or the remaining T29.8 cases. Existing Pastel
+artwork/icon/proportion and Kodi management presentation gaps stay open.
+
+The authenticated G runtime repair verifies 128 actual foreground-helper calls
+with descriptors unchanged at 6 before/6 after, logged in
+`build/vm-oracle/store-20261025-g/report/android-admin.log`. Normal installer and
+repair entry points apply the same idempotent bounded source transformation.
+
+The user's latest clarification explicitly excludes pointer emulation from the
+Chromium bridge. See [remote implementation and evidence](chromium-remote-2026-10-25.md).
+Online catalog, complete remote/provider acceptance and current integrated
+delivery remain open; no task percentage is raised by this review.
+
+Current installed checkpoint: `store-remote-20261025-full-b` passes 32/32 and
+both actual Store lifecycles on release `2c9bbf97600df0a864e9d6f5`, with all 14
+frames reviewed. This fixes A's observed post-Plex keyboard-focus regression;
+A's failed lifecycle is retained, not counted as a pass. See the remote record
+for source hashes, applicable standing fixture evidence and remaining gates.

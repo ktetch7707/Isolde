@@ -123,6 +123,7 @@ struct ProfileRuntime {
         if (kodi.connected()) kodiService.markReady();
     });
     QObject::connect(&sessions, &SessionManager::launching, &kodiService, [this](const QString &id) {
+        qApp->setProperty("isoldeRemoteAppearance",homeLayout.homeAppearance());
         if (id == "kodi") kodiService.suspend(true);
     });
     QObject::connect(&sessions, &SessionManager::returnedHome, &kodiService, [this](const QString &id) {

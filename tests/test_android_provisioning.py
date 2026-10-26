@@ -21,6 +21,32 @@ install_spec.loader.exec_module(installer)
 
 
 class AndroidProvisioningTests(unittest.TestCase):
+    def test_selector_repair_closes_on_success_and_exception_and_is_repeatable(self):
+        before=b'''def foreground_pipe(args, cmd):
+    process = args
+    sel = selectors.DefaultSelector()
+    sel.register(process.stdout, selectors.EVENT_READ)
+    if cmd:
+        raise RuntimeError("operation failed")
+    return (process.returncode, "")
+'''
+        after=android.selector_cleanup_source(before)
+        self.assertEqual(android.selector_cleanup_source(after),after)
+        selector=Mock();factory=Mock(return_value=selector)
+        scope={"selectors":SimpleNamespace(DefaultSelector=factory,EVENT_READ=1)}
+        exec(compile(after,"test-selector-repair","exec"),scope)
+        for failure in (False,True):
+            stream=Mock();process=SimpleNamespace(stdout=stream,returncode=0);selector.reset_mock()
+            if failure:
+                with self.assertRaisesRegex(RuntimeError,"operation failed"):scope["foreground_pipe"](process,True)
+            else:self.assertEqual(scope["foreground_pipe"](process,False),(0,""))
+            selector.close.assert_called_once_with();stream.close.assert_called_once_with()
+        selector.reset_mock();selector.register.side_effect=RuntimeError("registration failed")
+        with self.assertRaisesRegex(RuntimeError,"registration failed"):scope["foreground_pipe"](process,False)
+        selector.close.assert_called_once_with()
+        with self.assertRaisesRegex(RuntimeError,"allocation"):android.selector_cleanup_source(before.replace(b"sel = selectors.DefaultSelector()",b"sel = another_factory()"))
+        with self.assertRaisesRegex(RuntimeError,"Oversized"):android.selector_cleanup_source(b" "*(128*1024+1))
+
     @unittest.skipUnless(sys.platform == "linux", "Linux atomic activation with directory fsync")
     def test_activation_preserves_existing_apps_and_is_repeatable(self):
         receipt = {"configurationSha256": hashlib.sha256((ROOT/"config/android-runtime.json").read_bytes()).hexdigest()}

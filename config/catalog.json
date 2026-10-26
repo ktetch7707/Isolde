@@ -1,5 +1,17 @@
 {
   "schemaVersion": 1,
+  "store": {
+    "platforms": [{"type":"android","label":"Android"},{"type":"web","label":"Chromium"}],
+    "columns": 2,
+    "spacing": 20,
+    "cardHeight": 142,
+    "detailRatio": 0.42
+    ,"webBackend":"chromium"
+    ,"webDesktopId":"google-chrome"
+    ,"webCategory":"Web apps"
+    ,"appSection":"Apps"
+    ,"appAccent":"#64748B"
+  },
   "packages": [
     "packages/ambient-weather/manifest.json",
     "packages/living-room-radio/manifest.json",

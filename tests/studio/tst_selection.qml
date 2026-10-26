@@ -18,6 +18,73 @@ Item {
         QtObject {id:fakeRegistry;property var apps:[]}
         Component {id:carouselComponent;App.PageAppCarousel {width:900;height:160;registry:fakeRegistry;appearance:({textColor:"#514b67",surfaceColor:"#f7edff",focusColor:"#bd8198"});style:({variant:"orb",layout:{visibleColumns:2}})}}
         SignalSpy {id:launchSpy;signalName:"launch"}
+        QtObject {
+            id:storeCatalog
+            property var storeOptions:({platforms:[{type:"android",label:"Android"},{type:"web",label:"Chromium"}],columns:2,spacing:20,cardHeight:142})
+            property bool busy:false
+            property string errorString:""
+            property bool onlineStoreSearch:false
+            property int webAdds:0
+            property var entries:[]
+            function setOnlineStoreSearch(value){onlineStoreSearch=value}
+            function searchStore(query){}
+            function addWebApp(name,url,backend){webAdds++;entries=[{id:"web-custom",name:name,type:"web",storeType:"web",category:"Web",publisher:"example.org",description:url,symbol:"W",accent:"#347d9c",installed:true}];return "web-custom"}
+            function install(id){entries=entries.map(e=>Object.assign({},e,{installed:e.id===id?true:e.installed}));return true}
+            function uninstall(id){entries=entries.map(e=>Object.assign({},e,{installed:e.id===id?false:e.installed}));return true}
+        }
+        Component {id:storeComponent;App.AppStoreView {width:1280;height:720;catalog:storeCatalog;entries:storeCatalog.entries;appearance:({surfaceColor:"#f1e6f5",textColor:"#40384d",focusColor:"#8d4b73"})}}
+        SignalSpy {id:storeOpenSpy;signalName:"openRequested"}
+        function test_store_add_website_cancel_and_remote_form() {
+            storeCatalog.entries=[];storeCatalog.webAdds=0
+            const store=createTemporaryObject(storeComponent,tests.parent);verify(store!==null)
+            editor.visible=false;store.z=10000;store.choosePlatform(1)
+            store.visible=false;editor.visible=true;editor.forceActiveFocus()
+            store.visible=true;tryCompare(store,"activeFocus",true);editor.visible=false
+            store.handleCommand(inputManager.menu);store.handleCommand(inputManager.confirm);verify(store.addWebOpen)
+            store.handleCommand(inputManager.back);verify(!store.addWebOpen);compare(storeCatalog.webAdds,0)
+            store.handleCommand(inputManager.confirm);store.handleCommand(inputManager.confirm)
+            verify(store.searchOpen);const keyboard=findChild(store,"storeKeyboard");verify(keyboard!==null);keyboard.accepted("Example website")
+            compare(store.webName,"Example website");verify(!store.searchOpen)
+            store.handleCommand(inputManager.navigateDown);store.handleCommand(inputManager.confirm);keyboard.accepted("https://example.org/")
+            compare(store.webAddress,"https://example.org/")
+            wait(100);if(studioFixture.artifacts)grabImage(store).save(studioFixture.artifacts+"/studio-test-store-add-website.png")
+            store.handleCommand(inputManager.navigateDown);store.handleCommand(inputManager.navigateDown);store.handleCommand(inputManager.navigateDown)
+            store.handleCommand(inputManager.confirm);compare(storeCatalog.webAdds,1);verify(!store.addWebOpen);compare(store.selectedId,"web-custom");compare(store.area,"actions")
+        }
+        function test_store_chromium_wrappers_and_large_text_actions() {
+            storeCatalog.entries=[{id:"browser-wrapper",name:"A Chromium desktop wrapper",type:"desktop",storeType:"web",presentationMode:"web-kiosk",category:"Video",publisher:"Example",description:"A long description for a remote-friendly browser application that wraps over several lines at larger text sizes. The selected action must remain fully visible when navigating with the remote control.",symbol:"C",accent:"#347d9c",installed:true}]
+            const store=createTemporaryObject(storeComponent,tests.parent);verify(store!==null)
+            editor.visible=false;store.z=10000
+            store.appearance={surfaceColor:"#f1e6f5",textColor:"#40384d",focusColor:"#8d4b73",typographyScale:1.6}
+            store.choosePlatform(1);compare(store.filtered.length,1)
+            store.deviceApps=true;compare(store.filtered.length,0)
+            store.deviceApps=false;store.area="actions";store.actionIndex=1
+            const details=findChild(store,"storeDetails"),action=findChild(store,"store-action-1")
+            verify(details!==null);verify(action!==null)
+            tryVerify(()=>{const p=action.mapToItem(details,0,0);return p.y>=-1 && p.y+action.height<=details.height+1})
+        }
+        function test_store_platform_install_open_uninstall_and_cancel() {
+            storeCatalog.entries=[{id:"android-example",name:"Android app",type:"android",category:"Video",publisher:"Example",description:"A remote-friendly Android app.",symbol:"A",accent:"#b34747",installed:false},{id:"web-example",name:"Chromium app",type:"web",category:"Video",publisher:"Example",description:"A Chromium web app.",symbol:"C",accent:"#347d9c",installed:false}]
+            const store=createTemporaryObject(storeComponent,tests.parent);verify(store!==null)
+            editor.visible=false;store.z=10000;waitForRendering(store)
+            storeOpenSpy.target=store
+            for(let platform=0;platform<2;++platform){
+                store.choosePlatform(platform);compare(store.filtered.length,1)
+                store.handleCommand(inputManager.navigateDown);store.handleCommand(inputManager.confirm)
+                compare(store.confirmation,"install");store.handleCommand(inputManager.back);compare(store.selected.installed,false)
+                store.handleCommand(inputManager.confirm);store.handleCommand(inputManager.navigateRight);store.handleCommand(inputManager.confirm)
+                compare(store.selected.installed,true);const id=store.selectedId
+                storeOpenSpy.clear();store.handleCommand(inputManager.confirm)
+                compare(storeOpenSpy.count,1);compare(storeOpenSpy.signalArguments[0][0],id);compare(store.returnAppId,id)
+                waitForRendering(store)
+                if(studioFixture.artifacts)grabImage(store).save(studioFixture.artifacts+"/studio-test-store-"+(platform===0?"android":"chromium")+".png")
+                store.handleCommand(inputManager.navigateDown);store.handleCommand(inputManager.confirm)
+                compare(store.confirmation,"uninstall");store.handleCommand(inputManager.back);compare(store.selected.installed,true)
+                store.handleCommand(inputManager.confirm);store.handleCommand(inputManager.navigateRight);store.handleCommand(inputManager.confirm)
+                compare(store.selected.installed,false);compare(store.selectedId,id)
+            }
+            storeOpenSpy.target=null
+        }
         SignalSpy {id:switchSpy;signalName:"clicked"}
         Component {id:ambientComponent;App.AmbientOverlay {}}
         QtObject {id:fakePlaylistCatalog;property var items:[{title:"Family films",playlistName:"Family films.xsp"}];property string status:"Kodi video playlists · 1 of 1"}

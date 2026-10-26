@@ -41,6 +41,8 @@ add_library(isolde_core STATIC
     src/app/AppDefinition.h
     src/app/AppCatalog.cpp
     src/app/LocalCatalogProvider.cpp
+    src/app/LocalCatalogProvider.h
+    src/app/StoreProvider.h
     src/app/AppCatalog.h
     src/app/AppRegistry.cpp
     src/app/AppRegistry.h
@@ -100,6 +102,9 @@ target_link_libraries(isolde-recovery PRIVATE Qt6::Qml Qt6::Quick)
 qt_add_resources(isolde-recovery "recovery_ui" PREFIX "/recovery" BASE src/recovery FILES src/recovery/Recovery.qml)
 qt_add_executable(isolde-native-host src/sessions/NativeAppHost.cpp)
 target_link_libraries(isolde-native-host PRIVATE Qt6::Core)
+target_include_directories(isolde-native-host PRIVATE src)
+qt_add_resources(isolde-native-host "native_remote" PREFIX "/isolde" BASE src/input FILES src/input/web-remote.js)
+qt_add_resources(isolde "embedded_remote" PREFIX "/isolde" BASE src/input FILES src/input/web-remote.js)
 add_dependencies(isolde isolde-native-host)
 target_link_libraries(isolde PRIVATE isolde_core Qt6::Qml Qt6::Quick Qt6::WebEngineQuick Qt6::WebChannel)
 target_compile_definitions(isolde PRIVATE ISOLDE_VERSION="${PROJECT_VERSION}")
@@ -125,6 +130,7 @@ qt_add_qml_module(isolde
         qml/MockSessionView.qml
         qml/OnScreenKeyboard.qml
         qml/AppStoreView.qml
+        qml/StoreSettingsView.qml
         qml/AmbientScreen.qml
         qml/AmbientOverlay.qml
         qml/AmbientSettingsView.qml
@@ -311,6 +317,13 @@ if(BUILD_TESTING)
         tests/tst_isolde.cpp
     )
     target_link_libraries(isolde_tests PRIVATE isolde_core Qt6::Test)
+    qt_add_executable(isolde_web_remote_tests tests/web_remote.cpp)
+    target_link_libraries(isolde_web_remote_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick Qt6::WebEngineQuick)
+    target_compile_definitions(isolde_web_remote_tests PRIVATE WEB_REMOTE_TEST_QML="${CMAKE_CURRENT_SOURCE_DIR}/tests/WebRemoteTest.qml")
+    qt_add_resources(isolde_web_remote_tests "test_remote" PREFIX "/isolde" BASE src/input FILES src/input/web-remote.js)
+    add_dependencies(isolde_web_remote_tests isolde-native-host)
+    add_test(NAME web_remote COMMAND isolde_web_remote_tests)
+    set_tests_properties(web_remote PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_desktop_mode_tests tests/tst_desktop_mode.cpp)
     target_link_libraries(isolde_desktop_mode_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
     target_compile_definitions(isolde_desktop_mode_tests PRIVATE STUDIO_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/studio-defaults.json" DESKTOP_RETURN_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/DesktopReturnWindow.qml")

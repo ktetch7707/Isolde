@@ -109,6 +109,10 @@ Window {
             window.openSearchFromPage()
         } else if (command === inputManager.back && sessionManager.active && sessionManager.currentAppType === "settings" && settings.inPage) {
             settings.handleCommand(command)
+        } else if (command === inputManager.back && sessionManager.active && sessionManager.currentAppType === "store") {
+            if(!store.handleCommand(command))sessionManager.exitCurrent()
+        } else if(command===inputManager.back && sessionManager.active && sessionManager.currentAppType==="web"){
+            webKiosk.handleCommand(command)
         } else if (command === inputManager.back) {
             if (sessionManager.active)
                 sessionManager.exitCurrent()
@@ -249,6 +253,8 @@ Window {
                 accent: sessionManager.currentAppAccent
                 url: sessionManager.currentLaunchUrl
                 allowedOrigins: sessionManager.currentAllowedOrigins
+                appearance:homeLayout.homeAppearance
+                onExitRequested:sessionManager.exitCurrent()
             }
 
             AppStoreView {
@@ -256,6 +262,9 @@ Window {
                 anchors.fill: parent
                 visible: sessionManager.active && sessionManager.currentAppType === "store"
                 entries: appCatalog.entries
+                appearance: homeLayout.homeAppearance
+                onOperationSettled: { if(visible){window.raise();window.requestActivate();shellSurface.forceActiveFocus()} }
+                onOpenRequested: appId => { sessionManager.exitCurrent(); Qt.callLater(()=>sessionManager.launch(appId)) }
             }
 
             SettingsView {
@@ -449,6 +458,9 @@ Window {
     }
     Connections {
         target: sessionManager
+        function onReturnedHome(appId) {
+            if(store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
+        }
         function onSessionRejected(reason) {
             window.launchErrorVpn=false
             window.launchErrorAppId = ""

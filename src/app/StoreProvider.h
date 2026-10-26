@@ -20,6 +20,9 @@ public:
     //  { id, name, publisher, category, iconSource, type, store, storeId,
     //    version, sizeBytes, provenance, downloadUrl, sha256, networkRequired, consentText }
     [[nodiscard]] virtual QVariantList search(const QString &query) = 0;
+    virtual void requestSearch(const QString &query) { m_results=search(query); emit resultsChanged(); }
+    virtual void cancel() {}
+    [[nodiscard]] QVariantList results() const { return m_results; }
 
     [[nodiscard]] virtual QUrl artifactUrl(const QString &storeId) const = 0;
     [[nodiscard]] virtual QByteArray artifactHash(const QString &storeId) const = 0;
@@ -28,4 +31,6 @@ public:
 signals:
     void resultsChanged();
     void providerError(const QString &message);
+protected:
+    QVariantList m_results;
 };

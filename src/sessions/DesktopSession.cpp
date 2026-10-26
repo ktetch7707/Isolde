@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QJsonDocument>
 
 namespace {
 
@@ -362,7 +363,14 @@ void DesktopSession::launch()
     qInfo() << "Isolated native session launching" << definition().id << "profile" << qApp->property("isoldeProfile");
     m_launcher.setProcessEnvironment(sandbox.environment);
     m_launcher.setProgram(sandbox.program);
-    m_launcher.setArguments(sandbox.arguments + resolvedLaunch.arguments);
+    auto launchArguments=sandbox.arguments;
+    if(definition().presentationMode=="web-kiosk"){
+        const auto appearance=qApp->property("isoldeRemoteAppearance").toMap();
+        if(!appearance.contains("focusColor")){setError("The app's remote appearance is unavailable. Return Home and retry.");setState(State::Exited);return;}
+        const auto index=launchArguments.lastIndexOf("--");
+        launchArguments.insert(index,"--web-remote");launchArguments.insert(index+1,QString::fromLatin1(QJsonDocument::fromVariant(appearance).toJson(QJsonDocument::Compact).toBase64()));
+    }
+    m_launcher.setArguments(launchArguments + resolvedLaunch.arguments);
     connect(&m_launcher, &QProcess::readyReadStandardError, this, [this] {
         m_diagnostics = (m_diagnostics + m_launcher.readAllStandardError()).right(8192);
     });

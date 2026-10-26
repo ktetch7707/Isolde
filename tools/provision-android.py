@@ -16,6 +16,9 @@ import shutil
 import tempfile
 import io
 import stat
+import ast
+import sys
+from types import SimpleNamespace
 
 spec = importlib.util.spec_from_file_location("default_provisioner", Path(__file__).with_name("provision-default-apps.py"))
 shared = importlib.util.module_from_spec(spec)
@@ -84,6 +87,58 @@ def require_idle_runtime(initialized):
         if manager.GetSession(timeout=5): raise RuntimeError("Close the active Android session before runtime setup; existing sessions are never taken over")
 
 
+def selector_cleanup_source(before):
+    """Bounded fix for Waydroid #2357; preserve vendor source and fail on unknown shapes."""
+    if len(before)>128*1024: raise RuntimeError("Oversized Android runtime helper")
+    text=before.decode(); tree=ast.parse(text)
+    functions=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=="foreground_pipe"]
+    if len(functions)!=1: raise RuntimeError("Unknown Android runtime helper; selector repair refused")
+    function=functions[0]
+    closes=[n for n in ast.walk(function) if isinstance(n,ast.Call) and ast.unparse(n.func)=="sel.close"]
+    if closes:
+        if any(isinstance(n,ast.Try) and any(ast.unparse(c)=="sel.close()" for s in n.finalbody for c in ast.walk(s)) for n in ast.walk(function)): return before
+        raise RuntimeError("Unknown Android selector cleanup; repair refused")
+    selectors=[n for n in function.body if isinstance(n,ast.Assign) and len(n.targets)==1 and ast.unparse(n.targets[0])=="sel" and ast.unparse(n.value)=="selectors.DefaultSelector()"]
+    if len(selectors)!=1 or not isinstance(function.body[-1],ast.Return): raise RuntimeError("Unknown Android selector allocation; repair refused")
+    selector=selectors[0];tail=function.body[function.body.index(selector)+1:]
+    if not tail or ast.unparse(tail[0])!="sel.register(process.stdout, selectors.EVENT_READ)": raise RuntimeError("Unknown Android selector registration; repair refused")
+    lines=text.splitlines(keepends=True);start=selector.end_lineno;end=function.end_lineno
+    result="".join(lines[:start])+"    # Isolde: close the selector on every path (Waydroid #2357).\n    try:\n"+"".join("    "+line if line.strip() else line for line in lines[start:end])+"    finally:\n        sel.close()\n        process.stdout.close()\n"+"".join(lines[end:])
+    compile(result,"waydroid-selector-cleanup","exec")
+    return result.encode()
+
+
+def repair_selector_helper():
+    path=Path("/usr/lib/waydroid/tools/helpers/run_core.py")
+    if path.resolve()!=path or not path.is_file() or path.stat().st_uid!=0 or path.stat().st_mode & 0o022 or path.stat().st_size>128*1024: raise RuntimeError("Unsafe Android runtime helper")
+    before=path.read_bytes();after=selector_cleanup_source(before)
+    if before!=after:
+        shared.atomic(path.with_suffix(".py.isolde-backup"),before,0o600)
+        shared.atomic(path,after,stat.S_IMODE(path.stat().st_mode))
+    return hashlib.sha256(after).hexdigest()
+
+
+def repair_runtime(source):
+    shared.platform()
+    if os.geteuid()!=0: raise RuntimeError("Android repair requires a guest administrator")
+    data=load(source);receipt=system_receipt()
+    if not receipt or receipt.get("configurationSha256")!=hashlib.sha256((source/"config/android-runtime.json").read_bytes()).hexdigest(): raise RuntimeError("Run Android setup before runtime repair")
+    version=shared.run("dpkg-query","-W","-f=${Version}","waydroid",capture_output=True,text=True,timeout=15).stdout.strip()
+    if version.split("-",1)[0]!=data["runtimeVersion"]: raise RuntimeError("Android runtime version differs from the tested repair")
+    require_idle_runtime(True)
+    checksum=repair_selector_helper()
+    # The existing daemon has already exhausted descriptors; reload only while idle.
+    require_idle_runtime(True)
+    shared.run("systemctl","restart","waydroid-container.service",timeout=60)
+    sys.path.insert(0,"/usr/lib/waydroid")
+    from tools.helpers import run_core
+    baseline=len(os.listdir("/proc/self/fd"))
+    for _ in range(128): run_core.foreground_pipe(SimpleNamespace(timeout=3),["/usr/bin/true"])
+    final=len(os.listdir("/proc/self/fd"))
+    if final!=baseline: raise RuntimeError("Android selector cleanup leaked descriptors")
+    print(json.dumps({"selectorRepairVerified":True,"runtimeHelperSha256":checksum,"commands":128,"descriptorsBefore":baseline,"descriptorsAfter":final}),flush=True)
+
+
 def system(source, software_rendering=False):
     shared.platform()
     if os.geteuid() != 0: raise RuntimeError("Android system setup requires a guest administrator")
@@ -124,7 +179,10 @@ def system(source, software_rendering=False):
     # Never force reinitialize an existing runtime or delete its userdata.
     if software_rendering:
         configure_software_rendering(cfg_path)
+    if initialized: require_idle_runtime(True)
+    repair_selector_helper()
     shared.run("systemctl", "enable", "--now", "waydroid-container.service", timeout=60)
+    shared.run("systemctl", "restart", "waydroid-container.service", timeout=60)
     shared.atomic(Path("/var/lib/isolde/android-install.json"), json.dumps({
         "schemaVersion": 1, "runtime": "waydroid", "runtimeVersion": data["runtimeVersion"],
         "softwareRenderingRequested": software_rendering, "apkStaged": True,
@@ -175,8 +233,11 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--software-rendering", action="store_true")
     parser.add_argument("--activate-if-configured", action="store_true", help="Register SmartTube in All Apps as the regular user, if Android setup exists")
+    parser.add_argument("--repair-runtime",action="store_true",help="Repair the pinned runtime selector leak and restart only its idle daemon")
     args = parser.parse_args()
-    if args.activate_if_configured:
+    if args.repair_runtime:
+        repair_runtime(args.source.resolve())
+    elif args.activate_if_configured:
         print(json.dumps({"smartTubeRegistered": activate(args.source.resolve())}))
     else:
         system(args.source.resolve(), args.software_rendering)

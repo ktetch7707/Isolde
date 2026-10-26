@@ -18,6 +18,7 @@ import time
 import xml.etree.ElementTree as ET
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
+          "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests"),
           "profile_browser_isolation": "isolde_profile_browser_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
           "studio_navigation": "isolde_home_navigation_tests",
@@ -46,6 +47,8 @@ def suite_selection(suite):
         pattern = "^(studio_grid|studio_grid_controls)$"
     if suite == "vpn":
         pattern = "^(vpn_setup|vpn_launch)$"
+    if suite == "store":
+        pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote)$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
@@ -61,10 +64,14 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "shell": ("shell-acceptance.py", []),
          "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
          "android": ("android-acceptance.py", []),
-         "androidapps": ("android-apps-acceptance.py", [])}
+         "androidapps": ("android-apps-acceptance.py", []),
+         "store": ("store-acceptance.py", [])}
 
 
 def visual_result_passed(case, result):
+    if case == "store":
+        return (all(result.get(k) is True for k in ("passed","androidLifecycle","chromiumLifecycle","androidPackageRemovalVerified","freshProfile"))
+                and result.get("normalProfileUsed") is False and result.get("playbackVerified") is False and len(result.get("captures",[]))==14)
     if case == "androidapps":
         return (all(result.get(k) is True for k in ("passed", "sharedSessionLaunch", "ownedSessionStopped"))
                 and result.get("playbackVerified") is False
@@ -445,6 +452,8 @@ class Oracle:
                 expected = {"home_component_navigation", "studio_navigation"}
             if suite == "vpn":
                 expected = {"vpn_setup", "vpn_launch"}
+            if suite == "store":
+                expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote"}
             if {c.get("name") for c in cases} != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
@@ -479,7 +488,7 @@ class Oracle:
         return self.run / "payload"
 
     def configure_native(self, target="native"):
-        if target not in {"native","surfshark","android"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair"}: raise ValueError("Unsupported guest configuration target")
         payload=self.tested_payload()
         deployed=json.loads((self.run/"deploy-result.json").read_text())
         if self.command("hostname")!="isolde-test" or self.links()["current"]!=deployed["release"] or digest(Path(deployed["release"])/"bin/isolde")!=digest(payload/"bin/isolde"):
@@ -492,10 +501,11 @@ class Oracle:
         command=["/usr/bin/python3","-c","import os,runpy,sys; sys.argv="+repr(command[1:])+"; runpy.run_path(sys.argv[0],run_name='__main__'); os.chmod('/usr/lib/isolde-native',0o755)"]
         if target=="surfshark":command=["/usr/bin/python3",str(script),"surfshark","--source",str(self.run/"source")]
         if target=="android":command=["/usr/bin/python3",str(self.run/"source/tools/provision-android.py"),"--source",str(self.run/"source"),"--software-rendering"]
+        if target=="android-repair":command=["/usr/bin/python3",str(self.run/"source/tools/provision-android.py"),"--source",str(self.run/"source"),"--repair-runtime"]
         launcher=self.run/"native-admin-terminal.py"
-        title="Isolde Android setup" if target=="android" else "Isolde Surfshark setup" if target=="surfshark" else "Isolde native setup"
+        title="Isolde Android setup" if target.startswith("android") else "Isolde Surfshark setup" if target=="surfshark" else "Isolde native setup"
         launcher.write_text("import subprocess\nprint("+repr(title+" — enter the VM administrator password only here.")+", flush=True)\nr = subprocess.run("+repr(["pkexec"]+command)+")\nprint('Setup finished with exit code', r.returncode, flush=True)\n"+("if r.returncode: input('Press Enter to close this window. ')\n" if target in {"surfshark","android"} else "input('Press Enter to close this window. ')\n")+"raise SystemExit(r.returncode)\n")
-        if target=="android":
+        if target.startswith("android"):
             # Capture installer output, never the administrator authentication
             # dialog. Errors close automatically and produce a structured exit.
             (self.run/"android-admin-exit.json").unlink(missing_ok=True)
@@ -509,8 +519,8 @@ class Oracle:
         try:
             self.stage("native-configure-stop",["systemctl","--user","stop","isolde.service"],30)
             print("VM_AUTH_REQUIRED: authenticate in the "+title+" terminal inside Isolde-Test; never send a password here.",flush=True)
-            self.stage("native-configure-policy",["ptyxis","--standalone","--title",title,"--","/usr/bin/python3",str(launcher)],3600 if target=="android" else 900 if target=="surfshark" else 180,env=environment)
-            if target=="android":
+            self.stage("native-configure-policy",["ptyxis","--standalone","--title",title,"--","/usr/bin/python3",str(launcher)],3600 if target.startswith("android") else 900 if target=="surfshark" else 180,env=environment)
+            if target.startswith("android"):
                 outcome=self.run/"android-admin-exit.json"
                 if not outcome.is_file() or json.loads(outcome.read_text()).get("exit")!=0:raise RuntimeError("Android administrator setup failed; see android-admin.log")
                 receipt=Path("/var/lib/isolde/android-install.json")
@@ -599,7 +609,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android","androidapps") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android","androidapps","store") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -742,7 +752,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -844,7 +854,7 @@ def main():
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair"],default="native")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.run_id):
         parser.error("Invalid run ID")
@@ -866,6 +876,10 @@ def main():
             "apkStaged":Path("/usr/share/isolde/android/smarttube.apk").is_file(),
             "receiptPresent":Path("/var/lib/isolde/android-install.json").is_file(),
             "freeGiB":round(shutil.disk_usage(Path.home()).free/1024**3,2)}
+        container_state=subprocess.run(["systemctl","show","waydroid-container.service","-p","ActiveState","-p","SubState","-p","Result","-p","ExecMainStatus"],capture_output=True,text=True,timeout=10)
+        status["androidSetup"]["containerService"]=container_state.stdout[:2048]
+        container_log=subprocess.run(["journalctl","-u","waydroid-container.service","--since=-15min","-n","60","--no-pager","-o","cat"],capture_output=True,text=True,timeout=10)
+        status["androidSetup"]["containerStartupLog"]=container_log.stdout[-12288:]
         # Inspect only this guardian's descendant tree; never unrelated app
         # arguments, environment, account files or terminal contents.
         status["guardianAlive"]=False

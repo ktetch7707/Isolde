@@ -19,7 +19,7 @@ Item {
         { name: "System", description: "Display, audio, power, support, updates, and about" },
         { name: "Profiles", description: "People, personal layouts, and separate web sign-ins" },
         { name: "VPN", description: "Install and configure Surfshark and Proton VPN" },
-        { name: "Online Store", description: "Browse and install apps from Google Play and the Chrome Web Store" }
+        { name: "Online Store", description: "Verified Android repositories and Chromium web apps" }
     ]
 
     function openSection(index) {
@@ -137,14 +137,7 @@ Item {
                 anchors.margins: 26
                 NetworkSettingsView { id: networkPage; anchors.fill: parent; visible: root.selectedSection === 0 }
                 VpnSettingsView { id: vpnPage; anchors.fill: parent; appearance: root.appearance; visible: root.inPage && root.selectedSection === 6 }
-                Column {
-                    visible: root.selectedSection === 7
-                    anchors.centerIn: parent
-                    spacing: 10
-                    Text { text: "ONLINE STORE"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                    Text { text: "Browse and install apps from Google Play and the Chrome Web Store"; color: "#91A0BC"; font.pixelSize: 18 }
-                }
-                StoreSettingsView { id: storePage; anchors.fill: parent; visible: root.selectedSection === 7 }
+                StoreSettingsView { id: storePage; anchors.fill: parent; appearance:root.appearance; visible: root.inPage && root.selectedSection === 7 }
                 Column {
                     visible: root.selectedSection === 1
                     anchors.centerIn: parent

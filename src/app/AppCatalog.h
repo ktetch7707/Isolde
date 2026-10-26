@@ -10,6 +10,8 @@
 #include <QProcess>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QPointer>
+#include <QJsonObject>
 
 class AppCatalog final : public QObject {
     Q_OBJECT
@@ -20,12 +22,15 @@ class AppCatalog final : public QObject {
     Q_PROPERTY(QString operationId READ operationId NOTIFY entriesChanged)
     Q_PROPERTY(bool onlineStoreSearch READ onlineStoreSearch NOTIFY onlineStoreSearchChanged)
     Q_PROPERTY(QVariantList providerResults READ providerResults NOTIFY providerResultsChanged)
+    Q_PROPERTY(QVariantList allEntries READ allEntries NOTIFY entriesChanged)
+    Q_PROPERTY(QString downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
+    Q_PROPERTY(QString storeSourceName READ storeSourceName NOTIFY entriesChanged)
 
 public:
     explicit AppCatalog(AppRegistry *registry, QObject *parent = nullptr);
     ~AppCatalog() override;
     QVariantMap storeOptions() const { return m_storeOptions; }
-    bool busy() const { return !m_operationId.isEmpty(); }
+    bool busy() const { return !m_operationId.isEmpty() || m_downloadReply; }
     QString operationId() const { return m_operationId; }
     [[nodiscard]] QVariantList entries() const;
     [[nodiscard]] QString errorString() const;
@@ -34,6 +39,7 @@ public:
     Q_INVOKABLE void setStoreProvider(StoreProvider *provider);
     Q_INVOKABLE StoreProvider *storeProvider() const { return m_provider; }
     Q_INVOKABLE void setOnlineStoreSearch(bool enabled);
+    Q_INVOKABLE void searchStore(const QString &query);
     Q_INVOKABLE bool load(const QString &catalogPath = {}, const QString &statePath = {}, const QString &installRoot = {});
     Q_INVOKABLE bool install(const QString &id);
     Q_INVOKABLE bool uninstall(const QString &id);
@@ -43,7 +49,9 @@ public:
     Q_INVOKABLE bool markFailed(const QString &id, const QString &reason);
     Q_INVOKABLE QVariantList allEntries() const;
     Q_INVOKABLE bool downloadAndInstall(const QString &storeId);
+    Q_INVOKABLE QString addWebApp(const QString &name,const QString &url,const QString &backend);
     [[nodiscard]] QString downloadProgress() const { return m_downloadProgress; }
+    QString storeSourceName() const { return m_provider ? m_provider->providerName() : tr("No online repository connected"); }
 
 signals:
     void entriesChanged();
@@ -69,6 +77,7 @@ private:
         QString setupPrompt;
         QStringList capabilities;
         QByteArray manifestData;
+        bool custom=false;
     };
     const Entry *findEntry(const QString &id) const;
     bool saveState();
@@ -79,6 +88,8 @@ private:
     void onDownloadFinished();
     void onDownloadReadyRead();
     void onDownloadError(QNetworkReply::NetworkError code);
+    bool customEntry(const QJsonObject &data,Entry *entry);
+    bool installCustom(const QJsonObject &data);
 
     AppRegistry *m_registry;
     QVector<Entry> m_entries;
@@ -95,7 +106,7 @@ private:
     QString m_operation;
     bool m_committing = false;
     QByteArray m_operationEvents;
-    StoreProvider *m_provider = nullptr;
+    QPointer<StoreProvider> m_provider;
     bool m_onlineStoreSearch = false;
     QVariantList m_providerResults;
     QString m_downloadProgress;
@@ -105,4 +116,5 @@ private:
     QString m_downloadStoreId;
     QByteArray m_downloadExpectedHash;
     QVariantMap m_downloadResult;
+    QHash<QString,QString> m_customPackages;
 };

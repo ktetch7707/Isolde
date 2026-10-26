@@ -95,6 +95,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--app", required=True)
+    parser.add_argument("--operation", choices=("launch", "install", "uninstall"), default="launch")
     args = parser.parse_args()
     if sys.platform != "linux" or os.getuid() == 0:
         raise RuntimeError("Android apps require the Linux desktop session, without administrator privileges.")
@@ -163,6 +164,18 @@ def main():
             time.sleep(.2)
         verify()
         apps = command(env, "app", "list", timeout=90)
+        if args.operation == "uninstall":
+            if "packageName: "+package in apps.splitlines():
+                emit("removing"); verify(); command(env, "app", "remove", package)
+                deadline = time.monotonic()+60
+                while True:
+                    verify()
+                    if "packageName: "+package not in command(env, "app", "list", timeout=15).splitlines(): break
+                    if time.monotonic()>deadline: raise RuntimeError("Android did not finish removing the app. Retry removal.")
+                    time.sleep(1)
+            packages.pop(args.app, None); save_packages(package_receipt, packages)
+            emit("completed", operation="uninstall", packageAbsent=True)
+            return
         if "packageName: "+package not in apps.splitlines() or packages.get(args.app) != app["sha256"]:
             emit("installing")
             verify(); command(env, "app", "install", str(apk), timeout=120)
@@ -174,6 +187,9 @@ def main():
                 time.sleep(1)
             packages[args.app] = app["sha256"]
             save_packages(package_receipt, packages)
+        if args.operation == "install":
+            emit("completed", operation="install", packagePresent=True)
+            return
         verify(); command(env, "app", "launch", package)
         emit("ready")
         while True:
