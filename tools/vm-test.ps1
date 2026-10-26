@@ -1,14 +1,16 @@
 param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
-    [ValidateSet('all','vpn','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode')][string]$Suite = 'all',
+    [ValidateSet('all','vpn','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
     [ValidateSet('studio','desktop','lounge','pastel','pages','repairs','apps','clients','vpn','shell','playlists')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
+    [switch]$Capture,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
+if ($Capture -and $Action -ne 'Status') { throw 'Capture is restricted to Status of an active guest setup guardian.' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Use PowerShell 7 (pwsh), not Windows PowerShell.' }
 . "$PSScriptRoot/vm-process.ps1"
 $repo = Split-Path $PSScriptRoot -Parent
@@ -58,9 +60,18 @@ try {
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
-        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
+        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')
-        $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + $command) -TimeoutSeconds $seconds -Log (Join-Path $local "$remoteAction.log")
+        $actionResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + $command) -TimeoutSeconds $seconds -Log (Join-Path $local "$remoteAction.log")
+        if ($Capture) {
+            $stateLine = $actionResult.Lines | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1
+            if (!$stateLine) { throw 'No guest guardian status returned.' }
+            $captureState = $stateLine | ConvertFrom-Json
+            if ($captureState.runId -ne $RunId -or $captureState.state -ne 'running' -or $captureState.action -ne 'configure' -or $captureState.stage -ne 'native-configure-policy' -or !$captureState.guardianAlive) { throw 'Capture requires this live setup guardian.' }
+            $capturePath = Join-Path $local ('setup-status-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '.png')
+            $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm','Isolde-Test','screenshotpng',$capturePath) -TimeoutSeconds 20 -Log (Join-Path $local 'setup-capture.log')
+            Write-Host "Captured $capturePath"
+        }
     }
 } catch {
     $exitCode = 1

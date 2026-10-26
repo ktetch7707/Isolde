@@ -199,12 +199,17 @@ def main():
     parser.add_argument("--startup", action="store_true", help="Start at graphical login and recover from crashes")
     parser.add_argument("--build-dir", type=Path, help="Reuse a CMake build directory (default: build-appliance)")
     parser.add_argument("--without-default-apps", action="store_true", help="Explicitly omit native default-app downloads and first-install activation")
+    parser.add_argument("--android", action="store_true", help="Provision the Android runtime and verified SmartTube package during dependencies setup")
+    parser.add_argument("--android-software-rendering", action="store_true", help="Use the Android software renderer for a VM; requires --android")
     args = parser.parse_args()
+    if args.android_software_rendering and not args.android:
+        parser.error("--android-software-rendering requires --android")
     if args.action == "plan":
         print("Target: Ubuntu 26.04; existing desktop and user preserved.")
         print("Dependencies: " + " ".join(DEPENDENCIES))
         print(f"Build, test, stage release, atomically activate under {args.prefix}.")
         print("Optional --startup: user service + graphical autostart. No automatic login, disk erase or reboot.")
+        if args.android: print("Android: signed Waydroid repository, Vanilla images and verified SmartTube APK; profile installation and launch are separate gates.")
         return
     if sys.platform != "linux" or not ubuntu_supported():
         raise RuntimeError("This installer currently supports Ubuntu 26.04 only.")
@@ -218,6 +223,9 @@ def main():
         run("apt-get", "install", "-y", *DEPENDENCIES)
         if not args.without_default_apps:
             run(sys.executable, str(args.source.resolve()/"tools/provision-default-apps.py"), "system", "--source", str(args.source.resolve()))
+        if args.android:
+            run(sys.executable, str(args.source.resolve()/"tools/provision-android.py"), "--source", str(args.source.resolve()),
+                *(["--software-rendering"] if args.android_software_rendering else []))
         return
     if os.geteuid() == 0:
         raise RuntimeError("Build/install as the regular Isolde user, not root.")

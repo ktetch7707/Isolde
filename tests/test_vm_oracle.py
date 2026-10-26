@@ -15,6 +15,9 @@ import signal
 import threading
 import unittest
 from unittest.mock import patch
+from unittest.mock import Mock
+from types import SimpleNamespace
+from contextlib import redirect_stdout
 
 spec = importlib.util.spec_from_file_location("oracle", Path(__file__).resolve().parents[1] / "tools/vm-oracle.py")
 oracle = importlib.util.module_from_spec(spec)
@@ -22,6 +25,36 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_android_setup_error_is_recorded_without_an_enter_prompt(self):
+        process=Mock();process.stdout=["Installer failed before initialization\n"];process.wait.return_value=7
+        fake=SimpleNamespace(Popen=Mock(return_value=process),PIPE=-1,STDOUT=-2)
+        script=oracle.android_admin_launcher(["/usr/bin/python3","/tested/setup.py"],self.root,"Android setup")
+        with patch.dict(sys.modules,{"subprocess":fake}),redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as result:exec(compile(script,"android-admin-terminal.py","exec"),{})
+        self.assertEqual(result.exception.code,7)
+        self.assertEqual(json.loads((self.root/"android-admin-exit.json").read_text()),{"exit":7})
+        self.assertIn("failed before initialization",(self.root/"android-admin.log").read_text())
+        self.assertEqual(fake.Popen.call_args.args[0],["pkexec","/usr/bin/python3","/tested/setup.py"])
+
+    @unittest.skipUnless(sys.platform=="linux","Guest-only cleanup")
+    def test_android_space_preparation_preserves_recent_payloads_and_profile_data(self):
+        home=self.root/"home";home.mkdir()
+        runner=oracle.Oracle(home/"oracle","current")
+        for i in range(1,5):
+            old=runner.root/"runs"/str(i);(old/"payload").mkdir(parents=True)
+            (old/"payload/bin").write_text("obsolete payload")
+            (old/"source.log").write_text("preserve evidence")
+            os.utime(old,(i,i))
+        profile=home/"profile.json";profile.write_text("preserve user data")
+        with patch.object(runner,"command",return_value="isolde-test"),patch.object(oracle.Path,"home",return_value=home),patch.object(oracle.shutil,"disk_usage",return_value=SimpleNamespace(free=7*1024**3)):
+            runner.prepare_guest_space(8)
+        self.assertFalse((runner.root/"runs/1/payload").exists())
+        self.assertFalse((runner.root/"runs/2/payload").exists())
+        self.assertTrue((runner.root/"runs/3/payload").exists())
+        self.assertTrue((runner.root/"runs/4/payload").exists())
+        self.assertTrue((runner.root/"runs/1/source.log").is_file())
+        self.assertEqual(profile.read_text(),"preserve user data")
+
     def test_cancellation_unwinds_a_waiting_selector_and_owned_child(self):
         previous=signal.signal(signal.SIGTERM,oracle.interrupted)
         timer=threading.Timer(.2,lambda:os.kill(os.getpid(),signal.SIGTERM))

@@ -1,5 +1,7 @@
 # Product implementation order
 
+Latest app scope (user, 2026-10-25): [Android apps and SmartTube](android-apps-2026-10-25.md) replaces the FreeTube substitution with real SmartTube and supported Android apps. Finish healthy in-flight Kodi verification, then investigate guest runtime compatibility through the bounded runner and implement repeatable setup, profile isolation and remote launch/return. Preserve existing media, twelve-repair and VPN requirements; no completion credit.
+
 User scope revision (2026-10-25): [the complete Kodi interface requirement](kodi-complete-interface-2026-10-25.md) supersedes the earlier requirement to manage curation in Kodi. Isolde must provide playlist authoring, library/source settings and refresh, title poster editing, playback and automatic background backend management. Continue the active playlist verification into these Kodi-owned operations through Isolde UI; opening Kodi menus is not a completed workflow. Preserve the remaining twelve repairs and VPN acceptance work. Use the backlog's updated T04 gates/accounting and keep Kodi authoritative without direct database writes.
 
 Optional scrolling pages (user, 2026-10-21): [scrolling requirements](design/page-studio/scrolling-pages-2026-10-21.md) extend open T19–T24 gates with a per-page checkbox, downward content growth, no-room Add recovery and safe disable/cancel behavior. Existing viewport-grid bounds remain distinct from the proposed bounded document extent. Preserve backlog order and completion credit.

@@ -1,0 +1,49 @@
+# Android apps and SmartTube — 2026-10-25
+
+The user explicitly prefers SmartTube over the earlier FreeTube substitute and requests Android app support comparable to Google TV. This supersedes the earlier permission to use a Linux YouTube alternative. Preserve installed apps and authored layouts; changing a default must not rewrite saved layouts on startup.
+
+## Required behavior
+
+- SmartTube is the preferred YouTube client, obtained from official upstream releases with verified package identity and integrity.
+- Android is a supported app type in the shared registry, Store, launch/session lifecycle and configurable app components. Installation, updates, removal, status and retry belong in Isolde; terminal commands and a separate Android launcher must not be required.
+- The repeatable guest installer detects compatibility and provisions the runtime. Unsupported hardware or initialization failures produce actionable status without breaking native apps, Kodi or offline operation.
+- D-pad, Confirm, Back and universal return operate from actual Android app focus. Return restores the exact originating Isolde component/card. Runtime exit/crash recovers safely.
+- Android account and app data are isolated by Isolde profile. A shared runtime alone is not evidence of isolation. Profile teardown invalidates clients and launch sessions.
+- Installation and updates use bounded validated packages and supported runtime APIs, without shell-expanded launch recipes. Runtime permissions and disk/install choices are explicit in the product workflow.
+- Verify real SmartTube installation, launch, navigation and return inside Isolde-Test. Record playback separately from startup. Preserve normal profiles, layout hashes and other providers.
+
+## Investigation
+
+Waydroid is a candidate, not a selected or verified runtime. Official documentation requires Wayland and describes software rendering for VMs. Check the VirtualBox guest's kernel, binder support, graphics, package availability and performance through the bounded runner before choosing an implementation. No Android runtime or host settings changes are authorized on Windows.
+
+Read-only guest preflight: `build/vm-oracle/media-profile-20261025-f/report/android-capabilities.json` confirms a Wayland GNOME session, x86_64 kernel 7.0.0-38-generic, available signed `binder_linux` module and binderfs kernel support. No binder module is loaded and Waydroid/Weston/adb are absent. Graphics report VMware SVGA II (VirtualBox VMSVGA). Existing apt sources offer Weston but no Waydroid. This establishes prerequisites only, not runtime performance or app compatibility.
+
+The official repository bootstrap now explicitly accepts `resolute`, despite the desktop documentation's older example list. Upstream release API identifies SmartTube stable 32.68s with an x86 APK and SHA-256 digest. `config/android-runtime.json` pins that official artifact and repository key bytes for repeatable provisioning; it does not install or register an app yet. Current stable package identity is `org.smarttube.stable`, as declared in upstream Gradle flavor configuration.
+
+Profile implementation must use distinct `XDG_DATA_HOME`/Waydroid userdata roots and verify the actual container session's bound userdata before app operations. Upstream binds session userdata at `/data`, but exposes a single session bus name: refuse foreign or other-profile running sessions rather than attaching to them. A runtime subprocess exiting successfully is insufficient: upstream app commands can log an error and still return success, so verify resulting package/session state explicitly.
+
+Primary references: [SmartTube upstream](https://github.com/yuliskov/SmartTube), [Waydroid installation](https://docs.waydro.id/usage/install-on-desktops), [VM support](https://docs.waydro.id/faq/get-waydroid-to-work-through-a-vm), [app commands](https://docs.waydro.id/usage/install-and-run-android-applications).
+
+This extends T12/T13 and shared app/session components. Finish healthy in-flight Kodi verification before runtime investigation. Full Kodi integration, all twelve repairs and saved Canada/US VPN proof remain open. No completion credit: 24 active tasks, sum 847, Overall round(847/24) = 35%.
+
+## Implementation checkpoint (not installed acceptance)
+
+`tools/provision-android.py` implements an explicit Ubuntu guest administrator phase: scoped signed Waydroid repository with a pinned signing-key checksum, selected runtime version, APK checksum/signature/package/version/ABI checks, Vanilla image initialization without forced reinitialization, optional software rendering and an honest receipt that leaves profile installation/launch false. No downloaded APK or runtime image is committed. The official repository's InRelease publishes architecture-independent package indexes; Waydroid 1.6.3 is available for resolute. No package or repository was installed by the read-only investigation.
+
+`tests/test_android_provisioning.py` initially passes three local validation tests (workspace-local temporary directory): invalid source/identity/configuration rejection, checksum-failure cleanup with existing-file preservation, and platform refusal before system commands. The first Windows sandbox-temp attempt failed on temp-directory access; no host permissions were changed. Linux CTest registration passes in `media-controls-20261025-i` (31/31 full suite). These mocked/validation tests do not prove privileged installation, repeatability, profile isolation, remote input or playback.
+
+The next edit batch packages the helper/config into the appliance payload and exposes an explicit `--android` dependency-installer option, with optional VM software rendering. The bounded runner gains a reviewed `ConfigureTarget android` path using the guest's administrator prompt and matching tested/deployed source/receipt checks. No persistent administrator grant is added. An active Android session is refused rather than taken over. Initial image setup requires 6 GiB free; repeat setup recognizes existing initialization and uses a smaller staging-space gate. Rendering configuration preserves unknown settings, keeps a backup, rolls back configuration bytes on regeneration failure and avoids regeneration when already configured. Five tests now include installer opt-in/refusal and a Linux rollback/repeat check; this expanded batch awaits VM verification.
+
+Open before delivery: verify packaged installer setup inside the VM; integrate shared Store/setup controls; implement exclusive profile-scoped Android sessions with verified userdata binding and package state; register/launch SmartTube; verify actual D-pad/Back/universal return, error recovery, profile switching and both standing fixtures. Do not replace the default with an app that has not passed its runtime launch gate.
+
+## First privileged guest attempt
+
+`android-20261025-a` passes **31/31** in 285.54 seconds, including all five then-current Android tests, and deploys installer-support release `600017a3eb2033124e18d34c`. The user authenticates the VM administrator prompt. The signed repository and Waydroid/aapt/apksigner package step complete, but setup stops before APK staging or image initialization: a freshly installed Waydroid daemon raises “not initialized” for GetSession. This is an installer ordering defect, not successful Android setup.
+
+Bounded Status observes `/usr/bin/waydroid`, no runtime configuration/APK/receipt and 5.85 GiB free. Its guardian-scoped VM-only capture `build/vm-oracle/android-20261025-a/setup-status-20261025-171043-143.png` is reviewed and identifies that exact exception. No host browser or input control is used. The failed terminal guardian is explicitly cancelled through the runner; Isolde restores active with zero restarts and both normal layout hashes unchanged. The VM repository/packages remain installed; no Android profile/account is created.
+
+The corrected batch skips the impossible session query before initialization and retains the active-session refusal for initialized runtimes. A sixth regression covers both paths. The administrator launcher now records bounded installation output and a structured exit, closes automatically on failure, and requires exit success plus a matching receipt. Guardian-scoped Status capture/process-name diagnostics avoid unrelated arguments/account data. Android setup reuses bounded guest artifact cleanup to reach 8 GiB: retain the current/three newest payloads, source/evidence/cache/profiles/releases; verify absolute guest paths and mounts before removal. Linux runner tests cover evidence/profile preservation and error completion without an Enter prompt. `android-20261025-b` is the verification retry; no runtime/app acceptance credit yet.
+
+B passes **31/31**. A further review adds permission preservation to the rendering rollback test: Waydroid's regular app client must still be able to read the runtime metadata. Setup uses a process-local 022 umask; rendering edits/rollback retain the existing configuration mode, while the backup remains private. C passes **31/31** in 285.22 seconds, including all six Android cases and the Linux runner's new regressions. Its deployed installer-support release is `af8a85660a110a8493ecfa82`, source digest `83efe66b000d710d7d71cdb3589f0840268d0a40e055ac9ecff15b4dc04ff685`.
+
+Payload comparison with reviewed `media-controls-20261025-i` changes only `share/isolde/config/android-runtime.json` and `share/isolde/provision-android.py`. Application binaries, QML/resources, component/default data, bridge and all other support payloads are byte-identical, so I's reviewed standing fixture evidence remains applicable to the unchanged renderer. This does not supply Android UI acceptance. The corrected C guest setup is now awaiting Ubuntu administrator authentication; initialization, SmartTube launch and profile/remote checks remain open. No task checkbox credit; Overall stays 35%.

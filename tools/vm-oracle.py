@@ -18,6 +18,7 @@ import time
 import xml.etree.ElementTree as ET
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
+          "profile_browser_isolation": "isolde_profile_browser_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
           "studio_navigation": "isolde_home_navigation_tests",
           "kodi_media_client": "isolde_kodi_media_tests",
@@ -94,6 +95,14 @@ def atomic_json(path, value):
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2) + "\n")
     temporary.replace(path)
+
+
+def android_admin_launcher(command, run, title):
+    return ("import subprocess,json\nprint("+repr(title+" — enter the VM administrator password only here.")+",flush=True)\n"
+        +"p=subprocess.Popen("+repr(["pkexec"]+command)+",stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)\n"
+        +"total=0\nwith open("+repr(str(run/"android-admin.log"))+",'w') as log:\n"
+        +" for line in p.stdout:\n  print(line[:8192],end='',flush=True)\n  if total<8*1024*1024: log.write(line[:8192]);log.flush();total+=len(line[:8192])\n"
+        +"code=p.wait()\nwith open("+repr(str(run/"android-admin-exit.json"))+",'w') as result:json.dump({'exit':code},result)\nraise SystemExit(code)\n")
 
 
 def digest(path):
@@ -368,6 +377,29 @@ class Oracle:
                 content=file.read_text(errors="replace")
                 if "unpriv_bwrap" in content: matching_profiles[file.name]=content
         atomic_json(self.run/"native-bwrap-profile.json", matching_profiles)
+        # Read-only Android runtime preflight. Never load modules, install a
+        # runtime, change graphics or inspect Android/account data here.
+        kernel = os.uname().release
+        android = {"kernel": kernel, "machine": os.uname().machine,
+                   "tools": {name: shutil.which(name) for name in ("waydroid", "weston", "adb")},
+                   "binderDevices": [str(p) for p in (Path("/dev/binder"), Path("/dev/hwbinder"), Path("/dev/vndbinder"), Path("/dev/binderfs")) if p.exists()]}
+        config = Path("/boot") / ("config-" + kernel)
+        android["kernelConfig"] = [line for line in config.read_text().splitlines() if "ANDROID_BINDER" in line or "MEMFD_CREATE=" in line] if config.is_file() and config.stat().st_size < 1024*1024 else []
+        android["binderFilesystemAvailable"] = "binder" in Path("/proc/filesystems").read_text()
+        for label, command in (("binderModule", ["modinfo", "binder_linux"]),
+                               ("packages", ["apt-cache", "policy", "waydroid", "weston"]),
+                               ("runtimeService", ["systemctl", "show", "waydroid-container.service", "-p", "LoadState", "-p", "ActiveState"]),
+                               ("graphics", ["lspci", "-nn"])):
+            if not shutil.which(command[0]):
+                android[label] = {"available": False}
+                continue
+            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            output = result.stdout
+            if label == "graphics": output = "\n".join(line for line in output.splitlines() if any(word in line.lower() for word in ("vga", "display", "3d controller")))
+            android[label] = {"exit": result.returncode, "output": output[:8192], "error": result.stderr[:2048]}
+        android["session"] = {key: value for line in self.command("systemctl", "--user", "show-environment").splitlines()
+                              for key, separator, value in [line.partition("=")] if separator and key in {"XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "WAYLAND_DISPLAY", "DISPLAY"}}
+        atomic_json(self.run/"android-capabilities.json", android)
 
     def test(self, suite):
         self.check()
@@ -438,20 +470,27 @@ class Oracle:
         return self.run / "payload"
 
     def configure_native(self, target="native"):
-        if target not in {"native","surfshark"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android"}: raise ValueError("Unsupported guest configuration target")
         payload=self.tested_payload()
         deployed=json.loads((self.run/"deploy-result.json").read_text())
         if self.command("hostname")!="isolde-test" or self.links()["current"]!=deployed["release"] or digest(Path(deployed["release"])/"bin/isolde")!=digest(payload/"bin/isolde"):
             raise RuntimeError("Native configuration requires this deployed snapshot in Isolde-Test")
+        if target=="android":self.prepare_guest_space(8)
         script=self.run/"source/tools/provision-default-apps.py"
         command=["/usr/bin/python3",str(script),"isolation","--source",str(self.run/"source")]
         # Older tested installers inherited the administrator's group-writable
         # umask. Tighten only the exact approved directory after installation.
         command=["/usr/bin/python3","-c","import os,runpy,sys; sys.argv="+repr(command[1:])+"; runpy.run_path(sys.argv[0],run_name='__main__'); os.chmod('/usr/lib/isolde-native',0o755)"]
         if target=="surfshark":command=["/usr/bin/python3",str(script),"surfshark","--source",str(self.run/"source")]
+        if target=="android":command=["/usr/bin/python3",str(self.run/"source/tools/provision-android.py"),"--source",str(self.run/"source"),"--software-rendering"]
         launcher=self.run/"native-admin-terminal.py"
-        title="Isolde Surfshark setup" if target=="surfshark" else "Isolde native setup"
-        launcher.write_text("import subprocess\nprint("+repr(title+" — enter the VM administrator password only here.")+", flush=True)\nr = subprocess.run("+repr(["pkexec"]+command)+")\nprint('Setup finished with exit code', r.returncode, flush=True)\n"+("if r.returncode: input('Press Enter to close this window. ')\n" if target=="surfshark" else "input('Press Enter to close this window. ')\n")+"raise SystemExit(r.returncode)\n")
+        title="Isolde Android setup" if target=="android" else "Isolde Surfshark setup" if target=="surfshark" else "Isolde native setup"
+        launcher.write_text("import subprocess\nprint("+repr(title+" — enter the VM administrator password only here.")+", flush=True)\nr = subprocess.run("+repr(["pkexec"]+command)+")\nprint('Setup finished with exit code', r.returncode, flush=True)\n"+("if r.returncode: input('Press Enter to close this window. ')\n" if target in {"surfshark","android"} else "input('Press Enter to close this window. ')\n")+"raise SystemExit(r.returncode)\n")
+        if target=="android":
+            # Capture installer output, never the administrator authentication
+            # dialog. Errors close automatically and produce a structured exit.
+            (self.run/"android-admin-exit.json").unlink(missing_ok=True)
+            launcher.write_text(android_admin_launcher(command,self.run,title))
         environment=dict(os.environ)
         for line in self.command("systemctl","--user","show-environment").splitlines():
             key,_,value=line.partition("=")
@@ -461,8 +500,17 @@ class Oracle:
         try:
             self.stage("native-configure-stop",["systemctl","--user","stop","isolde.service"],30)
             print("VM_AUTH_REQUIRED: authenticate in the "+title+" terminal inside Isolde-Test; never send a password here.",flush=True)
-            self.stage("native-configure-policy",["ptyxis","--standalone","--title",title,"--","/usr/bin/python3",str(launcher)],900 if target=="surfshark" else 180,env=environment)
-            if target=="surfshark":
+            self.stage("native-configure-policy",["ptyxis","--standalone","--title",title,"--","/usr/bin/python3",str(launcher)],3600 if target=="android" else 900 if target=="surfshark" else 180,env=environment)
+            if target=="android":
+                outcome=self.run/"android-admin-exit.json"
+                if not outcome.is_file() or json.loads(outcome.read_text()).get("exit")!=0:raise RuntimeError("Android administrator setup failed; see android-admin.log")
+                receipt=Path("/var/lib/isolde/android-install.json")
+                if receipt.is_symlink() or not receipt.is_file() or receipt.stat().st_size>65536 or receipt.stat().st_uid!=0:raise RuntimeError("Android administrator setup did not produce a valid receipt")
+                result=json.loads(receipt.read_text())
+                expected=digest(self.run/"source/config/android-runtime.json")
+                if result.get("configurationSha256")!=expected or result.get("apkStaged") is not True or result.get("profileAppInstalled") is not False or result.get("launchVerified") is not False:raise RuntimeError("Android setup receipt does not match this tested configuration")
+                atomic_json(self.run/"android-install-result.json",result)
+            elif target=="surfshark":
                 receipt=Path("/var/lib/isolde/surfshark-install.json")
                 if not receipt.is_file():raise RuntimeError("Surfshark administrator setup did not complete")
                 result=json.loads(receipt.read_text())
@@ -591,11 +639,7 @@ class Oracle:
             time.sleep(0.5)
         raise RuntimeError("Selected release failed to start; inspect restart.log and journal. No automatic rollback.")
 
-    def provision(self):
-        self.tested_payload()
-        deployment = json.loads((self.run / "deploy-result.json").read_text())
-        if self.links()["current"] != deployment["release"]:
-            raise RuntimeError("Provisioning requires this run's deployed release")
+    def prepare_guest_space(self, target_gib=5):
         if self.command("hostname") != "isolde-test":
             raise RuntimeError("Guest provisioning is restricted to Isolde-Test")
         # Only obsolete generated payloads; source, logs, screenshots, releases,
@@ -607,7 +651,7 @@ class Oracle:
         cleanup_path = self.run / "guest-payload-cleanup.json"
         removed = json.loads(cleanup_path.read_text()).get("targets", []) if cleanup_path.exists() else []
         for candidate in reversed(candidates):
-            if shutil.disk_usage(self.root).free >= 5 * 1024**3: break
+            if shutil.disk_usage(self.root).free >= target_gib * 1024**3: break
             target = candidate / "payload"
             if candidate in protected or not target.is_dir() or target.is_symlink(): continue
             if target.resolve() != target or not target.resolve().is_relative_to(runs.resolve()): raise RuntimeError("Unsafe guest artifact path")
@@ -633,6 +677,12 @@ class Oracle:
                 removed.append(str(target))
                 atomic_json(cleanup_path, {"guest": "isolde-test", "targets": removed})
                 remove_guest_build(target, legacy, mounts)
+    def provision(self):
+        self.tested_payload()
+        deployment = json.loads((self.run / "deploy-result.json").read_text())
+        if self.links()["current"] != deployment["release"]:
+            raise RuntimeError("Provisioning requires this run's deployed release")
+        self.prepare_guest_space()
         self.check()
         if shutil.disk_usage(self.root).free < 4 * 1024**3: raise RuntimeError("Default clients need at least 4 GiB free after bounded artifact cleanup")
         before, links, layouts = self.service(), self.links(), self.layout_hashes()
@@ -784,7 +834,7 @@ def main():
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android"],default="native")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.run_id):
         parser.error("Invalid run ID")
@@ -801,6 +851,31 @@ def main():
         windows = subprocess.run(["wmctrl", "-lpx"], env=environment, capture_output=True, text=True, timeout=10)
         status["windowClasses"] = [line.split(None, 5)[:4] for line in windows.stdout.splitlines()[:64]]
         status["vpnPlatform"]=vpn_platform()
+        status["androidSetup"]={"runtimeExecutable":shutil.which("waydroid"),
+            "runtimeConfigured":Path("/var/lib/waydroid/waydroid.cfg").is_file(),
+            "apkStaged":Path("/usr/share/isolde/android/smarttube.apk").is_file(),
+            "receiptPresent":Path("/var/lib/isolde/android-install.json").is_file(),
+            "freeGiB":round(shutil.disk_usage(Path.home()).free/1024**3,2)}
+        # Inspect only this guardian's descendant tree; never unrelated app
+        # arguments, environment, account files or terminal contents.
+        status["guardianAlive"]=False
+        try:
+            proc=Path("/proc")/str(status.get("pid",0))
+            status["guardianAlive"]=(status.get("processStartTicks")==proc.joinpath("stat").read_text().split()[21]
+                and str(root/"bin"/("driver-"+status.get("driverDigest","")+".py")).encode() in proc.joinpath("cmdline").read_bytes().split(b"\0"))
+        except (OSError,IndexError):pass
+        pending=[status.get("pid",0)] if status["guardianAlive"] else []; seen=set(); names=[]
+        while pending and len(seen)<64:
+            pid=pending.pop()
+            if not isinstance(pid,int) or pid<2 or pid in seen:continue
+            seen.add(pid)
+            try:
+                process=Path("/proc")/str(pid)
+                names.append(process.joinpath("comm").read_text().strip()[:40])
+                children=process.joinpath("task",str(pid),"children").read_text()[:4096]
+                pending.extend(int(p) for p in children.split() if p.isdigit())
+            except (OSError,ValueError):pass
+        status["androidSetup"]["ownedProcessNames"]=names
         print(json.dumps(status))
         return
     if args.action == "cancel":
