@@ -25,6 +25,14 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_android_probe_does_not_claim_product_acceptance(self):
+        result = {key: True for key in ("passed", "compatibilityProbeOnly", "userdataBindingVerified", "packageInstalled", "launchRequested", "ownedSessionStopped")}
+        result.update({key: False for key in ("isoldeIntegrationVerified", "playbackVerified", "remoteVerified")})
+        self.assertTrue(oracle.visual_result_passed("android", result))
+        for key in result:
+            bad = dict(result); bad.pop(key)
+            self.assertFalse(oracle.visual_result_passed("android", bad))
+
     def test_android_setup_error_is_recorded_without_an_enter_prompt(self):
         process=Mock();process.stdout=["Installer failed before initialization\n"];process.wait.return_value=7
         fake=SimpleNamespace(Popen=Mock(return_value=process),PIPE=-1,STDOUT=-2)

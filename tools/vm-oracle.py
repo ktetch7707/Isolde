@@ -59,10 +59,14 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
          "shell": ("shell-acceptance.py", []),
-         "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"])}
+         "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
+         "android": ("android-acceptance.py", [])}
 
 
 def visual_result_passed(case, result):
+    if case == "android":
+        return (all(result.get(k) is True for k in ("passed", "compatibilityProbeOnly", "userdataBindingVerified", "packageInstalled", "launchRequested", "ownedSessionStopped"))
+                and all(result.get(k) is False for k in ("isoldeIntegrationVerified", "playbackVerified", "remoteVerified")))
     if case == "playlists":
         return (all(result.get(key) is True for key in ("passed","real_kodi_saved_playlist","playlist_creation_ui_verified","playlist_cancel_no_write","play_pause_stop","media_unchanged"))
                 and result.get("normal_profile_used") is False and result.get("picker_ui_verified") is False and result.get("episodes")==3)
@@ -590,7 +594,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 900 if case in ("pages","playlists") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -717,7 +721,7 @@ def collect_evidence(run, case, directories):
         for directory in sorted(directories):
             if not re.fullmatch(r"/tmp/isolde-(?:components-acceptance|reference-config|tv-acceptance)-[A-Za-z0-9_-]+", str(directory)):
                 raise RuntimeError("Unexpected evidence root")
-            paths = [directory / name for name in ("result.json", "shell.log", "attempt-config.json", "provider-requests.json")]
+            paths = [directory / name for name in ("result.json", "shell.log", "android.log", "attempt-config.json", "provider-requests.json")]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:
@@ -732,7 +736,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

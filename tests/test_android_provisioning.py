@@ -19,6 +19,22 @@ install_spec.loader.exec_module(installer)
 
 
 class AndroidProvisioningTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Guest-only Android probe")
+    def test_asynchronous_package_completion_and_lost_ownership(self):
+        probe_spec = importlib.util.spec_from_file_location("android_probe", ROOT/"tools/android-acceptance.py")
+        probe = importlib.util.module_from_spec(probe_spec); probe_spec.loader.exec_module(probe)
+        listings = iter(["packageName: com.android.settings", "packageName: org.smarttube.stable"])
+        verify = Mock(); sleep = Mock()
+        probe.await_package(lambda: next(listings), verify, clock=lambda: 0, sleep=sleep)
+        self.assertEqual(verify.call_count, 2); sleep.assert_called_once_with(1)
+        listing = Mock()
+        with self.assertRaisesRegex(RuntimeError, "ownership lost"):
+            probe.await_package(listing, Mock(side_effect=RuntimeError("ownership lost")), clock=lambda: 0)
+        listing.assert_not_called()
+        ticks = iter([0, 60])
+        with self.assertRaisesRegex(RuntimeError, "deadline"):
+            probe.await_package(lambda: "", Mock(), clock=lambda: next(ticks), sleep=Mock())
+
     def test_uninitialized_daemon_is_not_queried_and_active_session_is_refused(self):
         manager = Mock()
         bus = Mock(); bus.name_has_owner.return_value = True

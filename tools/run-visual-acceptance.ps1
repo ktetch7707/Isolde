@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists')][string]$Case = 'pages',
+    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
