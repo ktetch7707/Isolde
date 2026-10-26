@@ -41,6 +41,7 @@ private slots:
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
     void gamesLaunchRejectsMissingAndRedirectedTargets();
     void gamesContractsRejectExecutableData();
+    void gamesRelinkPreservesIdentityAndRollsBack();
     void validatesContracts();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
@@ -81,6 +82,24 @@ static AppDefinition gamesRuntime(const QString &id="psp-test") {
 }
 static QVariantMap gameRegistration(const QString &root,const QString &target="game.iso") {
     return {{"schemaVersion",1},{"title","Local title"},{"platform","PSP"},{"runtimeId","psp-test"},{"root",root},{"target",target}};
+}
+void ComponentTests::gamesRelinkPreservesIdentityAndRollsBack() {
+    QTemporaryDir dir;const auto oldRoot=dir.filePath("original"),newRoot=dir.filePath("moved");
+    QVERIFY(QDir().mkpath(oldRoot));QVERIFY(QDir().mkpath(newRoot));
+    writeFile(oldRoot+"/game.iso","game-content");writeFile(newRoot+"/game.iso","game-content");
+    AppRegistry apps;QVERIFY(apps.addApp(gamesRuntime()));GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    const auto id=library.addGame(gameRegistration(oldRoot));QVERIFY(!id.isEmpty());QVERIFY(library.setFavorite(id,true));
+    const auto original=library.registration(id);auto edited=original;edited["title"]="My corrected title";edited["root"]=newRoot;
+    edited["target"]="missing.iso";QVERIFY(!library.updateGame(id,edited));QCOMPARE(library.registration(id),original);
+    edited["target"]="game.iso";QVERIFY(library.updateGame(id,edited));QCOMPARE(library.registration(id),edited);
+    QCOMPARE(library.resolveLaunch(id).value("target").toString(),newRoot+"/game.iso");QVERIFY(library.details(id).value("favorite").toBool());
+    const auto other=library.addGame(gameRegistration(oldRoot));QVERIFY(!other.isEmpty());
+    // Relinking onto another installation fails the unique constraint atomically.
+    edited["root"]=oldRoot;edited["title"]="Must not survive conflict";QVERIFY(!library.updateGame(id,edited));
+    QCOMPARE(library.details(id).value("title").toString(),QString("My corrected title"));
+    QCOMPARE(library.registration(id).value("root").toString(),newRoot);
+    GameLibrary differentProfile(dir.filePath("other/games.sqlite"),&apps);QVERIFY(!differentProfile.updateGame(id,edited));
+    QCOMPARE(readFile(oldRoot+"/game.iso"),QByteArray("game-content"));QCOMPARE(readFile(newRoot+"/game.iso"),QByteArray("game-content"));
 }
 void ComponentTests::gamesContractsRejectExecutableData() {
     QString error;const auto registration=gameRegistration("/tmp/games");

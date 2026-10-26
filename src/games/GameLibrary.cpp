@@ -116,6 +116,31 @@ QVariantList GameLibrary::page(const QString &view, const QString &search, int o
     if (!query.exec()) { fail(query.lastError().text()); return {}; }
     QVariantList result; while (query.next()) result.append(row(query)); return result;
 }
+QVariantMap GameLibrary::registration(const QString &id) {
+    if(!m_ready || !ComponentSchema::safeId(id))return {};
+    QSqlQuery query(m_db);
+    query.prepare("SELECT title,platform,runtime,root,target FROM games WHERE id=?");query.addBindValue(id);
+    if(!query.exec() || !query.next())return {};
+    return {{"schemaVersion",1},{"title",query.value(0)},{"platform",query.value(1)},
+        {"runtimeId",query.value(2)},{"root",query.value(3)},{"target",query.value(4)}};
+}
+bool GameLibrary::updateGame(const QString &id,const QVariantMap &input) {
+    if(!m_ready || registration(id).isEmpty())return fail(tr("Game not found in this profile."));
+    QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
+    if(value.isEmpty())return fail(error);
+    const auto runtime=value.value("runtimeId").toString(),root=value.value("root").toString(),target=value.value("target").toString();
+    if(!compatibleRuntime(runtime,!root.isEmpty()))return fail(tr("Choose an installed compatible game runtime."));
+    if(!root.isEmpty() && checkedTarget(root,target).isEmpty())return false;
+    if(!m_db.transaction())return fail(m_db.lastError().text());
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE games SET title=?,platform=?,runtime=?,root=?,target=? WHERE id=?");
+    for(const auto &key:QStringList{"title","platform","runtimeId","root","target"})query.addBindValue(value.value(key));
+    query.addBindValue(id);
+    if(!query.exec() || query.numRowsAffected()!=1 || !m_db.commit()){
+        const auto reason=query.lastError().text();m_db.rollback();return fail(tr("Could not update this game. Previous metadata and source were preserved. %1").arg(reason));
+    }
+    m_error.clear();emit errorChanged();emit changed();return true;
+}
 QVariantMap GameLibrary::details(const QString &id) {
     if (!m_ready || !ComponentSchema::safeId(id)) return {};
     QSqlQuery query(m_db); query.prepare("SELECT id,title,platform,runtime,favorite FROM games WHERE id=?"); query.addBindValue(id);

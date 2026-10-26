@@ -24,10 +24,11 @@ Item {
     property int choice:0
     property string message:""
     property var draft:({})
+    property string editingId:""
     property int field:0
     readonly property var runtimes:library?library.runtimes:[]
     readonly property var tools:["Add game","All","Favorites","Recent","Search","Previous","Next"]
-    readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Back"]:[]
+    readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Back"]:[]
     readonly property int columns:style.libraryLayout==="list"?1:Math.max(1,style.libraryColumns || 4)
     readonly property real scale:appearance.typographyScale || 1
     readonly property string foreground:appearance.textColor || "#F5F1F3"
@@ -56,7 +57,7 @@ Item {
     function beginAdd(){
         if(!library || !library.ready){message=library?library.errorString:"Games is unavailable in this profile.";return}
         if(!runtimes.length){message="No compatible game runtime is installed. Game runtimes must be provisioned before a game can be added.";return}
-        draft=({schemaVersion:1,title:"",platform:"PC",runtimeId:"",root:"",target:""});choice=0;mode="runtime";message="Choose the installed game or runtime. Nothing is saved until Add is confirmed."
+        editingId="";draft=({schemaVersion:1,title:"",platform:"PC",runtimeId:"",root:"",target:""});choice=0;mode="runtime";message="Choose the installed game or runtime. Nothing is saved until Add is confirmed."
     }
     function beginField(index){field=index;mode="keyboard";keyboard.selectedIndex=0;keyboard.value=index===4?search:index===0?draft.title:index===1?draft.platform:index===2?draft.root:draft.target}
     function activateTool(){
@@ -70,11 +71,11 @@ Item {
     function activateChoice(){
         if(mode==="runtime"){
             const runtime=runtimes[choice];if(!runtime)return
-            draft=Object.assign({},draft,{runtimeId:runtime.id});beginField(0);return
+            draft=Object.assign({},draft,{runtimeId:runtime.id},runtime.file?{}:{root:"",target:""});beginField(0);return
         }
         if(mode==="review"){
             if(choice===1){mode="browse";return}
-            const id=library.addGame(draft)
+            const id=editingId?(library.updateGame(editingId,draft)?editingId:""):library.addGame(draft)
             if(!id){message=library.errorString;return}
             queryView="all";search="";offset=0;selectedId=id;selected=0;mode="browse";message="Game added. Select its card for details and Play.";reload();return
         }
@@ -91,6 +92,7 @@ Item {
                 }else{mode="browse";detail=null}
             }else if(choice===1){if(!library.setFavorite(detail.id,!detail.favorite))message=library.errorString}
             else if(choice===2){mode="remove";choice=0;message="Remove only this library entry? Game files and saves stay where they are."}
+            else if(choice===3){editingId=detail.id;draft=library.registration(editingId);detail=null;message="Edit this game or relink its folder. Review confirms the complete change; Back cancels.";choice=0;mode="runtime"}
             else{mode="browse";detail=null}
         }
     }
@@ -165,7 +167,7 @@ Item {
             Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="review"?root.draft.title+" · "+root.draft.platform+"\n"+(root.draft.root?"Allow this game runtime to read: "+root.draft.root+"\nFile: "+root.draft.target:"Installed game: "+root.draft.runtimeId):root.message;color:root.muted;font.pixelSize:17*root.scale}
             ListView {
                 width:parent.width;height:Math.max(60,parent.height-160);clip:true;currentIndex:root.choice;highlightMoveDuration:0
-                model:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:["Add game and approve source","Cancel"]
+                model:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:[root.editingId?"Save changes and approve source":"Add game and approve source","Cancel"]
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     width:ListView.view.width;height:48;color:root.surface;radius:8

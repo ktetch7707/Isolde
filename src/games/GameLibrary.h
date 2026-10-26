@@ -20,6 +20,8 @@ public:
     QVariantList runtimes() const;
     // Explicit registration is also explicit consent to read this specific root.
     Q_INVOKABLE QString addGame(const QVariantMap &registration);
+    Q_INVOKABLE QVariantMap registration(const QString &gameId);
+    Q_INVOKABLE bool updateGame(const QString &gameId, const QVariantMap &registration);
     Q_INVOKABLE bool setFavorite(const QString &gameId, bool favorite);
     Q_INVOKABLE QVariantList page(const QString &view = "all", const QString &search = {}, int offset = 0);
     Q_INVOKABLE QVariantMap details(const QString &gameId);
