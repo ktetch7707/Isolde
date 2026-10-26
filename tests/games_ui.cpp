@@ -25,6 +25,7 @@ private slots:
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
     void remoteEditCanCancelAndApplyWithoutMouse();
+    void remoteEditionChooserDispatchesOwnedVersion();
 };
 static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
@@ -38,6 +39,21 @@ static void doneOnKeyboard(QObject *widget) {
     for(int i=0;i<5;++i)command(widget,InputManager::NavigateDown);
     for(int i=0;i<9;++i)command(widget,InputManager::NavigateRight);
     command(widget,InputManager::Confirm);
+}
+void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    QVariantMap registration{{"schemaVersion",1},{"title","Shared title"},{"platform","PC"},{"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}};
+    const auto game=library.addGame(registration);QVERIFY(!game.isEmpty());registration["runtimeId"]="other-test";registration["title"]="Alternate";
+    const auto edition=library.addEdition(game,registration);QVERIFY2(!edition.isEmpty(),qPrintable(library.errorString()));
+    InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"originId","game-origin"},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("mode").toString(),QString("editions"));QVERIFY(dispatch.lastAction.isEmpty());
+    command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(dispatch.lastAction.value("gameId").toString(),game);QCOMPARE(dispatch.lastAction.value("editionId").toString(),edition);
+    QCOMPARE(dispatch.origin,QString("game-origin"));QCOMPARE(library.page().size(),1);
 }
 void GamesUiTests::remoteEditCanCancelAndApplyWithoutMouse() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);

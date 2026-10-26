@@ -43,6 +43,7 @@ private slots:
     void gamesContractsRejectExecutableData();
     void gamesRelinkPreservesIdentityAndRollsBack();
     void gamesFolderImportIsReviewedAtomicAndCancelable();
+    void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
     void validatesContracts();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
@@ -83,6 +84,24 @@ static AppDefinition gamesRuntime(const QString &id="psp-test") {
 }
 static QVariantMap gameRegistration(const QString &root,const QString &target="game.iso") {
     return {{"schemaVersion",1},{"title","Local title"},{"platform","PSP"},{"runtimeId","psp-test"},{"root",root},{"target",target}};
+}
+void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
+    QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");
+    AppRegistry apps;QVERIFY(apps.addApp(gamesRuntime()));const auto path=dir.filePath("profile/games.sqlite");QString game,edition;
+    {GameLibrary library(path,&apps);game=library.addGame(gameRegistration(root));QVERIFY(!game.isEmpty());
+        QVERIFY(library.setFavorite(game,true));auto second=gameRegistration(root,"other.iso");second["platform"]="PSP alternate";second["title"]="Second edition";
+        edition=library.addEdition(game,second);QVERIFY2(!edition.isEmpty(),qPrintable(library.errorString()));
+        QVERIFY(QFileInfo::exists(path+".v1-backup.sqlite"));QCOMPARE(library.editions(game).size(),2);QCOMPARE(library.page().size(),1);
+        QVERIFY(library.resolveLaunch(game).isEmpty());QCOMPARE(library.resolveLaunch(game,game).value("target").toString(),root+"/game.iso");
+        QCOMPARE(library.resolveLaunch(game,edition).value("target").toString(),root+"/other.iso");
+        QVERIFY(library.resolveLaunch("game-other",edition).isEmpty());QVERIFY(library.resolveLaunch(game,"edition-forged").isEmpty());
+        QVERIFY(library.addEdition(game,second).isEmpty());QVERIFY(library.addGame(second).isEmpty());QVERIFY(!library.updateGame(game,second));
+        QCOMPARE(library.registration(game).value("target").toString(),QString("game.iso"));QVERIFY(library.details(game).value("favorite").toBool());
+        GameLibrary other(dir.filePath("different/games.sqlite"),&apps);QVERIFY(other.resolveLaunch(game,edition).isEmpty());}
+    {GameLibrary reopened(path,&apps);QVERIFY(reopened.ready());QCOMPARE(reopened.editions(game).size(),2);QCOMPARE(reopened.page().size(),1);
+        QVERIFY(reopened.removeGame(game));QVERIFY(reopened.editions(game).isEmpty());QVERIFY(reopened.resolveLaunch(game,edition).isEmpty());}
+    QCOMPARE(readFile(root+"/game.iso"),QByteArray("one"));QCOMPARE(readFile(root+"/other.iso"),QByteArray("two"));
+    {GameLibrary backup(path+".v1-backup.sqlite",&apps);QVERIFY(backup.ready());QCOMPARE(backup.page().size(),1);QCOMPARE(backup.editions(game).size(),1);}
 }
 void ComponentTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root+"/nested"));

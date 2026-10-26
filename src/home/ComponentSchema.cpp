@@ -329,9 +329,13 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
     QVariantMap result{{"schemaVersion", 1}, {"type", type}};
     if (type == "launch-game") {
         for(auto it=input.cbegin();it!=input.cend();++it)
-            if(!QStringList{"schemaVersion","type","gameId"}.contains(it.key()))return reject(error,"Game actions contain an identity only.");
+            if(!QStringList{"schemaVersion","type","gameId","editionId"}.contains(it.key()))return reject(error,"Game actions contain identities only.");
         if(input.value("gameId").metaType().id()!=QMetaType::QString || !safeId(input.value("gameId").toString()))return reject(error,"Choose a valid game.");
         result["gameId"]=input.value("gameId");
+        if(input.contains("editionId")){
+            if(input.value("editionId").metaType().id()!=QMetaType::QString || !safeId(input.value("editionId").toString()))return reject(error,"Choose a valid edition.");
+            result["editionId"]=input.value("editionId");
+        }
     } else if (type == "launch-app") {
         const auto id = input.value("appId").toString();
         if (!safeId(id)) return reject(error, "Choose a valid app.");

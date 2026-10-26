@@ -28,6 +28,8 @@ public:
     Q_INVOKABLE QString addGame(const QVariantMap &registration);
     Q_INVOKABLE QVariantMap registration(const QString &gameId);
     Q_INVOKABLE bool updateGame(const QString &gameId, const QVariantMap &registration);
+    Q_INVOKABLE QVariantList editions(const QString &gameId);
+    Q_INVOKABLE QString addEdition(const QString &gameId, const QVariantMap &registration);
     bool scanning() const { return bool(m_scan); }
     int importCount() const { return m_preview.size(); }
     bool importReady() const { return m_importReady; }
@@ -39,7 +41,7 @@ public:
     Q_INVOKABLE QVariantList page(const QString &view = "all", const QString &search = {}, int offset = 0);
     Q_INVOKABLE QVariantMap details(const QString &gameId);
     Q_INVOKABLE bool removeGame(const QString &gameId);
-    QVariantMap resolveLaunch(const QString &gameId);
+    QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
     void invalidate();
 signals:
     void changed();
@@ -53,6 +55,8 @@ private:
     QString m_connection, m_error;
     AppRegistry *m_apps;
     bool m_ready = false;
+    bool m_hasEditions = false;
+    bool installationExists(const QString &runtime, const QString &root, const QString &target);
     void scanStep();
     QTimer m_scanTimer;
     std::unique_ptr<QDirIterator> m_scan;

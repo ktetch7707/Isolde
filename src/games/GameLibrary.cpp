@@ -35,7 +35,7 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     if (!query.exec("PRAGMA user_version") || !query.next()) { fail(tr("Cannot read the games catalog version.")); return; }
     const int version = query.value(0).toInt(); query.finish();
     // Never migrate, replace or repair an unknown existing catalog on read.
-    if (exists && version != 1) { fail(tr("Unsupported games catalog version. Original data was preserved.")); return; }
+    if (exists && version != 1 && version != 2) { fail(tr("Unsupported games catalog version. Original data was preserved.")); return; }
     if (!query.exec("PRAGMA foreign_keys=ON") || !query.exec("PRAGMA synchronous=FULL")) { fail(query.lastError().text()); return; }
     if (!exists) {
         if (!m_db.transaction()) { fail(m_db.lastError().text()); return; }
@@ -45,6 +45,10 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
         if (!created || !m_db.commit()) { const auto error = query.lastError().text(); m_db.rollback(); fail(tr("Cannot initialize the games catalog: %1").arg(error)); return; }
     }
     if (!query.exec("SELECT id,title,platform,runtime,root,target,favorite,added FROM games LIMIT 0")) { fail(tr("Invalid games catalog. Original data was preserved.")); return; }
+    if(version==2){
+        if(!query.exec("SELECT id,game_id,title,platform,runtime,root,target FROM game_editions LIMIT 0")){fail(tr("Invalid edition catalog. Original data was preserved."));return;}
+        m_hasEditions=true;
+    }
     m_ready = true;
 }
 GameLibrary::~GameLibrary() {
@@ -89,6 +93,7 @@ QString GameLibrary::addGame(const QVariantMap &input) {
     const auto root = registration.value("root").toString(), target = registration.value("target").toString();
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("Choose an installed compatible game runtime.")); return {}; }
     if (!root.isEmpty() && checkedTarget(root,target).isEmpty()) return {};
+    if(m_hasEditions && installationExists(runtime,root,target)){fail(tr("This installation already belongs to a game or edition."));return {};}
     QSqlQuery query(m_db);
     query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?");
     query.addBindValue(runtime); query.addBindValue(root); query.addBindValue(target);
@@ -134,6 +139,11 @@ bool GameLibrary::updateGame(const QString &id,const QVariantMap &input) {
     const auto runtime=value.value("runtimeId").toString(),root=value.value("root").toString(),target=value.value("target").toString();
     if(!compatibleRuntime(runtime,!root.isEmpty()))return fail(tr("Choose an installed compatible game runtime."));
     if(!root.isEmpty() && checkedTarget(root,target).isEmpty())return false;
+    if(m_hasEditions){
+        QSqlQuery duplicate(m_db);duplicate.prepare("SELECT id FROM game_editions WHERE runtime=? AND root=? AND target=?");
+        duplicate.addBindValue(runtime);duplicate.addBindValue(root);duplicate.addBindValue(target);
+        if(!duplicate.exec() || duplicate.next())return fail(tr("This installation already belongs to an edition. Previous metadata was preserved."));
+    }
     if(!m_db.transaction())return fail(m_db.lastError().text());
     QSqlQuery query(m_db);
     query.prepare("UPDATE games SET title=?,platform=?,runtime=?,root=?,target=? WHERE id=?");
@@ -163,15 +173,62 @@ bool GameLibrary::removeGame(const QString &id) {
     // Catalog-only operation: deliberately never deletes game/runtime/save files.
     m_error.clear(); emit changed(); return true;
 }
-QVariantMap GameLibrary::resolveLaunch(const QString &id) {
+QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionId) {
     if (!m_ready || !ComponentSchema::safeId(id)) { fail(tr("Game not found in this profile.")); return {}; }
-    QSqlQuery query(m_db); query.prepare("SELECT runtime,root,target FROM games WHERE id=?"); query.addBindValue(id);
+    if(editionId.isEmpty() && editions(id).size()>1){fail(tr("Choose which edition to play."));return {};}
+    if(!editionId.isEmpty() && !ComponentSchema::safeId(editionId)){fail(tr("Invalid edition identity."));return {};}
+    QSqlQuery query(m_db);
+    if(editionId.isEmpty() || editionId==id){query.prepare("SELECT runtime,root,target FROM games WHERE id=?");query.addBindValue(id);}
+    else if(m_hasEditions){query.prepare("SELECT runtime,root,target FROM game_editions WHERE game_id=? AND id=?");query.addBindValue(id);query.addBindValue(editionId);}
+    else{fail(tr("Edition not found in this profile."));return {};}
     if (!query.exec() || !query.next()) { fail(tr("Game not found in this profile.")); return {}; }
     const auto runtime=query.value(0).toString(), root=query.value(1).toString(), relative=query.value(2).toString();
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("The game runtime is missing or incompatible. Repair it and retry.")); return {}; }
     if (root.isEmpty()) return {{"type","launch-app"},{"appId",runtime}};
     const auto target=checkedTarget(root,relative); if (target.isEmpty()) return {};
     return {{"type","open-file"},{"openWith",runtime},{"target",target}};
+}
+bool GameLibrary::installationExists(const QString &runtime,const QString &root,const QString &target) {
+    QSqlQuery query(m_db);
+    query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?"+QString(m_hasEditions?" UNION ALL SELECT id FROM game_editions WHERE runtime=? AND root=? AND target=?":""));
+    for(int i=0;i<(m_hasEditions?2:1);++i){query.addBindValue(runtime);query.addBindValue(root);query.addBindValue(target);}
+    if(!query.exec()){fail(query.lastError().text());return true;}
+    return query.next();
+}
+QVariantList GameLibrary::editions(const QString &id) {
+    const auto base=registration(id);if(base.isEmpty())return {};
+    QVariantList result{QVariantMap{{"id",id},{"title",base.value("title")},{"platform",base.value("platform")},{"runtimeId",base.value("runtimeId")}}};
+    if(!m_hasEditions)return result;
+    QSqlQuery query(m_db);query.prepare("SELECT id,title,platform,runtime FROM game_editions WHERE game_id=? ORDER BY id LIMIT 31");query.addBindValue(id);
+    if(!query.exec()){fail(query.lastError().text());return {};}
+    while(query.next())result.append(QVariantMap{{"id",query.value(0)},{"title",query.value(1)},{"platform",query.value(2)},{"runtimeId",query.value(3)}});
+    return result;
+}
+QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
+    if(!m_ready || registration(id).isEmpty()){fail(tr("Game not found in this profile."));return {};}
+    QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
+    if(value.isEmpty()){fail(error);return {};}
+    const auto runtime=value.value("runtimeId").toString(),root=value.value("root").toString(),target=value.value("target").toString();
+    if(!compatibleRuntime(runtime,!root.isEmpty())){fail(tr("Choose a compatible edition runtime."));return {};}
+    if(!root.isEmpty() && checkedTarget(root,target).isEmpty())return {};
+    if(editions(id).size()>=32){fail(tr("A game supports up to 32 editions."));return {};}
+    if(installationExists(runtime,root,target)){fail(tr("This installation already belongs to a game or edition."));return {};}
+    QSqlQuery query(m_db);
+    if(!m_hasEditions){
+        // User-confirmed first edition edit is the upgrade boundary, never startup.
+        const auto backup=m_db.databaseName()+".v1-backup.sqlite";
+        if(QFileInfo::exists(backup) || QFileInfo(backup).isSymLink()){fail(tr("A pre-edition backup already exists. Preserve it before retrying the catalog upgrade."));return {};}
+        query.prepare("VACUUM main INTO ?");query.addBindValue(backup);
+        if(!query.exec()){fail(tr("Cannot back up the catalog before adding editions."));return {};}
+    }
+    if(!m_db.transaction()){fail(m_db.lastError().text());return {};}
+    if(!m_hasEditions && (!query.exec("CREATE TABLE game_editions(id TEXT PRIMARY KEY,game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT NOT NULL,root TEXT NOT NULL,target TEXT NOT NULL,UNIQUE(runtime,root,target))")
+        || !query.exec("CREATE INDEX game_editions_owner ON game_editions(game_id)") || !query.exec("PRAGMA user_version=2"))){m_db.rollback();fail(query.lastError().text());return {};}
+    const auto edition="edition-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    query.prepare("INSERT INTO game_editions(id,game_id,title,platform,runtime,root,target) VALUES(?,?,?,?,?,?,?)");query.addBindValue(edition);query.addBindValue(id);
+    for(const auto &key:QStringList{"title","platform","runtimeId","root","target"})query.addBindValue(value.value(key));
+    if(!query.exec() || !m_db.commit()){m_db.rollback();fail(tr("Edition could not be saved; the previous catalog was preserved."));return {};}
+    m_hasEditions=true;m_error.clear();emit errorChanged();emit changed();return edition;
 }
 void GameLibrary::cancelImport() {
     m_scanTimer.stop();m_scan.reset();m_preview.clear();m_importReady=false;
@@ -227,8 +284,9 @@ bool GameLibrary::commitImport() {
         if(ComponentSchema::gameRegistration(value,&error).isEmpty() || checkedTarget(m_importRoot,value.value("target").toString()).isEmpty()){
             m_db.rollback();return fail(error.isEmpty()?tr("A source changed after preview. Nothing was imported; review the folder again."):error);
         }
-        query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?");
+        query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?"+QString(m_hasEditions?" UNION ALL SELECT id FROM game_editions WHERE runtime=? AND root=? AND target=?":""));
         query.addBindValue(m_importRuntime);query.addBindValue(m_importRoot);query.addBindValue(value.value("target"));
+        if(m_hasEditions){query.addBindValue(m_importRuntime);query.addBindValue(m_importRoot);query.addBindValue(value.value("target"));}
         if(!query.exec()){m_db.rollback();return fail(query.lastError().text());}
         const bool existing=query.next();query.finish();if(existing)continue; // Preserve manual corrections.
         if(++count>MaxGames){m_db.rollback();return fail(tr("Import would exceed the catalog limit. Nothing was imported."));}
