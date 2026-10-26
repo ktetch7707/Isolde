@@ -25,9 +25,13 @@ Item {
     property string message:""
     property var draft:({})
     property string editingId:""
+    property bool importing:false
+    property int importOffset:0
+    property var importItems:[]
     property int field:0
     readonly property var runtimes:library?library.runtimes:[]
-    readonly property var tools:["Add game","All","Favorites","Recent","Search","Previous","Next"]
+    readonly property var tools:["Add game","All","Favorites","Recent","Search","Previous","Next","Import folder"]
+    readonly property var importActions:["Import all reviewed files","Cancel · save nothing","Previous preview page","Next preview page"].concat(importItems.map(g=>g.title+" · "+g.target))
     readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Back"]:[]
     readonly property int columns:style.libraryLayout==="list"?1:Math.max(1,style.libraryColumns || 4)
     readonly property real scale:appearance.typographyScale || 1
@@ -41,6 +45,12 @@ Item {
     onQueryViewChanged:{offset=0;reload()}
     onSearchChanged:{offset=0;reload()}
     Connections {target:root.library;function onChanged(){root.reload()}}
+    Connections {target:root.library;function onImportChanged(){
+        if(root.mode!=="scan" && root.mode!=="importPreview")return
+        root.importItems=root.library.importPage(root.importOffset)
+        if(root.library.importReady){root.mode="importPreview";root.message=root.library.importCount+" files found. Review filenames before importing; no metadata matching is assumed."}
+        else if(!root.library.scanning){root.mode="browse";root.message=root.library.errorString || "Import canceled. Nothing was saved."}
+    }}
     Connections {
         target:root.dispatcher
         function onRejected(reason){if(root.mode==="details")root.message=reason}
@@ -54,24 +64,34 @@ Item {
         if(detail){const updated=library.details(detail.id);if(updated.id)detail=updated;else{detail=null;mode="browse"}}
     }
     function openDetails(){if(!items[selected])return;selectedId=items[selected].id;detail=library.details(selectedId);choice=0;message="";mode="details"}
-    function beginAdd(){
+    function beginAdd(asImport){
         if(!library || !library.ready){message=library?library.errorString:"Games is unavailable in this profile.";return}
         if(!runtimes.length){message="No compatible game runtime is installed. Game runtimes must be provisioned before a game can be added.";return}
-        editingId="";draft=({schemaVersion:1,title:"",platform:"PC",runtimeId:"",root:"",target:""});choice=0;mode="runtime";message="Choose the installed game or runtime. Nothing is saved until Add is confirmed."
+        importing=!!asImport;editingId="";draft=({schemaVersion:1,title:"",platform:"PC",runtimeId:"",root:"",target:""});choice=0;mode="runtime";message="Choose the installed game or runtime. Nothing is saved until review is confirmed."
     }
     function beginField(index){field=index;mode="keyboard";keyboard.selectedIndex=0;keyboard.value=index===4?search:index===0?draft.title:index===1?draft.platform:index===2?draft.root:draft.target}
     function activateTool(){
         message=""
         if(toolbar===0){beginAdd();return}
+        if(toolbar===7){beginAdd(true);return}
         if(toolbar===4){beginField(4);return}
         if(toolbar===5){offset=Math.max(0,offset-50);selectedId="";selected=-1;reload();return}
         if(toolbar===6){if(items.length===50){offset+=50;selectedId="";selected=-1;reload()}return}
         search="";offset=0;selectedId="";selected=-1;queryView=toolbar===2?"favorites":toolbar===3?"recent":"all";reload()
     }
     function activateChoice(){
+        if(mode==="scan"){library.cancelImport();mode="browse";return}
+        if(mode==="importPreview"){
+            if(choice===0){if(!library.commitImport()){message=library.errorString;return}mode="browse";reload();return}
+            if(choice===1){library.cancelImport();mode="browse";return}
+            if(choice===2)importOffset=Math.max(0,importOffset-50)
+            else if(choice===3 && importOffset+50<library.importCount)importOffset+=50
+            importItems=library.importPage(importOffset);return
+        }
         if(mode==="runtime"){
             const runtime=runtimes[choice];if(!runtime)return
-            draft=Object.assign({},draft,{runtimeId:runtime.id},runtime.file?{}:{root:"",target:""});beginField(0);return
+            if(importing && !runtime.file){message="Choose a file-based game runtime for folder import.";return}
+            draft=Object.assign({},draft,{runtimeId:runtime.id},runtime.file?{}:{root:"",target:""});beginField(importing?1:0);return
         }
         if(mode==="review"){
             if(choice===1){mode="browse";return}
@@ -92,16 +112,16 @@ Item {
                 }else{mode="browse";detail=null}
             }else if(choice===1){if(!library.setFavorite(detail.id,!detail.favorite))message=library.errorString}
             else if(choice===2){mode="remove";choice=0;message="Remove only this library entry? Game files and saves stay where they are."}
-            else if(choice===3){editingId=detail.id;draft=library.registration(editingId);detail=null;message="Edit this game or relink its folder. Review confirms the complete change; Back cancels.";choice=0;mode="runtime"}
+            else if(choice===3){importing=false;editingId=detail.id;draft=library.registration(editingId);detail=null;message="Edit this game or relink its folder. Review confirms the complete change; Back cancels.";choice=0;mode="runtime"}
             else{mode="browse";detail=null}
         }
     }
     function handleCommand(command){
         if(readOnly)return false
         if(mode==="keyboard"){keyboard.handleCommand(command);return true}
-        if(command===inputManager.back){if(mode!=="browse"){mode="browse";detail=null;draft=({});return true}return false}
+        if(command===inputManager.back){if(mode!=="browse"){if(mode==="scan" || mode==="importPreview")library.cancelImport();mode="browse";detail=null;draft=({});return true}return false}
         if(mode!=="browse"){
-            const count=mode==="runtime"?runtimes.length:mode==="details"?detailActions.length:2
+            const count=mode==="runtime"?runtimes.length:mode==="details"?detailActions.length:mode==="scan"?1:mode==="importPreview"?importActions.length:2
             if(command===inputManager.navigateDown || command===inputManager.navigateRight)choice=Math.min(count-1,choice+1)
             else if(command===inputManager.navigateUp || command===inputManager.navigateLeft)choice=Math.max(0,choice-1)
             else if(command===inputManager.confirm)activateChoice()
@@ -130,7 +150,7 @@ Item {
             Repeater {model:root.tools
                 delegate:Rectangle {
                     required property int index;required property string modelData
-                    width:(parent.width-24)/7;height:44;radius:root.style.radius || 8;color:root.surface
+                    width:(parent.width-4*(root.tools.length-1))/root.tools.length;height:44;radius:root.style.radius || 8;color:root.surface
                     border.color:root.focusColor;border.width:root.engaged && root.selected<0 && root.toolbar===index?2:0
                     Text {anchors.centerIn:parent;textFormat:Text.PlainText;text:modelData;color:root.foreground;font.pixelSize:14*root.scale}
                     MouseArea {anchors.fill:parent;enabled:!root.readOnly;onClicked:{root.engage();root.selected=-1;root.toolbar=index;root.activateTool()}}
@@ -167,7 +187,7 @@ Item {
             Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="review"?root.draft.title+" · "+root.draft.platform+"\n"+(root.draft.root?"Allow this game runtime to read: "+root.draft.root+"\nFile: "+root.draft.target:"Installed game: "+root.draft.runtimeId):root.message;color:root.muted;font.pixelSize:17*root.scale}
             ListView {
                 width:parent.width;height:Math.max(60,parent.height-160);clip:true;currentIndex:root.choice;highlightMoveDuration:0
-                model:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:[root.editingId?"Save changes and approve source":"Add game and approve source","Cancel"]
+                model:root.mode==="scan"?["Cancel scan · save nothing"]:root.mode==="importPreview"?root.importActions:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:[root.editingId?"Save changes and approve source":"Add game and approve source","Cancel"]
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     width:ListView.view.width;height:48;color:root.surface;radius:8
@@ -188,6 +208,10 @@ Item {
             const runtime=root.runtimes.find(r=>r.id===root.draft.runtimeId)
             if(root.field===0)root.beginField(1)
             else if(root.field===1 && runtime && runtime.file)root.beginField(2)
+            else if(root.field===2 && root.importing){
+                root.importOffset=0;root.choice=1;root.mode="scan";root.message="Scanning names only. Nothing is saved until review is confirmed."
+                if(!root.library.beginImport(root.draft.root,root.draft.runtimeId,root.draft.platform)){root.mode="browse";root.message=root.library.errorString}
+            }
             else if(root.field===2)root.beginField(3)
             else{root.mode="review";root.choice=0;root.message=""}
         }

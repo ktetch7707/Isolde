@@ -42,6 +42,7 @@ private slots:
     void gamesLaunchRejectsMissingAndRedirectedTargets();
     void gamesContractsRejectExecutableData();
     void gamesRelinkPreservesIdentityAndRollsBack();
+    void gamesFolderImportIsReviewedAtomicAndCancelable();
     void validatesContracts();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
@@ -82,6 +83,23 @@ static AppDefinition gamesRuntime(const QString &id="psp-test") {
 }
 static QVariantMap gameRegistration(const QString &root,const QString &target="game.iso") {
     return {{"schemaVersion",1},{"title","Local title"},{"platform","PSP"},{"runtimeId","psp-test"},{"root",root},{"target",target}};
+}
+void ComponentTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
+    QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root+"/nested"));
+    writeFile(root+"/a.iso","a");writeFile(root+"/nested/b.iso","b");writeFile(root+"/ignore.txt","x");
+    AppRegistry apps;auto runtime=gamesRuntime();runtime.launchConfiguration["gameFormats"]=QVariantList{"iso"};QVERIFY(apps.addApp(runtime));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    QVERIFY(library.beginImport(root,"psp-test","PSP"));QVERIFY(!library.commitImport());library.cancelImport();
+    QVERIFY(!library.scanning());QCOMPARE(library.importCount(),0);QVERIFY(library.page().isEmpty());
+    QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY(library.importReady());
+    QCOMPARE(library.importCount(),2);QVERIFY(library.page().isEmpty());
+    QVERIFY(QFile::remove(root+"/nested/b.iso"));QVERIFY(!library.commitImport());QVERIFY(library.page().isEmpty());
+    writeFile(root+"/nested/b.iso","b");QVERIFY(library.commitImport());QCOMPARE(library.page().size(),2);
+    const auto id=library.page()[0].toMap().value("id").toString();auto corrected=library.registration(id);corrected["title"]="Manual correction";QVERIFY(library.updateGame(id,corrected));
+    QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY(library.importReady());QVERIFY(library.commitImport());
+    QCOMPARE(library.page().size(),2);QCOMPARE(library.details(id).value("title").toString(),QString("Manual correction"));
+    QVERIFY(library.beginImport(root,"psp-test","PSP"));library.invalidate();QVERIFY(!library.scanning());QVERIFY(!library.commitImport());
+    QCOMPARE(readFile(root+"/a.iso"),QByteArray("a"));QCOMPARE(readFile(root+"/nested/b.iso"),QByteArray("b"));
 }
 void ComponentTests::gamesRelinkPreservesIdentityAndRollsBack() {
     QTemporaryDir dir;const auto oldRoot=dir.filePath("original"),newRoot=dir.filePath("moved");

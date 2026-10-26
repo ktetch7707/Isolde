@@ -24,6 +24,7 @@ class GamesUiTests : public QObject {
 private slots:
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
+    void remoteEditCanCancelAndApplyWithoutMouse();
 };
 static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
@@ -32,6 +33,29 @@ static AppDefinition runtime() {
 }
 static void command(QObject *widget,int value) {
     QVariant result;QVERIFY(QMetaObject::invokeMethod(widget,"handleCommand",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,value)));
+}
+static void doneOnKeyboard(QObject *widget) {
+    for(int i=0;i<5;++i)command(widget,InputManager::NavigateDown);
+    for(int i=0;i<9;++i)command(widget,InputManager::NavigateRight);
+    command(widget,InputManager::Confirm);
+}
+void GamesUiTests::remoteEditCanCancelAndApplyWithoutMouse() {
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    const auto id=library.addGame({{"schemaVersion",1},{"title","Original"},{"platform","PC"},{"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});QVERIFY(!id.isEmpty());
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);
+    for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("runtime"));
+    command(widget.data(),InputManager::Back);QCOMPARE(library.details(id).value("title").toString(),QString("Original"));
+    command(widget.data(),InputManager::Confirm);for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
+    command(widget.data(),InputManager::Confirm); // append digit 1 to existing title
+    doneOnKeyboard(widget.data());doneOnKeyboard(widget.data());
+    QCOMPARE(widget->property("mode").toString(),QString("review"));QCOMPARE(library.details(id).value("title").toString(),QString("Original"));
+    command(widget.data(),InputManager::Confirm);QCOMPARE(library.details(id).value("title").toString(),QString("Original1"));
+    QCOMPARE(library.page().size(),1);
 }
 void GamesUiTests::remoteDetailsFavoriteRemoveAndCancel() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));

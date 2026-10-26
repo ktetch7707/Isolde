@@ -7,6 +7,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QUuid>
+#include <QRegularExpression>
 
 namespace {
 constexpr int MaxGames = 50000;
@@ -21,6 +22,8 @@ QVariantMap row(const QSqlQuery &query) {
 GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent)
     : QObject(parent), m_connection("games-" + QUuid::createUuid().toString(QUuid::WithoutBraces)), m_apps(apps) {
     connect(apps,&AppRegistry::appsChanged,this,&GameLibrary::changed);
+    m_scanTimer.setInterval(0);
+    connect(&m_scanTimer,&QTimer::timeout,this,&GameLibrary::scanStep);
     if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink()) { fail(tr("Choose a private games catalog path.")); return; }
     const bool exists = QFileInfo::exists(path);
     if (!exists && !QDir().mkpath(QFileInfo(path).absolutePath())) { fail(tr("Cannot create the games catalog folder.")); return; }
@@ -48,7 +51,7 @@ GameLibrary::~GameLibrary() {
     m_db.close(); m_db = QSqlDatabase(); QSqlDatabase::removeDatabase(m_connection);
 }
 bool GameLibrary::fail(const QString &error) { m_error = error; emit errorChanged(); return false; }
-void GameLibrary::invalidate() { m_ready = false; m_db.close(); fail(tr("This games profile is no longer active.")); emit changed(); }
+void GameLibrary::invalidate() { cancelImport(); m_ready = false; m_db.close(); fail(tr("This games profile is no longer active.")); emit changed(); }
 bool GameLibrary::compatibleRuntime(const QString &id, bool file) const {
     const auto *app = m_apps->find(id);
     if (!app || app->type != "desktop") return false;
@@ -169,4 +172,71 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id) {
     if (root.isEmpty()) return {{"type","launch-app"},{"appId",runtime}};
     const auto target=checkedTarget(root,relative); if (target.isEmpty()) return {};
     return {{"type","open-file"},{"openWith",runtime},{"target",target}};
+}
+void GameLibrary::cancelImport() {
+    m_scanTimer.stop();m_scan.reset();m_preview.clear();m_importReady=false;
+    m_importRoot.clear();m_importRuntime.clear();m_importPlatform.clear();m_importFormats.clear();
+    m_scanEntries=0;emit importChanged();
+}
+bool GameLibrary::beginImport(const QString &root,const QString &runtime,const QString &platform) {
+    if(!m_ready || scanning() || m_importReady)return fail(tr("Finish or cancel the current import first."));
+    const auto error=MediaGrants::validate(root);if(!error.isEmpty())return fail(error);
+    if(!compatibleRuntime(runtime,true) || platform.trimmed().isEmpty() || platform.size()>80)return fail(tr("Choose a compatible runtime and platform."));
+    const auto formats=m_apps->find(runtime)->launchConfiguration.value("gameFormats").toList();
+    if(formats.isEmpty() || formats.size()>32)return fail(tr("This runtime has no verified import formats. Add individual games instead."));
+    QStringList extensions;
+    for(const auto &format:formats){
+        const auto text=format.toString();
+        if(format.metaType().id()!=QMetaType::QString || !QRegularExpression("^[a-z0-9]{1,8}$").match(text).hasMatch())return fail(tr("Invalid runtime import format."));
+        extensions.append(text);
+    }
+    m_importRoot=root;m_importRuntime=runtime;m_importPlatform=platform;m_importFormats=extensions;
+    m_preview.clear();m_scanEntries=0;m_error.clear();emit errorChanged();
+    m_scan=std::make_unique<QDirIterator>(root,QDir::Files|QDir::Dirs|QDir::NoDotAndDotDot|QDir::NoSymLinks,QDirIterator::Subdirectories);
+    m_scanTimer.start();emit importChanged();return true;
+}
+void GameLibrary::scanStep() {
+    if(!m_ready || !m_scan)return;
+    // Yield to input between bounded batches. No file contents are read.
+    for(int batch=0;batch<32 && m_scan->hasNext();++batch){
+        const auto path=m_scan->next();const auto info=m_scan->fileInfo();
+        if(++m_scanEntries>10000){cancelImport();fail(tr("This folder exceeds the 10,000-entry import limit. Choose a smaller folder; nothing was imported."));return;}
+        if(!info.isFile() || info.isSymLink() || info.canonicalFilePath()!=path || !path.startsWith(m_importRoot+'/') || !info.isReadable())continue;
+        if(!m_importFormats.contains(info.suffix().toLower()))continue;
+        const auto title=info.completeBaseName();
+        if(title.trimmed()!=title || title.isEmpty() || title.size()>256){cancelImport();fail(tr("An import title is invalid. Add it manually with a corrected title."));return;}
+        m_preview.append(QVariantMap{{"schemaVersion",1},{"title",title},{"platform",m_importPlatform},
+            {"runtimeId",m_importRuntime},{"root",m_importRoot},{"target",QDir(m_importRoot).relativeFilePath(path)}});
+    }
+    if(!m_scan->hasNext()){m_scanTimer.stop();m_scan.reset();m_importReady=true;}
+    emit importChanged();
+}
+QVariantList GameLibrary::importPage(int offset) const {
+    if(offset<0 || offset%PageSize || offset>=10000)return {};
+    return m_preview.mid(offset,PageSize);
+}
+bool GameLibrary::commitImport() {
+    if(!m_ready || scanning() || !m_importReady)return fail(tr("Wait for the import preview before confirming."));
+    if(!compatibleRuntime(m_importRuntime,true))return fail(tr("The selected runtime is no longer installed."));
+    if(!m_db.transaction())return fail(m_db.lastError().text());
+    QSqlQuery query(m_db);
+    if(!query.exec("SELECT count(*) FROM games") || !query.next()){m_db.rollback();return fail(tr("Cannot read the games catalog."));}
+    int count=query.value(0).toInt();query.finish();
+    for(const auto &entry:m_preview){
+        const auto value=entry.toMap();QString error;
+        if(ComponentSchema::gameRegistration(value,&error).isEmpty() || checkedTarget(m_importRoot,value.value("target").toString()).isEmpty()){
+            m_db.rollback();return fail(error.isEmpty()?tr("A source changed after preview. Nothing was imported; review the folder again."):error);
+        }
+        query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?");
+        query.addBindValue(m_importRuntime);query.addBindValue(m_importRoot);query.addBindValue(value.value("target"));
+        if(!query.exec()){m_db.rollback();return fail(query.lastError().text());}
+        const bool existing=query.next();query.finish();if(existing)continue; // Preserve manual corrections.
+        if(++count>MaxGames){m_db.rollback();return fail(tr("Import would exceed the catalog limit. Nothing was imported."));}
+        query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,unixepoch())");
+        query.addBindValue("game-"+QUuid::createUuid().toString(QUuid::WithoutBraces));
+        for(const auto &key:QStringList{"title","platform","runtimeId","root","target"})query.addBindValue(value.value(key));
+        if(!query.exec()){const auto reason=query.lastError().text();m_db.rollback();return fail(reason);}
+    }
+    if(!m_db.commit()){m_db.rollback();return fail(tr("Import could not be saved. Previous data was preserved."));}
+    cancelImport();m_error.clear();emit errorChanged();emit changed();return true;
 }
