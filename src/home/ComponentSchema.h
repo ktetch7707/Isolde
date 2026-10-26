@@ -7,6 +7,9 @@ class AppRegistry;
 // Every validator returns true only for documents that satisfy the layout
 // bounds declared in ComponentSchema.cpp; values are never clamped silently.
 namespace ComponentSchema {
+// Versioned native-channel definitions and bounded nested rule trees.
+QVariantMap guideChannel(const QVariantMap &value, QString *error = nullptr);
+QVariantMap guideRule(const QVariantMap &value, QString *error = nullptr);
 QVariantMap gameRegistration(const QVariantMap &value, QString *error = nullptr);
 // Logical page extent is independent of the bounded TV viewport grid.
 inline constexpr int MaxScrollableRows = 10240;

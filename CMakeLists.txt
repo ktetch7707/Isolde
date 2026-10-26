@@ -14,6 +14,10 @@ if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
 endif()
 
 add_library(isolde_core STATIC
+    src/media/GuideStore.cpp
+    src/media/GuideStore.h
+    src/media/GuideRules.cpp
+    src/media/GuideRules.h
     src/games/GameLibrary.cpp
     src/games/GameLibrary.h
     src/media/KodiArtwork.cpp
@@ -340,6 +344,10 @@ if(BUILD_TESTING)
     target_link_libraries(isolde_capture_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME capture_protocol COMMAND isolde_capture_tests)
     qt_add_executable(isolde_component_tests tests/tst_components.cpp)
+    qt_add_executable(isolde_guide_tests tests/tst_guide.cpp)
+    target_link_libraries(isolde_guide_tests PRIVATE isolde_core Qt6::Test)
+    add_test(NAME guide_contracts COMMAND isolde_guide_tests)
+    set_tests_properties(guide_contracts PROPERTIES TIMEOUT 60 LABELS "guide;unit")
     qt_add_executable(isolde_games_ui_tests tests/games_ui.cpp)
     target_link_libraries(isolde_games_ui_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
     target_compile_definitions(isolde_games_ui_tests PRIVATE GAMES_WIDGET_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/GamesLibraryWidget.qml")

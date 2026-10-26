@@ -19,6 +19,7 @@ import time
 import xml.etree.ElementTree as ET
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
+          "guide_contracts": "isolde_guide_tests",
           "games": ("isolde_component_tests", "isolde_games_ui_tests", "isolde_tests"),
           "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests"),
           "profile_browser_isolation": "isolde_profile_browser_tests",
