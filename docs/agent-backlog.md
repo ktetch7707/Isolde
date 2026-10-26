@@ -368,7 +368,8 @@ Done when: complete software control/editor paths pass native/QML/installed VM s
 Verify: `tst_capture`, schema/dispatcher/settings/input tests, full CTest and installed virtual-device editor journeys via the bounded runner. Evidence: existing CaptureController/protocol/fake-backend and HDMI Settings foundation retains T10.1; full software adapters/editors and H04 remain open.
 
 ## T11 — Guide / PseudoTV (L, depends: T24)
-Entry docs: `docs/unified-master-plan.txt` PseudoTV Sec 1-10, `docs/implementation-order.md:50`.
+Approved scope amendment (2026-10-26): [unified Live TV review and implementation requirements](live-tv-proposal-review-2026-10-26.md). Includes equal-access Create local channel / Add source, remote lineup management, local scheduled channels alongside Kodi/PVR, capability-gated Plex and YouTube TV sources, honest app-only destinations, exact guide return, profile isolation and atomic schedule persistence. Provider limitations remain explicit; app launch is not channel tuning. Included in T11.1–T11.3 and their acceptance gates, not a separate task. Planning adds no completion credit: T11 remains 0/3 = 0%; recorded overall remains 32% across 27 ACTIVE tasks.
+Entry docs: `docs/unified-master-plan.txt` PseudoTV Sec 1-10, `docs/implementation-order.md:50`, `docs/live-tv-proposal-review-2026-10-26.md` (full reviewed amendment).
 Entry files: `src/media/` (new guide store), `qml/GuideView.qml` (new), `qml/ComposedHome.qml` (compact widget).
 Scope:
 - [ ] T11.1 Inspect actual backend first, then PVR or playlist/EPG adapter; compact widget (3-5ch + progress) → overlay → full EPG
