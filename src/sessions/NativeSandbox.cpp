@@ -1,5 +1,6 @@
 #include "sessions/NativeSandbox.h"
 #include "media/MediaGrants.h"
+#include "games/GameEmulators.h"
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -34,7 +35,8 @@ bool privateDirectory(const QString &path)
 
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
-                                        const QString &target, const QString &storageRoot)
+                                        const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
+                                        const QString &gameSourceRoot)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -151,6 +153,23 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     }
     if (QFileInfo::exists(hostRuntime + "/pipewire-0")) bind(hostRuntime + "/pipewire-0", runtime + "/pipewire-0");
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
+    if(!emulatorRuntime.isEmpty()){
+        // Give managed emulators gamepad nodes only. Do not expose keyboard,
+        // mouse or the entire host input directory to a native game session.
+        const auto nodes=QDir("/sys/class/input").entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot);
+        int granted=0;
+        for(const auto &node:nodes){
+            if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(node).hasMatch())continue;
+            QFile capabilities("/sys/class/input/"+node+"/device/capabilities/key");
+            if(!capabilities.open(QIODevice::ReadOnly))continue;
+            const auto bitmap=QString::fromLatin1(capabilities.read(4096)).trimmed().split(' ',Qt::SkipEmptyParts);
+            bool gamepad=false;
+            for(int code=0x120;code<0x140;++code){const auto word=bitmap.size()-1-code/64;
+                if(word>=0){bool ok=false;const auto bits=bitmap.at(word).toULongLong(&ok,16);gamepad|=ok && (bits&(quint64(1)<<(code%64)));}}
+            const auto device="/dev/input/"+node;
+            if(gamepad && QFileInfo::exists(device)){if(++granted>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}bind(device,device,"--dev-bind");}
+        }
+    }
     if (QFileInfo::exists("/sys")) bind("/sys", "/sys");
     // resolv.conf is often a symlink into /run, which otherwise stays private.
     const auto resolver = QFileInfo("/etc/resolv.conf").canonicalFilePath();
@@ -198,8 +217,18 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                 plan.error = QStringLiteral("Choose a media file or folder, not a profile, account, or system folder.");
                 return plan;
             }
-            plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
-            bind(canonical, plan.actionTarget);
+            if(!gameSourceRoot.isEmpty()){
+                const auto error=MediaGrants::validate(gameSourceRoot);
+                if(!error.isEmpty() || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
+                    || inside(base,gameSourceRoot) || inside(gameSourceRoot,base)){
+                    plan.error="The reviewed game folder is unavailable or redirected. Review it in Games and retry.";return plan;
+                }
+                plan.actionTarget="/media/games/"+QDir(gameSourceRoot).relativeFilePath(canonical);
+                bind(gameSourceRoot,"/media/games");
+            } else {
+                plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
+                bind(canonical, plan.actionTarget);
+            }
         } else if (!QStringList{"https", "http", "smb", "nfs"}.contains(url.scheme())) {
             plan.error = QStringLiteral("This media address is not supported by isolated native apps.");
             return plan;
@@ -208,6 +237,19 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     // Start a new bus inside the sandbox. Host service activation is never used.
     bind(supervisor, "/run/isolde-native-host");
     bind(busConfig, "/run/isolde-session-bus.conf");
+    if(!emulatorRuntime.isEmpty()){
+        const auto runtimeDefinition=GameEmulators::definition(emulatorRuntime);
+        auto helperRoot=QCoreApplication::applicationDirPath()+"/share/isolde";
+        if(!QFileInfo(helperRoot+"/emulator-session.py").isReadable())helperRoot=QCoreApplication::applicationDirPath()+"/../share/isolde";
+        const auto helper=helperRoot+"/emulator-session.py";
+        const auto manifest=helperRoot+"/game-runtimes.json";
+        if(runtimeDefinition.isEmpty() || emulatorRuntime!=appId || binary!=QFileInfo("/usr/bin/python3").canonicalFilePath()
+            || !QFileInfo(helper).isReadable() || !QFileInfo(manifest).isReadable() || target.isEmpty()){
+            plan.error="Repair the managed emulator adapter or choose a game from Games.";return plan;
+        }
+        bind(helper,"/run/emulator-session.py");bind(manifest,"/run/game-runtimes.json");
+        // The packaged script accepts identities, never commands from a game.
+    }
     args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--" << executable;
     plan.environment.insert("PATH", "/usr/bin:/bin");
     plan.environment.insert("LANG", host.value("LANG", "C.UTF-8"));

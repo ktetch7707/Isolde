@@ -336,7 +336,9 @@ void DesktopSession::launch()
     }
     auto resolvedLaunch = launch;
     const auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(), definition().id,
-        resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString());
+        resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString(), {},
+        definition().launchConfiguration.value("emulatorRuntime").toString(),
+        definition().launchConfiguration.value("gameSourceRoot").toString());
     if (!sandbox.error.isEmpty()) {
         setError(sandbox.error);
         setState(State::Exited);
@@ -360,6 +362,8 @@ void DesktopSession::launch()
         return;
     }
 
+    const auto emulator=configuration.value("emulatorRuntime").toString();
+    if(!emulator.isEmpty())resolvedLaunch.arguments={"/run/emulator-session.py","--runtime",emulator,sandbox.actionTarget};
     qInfo() << "Isolated native session launching" << definition().id << "profile" << qApp->property("isoldeProfile");
     m_launcher.setProcessEnvironment(sandbox.environment);
     m_launcher.setProgram(sandbox.program);
@@ -384,7 +388,10 @@ void DesktopSession::launch()
                 qInfo() << "Isolated native session finished" << definition().id << exitCode << exitStatus;
                 m_kodiLock.reset();
                 if (m_stopping) return;
-                if (exitStatus != QProcess::NormalExit || exitCode != 0)
+                if ((exitStatus != QProcess::NormalExit || exitCode != 0) && definition().launchConfiguration.contains("emulatorRuntime") && m_diagnostics.contains("Emulator setup: ")) {
+                    const auto reason=QString::fromUtf8(m_diagnostics).section("Emulator setup: ",-1).section('\n',0,0).left(320);
+                    setError(reason);
+                } else if (exitStatus != QProcess::NormalExit || exitCode != 0)
                     setError(QStringLiteral("%1 could not continue in its private profile (exit %2). No shared-account fallback was used.").arg(definition().name).arg(exitCode));
                 // Defer teardown until QProcess has finished delivering its signal.
                 QTimer::singleShot(0, this, [this] { setState(State::Exited); });

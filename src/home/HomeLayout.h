@@ -204,6 +204,7 @@ private:
     QString m_pageId;
 
     AppRegistry *m_registry;
+    QVariantList m_registryItems;
     QJsonArray m_items;
     QJsonArray m_categories;
     bool m_brandVisible = false;

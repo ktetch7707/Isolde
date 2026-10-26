@@ -2,14 +2,16 @@ param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
     [ValidateSet('all','guide_contracts','games','store','vpn','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
-    [ValidateSet('studio','desktop','lounge','pastel','pages','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games')][string[]]$Cases = @('studio','lounge','pastel'),
+    [ValidateSet('studio','desktop','lounge','pastel','pages','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [switch]$Capture,
+    [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
     [ValidateSet('native','surfshark','android','android-repair','games')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
+if ($WaitSeconds -and $Action -notin @('Test','Configure','Visual')) { throw 'Bounded lock waiting is available for Test/Configure/Visual only.' }
 if ($Capture -and $Action -ne 'Status') { throw 'Capture is restricted to Status of an active guest setup guardian.' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Use PowerShell 7 (pwsh), not Windows PowerShell.' }
 . "$PSScriptRoot/vm-process.ps1"
@@ -52,7 +54,7 @@ try {
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt")
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds
         }
     } else {
         $remoteAction = $Action.ToLowerInvariant()
@@ -60,8 +62,10 @@ try {
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
-        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
+        if ($WaitSeconds) { $command += " --wait-seconds $WaitSeconds" }
+        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'games') { 2500 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')
+        $seconds += $WaitSeconds
         $actionResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + $command) -TimeoutSeconds $seconds -Log (Join-Path $local "$remoteAction.log")
         if ($Capture) {
             $stateLine = $actionResult.Lines | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1

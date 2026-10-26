@@ -20,6 +20,8 @@ add_library(isolde_core STATIC
     src/media/GuideRules.h
     src/games/GameLibrary.cpp
     src/games/GameLibrary.h
+    src/games/GameEmulators.cpp
+    src/games/GameEmulators.h
     src/media/KodiArtwork.cpp
     src/media/KodiArtwork.h
     src/home/ComponentSchema.cpp
@@ -100,6 +102,7 @@ add_library(isolde_core STATIC
     src/sessions/SessionManager.h
 )
 target_include_directories(isolde_core PUBLIC src)
+target_compile_definitions(isolde_core PRIVATE ISOLDE_GAME_RUNTIME_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/config/game-runtimes.json")
 target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort Qt6::Sql)
 
 qt_add_executable(isolde src/main.cpp)
@@ -203,7 +206,13 @@ qt_add_resources(isolde "isolde_config"
         config/packages/kodi/manifest.json
         config/packages/retro-arcade/manifest.json
         config/packages/dolphin/manifest.json
+        config/game-runtimes.json
         config/packages/pcsx2/manifest.json
+        config/packages/ppsspp/manifest.json
+        config/packages/retroarch-nes/manifest.json
+        config/packages/retroarch-gb/manifest.json
+        config/packages/retroarch-gba/manifest.json
+        config/packages/retroarch-snes/manifest.json
         config/packages/supertux/manifest.json
         config/packages/spotify/manifest.json
         config/packages/steam/manifest.json
@@ -233,6 +242,14 @@ configure_file(config/default-home-layout.json "${CMAKE_CURRENT_BINARY_DIR}/conf
 configure_file(config/studio-defaults.json "${CMAKE_CURRENT_BINARY_DIR}/config/studio-defaults.json" COPYONLY)
 file(COPY config/skins DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/config")
 set(ISOLDE_PACKAGE_MANIFESTS
+    config/packages/dolphin/manifest.json
+    config/packages/pcsx2/manifest.json
+    config/packages/ppsspp/manifest.json
+    config/packages/retroarch-nes/manifest.json
+    config/packages/retroarch-gb/manifest.json
+    config/packages/retroarch-gba/manifest.json
+    config/packages/retroarch-snes/manifest.json
+    config/packages/supertux/manifest.json
     config/packages/ambient-weather/manifest.json
     config/packages/living-room-radio/manifest.json
     config/packages/photo-gallery/manifest.json
@@ -259,6 +276,15 @@ endforeach()
 
 install(TARGETS isolde RUNTIME DESTINATION bin)
 install(FILES tools/component-health.py DESTINATION share/isolde)
+install(FILES tools/emulator-session.py DESTINATION share/isolde)
+install(FILES tools/provision-games.py tools/build-ppsspp.py DESTINATION share/isolde)
+install(FILES tools/fetch-game-fixtures.py DESTINATION share/isolde)
+install(FILES config/game-runtimes.json DESTINATION share/isolde)
+configure_file(tools/emulator-session.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/emulator-session.py COPYONLY)
+configure_file(tools/provision-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/provision-games.py COPYONLY)
+configure_file(tools/build-ppsspp.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/build-ppsspp.py COPYONLY)
+configure_file(tools/fetch-game-fixtures.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/fetch-game-fixtures.py COPYONLY)
+configure_file(config/game-runtimes.json ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/game-runtimes.json COPYONLY)
 install(FILES tools/provision-default-apps.py DESTINATION share/isolde)
 install(FILES tools/provision-android.py DESTINATION share/isolde)
 install(FILES tools/android-session.py DESTINATION share/isolde)

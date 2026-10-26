@@ -291,6 +291,16 @@ class OracleTests(unittest.TestCase):
             self.assertTrue(archive.getnames()[0].endswith("result.json"))
 
     def test_visual_results_use_each_harness_contract(self):
+        emulators=dict(passed=True,freshProfile=True,remoteRuntimeSetup=True,remoteRegistration=True,nativeGameStarted=True,
+            returned=True,sourceUnchanged=True,runtime="ppsspp",gameplayVerified=False,physicalControllerVerified=False,
+            captures=["emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",
+                "emulatorsdetails","emulatorspermission","emulatorsmenu","emulatorsplay","emulatorsaction","emulatorsreturn","emulatorsrestored"])
+        self.assertTrue(oracle.visual_result_passed("emulators",emulators))
+        for key in emulators:
+            incomplete=dict(emulators);incomplete.pop(key)
+            self.assertFalse(oracle.visual_result_passed("emulators",incomplete))
+        claimed=dict(emulators,gameplayVerified=True)
+        self.assertFalse(oracle.visual_result_passed("emulators",claimed))
         independent = {"passed": True, "native_clients": True, "steam_client_downloaded": False, "subscriptionPlaybackVerified": False, "household_unchanged": True}
         self.assertTrue(oracle.visual_result_passed("clients", independent))
         self.assertFalse(oracle.visual_result_passed("apps", independent))
@@ -372,6 +382,20 @@ class OracleTests(unittest.TestCase):
                 with oracle.exclusive_lock(lock):
                     self.fail("Second process acquired owned lock")
         self.assertTrue(lock.exists())
+
+    @unittest.skipUnless(os.name=="posix","Linux advisory lock")
+    def test_bounded_wait_preserves_owner_and_acquires_after_release(self):
+        lock=self.root/"queued-lock";ready=threading.Event()
+        def owner():
+            with oracle.exclusive_lock(lock):ready.set();time.sleep(.15)
+        thread=threading.Thread(target=owner);thread.start();self.assertTrue(ready.wait(1))
+        with oracle.exclusive_lock(lock,.8):self.assertFalse(thread.is_alive())
+        thread.join(1);self.assertTrue(lock.exists())
+        with oracle.exclusive_lock(lock):
+            started=time.monotonic()
+            with self.assertRaisesRegex(RuntimeError,"BUSY"):
+                with oracle.exclusive_lock(lock,.05):self.fail("Interrupted an active owner")
+            self.assertLess(time.monotonic()-started,.5)
 
 
 if __name__ == "__main__":

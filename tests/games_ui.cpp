@@ -1,4 +1,7 @@
 #include "games/GameLibrary.h"
+#include "games/GameEmulators.h"
+#include <QStandardPaths>
+#include <QUuid>
 #include "app/AppRegistry.h"
 #include "input/InputManager.h"
 #include <QtTest>
@@ -26,6 +29,7 @@ private slots:
     void remoteAddReviewWritesOnlyOnConfirm();
     void remoteEditCanCancelAndApplyWithoutMouse();
     void remoteEditionChooserDispatchesOwnedVersion();
+    void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
 };
 static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
@@ -39,6 +43,28 @@ static void doneOnKeyboard(QObject *widget) {
     for(int i=0;i<5;++i)command(widget,InputManager::NavigateDown);
     for(int i=0;i<9;++i)command(widget,InputManager::NavigateRight);
     command(widget,InputManager::Confirm);
+}
+void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
+    QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    qApp->setProperty("isoldeProfile",profile);
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    for(int i=0;i<8;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulators"));
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));
+    const auto file=GameEmulators::home(profile,"ppsspp")+"/.config/isolde-emulator/settings.json";
+    command(widget.data(),InputManager::Confirm);QVERIFY(!QFileInfo::exists(file)); // default Cancel
+    command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
+    for(int i=0;i<4;++i)command(widget.data(),InputManager::NavigateUp);
+    command(widget.data(),InputManager::Confirm); // automatic -> software, draft only
+    QVERIFY(!QFileInfo::exists(file));
+    for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown);
+    command(widget.data(),InputManager::Confirm);QCOMPARE(library.emulatorSettings("ppsspp").value("video").toString(),QString("software"));
+    QVERIFY(!library.installEmulators(false));QVERIFY(!library.setupBusy());
+    QVERIFY(QDir(QFileInfo(GameEmulators::home(profile,"ppsspp")).absolutePath()).removeRecursively());
+    qApp->setProperty("isoldeProfile",QVariant());
 }
 void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));

@@ -77,10 +77,10 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
     else if (type == "app-drawer") { emit drawerRequested(); accepted = true; }
     else if (type == "launch-app") accepted = launchApp(value.value("appId").toString());
     else if (type == "launch-game") {
-        const auto resolved = m_games ? m_games->resolveLaunch(value.value("gameId").toString(),value.value("editionId").toString()) : QVariantMap();
+        auto resolved = m_games ? m_games->resolveLaunch(value.value("gameId").toString(),value.value("editionId").toString()) : QVariantMap();
         if(resolved.isEmpty()) emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable in this profile."));
         else if(resolved.value("type")=="launch-app") accepted=launchApp(resolved.value("appId").toString());
-        else accepted=m_sessions->launchAction(resolved);
+        else {const auto root=resolved.take("sourceRoot").toString();accepted=m_sessions->launchGameFile(resolved,root);}
     }
     else if (type == "settings") {
         accepted = launchApp("settings");

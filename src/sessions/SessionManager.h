@@ -40,6 +40,9 @@ public:
 
     Q_INVOKABLE bool launch(const QString &appId);
     Q_INVOKABLE bool launchAction(const QVariantMap &action);
+    // Only the identity-resolving Games dispatcher supplies this grant. It is
+    // deliberately not a QML/layout action argument.
+    bool launchGameFile(const QVariantMap &action, const QString &sourceRoot);
     Q_INVOKABLE void exitCurrent();
     Q_INVOKABLE void goHome();
 
@@ -54,6 +57,7 @@ signals:
     void returnedHome(const QString &focusId);
 
 private:
+    bool launchFileAction(const QVariantMap &action, const QString &sourceRoot);
     bool launchDefinition(AppDefinition definition);
 
     AppRegistry *m_registry;

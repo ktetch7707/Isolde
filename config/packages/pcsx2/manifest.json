@@ -3,18 +3,42 @@
   "packageId": "pcsx2",
   "version": "1.0.0",
   "minIsoldeVersion": "0.0.1.2",
-  "name": "PCSX2 game runtime",
-  "description": "Managed PS2 runtime. Requires your own compatible game and firmware. Isolde setup/gameplay acceptance remains separate from installing this runtime.",
-  "category": "Games", "publisher": "PCSX2 Team",
-  "provenance": "Pinned signed Ubuntu pcsx2 package; no games or firmware included",
-  "capabilities": ["desktop.external", "input.gamepad", "audio.output"],
+  "name": "PCSX2 · PlayStation 2",
+  "description": "Managed console runtime. Add your game files in Games and use Emulator setup for private settings and firmware. Compatibility and controller acceptance are tracked separately.",
+  "category": "Games",
+  "publisher": "pcsx2",
+  "provenance": "Pinned runtime; no commercial games or firmware included",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
   "app": {
-    "id": "pcsx2", "type": "desktop", "presentationMode": "game-hub",
-    "networkRequirement": "none", "desktopId": "isolde-pcsx2",
-    "windowClass": "pcsx2-qt", "containment": "fullscreen",
-    "section": "Games", "accent": "#5467AC", "symbol": "PS2",
-    "handledActions": ["open-file"],
-    "actionHandlers": {"open-file": {"arguments": ["-batch", "-fullscreen", "--", "{target}"]}},
-    "gameFormats": ["iso", "chd", "cso", "bin", "elf"]
+    "id": "pcsx2",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-pcsx2",
+    "emulatorRuntime": "pcsx2",
+    "windowClass": "pcsx2-qt",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "PlayStation 2",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "iso",
+      "chd",
+      "cso",
+      "bin",
+      "elf"
+    ]
   }
 }

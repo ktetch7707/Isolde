@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "packageId": "ppsspp",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "PPSSPP · PSP",
+  "description": "Managed console runtime. Add your game files in Games and use Emulator setup for private settings and firmware. Compatibility and controller acceptance are tracked separately.",
+  "category": "Games",
+  "publisher": "ppsspp",
+  "provenance": "Pinned runtime; no commercial games or firmware included",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "ppsspp",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-ppsspp",
+    "emulatorRuntime": "ppsspp",
+    "windowClass": "PPSSPPSDL",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "PSP",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "iso",
+      "cso",
+      "chd",
+      "pbp",
+      "elf"
+    ]
+  }
+}

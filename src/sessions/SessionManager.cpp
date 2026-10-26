@@ -4,6 +4,8 @@
 #include "sessions/DesktopSession.h"
 #include "sessions/AndroidSession.h"
 #include "home/ComponentSchema.h"
+#include "media/MediaGrants.h"
+#include <QFileInfo>
 
 #include <QUrl>
 #include <QScopedValueRollback>
@@ -127,6 +129,22 @@ bool SessionManager::launchDefinition(AppDefinition definition)
 
 bool SessionManager::launchAction(const QVariantMap &input)
 {
+    return launchFileAction(input,{});
+}
+bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sourceRoot)
+{
+    const auto target=input.value("target").toString();
+    const auto *runtime=m_registry->find(input.value("openWith").toString());
+    const auto error=MediaGrants::validate(sourceRoot);
+    if(!error.isEmpty() || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
+        || !QStringList{"game","game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot+'/')
+        || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target){
+        emit sessionRejected(tr("The reviewed game folder is missing, redirected or incompatible. Review its source and retry."));return false;
+    }
+    return launchFileAction(input,sourceRoot);
+}
+bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot)
+{
     QString error;
     const auto action = ComponentSchema::action(input, &error);
     if (action.isEmpty()) { emit sessionRejected(error); return false; }
@@ -156,6 +174,7 @@ bool SessionManager::launchAction(const QVariantMap &input)
     AppDefinition actionDefinition = *definition;
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionType"), type);
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionTarget"), target);
+    if(!sourceRoot.isEmpty())actionDefinition.launchConfiguration.insert("gameSourceRoot",sourceRoot);
     qInfo() << "Launching action tile" << type << "target" << target << "with" << openWith;
     return launchDefinition(actionDefinition);
 }

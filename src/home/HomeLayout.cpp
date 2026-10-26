@@ -108,8 +108,14 @@ QJsonObject normalizedActionForItem(const QJsonObject &item)
 
 HomeLayout::HomeLayout(AppRegistry *registry, QObject *parent) : QObject(parent), m_registry(registry)
 {
+    connect(this,&HomeLayout::layoutChanged,this,[this]{m_registryItems=items();});
     connect(this,&HomeLayout::layoutChanged,this,&HomeLayout::syncPages);
-    connect(m_registry, &AppRegistry::appsChanged, this, &HomeLayout::layoutChanged);
+    connect(m_registry, &AppRegistry::appsChanged, this, [this]{
+        // Catalog-only changes must not reconstruct an unrelated active page.
+        // Carousels observe registry.apps directly; resolved tiles still refresh
+        // when their metadata, artwork or availability actually changes.
+        if(items()!=m_registryItems)emit layoutChanged();
+    });
 }
 
 QVariantList HomeLayout::items() const
@@ -701,7 +707,11 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
 
 bool HomeLayout::addAppTile(const QString &appId)
 {
-    if (!m_registry->find(appId)) return false;
+    const auto *definition=m_registry->find(appId);
+    if (!definition) return false;
+    // Managed file adapters have no standalone launch. Installing one must
+    // preserve the current page transaction and its remote focus.
+    if(!definition->launchConfiguration.value("emulatorRuntime").toString().isEmpty())return true;
     for (const auto &value : m_items)
         if (value.toObject().value("appId").toString() == appId) return true;
     QString id = appId;

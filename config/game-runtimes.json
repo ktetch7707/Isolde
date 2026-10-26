@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "runtimes": [
+    {"id":"ppsspp","name":"PPSSPP · PSP","engine":"ppsspp","platforms":["PSP"],"formats":["iso","cso","chd","pbp","elf"],"binary":"/usr/bin/PPSSPPSDL","firmwareRequired":false},
+    {"id":"dolphin","name":"Dolphin · GameCube / Wii","engine":"dolphin","platforms":["GameCube","Wii"],"formats":["iso","gcm","rvz","gcz","wbfs","dol","elf"],"binary":"/usr/games/dolphin-emu","firmwareRequired":false},
+    {"id":"pcsx2","name":"PCSX2 · PlayStation 2","engine":"pcsx2","platforms":["PlayStation 2"],"formats":["iso","chd","cso","bin","elf"],"binary":"/usr/games/pcsx2-qt","firmwareRequired":true},
+    {"id":"retroarch-nes","name":"RetroArch · NES (Nestopia)","engine":"retroarch","platforms":["NES"],"formats":["nes","unf","unif"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/nestopia_libretro.so","firmwareRequired":false},
+    {"id":"retroarch-gb","name":"RetroArch · Game Boy / Color (Gambatte)","engine":"retroarch","platforms":["Game Boy","Game Boy Color"],"formats":["gb","gbc"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/gambatte_libretro.so","firmwareRequired":false},
+    {"id":"retroarch-gba","name":"RetroArch · Game Boy Advance (mGBA)","engine":"retroarch","platforms":["Game Boy Advance"],"formats":["gba"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/mgba_libretro.so","firmwareRequired":false},
+    {"id":"retroarch-snes","name":"RetroArch · SNES (bsnes balanced)","engine":"retroarch","platforms":["SNES"],"formats":["sfc","smc"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/bsnes_mercury_balanced_libretro.so","firmwareRequired":false}
+  ]
+}

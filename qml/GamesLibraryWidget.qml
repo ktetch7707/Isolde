@@ -30,9 +30,14 @@ Item {
     property var editionChoices:[]
     property int importOffset:0
     property var importItems:[]
+    property string emulatorId:""
+    property var emulatorDraft:({})
+    property string firmwareDraft:""
+    readonly property var emulators:library?library.emulators:[]
+    readonly property var emulatorActions:["Video: "+(emulatorDraft.video || "automatic"),"Controller: "+(emulatorDraft.controller==="xbox-wii-classic"?"Xbox · Wii Classic":"Xbox · Wii Remote + Nunchuk / standard pad"), "Import PS2 firmware: "+(firmwareDraft || (emulatorDraft.firmware?"Saved private copy":"None selected")),"Save setup","Cancel · save nothing"]
     property int field:0
     readonly property var runtimes:library?library.runtimes:[]
-    readonly property var tools:["Add game","All","Favorites","Recent","Search","Previous","Next","Import folder"]
+    readonly property var tools:["Add game","All","Favorites","Recent","Search","Previous","Next","Import folder","Emulator setup"]
     readonly property var importActions:["Import all reviewed files","Cancel · save nothing","Previous preview page","Next preview page"].concat(importItems.map(g=>g.title+" · "+g.target))
     readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Add edition / version","Back"]:[]
     readonly property int columns:style.libraryLayout==="list"?1:Math.max(1,style.libraryColumns || 4)
@@ -47,6 +52,7 @@ Item {
     onQueryViewChanged:{offset=0;reload()}
     onSearchChanged:{offset=0;reload()}
     Connections {target:root.library;function onChanged(){root.reload()}}
+    Connections {target:root.library;function onSetupChanged(){if(root.mode==="emulatorInstallStatus")root.message=root.library.setupStatus}}
     Connections {target:root.library;function onImportChanged(){
         if(root.mode!=="scan" && root.mode!=="importPreview")return
         root.importItems=root.library.importPage(root.importOffset)
@@ -55,7 +61,7 @@ Item {
     }}
     Connections {
         target:root.dispatcher
-        function onRejected(reason){if(root.mode==="details")root.message=reason}
+        function onRejected(reason){if(root.engaged || root.mode==="details")root.message=reason}
     }
     function reload(){
         if(!library){items=[];return}
@@ -75,6 +81,7 @@ Item {
     function activateTool(){
         message=""
         if(toolbar===0){beginAdd();return}
+        if(toolbar===8){mode="emulators";choice=0;message="Choose a console runtime. Settings and saves belong only to this Isolde profile. Games and firmware are not downloaded.";return}
         if(toolbar===7){beginAdd(true);return}
         if(toolbar===4){beginField(4);return}
         if(toolbar===5){offset=Math.max(0,offset-50);selectedId="";selected=-1;reload();return}
@@ -82,6 +89,41 @@ Item {
         search="";offset=0;selectedId="";selected=-1;queryView=toolbar===2?"favorites":toolbar===3?"recent":"all";reload()
     }
     function activateChoice(){
+        if(mode==="emulators"){
+            if(choice===emulators.length){mode=library.setupBusy?"emulatorInstallStatus":"emulatorInstallReview";choice=0;message=library.setupBusy?library.setupStatus:"Install PPSSPP, Dolphin, PCSX2, RetroArch and the listed console cores? This downloads runtime software and uses appliance storage. No games or firmware are included. Existing saves are preserved.";return}
+            const emulator=emulators[choice];if(!emulator)return
+            emulatorId=emulator.id;emulatorDraft=library.emulatorSettings(emulatorId);firmwareDraft=""
+            if(!emulatorDraft.schemaVersion){message=library.errorString;return}
+            mode="emulatorSettings";choice=4;message=emulator.name+" · "+(emulator.installed?"Runtime installed":"Runtime installation required")+" · "+(emulator.registered?"Available for Games":"Use Install / repair emulators to make this runtime available")
+            return
+        }
+        if(mode==="emulatorInstallReview"){
+            if(choice===0){mode="browse";return}
+            if(!library.installEmulators(true)){message=library.errorString;return}
+            mode="emulatorInstallStatus";choice=0;message=library.setupStatus;return
+        }
+        if(mode==="emulatorInstallStatus"){
+            if(choice===1 && library.setupBusy)library.cancelEmulatorSetup()
+            else mode="browse"
+            return
+        }
+        if(mode==="emulatorSettings"){
+            if(choice===0){emulatorDraft=Object.assign({},emulatorDraft,{video:emulatorDraft.video==="automatic"?"software":"automatic"});return}
+            if(choice===1){
+                if(emulatorId==="dolphin")emulatorDraft=Object.assign({},emulatorDraft,{controller:emulatorDraft.controller==="xbox"?"xbox-wii-classic":"xbox"})
+                message="Xbox buttons and sticks use SDL mappings. Dolphin offers Wii Remote + Nunchuk or Classic; GameCube keeps its own pad mapping. Wii motion-dependent games require individual compatibility checks.";return
+            }
+            if(choice===2){
+                const emulator=emulators.find(e=>e.id===emulatorId)
+                if(!emulator || !emulator.firmwareRequired){message="This runtime needs no firmware import for the listed cartridge/disc routes.";return}
+                field=5;mode="keyboard";keyboard.selectedIndex=0;keyboard.value=firmwareDraft;return
+            }
+            if(choice===3){
+                if(!library.configureEmulator(emulatorId,{video:emulatorDraft.video,controller:emulatorDraft.controller},firmwareDraft)){message=library.errorString;return}
+                message="Emulator setup saved for this profile. Game files and existing saves are preserved."
+            }
+            mode="browse";return
+        }
         if(mode==="editions"){
             if(choice===editionChoices.length){mode="details";choice=0;return}
             const edition=editionChoices[choice];if(edition)launchEdition(edition.id);return
@@ -133,7 +175,7 @@ Item {
         if(mode==="keyboard"){keyboard.handleCommand(command);return true}
         if(command===inputManager.back){if(mode!=="browse"){if(mode==="scan" || mode==="importPreview")library.cancelImport();mode="browse";detail=null;draft=({});return true}return false}
         if(mode!=="browse"){
-            const count=mode==="editions"?editionChoices.length+1:mode==="runtime"?runtimes.length:mode==="details"?detailActions.length:mode==="scan"?1:mode==="importPreview"?importActions.length:2
+            const count=mode==="emulators"?emulators.length+1:mode==="emulatorSettings"?emulatorActions.length:mode==="editions"?editionChoices.length+1:mode==="runtime"?runtimes.length:mode==="details"?detailActions.length:mode==="scan"?1:mode==="importPreview"?importActions.length:2
             if(command===inputManager.navigateDown || command===inputManager.navigateRight)choice=Math.min(count-1,choice+1)
             else if(command===inputManager.navigateUp || command===inputManager.navigateLeft)choice=Math.max(0,choice-1)
             else if(command===inputManager.confirm)activateChoice()
@@ -195,11 +237,12 @@ Item {
         anchors.fill:parent;visible:root.mode!=="browse";color:root.surface;radius:root.style.radius || 12
         Column {
             anchors.fill:parent;anchors.margins:20;spacing:12;visible:root.mode!=="keyboard"
-            Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="details" && root.detail?root.detail.title:root.mode==="runtime"?"Choose game runtime":root.mode==="remove"?"Remove library entry":"Review game";color:root.foreground;font.pixelSize:24*root.scale}
-            Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="review"?root.draft.title+" · "+root.draft.platform+"\n"+(root.draft.root?"Allow this game runtime to read: "+root.draft.root+"\nFile: "+root.draft.target:"Installed game: "+root.draft.runtimeId):root.message;color:root.muted;font.pixelSize:17*root.scale}
+            Text {id:reviewTitle;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="details" && root.detail?root.detail.title:root.mode==="runtime"?"Choose game runtime":root.mode==="remove"?"Remove library entry":root.mode==="emulators"?"Emulator setup":root.mode==="emulatorSettings"?"Console settings":root.mode==="emulatorInstallReview"?"Install emulators":root.mode==="emulatorInstallStatus"?"Emulator installation":"Review game";color:root.foreground;font.pixelSize:24*root.scale}
+            Text {id:reviewSummary;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="review"?root.draft.title+" · "+root.draft.platform+"\n"+(root.draft.root?"Allow this game runtime to read: "+root.draft.root+"\nFile: "+root.draft.target:"Installed game: "+root.draft.runtimeId):root.message;color:root.muted;font.pixelSize:17*root.scale}
             ListView {
-                width:parent.width;height:Math.max(60,parent.height-160);clip:true;currentIndex:root.choice;highlightMoveDuration:0
-                model:root.mode==="editions"?root.editionChoices.map(e=>e.title+" · "+e.platform).concat(["Back"]):root.mode==="scan"?["Cancel scan · save nothing"]:root.mode==="importPreview"?root.importActions:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:[root.editionGameId?"Add edition · preserve other versions":root.editingId?"Save changes and approve source":"Add game and approve source","Cancel"]
+                objectName:"gamesReviewChoices"
+                width:parent.width;height:Math.max(0,parent.height-reviewTitle.height-reviewSummary.height-2*parent.spacing);clip:true;currentIndex:root.choice;highlightMoveDuration:0
+                model:root.mode==="emulatorInstallReview"?["Cancel","Install all listed emulators and cores"]:root.mode==="emulatorInstallStatus"?["Back to Games",root.library && root.library.setupBusy?"Stop installation safely":"Installation finished"]:root.mode==="emulators"?root.emulators.map(e=>e.name+" · "+(e.installed?"Installed":"Not installed")).concat([root.library && root.library.setupBusy?"Installation status":"Install / repair emulators"]):root.mode==="emulatorSettings"?root.emulatorActions:root.mode==="editions"?root.editionChoices.map(e=>e.title+" · "+e.platform).concat(["Back"]):root.mode==="scan"?["Cancel scan · save nothing"]:root.mode==="importPreview"?root.importActions:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:[root.editionGameId?"Add edition · preserve other versions":root.editingId?"Save changes and approve source":"Add game and approve source","Cancel"]
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     width:ListView.view.width;height:48;color:root.surface;radius:8
@@ -212,9 +255,10 @@ Item {
     }
     OnScreenKeyboard {
         id:keyboard;anchors.fill:parent;visible:root.mode==="keyboard";appearance:root.appearance
-        hint:root.field===0?"Game title":root.field===1?"Platform name":root.field===2?"Specific absolute game folder · source access reviewed before saving":root.field===3?"Game file relative to that folder":"Search local game titles"
-        onCanceled:{root.draft=({});root.mode="browse"}
+        hint:root.field===5?"Your absolute PS2 firmware path · Save setup confirms copying it into this profile":root.field===0?"Game title":root.field===1?"Platform name":root.field===2?"Specific absolute game folder · source access reviewed before saving":root.field===3?"Game file relative to that folder":"Search local game titles"
+        onCanceled:{if(root.field===5){root.mode="emulatorSettings";return}root.draft=({});root.mode="browse"}
         onAccepted:text=>{
+            if(root.field===5){root.firmwareDraft=text;root.mode="emulatorSettings";return}
             if(root.field===4){root.search=text;root.queryView="search";root.mode="browse";root.reload();return}
             const keys=["title","platform","root","target"];const next=Object.assign({},root.draft);next[keys[root.field]]=text;root.draft=next
             const runtime=root.runtimes.find(r=>r.id===root.draft.runtimeId)

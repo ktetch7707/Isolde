@@ -1,5 +1,14 @@
 #include "GameLibrary.h"
+#include "GameEmulators.h"
+#include <QCoreApplication>
 #include "app/AppRegistry.h"
+#include "app/AppCatalog.h"
+#include <QJsonDocument>
+#include <QStandardPaths>
+#ifdef Q_OS_UNIX
+#include <signal.h>
+#include <unistd.h>
+#endif
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
 #include <QDir>
@@ -22,6 +31,27 @@ QVariantMap row(const QSqlQuery &query) {
 GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent)
     : QObject(parent), m_connection("games-" + QUuid::createUuid().toString(QUuid::WithoutBraces)), m_apps(apps) {
     connect(apps,&AppRegistry::appsChanged,this,&GameLibrary::changed);
+    m_emulatorProfile=qApp->property("isoldeProfile").toString();if(m_emulatorProfile.isEmpty())m_emulatorProfile="default";
+    m_setupDeadline.setSingleShot(true);m_setupDeadline.setInterval(2400000);
+    connect(&m_setupDeadline,&QTimer::timeout,this,&GameLibrary::cancelEmulatorSetup);
+    connect(&m_setup,&QProcess::readyReadStandardOutput,this,[this]{m_setupOutput=(m_setupOutput+m_setup.readAllStandardOutput()).right(8192);});
+    connect(&m_setup,&QProcess::readyReadStandardError,this,[this]{m_setupOutput=(m_setupOutput+m_setup.readAllStandardError()).right(8192);});
+    connect(&m_setup,&QProcess::errorOccurred,this,[this](QProcess::ProcessError){m_setupStatus="Emulator setup could not start. "+m_setup.errorString();emit setupChanged();});
+    connect(&m_setup,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus status){
+        m_setupDeadline.stop();
+        if(!m_ready || m_setupCanceled){m_setupStatus="Setup stopped. Existing games and saves were preserved. Review runtime installation before retrying.";emit setupChanged();return;}
+        QFile receipt(m_setupReceipt);QVariantMap result;
+        if(receipt.open(QIODevice::ReadOnly) && receipt.size()<65536)result=QJsonDocument::fromJson(receipt.readAll()).toVariant().toMap();
+        if(code!=0 || status!=QProcess::NormalExit || !result.value("ready").toBool()){
+            m_setupStatus="Emulator installation failed. Existing games and saves were preserved. "+QString::fromUtf8(m_setupOutput).right(1200);emit setupChanged();return;}
+        bool activated=true;
+        for(const auto &item:emulators()){
+            const auto runtime=item.toMap();
+            if(!runtime.value("installed").toBool() || !m_catalog || !m_catalog->install(runtime.value("id").toString())){activated=false;break;}
+        }
+        m_setupStatus=activated?"Emulators installed and available in Add game. Your games and firmware were not downloaded.":"Runtime files installed, but activation needs repair. "+(m_catalog?m_catalog->errorString():QString("Store unavailable."));
+        emit changed();emit setupChanged();
+    });
     m_scanTimer.setInterval(0);
     connect(&m_scanTimer,&QTimer::timeout,this,&GameLibrary::scanStep);
     if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink()) { fail(tr("Choose a private games catalog path.")); return; }
@@ -52,10 +82,11 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     m_ready = true;
 }
 GameLibrary::~GameLibrary() {
+    cancelEmulatorSetup();if(setupBusy())m_setup.waitForFinished(5000);
     m_db.close(); m_db = QSqlDatabase(); QSqlDatabase::removeDatabase(m_connection);
 }
 bool GameLibrary::fail(const QString &error) { m_error = error; emit errorChanged(); return false; }
-void GameLibrary::invalidate() { cancelImport(); m_ready = false; m_db.close(); fail(tr("This games profile is no longer active.")); emit changed(); }
+void GameLibrary::invalidate() { cancelImport();cancelEmulatorSetup(); m_ready = false; m_db.close(); fail(tr("This games profile is no longer active.")); emit changed(); }
 bool GameLibrary::compatibleRuntime(const QString &id, bool file) const {
     const auto *app = m_apps->find(id);
     if (!app || app->type != "desktop") return false;
@@ -71,6 +102,56 @@ QVariantList GameLibrary::runtimes() const {
             result.append(QVariantMap{{"id",id},{"name",app.value("name")},{"file",compatibleRuntime(id,true)}});
     }
     return result;
+}
+QVariantList GameLibrary::emulators() const {
+    QVariantList result;
+    if(!m_ready)return result;
+    for(const auto &item:GameEmulators::definitions()){
+        auto value=item.toMap();const auto binary=value.value("binary").toString();
+        const auto core=value.value("core").toString();
+        value["installed"]=QFileInfo(binary).isExecutable() && (core.isEmpty() || QFileInfo(core).isFile());
+        value["registered"]=compatibleRuntime(value.value("id").toString(),true);result.append(value);
+    }return result;
+}
+QVariantMap GameLibrary::emulatorSettings(const QString &id){
+    if(!m_ready){fail(tr("This games profile is no longer active."));return {};}
+    QString error;const auto value=GameEmulators::settings(m_emulatorProfile,id,&error);if(value.isEmpty())fail(error);return value;
+}
+bool GameLibrary::configureEmulator(const QString &id,const QVariantMap &options,const QString &firmware){
+    if(!m_ready)return fail(tr("This games profile is no longer active."));
+    QString error;if(!GameEmulators::configure(m_emulatorProfile,id,options,firmware,&error))return fail(error);
+    m_error.clear();emit errorChanged();emit changed();return true;
+}
+bool GameLibrary::installEmulators(bool consent){
+    if(!m_ready || !consent || setupBusy() || !m_catalog)return fail(tr("Review and confirm emulator installation before continuing."));
+#ifndef Q_OS_LINUX
+    return fail(tr("Managed emulator installation currently requires the Linux appliance."));
+#else
+    auto root=QCoreApplication::applicationDirPath()+"/share/isolde";
+    if(!QFileInfo(root+"/provision-games.py").isReadable())root=QCoreApplication::applicationDirPath()+"/../share/isolde";
+    const auto program=QStandardPaths::findExecutable("python3");
+    if(program.isEmpty() || !QFileInfo(root+"/provision-games.py").isReadable())return fail(tr("Repair the Isolde emulator installer."));
+    const auto state=GameEmulators::home(m_emulatorProfile,"ppsspp")+"/.local/state";
+    for(auto ancestor=QFileInfo(state);;ancestor=QFileInfo(ancestor.absolutePath())){
+        if(ancestor.isSymLink())return fail(tr("Private emulator storage is redirected."));
+        if(ancestor.absolutePath()==ancestor.absoluteFilePath())break;
+    }
+    if(!QDir().mkpath(state) || QFileInfo(state).canonicalFilePath()!=state)return fail(tr("Cannot prepare private installation evidence."));
+    m_setupReceipt=state+"/runtime-install-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+".json";
+    m_setupCanceled=false;m_setupOutput.clear();m_setupStatus="Installing the verified runtimes and console cores. First-time PSP preparation may take several minutes. No game or firmware downloads.";
+    m_setup.setChildProcessModifier([]{::setsid();});
+    m_setup.start(program,{root+"/provision-games.py","--install","--receipt",m_setupReceipt});
+    m_setupDeadline.start();emit setupChanged();return true;
+#endif
+}
+void GameLibrary::cancelEmulatorSetup(){
+    if(!setupBusy())return;m_setupCanceled=true;
+#ifdef Q_OS_UNIX
+    if(m_setup.processId()>0)::kill(-pid_t(m_setup.processId()),SIGINT);
+#else
+    m_setup.terminate();
+#endif
+    m_setupStatus="Stopping emulator setup safely. Wait before retrying.";emit setupChanged();
 }
 QString GameLibrary::checkedTarget(const QString &root, const QString &relative) {
     const auto grantError = MediaGrants::validate(root);
@@ -174,6 +255,7 @@ bool GameLibrary::removeGame(const QString &id) {
     m_error.clear(); emit changed(); return true;
 }
 QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionId) {
+    m_error.clear();emit errorChanged();
     if (!m_ready || !ComponentSchema::safeId(id)) { fail(tr("Game not found in this profile.")); return {}; }
     if(editionId.isEmpty() && editions(id).size()>1){fail(tr("Choose which edition to play."));return {};}
     if(!editionId.isEmpty() && !ComponentSchema::safeId(editionId)){fail(tr("Invalid edition identity."));return {};}
@@ -186,7 +268,7 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionI
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("The game runtime is missing or incompatible. Repair it and retry.")); return {}; }
     if (root.isEmpty()) return {{"type","launch-app"},{"appId",runtime}};
     const auto target=checkedTarget(root,relative); if (target.isEmpty()) return {};
-    return {{"type","open-file"},{"openWith",runtime},{"target",target}};
+    return {{"type","open-file"},{"openWith",runtime},{"target",target},{"sourceRoot",root}};
 }
 bool GameLibrary::installationExists(const QString &runtime,const QString &root,const QString &target) {
     QSqlQuery query(m_db);

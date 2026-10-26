@@ -8,6 +8,8 @@
 #include "media/KodiService.h"
 #include "home/StudioSession.h"
 #include "games/GameLibrary.h"
+#include "games/GameEmulators.h"
+#include <QStandardPaths>
 #include "app/AppCatalog.h"
 #include <QSqlQuery>
 #include <QSqlDatabase>
@@ -46,6 +48,7 @@ private slots:
     void gamesFolderImportIsReviewedAtomicAndCancelable();
     void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
     void gamesCuratedPackagesBindThroughRealCatalog();
+    void emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData();
     void validatesContracts();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
@@ -91,17 +94,49 @@ void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCoreApplication::setApplicationVersion("0.0.1.2");
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.loadFromData(::apps));AppCatalog catalog(&apps);
     QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),dir.filePath("installed.json"),dir.filePath("packages")),qPrintable(catalog.errorString()));
-    for(const auto &id:QStringList{"dolphin","pcsx2","supertux"})QVERIFY2(catalog.install(id),qPrintable(catalog.errorString()));
+    HomeLayout home(&apps);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    const auto originalHome=home.committedDocument();QSignalSpy homeChanges(&home,&HomeLayout::layoutChanged);
+    connect(&catalog,&AppCatalog::packageInstalled,&home,&HomeLayout::addAppTile);
+    const QStringList runtimeIds{"dolphin","pcsx2","ppsspp","retroarch-nes","retroarch-gb","retroarch-gba","retroarch-snes","supertux"};
+    for(const auto &id:runtimeIds){
+        QVERIFY2(catalog.install(id),qPrintable(catalog.errorString()));
+        if(id!="supertux"){QCOMPARE(home.committedDocument(),originalHome);QCOMPARE(homeChanges.count(),0);}
+    }
+    QVERIFY(apps.addApp(gamesRuntime("watched")));QVERIFY(home.addAppTile("watched"));
+    homeChanges.clear();const auto authoredHome=home.committedDocument();
+    QVERIFY(apps.removeApp("watched"));QCOMPARE(homeChanges.count(),1);
+    QCOMPARE(home.committedDocument(),authoredHome); // Availability refresh writes nothing.
     const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","inert-security-fixture");
-    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);QCOMPARE(library.runtimes().size(),3);
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);QCOMPARE(library.runtimes().size(),runtimeIds.size());
     auto registration=gameRegistration(root);registration["runtimeId"]="dolphin";registration["platform"]="GameCube";
     const auto disc=library.addGame(registration);QVERIFY2(!disc.isEmpty(),qPrintable(library.errorString()));
     QCOMPARE(library.resolveLaunch(disc).value("openWith").toString(),QString("dolphin"));
+    QCOMPARE(library.resolveLaunch(disc).value("sourceRoot").toString(),root);
+    auto forged=gamesRuntime("forged");QVERIFY(forged.isValid());forged.launchConfiguration["gameSourceRoot"]=root;
+    QVERIFY(!forged.isValid());QVERIFY(!apps.addApp(forged));
     registration["runtimeId"]="supertux";registration["root"]=QStringLiteral("");registration["target"]=QStringLiteral("");registration["title"]="SuperTux";registration["platform"]="PC";
     const auto native=library.addGame(registration);QVERIFY2(!native.isEmpty(),qPrintable(library.errorString()));
     QCOMPARE(library.resolveLaunch(native).value("appId").toString(),QString("supertux"));
     QVERIFY(catalog.uninstall("dolphin"));QVERIFY(library.resolveLaunch(disc).isEmpty());
     QVERIFY(!library.details(disc).isEmpty());QCOMPARE(readFile(root+"/game.iso"),QByteArray("inert-security-fixture"));
+}
+void ComponentTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto first=QUuid::createUuid().toString(QUuid::WithoutBraces),second=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QString error;const auto home=GameEmulators::home(first,"ppsspp");QVERIFY(!home.isEmpty());
+    const auto file=home+"/.config/isolde-emulator/settings.json";
+    const auto defaults=GameEmulators::settings(first,"ppsspp",&error);QCOMPARE(defaults.value("video").toString(),QString("automatic"));QVERIFY(!QFileInfo::exists(file));
+    QVERIFY(GameEmulators::configure(first,"ppsspp",{{"video","software"},{"controller","xbox"}},{},&error));
+    QCOMPARE(GameEmulators::settings(first,"ppsspp",&error).value("video").toString(),QString("software"));
+    QCOMPARE(GameEmulators::settings(second,"ppsspp",&error).value("video").toString(),QString("automatic"));
+    const auto before=readFile(file);
+    QVERIFY(!GameEmulators::configure(first,"ppsspp",{{"video","arbitrary"},{"controller","xbox"}},{},&error));QCOMPARE(readFile(file),before);
+    QVERIFY(!GameEmulators::configure(first,"ppsspp",{{"video","automatic"},{"controller","xbox"},{"command","evil"}},{},&error));QCOMPARE(readFile(file),before);
+    writeFile(file,"{\"schemaVersion\":99}");QVERIFY(GameEmulators::settings(first,"ppsspp",&error).isEmpty());
+    QVERIFY(!GameEmulators::configure(first,"ppsspp",{{"video","automatic"},{"controller","xbox"}},{},&error));QCOMPARE(readFile(file),QByteArray("{\"schemaVersion\":99}"));
+    QVERIFY(GameEmulators::home("../other","ppsspp").isEmpty());QVERIFY(GameEmulators::home(first,"unknown").isEmpty());
+    // This unique test profile is under Qt's test storage only.
+    QVERIFY(QDir(QFileInfo(home).absolutePath()).removeRecursively());
 }
 void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");

@@ -1,16 +1,25 @@
 {
   "schemaVersion": 1,
   "store": {
-    "platforms": [{"type":"android","label":"Android"},{"type":"web","label":"Chromium"}],
+    "platforms": [
+      {
+        "type": "android",
+        "label": "Android"
+      },
+      {
+        "type": "web",
+        "label": "Chromium"
+      }
+    ],
     "columns": 2,
     "spacing": 20,
     "cardHeight": 142,
-    "detailRatio": 0.42
-    ,"webBackend":"chromium"
-    ,"webDesktopId":"google-chrome"
-    ,"webCategory":"Web apps"
-    ,"appSection":"Apps"
-    ,"appAccent":"#64748B"
+    "detailRatio": 0.42,
+    "webBackend": "chromium",
+    "webDesktopId": "google-chrome",
+    "webCategory": "Web apps",
+    "appSection": "Apps",
+    "appAccent": "#64748B"
   },
   "packages": [
     "packages/ambient-weather/manifest.json",
@@ -33,6 +42,11 @@
     "packages/paramount-plus/manifest.json",
     "packages/crunchyroll/manifest.json",
     "packages/netflix/manifest.json",
-    "packages/peacock/manifest.json"
+    "packages/peacock/manifest.json",
+    "packages/ppsspp/manifest.json",
+    "packages/retroarch-nes/manifest.json",
+    "packages/retroarch-gb/manifest.json",
+    "packages/retroarch-gba/manifest.json",
+    "packages/retroarch-snes/manifest.json"
   ]
 }

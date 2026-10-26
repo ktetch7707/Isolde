@@ -137,10 +137,17 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "android": ("android-acceptance.py", []),
          "androidapps": ("android-apps-acceptance.py", []),
          "store": ("store-acceptance.py", []),
-         "games": ("games-acceptance.py", [])}
+         "games": ("games-acceptance.py", []),
+         "emulators": ("games-acceptance.py", ["--emulator"])}
 
 
 def visual_result_passed(case, result):
+    if case == "emulators":
+        return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRuntimeSetup","remoteRegistration","nativeGameStarted","returned","sourceUnchanged"))
+                and result.get("runtime")=="ppsspp" and result.get("gameplayVerified") is False
+                and result.get("physicalControllerVerified") is False and result.get("captures")==[
+                    "emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",
+                    "emulatorsdetails","emulatorspermission","emulatorsmenu","emulatorsplay","emulatorsaction","emulatorsreturn","emulatorsrestored"])
     if case == "games":
         return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRegistration","nativeGameStarted","returned"))
                 and result.get("gameplayVerified") is False and result.get("physicalControllerVerified") is False and len(result.get("captures",[]))==9)
@@ -400,9 +407,9 @@ class Oracle:
         # T30 capability discovery is bounded. No game startup, account
         # enumeration, ROM scan or runtime installation occurs here.
         game_tools = {name: shutil.which(name) for name in
-                      ("PPSSPPSDL", "PPSSPPQt", "ppsspp", "dolphin-emu", "pcsx2-qt", "flatpak", "wine", "wine64", "neverball", "supertux2")}
+                      ("PPSSPPSDL", "PPSSPPQt", "ppsspp", "retroarch", "dolphin-emu", "pcsx2-qt", "flatpak", "wine", "wine64", "neverball", "supertux2")}
         package_probe = subprocess.run(
-            ["apt-cache", "policy", "ppsspp", "dolphin-emu", "pcsx2", "neverball", "supertux", "libsdl2-dev", "libqt6sql6-sqlite"],
+            ["apt-cache", "policy", "ppsspp", "libretro-ppsspp", "retroarch", "libretro-nestopia", "libretro-gambatte", "libretro-mgba", "libretro-bsnes-mercury-balanced", "dolphin-emu", "pcsx2", "neverball", "supertux", "libsdl2-dev", "libqt6sql6-sqlite"],
             capture_output=True, text=True, timeout=15)
         atomic_json(self.run / "games-runtime-capabilities.json", {
             "executables": game_tools, "architecture": os.uname().machine,
@@ -410,7 +417,7 @@ class Oracle:
             "packagePolicy": package_probe.stdout[:16384], "error": package_probe.stderr[:2048],
             "physicalControllerQualified": False, "physicalOpticalQualified": False})
         game_help = {}
-        for binary, argument in (("/usr/games/dolphin-emu", "--help"), ("/usr/games/pcsx2-qt", "-help"), ("/usr/games/supertux2", "--help")):
+        for binary, argument in (("/usr/games/dolphin-emu", "--help"), ("/usr/games/pcsx2-qt", "-help"), ("/usr/games/supertux2", "--help"), ("/usr/bin/retroarch", "--help")):
             if not Path(binary).is_file():continue
             with tempfile.TemporaryDirectory(prefix="games-help-",dir=self.run) as private:
                 environment=dict(os.environ,HOME=private,XDG_CONFIG_HOME=private+"/config",XDG_DATA_HOME=private+"/data",QT_QPA_PLATFORM="offscreen")
@@ -591,7 +598,7 @@ class Oracle:
         if target=="games":
             if self.command("hostname")!="isolde-test":raise RuntimeError("Games setup is restricted to Isolde-Test")
             self.prepare_guest_space()
-            self.stage("games-runtime-install",["python3",str(self.run/"source/tools/provision-games.py"),"--install","--fixture","--receipt",str(self.run/"games-runtime-install.json")],1200)
+            self.stage("games-runtime-install",["python3",str(self.run/"source/tools/provision-games.py"),"--install","--fixture","--receipt",str(self.run/"games-runtime-install.json")],2400)
             return
         deployed=json.loads((self.run/"deploy-result.json").read_text())
         if self.command("hostname")!="isolde-test" or self.links()["current"]!=deployed["release"] or digest(Path(deployed["release"])/"bin/isolde")!=digest(payload/"bin/isolde"):
@@ -712,7 +719,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android","androidapps","store") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -791,7 +798,9 @@ class Oracle:
                     for name in ("cwd", "exe"):
                         try: active.append((process/name).resolve(strict=True))
                         except (OSError, RuntimeError): pass
-            for old in old_runs[:-3][:128]:
+            # Retain the newest legacy build plus every live process tree.
+            # The incremental oracle cache is separate and remains untouched.
+            for old in old_runs[:-1][:128]:
                 if shutil.disk_usage(self.root).free >= 8 * 1024**3: break
                 target = old/"build"
                 if not target.is_dir() or any(p == target or p.is_relative_to(target) for p in active): continue
@@ -855,21 +864,27 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
 
 
 @contextlib.contextmanager
-def exclusive_lock(path):
+def exclusive_lock(path, wait_seconds=0):
     import fcntl
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as handle:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError("BUSY: another owned run is active. Use Status; do not delete locks or start another build.")
+        deadline=time.monotonic()+wait_seconds;last_notice=0
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB);break
+            except BlockingIOError:
+                if time.monotonic()>=deadline:
+                    raise RuntimeError("BUSY: another owned run is active. Use Status; do not delete locks or start another build.")
+                if time.monotonic()-last_notice>=10:
+                    print("WAIT oracle lock; preserving the active owner's work",flush=True);last_notice=time.monotonic()
+                time.sleep(min(.25,max(0,deadline-time.monotonic())))
         yield
 
 
@@ -954,11 +969,14 @@ def main():
     parser.add_argument("action", choices=["check", "test", "visual", "deploy", "provision", "configure", "diagnose", "status", "recover", "cancel"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--suite", choices=SUITES, default="all")
+    parser.add_argument("--wait-seconds",type=int,default=0)
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
     parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games"],default="native")
     args = parser.parse_args()
+    if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
+        parser.error("Bounded lock waiting (0–900 seconds) is restricted to Test/Configure/Visual")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.run_id):
         parser.error("Invalid run ID")
     root = Path.home() / "isolde-oracle"
@@ -966,6 +984,13 @@ def main():
     if args.action == "status":
         path = root / "runs" / args.run_id / "status.json"
         status = json.loads(path.read_text()) if path.is_file() else {"state": "unknown", "runId": args.run_id}
+        status["activeRuns"]=[]
+        for candidate in sorted((root/"runs").glob("*/status.json"),key=lambda p:p.stat().st_mtime,reverse=True)[:64]:
+            try:
+                active=json.loads(candidate.read_text())
+                if active.get("state")=="running" and Path("/proc/"+str(int(active["pid"]))).is_dir():
+                    status["activeRuns"].append({key:active.get(key) for key in ("runId","stage","action","updated")})
+            except (OSError,ValueError,KeyError):continue
         environment = dict(os.environ)
         manager = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True, timeout=10)
         for line in manager.stdout.splitlines():
@@ -1011,7 +1036,10 @@ def main():
     oracle = Oracle(root, args.run_id)
     acquired = False
     try:
-        with exclusive_lock(root / "oracle.lock"):
+        if args.wait_seconds:
+            oracle.update(action=args.action,stage="waiting-for-lock")
+            signal.signal(signal.SIGTERM, interrupted);signal.signal(signal.SIGINT, interrupted);signal.signal(signal.SIGHUP, interrupted)
+        with exclusive_lock(root / "oracle.lock",args.wait_seconds):
             acquired = True
             signal.signal(signal.SIGTERM, interrupted)
             signal.signal(signal.SIGINT, interrupted)
@@ -1042,12 +1070,12 @@ def main():
                         lease.unlink()
             oracle.update(state="passed", stage="finished")
     except Exception as error:
-        if acquired:
+        if acquired or args.wait_seconds:
             oracle.update(state="failed", error=str(error))
         print("FAIL " + str(error), flush=True)
         sys.exit(1)
     finally:
-        if acquired:
+        if acquired or args.wait_seconds:
             write_report(oracle.run)
     print("VM_RESULT " + json.dumps(oracle.state), flush=True)
 

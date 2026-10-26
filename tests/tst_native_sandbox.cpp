@@ -15,6 +15,7 @@ class NativeSandboxTests : public QObject {
 private slots:
     void profileAndAppStorageRemainSeparate();
     void explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
+    void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
     void processTreeDiesWithLauncher();
     void gracefulExitFlushesAppState();
     void normalExitRemovesDetachedChildren();
@@ -109,6 +110,22 @@ void NativeSandboxTests::explicitMediaIsReadOnlyAndPrivatePathsAreRefused()
     QVERIFY(!NativeSandbox::prepare(alice, "fixture", "/bin/sh", environment, storage.path(), storage.path()).error.isEmpty());
     QVERIFY(!NativeSandbox::prepare(alice, "fixture", "/bin/sh", environment, QDir::homePath(), storage.path()).error.isEmpty());
     QVERIFY(!NativeSandbox::prepare(alice, "fixture", "/bin/sh", environment, "/proc", storage.path()).error.isEmpty());
+}
+void NativeSandboxTests::reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot(){
+    QTemporaryDir storage,bundle,unrelated;
+    QVERIFY(QDir().mkpath(bundle.filePath("game/models")));
+    const auto target=bundle.filePath("game/EBOOT.PBP"),resource=bundle.filePath("game/models/mesh.txt");
+    for(const auto &path:QStringList{target,resource}){QFile file(path);QVERIFY(file.open(QIODevice::WriteOnly));file.write("preserve-bundle");}
+    QFile secret(unrelated.filePath("private"));QVERIFY(secret.open(QIODevice::WriteOnly));secret.write("not-granted");secret.close();
+    const auto env=QProcessEnvironment::systemEnvironment();
+    const auto plan=NativeSandbox::prepare(alice,"fixture","/bin/sh",env,target,storage.path(),{},bundle.path());
+    QVERIFY2(plan.error.isEmpty(),qPrintable(plan.error));QCOMPARE(plan.actionTarget,QString("/media/games/game/EBOOT.PBP"));
+    QCOMPARE(run(plan,"test ! -e \"$2\" && if printf overwrite > \"$1\" 2>/dev/null; then exit 1; fi; cat \"$1\"",{"/media/games/game/models/mesh.txt",secret.fileName()}),QByteArray("preserve-bundle"));
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture","/bin/sh",env,target,storage.path(),{},unrelated.path()).error.isEmpty());
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture","/bin/sh",env,target,storage.path(),{},QDir::homePath()).error.isEmpty());
+    const auto redirected=bundle.filePath("redirect");QVERIFY(QFile::link(unrelated.path(),redirected));
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture","/bin/sh",env,target,storage.path(),{},redirected).error.isEmpty());
+    QFile original(resource);QVERIFY(original.open(QIODevice::ReadOnly));QCOMPARE(original.readAll(),QByteArray("preserve-bundle"));
 }
 
 void NativeSandboxTests::processTreeDiesWithLauncher()

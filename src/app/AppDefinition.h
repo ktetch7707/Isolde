@@ -6,6 +6,7 @@
 #include <QVariantMap>
 #include <QRegularExpression>
 #include <QSet>
+#include "games/GameEmulators.h"
 
 struct AppDefinition {
     QString id;
@@ -24,6 +25,13 @@ struct AppDefinition {
     [[nodiscard]] bool isValid() const
     {
         if(id.trimmed().isEmpty() || name.trimmed().isEmpty() || type.trimmed().isEmpty())return false;
+        if(launchConfiguration.contains("gameSourceRoot"))return false; // Runtime-only, never app/package data.
+        if(launchConfiguration.contains("emulatorRuntime")){
+            const auto runtime=launchConfiguration.value("emulatorRuntime");
+            if(runtime.metaType()!=QMetaType::fromType<QString>() || runtime.toString()!=id || GameEmulators::definition(id).isEmpty()
+                || type!="desktop" || presentationMode!="game-hub" || handledActions!=QStringList{"open-file"}
+                || launchConfiguration.value("desktopId").toString()!="isolde-"+id)return false;
+        }
         if(type == "android") {
             static const QRegularExpression runtimeId("^[a-z0-9][a-z0-9.-]{0,79}$");
             const auto runtimeApp = launchConfiguration.value("runtimeApp");
