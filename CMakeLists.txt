@@ -40,6 +40,7 @@ add_library(isolde_core STATIC
     src/settings/ProfileManager.h
     src/app/AppDefinition.h
     src/app/AppCatalog.cpp
+    src/app/LocalCatalogProvider.cpp
     src/app/AppCatalog.h
     src/app/AppRegistry.cpp
     src/app/AppRegistry.h
