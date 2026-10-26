@@ -1,5 +1,6 @@
 #include "ActionDispatcher.h"
 #include "ComponentSchema.h"
+#include "games/GameLibrary.h"
 #include "HomeLayout.h"
 #include "app/AppCatalog.h"
 #include "sessions/SessionManager.h"
@@ -75,6 +76,12 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
     }
     else if (type == "app-drawer") { emit drawerRequested(); accepted = true; }
     else if (type == "launch-app") accepted = launchApp(value.value("appId").toString());
+    else if (type == "launch-game") {
+        const auto resolved = m_games ? m_games->resolveLaunch(value.value("gameId").toString()) : QVariantMap();
+        if(resolved.isEmpty()) emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable in this profile."));
+        else if(resolved.value("type")=="launch-app") accepted=launchApp(resolved.value("appId").toString());
+        else accepted=m_sessions->launchAction(resolved);
+    }
     else if (type == "settings") {
         accepted = launchApp("settings");
         if (accepted) emit settingsRequested(value.value("section").toInt());

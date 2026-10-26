@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network DBus Qml Quick Test WebEngineQuick WebChannel Multimedia SerialPort)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network DBus Qml Quick Test WebEngineQuick WebChannel Multimedia SerialPort Sql)
 qt_standard_project_setup(REQUIRES 6.4)
 qt_policy(SET QTP0001 NEW)
 if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
@@ -14,6 +14,8 @@ if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
 endif()
 
 add_library(isolde_core STATIC
+    src/games/GameLibrary.cpp
+    src/games/GameLibrary.h
     src/media/KodiArtwork.cpp
     src/media/KodiArtwork.h
     src/home/ComponentSchema.cpp
@@ -94,7 +96,7 @@ add_library(isolde_core STATIC
     src/sessions/SessionManager.h
 )
 target_include_directories(isolde_core PUBLIC src)
-target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort)
+target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort Qt6::Sql)
 
 qt_add_executable(isolde src/main.cpp)
 qt_add_executable(isolde-recovery src/recovery/main.cpp)
@@ -160,6 +162,7 @@ qt_add_qml_module(isolde
     qml/StudioCatalog.qml
         qml/PlacedComponents.qml
         qml/PageLibraryWidget.qml
+        qml/GamesLibraryWidget.qml
         qml/PageAppCarousel.qml
         qml/ArtworkImage.qml
         qml/FrostedPanel.qml
@@ -334,6 +337,11 @@ if(BUILD_TESTING)
     target_link_libraries(isolde_capture_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME capture_protocol COMMAND isolde_capture_tests)
     qt_add_executable(isolde_component_tests tests/tst_components.cpp)
+    qt_add_executable(isolde_games_ui_tests tests/games_ui.cpp)
+    target_link_libraries(isolde_games_ui_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
+    target_compile_definitions(isolde_games_ui_tests PRIVATE GAMES_WIDGET_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/GamesLibraryWidget.qml")
+    add_test(NAME games_remote_ui COMMAND isolde_games_ui_tests)
+    set_tests_properties(games_remote_ui PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     target_link_libraries(isolde_component_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME component_contracts COMMAND isolde_component_tests)
     add_test(NAME studio_unit COMMAND isolde_component_tests

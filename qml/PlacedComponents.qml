@@ -135,6 +135,7 @@ Item {
                 id:media;anchors.fill:parent;active:node.library
                 sourceComponent:PageLibraryWidget {
                     provider:surface.previewOverlay?null:surface.host.libraryProvider;widgetKey:surface.host.pageKey+"."+node.modelData.item.id
+                    originId:node.modelData.item.id
                     style:node.style;appearance:surface.host.appearance
                     readOnly:surface.host.editMode || surface.host.previewOnly;frozen:surface.host.freezeData
                     samplePreview:surface.host.samplePreview;sampleItems:surface.host.sampleItems

@@ -139,7 +139,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if(it.value().metaType().id()!=QMetaType::QString || !QColor(it.value().toString()).isValid() || QColor(it.value().toString()).alpha()!=255)return false;
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
-            if (key == "libraryKind" && !QStringList{"movies","shows","history","albums","channels"}.contains(it.value().toString())) return false;
+            if (key == "libraryKind" && !QStringList{"movies","shows","history","albums","channels","games"}.contains(it.value().toString())) return false;
             if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection","playlist"}.contains(it.value().toString())) return false;
             if (key == "libraryLayout" && !QStringList{"grid","list","row"}.contains(it.value().toString())) return false;
             if (key == "libraryCardStyle" && !QStringList{"media","recent","orb","source","summary","banner"}.contains(it.value().toString())) return false;
@@ -299,6 +299,26 @@ bool ComponentSchema::placementsOverlap(const QVariantMap &a, const QVariantMap 
         && a.value("y").toInt() < b.value("y").toInt() + b.value("height").toInt()
         && b.value("y").toInt() < a.value("y").toInt() + a.value("height").toInt();
 }
+QVariantMap ComponentSchema::gameRegistration(const QVariantMap &input, QString *error)
+{
+    if(error)error->clear();
+    static const QSet<QString> keys{"schemaVersion","title","platform","runtimeId","root","target"};
+    if(input.size()!=keys.size() || input.value("schemaVersion").metaType().id()==QMetaType::QString
+        || input.value("schemaVersion").metaType().id()==QMetaType::Bool || input.value("schemaVersion").toDouble()!=1)
+        return reject(error,"Unsupported game registration version or fields.");
+    for(auto it=input.cbegin();it!=input.cend();++it)if(!keys.contains(it.key()))return reject(error,"Unknown game registration field.");
+    for(const auto &key:QStringList{"title","platform","runtimeId","root","target"})
+        if(input.value(key).metaType().id()!=QMetaType::QString || input.value(key).toString().contains(QChar::Null))return reject(error,"Game fields must be text.");
+    const auto title=input.value("title").toString(), platform=input.value("platform").toString();
+    const auto root=input.value("root").toString(), target=input.value("target").toString();
+    if(title.trimmed().isEmpty() || title!=title.trimmed() || title.size()>256 || platform.trimmed().isEmpty() || platform.size()>80
+        || !safeId(input.value("runtimeId").toString()))return reject(error,"Choose a title, platform and valid game runtime.");
+    if(root.size()>4096 || target.size()>4096 || root.isEmpty()!=target.isEmpty())return reject(error,"Choose both a game folder and relative file, or an installed game app.");
+    if(!root.isEmpty() && (!QDir::isAbsolutePath(root) || QDir::cleanPath(root)!=root
+        || QDir::isAbsolutePath(target) || target.contains('\\') || QDir::cleanPath(target)!=target
+        || target.split('/').contains("..")))return reject(error,"Choose a file inside a specific absolute game folder.");
+    return input;
+}
 QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
 {
     if (error) error->clear();
@@ -307,7 +327,12 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
     // Read compatibility for the first generated Home shelves.
     if (type == "kodi-collection") type = input.value("movieId").toInt() > 0 ? "play-movie" : "open-collection";
     QVariantMap result{{"schemaVersion", 1}, {"type", type}};
-    if (type == "launch-app") {
+    if (type == "launch-game") {
+        for(auto it=input.cbegin();it!=input.cend();++it)
+            if(!QStringList{"schemaVersion","type","gameId"}.contains(it.key()))return reject(error,"Game actions contain an identity only.");
+        if(input.value("gameId").metaType().id()!=QMetaType::QString || !safeId(input.value("gameId").toString()))return reject(error,"Choose a valid game.");
+        result["gameId"]=input.value("gameId");
+    } else if (type == "launch-app") {
         const auto id = input.value("appId").toString();
         if (!safeId(id)) return reject(error, "Choose a valid app.");
         result["appId"] = id;
@@ -436,7 +461,9 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(QStringList{"collection","genre","tag"}.contains(style.value("libraryView").toString()) && style.value("libraryValue").toString().trimmed().isEmpty())return reject(error,"Choose a named Kodi source.");
             if(style.value("libraryKind")=="shows" && QStringList{"genre","tag"}.contains(style.value("libraryView").toString()))return reject(error,"This Kodi view is available for movies only.");
             if(style.value("libraryView")=="collection" && !safeId(style.value("libraryValue").toString()))return reject(error,"Choose a saved collection.");
-            source={{"schemaVersion",1},{"provider","kodi"},{"kind","library"},{"libraryKind",style.value("libraryKind")},{"libraryView",style.value("libraryView")},{"libraryValue",style.value("libraryValue","")}};
+            const bool games=style.value("libraryKind")=="games";
+            if(games && (!QStringList{"all","recent","search"}.contains(style.value("libraryView").toString())))return reject(error,"Choose a supported local Games view.");
+            source={{"schemaVersion",1},{"provider",games?"games":"kodi"},{"kind","library"},{"libraryKind",style.value("libraryKind")},{"libraryView",style.value("libraryView")},{"libraryValue",style.value("libraryValue","")}};
             if(history)source["kind"]="recently-viewed";
             if(music)source["kind"]="music";
             if(guide)source["kind"]="guide";

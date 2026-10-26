@@ -26,6 +26,7 @@ QObject *PageData::client(const QString &key,const QVariantMap &source) {
     if(!ComponentSchema::validPresentation(source,true))return nullptr;
     QVariantMap query{{"libraryKind",source.value("libraryKind","movies")},{"libraryView",source.value("libraryView","all")},{"libraryValue",source.value("libraryValue","")}};
     const auto kind=query["libraryKind"].toString(),view=query["libraryView"].toString(),value=query["libraryValue"].toString();
+    if(kind=="games")return nullptr; // Games never creates a Kodi client.
     if(kind=="history" && (view!="watched" || !value.isEmpty()))return nullptr;
     if(kind=="albums" && (view!="all" || !value.isEmpty()))return nullptr;
     if(kind=="channels" && (view!="all" || !value.isEmpty()))return nullptr;

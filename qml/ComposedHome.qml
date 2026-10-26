@@ -484,6 +484,7 @@ Item {
                                 visible: active
                                 sourceComponent: PageLibraryWidget {
                                     provider:host.libraryProvider; widgetKey:host.pageKey+"."+sectionView.modelData.id
+                                    originId:"widget-"+sectionView.modelData.id
                                     readOnly:host.editMode || host.previewOnly;frozen:host.freezeData;samplePreview:host.samplePreview;sampleItems:host.sampleItems
                                     style:sectionView.style; appearance:host.appearance
                                     engaged:root.activeWidget === "widget-"+sectionView.modelData.id

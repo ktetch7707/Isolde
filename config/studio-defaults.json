@@ -684,7 +684,7 @@
         "scope": "presentation",
         "key": "libraryKind",
         "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
-        "label": "Kodi library",
+        "label": "Library source",
         "type": "choice",
         "types": [
           "library",
@@ -700,7 +700,7 @@
         "scope": "presentation",
         "key": "libraryView",
         "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
-        "label": "Kodi view",
+        "label": "Library view",
         "type": "choice",
         "types": [
           "library",

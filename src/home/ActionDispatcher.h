@@ -8,6 +8,7 @@ class KodiMedia;
 class KodiService;
 class HomeLayout;
 class CaptureController;
+class GameLibrary;
 
 class ActionDispatcher final : public QObject {
     Q_OBJECT
@@ -16,6 +17,7 @@ public:
         KodiService *service, AppCatalog *catalog = nullptr, CaptureController *capture = nullptr, QObject *parent = nullptr);
     Q_INVOKABLE bool dispatch(const QVariantMap &action, const QString &originId = {});
     void setLayout(HomeLayout *layout) { m_layout=layout; }
+    void setGames(GameLibrary *games) { m_games=games; }
 signals:
     void drawerRequested();
     void pageRequested(const QString &id, const QString &originId);
@@ -34,6 +36,7 @@ private:
     AppCatalog *m_catalog;
     CaptureController *m_capture;
     HomeLayout *m_layout = nullptr;
+    GameLibrary *m_games = nullptr;
     QString m_origin;
     bool m_dispatching = false;
 };

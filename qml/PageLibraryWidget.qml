@@ -5,6 +5,7 @@ Item {
     objectName:"pageLibraryWidget"
     required property var provider
     required property string widgetKey
+    property string originId:widgetKey
     property var style: ({})
     property var appearance: ({})
     property bool engaged:false
@@ -13,9 +14,10 @@ Item {
     property bool frozen:false
     property bool samplePreview:false
     property var sampleItems:[]
+    readonly property bool games:style.libraryKind==="games"
     property var heldClient:null
     property var frozenItems:[]
-    readonly property var client:frozen?heldClient:provider ? provider.client(widgetKey,style) : null
+    readonly property var client:games?null:frozen?heldClient:provider ? provider.client(widgetKey,style) : null
     onClientChanged:if(!frozen)heldClient=client
     onFrozenChanged:{if(frozen)frozenItems=heldClient?heldClient.items.slice():[];else frozenItems=[]}
     readonly property var liveItems:frozen?frozenItems:client?client.items:[]
@@ -56,6 +58,7 @@ Item {
     }
     function handleCommand(command) {
         if(readOnly || frozen)return false
+        if(games)return gamesLoader.item?gamesLoader.item.handleCommand(command):false
         if(!client)return command !== inputManager.back && command !== inputManager.navigateUp
         const index=client.selectedIndex, step=columns
         if(command===inputManager.back){if(details){details=null;return true}if(client.goBack())return true;return false}
@@ -78,6 +81,7 @@ Item {
     }
     Rectangle { anchors.fill:parent; color:"transparent"; radius:root.style.radius || 12; border.width:root.engaged || root.highlighted?2:0; border.color:root.appearance.focusColor || "#C994A5" }
     Column {
+        visible:!root.games
         anchors.fill:parent; anchors.margins:root.chrome?5:0; spacing:root.chrome?8:0
         Row {
             visible:root.chrome;width:parent.width; height:visible?36:0; spacing:5
@@ -117,12 +121,23 @@ Item {
         Text {visible:root.chrome || root.usingSamples;textFormat:Text.PlainText; width:parent.width;elide:Text.ElideRight;text:root.usingSamples?"Design samples · not your library or viewing history":root.readOnly?"Read-only Kodi preview · playback and refresh are intercepted":(root.client?root.client.status:"")+" · OK enters / plays · Menu details · Back leaves widget";color:root.appearance.mutedColor || "#AAA5AF";font.pixelSize:12 }
     }
     Rectangle {
-        anchors.fill:parent;visible:!!root.details;color:root.appearance.surfaceColor || "#202126";radius:12
+        anchors.fill:parent;visible:!root.games && !!root.details;color:root.appearance.surfaceColor || "#202126";radius:12
         Column { anchors.fill:parent;anchors.margins:22;spacing:12
             Text {textFormat:Text.PlainText; text:root.details?root.details.title || "":"";color:root.appearance.textColor || "white";font.pixelSize:24;width:parent.width;elide:Text.ElideRight }
             Text {textFormat:Text.PlainText; text:root.details?root.details.plot || "No description supplied by Kodi.":"";color:root.appearance.mutedColor || "#AAA5AF";font.pixelSize:17;width:parent.width;wrapMode:Text.WordWrap;maximumLineCount:Math.max(1,Math.floor((root.height-130)/22));elide:Text.ElideRight }
             Text {textFormat:Text.PlainText; text:root.guide?"Confirm watches channel · Back closes":root.music?"Confirm plays track · Back closes":"OK resume / browse · Right restart · Back close";color:root.appearance.focusColor || "#C994A5";font.pixelSize:15 }
         }
         MouseArea { anchors.right:parent.right;anchors.top:parent.top;width:80;height:40;onClicked:root.details=null;Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:"Back";color:root.appearance.textColor || "white"} }
+    }
+    Loader {
+        id:gamesLoader;anchors.fill:parent;active:root.games
+        sourceComponent:GamesLibraryWidget {
+            library:typeof gameLibrary!=="undefined"?gameLibrary:null
+            dispatcher:typeof actionDispatcher!=="undefined"?actionDispatcher:null
+            originId:root.originId
+            style:root.style;appearance:root.appearance
+            engaged:root.engaged;readOnly:root.readOnly || root.frozen
+            onEngage:root.engage()
+        }
     }
 }

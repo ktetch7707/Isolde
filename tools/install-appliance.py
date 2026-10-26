@@ -16,6 +16,7 @@ import tempfile
 DEPENDENCIES = [
     "build-essential", "cmake", "ninja-build", "qt6-base-dev", "qt6-multimedia-dev", "qt6-serialport-dev",
     "qt6-declarative-dev", "qt6-webengine-dev", "qt6-webchannel-dev",
+    "libqt6sql6-sqlite",
     "qml6-module-qtquick", "qml6-module-qtquick-window", "qml6-module-qtquick-controls",
     "qml6-module-qtquick-layouts", "qml6-module-qtquick-templates", "qml6-module-qtqml-workerscript",
     "qml6-module-qtwebengine", "qml6-module-qtwebchannel", "qml6-module-qtquick-dialogs", "qml6-module-qtmultimedia",

@@ -4,6 +4,7 @@
 #include "home/HomeLayout.h"
 #include "home/ActionDispatcher.h"
 #include "home/PageData.h"
+#include "games/GameLibrary.h"
 #include "settings/DisplaySettings.h"
 #include "settings/AudioSettings.h"
 #include "settings/RemoteSettings.h"
@@ -74,6 +75,7 @@ struct ProfileRuntime {
     KodiShelves kodiShelves{qApp->property("isoldeProfile").toString(), &kodi};
     KodiArtwork kodiArtwork{qApp->property("isoldeProfile").toString()};
     PageData pageData{qApp->property("isoldeProfile").toString(), &kodi};
+    std::unique_ptr<GameLibrary> games;
     ActionDispatcher actions{&registry, &sessions, &kodi, &kodiService, &catalog, &captureController};
     QQmlApplicationEngine engine;
 
@@ -97,6 +99,9 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("actionDispatcher"), &actions);
     engine.rootContext()->setContextProperty(QStringLiteral("pageData"), &pageData);
     actions.setLayout(&homeLayout);
+    games=std::make_unique<GameLibrary>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("games.sqlite"), &registry);
+    actions.setGames(games.get());
+    engine.rootContext()->setContextProperty(QStringLiteral("gameLibrary"), games.get());
     QObject::connect(&kodiService,&KodiService::unavailable,&pageData,&PageData::invalidate);
     homeLayout.setCollections(kodi.collections());
     QObject::connect(&kodi, &KodiMedia::collectionsChanged, &homeLayout, [this] { homeLayout.setCollections(kodi.collections()); });
@@ -267,6 +272,7 @@ struct ProfileRuntime {
     }
     }
     ~ProfileRuntime() {
+        games->invalidate();
         appVpn.cancel();
         QObject::disconnect(&sessions, nullptr, &kodiService, nullptr);
         kodiService.stop();

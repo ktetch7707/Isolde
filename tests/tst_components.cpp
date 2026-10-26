@@ -7,6 +7,9 @@
 #include "media/CaptureController.h"
 #include "media/KodiService.h"
 #include "home/StudioSession.h"
+#include "games/GameLibrary.h"
+#include <QSqlQuery>
+#include <QSqlDatabase>
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QSettings>
@@ -35,6 +38,9 @@ static QByteArray readFile(const QString &path) { QFile file(path); if (!file.op
 class ComponentTests : public QObject {
     Q_OBJECT
 private slots:
+    void gamesCatalogIsBoundedAtomicAndProfileLocal();
+    void gamesLaunchRejectsMissingAndRedirectedTargets();
+    void gamesContractsRejectExecutableData();
     void validatesContracts();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
@@ -66,6 +72,76 @@ private slots:
     void studioOverlayMovementKeepsNeighborsAndBounds();
     void studioCatalogLinksInspectorAndStagedArtwork();
 };
+static AppDefinition gamesRuntime(const QString &id="psp-test") {
+    AppDefinition app;app.id=id;app.name="PSP runtime";app.type="desktop";
+    app.presentationMode="game-hub";app.section="Games";app.accent=QColor("#556677");
+    app.handledActions={"open-file"};
+    app.launchConfiguration={{"desktopId","isolde-test-emulator"},{"actionHandlers",QVariantMap{{"open-file",QVariantMap{{"appendTarget",true}}}}}};
+    return app;
+}
+static QVariantMap gameRegistration(const QString &root,const QString &target="game.iso") {
+    return {{"schemaVersion",1},{"title","Local title"},{"platform","PSP"},{"runtimeId","psp-test"},{"root",root},{"target",target}};
+}
+void ComponentTests::gamesContractsRejectExecutableData() {
+    QString error;const auto registration=gameRegistration("/tmp/games");
+    QVERIFY(!ComponentSchema::gameRegistration(registration,&error).isEmpty());
+    auto invalid=registration;invalid["executable"]="/bin/sh";QVERIFY(ComponentSchema::gameRegistration(invalid,&error).isEmpty());
+    for(const auto &version:QVariantList{true,QString("1"),2}){invalid=registration;invalid["schemaVersion"]=version;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());}
+    for(const auto &target:QStringList{"../game.iso","nested/../../game.iso","/tmp/game.iso","folder/../game.iso","folder\\game.iso"}){
+        invalid=registration;invalid["target"]=target;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());
+    }
+    QVariantMap action{{"schemaVersion",1},{"type","launch-game"},{"gameId","game-valid"}};
+    QCOMPARE(ComponentSchema::action(action),action);
+    action["arguments"]=QStringList{"--unsafe"};QVERIFY(ComponentSchema::action(action,&error).isEmpty());
+    QVERIFY(!error.isEmpty());
+}
+void ComponentTests::gamesCatalogIsBoundedAtomicAndProfileLocal() {
+    QTemporaryDir dir;QVERIFY(dir.isValid());const auto root=dir.filePath("library");QVERIFY(QDir().mkpath(root));
+    const auto content=QByteArray("immutable fixture");writeFile(root+"/game.iso",content);
+    AppRegistry registry;QVERIFY(registry.addApp(gamesRuntime()));
+    const auto path=dir.filePath("one/games.sqlite");QString id;
+    {
+        GameLibrary catalog(path,&registry);QVERIFY2(catalog.ready(),qPrintable(catalog.errorString()));
+        id=catalog.addGame(gameRegistration(root));QVERIFY2(!id.isEmpty(),qPrintable(catalog.errorString()));
+        QCOMPARE(catalog.page().size(),1);QCOMPARE(catalog.details(id)["title"].toString(),QString("Local title"));
+        auto duplicate=gameRegistration(root);duplicate["title"]="Do not overwrite";
+        QVERIFY(catalog.addGame(duplicate).isEmpty());QCOMPARE(catalog.details(id)["title"].toString(),QString("Local title"));
+        QVERIFY(catalog.setFavorite(id,true));QCOMPARE(catalog.page("favorites").size(),1);
+        QVERIFY(catalog.page("search","% OR 1=1").isEmpty());QVERIFY(catalog.page("all","",1).isEmpty());
+        GameLibrary other(dir.filePath("two/games.sqlite"),&registry);QVERIFY(other.ready());
+        QVERIFY(other.details(id).isEmpty());QVERIFY(other.resolveLaunch(id).isEmpty());QVERIFY(!other.removeGame(id));
+        // A real SQLite abort proves failed writes leave the previous state.
+        const auto connection=QStringLiteral("games-fault-test");
+        {auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(path);QVERIFY(db.open());
+            {QSqlQuery q(db);QVERIFY(q.exec("CREATE TRIGGER reject_favorite BEFORE UPDATE ON games BEGIN SELECT RAISE(ABORT,'injected write failure'); END"));}
+            QVERIFY(!catalog.setFavorite(id,false));QVERIFY(catalog.details(id)["favorite"].toBool());
+            {QSqlQuery q(db);QVERIFY(q.exec("DROP TRIGGER reject_favorite"));}db.close();}
+        QSqlDatabase::removeDatabase(connection);
+    }
+    {GameLibrary reopened(path,&registry);QVERIFY(reopened.ready());QCOMPARE(reopened.page().size(),1);
+        QCOMPARE(reopened.resolveLaunch(id)["target"].toString(),root+"/game.iso");
+        QVERIFY(reopened.removeGame(id));QVERIFY(reopened.page().isEmpty());
+        QCOMPARE(readFile(root+"/game.iso"),content);reopened.invalidate();QVERIFY(reopened.addGame(gameRegistration(root)).isEmpty());}
+    // Unknown versions must never be reset, migrated or rewritten on read.
+    const auto connection=QStringLiteral("games-version-test");
+    {auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(path);QVERIFY(db.open());{QSqlQuery q(db);QVERIFY(q.exec("PRAGMA user_version=99"));}db.close();}
+    QSqlDatabase::removeDatabase(connection);const auto before=readFile(path);
+    {GameLibrary unknown(path,&registry);QVERIFY(!unknown.ready());QVERIFY(!unknown.errorString().isEmpty());}
+    QCOMPARE(readFile(path),before);
+}
+void ComponentTests::gamesLaunchRejectsMissingAndRedirectedTargets() {
+    QTemporaryDir dir;const auto root=dir.filePath("library");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","original");
+    AppRegistry registry;QVERIFY(registry.addApp(gamesRuntime()));GameLibrary catalog(dir.filePath("profile/games.sqlite"),&registry);
+    const auto id=catalog.addGame(gameRegistration(root));QVERIFY(!id.isEmpty());
+    QCOMPARE(catalog.resolveLaunch(id).value("openWith").toString(),QString("psp-test"));
+    QVERIFY(QFile::rename(root+"/game.iso",dir.filePath("outside.iso")));QVERIFY(catalog.resolveLaunch(id).isEmpty());
+#ifdef Q_OS_UNIX
+    QVERIFY(QFile::link(dir.filePath("outside.iso"),root+"/game.iso"));QVERIFY(catalog.resolveLaunch(id).isEmpty());
+    QVERIFY(catalog.addGame(gameRegistration(root)).isEmpty());
+#endif
+    registry.removeApp("psp-test");QVERIFY(catalog.resolveLaunch(id).isEmpty());
+    QCOMPARE(readFile(dir.filePath("outside.iso")),QByteArray("original"));
+}
 void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
 {
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));
