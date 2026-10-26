@@ -94,6 +94,17 @@ Each runtime exposes a validated platform/format/settings capability profile. Pr
 
 G0 must produce a concrete supported-platform matrix. PSP is an explicit initial acceptance target from master-plan §6. GameCube and PS2 are named requirements to assess against target hardware; their inclusion and runtime choice require measured gameplay/controller compatibility, not an assumed universal emulator bundle. Select the actual emulator projects using current upstream documentation, supported Linux packages, licensing, command-line/configuration capabilities and hardware evidence. No emulator brand or number of supported systems is inferred as already agreed.
 
+Emulator scope retention (user reminder, 2026-10-26): the named runtime work is broader than the two Ubuntu packages installed so far. Keep the original proposal's RetroArch route visible alongside the master-plan PSP target. Do not close T30.6 from Dolphin/PCSX2 provisioning or a native SuperTux test.
+
+| Runtime track | Current state | Required remaining result |
+| --- | --- | --- |
+| PPSSPP / PSP | Not provisioned or integrated; no candidate in the guest's configured Ubuntu package index | Verified pinned delivery, private configuration/saves, Isolde setup/import/settings, actual PSP game input and exact return. This is the initial emulator acceptance target, not an optional follow-up. |
+| Dolphin / GameCube and Wii | Pinned guest package, curated manifest and file-launch binding exist | Isolde configuration/controller/firmware-as-needed preflight, offline payload/update recovery and actual emulated gameplay/return for each declared platform. |
+| PCSX2 / PS2 | Pinned guest package, curated manifest and file-launch binding exist | Remote-operable firmware/setup/configuration, offline payload/update recovery and actual PS2 gameplay/return. |
+| RetroArch / selected classic systems | Named in the original base proposal; not provisioned or integrated | Declare and verify each core/platform/format/license separately, pin both frontend and core artifacts, and integrate setup, controller defaults, private saves, game launch and return through Isolde. Frontend installation alone never establishes console support. |
+
+Additional emulators/systems from the user's original discussion must be recorded when identified; do not invent an agreed console/core roster or silently drop an identified runtime. Each row uses the same TV-remote launch → Xbox-controller play → exact return requirement with no mouse. SuperTux is a native launch fixture and satisfies none of these emulator rows.
+
 For every advertised supported platform: prove fresh appliance/runtime provisioning and repair, remote-only game/firmware import as applicable, playable game launch, Xbox input, profile/save preservation, exact return, offline cold boot and upgrade rollback. One accepted emulator does not complete the whole declared platform matrix. Optional save-state controls are exposed only when verified; ordinary game saves must work without enabling them.
 
 ## 4. Ownership, identity and persistence
