@@ -50,6 +50,11 @@ Item {
     property string flowAxis:"x"
     property bool flowPreviewValid:true
     property string deletedSelection: ""
+    // T20.5: reduced-motion feedback. Wired to the global DisplaySettings
+    // preference (off by default). When enabled, movement uses stationary
+    // outlines instead of any animated feedback so the target information
+    // is preserved without motion.
+    property bool reduceMotion: typeof displaySettings !== "undefined" && displaySettings ? displaySettings.reduceMotion : false
     property bool sizeControlsVisible: true
     property bool pendingScrollEnable:false
     property bool scrollingDraft:false
@@ -1012,13 +1017,13 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         objectName:"studioOrigin"
                         visible:!studio.addingType && !!studio.current && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="size" || studio.mode==="collision" || studio.mode==="geometry")
                         readonly property var rect:studio.origin.x!==undefined?preview.placementRectFor(studio.origin,studio.originScopeId,studio.originParentId):({x:0,y:0,width:0,height:0})
-                        x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:2;border.color:studio.palette.mutedColor
+                        x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:studio.reduceMotion?3:2;border.color:studio.reduceMotion?studio.palette.focusColor:studio.palette.mutedColor
                     }
                     Rectangle {
                         objectName:"studioGhost"
                         visible:(studio.mode==="noRoom" && !!studio.addingType) || ((studio.mode==="move" || studio.mode==="size") && !studio.collisionPreview.valid) || studio.mode==="resize" || studio.mode==="geometry" || (studio.mode==="collision" && !studio.collisionPreview.valid)
                         readonly property var rect:preview.placementRectFor(studio.candidate,studio.scopeId,studio.parentScopeId)
-                        x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent"
+                        x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:studio.reduceMotion?2:0;border.color:studio.reduceMotion?studio.palette.focusColor:"transparent"
                         readonly property var sourceSection:studio.page?(studio.page.sections || []).find(s=>(s.id || "")===studio.scopeId):null
                         HomeCard {visible:!((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType || ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="container" && ((studio.addingType?studio.addPrototype.root:studio.current) || {}).componentType!=="library";objectName:"studioGhostCard";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd;item:Object.assign({},studio.addingType?(studio.addPrototype.viewItems || [])[0] || {}:studio.current || {},{presentation:Object.assign({},parent.sourceSection?parent.sourceSection.presentation || {}:{},studio.addingType?((studio.addPrototype.viewItems || [])[0] || {}).presentation || {}:studio.current?studio.current.presentation || {}:{})});appearance:studio.page?studio.page.appearance:studio.palette;selected:true;opacity:studio.current && !studio.addingType && studio.current.opacity!==undefined?studio.current.opacity:1}
                         PlacedComponents {
