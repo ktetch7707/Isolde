@@ -456,6 +456,7 @@
         },
         "presentation": {
           "surfaceColor": "#f7edff",
+          "icon": "grid",
           "diameter": 70,
           "surfaceOpacity": 0.85,
           "labelPill": false,

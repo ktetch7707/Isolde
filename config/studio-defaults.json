@@ -387,6 +387,7 @@
       },
       "presentation": {
         "showHeading": true,
+        "icon": "grid",
         "surfaceOpacity": 0.35,
         "radius": 18,
         "layout": {
@@ -656,6 +657,12 @@
           "section",
           "navigation"
         ]
+      },
+      {
+        "tab": "Content", "scope": "presentation", "key": "icon",
+        "label": "More apps icon", "type": "choice", "families": ["app-bar"],
+        "choices": ["grid", "display", "film", "music", "gamepad", "search", "settings", "heart", "clock", "arrow-right"],
+        "fallback": "grid"
       },
       {
         "tab": "Content",

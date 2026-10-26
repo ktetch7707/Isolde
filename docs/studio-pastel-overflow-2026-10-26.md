@@ -35,3 +35,19 @@ All three reports preserve Household and Studio Demo layout hashes. The final no
 The overflow/capacity slice is verified; the whole Pastel/component gate is still open. In particular, More apps inherits the section's heart icon instead of a clear collection glyph, some app entries retain letter placeholders, Steam retains its installer artwork, history artwork is synthetic fixture data, and broader composition/provider/usability requirements remain. The native frames are sparse control/input fixtures, not proof of populated Home, real provider playback or hardware support. Other screens still expose known management/editor presentation gaps.
 
 Do not close T20.5/T21.9 merely from these passing functional journeys. Next address the overflow presentation through the shared appearance/schema/editor/default model and remaining artwork/design acceptance. No task checkbox or percentage credit is added: T20 80%, T21 36%, Overall 32% across 27 active software tasks.
+
+## Configurable overflow icon — verified checkpoint G
+
+The inherited heart finding is now repaired for new carousels and explicit Pastel adoption. The existing validated `presentation.icon` field is set to `grid` in the app-carousel catalog default and both matching Pastel documents. A family-scoped **More apps icon** choice exposes that same field in the normal Content inspector. The section heading keeps its own heart; there is no renderer branch, parallel setting or startup rewrite. Existing saved layouts retain their authored values and can use the new control.
+
+The actual-input regression `test_app_collection_overflow_icon_remote_cancel_and_undo` creates a carousel, locates the real inspector field, navigates its choices, cancels without a document change, accepts a clock icon, observes the rendered overflow card update, and undoes the single transaction back to grid. Applied disk bytes stay unchanged.
+
+Early attempts are retained honestly: A/B fail because the new test initially allocates outside its fixture grid; C stops before testing because the concurrently edited runner lacks a `tempfile` import (subsequently corrected); D detects the test binding surviving editor teardown, fixed with a null guard while strict warning checks remain enabled; E refuses untracked concurrent emulator manifests before packaging. F passes the focused Studio selection registration, including the new case, in 20.17 seconds.
+
+Full **`studio-overflow-icon-20261026-full-g` passes 34/34** in 295.12 seconds. Source digest: `5ae625e8d87e321d63bc2516e85b006ff5865e154de0c7889fc479047fbda3cd`; archive SHA-256: `a1b32208def1a54644cf43417cbf2e4a98986b60d996fdc37417b69262373d4d`. All three staged graphical journeys pass, with all **30 graphical + 29 native captures opened and reviewed** and both recreation/reset pairs compared to their references. The 29 native frames also match reviewed checkpoint C byte-for-byte.
+
+- Pastel `visual/pastel/attempt-20261026-063736-199/`, guest `/tmp/isolde-reference-config-ul909ab1`: nine slots, clear grid on More apps, separate heart heading, full gallery and exact Back origin retained.
+- Lounge `visual/lounge/attempt-20261026-063929-792/`, guest `/tmp/isolde-reference-config-t4uta6up`: composition and reset preserved.
+- Studio `visual/studio/attempt-20261026-064026-465/`, guest `/tmp/isolde-components-acceptance-gvil60wd`: normal remote editing/nesting/scrolling acceptance retained.
+
+Reports, capture hashes and the scoped verdict are under `build/vm-oracle/studio-overflow-icon-20261026-full-g/`; normal Household/Studio Demo hashes are unchanged and final service restoration is active/running with zero automatic restarts. No Deploy is performed. Letter/installer artwork and broader design/provider/user acceptance remain open, so T20/T21 and Overall remain 80%/36%/32%. This supersedes only the heart-icon open finding above, not the broader acceptance limits.

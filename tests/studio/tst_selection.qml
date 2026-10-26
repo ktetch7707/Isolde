@@ -240,6 +240,40 @@ Item {
             backdrop.config={mode:"solid"}
             compare(backdrop.status,Image.Null)
         }
+        function test_app_collection_overflow_icon_remote_cancel_and_undo() {
+            verify(editor.session.execute("composition",{value:Object.assign({},editor.page.composition,{grid:Object.assign({},editor.page.grid,{columns:8,rows:5})})}),editor.session.errorString)
+            verify(editor.session.execute("addResolved",{type:"app-bar",placement:{x:1,y:0,width:6,height:2}}),editor.session.errorString)
+            const appBar=editor.items.find(i=>i.family==="app-bar")
+            verify(!!appBar);editor.selectedId=appBar.id;settle()
+            compare(editor.current.presentation.icon,"grid")
+            fakeRegistry.apps=[{id:"one",name:"One",type:"web"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"web"}]
+            const carousel=createTemporaryObject(carouselComponent,tests.parent)
+            carousel.style=Qt.binding(()=>Object.assign({},editor && editor.current?editor.current.presentation:{},{variant:"orb",layout:{visibleColumns:2}}))
+            tryVerify(()=>findChild(carousel,"appCarouselCard-__more__")!==null)
+            const more=findChild(carousel,"appCarouselCard-__more__")
+            compare(more.item.presentation.icon,"grid")
+            const before=JSON.stringify(editor.session.document),history=editor.session.changeCount
+            editor.openInspector(false);settle()
+            const inspector=findChild(editor,"studioInspector")
+            if(inspector.collapsed)command(inputManager.confirm)
+            command(inputManager.confirm);compare(inspector.view,"fields")
+            const field=inspector.fields.findIndex(f=>f.key==="icon")
+            verify(field>=0);compare(inspector.fields[field].label,"More apps icon")
+            for(let i=0;i<field;++i)command(inputManager.navigateDown)
+            command(inputManager.confirm);compare(inspector.view,"choices")
+            const clock=inspector.choices.findIndex(c=>c.value==="clock");verify(clock>=0)
+            for(let i=0;i<clock;++i)command(inputManager.navigateDown)
+            command(inputManager.back);compare(JSON.stringify(editor.session.document),before)
+            compare(inspector.selected,field)
+            command(inputManager.confirm)
+            for(let i=0;i<clock;++i)command(inputManager.navigateDown)
+            command(inputManager.confirm);settle()
+            compare(editor.current.presentation.icon,"clock");compare(more.item.presentation.icon,"clock")
+            compare(editor.session.changeCount,history+1)
+            verify(editor.session.undo());settle()
+            compare(JSON.stringify(editor.session.document),before);compare(more.item.presentation.icon,"grid")
+            compare(studioFixture.disk(),diskBaseline)
+        }
         function test_app_collection_registry_membership_overflow_and_return() {
             fakeRegistry.apps=[{id:"one",name:"One",type:"desktop",section:"Games"},{id:"mock",name:"Fake",type:"mock"},{id:"two",name:"Two",type:"web",section:"Music"},{id:"three",name:"Three",type:"desktop",section:"Games"}]
             const carousel=createTemporaryObject(carouselComponent,tests.parent)
