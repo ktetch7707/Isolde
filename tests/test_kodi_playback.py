@@ -53,6 +53,9 @@ class PlaybackTests(unittest.TestCase):
         self.kind = "movie"
         self.channel_locked = False
         self.speed = 1
+        self.duration = 7200
+        self.position = 0
+        self.seekable = True
         self.now = 0
         self.calls, self.builtins = [], []
         self.player = module.Playback(self.execute, self.builtins.append, True, lambda: self.now)
@@ -63,12 +66,14 @@ class PlaybackTests(unittest.TestCase):
         self.calls.append((method, params))
         result = "OK"
         if method == "Player.GetActivePlayers": result = [{"playerid": 1, "type": "audio" if self.kind == "song" else "video"}] if self.active else []
-        elif method == "VideoLibrary.GetMovieDetails": result = {"moviedetails": {"file": str(self.path)}}
-        elif method == "VideoLibrary.GetEpisodeDetails": result = {"episodedetails": {"file": str(self.path)}}
-        elif method == "AudioLibrary.GetSongDetails": result = {"songdetails": {"file": str(self.path)}}
+        elif method == "VideoLibrary.GetMovieDetails": result = {"moviedetails": {"file": str(self.path),"runtime":self.duration}}
+        elif method == "VideoLibrary.GetEpisodeDetails": result = {"episodedetails": {"file": str(self.path),"runtime":self.duration}}
+        elif method == "VideoLibrary.GetMusicVideoDetails": result = {"musicvideodetails": {"file": str(self.path),"runtime":self.duration}}
+        elif method == "AudioLibrary.GetSongDetails": result = {"songdetails": {"file": str(self.path),"duration":self.duration}}
         elif method == "PVR.GetChannelDetails": result = {"channeldetails":{"channeltype":"tv","hidden":False,"locked":self.channel_locked}}
         elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item}}
-        elif method == "Player.GetProperties": result = {"speed": self.speed}
+        elif method == "Player.GetProperties": result = {"speed":self.speed,"canseek":self.seekable,
+            "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
         elif method == "Player.Stop": self.active = False
         return json.dumps({"result": result})
@@ -82,6 +87,52 @@ class PlaybackTests(unittest.TestCase):
         self.active=True;self.assertEqual(self.player.status()["state"],"playing")
         self.assertIn(("Player.Open",{"item":{"channelid":7},"options":{"resume":False}}),self.calls)
         self.assertEqual(self.player.control("home"),{"state":"ended","home":True})
+
+    def test_scheduled_tune_uses_absolute_broadcast_time_and_verifies_seek(self):
+        self.kind="episode"
+        result=self.player.handle("Isolde.PlayScheduled",{"mediaType":"episode","mediaId":7,"offsetSeconds":4511})
+        self.assertEqual(result["state"],"starting")
+        self.assertIn(("Player.Open",{"item":{"episodeid":7},"options":{"resume":{"hours":1,"minutes":15,"seconds":11,"milliseconds":0}}}),self.calls)
+        self.active=True
+        self.assertEqual(self.player.status()["state"],"starting") # player has not applied its seek yet
+        self.position=4511
+        self.assertEqual(self.player.status()["state"],"playing")
+        self.assertIn("ActivateWindow(fullscreenvideo)",self.builtins)
+
+    def test_scheduled_seek_failure_is_not_reported_as_live_playback(self):
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
+        self.active=True;self.seekable=False
+        result=self.player.status()
+        self.assertEqual(result["state"],"failed");self.assertIn("broadcast position",result["reason"])
+        self.assertFalse(self.active)
+        self.assertNotIn("ActivateWindow(fullscreenvideo)",self.builtins)
+
+    def test_scheduled_startup_home_and_replacement_preserve_ownership(self):
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
+        self.player.control("home");self.active=True;self.player.status()
+        self.assertFalse(self.active);self.assertTrue(self.player.status()["home"])
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
+        self.active=True;self.item=9;self.now=21
+        self.calls=[]
+        self.assertEqual(self.player.status()["state"],"replaced")
+        self.assertNotIn("Player.Stop",[m for m,_ in self.calls])
+
+    def test_scheduled_offset_and_duration_validation_precedes_player_open(self):
+        valid={"mediaType":"movie","mediaId":7,"offsetSeconds":800}
+        for invalid in (dict(valid,mediaType="channel"),dict(valid,mediaId=True),dict(valid,mediaId=0),
+                        dict(valid,offsetSeconds=-1),dict(valid,offsetSeconds=True),dict(valid,offsetSeconds=86400),
+                        dict(valid,file=str(self.path)),dict(valid,offsetSeconds="800")):
+            with self.assertRaises(ValueError):self.player.handle("Isolde.PlayScheduled",invalid)
+        self.duration=700
+        with self.assertRaises(ValueError):self.player.handle("Isolde.PlayScheduled",valid)
+        self.assertNotIn("Player.Open",[m for m,_ in self.calls])
+
+    def test_scheduled_musicvideo_uses_kodi_library_identity(self):
+        self.kind="musicvideo"
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"musicvideo","mediaId":7,"offsetSeconds":0})
+        self.active=True
+        self.assertEqual(self.player.status()["state"],"playing")
+        self.assertIn(("VideoLibrary.GetMusicVideoDetails",{"musicvideoid":7,"properties":["file","runtime"]}),self.calls)
 
     def test_local_song_ownership_and_audio_controls(self):
         self.kind = "song"

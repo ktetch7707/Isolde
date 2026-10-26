@@ -46,6 +46,8 @@ public:
     Q_INVOKABLE void openView(const QString &kind, const QString &view, const QString &value = {});
     Q_INVOKABLE void openShowResult(const QString &query, int tvShowId, int pageStart = 0);
     Q_INVOKABLE void playMedia(const QString &kind, int id, bool resume = true);
+    // Guide coordinator only: explicit broadcast offset, never saved resume.
+    bool playScheduled(const QString &kind, int id, int offsetSeconds);
     Q_INVOKABLE void activate(int index);
     Q_INVOKABLE bool goBack();
     Q_INVOKABLE void playSelected(bool resume = true);

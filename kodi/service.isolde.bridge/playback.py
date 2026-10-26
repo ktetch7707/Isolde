@@ -14,6 +14,9 @@ class Playback:
         self.seen = False
         self.home = False
         self.pending_stop = None
+        self.scheduled_offset = None
+        self.opened_at = 0
+        self.failure_reason = ""
 
     def rpc(self, method, params=None):
         reply = json.loads(self.execute(json.dumps({"jsonrpc": "2.0", "id": 1,
@@ -25,8 +28,20 @@ class Playback:
     def handle(self, method, params):
         if not self.managed:
             raise ValueError("Playback requires Isolde frontend mode")
-        if method in ("Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel"):
-            media_type = "movie" if method == "Isolde.PlayMovie" else "song" if method == "Isolde.PlaySong" else "channel" if method == "Isolde.PlayChannel" else "episode"
+        scheduled = method == "Isolde.PlayScheduled"
+        offset = None
+        if scheduled:
+            if (set(params) != {"mediaType", "mediaId", "offsetSeconds"}
+                or params.get("mediaType") not in {"movie", "episode", "musicvideo", "song"}
+                or type(params.get("mediaId")) is not int or not 1 <= params["mediaId"] <= 2147483647
+                or type(params.get("offsetSeconds")) is not int or not 0 <= params["offsetSeconds"] < 86400):
+                raise ValueError("Scheduled playback requires a Kodi media identity and a bounded elapsed offset")
+            media_type = params["mediaType"]
+            offset = params["offsetSeconds"]
+            method = {"movie":"Isolde.PlayMovie", "episode":"Isolde.PlayEpisode", "musicvideo":"Isolde.PlayMusicVideo", "song":"Isolde.PlaySong"}[media_type]
+            params = {media_type+"id":params["mediaId"], "resume":False}
+        if method in ("Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel") or scheduled:
+            media_type = "movie" if method == "Isolde.PlayMovie" else "musicvideo" if method == "Isolde.PlayMusicVideo" else "song" if method == "Isolde.PlaySong" else "channel" if method == "Isolde.PlayChannel" else "episode"
             key = media_type + "id"
             if set(params) != {key, "resume"} or type(params[key]) is not int or params[key] < 1 or type(params["resume"]) is not bool:
                 raise ValueError("A library ID and explicit resume choice are required")
@@ -39,16 +54,25 @@ class Playback:
                 if details.get("channeltype") != "tv" or details.get("locked",False) or details.get("hidden",False):
                     raise ValueError("Choose an available unlocked Kodi TV channel")
             else:
-                details = self.rpc("VideoLibrary.GetMovieDetails" if media_type == "movie" else "AudioLibrary.GetSongDetails" if media_type == "song" else "VideoLibrary.GetEpisodeDetails",
-                                   {key: params[key], "properties": ["file"]})
+                duration_field = "duration" if media_type == "song" else "runtime"
+                details = self.rpc("VideoLibrary.GetMovieDetails" if media_type == "movie" else "VideoLibrary.GetMusicVideoDetails" if media_type == "musicvideo" else "AudioLibrary.GetSongDetails" if media_type == "song" else "VideoLibrary.GetEpisodeDetails",
+                                   {key: params[key], "properties": ["file", duration_field] if scheduled else ["file"]})
                 path = details.get(media_type + "details", {}).get("file", "")
                 if not isinstance(path, str) or not os.path.isabs(path) or not os.path.isfile(path) or not os.access(path, os.R_OK):
                     raise ValueError("This media is not an available local file")
-            if self.rpc("Player.Open", {"item": {key: params[key]}, "options": {"resume": params["resume"]}}) != "OK":
+                if scheduled:
+                    duration = details.get(media_type+"details", {}).get(duration_field)
+                    if type(duration) is not int or not 0 <= offset < duration <= 86400:
+                        raise ValueError("Scheduled media duration changed or is unavailable; repair its slot before tuning")
+            resume = {"hours":offset//3600, "minutes":offset//60%60, "seconds":offset%60, "milliseconds":0} if scheduled else params["resume"]
+            if self.rpc("Player.Open", {"item": {key: params[key]}, "options": {"resume": resume}}) != "OK":
                 raise ValueError("Kodi did not accept playback")
             self.movie, self.state, self.seen, self.home = params[key], "starting", False, False
             self.media_type = media_type
             self.pending_stop = None
+            self.scheduled_offset = offset
+            self.opened_at = self.clock()
+            self.failure_reason = ""
             self.deadline = self.clock() + 20
             return self.status()
         if method == "Isolde.PlaybackStatus" and not params:
@@ -70,7 +94,27 @@ class Playback:
                     # Never stop a different player/item that we do not own.
                     self.movie, self.state = None, "replaced"
                 else:
-                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed"]})
+                    verify_seek = self.scheduled_offset is not None and self.scheduled_offset > 0 and not self.seen and self.pending_stop is None
+                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed", "canseek", "time"] if verify_seek else ["speed"]})
+                    if verify_seek:
+                        position = props.get("time", {})
+                        valid_position = (isinstance(position,dict)
+                            and all(type(position.get(k)) is int for k in ("hours","minutes","seconds"))
+                            and 0 <= position["hours"] <= 24 and 0 <= position["minutes"] < 60 and 0 <= position["seconds"] < 60)
+                        seconds = position["hours"]*3600+position["minutes"]*60+position["seconds"] if valid_position else -1
+                        elapsed = max(0,self.clock()-self.opened_at)
+                        verified = (props.get("canseek") is True and valid_position
+                            and self.scheduled_offset-3 <= seconds <= self.scheduled_offset+elapsed+3)
+                        if not verified:
+                            if props.get("canseek") is False or self.clock() >= self.deadline:
+                                # This is still the exact owned item checked above.
+                                # Never report a restart-at-zero as a live tune.
+                                self.rpc("Player.Stop", {"playerid":player})
+                                self.movie, self.state = None, "failed"
+                                self.failure_reason = "The player could not seek to this channel's broadcast position. Return to the guide and retry."
+                                self.builtin("Minimize")
+                                return {"state":self.state,"home":self.home,"reason":self.failure_reason}
+                            return {"state":"starting","home":self.home}
                     if not self.seen:
                         self.builtin("ActivateWindow(visualisation)" if self.media_type == "song" else "ActivateWindow(fullscreenvideo)")
                     self.seen = True
@@ -82,7 +126,9 @@ class Playback:
             elif self.seen or self.clock() >= self.deadline:
                 self.movie, self.state = None, "ended" if self.seen else "failed"
                 self.builtin("Minimize")
-        return {"state": self.state, "home": self.home}
+        result = {"state": self.state, "home": self.home}
+        if self.failure_reason: result["reason"] = self.failure_reason
+        return result
 
     def control(self, action):
         if action not in ("pause", "stop", "home", "forward", "backward"):

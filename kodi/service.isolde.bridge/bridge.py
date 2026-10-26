@@ -89,7 +89,7 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
         return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0" or type(request_id) is not int:
         return error(-32600, "Invalid request")
-    playback_methods = {"Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
+    playback_methods = {"Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
     if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})

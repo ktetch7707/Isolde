@@ -627,6 +627,17 @@ void KodiMedia::playLibraryItem(const QString &kind, int id, bool resume, bool r
     emit changed();
     request(kind == "movie" ? "Isolde.PlayMovie" : kind == "song" ? "Isolde.PlaySong" : kind == "channel" ? "Isolde.PlayChannel" : "Isolde.PlayEpisode", {{kind + "id", id}, {"resume", (kind=="song" || kind=="channel")?false:resume}});
 }
+bool KodiMedia::playScheduled(const QString &kind, int id, int offsetSeconds)
+{
+    if (m_busy || m_playbackActive || id<1 || offsetSeconds<0 || offsetSeconds>=86400
+        || !QStringList{"movie","episode","musicvideo","song"}.contains(kind)) return false;
+    ++m_generation;
+    m_playbackActive=true; m_playbackVisible=false; m_busy=true; m_stage=5;
+    m_presentationError.clear(); m_playbackStatus="Tuning to the channel's broadcast position…";
+    emit changed();
+    request("Isolde.PlayScheduled",{{"mediaType",kind},{"mediaId",id},{"offsetSeconds",offsetSeconds}});
+    return m_playbackActive;
+}
 void KodiMedia::presentationFailed()
 {
     if (!m_playbackActive) return;
@@ -700,6 +711,7 @@ void KodiMedia::consume()
             || !result.value("home").isBool()) { fail("Invalid playback status."); return; }
         m_busy = false; releaseSocket();
         m_playbackStatus = m_presentationError.isEmpty() ? state : m_presentationError;
+        if (state=="failed" && result.value("reason").isString()) m_playbackStatus=result.value("reason").toString().left(512);
         if (state == "starting" || state == "playing" || state == "paused") {
             m_playbackPoll.start();
             if (state != "starting" && !m_playbackVisible) { m_playbackVisible = true; emit playbackStarted(); }

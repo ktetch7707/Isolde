@@ -11,12 +11,78 @@ import re
 import selectors
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import sys
 import tarfile
 import time
 import xml.etree.ElementTree as ET
+
+def guide_backend_probe(home):
+    """Read only the active Isolde profile's bridge, with no scan/tune/auth.
+
+    Missing configuration is a capability finding, not a fabricated lineup.
+    Never inspect another profile to find a more convenient working backend.
+    """
+    home=Path(home)
+    result={"available":False,"playbackVerified":False,"profileIsolation":"active-only"}
+    try:
+        profiles=home/".config/Isolde/profiles.json"
+        if any(path.is_symlink() for path in (profiles,*profiles.parents)):
+            raise ValueError("Refusing redirected profile configuration")
+        if profiles.is_symlink() or not profiles.is_file() or profiles.stat().st_size>65536:
+            result["reason"]="Active profile configuration unavailable";return result
+        active=json.loads(profiles.read_text())["active"]
+        if not isinstance(active,str) or not re.fullmatch(r"default|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",active):
+            raise ValueError("Invalid active profile")
+        directory=home/".local/share/Isolde/native-profiles"/active/"kodi/home/.kodi/userdata/isolde"
+        for path in (profiles,*profiles.parents,directory,*directory.parents):
+            if path.is_symlink():raise ValueError("Refusing redirected profile path")
+        result["activeProfile"]=active
+        # Linux AF_UNIX paths are bounded; the descriptor path also prevents
+        # a final directory symlink from redirecting the connection.
+        descriptor=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW|os.O_CLOEXEC)
+        try:
+            def query(method,params):
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as stream:
+                    deadline=time.monotonic()+3
+                    stream.settimeout(3)
+                    stream.connect("/proc/self/fd/"+str(descriptor)+"/rpc.sock")
+                    stream.sendall(json.dumps({"jsonrpc":"2.0","id":1,"method":method,"params":params}).encode()+b"\n")
+                    data=b""
+                    while not data.endswith(b"\n"):
+                        remaining=deadline-time.monotonic()
+                        if remaining<=0:raise TimeoutError("Guide probe deadline")
+                        stream.settimeout(remaining)
+                        block=stream.recv(min(65536,4*1024*1024+1-len(data)))
+                        if not block or len(data)+len(block)>4*1024*1024:raise ValueError("Invalid guide response bounds")
+                        data+=block
+                    reply=json.loads(data)
+                    if not isinstance(reply,dict) or reply.get("jsonrpc")!="2.0" or reply.get("id")!=1:raise ValueError("Invalid bridge response")
+                    return reply
+            version=query("JSONRPC.Version",{})
+            if not isinstance(version.get("result"),dict):raise ValueError("Invalid Kodi version response")
+            result["version"]=version["result"].get("version")
+            channels=query("PVR.GetChannels",{"channelgroupid":"alltv","properties":["channelnumber","broadcastnow","broadcastnext","locked","hidden"],"limits":{"start":0,"end":50}})
+            if "error" in channels:
+                result["reason"]="PVR discovery unavailable through the configured bridge"
+                result["bridgeErrorCode"]=channels["error"].get("code")
+            else:
+                catalog=channels.get("result",{})
+                if not isinstance(catalog,dict):raise ValueError("Invalid channel catalog")
+                rows=catalog.get("channels");limits=catalog.get("limits",{})
+                if (not isinstance(rows,list) or len(rows)>50 or not all(isinstance(row,dict) for row in rows)
+                    or not isinstance(limits,dict) or type(limits.get("total")) is not int or limits["total"]<len(rows)
+                    or limits.get("start")!=0 or limits.get("end")!=len(rows) or (not rows and limits["total"]!=0)):
+                    raise ValueError("Invalid channel page")
+                result.update(available=True,totalChannels=limits["total"],sampledChannels=len(rows),
+                    channelsWithNow=sum(bool(row.get("broadcastnow")) for row in rows),
+                    channelsWithNext=sum(bool(row.get("broadcastnext")) for row in rows))
+        finally:os.close(descriptor)
+    except (OSError,ValueError,KeyError,TypeError):
+        result["reason"]="Active profile's local Kodi bridge is unavailable or incompatible"
+    return result
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "guide_contracts": "isolde_guide_tests",
@@ -330,6 +396,7 @@ class Oracle:
         return after
 
     def check(self):
+        atomic_json(self.run/"guide-runtime-capabilities.json",guide_backend_probe(Path.home()))
         # T30 capability discovery is bounded. No game startup, account
         # enumeration, ROM scan or runtime installation occurs here.
         game_tools = {name: shutil.which(name) for name in

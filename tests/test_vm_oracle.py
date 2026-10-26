@@ -25,6 +25,49 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_guide_probe_does_not_search_other_profiles_or_claim_playback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home=Path(folder)
+            result=oracle.guide_backend_probe(home)
+            self.assertFalse(result["available"]);self.assertFalse(result["playbackVerified"])
+            profiles=home/".config/Isolde/profiles.json";profiles.parent.mkdir(parents=True)
+            profiles.write_text(json.dumps({"active":"../other"}))
+            result=oracle.guide_backend_probe(home)
+            self.assertFalse(result["available"]);self.assertNotIn("activeProfile",result)
+            profiles.write_text(json.dumps({"active":"default"}))
+            result=oracle.guide_backend_probe(home)
+            self.assertFalse(result["available"]);self.assertEqual(result["activeProfile"],"default")
+            self.assertFalse(result["playbackVerified"])
+
+    @unittest.skipUnless(os.name=="posix","Linux active-profile local socket")
+    def test_guide_probe_is_read_only_paged_and_active_profile_scoped(self):
+        import socket
+        with tempfile.TemporaryDirectory() as folder:
+            home=Path(folder);profiles=home/".config/Isolde/profiles.json";profiles.parent.mkdir(parents=True)
+            profiles.write_text(json.dumps({"active":"default"}))
+            directory=home/".local/share/Isolde/native-profiles/default/kodi/home/.kodi/userdata/isolde";directory.mkdir(parents=True)
+            descriptor=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
+            calls=[];errors=[]
+            with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
+                server.bind("/proc/self/fd/"+str(descriptor)+"/rpc.sock");server.listen();server.settimeout(3)
+                def serve():
+                    try:
+                        for _ in range(2):
+                            stream,_=server.accept()
+                            with stream:
+                                request=json.loads(stream.recv(32768));calls.append(request)
+                                result={"version":{"major":13,"minor":5,"patch":0}} if request["method"]=="JSONRPC.Version" else {"channels":[{"channelid":7,"broadcastnow":{"title":"Fixture"}}],"limits":{"start":0,"end":1,"total":1}}
+                                stream.sendall(json.dumps({"jsonrpc":"2.0","id":1,"result":result}).encode()+b"\n")
+                    except Exception as error:errors.append(error)
+                thread=threading.Thread(target=serve);thread.start()
+                result=oracle.guide_backend_probe(home);thread.join(4)
+            os.close(descriptor)
+            self.assertEqual(errors,[]);self.assertFalse(thread.is_alive())
+            self.assertTrue(result["available"]);self.assertEqual(result["totalChannels"],1)
+            self.assertFalse(result["playbackVerified"]);self.assertEqual(result["channelsWithNow"],1)
+            self.assertEqual([r["method"] for r in calls],["JSONRPC.Version","PVR.GetChannels"])
+            self.assertEqual(calls[1]["params"]["limits"],{"start":0,"end":50})
+
     def test_android_probe_does_not_claim_product_acceptance(self):
         result = {key: True for key in ("passed", "compatibilityProbeOnly", "userdataBindingVerified", "packageInstalled", "launchRequested", "ownedSessionStopped")}
         result.update({key: False for key in ("isoldeIntegrationVerified", "playbackVerified", "remoteVerified")})

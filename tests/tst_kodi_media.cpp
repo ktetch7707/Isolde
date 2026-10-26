@@ -27,6 +27,7 @@ private slots:
     void tvGuideReadsChannelsAndKeepsUnavailableStateHonest();
     void pagesLibraryAndResets();
     void playbackLifecycle();
+    void scheduledPlaybackUsesExplicitBroadcastOffset();
     void localViewsAndCollections();
     void manualMovieCollections();
     void manualShowCollections();
@@ -799,6 +800,27 @@ void KodiMediaTests::playbackLifecycle()
     QVERIFY(!media.playbackActive());
     QVERIFY(!media.connected());
     QCOMPARE(started.size(), 1);
+}
+void KodiMediaTests::scheduledPlaybackUsesExplicitBroadcastOffset()
+{
+    QTemporaryDir dir; QLocalServer server;
+    QVERIFY(server.listen(dir.filePath("rpc.sock"))); serve(server,13);
+    server.setProperty("playState","starting");
+    KodiMedia media("guide-profile",nullptr,dir.path());
+    QSignalSpy started(&media,&KodiMedia::playbackStarted), returned(&media,&KodiMedia::playbackReturned);
+    QVERIFY(!media.playScheduled("channel",1,100));
+    QVERIFY(!media.playScheduled("movie",0,100));
+    QVERIFY(!media.playScheduled("movie",7,-1));
+    QVERIFY(!media.playScheduled("movie",7,86400));
+    QVERIFY(media.playScheduled("episode",7,4511));
+    QVERIFY(!media.playScheduled("movie",8,0)); // only one playback owner
+    QTRY_VERIFY(!media.busy());
+    QCOMPARE(server.property("lastPlayMethod").toString(),QString("Isolde.PlayScheduled"));
+    QCOMPARE(server.property("lastPlayParams").toMap(),QVariantMap({{"mediaType","episode"},{"mediaId",7},{"offsetSeconds",4511}}));
+    QCOMPARE(started.size(),0);
+    server.setProperty("playState","playing"); QTRY_COMPARE(started.size(),1);
+    server.setProperty("playState","ended"); media.playbackControl("stop");
+    QTRY_VERIFY(!media.playbackActive()); QCOMPARE(returned.size(),1);
 }
 void KodiMediaTests::readsLibraryThroughTwoRequests()
 {

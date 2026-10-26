@@ -8,11 +8,11 @@ The master-plan Live TV Engine sections 1–12 and [reviewed amendment](live-tv-
 
 | Area | Implementation/evidence required | Current state |
 | --- | --- | --- |
-| Actual backend audit | Installed Kodi/PVR/add-on version, groups/channels/EPG, identity and tuning, preservation | Source contracts inspected; actual backend audit pending VM availability |
+| Actual backend audit | Installed Kodi/PVR/add-on version, groups/channels/EPG, identity and tuning, preservation | Active-profile read-only probe confirmed JSON-RPC 13.5.0; PVR.GetChannels returned -32100. Working PVR/EPG/tune fixture and full backend audit remain pending |
 | Shared native store | SQLite WAL, rules/slots/clock/generation state, bounded queries, atomic failure and profile isolation | Initial GuideStore/GuideRules contracts passed; full feature/installed acceptance pending |
 | Local creation | Remote rule editor, match preview, mixed media, one-save Cartoon Network, error/retry | Pending |
 | Scheduling depth | Stable shuffle/episode order/rotation, fixed blocks, cooldowns/filler, drift/DST, targeted repair, retention and regeneration preview | Initial sequential/shuffle/rotation/real-time/pause and unavailable-slate foundation only; full scheduling depth pending |
-| Playback | Actual elapsed seek, current-slot transition, unavailable retry, exact guide return, channel order surfing | Pending |
+| Playback | Actual elapsed seek, current-slot transition, unavailable retry, exact guide return, channel order surfing | Explicit-offset bridge/client contracts passed; actual playback and UI coordination remain pending |
 | Guide surfaces | Compact 3–5 channels/progress → overlay → full timeline, now/next/details/search, truthful capabilities | Pending |
 | Source setup | Existing Kodi/PVR, M3U/XMLTV/stream mapping, tuners, Plex/YouTube TV capability verification/app destinations | Pending; provider APIs are not assumed |
 | Management/portability | Remote hide/order/number/name/logo/favorites/groups; revisioned drafts/cancel; export/import/remap | Initial backend hide/favorite/order/number/name only; UI/groups/artwork/export pending |
@@ -29,11 +29,22 @@ The master-plan Live TV Engine sections 1–12 and [reviewed amendment](live-tv-
 
 These are synchronous store primitives. Production scheduling must run through a bounded worker before large-channel creation is connected to the UI. Fixed blocks and the remaining clock discontinuity/recovery policies are not implemented by this batch.
 
+## Explicit-offset playback batch
+
+`Isolde.PlayScheduled` accepts only a Kodi movie/episode/music-video/song ID and an integer offset below one day. Kodi resolves the local readable file and current runtime; changed/unknown durations and out-of-range offsets fail before Player.Open. The request uses an absolute time object, never the viewer's saved resume position. Before reporting playback active, a nonzero-offset launch waits for the owned player's seek capability and position to match the requested broadcast point (with a small startup tolerance). Unsupported/failed seeking stops only that owned item and returns a retryable failure; a replacement item is never stopped. Home during startup retains the existing bounded stop behavior.
+
+The C++ KodiMedia client exposes this typed entry point to the future guide coordinator. This is not yet a reachable guide action or an actual-video acceptance pass. Five new bridge playback regressions and one C++ local-transport regression cover offset, duration/type/bounds, deferred seeking, failure, replacement ownership and startup Home.
+
+The runner's new guide probe reads only the configured active profile and makes JSONRPC.Version plus one bounded PVR.GetChannels request (50 items maximum, per-request deadline/response bounds). It does not scan, launch, authenticate or tune, and never searches other profiles for a working backend. Its diagnostic states explicitly leave playbackVerified=false. The installed active backend currently reports PVR unavailable; this is a source capability finding, not a reason to invent live listings or mutate its Kodi configuration.
+
 ## Verification log
 
 - `20261026-115339-0c3667`: Check failed at the host network sandbox (SSH permission denied). No guest build started.
 - `20261026-115351-683fde`: approved runner access reached the guest; Check reported BUSY. Existing `kodi-movie-art-20261026-d` was verified alive and left undisturbed.
 - `guide-foundation-20261026-a`: immutable source snapshot was packaged, but Test reported BUSY before build. Status identified concurrent `kodi-movie-art-20261026-e`; no guide test pass claimed.
 - `guide-foundation-20261026-b`: queued through the runner's bounded wait without interrupting the active owner. Incremental Linux build passed; `guide_contracts` passed in 0.20 seconds: 10 behavioral cases plus init/cleanup, 12 Qt results, zero failed/skipped. Host evidence: `build/vm-oracle/guide-foundation-20261026-b/report/{ctest.log,LastTest.log,status.json}`. Immutable guest source/evidence: `/home/isolde-dev/isolde-oracle/runs/guide-foundation-20261026-b/`; source manifest digest `eecabda9a4ae96a2d10f632027e43b1cd720147c8c2ea5384b23713701c1e5b9`. Service stayed active with zero restarts; release links unchanged. This focused run does not stage/deploy a product or prove full CTest, real playback, UI or performance acceptance.
+- `guide-playback-20261026-a`: full Linux CTest **35/35 PASS**, zero skipped, 291.40 seconds. Includes guide contracts, Studio suites, Kodi bridge/playback and C++ media-client regressions. Runner self-tests also passed, including active-profile probe bounds/isolation. Full tested payload staged, not deployed. Source manifest digest `7766b2e4ecb935875f53bc3f995ee19ba114c5c858fbbdf2604d4cae9bf82c2a`; host logs under `build/vm-oracle/guide-playback-20261026-a/report/`, immutable guest source/evidence under `/home/isolde-dev/isolde-oracle/runs/guide-playback-20261026-a/`. `guide-runtime-capabilities.json` records actual JSON-RPC 13.5.0 and PVR error -32100. Normal service remained active with zero restarts and unchanged release links. Installed guide, visual fixtures, actual scheduled video/seek and disconnected acceptance remain unverified.
+
+Next implementation batch: connect the store through a bounded profile-scoped worker/coordinator, add guide creation/viewing controls and actual playback/return, then source setup/EPG adapters and the remaining scheduling/editor depth. Before connecting remote reorder, include the preview's channel revisions so an intervening reorder cannot silently overwrite another draft. Retain the complete requirement table above; these batches do not redefine success.
 
 T11 remains 0/3 = 0%. This ledger is not a completion or deployed-release claim.
