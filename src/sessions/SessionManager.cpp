@@ -2,6 +2,7 @@
 
 #include "sessions/MockSession.h"
 #include "sessions/DesktopSession.h"
+#include "sessions/AndroidSession.h"
 #include "home/ComponentSchema.h"
 
 #include <QUrl>
@@ -71,7 +72,7 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     }
     if (definition.type != QStringLiteral("mock") && definition.type != QStringLiteral("store")
         && definition.type != QStringLiteral("customize") && definition.type != QStringLiteral("settings")
-        && definition.type != QStringLiteral("desktop") && definition.type != QStringLiteral("web")) {
+        && definition.type != QStringLiteral("desktop") && definition.type != QStringLiteral("web") && definition.type != "android") {
         const auto reason = tr("Unsupported session type: %1").arg(definition.type);
         emit sessionRejected(reason);
         emit sessionFailed(definition.id, reason);
@@ -85,6 +86,7 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     emit launching(definition.id);
     emit previousFocusIdChanged();
     if (definition.type == QStringLiteral("desktop")) m_session = std::make_unique<DesktopSession>(definition);
+    else if (definition.type == "android") m_session = std::make_unique<AndroidSession>(definition);
     else m_session = std::make_unique<MockSession>(definition);
     auto *session = m_session.get();
     const auto appName = definition.name;
@@ -94,7 +96,7 @@ bool SessionManager::launchDefinition(AppDefinition definition)
             return;
         const bool intentionalExit = m_intentionalExit;
         const auto failure = session->errorString();
-        const bool normalDesktopExit = session->definition().type == "desktop" && failure.isEmpty();
+        const bool normalDesktopExit = (session->definition().type == "desktop" || session->definition().type == "android") && failure.isEmpty();
         m_intentionalExit = false;
         m_session.reset();
         emit currentAppChanged();

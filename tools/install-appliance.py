@@ -262,6 +262,7 @@ def main():
         config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config"))) / "Isolde"
         if not (config / "default-apps-completed.json").exists():
             run(sys.executable, str(source/"tools/provision-default-apps.py"), "activate", "--source", str(source))
+    run(sys.executable, str(source/"tools/provision-android.py"), "--source", str(source), "--activate-if-configured")
     print(f"Installed and tested: {release}. Existing running app was not interrupted.")
     print(f"Launch: {prefix / 'current/bin/isolde'}")
 

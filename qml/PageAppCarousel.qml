@@ -14,7 +14,7 @@ Item {
     property string selectedId:""
     property string galleryId:""
     property bool pendingGalleryRestore:false
-    readonly property var allApps:(registry?registry.apps:[]).filter(a=>(a.type==="web" || a.type==="desktop") && (!collection.section || a.section===collection.section))
+    readonly property var allApps:(registry?registry.apps:[]).filter(a=>(a.type==="web" || a.type==="desktop" || a.type==="android") && (!collection.section || a.section===collection.section))
     readonly property bool collectionTooLarge:collection.mode==="all" && allApps.length>128
     readonly property var eligible:{
         const all=allApps

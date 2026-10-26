@@ -144,7 +144,7 @@ struct ProfileRuntime {
                 pendingVpnReady=true;
             }
         }
-        if(definition.type!="desktop" || (desktopMode.active() && desktopMode.nativeMode())){pendingLaunch=false;pendingVpnReady=false;return true;}
+        if((definition.type!="desktop" && definition.type!="android") || (desktopMode.active() && desktopMode.nativeMode())){pendingLaunch=false;pendingVpnReady=false;return true;}
         pendingNativeDefinition=definition;pendingNativeLaunch=true;
         desktopMode.prepareNative(definition.id);
         return false;

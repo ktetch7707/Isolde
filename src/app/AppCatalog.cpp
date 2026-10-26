@@ -78,7 +78,7 @@ QVariantList AppCatalog::entries() const
                                   {"state", packageState(entry.app.id)},
                                   {"failureReason", m_failureReasons.value(entry.app.id)},
                                   {"presentationMode", entry.app.presentationMode},
-                                  {"profileIsolation", entry.app.type == "desktop" ? "private-native" : (entry.app.type == "web" ? "private-web" : "")},
+                                  {"profileIsolation", entry.app.type == "android" ? "private-android" : entry.app.type == "desktop" ? "private-native" : (entry.app.type == "web" ? "private-web" : "")},
                                   {"networkRequirement", entry.app.networkRequirement},
                                   {"handledActions", entry.app.handledActions},
                                   {"accent", entry.app.accent.name()}, {"symbol", entry.app.symbol},

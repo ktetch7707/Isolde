@@ -24,6 +24,14 @@ struct AppDefinition {
     [[nodiscard]] bool isValid() const
     {
         if(id.trimmed().isEmpty() || name.trimmed().isEmpty() || type.trimmed().isEmpty())return false;
+        if(type == "android") {
+            static const QRegularExpression runtimeId("^[a-z0-9][a-z0-9.-]{0,79}$");
+            const auto runtimeApp = launchConfiguration.value("runtimeApp");
+            if(runtimeApp.metaType()!=QMetaType::fromType<QString>() || !runtimeId.match(runtimeApp.toString()).hasMatch()
+                || presentationMode!="desktop-bridge" || !handledActions.isEmpty())return false;
+            for(const auto &key : {"command", "executable", "arguments", "desktopId", "actionTarget"})
+                if(launchConfiguration.contains(key))return false;
+        }
         if(!launchConfiguration.contains("legacyIds"))return true;
         const auto value=launchConfiguration.value("legacyIds");
         if(value.metaType()!=QMetaType::fromType<QVariantList>() || value.toList().size()>8)return false;

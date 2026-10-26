@@ -11,6 +11,7 @@
     "packages/spotify/manifest.json",
     "packages/steam/manifest.json",
     "packages/freetube/manifest.json",
+    "packages/smarttube/manifest.json",
     "packages/cbc-gem/manifest.json",
     "packages/prime-video/manifest.json",
     "packages/disney-plus/manifest.json",

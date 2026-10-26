@@ -1,6 +1,8 @@
 import copy
 import importlib.util
 import json
+import hashlib
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -19,6 +21,47 @@ install_spec.loader.exec_module(installer)
 
 
 class AndroidProvisioningTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux atomic activation with directory fsync")
+    def test_activation_preserves_existing_apps_and_is_repeatable(self):
+        receipt = {"configurationSha256": hashlib.sha256((ROOT/"config/android-runtime.json").read_bytes()).hexdigest()}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root/"config"; config.mkdir()
+            state = config/"Isolde/installed-apps.json"; state.parent.mkdir()
+            original = {"installed": ["freetube"], "packageStates": {"freetube": "failed"}, "failureReasons": {"freetube": "preserve"}}
+            state.write_text(json.dumps(original))
+            env = {"XDG_CONFIG_HOME": str(config), "XDG_DATA_HOME": str(root/"data")}
+            with patch.dict(os.environ, env), patch.object(android.os, "geteuid", return_value=1000, create=True), patch.object(android, "system_receipt", return_value=receipt):
+                self.assertTrue(android.activate(ROOT)); self.assertTrue(android.activate(ROOT))
+                value = json.loads(state.read_text())
+                self.assertEqual(value["installed"], ["freetube", "smarttube"])
+                self.assertEqual(value["failureReasons"], original["failureReasons"])
+                self.assertEqual(value["packageStates"]["freetube"], "failed")
+                self.assertTrue((root/"data/Isolde/packages/smarttube/32.68.0/manifest.json").is_file())
+                before = state.read_bytes()
+                with patch.object(android.shared, "atomic", side_effect=OSError("disk full")):
+                    with self.assertRaises(OSError): android.activate(ROOT)
+                self.assertEqual(state.read_bytes(), before)
+
+    @unittest.skipUnless(sys.platform == "linux", "Linux Android profile storage")
+    def test_android_runtime_refuses_wrong_profile_and_redirected_storage(self):
+        spec = importlib.util.spec_from_file_location("android_session", ROOT/"tools/android-session.py")
+        session = importlib.util.module_from_spec(spec); spec.loader.exec_module(session)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); config = root/"config"; (config/"Isolde").mkdir(parents=True)
+            selected = config/"Isolde/profiles.json"; selected.write_text(json.dumps({"active": "default"}))
+            with self.assertRaises(ValueError): session.profile_root("../other", config, root/"data")
+            other = "6b30896f-2192-47f4-bc93-f71977515e95"
+            with self.assertRaisesRegex(ValueError, "changed"): session.profile_root(other, config, root/"data")
+            self.assertFalse((root/"data").exists())
+            first = session.profile_root("default", config, root/"data")
+            (first/"sentinel").write_text("private")
+            selected.write_text(json.dumps({"active": other}))
+            second = session.profile_root(other, config, root/"data")
+            self.assertNotEqual(first, second); self.assertFalse((second/"sentinel").exists())
+            self.assertEqual(first.stat().st_mode & 0o777, 0o700)
+            redirected = root/"redirect"; redirected.symlink_to(root/"data", target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError, "redirected"): session.profile_root(other, config, redirected)
+
     @unittest.skipUnless(sys.platform == "linux", "Guest-only Android probe")
     def test_asynchronous_package_completion_and_lost_ownership(self):
         probe_spec = importlib.util.spec_from_file_location("android_probe", ROOT/"tools/android-acceptance.py")

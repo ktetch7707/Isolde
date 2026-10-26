@@ -30,7 +30,7 @@ Window {
     }
     PageBackdrop {
         id: windowWallpaper; anchors.fill: parent; source: homeLayout.wallpaperSource
-        config:homeLayout.composition.background || {};startColor:homeLayout.backgroundStart;endColor:homeLayout.backgroundEnd; visible: (!sessionManager.active || sessionManager.currentAppType === "desktop") && !pageSurface.open && !window.ambientActive && !!source.toString() && (homeLayout.composition.enabled || !!homeLayout.composition.background)
+        config:homeLayout.composition.background || {};startColor:homeLayout.backgroundStart;endColor:homeLayout.backgroundEnd; visible: (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android")) && !pageSurface.open && !window.ambientActive && !!source.toString() && (homeLayout.composition.enabled || !!homeLayout.composition.background)
     }
 
     function launchAppFromShell(appId, originId) {
@@ -190,7 +190,7 @@ Window {
             HomeScreen {
                 id: home
                 anchors.fill: parent
-                visible: (!sessionManager.active || sessionManager.currentAppType === "desktop") && !pageSurface.open
+                visible: (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android")) && !pageSurface.open
                 items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
                 authoredItems: homeLayout.components
                 sections: sourceManager.sections.concat(homeLayout.sections).concat(kodiShelves.sections)
@@ -235,7 +235,7 @@ Window {
 
             MockSessionView {
                 anchors.fill: parent
-                visible: sessionManager.active && sessionManager.currentAppType !== "desktop" && sessionManager.currentAppType !== "store" && sessionManager.currentAppType !== "settings" && sessionManager.currentAppType !== "web"
+                visible: sessionManager.active && sessionManager.currentAppType !== "desktop" && sessionManager.currentAppType !== "android" && sessionManager.currentAppType !== "store" && sessionManager.currentAppType !== "settings" && sessionManager.currentAppType !== "web"
                 appName: sessionManager.currentAppName
                 accent: sessionManager.currentAppAccent
                 presentationMode: sessionManager.currentPresentationMode
@@ -272,7 +272,7 @@ Window {
             }
 
             PageSurface {
-                id:pageSurface;anchors.fill:parent;visible:open && (!sessionManager.active || sessionManager.currentAppType === "desktop")
+                id:pageSurface;anchors.fill:parent;visible:open && (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android"))
                 layoutModel:homeLayout;provider:pageData;availableApps:appRegistry.apps;artwork:artPacks.artwork;themes:artPacks.themes
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}

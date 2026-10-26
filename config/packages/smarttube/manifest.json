@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "packageId": "smarttube",
+  "version": "32.68.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "SmartTube",
+  "description": "YouTube for remote controls. Android app data stays in the active Isolde profile. Requires Android support from the Isolde installer.",
+  "category": "Photo & Video",
+  "publisher": "SmartTube Community",
+  "provenance": "Official SmartTube release, verified by the Isolde Android installer",
+  "capabilities": ["network", "audio.output", "video.output", "android.external"],
+  "app": {
+    "id": "smarttube",
+    "type": "android",
+    "runtimeApp": "smarttube",
+    "presentationMode": "desktop-bridge",
+    "networkRequirement": "internet",
+    "section": "Apps",
+    "accent": "#E45252",
+    "symbol": "S"
+  }
+}

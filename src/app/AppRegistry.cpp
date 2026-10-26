@@ -32,7 +32,7 @@ static bool validIconName(const AppDefinition &app)
 
 static QString appIcon(const AppDefinition &app, bool cutout=false)
 {
-    if((app.type!="web" && app.type!="desktop") || !qobject_cast<QGuiApplication *>(QCoreApplication::instance()))return {};
+    if((app.type!="web" && app.type!="desktop" && app.type!="android") || !qobject_cast<QGuiApplication *>(QCoreApplication::instance()))return {};
     auto name=app.launchConfiguration.value("icon",app.id).toString();
     const auto roots=QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
     const auto safeFile=[&](const QString &path){

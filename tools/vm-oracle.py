@@ -60,10 +60,15 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
          "shell": ("shell-acceptance.py", []),
          "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
-         "android": ("android-acceptance.py", [])}
+         "android": ("android-acceptance.py", []),
+         "androidapps": ("android-apps-acceptance.py", [])}
 
 
 def visual_result_passed(case, result):
+    if case == "androidapps":
+        return (all(result.get(k) is True for k in ("passed", "sharedSessionLaunch", "ownedSessionStopped"))
+                and result.get("playbackVerified") is False
+                and result.get("reviewSequenceCaptured")==["androidnavigation","androidgallery","androidlaunch","androidpermission","androidopen","androidremote","androidreturn"])
     if case == "android":
         return (all(result.get(k) is True for k in ("passed", "compatibilityProbeOnly", "userdataBindingVerified", "packageInstalled", "launchRequested", "ownedSessionStopped"))
                 and all(result.get(k) is False for k in ("isoldeIntegrationVerified", "playbackVerified", "remoteVerified")))
@@ -564,7 +569,7 @@ class Oracle:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
     def visual(self, case, installed=False):
-        if case in ("repairs", "apps", "clients", "vpn", "shell") and not installed:
+        if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
         if installed:
@@ -594,7 +599,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android","androidapps") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -629,6 +634,7 @@ class Oracle:
         before = self.links()
         with exclusive_lock(prefix / ".install.lock"):
             release = installer.install_payload(payload, prefix)
+        self.stage("android-app-registration", ["python3", str(source/"tools/provision-android.py"), "--source", str(source), "--activate-if-configured"], 30)
         # Reuse the installer activation contract. No repeat compilation/tests or startup edits.
         self.stage("restart", ["systemctl", "--user", "restart", "isolde.service"], 30)
         deadline = time.monotonic() + 30
@@ -721,7 +727,7 @@ def collect_evidence(run, case, directories):
         for directory in sorted(directories):
             if not re.fullmatch(r"/tmp/isolde-(?:components-acceptance|reference-config|tv-acceptance)-[A-Za-z0-9_-]+", str(directory)):
                 raise RuntimeError("Unexpected evidence root")
-            paths = [directory / name for name in ("result.json", "shell.log", "android.log", "attempt-config.json", "provider-requests.json")]
+            paths = [directory / name for name in ("result.json", "shell.log", "android.log", "window-discovery.json", "attempt-config.json", "provider-requests.json")]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:
@@ -736,7 +742,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

@@ -134,9 +134,49 @@ def system(source, software_rendering=False):
     }, indent=2).encode(), 0o644)
 
 
+def system_receipt():
+    receipt = Path("/var/lib/isolde/android-install.json")
+    if not receipt.is_file(): return None
+    if receipt.is_symlink() or receipt.stat().st_uid != 0 or receipt.stat().st_size > 65536:
+        raise RuntimeError("Invalid Android installer receipt")
+    return json.loads(receipt.read_text())
+
+
+def activate(source):
+    """Publish the verified Android app through the ordinary Isolde catalog."""
+    if os.geteuid() == 0: raise RuntimeError("Android app activation requires the regular Isolde user")
+    receipt = system_receipt()
+    if receipt is None: return False
+    expected = hashlib.sha256((source/"config/android-runtime.json").read_bytes()).hexdigest()
+    if receipt.get("configurationSha256") != expected:
+        raise RuntimeError("Android system setup does not match this release")
+    load(source)
+    config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config")))/"Isolde"
+    data = Path(os.environ.get("XDG_DATA_HOME", str(Path.home()/".local/share")))/"Isolde"
+    state_path = config/"installed-apps.json"
+    if state_path.is_symlink() or (state_path.exists() and state_path.stat().st_size > 1024*1024):
+        raise ValueError("Invalid installed app state; refusing overwrite")
+    state = json.loads(state_path.read_text()) if state_path.exists() else {"installed": [], "packageStates": {}}
+    if not isinstance(state.get("installed"), list) or not isinstance(state.get("packageStates", {}), dict):
+        raise ValueError("Invalid installed app state; refusing overwrite")
+    manifest_path = source/"config/packages/smarttube/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("packageId") != "smarttube" or manifest.get("app", {}).get("type") != "android":
+        raise ValueError("Invalid bundled SmartTube manifest")
+    shared.atomic(data/"packages/smarttube"/manifest["version"]/"manifest.json", manifest_path.read_bytes())
+    if "smarttube" not in state["installed"]: state["installed"].append("smarttube")
+    state.setdefault("packageStates", {}).setdefault("smarttube", "ready")
+    shared.atomic(state_path, json.dumps(state, indent=2).encode())
+    return True
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--software-rendering", action="store_true")
+    parser.add_argument("--activate-if-configured", action="store_true", help="Register SmartTube in All Apps as the regular user, if Android setup exists")
     args = parser.parse_args()
-    system(args.source.resolve(), args.software_rendering)
+    if args.activate_if_configured:
+        print(json.dumps({"smartTubeRegistered": activate(args.source.resolve())}))
+    else:
+        system(args.source.resolve(), args.software_rendering)

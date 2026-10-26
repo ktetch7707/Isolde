@@ -26,6 +26,29 @@ class IsoldeTests final : public QObject {
     Q_OBJECT
 
 private slots:
+    void androidDefinitionsRejectExecutableRecipes() {
+        AppRegistry registry;
+        const QByteArray valid=R"([{"id":"smarttube","name":"SmartTube","type":"android","runtimeApp":"smarttube","presentationMode":"desktop-bridge","section":"Apps"}])";
+        QVERIFY(registry.loadFromData(valid));
+        QCOMPARE(registry.find("smarttube")->type,QString("android"));
+        auto bad=*registry.find("smarttube");bad.id="bad";
+        bad.launchConfiguration["runtimeApp"]="../account";
+        QVERIFY(!registry.addApp(bad));
+        bad.launchConfiguration["runtimeApp"]="smarttube";
+        bad.launchConfiguration["executable"]="/bin/sh";
+        QVERIFY(!registry.addApp(bad));
+        QVERIFY(!registry.loadFromData(QByteArray(valid).replace("smarttube\",\"presentationMode", "../bad\",\"presentationMode")));
+        QVERIFY(registry.find("smarttube"));
+        QCoreApplication::setApplicationVersion("0.0.1.2");
+        QTemporaryDir directory;
+        AppCatalog catalog(&registry);
+        QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),directory.filePath("state.json"),directory.filePath("packages")),qPrintable(catalog.errorString()));
+        // Use a clean registry: publication must come from the normal catalog.
+        QVERIFY(registry.removeApp("smarttube"));
+        QVERIFY2(catalog.install("smarttube"),qPrintable(catalog.errorString()));
+        QCOMPARE(registry.find("smarttube")->type,QString("android"));
+        QVERIFY(catalog.isInstalled("smarttube"));
+    }
     void appArtworkRemovesOnlyConnectedBackground() {
         QImage logo(20,20,QImage::Format_ARGB32);logo.fill(Qt::white);
         for(int y=4;y<16;++y)for(int x=4;x<16;++x)logo.setPixelColor(x,y,Qt::red);

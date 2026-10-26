@@ -88,6 +88,21 @@ Item {
             carousel.handleCommand(inputManager.back);compare(carousel.selectedId,"__more__")
             launchSpy.target=null
         }
+        function test_android_app_is_in_gallery_and_restores_its_card() {
+            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"},{id:"smarttube",name:"SmartTube",type:"android"},{id:"three",name:"Three",type:"web"}]
+            const carousel=createTemporaryObject(carouselComponent,tests.parent)
+            launchSpy.target=carousel;launchSpy.clear()
+            compare(carousel.eligible.length,3)
+            carousel.activate("__more__")
+            const gallery=findChild(carousel,"appCarouselGallery");tryCompare(gallery,"opened",true)
+            carousel.handleCommand(inputManager.navigateRight);compare(carousel.galleryId,"smarttube")
+            carousel.handleCommand(inputManager.confirm)
+            compare(launchSpy.count,1);compare(launchSpy.signalArguments[0][0].appId,"smarttube")
+            const state=carousel.focusState();verify(state.galleryOpen)
+            carousel.restoreFocusState(state);tryCompare(gallery,"opened",true)
+            compare(carousel.galleryId,"smarttube")
+            carousel.handleCommand(inputManager.back);launchSpy.target=null
+        }
         function test_page_menu_remote_navigation_and_preview() {
             const menu=createTemporaryObject(menuComponent,tests.parent,{pages:[{id:"",name:"Home"},{id:"movies",name:"Movies"},{id:"shows",name:"Shows"}]})
             verify(menu!==null);menuSpy.target=menu;menuSpy.clear()

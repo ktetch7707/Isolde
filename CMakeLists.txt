@@ -81,6 +81,8 @@ add_library(isolde_core STATIC
     src/sessions/MockSession.h
     src/sessions/DesktopSession.cpp
     src/sessions/DesktopSession.h
+    src/sessions/AndroidSession.cpp
+    src/sessions/AndroidSession.h
     src/sessions/DesktopMode.cpp
     src/sessions/DesktopMode.h
     src/sessions/NativeSandbox.cpp
@@ -189,6 +191,7 @@ qt_add_resources(isolde "isolde_config"
         config/packages/spotify/manifest.json
         config/packages/steam/manifest.json
     config/packages/freetube/manifest.json
+    config/packages/smarttube/manifest.json
     config/packages/cbc-gem/manifest.json
     config/packages/prime-video/manifest.json
     config/packages/disney-plus/manifest.json
@@ -223,6 +226,7 @@ set(ISOLDE_PACKAGE_MANIFESTS
     config/packages/spotify/manifest.json
     config/packages/steam/manifest.json
     config/packages/freetube/manifest.json
+    config/packages/smarttube/manifest.json
     config/packages/cbc-gem/manifest.json
     config/packages/prime-video/manifest.json
     config/packages/disney-plus/manifest.json
@@ -240,6 +244,8 @@ install(TARGETS isolde RUNTIME DESTINATION bin)
 install(FILES tools/component-health.py DESTINATION share/isolde)
 install(FILES tools/provision-default-apps.py DESTINATION share/isolde)
 install(FILES tools/provision-android.py DESTINATION share/isolde)
+install(FILES tools/android-session.py DESTINATION share/isolde)
+configure_file(tools/android-session.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/android-session.py COPYONLY)
 install(FILES config/android-runtime.json DESTINATION share/isolde/config)
 configure_file(tools/provision-android.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/provision-android.py COPYONLY)
 configure_file(config/android-runtime.json ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/config/android-runtime.json COPYONLY)

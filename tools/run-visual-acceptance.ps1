@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android')][string]$Case = 'pages',
+    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -50,7 +50,8 @@ $captureLine = {
         if (!(Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).Length -eq 0) { throw "Screenshot missing: $phase" }
         $vpnInput = $Case -eq 'vpn' -and $phase -in @('vpnnavigation','vpnpermission','vpnprovider','vpnsettings','vpnprotocol','vpnprotocolconfirm','vpnconnection','vpnproviderstate','vpnassign','vpnuspermission','vpnusprovider','vpnussearch','vpnusconnect','cbcvpnpermission')
         $shellInput = $Case -eq 'shell' -and $phase -in @('shellnavigation','shellgallery','shellstore','shellreturn','shellambient','shellwake')
-        $nativePermission = ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput -or $shellInput
+        $androidInput = $Case -eq 'androidapps' -and $phase -in @('androidnavigation','androidgallery','androidlaunch','androidpermission','androidopen','androidremote','androidreturn')
+        $nativePermission = $androidInput -or ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput -or $shellInput
         $nativeReturn = ($Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')) -or ($Case -eq 'vpn' -and $phase -in @('vpnproviderreturn','vpnusreturn','cbcvpn'))
         if (($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) -or ($Case -eq 'apps' -and $phase -eq 'steaminstall') -or $nativePermission -or $nativeReturn) {
             if ($VmName -ne 'Isolde-Test') { throw 'Compositor input is restricted to the Isolde-Test guest.' }
