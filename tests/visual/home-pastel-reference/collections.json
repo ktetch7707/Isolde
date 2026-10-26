@@ -1,13 +1,15 @@
 {
   "installedApps": [
-    "ambient-weather",
-    "living-room-radio",
-    "photo-gallery",
-    "plex",
-    "home-assistant",
-    "kodi",
-    "retro-arcade",
+    "netflix",
+    "freetube",
+    "disney-plus",
+    "prime-video",
     "spotify",
+    "crunchyroll",
+    "paramount-plus",
+    "peacock",
+    "cbc-gem",
+    "kodi",
     "steam"
   ],
   "history": [

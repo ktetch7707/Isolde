@@ -1,0 +1,37 @@
+# T21.9 — Pastel collection capacity and overflow acceptance
+
+Date: 2026-10-26. This is the authorized T21.9 prerequisite for unfinished T20.5, not a claim that either task is complete.
+
+## Observed failure and correction
+
+Reviewed the latest retained populated capture, `build/vm-oracle/games-20261026-d/visual/pastel/attempt-20261026-010038-700/pastel-custom.png`, beside `tests/visual/home-pastel-reference/reference.jpg`. The capture has six spread-out app entries and no More apps control. The target composition calls for nine visible slots and the semantic gate requires real overflow behavior.
+
+The fixture listed four mock app definitions that the production carousel correctly excludes. It therefore could not establish overflow. The packaged preset and its matching recreation fixture also declared eight visible slots despite the category's nine-column presentation.
+
+Both layouts now declare nine visible slots through the existing validated collection layout. The disposable fixture restores eleven real eligible packaged catalog definitions instead of the mock entries. It exercises ordinary registry filtering and production carousel overflow; these registrations do not establish external app installation, launch, account entitlement or playback. Existing user layouts are not rewritten.
+
+The graphical reference journey now captures More apps and Back to its origin, and asserts layout bytes stay unchanged. This extends the normal collection-provider acceptance path; there is no renderer branch for the reference or a new layout/configuration store.
+
+## Verification
+
+Local checks pass: packaged preset layout equals the recreation document; all eleven fixture identities resolve to catalog definitions of eligible desktop/web/Android types; identities are unique; the count exceeds the nine-slot capacity. The modified acceptance script parses, and `git diff --check` passes.
+
+VM attempts `studio-pastel-20261026-a` and `-b` are **not passes**: the runner refused both with BUSY. Status first confirmed `games-runtime-20261026-b` actively running CTest, then later confirmed that run's separate `games-runtime-install` Configure guardian. No lock was removed and no healthy build/setup was interrupted. The earlier sandboxed Status transport permission failure was resolved by using the authorized runner outside the sandbox; it was not treated as a guest failure.
+
+## Verified checkpoint C
+
+`studio-pastel-20261026-c` passes **34/34** full CTest registrations in 294.50 seconds. Tested source digest: `cf7f96aa14f7dc614702c19844d966a5c454ca37ce6335a06edd923806247bd8`; immutable archive SHA-256: `5d50d66bb97f4c45700050ddbd827f95ccaf1f14f3a0e1796a64c42dc954ebfa`. The runner reuses the incremental Linux cache and stages the exact passing payload. No release deployment is performed.
+
+All three graphical journeys pass on that staged payload. Every capture was opened and reviewed: **11 Pastel + 4 Lounge + 15 Studio = 30 graphical frames**, and all **29 native control frames** in the report. Both reference recreation/reset pairs were compared with their references. Durable evidence is under `build/vm-oracle/studio-pastel-20261026-c/`:
+
+- Pastel: `visual/pastel/attempt-20261026-023106-157/`, guest `/tmp/isolde-reference-config-sm5fzgzq`. The custom frame now has nine slots with More apps last. The overflow frame shows actual extra registry entries, including Netflix and Peacock, in the normal contextual gallery. Back visibly restores the selected More apps origin. Saved layout bytes remain unchanged during gallery navigation; Settings skin save/reapply/reset passes.
+- Lounge: `visual/lounge/attempt-20261026-023302-951/`, guest `/tmp/isolde-reference-config-aecz113r`. The existing landscape-adapted composition and reset are preserved; isolated reset correctly shows an uninstalled Steam source as unavailable.
+- Studio: `visual/studio/attempt-20261026-023359-083/`, guest `/tmp/isolde-components-acceptance-s0ygg0dd`. Remote catalog/add, reflow, size, draft interaction/Apply, nested slots/Layers and scrolling journeys pass. These synthetic windowed frames do not constitute uncoached usability or appliance containment acceptance.
+
+All three reports preserve Household and Studio Demo layout hashes. The final normal service restores active/running with **zero automatic restarts**. Local `review-summary.json` records reviewed capture paths/hashes and this narrow verdict; the runner's original pending semantic flags are not rewritten into a broad pass.
+
+## Remaining acceptance
+
+The overflow/capacity slice is verified; the whole Pastel/component gate is still open. In particular, More apps inherits the section's heart icon instead of a clear collection glyph, some app entries retain letter placeholders, Steam retains its installer artwork, history artwork is synthetic fixture data, and broader composition/provider/usability requirements remain. The native frames are sparse control/input fixtures, not proof of populated Home, real provider playback or hardware support. Other screens still expose known management/editor presentation gaps.
+
+Do not close T20.5/T21.9 merely from these passing functional journeys. Next address the overflow presentation through the shared appearance/schema/editor/default model and remaining artwork/design acceptance. No task checkbox or percentage credit is added: T20 80%, T21 36%, Overall 32% across 27 active software tasks.

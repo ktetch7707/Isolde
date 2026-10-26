@@ -464,7 +464,7 @@
             "schemaVersion": 1,
             "wrap": false,
             "gap": 16,
-            "visibleColumns": 8,
+            "visibleColumns": 9,
             "columns": 16,
             "rows": 1,
             "mode": "row"

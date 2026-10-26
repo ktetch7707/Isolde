@@ -37,3 +37,7 @@ Installed release `523f627f0c06211f92b6e43b` passed all thirteen suites and the 
 ## Current semantic status (2026-10-23)
 
 The prerequisite rebuild and its verification are recorded in [genuine collection evidence](../../../docs/studio-history-prerequisite-2026-10-23.md). Current populated graphical review remains pending until that record reports actual captures. The historical captures above do not prove current collection semantics. See also the earlier [standing evidence audit](../../../docs/studio-reference-evidence-2026-10-23.md).
+
+## Capacity and gallery checkpoint (2026-10-26)
+
+[Overflow evidence](../../../docs/studio-pastel-overflow-2026-10-26.md) supersedes the old missing-overflow fixture limitation: the fixture restores eleven eligible real catalog definitions, the packaged/fixture collection has nine visible slots, and actual remote More apps → gallery → Back is reviewed with exact origin and unchanged layout bytes. Full C passes 34/34 and all standing graphical journeys; all 30 graphical and 29 native frames are reviewed. Placeholder/installer artwork, the inherited heart glyph on More apps and broader reference/provider/design acceptance remain open. Registered fixture apps are never represented as installed external clients or subscription playback proof. Existing user layouts and the normal installed release remain unchanged.

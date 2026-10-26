@@ -373,6 +373,15 @@ def main():
                 collection_provider.verify_history()
             captured("custom")
             if collection_provider:
+                capacity = apps[0].get("presentation", {}).get("layout", {}).get("visibleColumns", 4)
+                eligible = [app for app in collection_provider.installed]
+                assert len(eligible) > capacity, "Collection fixture must exercise app overflow"
+                key("Home"); key("Up", 30); key("Down", 4)
+                key("Left", 30); key("Right", capacity-1); key("Return")
+                captured("appsoverflow")
+                key("Escape")
+                captured("appsoverflowreturn")
+                assert layout.read_bytes() == original_bytes, "Gallery browsing must not write the layout"
                 def starter(column):
                     key("Home"); key("Up", 30); key("Down", 3)
                     key("Left", 10)
