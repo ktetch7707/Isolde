@@ -12,12 +12,14 @@ import selectors
 import shutil
 import signal
 import subprocess
+import tempfile
 import sys
 import tarfile
 import time
 import xml.etree.ElementTree as ET
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
+          "games": ("isolde_component_tests", "isolde_games_ui_tests", "isolde_tests"),
           "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests"),
           "profile_browser_isolation": "isolde_profile_browser_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
@@ -49,6 +51,8 @@ def suite_selection(suite):
         pattern = "^(vpn_setup|vpn_launch)$"
     if suite == "store":
         pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote)$"
+    if suite == "games":
+        pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning)$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
@@ -65,10 +69,14 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
          "android": ("android-acceptance.py", []),
          "androidapps": ("android-apps-acceptance.py", []),
-         "store": ("store-acceptance.py", [])}
+         "store": ("store-acceptance.py", []),
+         "games": ("games-acceptance.py", [])}
 
 
 def visual_result_passed(case, result):
+    if case == "games":
+        return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRegistration","nativeGameStarted","returned"))
+                and result.get("gameplayVerified") is False and result.get("physicalControllerVerified") is False and len(result.get("captures",[]))==9)
     if case == "store":
         return (all(result.get(k) is True for k in ("passed","androidLifecycle","chromiumLifecycle","androidPackageRemovalVerified","freshProfile"))
                 and result.get("normalProfileUsed") is False and result.get("playbackVerified") is False and len(result.get("captures",[]))==14)
@@ -321,8 +329,8 @@ class Oracle:
         return after
 
     def check(self):
-        # T30 capability discovery is read-only and bounded. No client startup,
-        # account enumeration, ROM scan or runtime installation occurs here.
+        # T30 capability discovery is bounded. No game startup, account
+        # enumeration, ROM scan or runtime installation occurs here.
         game_tools = {name: shutil.which(name) for name in
                       ("PPSSPPSDL", "PPSSPPQt", "ppsspp", "dolphin-emu", "pcsx2-qt", "flatpak", "wine", "wine64", "neverball", "supertux2")}
         package_probe = subprocess.run(
@@ -333,6 +341,14 @@ class Oracle:
             "packagePolicyExit": package_probe.returncode,
             "packagePolicy": package_probe.stdout[:16384], "error": package_probe.stderr[:2048],
             "physicalControllerQualified": False, "physicalOpticalQualified": False})
+        game_help = {}
+        for binary, argument in (("/usr/games/dolphin-emu", "--help"), ("/usr/games/pcsx2-qt", "-help"), ("/usr/games/supertux2", "--help")):
+            if not Path(binary).is_file():continue
+            with tempfile.TemporaryDirectory(prefix="games-help-",dir=self.run) as private:
+                environment=dict(os.environ,HOME=private,XDG_CONFIG_HOME=private+"/config",XDG_DATA_HOME=private+"/data",QT_QPA_PLATFORM="offscreen")
+                result=subprocess.run([binary,argument],env=environment,capture_output=True,text=True,timeout=15)
+                game_help[binary]={"exit":result.returncode,"stdout":result.stdout[:16384],"stderr":result.stderr[:4096]}
+        atomic_json(self.run/"games-runtime-help.json",game_help)
         for tool in ("cmake", "ninja", "ctest", "python3", "tar"):
             if not shutil.which(tool):
                 raise RuntimeError("Required guest tool missing: " + tool)
@@ -466,6 +482,8 @@ class Oracle:
                 expected = {"vpn_setup", "vpn_launch"}
             if suite == "store":
                 expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote"}
+            if suite == "games":
+                expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning"}
             if {c.get("name") for c in cases} != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
@@ -769,7 +787,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

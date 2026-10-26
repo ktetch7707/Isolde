@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "packageId": "dolphin",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Dolphin game runtime",
+  "description": "Managed GameCube/Wii runtime. Add your own game files in Games. Runtime setup and game compatibility must be verified separately.",
+  "category": "Games",
+  "publisher": "Dolphin Emulator Project",
+  "provenance": "Pinned signed Ubuntu dolphin-emu package; no games or firmware included",
+  "capabilities": ["desktop.external", "input.gamepad", "audio.output"],
+  "app": {
+    "id": "dolphin", "type": "desktop", "presentationMode": "game-hub",
+    "networkRequirement": "none", "desktopId": "isolde-dolphin",
+    "windowClass": "dolphin-emu", "containment": "fullscreen",
+    "section": "Games", "accent": "#397DB8", "symbol": "GC",
+    "handledActions": ["open-file"],
+    "actionHandlers": {"open-file": {"arguments": ["--batch", "--exec", "{target}", "--config", "Dolphin.Display.Fullscreen=True"]}},
+    "gameFormats": ["iso", "gcm", "rvz", "gcz", "wbfs", "dol", "elf"]
+  }
+}

@@ -198,6 +198,9 @@ qt_add_resources(isolde "isolde_config"
         config/packages/home-assistant/manifest.json
         config/packages/kodi/manifest.json
         config/packages/retro-arcade/manifest.json
+        config/packages/dolphin/manifest.json
+        config/packages/pcsx2/manifest.json
+        config/packages/supertux/manifest.json
         config/packages/spotify/manifest.json
         config/packages/steam/manifest.json
     config/packages/freetube/manifest.json

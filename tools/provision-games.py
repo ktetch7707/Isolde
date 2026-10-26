@@ -34,21 +34,45 @@ def platform():
         raise RuntimeError("This runtime manifest supports amd64 only")
 
 
-def atomic_receipt(path, document):
+def atomic_bytes(path, data):
     path = Path(path).absolute()
     if path.is_symlink() or path.parent.resolve() != path.parent:
         raise ValueError("Refusing redirected receipt destination")
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".games-", dir=path.parent)
     try:
-        with os.fdopen(fd, "w") as output:
-            json.dump(document, output, indent=2); output.flush(); os.fsync(output.fileno())
+        with os.fdopen(fd, "wb") as output:
+            output.write(data); output.flush(); os.fsync(output.fileno())
         os.replace(temporary, path)
         directory = os.open(path.parent, os.O_DIRECTORY)
         try: os.fsync(directory)
         finally: os.close(directory)
     finally:
         if os.path.exists(temporary): os.unlink(temporary)
+
+
+def atomic_receipt(path, document):
+    atomic_bytes(path, json.dumps(document, indent=2).encode())
+
+
+def register_launchers(receipt, directory=None):
+    directory = Path(directory) if directory else Path.home()/".local/share/applications"
+    definitions = {
+        "dolphin-emu": ("dolphin", "Dolphin", []),
+        "pcsx2": ("pcsx2", "PCSX2", ["-bigpicture"]),
+        "supertux": ("supertux", "SuperTux", ["--fullscreen", "--renderer", "sdl"]),
+    }
+    written = []
+    for package, state in receipt["packages"].items():
+        if not state["ready"]: continue
+        app_id, name, arguments = definitions[package]
+        executable = state["executable"]
+        if executable not in (PACKAGES[package][1], PACKAGES[package][1].replace("/usr/games/", "/usr/bin/")):
+            raise ValueError("Runtime executable does not match the verified manifest")
+        entry = "[Desktop Entry]\nType=Application\nName="+name+"\nExec="+" ".join([executable]+arguments)+"\nTerminal=false\nNoDisplay=true\n"
+        path = directory/("isolde-"+app_id+".desktop")
+        atomic_bytes(path, entry.encode()); written.append(str(path))
+    return written
 
 
 def inspect(packages):
@@ -103,6 +127,7 @@ def main():
     args = parser.parse_args()
     packages = ["dolphin-emu", "pcsx2"] + (["supertux"] if args.fixture else [])
     result = provision(packages, args.install)
+    if result["ready"] and args.install: result["launchers"] = register_launchers(result)
     atomic_receipt(args.receipt, result)
     print(json.dumps(result))
 

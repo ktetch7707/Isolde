@@ -38,5 +38,17 @@ class GamesProvisioningTests(unittest.TestCase):
             with self.assertRaises(ValueError):games.atomic_receipt(root/"receipt",{})
             self.assertEqual((root/"original").read_text(),"preserve")
 
+    def test_launchers_use_only_verified_programs_and_are_repeatable(self):
+        state={"packages":{name:{"ready":True,"executable":value[1]} for name,value in games.PACKAGES.items()}}
+        with tempfile.TemporaryDirectory() as directory:
+            written=games.register_launchers(state,Path(directory))
+            self.assertEqual(len(written),3)
+            original={p:Path(p).read_bytes() for p in written}
+            games.register_launchers(state,Path(directory))
+            self.assertEqual(original,{p:Path(p).read_bytes() for p in written})
+            self.assertIn(b"--fullscreen --renderer sdl",(Path(directory)/"isolde-supertux.desktop").read_bytes())
+            state["packages"]["supertux"]["executable"]="/tmp/untrusted"
+            with self.assertRaises(ValueError):games.register_launchers(state,Path(directory))
+
 
 if __name__=="__main__":unittest.main()

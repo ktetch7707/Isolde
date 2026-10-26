@@ -8,6 +8,7 @@
 #include "media/KodiService.h"
 #include "home/StudioSession.h"
 #include "games/GameLibrary.h"
+#include "app/AppCatalog.h"
 #include <QSqlQuery>
 #include <QSqlDatabase>
 #include <QtTest>
@@ -44,6 +45,7 @@ private slots:
     void gamesRelinkPreservesIdentityAndRollsBack();
     void gamesFolderImportIsReviewedAtomicAndCancelable();
     void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
+    void gamesCuratedPackagesBindThroughRealCatalog();
     void validatesContracts();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
@@ -84,6 +86,22 @@ static AppDefinition gamesRuntime(const QString &id="psp-test") {
 }
 static QVariantMap gameRegistration(const QString &root,const QString &target="game.iso") {
     return {{"schemaVersion",1},{"title","Local title"},{"platform","PSP"},{"runtimeId","psp-test"},{"root",root},{"target",target}};
+}
+void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
+    QCoreApplication::setApplicationVersion("0.0.1.2");
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.loadFromData(::apps));AppCatalog catalog(&apps);
+    QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),dir.filePath("installed.json"),dir.filePath("packages")),qPrintable(catalog.errorString()));
+    for(const auto &id:QStringList{"dolphin","pcsx2","supertux"})QVERIFY2(catalog.install(id),qPrintable(catalog.errorString()));
+    const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","inert-security-fixture");
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);QCOMPARE(library.runtimes().size(),3);
+    auto registration=gameRegistration(root);registration["runtimeId"]="dolphin";registration["platform"]="GameCube";
+    const auto disc=library.addGame(registration);QVERIFY2(!disc.isEmpty(),qPrintable(library.errorString()));
+    QCOMPARE(library.resolveLaunch(disc).value("openWith").toString(),QString("dolphin"));
+    registration["runtimeId"]="supertux";registration["root"]=QStringLiteral("");registration["target"]=QStringLiteral("");registration["title"]="SuperTux";registration["platform"]="PC";
+    const auto native=library.addGame(registration);QVERIFY2(!native.isEmpty(),qPrintable(library.errorString()));
+    QCOMPARE(library.resolveLaunch(native).value("appId").toString(),QString("supertux"));
+    QVERIFY(catalog.uninstall("dolphin"));QVERIFY(library.resolveLaunch(disc).isEmpty());
+    QVERIFY(!library.details(disc).isEmpty());QCOMPARE(readFile(root+"/game.iso"),QByteArray("inert-security-fixture"));
 }
 void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");
