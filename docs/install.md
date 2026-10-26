@@ -1,5 +1,9 @@
 # Isolde install path and user instructions
 
+## Required beginner guide — completion gate, 2026-10-25
+
+This document describes the existing developer/pilot tooling; it is not yet a complete layperson installation guide. First-product 100% completion now requires T13.4/T31.7 in [the backlog](agent-backlog.md): a version-matched illustrated guide for the actual test computer, tested with an unassisted nontechnical reader. The required download/USB/boot/disk-selection, first-run/setup/local-playback and troubleshooting/recovery coverage is defined in [the documentation contract](first-product-software-scope.md#beginner-installation-guide--mandatory-for-100). The planned canonical guide is `docs/user-setup.md`, shipped with the installer and readable offline. This requirement is open; the developer commands below do not satisfy it.
+
 For the existing Oracle VirtualBox test machine, follow the [VM oracle runbook](vm-oracle.md) for isolation, release selection and restoration.
 
 Isolde should eventually be installable by a normal user without touching a Linux desktop after the initial OS image or installer boots.

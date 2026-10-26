@@ -2,6 +2,8 @@
 
 ## First-product software milestone — current authority, 2026-10-25
 
+Documentation clarification (user, 2026-10-25): S1/100% also requires a clear illustrated guide enabling installation/setup on the actual test computer with ordinary technology knowledge. T13.4 delivers it; T31.7 verifies an unassisted reader on a clean installation before the H05 physical repetition. Target-specific download/USB/boot/disk instructions, first-run/local playback and safe troubleshooting/recovery must be complete; existing developer/VM commands do not qualify. See the [beginner guide contract](first-product-software-scope.md#beginner-installation-guide--mandatory-for-100). Both added gates are open; task count and Overall 32% are unchanged.
+
 The user requests 100% software completion before hardware qualification. [Reconciled backlog](agent-backlog.md) and [S1/H1/R1 scope](first-product-software-scope.md) override older hardware-first editor/release/count wording below. Planning only: no application changes or interruption of active Store/Chromium work.
 
 There are **27 ACTIVE software tasks** (T01,T03–T05,T09–T31), sum 860, **32%**. T30 maps the full Games software plan; T31 accepts a frozen integrated candidate. T14 remains active, avoiding silent scope reduction. T10 completes adapters/editors/VM acceptance before physical qualification; T13 completes distribution/fresh-VM/offline/recovery before physical repetition. H01–H05 preserve physical TV/input/gameplay/optical/capture/appliance proof. S1 means ready for qualification, not hardware support or public release.
