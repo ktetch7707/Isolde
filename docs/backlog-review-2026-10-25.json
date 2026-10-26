@@ -1,0 +1,152 @@
+{
+  "result": "PASS",
+  "activeTasks": 27,
+  "sumPercentages": 860,
+  "overallPercent": 32,
+  "physicalGates": 5,
+  "checks": [
+    "scope/table/order",
+    "checkbox math",
+    "entrypoint synchronization",
+    "dependency graph",
+    "local document links"
+  ],
+  "retainedEvidenceChecked": true,
+  "tasks": {
+    "T15": {
+      "checked": 3,
+      "total": 4,
+      "percent": 75
+    },
+    "T16": {
+      "checked": 5,
+      "total": 5,
+      "percent": 100
+    },
+    "T17": {
+      "checked": 5,
+      "total": 5,
+      "percent": 100
+    },
+    "T18": {
+      "checked": 4,
+      "total": 4,
+      "percent": 100
+    },
+    "T19": {
+      "checked": 6,
+      "total": 6,
+      "percent": 100
+    },
+    "T20": {
+      "checked": 4,
+      "total": 5,
+      "percent": 80
+    },
+    "T21": {
+      "checked": 5,
+      "total": 14,
+      "percent": 36
+    },
+    "T22": {
+      "checked": 0,
+      "total": 4,
+      "percent": 0
+    },
+    "T23": {
+      "checked": 0,
+      "total": 4,
+      "percent": 0
+    },
+    "T24": {
+      "checked": 0,
+      "total": 5,
+      "percent": 0
+    },
+    "T27": {
+      "checked": 0,
+      "total": 5,
+      "percent": 0
+    },
+    "T25": {
+      "checked": 0,
+      "total": 5,
+      "percent": 0
+    },
+    "T26": {
+      "checked": 0,
+      "total": 5,
+      "percent": 0
+    },
+    "T28": {
+      "checked": 0,
+      "total": 5,
+      "percent": 0
+    },
+    "T29": {
+      "checked": 1,
+      "total": 8,
+      "percent": 13
+    },
+    "T01": {
+      "checked": 2,
+      "total": 3,
+      "percent": 67
+    },
+    "T05": {
+      "checked": 2,
+      "total": 3,
+      "percent": 67
+    },
+    "T03": {
+      "checked": 3,
+      "total": 4,
+      "percent": 75
+    },
+    "T04": {
+      "checked": 1,
+      "total": 7,
+      "percent": 14
+    },
+    "T12": {
+      "checked": 0,
+      "total": 6,
+      "percent": 0
+    },
+    "T09": {
+      "checked": 0,
+      "total": 4,
+      "percent": 0
+    },
+    "T10": {
+      "checked": 1,
+      "total": 3,
+      "percent": 33
+    },
+    "T11": {
+      "checked": 0,
+      "total": 3,
+      "percent": 0
+    },
+    "T14": {
+      "checked": 0,
+      "total": 2,
+      "percent": 0
+    },
+    "T30": {
+      "checked": 0,
+      "total": 9,
+      "percent": 0
+    },
+    "T13": {
+      "checked": 0,
+      "total": 3,
+      "percent": 0
+    },
+    "T31": {
+      "checked": 0,
+      "total": 6,
+      "percent": 0
+    }
+  }
+}

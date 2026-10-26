@@ -1,144 +1,81 @@
-# Isolde Agent Backlog â€” single source of truth
-Location: `docs/agent-backlog.md` (this file). Entrypoint: `AGENTS.md` at repo root points here.
-Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`.
+# Isolde Agent Backlog — first-product software completion
+Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
-## How percent completion works (agent must follow)
-- Active tasks are T01,T03-T05,T09-T28 (24 tasks). T02 is out of scope; T06-T08 are superseded by the Page Studio tasks and excluded from math. Each active task uses equally weighted checkboxes.
-- Task % = round(checked / total * 100). Update `| % |` cell when you check a box.
-- Overall % = round(average of the 24 ACTIVE task %s). Recompute on every edit.
-- `100% x 24 = active backlog implemented` ONLY if every active box is `[x]` AND `Evidence` has log/screenshot paths. No evidence = max 90%.
-- Workflow: use the priority-ranked table below, not numerical task ID. Select its first unfinished ACTIVE task whose Depends tasks are 100%; do not skip a blocker silently. Read only its Entry docs/files, implement its Scope, run Verify, then update checked evidence and percentages.
-- Standing gates for every task: `tests/visual/home-reference/` + `tests/visual/home-pastel-reference/` recreation+reset pass; profile isolation; atomic save+rollback; Kodi owns media/progress/playback (no parallel DB/player); offline Generator Test; Settings/Edit Home always reachable.
-- Scope revision (user, 2026-10-25): [complete Kodi interface](kodi-complete-interface-2026-10-25.md) supersedes the October 19 restriction on Isolde curation UI. Isolde must expose Kodi-owned playlist authoring, library/source settings and refresh, poster editing, playback and backend lifecycle without requiring Kodi menus. Keep Kodi authoritative; no parallel media DB or direct Kodi DB writes. Extend T04/T21/T09/T12; T02 stays archived as an older superseded scope.
+## Current authority and completion target — 2026-10-25
 
-Audit/deployment evidence is in [planning-audit.md](planning-audit.md) and [vm-update-2026-10-19.md](vm-update-2026-10-19.md). The user-selected Page Studio redesign now has priority; the existing editor code is committed in `25f56bf`, not an accepted replacement design. Read [vm-oracle.md](vm-oracle.md) before VM testing.
+User direction: reconcile current implementation/evidence and new plans, then finish **100% of first-product software before hardware qualification**. [Software scope and audit](first-product-software-scope.md) defines S1 (software complete), H1 (hardware qualified) and R1 (release accepted). This is a planning revision, not new product acceptance or an instruction to interrupt in-flight work.
 
-User feedback slice (2026-10-24): [Home background, app logos, editable page menus and Surfshark dependency](home-feedback-2026-10-24.md) records the explicitly requested related shell/T21 work. Combined J and final `surfshark-20261024-full-l` pass 28/28 and are deployed; the first graphical capture is rejected for showing GNOME overview, so visual gates remain open. [Bounded cancellation is repaired and verified](vm-cancellation-2026-10-24.md). [Surfshark 3.14.0 is installed and running in the guest](surfshark-install-2026-10-24.md); private login/keyring resolution and tunnel verification remain open. Automatic VPN switching and universal third-party Store onboarding remain open. No broad checkbox credit: T20 80%, T21 36%, Overall round(866/24) = 36%.
+All approved software remains included: Studio/shell, full Kodi, VPN, default apps/Android/SmartTube, current Store/Chromium, Guide, capture/device software, appliance distribution, discovery/subtitles and unified Games/local-copy/disc/emulator requirements. T30 tracks Games; T31 adds final whole-product proof. Physical requirements remain in H01–H05 outside S1 math. Missing real-runtime/account/fixture proof and software defects cannot be relabelled hardware work.
 
-## Execution priority — Page Studio first (user, 2026-10-19)
+Sequencing: [implementation-order.md](implementation-order.md). Requirements/amendments: [scope crosswalk](first-product-software-scope.md#requirement-to-task-coverage), `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`. Current amendments supersede older curation/Store/hardware-first editor wording. Kodi owns media; the separate games catalog is an explicit Games requirement.
 
-Latest app scope (user, 2026-10-25): [Android apps and SmartTube](android-apps-2026-10-25.md) supersedes the earlier FreeTube substitution. SmartTube is the preferred YouTube client; Android apps require repeatable guest provisioning, shared Store/session integration, profile isolation and actual remote navigation/return evidence. Finish healthy in-flight Kodi verification, then investigate guest compatibility through the bounded runner. Preserve full Kodi integration, all twelve repairs and VPN proof. No checkbox credit; Overall remains 35% (847/24 rounded).
+## Completion math and evidence rules
 
-SmartTube All Apps correction: `android-apps-20261025-b` passes 31/31, deploys `e0ba5049bc8f9e9dfd500241`, and registers SmartTube through the ordinary catalog. The reviewed installed journey shows its gallery card, launches through AndroidSession, navigates the SmartTube menu with remote keys, and returns with Home to the same selected card; the owned container is stopped. All 35 successful captures (7 app + 15 Studio + 4 lounge + 9 pastel) are reviewed, with both reference recreation/reset pairs compared. Both normal layout hashes are unchanged and Isolde restores active with zero restarts. Online content still spins and Android reports a network notice; playback, comprehensive remote behavior, actual two-profile account isolation, GUI runtime setup and update/removal acceptance remain open. Evidence: `build/vm-oracle/android-apps-20261025-b/visual/androidapps/attempt-20261025-182448-750/` and `docs/android-apps-2026-10-25.md`. No broad gate credit: T12/T13 0%, 24 tasks sum 847, Overall round(847/24) = 35%.
+- ACTIVE: **T01,T03–T05,T09–T31 = 27 tasks**. T02/T06–T08 stay excluded. H01–H05 are a separate physical qualification ledger, not software credit.
+- Task % = round(checked task-ID Scope boxes / total task-ID Scope boxes × 100), half-up. Overall = round(sum of the 27 rounded task percentages / 27). Mandatory linked subrequirements belong to their owning boxes and cannot be skipped.
+- Sum **860**; Overall **32%**. Only new feature credit: narrow reviewed Android baseline T29.7, giving T29 = 1/8 = 13%. All other checked gates retain historical foundation credit.
+- **S1 = 100% only when every active Scope box, Done when and required Verify gate passes with source/release identity, logs and reviewed evidence, including T31.** No evidence = max 90%; a functional pass cannot replace visual/semantic/user acceptance. Never round incomplete work to 100%.
+- Reuse verified foundations with explicit source-applicability checks; T31 tests one final integrated candidate. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
+- Standing software gates: both generic reference recreation/reset pairs; profile/account/data isolation where promised; atomic save/rollback/no rewrite on read; Kodi media/progress ownership; disconnected VM Generator Test; OFF-gated zero requests; reachable Settings/Edit recovery. Physical repetition is H1.
+- Before VM actions read `docs/vm-oracle.md`; use only the bounded runner and preserve unrelated work. This review launches no VM actions or application implementation.
 
-Android installer checkpoint: `android-20261025-c` passes 31/31, packages pinned official SmartTube/Waydroid setup, verifies fresh-daemon ordering, configuration permission/rollback/repeat behavior and bounded runner error/cleanup safeguards, and deploys support release `af8a85660a110a8493ecfa82`. The first authenticated attempt installed runtime packages but stopped before initialization; C corrects that error and its authenticated guest retry passes: Android images initialize, software rendering is configured, the verified APK is staged, and Isolde restarts with both normal layout hashes unchanged. E subsequently passes 31/31 and confirms SmartTube installation plus a visible launch in isolated probe userdata. Its reviewed frame still shows a loading spinner and Android network notice, so online content/playback and remote acceptance remain open. The owned probe session stops and Isolde restores cleanly. Evidence: `build/vm-oracle/android-20261025-e/visual/android/attempt-20261025-175233-477/android-android.png` and its `review.json`. Shared Store/session/profile integration and real SmartTube remote/launch/playback remain open. The renderer is byte-identical to reviewed media-controls I; no broad feature credit. T12/T13 0%, 24 tasks sum 847, Overall 35%.
+## Execution priority and authorized exceptions
 
-Latest media scope (user, 2026-10-25): [complete Kodi interface](kodi-complete-interface-2026-10-25.md) extends the active playlist slice into Kodi-owned authoring, library settings/refresh, poster editing and full playback/backend integration. Finish the healthy current verification, then continue this explicitly requested media work without requiring Kodi's GUI. Preserve all twelve repairs and unfinished VPN proof. T04 expands from three to seven gates, with its one historical checked gate retained: round(1/7×100) = 14%. Active count remains 24; sum 866−33+14 = 847, Overall round(847/24) = **35%**. The lower percentage records expanded scope, not lost implementation.
+Complete Studio T20.5 → T21 → T22 → T23 → T24, then T27 → T25 → T26 → T28. T19.6 is complete. T15.4 user review is already deferred to T24, not a prerequisite blocking the chain; close it from actual review before T31.
 
-User acceptance repair scope (2026-10-25): [twelve reported issues and acceptance requirements](product-feedback-2026-10-25.md) records the latest explicit implementation request. First address automatic non-Home sidebars using the existing Page menu component and common runtime/editor canvas, then continue the mapped component, media, Settings/VPN, screensaver, app-return, Kodi, Steam, Store and artwork repairs. This is an authorized related T21/shell slice, not a replacement for the unfinished VPN proof or existing Studio gates. No completion credit: T12 0%, T20 80%, T21 36%, Overall round(866/24) = 36%.
+T20's remaining visual gate needs T21.9. The existing authorized prerequisite exception permits necessary T21 component/fixture work while T20 stays open; it waives no Pastel requirement. Complete the prerequisite, close T20, then finish T21. No repeated permission for that exception is needed.
 
-User-requested VPN implementation (2026-10-24): [setup, automatic app-location scope and verification ledger](vpn-setup-2026-10-24.md) records the explicitly authorized T12/network slice. Both providers and the root-owned helper are installed through the repeatable provisioner. Capture, selected-interface key copy and profile-only automatic switching are explicitly approved; AF verifies two consecutive provisioning runs with the narrow grants installed. Local Python tests pass 33/33; full AO passes 30/30, deploys and provisions. Its five reviewed live frames and bounded diagnostics confirm the copied tunnel handshakes with actual kernel MTU/mark preserved, but TCP traffic still fails while native Surfshark is active. The candidate is removed safely and the native connection remains active. Native-provider coexistence/settings inspection is next; saved Canada/US and automatic CBC Canada acceptance remain open. AD retains the reviewed Studio/lounge/Pastel functional checkpoint, with prior Pastel/design gaps open. No completion credit: T12 0%, T20 80%, T21 36%, Overall round(866/24) = 36%.
+The active user-authorized T29 Store/Chromium slice may finish independently, preserving unfinished Studio/media/VPN work. Its T01/T03 foundations are usable under the existing exception; final evidence still closes before S1. Do not take over another coder's work or restart a healthy build.
 
-Page Studio is the highest-priority feature package. Complete **T15 → T16 → T17 → T18 → T19 → T20 → T21 → T22 → T23 → T24** first: design, safe drafts/history, grid/canvas, workspace, remote editing, desktop/nested editing, inspector, templates, Preview/Apply, and installed usability/cutover. **Finish reopened T19.6, then T20.5, then T21.6-T21.14 before T22. These gates implement the user's revised movement/color/context UX and real component semantics. T15 user review remains deferred to T24 under the user-authorized provisional-design exception.** Existing current-source build/regression gates remain mandatory during each implementation slice; this ordering does not waive safety tests or hardware limits.
-
-Next complete the related shell improvements: **T27 → T25 → T26 → T28** (shared theme, contained source notices, All Apps gallery, genuine Web switch). These extend the accepted Studio and no longer block its templates, Preview/Apply or core cutover. Then follow the remaining ranked rows for evidence repair, media preservation, input/system polish, playback, hardware/guide, appliance distribution and optional online work.
-
-The table AND task sections are physically in execution order. Task IDs remain stable for commit/evidence references; their numeric values are not priority. Struck/superseded rows are archived at the end. T17 supplies T05's remaining geometry evidence; when reviewing that later ledger task, reuse valid current-source evidence rather than repeating implementation. A blocker must be reported/resolved, not used to silently switch to a lower-priority feature. The planning-only restriction applied to the priority-edit request. The subsequent user request explicitly authorizes application implementation and VM deployment using the design provisionally.
-
-The first Studio expansion changed 13 active tasks to 20 (21% to 14%). This additive revision adds four zero-percent tasks, giving 24 active tasks and **11% overall** (275/24 rounded). Existing implementation credit is unchanged. Planning/specification work is not delivery of the new system.
+After Studio/shell and the current exception, follow the table: evidence reconciliation → media/system/playback → capture software → Guide → online/subtitles → Games → appliance distribution → T31. Select the first eligible unfinished row, report real capability/provider/account blockers and retain required scope. T13 consumes preceding software; T31 consumes every other active task. S1 precedes physical qualification; public release needs S1 + H1.
 
 ## Overall (update every edit)
+
 | Task | Priority | Title | % | Status |
 |------|----------|-------|---|--------|
-| T15 | 1 | Page Studio interaction design and usability validation | 75% | provisional design only; T15.4 user acceptance OPEN, deferred to T24 |
-| T16 | 2 | Shared draft transactions, history and profile safety | 100% | task verification complete; T17 next |
-| T17 | 3 | Shared canvas geometry, grids and legacy compatibility | 100% | geometry checkpoint verified; T18 next |
-| T18 | 4 | Unified Page Studio workspace and selection | 100% | workspace/lifecycle/selection verified; T19 next |
-| T19 | 5 | Remote pick-up/drop, resize and collision workflows | 100% | verified movement/reflow checkpoint; T20 next |
-| T20 | 6 | Desktop parity, layers and nested/group editing | 80% | open: T21.9 prerequisite authorized; standing Pastel gate remains open |
-| T21 | 7 | Contextual inspector, catalog and capability binding | 36% | reopened: component semantics, visual editing, shared selection, editable header and tool organization; depends on T20 |
-| T22 | 8 | Templates, tokens, reusable sections and portability | 0% | planned |
-| T23 | 9 | Preview, Apply, restore and navigation safety | 0% | planned |
-| T24 | 10 | Installed acceptance, usability and editor cutover | 0% | planned |
-| T27 | 11 | Shared theme inheritance across shell surfaces | 0% | planned |
-| T25 | 12 | Detected-source policy, styling and containment | 0% | planned |
-| T26 | 13 | Dedicated configurable All Apps destination | 0% | planned |
-| T28 | 14 | Genuine top-right Web search toggle | 0% | planned |
-| T01 | 15 | Bootstrap + gate check | 67% | verification incomplete |
-| T05 | 16 | Studio grid renderer consumes placements | 67% | verification incomplete |
-| T03 | 17 | Local search: Kodi titles via bridge (no curation adapters) | 75% | installed acceptance pending |
-| T04 | 18 | Complete Kodi interface, preservation and import | 14% | expanded: Kodi-only backend; playlist/library/poster/playback UI open |
-| T12 | 19 | System polish + input + on-screen keyboard | 0% | VPN slice in progress; live capture/CBC gates open |
-| T09 | 20 | Playback preference + viewing options | 0% | not started |
-| T10 | 21 | Capture + HDMI + audio editors (gated) | 33% | in progress |
-| T11 | 22 | Guide / PseudoTV | 0% | not started |
-| T13 | 23 | Appliance + release distribution | 0% | partial installer/Android foundation; release gates open |
-| T14 | 24 | Optional online discovery + linguist subtitles | 0% | not started |
-| T02 | — | ~~Finish curation~~ â€” OUT OF SCOPE (user curates via Kodi) | n/a | struck |
-| T06 | — | Remote + desktop grid editor → T17-T21/T24 | n/a | superseded |
-| T07 | — | Preview/Apply/Undo → T16/T23/T24 | n/a | superseded |
-| T08 | — | Templates/tokens/portability → T22-T24 | n/a | superseded |
-| **Overall** | — | **average of 24 active tasks** | **35%** | T04 expanded; T15 provisional and T20/T21 gates open |
+| T15 | 1 | Page Studio design and user validation | 75% | provisional; user review deferred to T24 |
+| T16 | 2 | Draft transactions, history and profile safety | 100% | verified foundation; final integrated regression T31 |
+| T17 | 3 | Shared canvas geometry and legacy compatibility | 100% | verified foundation; evidence reusable by T05 |
+| T18 | 4 | Unified Studio workspace and selection | 100% | verified foundation; broad cutover remains T24 |
+| T19 | 5 | Remote movement, resize and collision | 100% | verified reflow foundation; later UX gates retained |
+| T20 | 6 | Desktop parity, layers and nested editing | 80% | input matrices largely covered; Pastel/integrated closure open |
+| T21 | 7 | Inspector, real components, header and controls | 36% | substantial partial slices; nine broad gates open |
+| T22 | 8 | Templates, tokens, reuse and portability | 0% | open; existing skins are partial foundation |
+| T23 | 9 | Apply, versions, restore and navigation safety | 0% | open; backend atomicity exists, full UX not accepted |
+| T24 | 10 | Installed Studio usability and cutover | 0% | open; includes deferred T15 review |
+| T27 | 11 | Shared theme across shell surfaces | 0% | partial bindings; full surface matrix open |
+| T25 | 12 | Contained configurable detected sources | 0% | existing controls; full policy/placement open |
+| T26 | 13 | Configurable All Apps destination | 0% | gallery/Store-return slices verified; broad scope open |
+| T28 | 14 | Genuine Web search header toggle | 0% | implemented slices; complete combined acceptance open |
+| T29 | 15 | Verified Store, Android and Chromium remote | 13% | Android baseline accepted; source/bridge/playback/lifecycle open |
+| T01 | 16 | Current-source build and visual ledger | 67% | logs exist; final source/visual reconciliation open |
+| T05 | 17 | Grid renderer evidence reconciliation | 67% | reuse T17 geometry; visual/source closure open |
+| T03 | 18 | Local Kodi search installed acceptance | 75% | implemented; installed remote/real-Kodi gate open |
+| T04 | 19 | Complete Kodi interface, preservation and import | 14% | creation verified; full management/setup/video open |
+| T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 0% | partial implementation; six broad gates open |
+| T09 | 21 | Playback preference and viewing controls | 0% | direct playback exists; complete matrix open |
+| T10 | 22 | Capture/HDMI/audio software and editors | 33% | software foundation verified; physical H04 separate |
+| T11 | 23 | Guide / PseudoTV | 0% | actual schedule/backend/guide acceptance open |
+| T14 | 24 | Online discovery and Linguist subtitles | 0% | retained active; provider/model decisions open |
+| T30 | 25 | Unified Games, local copies/discs and emulators | 0% | new plan mapped; software 0/9; H02/H03 physical |
+| T13 | 26 | Appliance software and distribution | 0% | installer foundation; clean-VM/offline/recovery open |
+| T31 | 27 | Frozen first-product software acceptance | 0% | final integrated S1 gate; not yet run |
+| **Overall** | — | **average of 27 ACTIVE software tasks** | **32%** | **860 / 27 rounded; S1 incomplete** |
 
-## Highest priority: core Page Studio
+## Current checkpoint summary
 
-Kodi authoring checkpoint (2026-10-25): [playlist creation evidence](kodi-complete-interface-2026-10-25.md) records `media-controls-20261025-i` 31/31, an actual Isolde name/cancel/save/catalog journey in a fresh Kodi profile, all seven playlist and all 28 standing captures reviewed, and deployed release `cc26b6a6530d1a508e0b3c15`. Normal profiles are unchanged; all 20 native captures match reviewed K. Generated-filename presentation and actual video presentation remain open, alongside full playlist management, Studio shelf-picker acceptance and Kodi-free setup. No weighted checkbox credit: T04 round(1/7×100)=14%, 24 active tasks sum 847, Overall round(847/24)=35%.
+- T16–T19 foundations are verified. T20 input/nested matrices and T21 collections/history/colors/sliders/selection have substantial implementation. Known Pastel artwork/content/proportion, remaining semantics and integrated UX acceptance keep broad gates open.
+- Automatic-sidebar removal, More apps Store link/return and ambient-above-gallery preview are verified narrow repairs. Timed idle and authored screensaver pages remain open.
+- Kodi `media-controls-20261025-i`: 31/31, seven playlist and 28 standing captures reviewed; actual name/cancel/create/catalog works. Full management, installed shelf-picker, setup/library/poster controls and visible video in that journey remain open.
+- Native-return full C proves real FreeTube/CBC/Steam launch/Home return, not every app or subscription playback. SmartTube now supersedes FreeTube as preferred YouTube client.
+- Android apps B: 31/31, SmartTube card/menu/Home return and preserved normal profiles. Spinner/network notice means no accepted content/playback; two-profile accounts/setup UI/containment remain open.
+- Store G: 31/31, release `014674ec29d7dfb787fd8ca9`, functional Android/Plex install/open/close/remove, unchanged layouts/zero restarts; retained review/semantic acceptance pending. Online Store C: three focused tests, not full live-source/remote-bridge acceptance.
+- VPN approved helpers/handshake evidence exist; actual CA/US country/traffic and CBC switching remain open.
+- Games now has T30; Steam startup is not a game library/gameplay pass. Physical Xbox/optical proof remains H02/H03.
 
-Latest related repair checkpoint (2026-10-25): [gallery and ambient evidence](product-feedback-2026-10-25.md) records full G 30/30 and deployed release `330e759d0700c87afa43c264`. The reviewed real shell journey verifies the More apps Store action, exact Store return, ambient preview above the open gallery and single-key dismissal retaining selection. All 28 Studio/lounge/Pastel captures are reviewed; known Pastel design/artwork gaps remain open, and all 20 native captures match reviewed A. Normal profiles are unchanged. Editable screensaver pages, remaining user repairs and live VPN proof remain open; no broad checkbox credit. T12 0%, T20 80%, T21 36%, Overall round(866/24) = 36%.
+Full evidence and requirement owners: [reconciliation audit](first-product-software-scope.md). Older preamble/arithmetic/next-actions are preserved in [archived checkpoints](agent-backlog-history-2026-10-25.md). Dated paragraphs below are evidence history; the current table/scopes govern status.
 
-User-requested six repairs (2026-10-23): [implementation and integration evidence](studio-six-fixes-2026-10-23.md) records full-d's 27/27 native pass, all three graphical journeys and all 28 graphical captures reviewed. Studio Demo explicitly adopts the three starter page links with its design/existing pages preserved; Household is unchanged. The subsequent desktop identity/Registry fix passes actual compositor permission and Home return from an independently focused desktop application in default-apps full-c; all five captures reviewed. Later full D/E/F retain the implementation and pass 28/28 native registrations. Current release `c956d7400d936ed079c471bb` is deployed. Broader design and installed native-app gates remain open. No task checkbox or percentage credit yet: T20 80%, T21 36%, Overall round(866/24) = 36% across 24 active tasks.
-
-User-requested default apps (2026-10-23): Kodi, a SmartTube-like YouTube client with user-controlled ads/API options, Spotify, CBC Gem, Prime Video, Disney+, Paramount+, Crunchyroll, Netflix, Peacock and Steam. The user accepts an equivalent to Android-only SmartTube; FreeTube supplies Linux support, optional Invidious and user-controlled SponsorBlock. This explicitly authorizes the related native provisioning/default package/Steam Games-backend slice without waiting for the remaining Studio tasks. Native downloads, browser-runtime web apps and Steam Big Picture are being implemented and verified; registration alone is not proof of downloaded programs or subscription playback. No percentage credit.
-
-Default-app checkpoint (2026-10-24): [implementation, downloads and blocker evidence](default-apps-2026-10-23.md) records actual native package downloads, all eleven registrations, supplied artwork, Steam Games routing and unchanged normal layouts. Full G passes 28/28 native registrations in 282.51 seconds and all three installed functional graphical journeys; all 28 graphical and 20 native captures reviewed (native captures identical to reviewed D). Installed Steam reaches its own installer, then fails Ubuntu's nested sandbox capability policy; CBC's browser exits safely, and the corrected FreeTube launch reports an unusable Electron SUID sandbox helper. Automatic approval review rejects the proposed unconfined-wrapper/AppArmor exception; no security change is applied. Native clients and subscription playback remain unaccepted; broader design gates remain open. No checkbox credit: T20 80%, T21 36%, Overall round(866/24) = 36% across 24 active tasks.
-
-Native compatibility follow-up (2026-10-24): the user explicitly approves the exact Isolde-Test wrapper/AppArmor paths and scope. Implementation passes full A's 28/28 registrations in 289.61 seconds and is deployed as `5f8701685636756747b35ad9`. User-authorized guest password recovery and authentication now install/load the approved files. Configure F repairs a group-writable directory created by the administrator's mask; native isolation passes, with service/layouts preserved. All three controlled startup diagnostics pass after importing the graphical session environment. The actual clients journey exposes old failed package state routing FreeTube to Store; its three captures are reviewed. Full B tests the permission regression and a visible Retry Setup journey. Complete actual client UI/bootstrap/playback acceptance; do not request the same exception approval again. No additional sandbox-disable flags are applied. No percentage credit: T20 80%, T21 36%, Overall round(866/24) = 36% across 24 active tasks.
-
-Native launch/return checkpoint (2026-10-24): [runtime evidence](default-apps-2026-10-23.md) records passing `native-return-20261024-full-c` (28/28, 143-second CTest XML; 20 native captures identical to reviewed predecessors), deployed as `e2ca6970d5732c8fe3f739e2`. All three actual installed app journeys pass: Steam downloads its client and reaches Big Picture sign-in; FreeTube opens its real interface; CBC Gem loads its provider site but reports unavailable outside Canada. Physical Home returns and exact app-collection selection restoration are reviewed in all 12 app captures. Native launches now require the existing compositor return grant and retain the authored page during startup. Current-source Studio/Home/Pastel functional graphical regressions also pass; all 28 fixture captures reviewed (40 graphical total). No account login, subscription playback or gameplay is claimed; broader visual acceptance/offline/hardware gates remain open. No checkbox credit: T20 80%, T21 36%, Overall round(866/24) = 36% across 24 active tasks.
-
-User-authorized prerequisite (2026-10-23): implement T21.9 and its necessary carousel/provider support while keeping T20 and its visual gate open. This explicit sequencing exception resolves the reported T20 -> T21.9 -> T20 cycle; it does not waive tests, visual acceptance, profile isolation, or any task requirement. No checkbox credit yet: T20 80%, T21 36%; Overall round(866/24) = 36% across 24 active tasks.
-
-T21.9 implementation (2026-10-23): [genuine history and collection fixture prerequisite](studio-history-prerequisite-2026-10-23.md) records bounded mixed Kodi history, a dedicated catalog family, independent result-count/capacity controls, the updated Pastel source and production-component fixture. Full-d passes 26/26 native registrations in 127.74 seconds and all three functional graphical journeys; all 18 native and 23 graphical captures reviewed. Pastel now has populated production collections, but supplied app artwork, recent-card proportions and graphical overflow remain open. User-requested next repairs: actual app icons, Games/Music pages, Guide routing, top-right Web switch and real Desktop handoff. These explicit requests authorize the affected T21/T11/T28/T12 slices without closing their broader gates. Installed release/normal profiles unchanged. No checkbox credit: T20 80%, T21 36%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 dependency audit (2026-10-23): [requirement/evidence audit and sequencing block](studio-t20-completion-audit-2026-10-23.md) verifies the committed root/nested installed parity evidence and the remaining failed populated Pastel standing gate. Its required real carousel/fixture rebuild belongs to T21.9, while strict order requires T20 before T21. The user subsequently authorized that prerequisite with T20 still open, resolving the sequencing block without weakening the gate. T20 80%, T21 36%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 nested installed extension (2026-10-23): [pointer evidence record](studio-installed-pointer-2026-10-23.md) now includes an actual UI-authored eight-input group, occupied-child remote/pointer movement, held-drag cancel and exact group Undo. Full-a passes 25/25 native registrations in 275.45 seconds and the extended installed desktop journey; all ten graphical captures reviewed. Complete group Undo and pointer/remote saved equality pass, with unchanged normal profiles. Visual acceptance/Pastel remain open, with T21.9 sequencing clarification pending; no checkbox credit. T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 installed pointer work (2026-10-23): [actual X11 replay and pending verification](studio-installed-pointer-2026-10-23.md) adds an opt-in desktop journey comparing remote/pointer saved bytes and held-drag Back/release. Full-a passes native but fails fixture selection before pointer input. Full-b repairs explicit selection, passes 25/25 native registrations in 225.65 seconds and the installed desktop replay; all seven graphical captures reviewed. Remote and pointer saved bytes match, held-drag Back/release writes nothing, and normal profiles are unchanged. Nested installed/TV usability and populated Pastel remain open; the T21.9 dependency is surfaced for sequencing clarification. T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 installed checkpoint (2026-10-23): [VM deployment and explicit limits](studio-installed-2026-10-23.md) activates full-d release d87a5f1475b036da6b5e55a8 and verifies its executable against the passing 25-test payload. All three installed functional graphical journeys pass; all 23 captures reviewed. Normal profile hashes are unchanged; service active/running with zero automatic restarts. Installed pointer-drag parity, genuine TV usability and populated Pastel acceptance remain open. No checkbox credit: T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 standing visual audit (2026-10-23): [functional versus visual evidence](studio-reference-evidence-2026-10-23.md) removes false component-support/empty-missing claims from reference save/reset reports. Collection population and semantics remain explicitly unverified, including linked-page widgets. VM oracle self-tests pass 21/21 and focused destinations pass in 16.92 seconds; application bytes retain full-d evidence. Pastel rebuild is an explicit T21.9 dependency, not an accepted recreation. T20 installed evidence remains next; no checkbox credit. T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 cross-section movement (2026-10-23): [view restoration and contextual destinations](studio-section-targets-2026-10-23.md) repairs Back losing All sections view after a cross-section group preview, and identifies targets by section/parent path. Focused run c passes actual remote/pointer transfer, exact cancellation and undo in 13.86 seconds. Full-d passes 25/25 native registrations in 276.05 seconds, including both overview/isolated replay rows, plus all three functional graphical journeys. All 23 captures reviewed; populated Pastel and professional default/Inspector acceptance remain incomplete. Installed release and normal profiles are unchanged; no checkbox credit. T20 remains 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 movement policies (2026-10-23): [overlapping layers and full-grid replay matrix](studio-movement-policies-2026-10-23.md) fixes overlap-aware proposals, exposes a remote/pointer overlap control, preserves locked backgrounds and verifies full/mixed/locked grid parity with reduced motion. Full-b passes 25/25 native registrations in 228.58 seconds and all three functional graphical journeys; all 23 captures reviewed. Populated Pastel recreation and professional default/Inspector acceptance remain incomplete. Normal profiles and installed release are unchanged. No checkbox or deployment credit: T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 ordered insertion (2026-10-23): [nested row/column and carousel movement](studio-ordered-insertion-2026-10-23.md) adds shared visual insertion with preserved spans/gaps/capacity, locked refusal, remote/drag/menu-started pointer parity and bounded nested edge scrolling with exact cancel/undo. Full-g passes 23/23 native registrations in 227.23 seconds, including the new native transaction test. Navigation is partitioned into runtime/Studio registrations without dropping scenarios or increasing timeouts. All three functional graphical journeys pass; all 23 captures reviewed. Lounge composition passes; populated Pastel recreation remains incomplete. No deployment or checkbox credit: T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 explicit group targets (2026-10-23): [named destinations and movement coverage audit](studio-group-targets-2026-10-23.md) adds Move into group, safe target filtering, pointer cell selection and named Place/Options/Cancel controls through the shared transaction path. Run c passes seven focused Studio suites; full-e passes 21/21 native suites in 198.03 seconds. All three functional graphical journeys pass and all 23 captures are reviewed; Pastel reference recreation remains incomplete. Normal profiles and installed release are unchanged; no deployment or checkbox credit. Remaining nested-row/carousel, mixed-size/decorative/reduced-motion and installed acceptance requirements are explicit. T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 page-layout slice (2026-10-23): [visual page-grid controls and acceptance limits](studio-page-grid-2026-10-23.md) adds real-metric diagrams, bounded steppers/sliders, optional exact input, preserved placed groups/locks and geometry-ready section previews. Focused six-suite Studio run c passes in 97.28 seconds. Sparse control fixtures are explicitly distinguished from populated Home acceptance; earlier populated captures retain visible art/proportion gaps. Full-d passes 20/20 native suites and all three functional graphical journeys; all 23 captures reviewed. Lounge composition passes; Pastel recreation remains incomplete because its collection data is missing. Normal profiles and installed release remain unchanged. No checkbox or deployment credit: T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-T20 implementation slice (2026-10-23): [pointer movement, visual arrangement and group-layout controls](studio-pointer-parity-2026-10-23.md) adds scroll-aware dragging, held-drag Back/release protection, ordered insertion without conversion, shared resize/reflow, bounded pointer edge growth, a visual alignment pad and live group-layout controls through the normal Inspector. Final full-d passes 19/19 suites in 173.64 seconds plus the staged Studio journey; all 15 graphical and nine offscreen control captures reviewed. Both normal profiles and installed release are unchanged. Earlier full-b save/reset flows pass, but screenshot review leaves Pastel's isolated-profile reference composition incomplete (one app/unavailable history). T20.5 stays open for remaining page-grid controls, input/policy matrix and installed acceptance; existing rough UI is not accepted polish. T20 80%; Overall round(866/24) = 36% across 24 active tasks.
-
-User-selected four-fix slice (2026-10-22): [card navigation, library pages, full Studio view and spatial color input](studio-four-fixes-2026-10-22.md) owns the requested fixes under existing T21.7/T21.9/T21.10/T21.12 gates. Full-g passes 18/18 suites and both reviewed visual save/reset journeys; release `fc815f2341cb375a0b809118` is installed. Studio Demo has real editable Movies/TV pages and both visible Studio carousels; direct history-card navigation, spatial Left input and restart persistence are checked. Household is unchanged. No broad task checkbox credit: T21 36%, Overall round(866/24) = 36% across 24 active tasks.
-
-Live pastel implementation (user, 2026-10-21–22): [installed checkpoint and remaining gates](studio-live-carousels-2026-10-21.md). Full-c passes 18/18 suites and both reviewed visual save/reset journeys; release `a72852697c1f50e138161a63` is installed. Studio Demo explicitly applied Pastel with actual app/history collections; six watched movies, playback/reorder/focus return and actual Spotify launch are evidenced. Complete installed acceptance remains OPEN: native Home return is unverified, and a startup shelf-recovery follow-up is under test. Guest-only maintenance is authorized by the standing machine boundary. T21 36%; Overall round(866/24) = 36% over 24 active tasks.
-
-User acceptance gate (2026-10-21): [Pastel Home with live carousels](design/page-studio/pastel-live-acceptance.md) requires normal installed Home to show the pastel skin, a real installed-app collection and seeded Kodi Recently watched history including completed and partial videos. Recently Added, Continue Watching alone, static illustration buttons and editor-only previews fail. Applies to existing T21.6/T21.7/preset adoption/T24.2; currently NOT MET. No new weighted task, priority change or completion credit: T21 36%; Overall round(866/24) = 36% across 24 active tasks.
-
-User-requested Kodi demo data (2026-10-21): [persistent Studio Demo library](studio-demo-library.md) provides eight movies, two shows/six episodes, local artwork and verified Kodi watch/resume state in a separate active VM profile. Actual bridge queries and clip decoding pass; Household layout and installed release are unchanged. No page migration, application build, selection/slider acceptance or task credit is claimed. T21 36%; Overall round(866/24) = 36% across 24 active tasks.
-
-User-selected selection/control slice (2026-10-21): [implementation and verification status](studio-selection-2026-10-21.md) records actual Home focus rendering in Studio, shape-aware transparent recovery and real boolean switches. New bounded `studio_selection` tests are added but not run: the VM runner stopped before build at its 2 GiB capacity guard; precise rejected-payload cleanup approval remains pending. No cleanup, completion credit, commit or deployment is claimed. T21.11/T21.12 remain open; 24 active tasks, Overall round(866/24) = 36%.
-
-Optional long pages (user, 2026-10-21): [scrolling-page contract](design/page-studio/scrolling-pages-2026-10-21.md) adds a per-page Allow vertical scrolling checkbox. Off preserves a one-screen boundary; On allows validated downward growth without shrinking components. Include configured-component retention on no-room Add, live bottom-edge growth/reflow, exact cancel/undo/scroll restore and safe disable preview. Mandatory scope of existing open T19.6/T20.5/T21.11/T23.4/T24 gates; no new task IDs or completion credit. Overall remains round(866/24) = 36%.
-
-Control audit (user, 2026-10-21): [visual control replacement requirements](design/page-studio/control-audit-2026-10-21.md) adds property-specific sliders, steppers, switches, segmented choices, visual crop/layout/app selection and relevant exact-input alternatives to existing open T20.5/T21 gates, with T22 inheritance and T24 acceptance. Source review also found the current painted color wheel always writes red; T21.10 remains open until real remote/pointer color selection is verified. Preserve existing execution order and all completion credit: Overall round(866/24) = 36%. This is a static audit/design update, not an application or VM change.
-
-Approved usability expansion (user, 2026-10-21): [15 selected features and acceptance requirements](design/page-studio/usability-expansion-2026-10-21.md) is mandatory scope for the existing open T21–T24 gates. Includes component presets, My components, copy appearance, linked styles, content-slot templates, replacement in place, section isolation, responsive rules, content stress tests, private reference overlay, action search, useful empty states, named versions, household editing permissions and page health checks. The five declined ideas are excluded from this expansion. Finish T19.6 → T20.5 first; no new task IDs, checkbox credit or priority changes. Overall remains round(866/24) = 36%.
-
-Follow-up UX findings (2026-10-20): the selection/header/tool-organization section of [the usability audit](design/page-studio/usability-audit-2026-10-20.md) adds T21.12-T21.14. Studio selection follows the authored Home focus style, header elements are directly editable, and ordinary tools receive named homes instead of a mixed More menu. Controls must be discoverable without persistent instructional prose. Current T21 = 5/14 = 36%; Overall round(866/24) = 36%. Earlier calculations below are historical checkpoints. No implementation credit is added.
-
-Latest usability correction (user, 2026-10-20): [UI audit and interaction contract](design/page-studio/usability-audit-2026-10-20.md) supersedes hex-first colors, top-level Width/Height, buried deletion, Move before/after and mandatory normal-drop Shift dialogs. Context becomes Move/Edit component/Duplicate/Delete; size is inside Edit component; visual color picking includes a remote-operable wheel; movement previews neighbors making room and accepts one reversible transaction. First finish T19.6, then T20.5, then T21's remaining gates before T22. Earlier checked boxes retain historical checkpoint credit, not acceptance of the rejected UX. T19 5/6 = 83%, T20 4/5 = 80%, T21 5/11 = 45%; Overall round(858/24) = 36%. This is a design/audit update only.
-
-User component clarification (2026-10-20): [component contracts](design/page-studio/component-contracts.md) supersedes the earlier six-family taxonomy where different. App and Recently viewed rows must be genuine configurable collections, not hand-placed illustrated buttons. At that component-definition checkpoint T21 retained five historical boxes and added four open gates (56%; Overall 38%); the newer usability audit above adds further gates and supplies current percentages. No new implementation is claimed by this design update. T22 waits for the reopened T21 gates. Existing saved layouts are not rewritten.
-
-Reference-driven UX audit (2026-10-20): [reference-design-audit.md](design/page-studio/reference-design-audit.md) is an Entry doc for T17-T24. Required scope additions: T17 bounded child layout/ratios; T18 unobscured selection/context placement; T19-T20 alignment/distribution/groups; T21 Section/Group tool, independent card/label styling, state/typography/surface controls and honest live/sample states; T22 editable patterns/style reuse and private editor-only reference image overlay; T23 reference/export isolation and error recovery; T24 reconstruct both user references with generic editable components and record uncoached journeys. Arbitrary screenshot conversion and unavailable service/device capabilities are not promised. No boxes are checked by this audit; task percentages and Overall remain unchanged.
-
-Direct-edit refinement (user, 2026-10-19): the latest section of [Page-first Studio](design/page-studio/page-first-design.md#latest-refinement-direct-screen-editing) supersedes Confirm-picks-up and primary Preview controls. The actual runtime-rendered screen is edited live in a draft. Confirm selects; context offers Move, Width, Height and Edit component. Buttons and images share None/Open page/Supported action links. Optional Try interaction is secondary; Apply remains explicit. T18/T19/T21/T23/T24 must verify these journeys; no task credit changes from this planning refinement.
-
-UX revision (user feedback, 2026-10-19): read [Page-first Studio](design/page-studio/page-first-design.md) before T17-T24/T27. Full-size page, overlaying left page menu, single context windows and protected movable Home designation replace the provisional toolbar/fitted-preview shell. T16 backend evidence remains valid; neither the revised design nor the interactive concept is implemented acceptance. Percentages remain unchanged. Minimum Settings/Home theme inheritance is required before T24 cutover; T27's remaining shell adoption follows T24.
+## Active task scopes — in execution order
 
 ## T15 — Page Studio interaction design and usability validation (M, depends: none; selected priority)
 Entry docs: `docs/page-studio-redesign.md` sections 1-4, 10-11; `docs/shell-surfaces-design.md` sections 1-6; `docs/interface-design.md` Page Studio amendment.
@@ -186,6 +123,7 @@ Scope:
 - [x] T18.4 Make blank, empty, hidden, missing-source and unreadable-draft states recoverable using remote commands and independently readable editor chrome.
 Done when: remote-only entry -> page selection/create -> component selection -> panel edit -> Back returns to the exact canvas origin; no live saves or accidental playback.
 Verify: offscreen workspace/focus/empty-state tests in `home_component_navigation`, page draft/isolation tests in `component_contracts`, and installed screenshot/key journey on the VM. Evidence: [studio-page-lifecycle-2026-10-20.md](studio-page-lifecycle-2026-10-20.md), frozen source snapshot 30, archive `c2602bd4b2e18f961b46dcb9032e6734cc2d9b5c2114766bd06064bb8de0cea5`; full 14/14 CTest (57.62 seconds), actual legacy pointer selection/outline geometry/no-dispatch regression, remote create/rename/duplicate/designate/protect/delete/undo, link remap, hidden/locked recovery, readable profile-local chrome and 720p/1080p/4K named-page viewport parity. Installed release `d29207a40cc6296737bc757f`; Studio `/tmp/isolde-components-acceptance-fv1_g0gz`, dark `/tmp/isolde-reference-config-1g6u9fkz`, pastel `/tmp/isolde-reference-config-h6gprdyl`, both recreation/reset pairs reviewed; durable host evidence `build/studio-installed-30/`. Normal Household service/executable restored, active/running, zero restarts. Earlier shell checkpoint: [studio-workspace-2026-10-20.md](studio-workspace-2026-10-20.md). Nested/group Layers, complete inspector/catalog, Apply recovery, user usability/offline Generator/cutover and source-notice containment remain in their owning later tasks. Developer entry remains until T24.
+
 ## T19 — Remote pick-up/drop, resize and collision workflows (L, depends: T18)
 Entry docs: `docs/page-studio-redesign.md` sections 4-5; T15 movement/collision wireframes. Scrolling requirements: `docs/design/page-studio/scrolling-pages-2026-10-21.md` (owning gates only).
 Entry files: `src/input/InputManager.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, shared edit session from T16, shared canvas from T17, Studio views from T18, `tests/tst_home_navigation.cpp`, `tests/tst_components.cpp`, `tools/home-components-acceptance.py` (Studio remote oracle only).
@@ -202,6 +140,7 @@ Movement repair (user, 2026-10-21): [coder review and direct reflow repair](stud
 Implementation checkpoint (2026-10-20): [first usability slice](studio-reflow-2026-10-20.md) implements the new context, direct ordered movement, live grid neighbor proposals, ordinary reflow drop/undo, primary full-span size sliders and shorter canvas feedback. Full native 14/14 passed on `studio-reflow-full-20261020`; graphical/install evidence is in that record. T19.6 complete; Current T19 100%, T20 80%, T21 36%; Overall 36% across 24 active tasks.
 Done when: remote-only add/move/resize/collision/duplicate/remove journey is complete and intelligible; accepted drops change only the draft and cancellation has zero document/history effects.
 Verify: extended native remote state sequences and transaction/boundary failures; full CTest, both fixture pairs and installed remote evidence. Evidence: [studio-remote-editing-2026-10-20.md](studio-remote-editing-2026-10-20.md), frozen application/test snapshot 37, archive `f6ca0071258dc1c31187b014810f1e6023807f2b999d4ade671476b34002188d`; all 14 CTest suites passed (58.75 seconds). Model cases cover bounded indirect cascades, complete-result validation, full-grid refusal, locks, atomic section duplication, transfer/swap/order and no-write/undo; native cases cover repeat/anchors, every gesture-panel cancellation, original/ghost/proposal visibility and scale, disabled legacy-grid metadata, section cancel/undo and existing pointer/numeric parity. Deterministic write-failure/profile/Kodi regression suites remain passing. Installed release `32aa32c0089df0a3684a858e`: expanded Studio journey `/tmp/isolde-components-acceptance-52_xorqq` (EDIT/COLLISION/RESIZE/STUDIO/APPLIED), dark `/tmp/isolde-reference-config-8hgsoxv8`, pastel `/tmp/isolde-reference-config-9cbg5mra`; all nine captures explicitly reviewed. Durable evidence `build/studio-installed-37/`, normal service/executable restored active/running with zero restarts. Nested/group Layers, alignment/distribution, complete inspector/catalog, full-product offline Generator and genuine user/cutover review remain their owning T20-T24 gates; current developer entry remains.
+
 ## T20 — Desktop parity, layers and nested/group editing (L, depends: T19)
 Entry docs: `docs/page-studio-redesign.md` sections 2, 4-7; T15 desktop and scope wireframes. Control requirements: `docs/design/page-studio/control-audit-2026-10-21.md` (owning rows only). Scrolling requirements: `docs/design/page-studio/scrolling-pages-2026-10-21.md` (owning gates only).
 Entry files: Studio/shared canvas/edit-session files from T16-T19, `src/home/ComponentSchema.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `tests/tst_components.cpp`, `tests/tst_home_navigation.cpp`.
@@ -274,8 +213,6 @@ Scope:
 Done when: the new workspace is the default usable editor, every supported operation is discoverable and remote-complete, both fixtures and rollback pass, and a representative can create/customize/preview/apply a page without coaching or accidental launches.
 Verify: `ctest --test-dir build --output-on-failure` plus installed remote/pointer journeys, both visual wrappers with explicit SourceRoot, isolated real-Kodi pages test, offline denial, failure injection, profiling and usability report using the VM runbook. Evidence: pending. Physical hardware and full appliance Generator Test remain separate product gates.
 
-## Next: related shell and presentation fixes
-
 ## T27 — Shared theme inheritance across shell surfaces (M, depends: T24)
 Entry docs: `docs/shell-surfaces-design.md` sections 1, 4, 6; `docs/page-studio-redesign.md` sections 2, 6-8; `docs/home-customization.md` planned theme amendment.
 Entry files: `src/home/HomeLayout.{h,cpp}`, `src/home/PageModel.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, `qml/Main.qml`, `qml/CommandCenter.qml`, `qml/SettingsView.qml`, `qml/KodiLibraryView.qml`, `qml/KodiSettingsView.qml`, `qml/KodiImportView.qml`, `qml/MediaFoldersView.qml`, `qml/OnScreenKeyboard.qml`, their child dialogs/views and shared appearance helpers, `tests/tst_home_navigation.cpp`.
@@ -324,9 +261,24 @@ Scope:
 Done when: Web search is visibly and behaviorally a real top-right header switch, its persisted state is truthful and accessible, and its control never masquerades as a search result or enables unintended external requests.
 Verify: QML header-switch/query/results/empty/keyboard/late-callback tests in `home_component_navigation`, preference/profile/write-failure tests, runtime network-denial regression plus updated static helper, full CTest and installed themed remote captures. Evidence: pending; T14 still owns real provider implementation/terms, and T03's existing preference model is not header-control acceptance.
 
-## Then: remaining product and release work
+## T29 — Actual Store integration: real Android and Chromium app stores (L, depends: T01,T03; current authorized slice)
 
-## T01 â€” Bootstrap + gate check (S, depends: none)
+Entry docs: `docs/android-apps-2026-10-25.md`, `docs/store-lifecycle-2026-10-25.md`, `docs/default-apps-2026-10-23.md`, `docs/actual-stores-integration-plan.md`, `docs/packages.md` §Trust boundary, `docs/unified-master-plan.txt` §15 Generator Test.
+Entry files: `src/app/StoreProvider.h`, `src/app/LocalCatalogProvider.{h,cpp}`, `src/app/AppCatalog.{h,cpp}`, `qml/AppStoreView.qml`, `qml/SettingsView.qml`, `tests/tst_isolde.cpp`, `CMakeLists.txt`.
+
+Scope:
+- [ ] T29.1 StoreProvider abstract base class + LocalCatalogProvider wrapping the existing curated catalog; StoreSearchResult data model; no external requests when offline toggle is OFF (default)
+- [ ] T29.2 AppCatalog provider integration: setProvider(), onlineStoreSearch toggle (default OFF), merged local+provider results, F-Droid verified metadata with pinned signature/trust policy, ABI/capability filtering and SHA-256 artifact verification, atomic download→verify→install into profile package root
+- [ ] T29.3 QML wiring: AppStoreView shows provider results with store badge/provenance, download progress, Install/Open/Uninstall confirmations (default Cancel), focus restoration to same card; Settings exposes online store search toggle
+- [ ] T29.4 Tests: provider rejection of unknown source, download+verify+rollback, hash mismatch, write-failure regression, profile isolation, offline-zero-requests in tst_isolde.cpp
+- [ ] T29.5 VM acceptance: real-store Android app install→launch→return→uninstall; web-app/Add by URL validation→install→launch→return→uninstall (no extension store); Generator Test passes disconnected with zero external requests
+- [ ] T29.6 Chromium remote bridge: directional visible focus, Confirm, remote text entry, scrolling/pointer fallback, Back/Home and exact origin restoration in both existing external Chrome apps and embedded web apps; no mousepad needed for the acceptance fixture
+- [x] T29.7 Android baseline: repeatable pinned/checksummed runtime/APK setup and ordinary SmartTube catalog registration, actual installed menu navigation, owned-session shutdown and exact Home return with normal layouts preserved. Excludes playback, full setup UI, actual two-profile account acceptance and appliance containment.
+- [ ] T29.8 Shared remote Store/setup/update/removal lifecycle for both platforms: actual package presence/absence before metadata changes, repeat/cancel/failure recovery, provenance/progress, exact focus, large-text usability, two-profile account/data isolation and Android containment. SmartTube must load usable content and play a real video with controls/return; spinner/network notice fails. Provider subscription/account/DRM acceptance remains explicit under T12.6.
+Done when: verified account-free F-Droid repositories and web apps/Add by URL work through remote controls; runtime/setup/lifecycle, SmartTube content/playback and all eight gates pass, offline default is silent and both references pass. Superseded Google Play/GAPPS/credential/Chrome-extension proposals are excluded.
+Verify: full CTest, real-source and baseline Store/update/open/return/remove, local input fixture plus actual external/embedded Chromium, SmartTube playback, two-profile tests and disconnected Generator Test. T29.7 evidence: `docs/android-apps-2026-10-25.md`, `build/vm-oracle/android-apps-20261025-b/report/ctest.log` (31/31), seven reviewed frames `visual/androidapps/attempt-20261025-182448-750/`, release `e0ba5049bc8f9e9dfd500241`. Store G has 31/31 and functional lifecycle on `014674ec29d7dfb787fd8ca9`, but retained review/semantic acceptance is pending; online Store C has three focused passes only. See the scope audit. T29 = 1/8 = 13%; no broad acceptance from in-flight scaffolding.
+
+## T01 — Bootstrap + gate check (S, depends: none)
 Entry docs: `README.md`, `docs/implementation-order.md:19-38`, `tests/visual/home-reference/README.md`.
 Entry files: `CMakeLists.txt`, `tools/home-reference-acceptance.py`.
 Scope:
@@ -336,7 +288,7 @@ Scope:
 Done when: all currently registered Linux suites pass and both fixtures have recreation/reset evidence tied to the tested source.
 Verify: exact configure/build/CTest logs, source identity, result.json and screenshot pairs. Historical fixture evidence: `tests/visual/home-reference/last-review.json`, `tests/visual/home-pastel-reference/last-review.json`; historical TV evidence: `/tmp/isolde-tv-acceptance-m986n9dt/result.json` (guest; retention not verified). T01.1/T01.2 retain historical credit; rerun before closing T01.3. The earlier claim of Linux configure/build/CTest passing in the Windows environment with wildcard evidence was unsupported and is withdrawn. See [planning audit](planning-audit.md) and [VM oracle](vm-oracle.md).
 
-## T05 â€” Studio grid renderer consumes placements (M, depends: T01)
+## T05 — Studio grid renderer consumes placements (M, depends: T01)
 Entry docs: `docs/studio-builder.md` Universal grid, `docs/home-composition.md` Universal grid.
 Entry files: `src/home/HomeLayout.h`, `src/home/ComponentSchema.h`, `qml/ComposedHome.qml`, `qml/PageSurface.qml`.
 Scope:
@@ -346,10 +298,13 @@ Scope:
 Done when: renderer consumes grid, no new schema file, fixtures green.
 Verify: `universalGridValidatesAndPersists` + QML geometry tests + fixture pair. Evidence: data contract `HomeLayout::grid()/setGrid()/setItemPlacement()/gridCollisions()` + `ComponentSchema::validGrid()/validPlacement()` + `universalGridValidatesAndPersists` test; QML renderer `ComposedHome.qml` consumes grid via `placementMode`, `placementCell`, `placedItems`, `placementGrid` (snap-only, overflow refused, empty cells valid, 16:9 scale, guides edit-mode only). Source credit only for T05.1/T05.2; current-source geometry/CTest logs and both fixture pairs are still required. Current installed release `deacfc0b6d02d96d759303da` passes 14/14 suites and both reviewed recreation/reset pairs; see `docs/vm-update-2026-10-19.md`. Placement-specific geometry/empty-cell/scale acceptance remains open, so T05.3 stays unchecked.
 
-## T03 â€” Local search over Kodi library (M, depends: T01; curation adapters removed from scope)
+
+Reconciliation (2026-10-25): T17 already supplies the placement/empty-cell/scaling evidence in `studio-geometry-2026-10-20.md`; reuse it rather than reimplementing geometry. T05.3 remains open for source-applicability and full visual closure; known Pastel gaps prevent treating functional reset as convincing recreation.
+
+## T03 — Local search over Kodi library (M, depends: T01; curation adapters removed from scope)
 Entry docs: `docs/unified-master-plan.txt` Sec 13, `docs/kodi-media.md`.
 Entry files: `qml/CommandCenter.qml`, `src/home/PageData.h`, `qml/Main.qml` (openSearchFromPage).
-Scope (Kodi-bridge only â€” no tag/playlist/curation adapters; those were T02, struck):
+Scope (Kodi-bridge only — no tag/playlist/curation adapters; those were T02, struck):
 - [x] T03.1 Kodi title search (Movies/Shows/Episodes) with per-type bounded paging, debounce + cancel-aware, explicit Kodi-unavailable state
 - [x] T03.2 Persisted Web OFF/ON toggle data model default OFF (OFF = zero external requests; ON path stubbed, no endpoint wired)
 - [x] T03.3 Page-scoped sources via `pageSearchSources()` surfaced + routed back to originating page
@@ -357,7 +312,7 @@ Scope (Kodi-bridge only â€” no tag/playlist/curation adapters; those were T
 Done when: offscreen Command Center + bridge bounds tests pass, Web OFF provably silent.
 Verify: component suite `pagesPersistAndRouteAndTravelWithSkins`, network-denial check. Evidence: T03.3 done per Oct-18 M4 (PageModel::pageSearchSources, CommandCenter pageSources, Main openSearchFromPage). T03.1/T03.2/T03.3 done per Oct-18 M4 with 8/8 static checks passing (verify-t03-search.py). T03.4 manual acceptance only.
 
-## T04 â€” Complete Kodi interface, preservation and import (L, depends: T01)
+## T04 — Complete Kodi interface, preservation and import (L, depends: T01)
 Entry docs: `docs/master-roadmap.md` steps 1-2, `docs/install.md`.
 Entry files: `src/media/KodiService.h`, `src/sessions/DesktopSession.h`, `src/media/KodiImporter.{h,cpp}`, `qml/KodiImportView.qml`.
 Scope:
@@ -372,59 +327,52 @@ Additional Entry docs: `docs/kodi-complete-interface-2026-10-25.md`, `docs/kodi-
 Done when: real round-trip preserves skin+sources+watch-state, import rollback is tested, and T04.4–T04.7 complete through Isolde without required Kodi menus/settings. Playback controls share T09 gates; all profile, offline and visual requirements remain.
 Verify: appliance/vm acceptance with disposable fixture (hashes unchanged). Evidence: docs/kodi-media.md remembered media folders + nested discovery + direct playback done (hashes unchanged); T04.1/T04.2 remain open: importer/UI/setup source exists (`6ff2bcb`), but import does not transfer settings and rollback copies onto existing files. No safe installed preservation/rollback evidence; see `docs/planning-audit.md`.
 
-## T12 â€” System polish + input + on-screen keyboard (M, depends: T05)
-Entry docs: `docs/architecture.md` Audio/Remote, `docs/development-plan.md` keyboard, `docs/interface-design.md`.
+## T12 — System polish + input + on-screen keyboard (M, depends: T05)
+Entry docs: `docs/vpn-setup-2026-10-24.md`, `docs/vpn-switch-permission-2026-10-25.md`, `docs/product-feedback-2026-10-25.md`, `docs/default-apps-2026-10-23.md`, `docs/architecture.md` Audio/Remote, `docs/development-plan.md` keyboard, `docs/interface-design.md`.
 Entry files: `src/input/InputManager.h`, `src/settings/*.h`, `qml/OnScreenKeyboard.qml`.
 Scope:
 - [ ] T12.1 Audio/display/power/network onboarding polish, a11y/l10n, reduced-motion/contrast
 - [ ] T12.2 On-screen keyboard for Isolde-owned fields first (Network Settings, Store search): D-pad/Back/shift/symbols/focus-restore, never obscures field, passwords masked
-- [ ] T12.3 Remote-only journey + offline-denial tests
-Native-app return requirement (user, 2026-10-22; part of T12.3, no additional weighted checkbox): Isolde owns a configurable **Return to Isolde** binding, with Home as the default and a remote-accessible remapping control. It must work while an external native window has focus, invoke the existing SessionManager/native-host lifecycle, request graceful shutdown of only the owned app session, and restore the exact originating carousel card. Ordinary Back stays available to the app. Do not build a table of application-specific quit shortcuts or a Spotify exception. An optional per-app **Quit shortcut** override may be recorded through a friendly key-capture control as validated declarative input data; it is not required for Home to work, cannot contain commands/scripts, and must never target another profile/session. If an app refuses shutdown, expose an explicit close/recovery choice rather than silently killing unrelated processes. Verify with an app that ignores quit shortcuts, remapped remote input, native focus capture, bounded shutdown/recovery, profile isolation and exact carousel focus return. Spotify's user-reported Ctrl+Shift+Q is a motivating example, not a hard-coded rule. Planning only; no implementation/completion credit. T12 remains 0%; overall accounting is unchanged.
+- [ ] T12.3 Complete remote-only input/keyboard/universal-return plus offline-denial matrix: remapping, real external focus, app ignoring quit shortcuts, denial/cancel/hang/retry, exact origin and profile teardown. Reuse native-return full-C proof; physical-device qualification is H01/H02.
+- [ ] T12.4 Complete themed remote VPN setup: repeatable provisioner, approved profile-only capture/switch/disconnect, saved Canada/US, actual TCP/DNS/IPv4/IPv6 country checks and automatic CBC Canada routing/return/rollback without affecting unrelated connections. Handshake-only evidence fails.
+- [ ] T12.5 Author profile-owned screensaver pages with shared widgets/slideshows/text/managed GIFs/heroes, selection/rotation/reduced motion, timed idle above ordinary overlays, single-key dismissal without click-through and exact focus restoration. Retain the verified layering repair.
+- [ ] T12.6 Per-app support matrix and actual default-app setup/login/content/playback/return/failure journeys, including Disney+ and other owned apps; containment and account/profile behavior. Registration, sign-in or region errors are not playback acceptance. No unsupported substitute for a promised app capability.
+Native-app return requirement (user, 2026-10-22; part of T12.3, no additional weighted checkbox): Isolde owns a configurable **Return to Isolde** binding, with Home as the default and a remote-accessible remapping control. It must work while an external native window has focus, invoke the existing SessionManager/native-host lifecycle, request graceful shutdown of only the owned app session, and restore the exact originating carousel card. Ordinary Back stays available to the app. Do not build a table of application-specific quit shortcuts or a Spotify exception. An optional per-app **Quit shortcut** override may be recorded through a friendly key-capture control as validated declarative input data; it is not required for Home to work, cannot contain commands/scripts, and must never target another profile/session. If an app refuses shutdown, expose an explicit close/recovery choice rather than silently killing unrelated processes. Verify with an app that ignores quit shortcuts, remapped remote input, native focus capture, bounded shutdown/recovery, profile isolation and exact carousel focus return. Spotify's user-reported Ctrl+Shift+Q is a motivating example, not a hard-coded rule. Native-return full C has actual client launch/Home-return evidence; complete remapping/failure/all-app acceptance remains open. T12 stays 0%.
 Done when: keyboard + polish acceptance passes without breaking fixtures.
-Verify: input/a11y tests + installed remote run. Evidence: InputManager commands + AudioSettings/RemoteSettings/NetworkSettings/DisplaySettings pages + mixer doubles + volume/remote acceptance exist; `qml/OnScreenKeyboard.qml` exists and is used by Network Settings and Store; remote journey/masking/visibility/focus evidence remains required; a11y/l10n/reduced-motion incomplete. All boxes open.
+Verify: input/a11y tests + installed remote run. Evidence: InputManager commands + AudioSettings/RemoteSettings/NetworkSettings/DisplaySettings pages + mixer doubles + volume/remote acceptance exist; `qml/OnScreenKeyboard.qml` exists and is used by Network Settings and Store; remote journey/masking/visibility/focus evidence remains required; a11y/l10n/reduced-motion incomplete. All six boxes remain open; partial foundations do not complete these broad gates.
 
-## T09 â€” Playback preference + viewing options (M, depends: T24)
+## T09 — Playback preference + viewing options (M, depends: T24)
 Entry docs: `docs/unified-master-plan.txt` Sec 16, `docs/kodi-media.md`.
 Entry files: `src/media/KodiMedia.cpp`, `src/settings/SetupState.h`, `qml/SettingsView.qml`.
 Scope:
-- [ ] T09.1 `Settings â†’ Media â†’ Playback Preferences â†’ Always Play Locally When Available` default ON
-- [ ] T09.2 ON: local match from shelf/search plays/resumes immediately via Kodi; series tile â†’ episodes unless Continue/Play-Next; details via context menu
+- [ ] T09.1 `Settings → Media → Playback Preferences → Always Play Locally When Available` default ON
+- [ ] T09.2 ON: local match from shelf/search plays/resumes immediately via Kodi; series tile → episodes unless Continue/Play-Next; details via context menu
 - [ ] T09.3 OFF: Web ON discovery may show viewing-choices; library shelves still direct; resume/subtitle/watched retained via Kodi
 - [ ] T09.4 6-row Sec-16 acceptance table passes on installed build
 Done when: direct-play matrix verified, Web OFF silent.
-Verify: playback acceptance (movie shelf/search, Continue resume, seriesâ†’episodes, OFF unchanged). Evidence: partial â€” direct Kodi playback/resume, Continue Watching (inprogress), seriesâ†’episodes, shared player path exist per docs/kodi-media.md; Always-Play-Locally preference + viewing-choices page + 6-row table open.
+Verify: playback acceptance (movie shelf/search, Continue resume, series→episodes, OFF unchanged). Evidence: partial — direct Kodi playback/resume, Continue Watching (inprogress), series→episodes, shared player path exist per docs/kodi-media.md; Always-Play-Locally preference + viewing-choices page + 6-row table open.
 
-## T10 â€” Capture + HDMI + audio editors, gated (L, depends: T24)
+## T10 — Capture + HDMI + audio software and editors (L, depends: T24)
 Entry docs: `docs/master-roadmap.md` capture section, `docs/audio.md`, `docs/remotes.md`.
 Entry files: `src/media/CaptureController.h`, `src/settings/AudioSettings.h`, `qml/CaptureSettingsView.qml`.
 Scope:
-- [x] T10.1 Fake-backend state-machine + protocol/action-schema/dispatch unit tests (software only, no hardware claims)
-- [ ] T10.2 Real RS-232/capture/audio/latency/hotplug matrix qualification
-- [ ] T10.3 Capture-input editor + 8-input HDMI switcher editor + audio-routes editor + keyboard/remote integration (only after T10.2)
-Done when: hardware matrix signed off; VM-only never counted as live pass.
-Verify: `tst_capture` + hardware matrix log. Evidence: CaptureController (devices/formats/inputs/serial/commandTemplate) + HDMI-inputs settings page exist; hardware qualification + device editors open per docs/implementation-order.md:49.
+- [x] T10.1 Fake-backend state-machine + protocol/action-schema/dispatch unit tests (software only, no hardware claims).
+- [ ] T10.2 Complete production capture/RS-232/HDMI/audio adapter contracts, capability reporting, cancellation/reconnect/timeout/error recovery. Test OS boundaries through virtual devices/protocol fixtures; publish the H04 physical matrix and numeric measurement procedure. Unknown hardware remains visibly unqualified.
+- [ ] T10.3 Complete capture-input, eight-input HDMI switcher and audio-route editors through shared schema/appearance/actions, remote keyboard/focus, ownership, preview/cancel/atomic save and installed VM integration. Software editors no longer wait for physical qualification; hardware-specific choices remain capability-gated.
+Done when: complete software control/editor paths pass native/QML/installed VM success/failure/recovery. H04 separately qualifies signal/protocol/audio/latency/hotplug; virtual success never establishes hardware support. This supersedes the older hardware-first editor restriction.
+Verify: `tst_capture`, schema/dispatcher/settings/input tests, full CTest and installed virtual-device editor journeys via the bounded runner. Evidence: existing CaptureController/protocol/fake-backend and HDMI Settings foundation retains T10.1; full software adapters/editors and H04 remain open.
 
-## T11 â€” Guide / PseudoTV (L, depends: T24)
+## T11 — Guide / PseudoTV (L, depends: T24)
 Entry docs: `docs/unified-master-plan.txt` PseudoTV Sec 1-10, `docs/implementation-order.md:50`.
 Entry files: `src/media/` (new guide store), `qml/GuideView.qml` (new), `qml/ComposedHome.qml` (compact widget).
 Scope:
-- [ ] T11.1 Inspect actual backend first, then PVR or playlist/EPG adapter; compact widget (3-5ch + progress) â†’ overlay â†’ full EPG
+- [ ] T11.1 Inspect actual backend first, then PVR or playlist/EPG adapter; compact widget (3-5ch + progress) → overlay → full EPG
 - [ ] T11.2 SQLite WAL store (channels/rules/slots/migrations), persisted broadcast clock (real-time/pause-when-off/fixed/shuffle), stable committed slots, targeted repair, no global reindex on guide open
 - [ ] T11.3 12-hour-off seek test + restart-stability (7-day shuffle unchanged) + Cartoon-Network-in-one-save + offline cached listings
 Done when: Sec-10 acceptance tests pass with evidence.
-Verify: guide acceptance log + DB slot-stability tests. Evidence: none â€” no guide store/widget/EPG in tree; guide-summary cards are static config per docs/home-composition.md (no backend). All open.
+Verify: guide acceptance log + DB slot-stability tests. Evidence: none — no guide store/widget/EPG in tree; guide-summary cards are static config per docs/home-composition.md (no backend). All open.
 
-## T13 — Appliance + release distribution (L, depends: T01,T03-T05,T09-T12,T15-T28; T14 optional before release)
-Entry docs: `docs/install.md`, `docs/packages.md`, `docs/architecture.md` appliance.
-Entry files: `tests/test_appliance_install.py`, `tests/test_recovery.py`, `src/recovery/Recovery.qml`.
-Scope:
-- [ ] T13.1 Dedicated compositor/autologin, clean-machine onboarding, signed artifacts, offline dependency/model manifests
-- [ ] T13.2 Repair/rollback + recovery media (`isolde-recovery`), explicit disk-selection consent
-- [ ] T13.3 Fresh install + cold boot + power-loss + failed-upgrade + disconnected Generator Test on target hardware
-Done when: public-release gate passes. Release cannot precede this.
-Verify: appliance_install + appliance_recovery + Generator Test log. Evidence: partial foundation â€” install-appliance.py (Ubuntu 26.04 dev/pilot only), wait-for-display gate, atomic content-addressed releases, isolde-recovery, rollback path exist per docs/install.md; dedicated compositor/autologin/signed images/offline media/first-run wizard/hardware Generator Test all open.
-
-## T14 â€” Optional online discovery + linguist subtitles (M, depends: T03; may run after T13)
+## T14 — Optional online discovery + linguist subtitles (M, depends: T03; retained in first-product software scope)
 Entry docs: `docs/implementation-order.md:53-54`, `docs/unified-master-plan.txt` Sec 13-15.
 Entry files: `qml/CommandCenter.qml`, `src/media/KodiMedia.cpp` (subtitle load path).
 Scope:
@@ -433,26 +381,78 @@ Scope:
 Done when: OFF-silent + provenance tests pass; provider gate documented.
 Verify: network-denial + subtitle provenance tests. Evidence: persisted Web preference exists and ON remains an unavailable provider stub; T28 owns its header-switch UX, not a provider implementation. No linguist/SRT implementation evidence; T14 remains open.
 
+
+Scope reconciliation: T14 remains active for S1 rather than silently removing optional-before-release features from the denominator. Provider/terms and offline model/licensing decisions must be resolved; they are software blockers, not hardware gates.
+
+## T30 — Unified Games software, local copies/discs and integrated emulators (L, depends: T12,T21,T22,T26)
+Entry docs: `docs/games-page/GAMES_PAGE_PLAN.md` §§1–10, `docs/unified-master-plan.txt` §6, `docs/first-product-software-scope.md`, `docs/packages.md` trust boundary.
+Entry files: `src/app/AppRegistry.cpp`, `src/sessions/SessionManager.{h,cpp}`, `src/sessions/NativeAppHost.cpp`, `src/home/ComponentSchema.{h,cpp}`, `src/home/PageData.{h,cpp}`, shared profile/runtime/library/Studio files and immediate wiring/build references. No runtime/dependency is selected by this planning audit.
+Scope:
+- [ ] T30.1 G0: current primary-source adapter/runtime/platform/format matrix, supported legal fixtures, safe Steam session ownership, storage/dependency/licensing/redistribution decisions, account/save boundaries and numeric VM/target budgets. PSP initial target; explicitly assess GameCube/PS2. Unresolved required routes block software closure; Unsupported alone does not deliver a required route.
+- [ ] T30.2 G1: one real local game on the configured Games page, manual add → details/edition → Play → meaningful playable execution → exact offline return; remote-only Isolde steps, failure/cancel/retry and no desktop rescue. Physical remote-to-Xbox handoff remains H02.
+- [ ] T30.3 G2: bounded profile-local game/edition/installation/source/activity catalog, background import/preview, manual metadata/managed art, relink/dedup/multi-disc grouping, backup/export/restore and transactional crash/write-failure recovery. Preserve source/provider/game/save bytes and manual corrections.
+- [ ] T30.4 G3: configurable All Games, platform/franchise/tag filters/local search, Favorites/Recently Added/Continue Playing, manual/smart collections and edition choice; shared Studio/appearance/actions, 5/5,000 fixtures, remote/desktop parity and canonical records across shelves.
+- [ ] T30.5 G4: verified Steam discovery/direct Play, actual owned game lifecycle/return, existing-client/bootstrap/failure/offline/account cases. Big Picture sign-in is not gameplay; retain fallback and honest unsupported fields.
+- [ ] T30.6 G5: integrated versioned/verified emulator provisioning, Isolde-only setup/config/import/firmware preflight/Xbox defaults/settings, PSP actual gameplay and each declared software-supported platform; offline payloads, private config/saves/shutdown flush, repair/update rollback and exact return. No manual emulator desktop/terminal prerequisite; physical input/performance is H02.
+- [ ] T30.7 G5a: installed/portable PC copies independent of Steam and supported local installers: preflight/runtime/destination/consent → bounded install/cancel/recovery → verify/play/return. Approved compatibility route, genuine gameplay, no executable layout snippets or unowned-file/save deletion.
+- [ ] T30.8 G5b software: typed optical identity/mount/grant revalidation, explicit Install/Play, no autorun, disc-required prompts, multi-disc/wrong/missing/replaced/unreadable media, busy eject/removal/retry and safe uninstall. Virtual optical/protocol fixtures exercise production adapter/UI; real drive/disc qualification remains H03.
+- [ ] T30.9 G6 software: installed runtime/gameplay per advertised route, complete security/input/cancel/profile/session/save/crash matrix, 5,000-entry scale/performance, disconnected cold boot and both reviewed reference pairs. Label simulated I/O explicitly; physical H02/H03 remains pending.
+Done when: all nine software gates and linked Games software requirements pass with bounded supported capabilities and real playable fixtures. VM evidence never claims universal compatibility, physical controller/optical success or target-hardware performance; required H02/H03 remain intact.
+Verify: meaningful existing component/native session/input/QML coverage, full CTest, installed Games journeys via bounded runner, actual gameplay/input/session evidence, hashes/support matrix, offline denial and both references. Evidence: planning only in `docs/games-page/GAMES_PAGE_PLAN.md`; Steam startup is a prerequisite, not Games completion. 0/9.
+
+## T13 — Appliance software and distribution (L, depends: T01,T03-T05,T09-T12,T14-T30)
+Entry docs: `docs/install.md`, `docs/packages.md`, `docs/architecture.md` appliance, `docs/first-product-software-scope.md` S1/H1/R1.
+Entry files: `tests/test_appliance_install.py`, `tests/test_recovery.py`, `src/recovery/Recovery.qml`; follow existing installer/provisioner wiring as needed.
+Scope:
+- [ ] T13.1 Dedicated compositor/autologin and remote clean-machine onboarding in a fresh VM; signed/versioned artifacts and invalid-signature rejection, complete offline dependency/model/runtime manifests and packaged payloads. No developer checkout/cache or terminal configuration prerequisite.
+- [ ] T13.2 Repair/rollback and bootable recovery media (`isolde-recovery`), explicit disk-selection consent and preservation of accounts/layouts/media/saves; invalid signature, missing backend, corrupt config and failed-update recovery through product controls in a disposable VM.
+- [ ] T13.3 Actual shipped distribution passes fresh-VM install, cold boot/reboot, interrupted write/install, virtual power interruption, failed upgrade and disconnected Generator Test. Record source/payload hashes and before/after recovery evidence; physical repetition is H05.
+Done when: software appliance/distribution and offline recovery are complete in a clean VM. Public release still requires T31 plus H01–H05. No host installation or hardware certification follows from this task.
+Verify: appliance_install + appliance_recovery + full CTest and fresh-VM install/recovery/Generator logs through the bounded runner. Evidence: partial Ubuntu dev/pilot installer, wait-for-display, atomic releases and recovery foundations in `docs/install.md`; dedicated environment, signed/offline artifacts, onboarding and complete fresh-VM matrix remain open. Android setup is T29 foundation, not completion of this task.
+
+## T31 — Frozen first-product software acceptance (L, depends: every other ACTIVE task at 100%)
+Entry docs: `docs/first-product-software-scope.md`, `docs/code-quality-strategy-2026-10-25.md`, this backlog, `docs/vm-oracle.md`, owning task evidence and both reference READMEs.
+Entry files: existing CMake/native/QML registration, bounded VM runner, installed acceptance/recovery tools; extend only as the acceptance matrix requires.
+Scope:
+- [ ] T31.1 Versioned feature/route-to-test matrix covers every active gate and new planning requirement; close known software defects/missing reviews, retain explicit H01–H05 and already deferred features. No required hidden skips or Unsupported substitute for a promised route.
+- [ ] T31.2 Freeze source/distribution hashes; full Linux suites and deterministic failure/security/bounds/profile/cancellation tests pass. Publish logs/reviewed visuals and applicability checks for reused evidence.
+- [ ] T31.3 Actual shipped artifact installs in a clean VM, completes remote onboarding/reboot, signed/offline dependencies, missing-backend recovery, failed upgrade and virtual power/interruption rollback with data preserved. No developer cache/config surgery prerequisite.
+- [ ] T31.4 Installed whole-product journeys and disconnected cold boot meet the S1 exit contract: actual Kodi video/audio/subtitles/source/playlist/artwork, Studio/templates/portability/restore, search/guide, app lifecycle/SmartTube playback, actual CA/US/CBC switching, games/emulators and real two-profile isolation. Missing account/runtime/fixture proof remains a software blocker.
+- [ ] T31.5 Explicitly review both reference recreation/reset pairs and themed/scaled surfaces; measure VM performance/accessibility budgets and record uncoached user/representative journeys. Publish candidate/support limits/service restoration and concrete H01–H05 handoff, with no open required software failure.
+- [ ] T31.6 Pre-hardware code-quality/risk baseline tied to the candidate: inventory actual toolchain/check availability and warnings, risk-to-test map for persistence/schema/profile/process/network/provisioning, meaningful failure-injection regressions, separate critical-boundary diff/evidence review, reproducible commands/contracts and explicit unresolved defects. No invented coverage/SOLID score or hidden skipped analyzer. The linked Q0–Q5 infrastructure/ratchet program remains a proposal pending its own scheduled adoption; no paid/hosted service or host-tool installation is implied.
+Done when: every active software task and these six gates have passing evidence for one coherent candidate sufficient to start hardware qualification. S1 is not public-release approval; hardware findings may reopen software defects.
+Verify: full CTest, clean-VM install/recovery, installed feature/error/return matrix, offline denial, profile isolation, quality/risk baseline, performance and usability report via existing bounded tooling. Evidence: pending; planning audit runs/passes none of these product gates. 0/6.
+
+## Hardware qualification — separate H1 ledger, all OPEN
+
+Run after S1. A hardware finding exposing a software defect reopens its T-task and requires reverified software. This split schedules qualification; it waives no physical requirement or public-release gate.
+
+| Gate | Physical acceptance retained | Software prerequisite | Status |
+| --- | --- | --- | --- |
+| H01 | Intended TV/display/GPU/audio, remote/CEC/input, real modes and safe areas/readability, numeric response/frame/large-layout budgets, reduced motion/contrast, suspend/resume and hotplug | T10/T12/T24/T31 | OPEN; VM input is not certification |
+| H02 | Witnessed TV-remote launch → meaningful Xbox-controller gameplay → exact return for each advertised Games route/platform; no mouse/keyboard/desktop rescue, disconnect/reconnect and actual save preservation/performance. PSP initial target; assess GameCube/PS2 | T30; Games plan §1.1/§3.2/§9 | OPEN; physical devices required |
+| H03 | Real PC optical CD/DVD insertion/identify/install/play, disc-required/multi-disc/wrong/missing/unreadable media, changed mount, busy eject/removal/cancel/retry; no autorun or unowned-file/save deletion | T30.7/T30.8; virtual media proves software only | OPEN; physical drive/media required |
+| H04 | Real capture/audio sync/routes, RS-232, eight-input HDMI switch, formats, measured latency/hotplug/recovery on declared device matrix | T10 software adapters/editors | OPEN; equipment/version/measurement logs required |
+| H05 | Shipped appliance install/cold boot/disconnected Generator on target storage/firmware, real power loss, recovery-media boot, failed upgrade/rollback, disk consent and preserved profiles/media/saves | T13/T31; signed frozen artifact | OPEN; R1 also requires H01–H04 |
+
 ## Archive: excluded from execution and completion math
 
-## T02 â€” ~~Finish curation~~ STRUCK / OUT OF SCOPE
-Decision (user 2026-10-19): curating the collection is the user's responsibility. Isolde uses Kodi to handle what they have. No episode/tag/playlist/exclusion/template curation work. Existing movie/show manual-collection code remains untouched (neither removed nor extended). Excluded from Overall %.
+## T02 — Earlier curation scope (archived and superseded)
 
-## T06 — Superseded: remote + desktop editor
+October 19's curation prohibition is superseded by `docs/kodi-complete-interface-2026-10-25.md`. T02 remains excluded to avoid duplicate counting; T04/T09/T21 own required Kodi-owned authoring/management. Preserve existing collections; no parallel movie/TV DB or Kodi DB writes.
 
-Excluded from progress math. The old list/action-grid editing plan is replaced by T17-T21 and T24. Its move/resize/collision/duplicate/remove, internal sub-grid and remote/desktop parity obligations are retained in those tasks. Existing source/test coverage is a reusable baseline, not acceptance of the new workspace.
+## T06 — Superseded remote/desktop editor
 
-## T07 — Superseded: Preview/Apply/Undo
+Excluded; obligations retained by T17–T21/T24.
 
-Excluded from progress math. Drafts, atomic multi-item operations, history, compatible persistence and profile isolation move to T16; preview/apply/backups/recovery UX moves to T23; integrated failure acceptance moves to T24. Draft transactions must land before new manipulation UI.
+## T07 — Superseded Preview/Apply/Undo
 
-## T08 — Superseded: templates/tokens/portability
+Excluded; transactions/history T16, full Apply/recovery T23/T24.
 
-Excluded from progress math. Four templates, tokens/symbols, page/interface export/import and missing-source repair move to T22 with T23 apply integration and T24 cutover acceptance. Existing skins and pages are preserved.
+## T08 — Superseded templates/tokens/portability
 
-## Priority revision verification
+Excluded; obligations retained by T22–T24. Preserve existing skins/pages.
 
-2026-10-19: verified all 24 active priority ranks and task-section order, every dependency preceding its consumer, preserved task IDs/checkbox credit, resolved document links and documentation-only scope. Overall stays 11%. Evidence: `C:/Users/kketc/.codex/visualizations/2026/10/19/01a15691-1cd3-77d0-928f-854e1c7a566b/task-priority-review-20261019.log`. No application implementation, tests or VM changes in this revision.
 ## Completion rule
 
-Overall = round(sum(active task percentages)/24). Active set: T01,T03-T05,T09-T28. Exclude T02 (struck) and T06-T08 (superseded). When every active checkbox and Done when gate has specific evidence and all 24 active tasks read 100%, this active backlog is implemented. Documentation, mockups, source presence and old-release screenshots do not count as delivery. If an active task lacks required evidence, it cannot read 100%; the existing 90% no-evidence cap also applies. Adding tasks requires updating the active count, table, dependencies and AGENTS.md consistently.
+Overall = round(sum of ACTIVE percentages / **27**). Active: **T01,T03–T05,T09–T31**. Every box and required linked subrequirement needs passing evidence. 100% means **S1 first-product software complete, ready for hardware qualification**. H01–H05 determine H1; R1 public release requires both and final hardware fixes/reverification. Synchronize table/scopes/math/dependencies/AGENTS.md for any task change. Historical arithmetic elsewhere is not current authority.
