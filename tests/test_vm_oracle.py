@@ -25,6 +25,10 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_store_and_audio_focused_suites_select_only_owned_tests(self):
+        self.assertEqual(oracle.suite_selection("store_remote_ui"),(["isolde_studio_quick_tests"],"^store_remote_ui$"))
+        self.assertEqual(oracle.suite_selection("audio_backend"),(["isolde_audio_tests"],"^audio_backend$"))
+
     def test_storage_inventory_is_read_only_and_excludes_linked_runs(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);payload=root/"runs/old/payload";payload.mkdir(parents=True)

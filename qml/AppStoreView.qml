@@ -55,7 +55,7 @@ Item {
   if(selected.updatesManaged)items.push({op:"subscription",label:selected.updatesEnabled?qsTr("Unsubscribe from updates"):qsTr("Subscribe to updates")})
   return items
  }
- readonly property var toolsItems:[qsTr("F-Droid access: ")+(catalog.onlineStoreSearch?qsTr("On"):qsTr("Off")),qsTr("Previous page"),qsTr("Next page"),qsTr("Check app updates"),qsTr("Set up / repair Android")]
+ readonly property var toolsItems:[platforms[platformIndex] && platforms[platformIndex].type==="web"?qsTr("Add website"):qsTr("F-Droid access: ")+(catalog.onlineStoreSearch?qsTr("On"):qsTr("Off")),qsTr("Previous page"),qsTr("Next page"),qsTr("Check app updates"),qsTr("Set up / repair Android")]
  readonly property string operationName:catalog.operationName || ((entries || []).find(e=>e.id===catalog.operationId) || selected || {}).name || ""
  Connections {
   target:root.catalog
@@ -79,6 +79,7 @@ Item {
  function beginSearch(){keyboardPurpose="search";searchOpen=true;keyboard.value=searchText;keyboard.selectedIndex=0}
  function editWeb(field){keyboardPurpose=field===0?"webName":"webAddress";keyboard.value=field===0?webName:webAddress;keyboard.selectedIndex=0;searchOpen=true}
  function storeTool(){
+  area="tools";toolIndex=0
   if(platforms[platformIndex].type==="web"){addWebOpen=true;webField=0;webName="";webAddress=""}
   else catalog.setOnlineStoreSearch(!catalog.onlineStoreSearch)
  }
@@ -102,7 +103,7 @@ Item {
  function chooseTool(index){
   if(!toolAvailable(index))return
   toolsMenuOpen=false
-  if(index===0)catalog.setOnlineStoreSearch(!catalog.onlineStoreSearch)
+  if(index===0)storeTool()
   else if(index===1 || index===2)catalog.changeStorePage(index===1?-1:1)
   else if(index===3)catalog.checkForUpdates()
   else request("setup")
