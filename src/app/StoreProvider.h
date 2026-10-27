@@ -19,6 +19,10 @@ public:
     // Search returns a list of StoreSearchResult maps:
     //  { id, name, publisher, category, iconSource, type, store, storeId,
     //    version, sizeBytes, provenance, downloadUrl, sha256, networkRequired, consentText }
+    // Android installation additionally requires packageName, decimal-string versionCode,
+    // metadataVerified (signed repository index validated by this provider), and
+    // compatible (ABI/minSdk/capabilities checked against the configured runtime).
+    // These flags are provider output, never user-entered claims.
     [[nodiscard]] virtual QVariantList search(const QString &query) = 0;
     virtual void requestSearch(const QString &query) { m_results=search(query); emit resultsChanged(); }
     virtual void cancel() {}

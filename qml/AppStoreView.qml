@@ -42,6 +42,10 @@ Item {
  })
  readonly property var selected:filtered.find(e=>e.id===selectedId) || null
  readonly property string operationName:((entries || []).find(e=>e.id===catalog.operationId) || selected || {}).name || ""
+ Connections {
+  target:root.catalog
+  function onPackageInstalled(appId){root.selectedId=appId;root.area="actions";root.actionIndex=0}
+ }
  signal openRequested(string appId)
  signal operationSettled()
  onVisibleChanged:if(visible)Qt.callLater(()=>{if(root.visible)root.forceActiveFocus()})
@@ -199,7 +203,7 @@ Item {
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:body.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:body;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
     Text {textFormat:Text.PlainText;width:parent.width;text:(root.confirmation==="install"?qsTr("Install "):qsTr("Uninstall "))+(root.selected?root.selected.name:"")+"?";color:root.ink;font.pixelSize:28*root.typeScale;font.weight:Font.DemiBold;wrapMode:Text.WordWrap}
-    Text {textFormat:Text.PlainText;width:parent.width;text:root.confirmation==="install"?(root.selected && root.selected.type==="android"?qsTr("Add this app to your current profile using the verified Android package supplied by the Isolde installer."):qsTr("Add this app to your current profile.")):root.selected && root.selected.type==="android"?qsTr("Remove the Android app and its Android app data from this profile. Your pages and other profiles stay unchanged."):qsTr("Remove this app from your profile. Saved sign-in data is kept. Your pages stay unchanged.");color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap}
+    Text {textFormat:Text.PlainText;width:parent.width;text:root.confirmation==="install"?(root.selected && root.selected.type==="android"?qsTr("Install the verified Android package in your current profile."):qsTr("Add this app to your current profile.")):root.selected && root.selected.type==="android"?qsTr("Remove the Android app and its Android app data from this profile. Your pages and other profiles stay unchanged."):qsTr("Remove this app from your profile. Saved sign-in data is kept. Your pages stay unchanged.");color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap}
     Row {width:parent.width;spacing:root.gap
      Repeater {model:[qsTr("Cancel"),root.confirmation==="install"?qsTr("Install"):qsTr("Uninstall")]
       delegate:Rectangle {required property int index;required property string modelData;width:(body.width-root.gap)/2;height:54;radius:root.corners;color:root.surface;border.width:root.confirmIndex===index?3:1;border.color:root.focusColor

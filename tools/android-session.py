@@ -91,31 +91,64 @@ def command(env, *args, timeout=60):
                 except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
 
 
+def store_package(app_id, version, profile, data_home):
+    """Resolve only a checksummed APK inside the selected profile's package store."""
+    if not re.fullmatch(r"fdroid-[a-f0-9]{24}", app_id) or not re.fullmatch(r"[0-9]{1,18}", version):
+        raise ValueError("Invalid Store package identity.")
+    base = data_home/"Isolde/packages/profiles"/profile/app_id/version
+    if base.resolve() != base:
+        raise ValueError("Store package storage is redirected.")
+    manifest, apk = base/"manifest.json", base/"app.apk"
+    for path, maximum in ((manifest, 65536), (apk, 128*1024**2)):
+        if path.is_symlink() or not path.is_file() or path.stat().st_uid != os.getuid() or not 0 < path.stat().st_size <= maximum:
+            raise ValueError("Store package is missing or unsafe. Reinstall it from the Store.")
+    app = json.loads(manifest.read_text())
+    package = app.get("packageName", "")
+    expected = "fdroid-"+hashlib.sha256(package.encode()).hexdigest()[:24]
+    if (app.get("schemaVersion") != 1 or app.get("kind") != "fdroid" or app.get("id") != app_id
+            or expected != app_id or app.get("version") != version
+            or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+", package)
+            or not re.fullmatch(r"[a-f0-9]{64}", app.get("sha256", ""))
+            or hashlib.sha256(apk.read_bytes()).hexdigest() != app["sha256"]):
+        raise ValueError("Store package verification failed. Reinstall it from the Store.")
+    return app, apk
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--app", required=True)
     parser.add_argument("--operation", choices=("launch", "install", "uninstall"), default="launch")
+    parser.add_argument("--store-version")
     args = parser.parse_args()
     if sys.platform != "linux" or os.getuid() == 0:
         raise RuntimeError("Android apps require the Linux desktop session, without administrator privileges.")
     config_path = Path(__file__).with_name("config")/"android-runtime.json"
     if config_path.stat().st_size > 65536: raise RuntimeError("Invalid bundled Android configuration.")
     config = json.loads(config_path.read_text())
-    if config.get("schemaVersion") != 1 or args.app not in config.get("apps", {}):
-        raise RuntimeError("This Android app is not in the verified installer catalog.")
-    app = config["apps"][args.app]
-    package = app["packageName"]
-    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+", package):
-        raise RuntimeError("Invalid Android package identity.")
-    receipt = Path("/var/lib/isolde/android-install.json")
-    apk = Path("/usr/share/isolde/android")/(args.app+".apk")
-    for path, maximum in ((receipt, 65536), (apk, 128*1024**2)):
-        if path.is_symlink() or not path.is_file() or path.stat().st_uid != 0 or not 0 < path.stat().st_size <= maximum:
-            raise RuntimeError("Android setup is incomplete. Run the Isolde installer with Android support.")
-    installed = json.loads(receipt.read_text())
-    if installed.get("configurationSha256") != hashlib.sha256(config_path.read_bytes()).hexdigest() or hashlib.sha256(apk.read_bytes()).hexdigest() != app["sha256"]:
-        raise RuntimeError("Android package verification failed. Run the Isolde installer again.")
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config")))
+    data_home = Path(os.environ.get("XDG_DATA_HOME", str(Path.home()/".local/share")))
+    profile_root(args.profile, config_home, data_home)
+    if config.get("schemaVersion") != 1:
+        raise RuntimeError("Invalid Android runtime configuration.")
+    if args.store_version:
+        app, apk = store_package(args.app, args.store_version, args.profile, data_home)
+        package = app["packageName"]
+    else:
+        if args.app not in config.get("apps", {}):
+            raise RuntimeError("This Android app is not in the verified installer catalog.")
+        app = config["apps"][args.app]
+        package = app["packageName"]
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+", package):
+            raise RuntimeError("Invalid Android package identity.")
+        receipt = Path("/var/lib/isolde/android-install.json")
+        apk = Path("/usr/share/isolde/android")/(args.app+".apk")
+        for path, maximum in ((receipt, 65536), (apk, 128*1024**2)):
+            if path.is_symlink() or not path.is_file() or path.stat().st_uid != 0 or not 0 < path.stat().st_size <= maximum:
+                raise RuntimeError("Android setup is incomplete. Run the Isolde installer with Android support.")
+        installed = json.loads(receipt.read_text())
+        if installed.get("configurationSha256") != hashlib.sha256(config_path.read_bytes()).hexdigest() or hashlib.sha256(apk.read_bytes()).hexdigest() != app["sha256"]:
+            raise RuntimeError("Android package verification failed. Run the Isolde installer again.")
     runtime = Path(os.environ["XDG_RUNTIME_DIR"])
     if runtime.resolve() != runtime or runtime.stat().st_uid != os.getuid(): raise RuntimeError("Invalid desktop runtime directory.")
     fd = os.open(runtime/"isolde-android.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -178,7 +211,9 @@ def main():
             return
         if "packageName: "+package not in apps.splitlines() or packages.get(args.app) != app["sha256"]:
             emit("installing")
-            verify(); command(env, "app", "install", str(apk), timeout=120)
+            verify()
+            if args.store_version: store_package(args.app, args.store_version, args.profile, data_home)
+            command(env, "app", "install", str(apk), timeout=120)
             deadline = time.monotonic()+60
             while True:
                 verify()

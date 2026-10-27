@@ -53,7 +53,10 @@ void AndroidSession::launch()
     auto profile = qApp->property("isoldeProfile").toString();
     if (profile.isEmpty()) profile = "default";
     m_process.setProgram(python);
-    m_process.setArguments({helper, "--profile", profile, "--app", definition().launchConfiguration.value("runtimeApp").toString()});
+    QStringList arguments{helper,"--profile",profile,"--app",definition().launchConfiguration.value("runtimeApp").toString()};
+    const auto version=definition().launchConfiguration.value("storeVersion").toString();
+    if(!version.isEmpty())arguments << "--store-version" << version;
+    m_process.setArguments(arguments);
     m_process.start();
 }
 

@@ -21,6 +21,28 @@ install_spec.loader.exec_module(installer)
 
 
 class AndroidProvisioningTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux package ownership")
+    def test_store_package_checks_hash_identity_profile_and_redirects(self):
+        spec = importlib.util.spec_from_file_location("store_android_session", ROOT/"tools/android-session.py")
+        session = importlib.util.module_from_spec(spec); spec.loader.exec_module(session)
+        package = "org.example.demo"
+        app_id = "fdroid-"+hashlib.sha256(package.encode()).hexdigest()[:24]
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory)
+            base = data/"Isolde/packages/profiles/default"/app_id/"7"
+            base.mkdir(parents=True)
+            apk = base/"app.apk"; apk.write_bytes(b"verified test payload")
+            manifest = {"schemaVersion": 1, "kind": "fdroid", "id": app_id, "version": "7",
+                        "packageName": package, "sha256": hashlib.sha256(apk.read_bytes()).hexdigest()}
+            (base/"manifest.json").write_text(json.dumps(manifest))
+            self.assertEqual(session.store_package(app_id, "7", "default", data)[0], manifest)
+            with self.assertRaises(ValueError): session.store_package(app_id, "../7", "default", data)
+            with self.assertRaises(ValueError): session.store_package(app_id, "7", "other", data)
+            apk.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "verification"): session.store_package(app_id, "7", "default", data)
+            apk.unlink(); apk.symlink_to(base/"manifest.json")
+            with self.assertRaisesRegex(ValueError, "unsafe"): session.store_package(app_id, "7", "default", data)
+
     def test_selector_repair_closes_on_success_and_exception_and_is_repeatable(self):
         before=b'''def foreground_pipe(args, cmd):
     process = args

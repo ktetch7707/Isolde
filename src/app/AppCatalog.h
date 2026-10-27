@@ -64,6 +64,7 @@ signals:
     void packageUninstalled(const QString &appId);
 
 private:
+    friend class IsoldeTests;
     struct Entry {
         AppDefinition app;
         QString packageId;
@@ -114,6 +115,7 @@ private:
     QNetworkReply *m_downloadReply = nullptr;
     QByteArray m_downloadData;
     QString m_downloadStoreId;
+    QString m_downloadProfile;
     QByteArray m_downloadExpectedHash;
     QVariantMap m_downloadResult;
     QHash<QString,QString> m_customPackages;

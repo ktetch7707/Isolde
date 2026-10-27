@@ -14,6 +14,10 @@
 #include "theme/ArtPackCatalog.h"
 
 #include <QSignalSpy>
+#include <QCryptographicHash>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QFile>
 #include <QDir>
 #include <QTemporaryDir>
@@ -40,6 +44,30 @@ class IsoldeTests final : public QObject {
     Q_OBJECT
 
 private slots:
+    void downloadedAndroidManifestPersistsAndRejectsTampering() {
+        QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir temp;
+        AppRegistry registry;AppCatalog catalog(&registry);
+        const auto state=temp.filePath("state.json"),packages=temp.filePath("packages");
+        QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"),state,packages));
+        const QString package="org.example.demo";
+        const auto id="fdroid-"+QString::fromLatin1(QCryptographicHash::hash(package.toUtf8(),QCryptographicHash::Sha256).toHex().left(24));
+        QJsonObject manifest{{"schemaVersion",1},{"kind","fdroid"},{"id",id},{"packageName",package},
+            {"name","Demo"},{"version","1234567890"},{"sha256",QString(64,'a')},{"provenance","Verified test repository"}};
+        AppCatalog::Entry entry;QVERIFY(catalog.customEntry(manifest,&entry));
+        QCOMPARE(entry.app.launchConfiguration.value("storeVersion").toString(),QString("1234567890"));
+        for(const auto &key:QStringList{"id","packageName","version","sha256"}) {
+            auto invalid=manifest;invalid[key]="../unsafe";QVERIFY(!catalog.customEntry(invalid,&entry));
+        }
+        const auto directory=packages+"/"+id+"/1234567890";QVERIFY(QDir().mkpath(directory));
+        QFile file(directory+"/manifest.json");QVERIFY(file.open(QIODevice::WriteOnly));file.write(QJsonDocument(manifest).toJson());file.close();
+        QFile activation(state);QVERIFY(activation.open(QIODevice::WriteOnly));
+        activation.write(QJsonDocument(QJsonObject{{"installed",QJsonArray{id}},
+            {"customPackages",QJsonObject{{id,"1234567890"}}}}).toJson());activation.close();
+        AppRegistry restoredRegistry;AppCatalog restored(&restoredRegistry);
+        QVERIFY2(restored.load(QFINDTESTDATA("../config/catalog.json"),state,packages),qPrintable(restored.errorString()));
+        QVERIFY(restored.isInstalled(id));QVERIFY(restoredRegistry.find(id));
+        QCOMPARE(restoredRegistry.find(id)->type,QString("android"));
+    }
     void customWebAppsPersistAndRejectUnsafeInput() {
         QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir temp;
         const auto state=temp.filePath("state.json"),packages=temp.filePath("packages");
