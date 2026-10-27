@@ -45,6 +45,101 @@ Item {
                 throw error
             }
         }
+        function test_replace_in_place_preview_cancel_accept_and_undo() {
+            scenario("replace-in-place",()=>{
+                givenPage(false,false)
+                const before=document(),placement=JSON.stringify(editor.current.placement)
+                editor.openInspector(false)
+                const inspector=findChild(editor,"studioInspector")
+                inspector.view="fields";inspector.controlsShown=true
+                const field=inspector.fields.find(f=>f.type==="replaceComponent");verify(!!field)
+                inspector.activateField(field);compare(inspector.view,"choices")
+                inspector.selected=inspector.choices.findIndex(c=>c.value==="image");command(inputManager.confirm)
+                compare(editor.mode,"replaceReview");compare(editor.choice,1);compare(document(),before)
+                compare(editor.current.componentType,"image");compare(JSON.stringify(editor.current.placement),placement)
+                verify(editor.message.indexOf("Text body")>=0)
+                command(inputManager.back);compare(editor.mode,"inspector");compare(editor.current.componentType,"text");compare(document(),before)
+                inspector.activateField(field);inspector.selected=inspector.choices.findIndex(c=>c.value==="image");command(inputManager.confirm)
+                editor.choice=0;command(inputManager.confirm)
+                compare(editor.mode,"inspector");compare(editor.current.id,"cell-0");compare(editor.current.componentType,"image")
+                compare(JSON.stringify(editor.current.placement),placement);compare(editor.session.changeCount,1)
+                verify(editor.session.undo());compare(document(),before);compare(studioFixture.disk(),diskBaseline)
+            })
+        }
+        function test_header_direct_selection_edit_undo_and_exact_return() {
+            scenario("header-edit",()=>{
+                givenPage(false,false)
+                const before=document(),preview=findChild(editor,"studioPreview")
+                const title=findChild(preview,"pageHeader-title")
+                verify(title!==null);verify(waitForRendering(title))
+                mouseClick(title,title.width/3,title.height/2)
+                compare(editor.mode,"headerContext");compare(editor.headerSelection,"title")
+                command(inputManager.confirm)
+                const inspector=findChild(editor,"studioInspector")
+                compare(editor.mode,"inspector");compare(inspector.tabs[inspector.tab],"Header")
+                inspector.selected=inspector.fields.findIndex(f=>f.key==="headerMode");verify(inspector.selected>=0)
+                command(inputManager.confirm);compare(inspector.view,"choices")
+                inspector.selected=1;command(inputManager.confirm)
+                compare(editor.page.composition.headerMode,"identity")
+                inspector.selected=inspector.fields.findIndex(f=>f.key==="identity")
+                command(inputManager.confirm);compare(inspector.view,"keyboard")
+                findChild(inspector,"inspectorKeyboard").accepted("Family room")
+                compare(editor.page.composition.identity,"Family room")
+                compare(editor.session.changeCount,2)
+                command(inputManager.back);command(inputManager.back)
+                compare(editor.mode,"canvas");compare(editor.headerSelection,"title");compare(editor.selectedId,"cell-0")
+                command(inputManager.navigateDown);compare(editor.headerSelection,"")
+                verify(editor.session.undo());verify(editor.session.undo());compare(document(),before)
+                compare(studioFixture.disk(),diskBaseline)
+                // Header remains discoverable even with title/clock hidden.
+                editor.mode="layers";editor.choice=editor.dialogLabels().indexOf("Header")
+                verify(editor.choice>=0);command(inputManager.confirm)
+                compare(inspector.tabs[inspector.tab],"Header")
+            })
+        }
+        function test_named_tools_history_and_draft_default_restore() {
+            scenario("named-tools",()=>{
+                givenPage(false,false)
+                verify(!editor.menuEntries.some(e=>e.label==="More tools"))
+                verify(editor.menuEntries.some(e=>e.label==="Layers"))
+                verify(editor.menuEntries.some(e=>e.label==="Saved designs"))
+                const before=document()
+                editor.beginGesture(false);command(inputManager.navigateRight);command(inputManager.confirm)
+                const moved=document();editor.toolbarFocus=true;editor.menuIndex=0
+                command(inputManager.navigateUp);verify(editor.historyFocus)
+                command(inputManager.confirm);compare(document(),before)
+                command(inputManager.navigateRight);command(inputManager.confirm);compare(document(),moved)
+                command(inputManager.navigateDown);verify(!editor.historyFocus)
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="editorSettings"))
+                compare(editor.mode,"editorSettings");editor.choice=2;command(inputManager.confirm)
+                compare(editor.mode,"restoreDefaults");compare(editor.choice,0)
+                command(inputManager.confirm);compare(editor.mode,"editorSettings");compare(document(),moved)
+                editor.choice=2;command(inputManager.confirm);editor.choice=1;command(inputManager.confirm)
+                compare(editor.mode,"canvas");verify(document()!==moved)
+                verify(editor.session.undo());compare(document(),moved)
+                compare(studioFixture.disk(),diskBaseline)
+            })
+        }
+        function test_studio_colors_use_shared_picker_cancel_and_one_undo() {
+            scenario("studio-colors",()=>{
+                givenPage(false,false)
+                const before=document()
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="editorSettings"))
+                editor.choice=1;command(inputManager.confirm)
+                const inspector=findChild(editor,"studioInspector")
+                verify(inspector.editorMode)
+                inspector.selected=inspector.fields.findIndex(f=>f.key==="textColor");verify(inspector.selected>=0)
+                command(inputManager.confirm);compare(inspector.view,"colorWheel")
+                inspector.colorPicker.choose("#ffffff");settle();compare(document(),before)
+                command(inputManager.back);compare(inspector.view,"fields");compare(document(),before)
+                command(inputManager.confirm);inspector.colorPicker.choose("#ffffff");settle()
+                inspector.colorPicker.control=4;command(inputManager.confirm)
+                compare(editor.session.changeCount,1)
+                compare(editor.session.document.studioAppearance.textColor,"#ffffff")
+                verify(editor.session.undo());compare(document(),before)
+                compare(studioFixture.disk(),diskBaseline)
+            })
+        }
         function test_move_cancel_restores_document_history_and_viewport() {
             scenario("move-cancel", () => {
                 givenPage(false, true)

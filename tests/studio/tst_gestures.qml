@@ -187,10 +187,16 @@ Item {
                 compare(studioFixture.disk(),diskBaseline)
             })
         }
-        function test_pointer_threshold_cancel_release_and_remote_parity() {
-            scenario("pointer-transaction", () => {
+        function test_pointer_threshold_cancel_release_and_remote_parity_data() {
+            return [{tag:"full-size",zoom:1}, {tag:"zoomed-out",zoom:0.5}]
+        }
+        function test_pointer_threshold_cancel_release_and_remote_parity(data) {
+            scenario("pointer-transaction-" + data.tag, () => {
                 givenPage(false, false)
                 const before = document()
+                const preview = findChild(editor, "studioPreview")
+                preview.parent.zoom=data.zoom
+                settle()
                 const hit = findChild(editor, "studioHit-cell-0")
                 verify(hit !== null)
                 verify(waitForRendering(hit))
@@ -202,9 +208,8 @@ Item {
                 mouseRelease(editor, point.x + 1, point.y + 1)
                 compare(editor.mode, "context")
                 command(inputManager.back)
-                const preview = findChild(editor, "studioPreview")
                 const metrics = preview.gridMetricsFor("", "")
-                const destination = point.y + metrics.cellH + metrics.gap
+                const destination = point.y + (metrics.cellH + metrics.gap) * preview.parent.scale
                 mousePress(editor, point.x, point.y)
                 mouseMove(editor, point.x, destination)
                 compare(editor.mode, "move")
@@ -228,6 +233,50 @@ Item {
                 command(inputManager.navigateDown)
                 command(inputManager.confirm)
                 compare(document(), pointerResult)
+                compare(studioFixture.disk(), diskBaseline)
+            })
+        }
+        function test_pointer_outside_grid_refuses_stale_drop_and_can_retry() {
+            scenario("pointer-boundary", () => {
+                givenPage(false, false)
+                const before = document(), count = editor.session.changeCount
+                const hit = findChild(editor, "studioHit-cell-0")
+                const preview = findChild(editor, "studioPreview")
+                preview.parent.zoom=0.4
+                settle()
+                verify(waitForRendering(hit))
+                const from = hit.mapToItem(editor, hit.width / 2, hit.height / 2)
+                const metrics = preview.gridMetricsFor("", "")
+                // First visit a valid target, then move beyond the left boundary.
+                // Releasing must not accept that stale valid target.
+                mousePress(editor, from.x, from.y)
+                mouseMove(editor, from.x, from.y + (metrics.cellH + metrics.gap) * preview.parent.scale)
+                compare(editor.candidate.y, 1)
+                const outsideX = from.x - 2 * (metrics.cellW + metrics.gap) * preview.parent.scale
+                mouseMove(editor, outsideX, from.y)
+                compare(editor.mode, "move")
+                compare(editor.candidate.x, -2)
+                verify(!editor.collisionPreview.valid)
+                mouseRelease(editor, outsideX, from.y)
+                compare(editor.mode, "move")
+                compare(document(), before)
+                compare(editor.session.changeCount, count)
+                compare(studioFixture.disk(), diskBaseline)
+                // The refused proposal stays recoverable with the remote.
+                command(inputManager.navigateRight)
+                compare(editor.candidate.x, -1)
+                command(inputManager.confirm)
+                compare(editor.mode, "move")
+                compare(document(), before)
+                command(inputManager.navigateRight)
+                compare(editor.candidate.x, 0)
+                command(inputManager.navigateDown)
+                command(inputManager.confirm)
+                compare(editor.mode, "canvas")
+                compare(editor.current.placement.y, 1)
+                compare(editor.session.changeCount, count + 1)
+                verify(editor.session.undo())
+                compare(document(), before)
                 compare(studioFixture.disk(), diskBaseline)
             })
         }
@@ -262,6 +311,56 @@ Item {
                 command(inputManager.confirm)
                 compare(document(),pointerResult)
                 compare(studioFixture.disk(),diskBaseline)
+            })
+        }
+        function test_pointer_resize_boundary_refuses_stale_size_data() {
+            return [{tag:"too-wide", small:false}, {tag:"nonpositive", small:true}]
+        }
+        function test_pointer_resize_boundary_refuses_stale_size(data) {
+            scenario("resize-boundary-" + data.tag, () => {
+                givenPage(false, false)
+                const before = document(), count = editor.session.changeCount
+                const handle = findChild(editor, "studioResize-cell-0")
+                const preview = findChild(editor, "studioPreview")
+                preview.parent.zoom=0.4
+                settle()
+                verify(waitForRendering(handle))
+                const from = handle.mapToItem(editor, handle.width / 2, handle.height / 2)
+                const metrics = preview.gridMetricsFor("", "")
+                const step = (metrics.cellW + metrics.gap) * preview.parent.scale
+                mousePress(editor, from.x, from.y)
+                mouseMove(editor, from.x + step, from.y)
+                compare(editor.mode, "resize")
+                compare(editor.candidate.width, 2)
+                const to = from.x + (data.small ? -2 : editor.grid.columns) * step
+                mouseMove(editor, to, from.y)
+                verify(!editor.collisionPreview.valid)
+                mouseRelease(editor, to, from.y)
+                compare(editor.mode, "resize")
+                if(data.small){
+                    editor.resizeAxis="width"
+                    command(inputManager.navigateUp) // Not an adjustment of this axis.
+                    verify(editor.pointerBoundaryError.length>0)
+                }
+                command(inputManager.confirm)
+                compare(editor.mode, "resize")
+                compare(document(), before)
+                compare(editor.session.changeCount, count)
+                compare(studioFixture.disk(), diskBaseline)
+                command(inputManager.back)
+                settle()
+                compare(editor.mode, "canvas")
+                compare(editor.pointerBoundaryError, "")
+                compare(document(), before)
+                // A later valid operation must not inherit the refused target.
+                editor.beginGesture(false)
+                command(inputManager.navigateDown)
+                command(inputManager.confirm)
+                compare(editor.mode, "canvas")
+                compare(editor.session.changeCount, count + 1)
+                verify(editor.session.undo())
+                compare(document(), before)
+                compare(studioFixture.disk(), diskBaseline)
             })
         }
         function test_resize_reflow_preview_and_blocked_drop_stay_in_operation() {

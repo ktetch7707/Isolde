@@ -12,6 +12,65 @@
     ]
   },
   "desktop": {"title":"Desktop","returnLabel":"Return to Isolde","returnShortcut":"Home","width":360,"height":120,"margin":24,"radius":18,"labelSize":20},
+  "headerDefaults": {
+    "navigation": {
+      "schemaVersion": 1,
+      "order": [
+        "title",
+        "controls",
+        "clock"
+      ],
+      "gap": 22,
+      "padding": 0,
+      "showTitle": true,
+      "showDate": true,
+      "titleAlignment": "left",
+      "timeFormat": "h:mm AP",
+      "dateFormat": "ddd, MMM d",
+      "clockSize": 18,
+      "dateSize": 12,
+      "clockWidth": 100,
+      "iconSize": 23,
+      "opacity": 0,
+      "focusWidth": 2,
+      "height": 42,
+      "titleSize": 21,
+      "controlSize": 15,
+      "controlWidth": 100,
+      "radius": 12,
+      "controlDisplay": "label"
+    },
+    "identity": {
+      "schemaVersion": 1,
+      "order": [
+        "title",
+        "controls",
+        "clock"
+      ],
+      "gap": 22,
+      "padding": 0,
+      "showTitle": true,
+      "showDate": true,
+      "titleAlignment": "left",
+      "timeFormat": "h:mm AP",
+      "dateFormat": "ddd, MMM d",
+      "clockSize": 18,
+      "dateSize": 12,
+      "clockWidth": 100,
+      "iconSize": 23,
+      "opacity": 0,
+      "focusWidth": 2,
+      "height": 58,
+      "titleSize": 48,
+      "controlSize": 14,
+      "controlWidth": 120,
+      "radius": 26,
+      "controlDisplay": "both"
+    }
+  },
+  "appPicker": {"columns":4,"cardHeight":144,"gap":16,"radius":12,"margin":24,"labelSize":18,"logoSize":48},
+  "shapeChoices": [{"name":"Rectangle","type":"shape","presentation":{"shape":"rectangle"}},{"name":"Rounded rectangle","type":"shape","presentation":{"shape":"rounded"}},{"name":"Ellipse or circle","type":"shape","presentation":{"shape":"ellipse"}},{"name":"Pill","type":"shape","presentation":{"shape":"pill"}},{"name":"Divider","type":"shape","presentation":{"shape":"divider"}},{"name":"Container with editable children","type":"container","presentation":{"shape":"rounded"}}],
+  "replacementChoices": [{"name":"Button","type":"button"},{"name":"Image","type":"image"},{"name":"Text","type":"text"},{"name":"Decorative shape","type":"shape"},{"name":"Empty container","type":"container"}],
   "colorPicker": {
     "presets": [
       {"name": "Snow", "value": "#ffffff"},
@@ -258,6 +317,8 @@
     }
   ],
   "componentPresets": {
+    "shape": {"id":"shape","name":"Shape","kind":"widget","widgetType":"shape","componentType":"shape","placement":{"x":0,"y":0,"width":2,"height":2},"presentation":{"shape":"rectangle","surfaceOpacity":1,"labelPosition":"hidden","radius":20}},
+    "text": {"id":"text","name":"Text","kind":"widget","widgetType":"text","componentType":"text","placement":{"x":0,"y":0,"width":3,"height":1},"presentation":{"bodyText":"Your text","surfaceOpacity":0,"labelPosition":"hidden"}},
     "tv-guide": {
       "id":"tv-guide", "name":"TV Guide", "kind":"widget", "widgetType":"library",
       "componentType":"library", "family":"tv-guide", "placement":{"x":0,"y":0,"width":6,"height":4},
@@ -348,36 +409,7 @@
         "radius": 16
       }
     },
-    "carousel": {
-      "id": "carousel",
-      "name": "Button carousel",
-      "kind": "widget",
-      "widgetType": "container",
-      "componentType": "container",
-      "placement": {
-        "x": 0,
-        "y": 0,
-        "width": 6,
-        "height": 2
-      },
-      "presentation": {
-        "showHeading": true,
-        "surfaceOpacity": 0.35,
-        "radius": 18,
-        "layout": {
-          "schemaVersion": 1,
-          "mode": "row",
-          "columns": 16,
-          "rows": 1,
-          "gap": 14,
-          "padding": 12,
-          "visibleColumns": 4,
-          "wrap": false
-        },
-        "headingSize": 24
-      },
-      "family": "carousel"
-    },
+    "carousel": {"id":"carousel","name":"Button carousel","kind":"widget","widgetType":"container","componentType":"container","placement":{"x":0,"y":0,"width":6,"height":2},"presentation":{"showHeading":true,"surfaceOpacity":0.35,"radius":18,"layout":{"schemaVersion":1,"mode":"row","columns":16,"rows":1,"gap":14,"padding":12,"visibleColumns":4,"wrap":false},"headingSize":24,"moreLabel":"More buttons","galleryTitle":"Buttons"},"family":"carousel"},
     "page-menu": {
       "id":"page-menu", "name":"Pages", "kind":"widget", "widgetType":"container", "componentType":"container", "family":"page-menu",
       "placement":{"x":0,"y":0,"width":4,"height":1},
@@ -474,135 +506,38 @@
       "icon": "clock"
     },
     {
-      "id":"music-library", "name":"Music library",
-      "description":"Local Kodi albums and tracks with artwork and playback", "icon":"music"
+      "id": "music-library",
+      "name": "Music library",
+      "description": "Local Kodi albums and tracks with artwork and playback",
+      "icon": "music"
     },
     {
-      "id":"tv-guide", "name":"TV Guide",
-      "description":"Configured Kodi TV channels and current/next programmes", "icon":"tv"
-    },
-    {"id":"page-menu","name":"Page menu","description":"Movable page links. On named pages, replaces the fixed menu when placed; Undo restores it.","icon":"grid"}
-  ],
-  "actions": [
-    {"name":"Open TV Guide","action":{"type":"open-guide"}},
-    {
-      "name": "Open Settings",
-      "action": {
-        "type": "settings",
-        "section": -1
-      }
+      "id": "tv-guide",
+      "name": "TV Guide",
+      "description": "Configured Kodi TV channels and current/next programmes",
+      "icon": "tv"
     },
     {
-      "name": "Open Apps / Search",
-      "action": {
-        "type": "app-drawer"
-      }
+      "id": "page-menu",
+      "name": "Page menu",
+      "description": "Movable page links. On named pages, replaces the fixed menu when placed; Undo restores it.",
+      "icon": "grid"
     },
     {
-      "name": "Desktop mode",
-      "action": {
-        "type": "desktop-mode"
-      }
+      "id": "shape",
+      "name": "Shape",
+      "icon": "image",
+      "description": "Decorative shapes or a real container with editable children."
     },
     {
-      "name": "HDMI 1",
-      "action": {
-        "type": "switch-input",
-        "input": 1
-      }
-    },
-    {
-      "name": "HDMI 2",
-      "action": {
-        "type": "switch-input",
-        "input": 2
-      }
-    },
-    {
-      "name": "HDMI 3",
-      "action": {
-        "type": "switch-input",
-        "input": 3
-      }
-    },
-    {
-      "name": "HDMI 4",
-      "action": {
-        "type": "switch-input",
-        "input": 4
-      }
-    },
-    {
-      "name": "HDMI 5",
-      "action": {
-        "type": "switch-input",
-        "input": 5
-      }
-    },
-    {
-      "name": "HDMI 6",
-      "action": {
-        "type": "switch-input",
-        "input": 6
-      }
-    },
-    {
-      "name": "HDMI 7",
-      "action": {
-        "type": "switch-input",
-        "input": 7
-      }
-    },
-    {
-      "name": "HDMI 8",
-      "action": {
-        "type": "switch-input",
-        "input": 8
-      }
-    },
-    {
-      "name": "Settings · Network",
-      "action": {
-        "type": "settings",
-        "section": 0
-      }
-    },
-    {
-      "name": "Settings · Home",
-      "action": {
-        "type": "settings",
-        "section": 1
-      }
-    },
-    {
-      "name": "Settings · Sources",
-      "action": {
-        "type": "settings",
-        "section": 2
-      }
-    },
-    {
-      "name": "Settings · Remotes",
-      "action": {
-        "type": "settings",
-        "section": 3
-      }
-    },
-    {
-      "name": "Settings · System",
-      "action": {
-        "type": "settings",
-        "section": 4
-      }
-    },
-    {
-      "name": "Settings · Profiles",
-      "action": {
-        "type": "settings",
-        "section": 5
-      }
+      "id": "text",
+      "name": "Text",
+      "icon": "text",
+      "description": "Independent plain text with a separate optional visible label."
     }
   ],
+  "actionCategories": [{"name":"All links","types":[]},{"name":"Pages","types":["root-page","open-page"]},{"name":"Apps","types":["launch-app","app-drawer"]},{"name":"Media","types":["media-picker","open-collection","open-guide","play-movie","open-show"]},{"name":"Files and addresses","types":["open-file","open-folder","open-url","open-disc"]},{"name":"Inputs","types":["switch-input"]},{"name":"Settings and system","types":["settings","desktop-mode"]}],
+  "actions": [{"name":"Open TV Guide","action":{"type":"open-guide"},"aliases":["television","channels","schedule"]},{"name":"Open Settings","action":{"type":"settings","section":-1},"aliases":["preferences","configuration"]},{"name":"Open Apps / Search","action":{"type":"app-drawer"},"aliases":["applications","search"]},{"name":"Desktop mode","action":{"type":"desktop-mode"},"aliases":["computer","desktop"]},{"name":"HDMI 1","action":{"type":"switch-input","input":1},"aliases":["hdmi","source","capture"]},{"name":"HDMI 2","action":{"type":"switch-input","input":2},"aliases":["hdmi","source","capture"]},{"name":"HDMI 3","action":{"type":"switch-input","input":3},"aliases":["hdmi","source","capture"]},{"name":"HDMI 4","action":{"type":"switch-input","input":4},"aliases":["hdmi","source","capture"]},{"name":"HDMI 5","action":{"type":"switch-input","input":5},"aliases":["hdmi","source","capture"]},{"name":"HDMI 6","action":{"type":"switch-input","input":6},"aliases":["hdmi","source","capture"]},{"name":"HDMI 7","action":{"type":"switch-input","input":7},"aliases":["hdmi","source","capture"]},{"name":"HDMI 8","action":{"type":"switch-input","input":8},"aliases":["hdmi","source","capture"]},{"name":"Settings · Network","action":{"type":"settings","section":0},"aliases":["preferences","configuration"]},{"name":"Settings · Home","action":{"type":"settings","section":1},"aliases":["preferences","configuration"]},{"name":"Settings · Sources","action":{"type":"settings","section":2},"aliases":["preferences","configuration"]},{"name":"Settings · Remotes","action":{"type":"settings","section":3},"aliases":["preferences","configuration"]},{"name":"Settings · System","action":{"type":"settings","section":4},"aliases":["preferences","configuration"]},{"name":"Settings · Profiles","action":{"type":"settings","section":5},"aliases":["preferences","configuration"]}],
   "inspector": {
     "colors": [
       "#f5f1f3",
@@ -629,1045 +564,100 @@
       "arrow-right"
     ],
     "fields": [
-      {
-        "tab": "Content",
-        "scope": "component",
-        "key": "name",
-        "label": "Name",
-        "type": "text"
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "subtitle",
-        "label": "Text / supporting text",
-        "type": "text",
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "label",
-        "label": "Artwork badge",
-        "type": "text",
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "component",
-        "key": "customLogo",
-        "label": "Artwork",
-        "type": "artwork",
-        "excludeTypes": [
-          "library",
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Content", "scope": "presentation", "key": "icon",
-        "label": "More apps icon", "type": "choice", "families": ["app-bar"],
-        "choices": ["grid", "display", "film", "music", "gamepad", "search", "settings", "heart", "clock", "arrow-right"],
-        "fallback": "grid"
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "icon",
-        "label": "Icon",
-        "type": "choice",
-        "choices": [
-          "display",
-          "film",
-          "music",
-          "gamepad",
-          "grid",
-          "search",
-          "settings",
-          "heart",
-          "clock",
-          "arrow-right"
-        ],
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "libraryKind",
-        "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
-        "label": "Library source",
-        "type": "choice",
-        "types": [
-          "library",
-          "section"
-        ],
-        "choices": [
-          "movies",
-          "shows",
-          "games"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "libraryView",
-        "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
-        "label": "Library view",
-        "type": "choice",
-        "types": [
-          "library",
-          "section"
-        ],
-        "choices": [
-          "all",
-          "recent",
-          "watched",
-          "continue",
-          "search",
-          "genre",
-          "tag",
-          "collection",
-          "playlist"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "libraryValue",
-        "excludeFamilies": ["recently-viewed", "music-library", "tv-guide"],
-        "label": "Source / search",
-        "type": "source",
-        "types": [
-          "library",
-          "section"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "component",
-        "key": "apps",
-        "label": "Choose installed apps",
-        "type": "apps",
-        "families": [
-          "app-bar"
-        ],
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
+      {"tab":"Content","scope":"component","key":"name","label":"Editor name","type":"text"},
+      {"tab":"Content","scope":"presentation","key":"subtitle","label":"Text / supporting text","type":"text","excludeTypes":["container"]},
+      {"tab":"Content","scope":"presentation","key":"label","label":"Artwork badge","type":"text","advanced":true,"excludeTypes":["container"]},
+      {"tab":"Content","scope":"component","key":"customLogo","label":"Artwork","type":"artwork","excludeTypes":["library","section","navigation"]},
+      {"tab":"Content","scope":"presentation","key":"icon","label":"More apps icon","type":"choice","families":["app-bar"],"choices":["grid","display","film","music","gamepad","search","settings","heart","clock","arrow-right"],"fallback":"grid"},
+      {"tab":"Content","scope":"presentation","key":"icon","label":"Icon","type":"choice","choices":["display","film","music","gamepad","grid","search","settings","heart","clock","arrow-right"],"excludeTypes":["container"]},
+      {"tab":"Content","scope":"presentation","key":"libraryKind","excludeFamilies":["recently-viewed","music-library","tv-guide"],"label":"Library source","type":"choice","types":["library","section"],"choices":["movies","shows","games"]},
+      {"tab":"Content","scope":"presentation","key":"libraryView","excludeFamilies":["recently-viewed","music-library","tv-guide"],"label":"Library view","type":"choice","types":["library","section"],"choices":["all","recent","watched","continue","search","genre","tag","collection","playlist"]},
+      {"tab":"Content","scope":"presentation","key":"libraryValue","excludeFamilies":["recently-viewed","music-library","tv-guide"],"label":"Source / search","type":"source","types":["library","section"]},
+      {"tab":"Content","scope":"component","key":"apps","label":"Choose installed apps","type":"apps","families":["app-bar"],"excludeTypes":["section","navigation"]},
       {"tab":"Content","scope":"appCollection","key":"section","label":"App group","type":"appGroup","families":["app-bar"],"fallback":"All app groups"},
       {"tab":"Content","scope":"appCollection","key":"showStore","label":"App Store in More apps","type":"toggle","families":["app-bar"],"fallback":true},
       {"tab":"Appearance","scope":"presentation","key":"logoMode","label":"App logo treatment","type":"choice","choices":["cutout","original","tile"],"families":["app-bar"],"fallback":"cutout"},
-      {
-        "tab": "Content",
-        "scope": "component",
-        "key": "addChild",
-        "label": "Add a child component",
-        "type": "children",
-        "excludeFamilies": ["app-bar","page-menu"],
-        "types": [
-          "container"
-        ],
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "variant",
-        "label": "Card style",
-        "type": "choice",
-        "choices": [
-          "source",
-          "summary",
-          "banner",
-          "orb",
-          "media",
-          "recent",
-          "text",
-          "image"
-        ],
-        "excludeTypes": [
-          "library",
-          "container",
-          "section"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "surfaceColor",
-        "label": "Surface",
-        "type": "color",
-        "advanced": false
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelColor",
-        "label": "Text",
-        "type": "color",
-        "advanced": false
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "iconColor",
-        "label": "Icon color",
-        "type": "color",
-        "advanced": false,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "focusColor",
-        "label": "Focus ring",
-        "type": "color",
-        "advanced": false
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "borderColor",
-        "label": "Border",
-        "type": "color",
-        "advanced": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelSurfaceColor",
-        "label": "Label surface",
-        "type": "color",
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "surfaceOpacity",
-        "label": "Surface opacity",
-        "type": "number",
-        "control": "slider",
-        "displayScale": 100,
-        "displayUnit": "%",
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 1,
-        "advanced": false
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "radius",
-        "label": "Corners",
-        "type": "number",
-        "control": "slider",
-        "presets": [{"name":"Square","value":0},{"name":"Soft","value":22},{"name":"Rounded","value":100}],
-        "min": 0,
-        "max": 400,
-        "step": 2,
-        "fallback": 22,
-        "advanced": false
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelSize",
-        "label": "Label size",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 400,
-        "step": 1,
-        "fallback": 19,
-        "advanced": false,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "iconSize",
-        "label": "Icon size",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 400,
-        "step": 2,
-        "fallback": 48,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "diameter",
-        "label": "Circle diameter",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 400,
-        "step": 2,
-        "fallback": 110,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "focusWidth",
-        "label": "Focus ring width",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 12,
-        "step": 1,
-        "fallback": 3,
-        "advanced": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "borderWidth",
-        "label": "Border width",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 12,
-        "step": 1,
-        "fallback": 0,
-        "advanced": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelLines",
-        "label": "Label lines",
-        "type": "number",
-        "min": 1,
-        "max": 4,
-        "step": 1,
-        "fallback": 2,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "headingSize",
-        "label": "Heading size",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 400,
-        "step": 1,
-        "fallback": 24,
-        "advanced": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "cardGap",
-        "label": "Card spacing",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 400,
-        "step": 1,
-        "fallback": 14,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "artHeight",
-        "label": "Artwork height",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 400,
-        "step": 2,
-        "fallback": 180,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelPosition",
-        "label": "Label position",
-        "type": "choice",
-        "choices": [
-          "inside",
-          "below",
-          "overlay",
-          "hidden"
-        ],
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "textAlign",
-        "label": "Text alignment",
-        "type": "choice",
-        "choices": [
-          "left",
-          "center",
-          "right"
-        ],
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "artFit",
-        "label": "Artwork fit",
-        "type": "choice",
-        "choices": [
-          "cover",
-          "contain"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "libraryLayout",
-        "label": "Shelf arrangement",
-        "type": "choice",
-        "choices": [
-          "row",
-          "grid",
-          "list"
-        ],
-        "types": [
-          "library",
-          "section"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "libraryChrome",
-        "label": "Show library controls",
-        "type": "toggle",
-        "fallback": true,
-        "types": ["library", "section"]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "libraryCardStyle",
-        "label": "Shelf card style",
-        "type": "choice",
-        "choices": [
-          "media",
-          "recent",
-          "orb",
-          "source",
-          "summary",
-          "banner"
-        ],
-        "types": [
-          "library",
-          "section"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "component",
-        "key": "showTitle",
-        "label": "Show title",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true,
-        "excludeTypes": [
-          "section",
-          "navigation",
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "component",
-        "key": "showType",
-        "label": "Show type",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true,
-        "excludeTypes": [
-          "section",
-          "navigation",
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "component",
-        "key": "showLogo",
-        "label": "Show artwork",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true,
-        "excludeTypes": [
-          "section",
-          "navigation",
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "component",
-        "key": "logoFill",
-        "label": "Artwork fills card",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true,
-        "excludeTypes": [
-          "section",
-          "navigation",
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelPill",
-        "label": "Label pill",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelBold",
-        "label": "Bold label",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "labelWrap",
-        "label": "Wrap label",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "focusEnabled",
-        "label": "Focus ring",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "showHeading",
-        "label": "Group heading",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true,
-        "types": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "headingBold",
-        "label": "Bold heading",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "component",
-        "key": "opacity",
-        "label": "Whole component opacity",
-        "type": "number",
-        "control": "slider",
-        "displayScale": 100,
-        "displayUnit": "%",
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 1,
-        "advanced": true,
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "component",
-        "key": "crop",
-        "label": "Crop / focal point",
-        "type": "crop",
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Layout",
-        "scope": "component",
-        "key": "position",
-        "label": "Position and size",
-        "type": "geometry",
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Layout",
-        "scope": "component",
-        "key": "layout",
-        "label": "Internal layout",
-        "type": "layout",
-        "types": [
-          "container"
-        ],
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "libraryColumns",
-        "control": "slider",
-        "label": "Visible cards",
-        "type": "number",
-        "types": [
-          "library",
-          "section"
-        ],
-        "min": 1,
-        "max": 12,
-        "step": 1,
-        "fallback": 4
-      },
+      {"tab":"Content","scope":"component","key":"addChild","label":"Add a child component","type":"children","excludeFamilies":["app-bar","page-menu"],"types":["container"],"excludeTypes":["section","navigation"]},
+      {"tab":"Appearance","scope":"presentation","key":"variant","label":"Card style","type":"choice","choices":["source","summary","banner","orb","media","recent","text","image"],"excludeTypes":["library","container","section"]},
+      {"tab":"Appearance","scope":"presentation","key":"surfaceColor","label":"Surface","type":"color","advanced":false},
+      {"tab":"Appearance","scope":"presentation","key":"labelColor","label":"Text","type":"color","advanced":false},
+      {"tab":"Appearance","scope":"presentation","key":"iconColor","label":"Icon color","type":"color","advanced":false,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"focusColor","label":"Focus ring","type":"color","advanced":false},
+      {"tab":"Appearance","scope":"presentation","key":"borderColor","label":"Border","type":"color","advanced":true},
+      {"tab":"Appearance","scope":"presentation","key":"labelSurfaceColor","label":"Label surface","type":"color","advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"surfaceOpacity","label":"Surface opacity","type":"number","control":"slider","displayScale":100,"displayUnit":"%","min":0,"max":1,"step":0.05,"fallback":1,"advanced":false},
+      {"tab":"Appearance","scope":"presentation","key":"radius","label":"Corners","type":"number","control":"slider","presets":[{"name":"Square","value":0},{"name":"Soft","value":22},{"name":"Rounded","value":100}],"min":0,"max":400,"step":2,"fallback":22,"advanced":false},
+      {"tab":"Appearance","scope":"presentation","key":"labelSize","label":"Label size","type":"number","control":"slider","min":0,"max":400,"step":1,"fallback":19,"advanced":false,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"iconSize","label":"Icon size","type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":48,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"diameter","label":"Circle diameter","type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":110,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"focusWidth","label":"Focus ring width","type":"number","control":"slider","min":0,"max":12,"step":1,"fallback":3,"advanced":true},
+      {"tab":"Appearance","scope":"presentation","key":"borderWidth","label":"Border width","type":"number","control":"slider","min":0,"max":12,"step":1,"fallback":0,"advanced":true},
+      {"tab":"Appearance","scope":"presentation","key":"labelLines","label":"Label lines","type":"number","min":1,"max":4,"step":1,"fallback":2,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"headingSize","label":"Heading size","type":"number","control":"slider","min":0,"max":400,"step":1,"fallback":24,"advanced":true},
+      {"tab":"Appearance","scope":"presentation","key":"cardGap","label":"Card spacing","type":"number","control":"slider","min":0,"max":400,"step":1,"fallback":14,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"artHeight","label":"Artwork height","type":"number","control":"slider","min":0,"max":400,"step":2,"fallback":180,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"labelPosition","label":"Label position","type":"choice","choices":["inside","below","overlay","hidden"],"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"textAlign","label":"Text alignment","type":"choice","choices":["left","center","right"],"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"artFit","label":"Artwork fit","type":"choice","choices":["cover","contain"]},
+      {"tab":"Appearance","scope":"presentation","key":"libraryLayout","label":"Shelf arrangement","type":"choice","choices":["row","grid","list"],"types":["library","section"]},
+      {"tab":"Appearance","scope":"presentation","key":"libraryChrome","label":"Show library controls","type":"toggle","fallback":true,"types":["library","section"]},
+      {"tab":"Appearance","scope":"presentation","key":"libraryCardStyle","label":"Shelf card style","type":"choice","choices":["media","recent","orb","source","summary","banner"],"types":["library","section"]},
+      {"tab":"Appearance","scope":"component","key":"showTitle","label":"Show title","type":"toggle","fallback":true,"advanced":true,"excludeTypes":["section","navigation","container"]},
+      {"tab":"Appearance","scope":"component","key":"showType","label":"Show type","type":"toggle","fallback":true,"advanced":true,"excludeTypes":["section","navigation","container"]},
+      {"tab":"Appearance","scope":"component","key":"showLogo","label":"Show artwork","type":"toggle","fallback":true,"advanced":true,"excludeTypes":["section","navigation","container"]},
+      {"tab":"Appearance","scope":"component","key":"logoFill","label":"Artwork fills card","type":"toggle","fallback":false,"advanced":true,"excludeTypes":["section","navigation","container"]},
+      {"tab":"Appearance","scope":"presentation","key":"labelPill","label":"Label pill","type":"toggle","fallback":false,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"labelBold","label":"Bold label","type":"toggle","fallback":false,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"labelWrap","label":"Wrap label","type":"toggle","fallback":true,"advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"focusEnabled","label":"Focus ring","type":"toggle","fallback":true,"advanced":true},
+      {"tab":"Appearance","scope":"presentation","key":"showHeading","label":"Group heading","type":"toggle","fallback":false,"advanced":true,"types":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"headingBold","label":"Bold heading","type":"toggle","fallback":false,"advanced":true},
+      {"tab":"Appearance","scope":"component","key":"opacity","label":"Whole component opacity","type":"number","control":"slider","displayScale":100,"displayUnit":"%","min":0,"max":1,"step":0.05,"fallback":1,"advanced":true,"excludeTypes":["section","navigation"]},
+      {"tab":"Appearance","scope":"component","key":"crop","label":"Crop / focal point","type":"crop","excludeTypes":["section","navigation"]},
+      {"tab":"Layout","scope":"component","key":"position","label":"Position and size","type":"geometry","excludeTypes":["section","navigation"]},
+      {"tab":"Layout","scope":"component","key":"layout","label":"Internal layout","type":"layout","types":["container"],"excludeTypes":["section","navigation"]},
+      {"tab":"Layout","scope":"presentation","key":"libraryColumns","control":"slider","label":"Visible cards","type":"number","types":["library","section"],"min":1,"max":12,"step":1,"fallback":4},
       {"tab":"Layout","scope":"presentation","key":"guideRows","control":"slider","label":"Guide visible rows","type":"number","types":["library"],"families":["tv-guide"],"min":3,"max":12,"step":1,"fallback":5},
       {"tab":"Layout","scope":"presentation","key":"guideMinutes","control":"slider","label":"Guide time window (minutes)","type":"number","types":["library"],"families":["tv-guide"],"min":30,"max":240,"step":30,"fallback":120},
       {"tab":"Layout","scope":"presentation","key":"guideChannelWidth","control":"slider","label":"Guide channel column width","type":"number","types":["library"],"families":["tv-guide"],"min":120,"max":400,"step":10,"fallback":220},
       {"tab":"Appearance","scope":"presentation","key":"guideLabels","label":"Guide program labels","type":"toggle","types":["library"],"families":["tv-guide"],"fallback":true},
       {"tab":"Appearance","scope":"presentation","key":"guideSourceBadges","label":"Guide source badges","type":"toggle","types":["library"],"families":["tv-guide"],"fallback":true},
-      {
-        "tab": "Layout",
-        "scope": "component",
-        "key": "size",
-        "label": "Legacy size",
-        "type": "choice",
-        "choices": [
-          "compact",
-          "standard",
-          "wide"
-        ],
-        "advanced": true,
-        "excludeTypes": [
-          "section",
-          "navigation",
-          "container"
-        ]
-      },
-      {
-        "tab": "Actions",
-        "scope": "component",
-        "key": "action",
-        "label": "On select",
-        "type": "action",
-        "excludeTypes": [
-          "library",
-          "container",
-          "clock",
-          "text",
-          "section"
-        ]
-      },
-      {
-        "tab": "Accessibility",
-        "scope": "accessibility",
-        "key": "name",
-        "label": "Accessible name",
-        "type": "text"
-      },
-      {
-        "tab": "Accessibility",
-        "scope": "accessibility",
-        "key": "hint",
-        "label": "Accessible hint",
-        "type": "text"
-      },
-      {
-        "tab": "Accessibility",
-        "scope": "component",
-        "key": "hidden",
-        "label": "Runtime visibility",
-        "type": "visibility",
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Accessibility",
-        "scope": "component",
-        "key": "locked",
-        "label": "Lock / unlock",
-        "type": "lock",
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Accessibility",
-        "scope": "component",
-        "key": "order",
-        "label": "Reading / directional focus",
-        "type": "order",
-        "excludeTypes": [
-          "section",
-          "navigation"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "libraryLimit",
-        "control": "slider",
-        "label": "Result count",
-        "type": "number",
-        "types": [
-          "library",
-          "section"
-        ],
-        "min": 1,
-        "max": 50,
-        "step": 1,
-        "fallback": 50
-      },
-      {
-        "tab": "Content",
-        "scope": "component",
-        "key": "action",
-        "label": "On select",
-        "type": "action",
-        "excludeTypes": [
-          "library",
-          "container",
-          "clock",
-          "text",
-          "section"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "component",
-        "key": "typePreset",
-        "label": "Typography preset",
-        "type": "typography",
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "variant",
-        "label": "Section / card style",
-        "type": "choice",
-        "types": [
-          "section"
-        ],
-        "choices": [
-          "source",
-          "summary",
-          "banner",
-          "orb",
-          "media",
-          "recent",
-          "library"
-        ],
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "columns",
-        "label": "Cards per row",
-        "type": "number",
-        "types": [
-          "section"
-        ],
-        "min": 1,
-        "max": 12,
-        "step": 1,
-        "fallback": 4
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "span",
-        "label": "Flow lane span",
-        "type": "number",
-        "types": [
-          "section"
-        ],
-        "min": 1,
-        "max": 2,
-        "step": 1,
-        "fallback": 1
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "height",
-        "label": "Section height",
-        "type": "number",
-        "control": "slider",
-        "types": [
-          "section"
-        ],
-        "min": 60,
-        "max": 800,
-        "step": 10,
-        "fallback": 180
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "contentWidth",
-        "label": "Content width",
-        "type": "number",
-        "control": "slider",
-        "types": [
-          "section"
-        ],
-        "min": 100,
-        "max": 3840,
-        "step": 10,
-        "fallback": 1200
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "padding",
-        "label": "Panel padding",
-        "type": "number",
-        "control": "slider",
-        "types": [
-          "section"
-        ],
-        "min": 0,
-        "max": 400,
-        "step": 1,
-        "fallback": 0
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "panelOpacity",
-        "label": "Panel opacity",
-        "type": "number",
-        "control": "slider",
-        "displayScale": 100,
-        "displayUnit": "%",
-        "types": [
-          "section"
-        ],
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 0
-      },
-      {
-        "tab": "Layout",
-        "scope": "presentation",
-        "key": "blur",
-        "label": "Panel blur (optional effect)",
-        "type": "number",
-        "control": "slider",
-        "displayScale": 100,
-        "displayUnit": "%",
-        "types": [
-          "section"
-        ],
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 0
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "panelColor",
-        "label": "Panel tint",
-        "type": "color",
-        "types": [
-          "section"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "headingColor",
-        "label": "Heading color",
-        "type": "color",
-        "types": [
-          "section",
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "showHeading",
-        "label": "Show heading",
-        "type": "toggle",
-        "types": [
-          "section"
-        ],
-        "fallback": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "headingSize",
-        "label": "Heading size",
-        "type": "number",
-        "control": "slider",
-        "types": [
-          "section"
-        ],
-        "min": 0,
-        "max": 400,
-        "step": 1,
-        "fallback": 24
-      },
-      {
-        "tab": "Content",
-        "scope": "presentation",
-        "key": "trailingLabel",
-        "label": "Section link label",
-        "type": "text",
-        "types": [
-          "section"
-        ]
-      },
-      {
-        "tab": "Actions",
-        "scope": "presentation",
-        "key": "trailingAction",
-        "label": "Section link",
-        "type": "action",
-        "types": [
-          "section"
-        ]
-      },
-      {
-        "tab": "Content",
-        "scope": "component",
-        "key": "sourceId",
-        "label": "Repair source",
-        "type": "repair",
-        "types": [
-          "launcher",
-          "media-shelf",
-          "action-tile"
-        ]
-      },
-      {
-        "tab": "Layout",
-        "scope": "component",
-        "key": "categoryId",
-        "label": "Section",
-        "type": "section",
-        "advanced": true
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "selectedLabelColor",
-        "label": "Selected label color",
-        "type": "color",
-        "advanced": true,
-        "excludeTypes": [
-          "container"
-        ]
-      },
-      {
-        "tab": "Appearance",
-        "scope": "presentation",
-        "key": "progress",
-        "label": "Decorative progress (not Kodi history)",
-        "type": "number",
-        "min": 0,
-        "max": 1,
-        "step": 0.01,
-        "fallback": 0,
-        "advanced": true,
-        "excludeTypes": [
-          "library",
-          "section",
-          "navigation",
-          "container"
-        ]
-      }
+      {"tab":"Layout","scope":"component","key":"size","label":"Legacy size","type":"choice","choices":["compact","standard","wide"],"advanced":true,"excludeTypes":["section","navigation","container"]},
+      {"tab":"Actions","scope":"component","key":"action","label":"On select","type":"action","excludeTypes":["library","container","clock","text","section"]},
+      {"tab":"Accessibility","scope":"accessibility","key":"name","label":"Accessible name","type":"text"},
+      {"tab":"Accessibility","scope":"accessibility","key":"hint","label":"Accessible hint","type":"text"},
+      {"tab":"Accessibility","scope":"component","key":"hidden","label":"Runtime visibility","type":"visibility","excludeTypes":["section","navigation"]},
+      {"tab":"Accessibility","scope":"component","key":"locked","label":"Lock / unlock","type":"lock","excludeTypes":["section","navigation"]},
+      {"tab":"Accessibility","scope":"component","key":"order","label":"Reading / directional focus","type":"order","excludeTypes":["section","navigation"]},
+      {"tab":"Content","scope":"presentation","key":"libraryLimit","control":"slider","label":"Result count","type":"number","types":["library","section"],"min":1,"max":50,"step":1,"fallback":50},
+      {"tab":"Content","scope":"component","key":"action","label":"On select","type":"action","excludeTypes":["library","container","clock","text","section"]},
+      {"tab":"Appearance","scope":"component","key":"typePreset","label":"Typography preset","type":"typography","excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"variant","label":"Section / card style","type":"choice","types":["section"],"choices":["source","summary","banner","orb","media","recent","library"],"excludeTypes":["container"]},
+      {"tab":"Layout","scope":"presentation","key":"columns","label":"Cards per row","type":"number","types":["section"],"min":1,"max":12,"step":1,"fallback":4},
+      {"tab":"Layout","scope":"presentation","key":"span","label":"Flow lane span","type":"number","types":["section"],"min":1,"max":2,"step":1,"fallback":1},
+      {"tab":"Layout","scope":"presentation","key":"height","label":"Section height","type":"number","control":"slider","types":["section"],"min":60,"max":800,"step":10,"fallback":180},
+      {"tab":"Layout","scope":"presentation","key":"contentWidth","label":"Content width","type":"number","control":"slider","types":["section"],"min":100,"max":3840,"step":10,"fallback":1200},
+      {"tab":"Layout","scope":"presentation","key":"padding","label":"Panel padding","type":"number","control":"slider","types":["section"],"min":0,"max":400,"step":1,"fallback":0},
+      {"tab":"Layout","scope":"presentation","key":"panelOpacity","label":"Panel opacity","type":"number","control":"slider","displayScale":100,"displayUnit":"%","types":["section"],"min":0,"max":1,"step":0.05,"fallback":0},
+      {"tab":"Layout","scope":"presentation","key":"blur","label":"Panel blur (optional effect)","type":"number","control":"slider","displayScale":100,"displayUnit":"%","types":["section"],"min":0,"max":1,"step":0.05,"fallback":0},
+      {"tab":"Appearance","scope":"presentation","key":"panelColor","label":"Panel tint","type":"color","types":["section"]},
+      {"tab":"Appearance","scope":"presentation","key":"headingColor","label":"Heading color","type":"color","types":["section","container"]},
+      {"tab":"Appearance","scope":"presentation","key":"showHeading","label":"Show heading","type":"toggle","types":["section"],"fallback":true},
+      {"tab":"Appearance","scope":"presentation","key":"headingSize","label":"Heading size","type":"number","control":"slider","types":["section"],"min":0,"max":400,"step":1,"fallback":24},
+      {"tab":"Content","scope":"presentation","key":"trailingLabel","label":"Section link label","type":"text","types":["section"]},
+      {"tab":"Actions","scope":"presentation","key":"trailingAction","label":"Section link","type":"action","types":["section"]},
+      {"tab":"Content","scope":"component","key":"sourceId","label":"Repair source","type":"repair","types":["launcher","media-shelf","action-tile"]},
+      {"tab":"Layout","scope":"component","key":"categoryId","label":"Section","type":"section","advanced":true},
+      {"tab":"Appearance","scope":"presentation","key":"selectedLabelColor","label":"Selected label color","type":"color","advanced":true,"excludeTypes":["container"]},
+      {"tab":"Appearance","scope":"presentation","key":"progress","label":"Decorative progress (not Kodi history)","type":"number","min":0,"max":1,"step":0.01,"fallback":0,"advanced":true,"excludeTypes":["library","section","navigation","container"]},
+      {"tab":"Content","scope":"presentation","key":"visibleLabel","label":"Visible label","type":"text"},
+      {"tab":"Content","scope":"presentation","key":"bodyText","label":"Text body","type":"text","types":["text"]},
+      {"tab":"Appearance","scope":"presentation","key":"shape","label":"Shape","type":"choice","choices":["rectangle","rounded","ellipse","pill","divider"],"types":["shape"]},
+      {"tab":"Appearance","scope":"presentation","key":"shape","label":"Container shape","type":"choice","choices":["rectangle","rounded","pill"],"types":["container"]},
+      {"tab":"Content","scope":"component","key":"replacement","label":"Replace in place","type":"replaceComponent","types":["button","image","text","shape","container"]},
+      {"tab":"Appearance","scope":"presentation","key":"fillMode","label":"Fill","type":"choice","choices":["solid","gradient"],"fallback":"solid","types":["shape","container"]},
+      {"tab":"Appearance","scope":"presentation","key":"fillEndColor","label":"Gradient end","type":"color","types":["shape","container"]},
+      {"tab":"Appearance","scope":"presentation","key":"fillDirection","label":"Gradient direction","type":"choice","choices":["vertical","horizontal"],"fallback":"vertical","types":["shape","container"]}
     ],
     "typePresets": [
       {
@@ -1695,368 +685,74 @@
         }
       }
     ],
+    "studioFields": [{"tab":"Colors","scope":"studioAppearance","key":"surfaceColor","label":"Surface","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"selectedColor","label":"Selected surface","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"textColor","label":"Text","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"mutedColor","label":"Supporting text","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"focusColor","label":"Focus","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"reset","label":"Reset Studio colors","type":"editorColorsReset"}],
     "pageFields": [
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "backgroundStart",
-        "label": "Background top / solid",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "backgroundEnd",
-        "label": "Background bottom",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "surfaceColor",
-        "label": "Component surface",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "selectedColor",
-        "label": "Selected surface",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "textColor",
-        "label": "Text",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "mutedColor",
-        "label": "Supporting text",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "focusColor",
-        "label": "Focus accent",
-        "type": "color"
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "typographyScale",
-        "label": "Text scale",
-        "type": "number",
-        "control": "slider",
-        "displayUnit": "×",
-        "min": 0.8,
-        "max": 1.3,
-        "step": 0.05,
-        "fallback": 1
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "tileRoundness",
-        "label": "Global roundness",
-        "type": "number",
-        "control": "slider",
-        "displayScale": 100,
-        "displayUnit": "%",
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 0.18,
-        "advanced": true
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "spacing",
-        "label": "Spacing",
-        "type": "number",
-        "control": "slider",
-        "min": 8,
-        "max": 40,
-        "step": 2,
-        "fallback": 20,
-        "advanced": true
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "motionEnabled",
-        "label": "Focus animation",
-        "type": "toggle",
-        "fallback": true
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "fontFamily",
-        "label": "Font",
-        "type": "choice",
-        "choices": [
-          "DejaVu Sans"
-        ],
-        "advanced": true
-      },
-      {
-        "tab": "Colors",
-        "scope": "theme",
-        "key": "homeColumns",
-        "label": "Legacy columns",
-        "type": "number",
-        "min": 2,
-        "max": 6,
-        "step": 1,
-        "fallback": 3,
-        "advanced": true
-      },
-      {
-        "tab": "Background",
-        "scope": "background",
-        "key": "mode",
-        "label": "Background",
-        "type": "choice",
-        "choices": [
-          "solid",
-          "gradient",
-          "image"
-        ],
-        "fallback": "gradient"
-      },
-      {
-        "tab": "Background",
-        "scope": "composition",
-        "key": "wallpaper",
-        "label": "Managed background image",
-        "type": "artwork"
-      },
-      {
-        "tab": "Background",
-        "scope": "background",
-        "key": "dim",
-        "label": "Background dimming",
-        "type": "number",
-        "control": "slider",
-        "displayScale": 100,
-        "displayUnit": "%",
-        "min": 0,
-        "max": 1,
-        "step": 0.05,
-        "fallback": 0
-      },
-      {
-        "tab": "Background",
-        "scope": "background",
-        "key": "tintColor",
-        "label": "Dim tint",
-        "type": "color",
-        "fallback": "#000000"
-      },
-      {
-        "tab": "Background",
-        "scope": "background",
-        "key": "artFit",
-        "label": "Image fit",
-        "type": "choice",
-        "choices": [
-          "cover",
-          "contain"
-        ]
-      },
-      {
-        "tab": "Background",
-        "scope": "background",
-        "key": "crop",
-        "label": "Crop / focal point",
-        "type": "crop"
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "verticalScrolling",
-        "label": "Allow vertical scrolling",
-        "type": "scrolling",
-        "fallback": false
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "grid",
-        "label": "Grid / scrolling sections",
-        "type": "grid"
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "pageNavigation",
-        "label": "Page menu position",
-        "type": "choice",
-        "choices": [
-          "left",
-          "top",
-          "none"
-        ],
-        "needsNamedPage": true,
-        "needsComposition": true
-      },
+      {"tab":"Colors","scope":"theme","key":"backgroundStart","label":"Background top / solid","type":"color"},
+      {"tab":"Colors","scope":"theme","key":"backgroundEnd","label":"Background bottom","type":"color"},
+      {"tab":"Colors","scope":"theme","key":"surfaceColor","label":"Component surface","type":"color"},
+      {"tab":"Colors","scope":"theme","key":"selectedColor","label":"Selected surface","type":"color"},
+      {"tab":"Colors","scope":"theme","key":"textColor","label":"Text","type":"color"},
+      {"tab":"Colors","scope":"theme","key":"mutedColor","label":"Supporting text","type":"color"},
+      {"tab":"Colors","scope":"theme","key":"focusColor","label":"Focus accent","type":"color"},
+      {"tab":"Colors","scope":"theme","key":"typographyScale","label":"Text scale","type":"number","control":"slider","displayUnit":"×","min":0.8,"max":1.3,"step":0.05,"fallback":1},
+      {"tab":"Colors","scope":"theme","key":"tileRoundness","label":"Global roundness","type":"number","control":"slider","displayScale":100,"displayUnit":"%","min":0,"max":1,"step":0.05,"fallback":0.18,"advanced":true},
+      {"tab":"Colors","scope":"theme","key":"spacing","label":"Spacing","type":"number","control":"slider","min":8,"max":40,"step":2,"fallback":20,"advanced":true},
+      {"tab":"Colors","scope":"theme","key":"motionEnabled","label":"Focus animation","type":"toggle","fallback":true},
+      {"tab":"Colors","scope":"theme","key":"fontFamily","label":"Font","type":"choice","choices":["DejaVu Sans"],"advanced":true},
+      {"tab":"Colors","scope":"theme","key":"homeColumns","label":"Legacy columns","type":"number","min":2,"max":6,"step":1,"fallback":3,"advanced":true},
+      {"tab":"Background","scope":"background","key":"mode","label":"Background","type":"choice","choices":["solid","gradient","image"],"fallback":"gradient"},
+      {"tab":"Background","scope":"composition","key":"wallpaper","label":"Managed background image","type":"artwork"},
+      {"tab":"Background","scope":"background","key":"dim","label":"Background dimming","type":"number","control":"slider","displayScale":100,"displayUnit":"%","min":0,"max":1,"step":0.05,"fallback":0},
+      {"tab":"Background","scope":"background","key":"tintColor","label":"Dim tint","type":"color","fallback":"#000000"},
+      {"tab":"Background","scope":"background","key":"artFit","label":"Image fit","type":"choice","choices":["cover","contain"]},
+      {"tab":"Background","scope":"background","key":"crop","label":"Crop / focal point","type":"crop"},
+      {"tab":"Layout","scope":"composition","key":"verticalScrolling","label":"Allow vertical scrolling","type":"scrolling","fallback":false},
+      {"tab":"Layout","scope":"composition","key":"grid","label":"Grid / scrolling sections","type":"grid"},
+      {"tab":"Layout","scope":"composition","key":"pageNavigation","label":"Page menu position","type":"choice","choices":["left","top","none"],"needsNamedPage":true,"needsComposition":true},
       {"tab":"Layout","scope":"composition","key":"editableMenu","label":"Edit page menu as a component…","type":"editableMenu","needsNamedPage":true,"needsComposition":true},
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "sidebarWidth",
-        "label": "Sidebar width",
-        "type": "number",
-        "control": "slider",
-        "min": 120,
-        "max": 400,
-        "step": 5,
-        "fallback": 200,
-        "advanced": true,
-        "needsNamedPage": true,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "margin",
-        "label": "Safe margin",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 100,
-        "step": 2,
-        "fallback": 40,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "gap",
-        "label": "Section gap",
-        "type": "number",
-        "control": "slider",
-        "min": 0,
-        "max": 100,
-        "step": 2,
-        "fallback": 20,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "columns",
-        "label": "Flow columns",
-        "type": "number",
-        "min": 1,
-        "max": 2,
-        "step": 1,
-        "fallback": 1,
-        "advanced": true,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "fit",
-        "label": "Fit flow sections",
-        "type": "toggle",
-        "fallback": true,
-        "advanced": true,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "designHeight",
-        "label": "Design height",
-        "type": "number",
-        "min": 480,
-        "max": 1440,
-        "step": 10,
-        "fallback": 800,
-        "advanced": true,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "headerMode",
-        "label": "Header style",
-        "type": "choice",
-        "choices": [
-          "navigation",
-          "identity"
-        ],
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "identity",
-        "label": "Header title",
-        "type": "text",
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "showClock",
-        "label": "Header clock",
-        "type": "toggle",
-        "fallback": false,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "showProfile",
-        "label": "Profile label",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true,
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "theme",
-        "key": "brandVisible",
-        "label": "Isolde brand",
-        "type": "toggle",
-        "fallback": false,
-        "advanced": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "headerControls",
-        "label": "Header controls",
-        "type": "header",
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "initialTab",
-        "label": "Starting tab",
-        "type": "tab",
-        "needsComposition": true
-      },
-      {
-        "tab": "Layout",
-        "scope": "composition",
-        "key": "enabled",
-        "label": "Use composed layout",
-        "type": "toggle",
-        "advanced": true,
-        "fallback": false
-      }
+      {"tab":"Layout","scope":"composition","key":"sidebarWidth","label":"Sidebar width","type":"number","control":"slider","min":120,"max":400,"step":5,"fallback":200,"advanced":true,"needsNamedPage":true,"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"margin","label":"Safe margin","type":"number","control":"slider","min":0,"max":100,"step":2,"fallback":40,"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"gap","label":"Section gap","type":"number","control":"slider","min":0,"max":100,"step":2,"fallback":20,"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"columns","label":"Flow columns","type":"number","min":1,"max":2,"step":1,"fallback":1,"advanced":true,"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"fit","label":"Fit flow sections","type":"toggle","fallback":true,"advanced":true,"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"designHeight","label":"Design height","type":"number","min":480,"max":1440,"step":10,"fallback":800,"advanced":true,"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"headerMode","label":"Header style","type":"choice","choices":["navigation","identity"],"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"identity","label":"Header title","type":"text","needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"showClock","label":"Header clock","type":"toggle","fallback":false,"needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"showProfile","label":"Profile label","type":"toggle","fallback":false,"advanced":true,"needsComposition":true},
+      {"tab":"Layout","scope":"theme","key":"brandVisible","label":"Isolde brand","type":"toggle","fallback":false,"advanced":true},
+      {"tab":"Layout","scope":"composition","key":"headerControls","label":"Header controls","type":"header","needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"initialTab","label":"Starting tab","type":"tab","needsComposition":true},
+      {"tab":"Layout","scope":"composition","key":"enabled","label":"Use composed layout","type":"toggle","advanced":true,"fallback":false},
+      {"tab":"Layout","scope":"composition","key":"header","label":"Edit header","type":"headerEditor","needsComposition":true},
+      {"tab":"Header","scope":"composition","key":"headerMode","label":"Header style","type":"choice","needsComposition":true,"choices":[{"name":"Page navigation","value":"navigation"},{"name":"Title and logo","value":"identity"}]},
+      {"tab":"Header","scope":"composition","key":"identity","label":"Title","type":"text","needsComposition":true},
+      {"tab":"Header","scope":"headerStyle","key":"showTitle","label":"Show title or logo","type":"toggle","needsComposition":true,"fallback":true},
+      {"tab":"Header","scope":"headerStyle","key":"customLogo","label":"Logo image","type":"artwork","needsComposition":true},
+      {"tab":"Header","scope":"headerStyle","key":"titleAlignment","label":"Title alignment","type":"choice","needsComposition":true,"choices":["left","center","right"],"fallback":"left"},
+      {"tab":"Header","scope":"composition","key":"showClock","label":"Show clock","type":"toggle","needsComposition":true,"fallback":false},
+      {"tab":"Header","scope":"headerStyle","key":"showDate","label":"Show date","type":"toggle","needsComposition":true,"fallback":true},
+      {"tab":"Header","scope":"headerStyle","key":"timeFormat","label":"Clock format","type":"choice","needsComposition":true,"choices":[{"name":"12 hour","value":"h:mm AP"},{"name":"24 hour","value":"HH:mm"},{"name":"12 hour with seconds","value":"h:mm:ss AP"},{"name":"24 hour with seconds","value":"HH:mm:ss"}],"fallback":"h:mm AP"},
+      {"tab":"Header","scope":"headerStyle","key":"dateFormat","label":"Date format","type":"choice","needsComposition":true,"choices":[{"name":"Short date","value":"ddd, MMM d"},{"name":"Long date","value":"dddd, MMMM d"},{"name":"Year-month-day","value":"yyyy-MM-dd"},{"name":"Day/month/year","value":"dd/MM/yyyy"},{"name":"Month/day/year","value":"MM/dd/yyyy"}],"fallback":"ddd, MMM d"},
+      {"tab":"Header","scope":"composition","key":"headerControls","label":"Search and Settings","type":"header","needsComposition":true},
+      {"tab":"Header","scope":"headerStyle","key":"controlDisplay","label":"Control appearance","type":"choice","needsComposition":true,"choices":[{"name":"Icon and label","value":"both"},{"name":"Icon","value":"icon"},{"name":"Label","value":"label"}]},
+      {"tab":"Header","scope":"headerStyle","key":"order","label":"Header order","type":"choice","needsComposition":true,"choices":[{"name":"Title, controls, clock","value":["title","controls","clock"]},{"name":"Title, clock, controls","value":["title","clock","controls"]},{"name":"Controls, title, clock","value":["controls","title","clock"]},{"name":"Clock, title, controls","value":["clock","title","controls"]},{"name":"Controls, clock, title","value":["controls","clock","title"]},{"name":"Clock, controls, title","value":["clock","controls","title"]}]},
+      {"tab":"Header","scope":"headerStyle","key":"height","label":"Header height","type":"number","needsComposition":true,"control":"slider","min":42,"max":180,"fallback":42,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"padding","label":"Inside spacing","type":"number","needsComposition":true,"control":"slider","min":0,"max":24,"fallback":0,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"gap","label":"Space between groups","type":"number","needsComposition":true,"control":"slider","min":0,"max":64,"fallback":22,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"titleSize","label":"Title size","type":"number","needsComposition":true,"control":"slider","min":16,"max":96,"fallback":48,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"controlSize","label":"Control text size","type":"number","needsComposition":true,"control":"slider","min":12,"max":32,"fallback":14,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"controlWidth","label":"Control width","type":"number","needsComposition":true,"control":"slider","min":64,"max":240,"fallback":120,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"iconSize","label":"Icon size","type":"number","needsComposition":true,"control":"slider","min":12,"max":64,"fallback":23,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"clockSize","label":"Clock text size","type":"number","needsComposition":true,"control":"slider","min":12,"max":48,"fallback":18,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"dateSize","label":"Date text size","type":"number","needsComposition":true,"control":"slider","min":10,"max":32,"fallback":12,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"clockWidth","label":"Clock width","type":"number","needsComposition":true,"control":"slider","min":100,"max":320,"fallback":100,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"radius","label":"Corners","type":"number","needsComposition":true,"control":"slider","min":0,"max":80,"fallback":26,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"focusWidth","label":"Focus outline","type":"number","needsComposition":true,"control":"slider","min":1,"max":8,"fallback":2,"step":1},
+      {"tab":"Header","scope":"headerStyle","key":"opacity","label":"Background opacity","type":"number","needsComposition":true,"control":"slider","min":0,"max":1,"fallback":0,"step":0.05,"displayScale":100,"displayUnit":"%"},
+      {"tab":"Header","scope":"headerStyle","key":"backgroundColor","label":"Background","type":"color","needsComposition":true},
+      {"tab":"Header","scope":"headerStyle","key":"textColor","label":"Text","type":"color","needsComposition":true},
+      {"tab":"Header","scope":"headerStyle","key":"focusColor","label":"Focus","type":"color","needsComposition":true}
     ]
   },
   "designSamples": [

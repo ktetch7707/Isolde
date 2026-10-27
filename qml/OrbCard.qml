@@ -46,7 +46,7 @@ Item {
         color: root.style.labelPill === false ? "transparent" : "#85FFFFFF"
         Text {textFormat:Text.PlainText;
             id: label; anchors.centerIn: parent; width: Math.min(implicitWidth,parent.width-8)
-            text: root.item.name || ""; color: root.selected && root.style.selectedLabelColor ? root.style.selectedLabelColor : root.ink
+            text: root.style.visibleLabel===undefined?root.item.name || "":root.style.visibleLabel; color: root.selected && root.style.selectedLabelColor ? root.style.selectedLabelColor : root.ink
             font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: (root.style.labelSize || 15)*root.unit*(root.appearance.typographyScale || 1)
             elide: Text.ElideRight; font.weight: root.selected ? Font.DemiBold : Font.Normal
         }

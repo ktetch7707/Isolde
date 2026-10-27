@@ -12,19 +12,21 @@ Item {
     property string family:""
     property var configuration:({})
     property var selectedApps:[]
+    readonly property var appPicker:appPickerLoader.item
     property var assets:[]
     property string message:"Choose what to add. Content comes first; placement follows on the full page."
     property string keyboardAction:""
     property string keyboardReturn:""
     readonly property var families:options.catalog || []
     readonly property var actions:(session?session.availableActions:[]).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])
-    readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop"))
+    readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
     readonly property var mediaChoices:[{name:"Games · All local games",kind:"games",view:"all"},{name:"Games · Recently added",kind:"games",view:"recent"},{name:"Movies · All",kind:"movies",view:"all"},{name:"Movies · Recently watched",kind:"movies",view:"watched"},{name:"Movies · Recently added",kind:"movies",view:"recent"},{name:"Movies · Continue watching",kind:"movies",view:"continue"},{name:"Shows · All",kind:"shows",view:"all"},{name:"Shows · Recently watched",kind:"shows",view:"watched"},{name:"Shows · Recently added",kind:"shows",view:"recent"},{name:"Shows · Continue watching",kind:"shows",view:"continue"}].concat(actions.filter(a=>a.action && a.action.type==="open-collection").map(a=>({name:a.name,kind:a.mediaKind || "movies",view:"collection",value:a.action.collectionId})))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     signal picked(string type,var configuration)
     signal canceled()
     function begin(){view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page."}
     function labels(){
+        if(view==="shapes")return (options.shapeChoices || []).map(choice=>choice.name)
         if(view==="widgets")return ["Clock","Text / heading","Section / Group","Input slots · eight editable positions, capture availability required"]
         if(view==="links")return ["None · no action"].concat(actions.map(a=>a.name))
         if(view==="media")return mediaChoices.map(m=>m.name)
@@ -36,8 +38,10 @@ Item {
     function chooseFamily(index){
         const entry=families[index];if(!entry)return;family=entry.id;configuration=({});selected=0
         if(family==="button")view="links"
+        else if(family==="shape")view="shapes"
+        else if(family==="text")finish("text")
         else if(family==="image"){assets=session.artworkChoices();view="artwork"}
-        else if(family==="app-bar"){selectedApps=apps.slice(0,6).map(a=>a.action.appId);view="apps"}
+        else if(family==="app-bar"){selectedApps=(((options.componentPresets || {})["app-bar"] || {}).appCollection || {}).ids || [];view="apps"}
         else if(family==="library")view="media"
         else if(family==="recently-viewed" || family==="music-library" || family==="tv-guide" || family==="page-menu")finish(family)
         else if(family==="carousel")view="carousel"
@@ -45,7 +49,14 @@ Item {
     }
     function finish(type){const prototype=session.componentPrototype(type,configuration);if(!prototype.root){message=session.errorString;return}picked(type,configuration)}
     function importArtwork(source){const relative=session.stageArtwork(source);if(!relative){message=session.errorString;return false}configuration=Object.assign({},configuration,{customLogo:relative});view="links";selected=0;message="Image chosen. Decorative images have no remote focus; links make an image interactive.";return true}
+    function chooseAction(entry){
+        if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
+        configuration=Object.assign({},configuration,{action:entry.action || {}})
+        if(entry.needsTarget){beginKeyboard("target","","links");return}
+        if(family==="image" && entry.action && entry.action.type){beginKeyboard("imageName","Image link","links");return}finish(family)
+    }
     function activate(){
+        if(view==="shapes"){const entry=(options.shapeChoices || [])[selected];if(entry){configuration={presentation:entry.presentation};finish(entry.type)}return}
         if(view==="families"){chooseFamily(selected);return}
         if(view==="widgets"){finish(["clock","text","container","input-panel"][selected]);return}
         if(view==="carousel"){if(selected===0)configuration={buttons:options.carouselStart || []};finish("carousel");return}
@@ -66,6 +77,8 @@ Item {
     }
     function beginKeyboard(action,value,origin){keyboardAction=action;keyboardReturn=origin;keyboard.value=value;keyboard.selectedIndex=0;view="keyboard"}
     function handleCommand(command){
+        if(view==="links"){if(actionLoader.item)actionLoader.item.handleCommand(command);return}
+        if(view==="apps"){if(appPicker)appPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
         if(command===inputManager.back){if(view==="families")canceled();else{view="families";selected=0}return}
@@ -77,6 +90,7 @@ Item {
         else if(command===inputManager.navigateLeft)selected=Math.max(0,selected-1)
     }
     Rectangle {
+        visible:root.view!=="apps" && root.view!=="links"
         anchors.centerIn:parent;width:Math.min(parent.width-48,900*root.unit);height:Math.min(parent.height-48,630*root.unit)
         color:root.appearance.surfaceColor;radius:20*root.unit;border.width:2;border.color:root.appearance.focusColor
         Column {
@@ -115,7 +129,24 @@ Item {
             }
         }
     }
+    Loader {
+        id:actionLoader;anchors.fill:parent;visible:root.view==="links";active:root.visible && ["links","mediaAction","keyboard"].indexOf(root.view)>=0
+        sourceComponent:Component {StudioActionPicker {
+            anchors.fill:parent;actions:[{name:"None · no action",action:{}}].concat(root.actions);appearance:root.appearance;categories:root.options.actionCategories || []
+            onCanceled:{root.view="families";root.selected=Math.max(0,root.families.findIndex(f=>f.id===root.family))}
+            onPicked:entry=>root.chooseAction(entry)
+        }}
+    }
     StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="links";onPicked:action=>{root.configuration=Object.assign({},root.configuration,{action:action});if(root.family==="image")root.beginKeyboard("imageName","Image link","links");else root.finish(root.family)}}
+    Loader {
+        id:appPickerLoader;anchors.fill:parent;active:root.visible && root.view==="apps"
+        onLoaded:item.begin(root.selectedApps,((((root.options.componentPresets || {})["app-bar"] || {}).appCollection || {}).mode || "all"))
+        sourceComponent:Component {StudioAppPicker {
+            anchors.fill:parent;apps:root.apps;settings:root.options.appPicker || ({});appearance:root.appearance
+            onCanceled:{root.view="families";root.selected=0}
+            onAccepted:(mode,ids)=>{root.configuration={appCollection:{mode:mode,ids:ids}};root.finish("app-bar")}
+        }}
+    }
     OnScreenKeyboard {
         id:keyboard;anchors.fill:parent;visible:root.view==="keyboard";appearance:root.appearance;hint:root.message
         onCanceled:root.view=root.keyboardReturn

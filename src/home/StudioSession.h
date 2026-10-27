@@ -66,6 +66,7 @@ public:
     Q_INVOKABLE bool execute(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
     Q_INVOKABLE bool apply(const QString &focusId = {});
     Q_INVOKABLE QVariantMap componentPrototype(const QString &type, const QVariantMap &configuration = {});
+    Q_INVOKABLE QVariantMap replacementProposal(const QString &id, const QString &type, const QString &pageId = {});
     Q_INVOKABLE QVariantList artworkChoices() const;
     Q_INVOKABLE QString stageArtwork(const QString &source);
     Q_INVOKABLE QVariantList actionChoices() const;

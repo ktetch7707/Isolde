@@ -9,7 +9,31 @@ Item {
         property var editor:null
         property string diskBaseline:""
         Component {id:editorComponent;App.PageStudioView {width:1280;height:720;layoutModel:homeLayout}}
+        Component {id:appPickerCatalogComponent;App.StudioCatalog {width:1280;height:720}}
+        Component {id:appPickerInspectorComponent;App.StudioInspector {width:1280;height:720}}
+        SignalSpy {id:appPickerSpy;signalName:"picked"}
+        Component {id:collectionPickerComponent;App.StudioAppPicker {width:1280;height:720;settings:homeLayout.studioOptions.appPicker;appearance:homeLayout.studioAppearance}}
+        SignalSpy {id:collectionPickerSpy;signalName:"accepted"}
+        Component {id:actionPickerComponent;App.StudioActionPicker {width:1280;height:720;categories:homeLayout.studioOptions.actionCategories;appearance:homeLayout.studioAppearance}}
+        SignalSpy {id:actionPickedSpy;signalName:"picked"}
+        SignalSpy {id:actionCanceledSpy;signalName:"canceled"}
+        function test_action_picker_search_categories_and_cancel(){
+            const actions=[{name:"Open Home",action:{type:"root-page"}},{name:"Cinema input",aliases:["HDMI","capture source"],action:{type:"switch-input",input:2}},{name:"Movie",needsMedia:"movies"}]
+            const picker=createTemporaryObject(actionPickerComponent,tests.parent,{actions:actions});verify(picker!==null)
+            actionPickedSpy.target=picker;actionCanceledSpy.target=picker;actionPickedSpy.clear();actionCanceledSpy.clear()
+            picker.query="HDMI source";compare(picker.entries.length,1);compare(picker.entries[0].name,"Cinema input")
+            picker.handleCommand(inputManager.navigateDown);picker.handleCommand(inputManager.confirm)
+            compare(actionPickedSpy.count,1);compare(actionPickedSpy.signalArguments[0][0].action.input,2)
+            picker.query="";picker.category=homeLayout.studioOptions.actionCategories.findIndex(c=>c.types.indexOf("root-page")>=0)
+            compare(picker.entries.length,1);compare(picker.entries[0].name,"Open Home")
+            picker.query="no matching link";compare(picker.entries.length,0);picker.toolsFocused=true;picker.tool=0
+            picker.handleCommand(inputManager.confirm);verify(picker.searching)
+            picker.handleCommand(inputManager.back);verify(!picker.searching);compare(picker.query,"no matching link")
+            picker.handleCommand(inputManager.back);compare(actionCanceledSpy.count,1);compare(actionPickedSpy.count,1)
+            compare(actions[1].action.input,2)
+        }
         Component {id:backdropComponent;App.PageBackdrop {width:320;height:180;startColor:"black";endColor:"blue"}}
+        Component {id:shapeCardComponent;App.HomeCard {width:240;height:120;appearance:homeLayout.appearance}}
         Component {id:orbComponent;App.OrbCard {width:140;height:150;item:({name:"Logo",logoSource:Qt.resolvedUrl("../visual/home-pastel-reference/wallpaper.png")})}}
         Component {id:menuComponent;App.PageMenuWidget {width:600;height:120;appearance:({textColor:"white",surfaceColor:"#202126",focusColor:"pink"});style:({layout:{mode:"row",columns:3,rows:1,padding:8,gap:8}})}}
         Component {id:menuHomeComponent;App.HomeScreen {width:1280;height:720;sections:[];brandVisible:false;backgroundStart:"black";backgroundEnd:"black";tileRoundness:0.2;internetAvailable:false;localNetworkAvailable:false;hasContextualSources:false}}
@@ -18,6 +42,20 @@ Item {
         QtObject {id:fakeRegistry;property var apps:[]}
         Component {id:carouselComponent;App.PageAppCarousel {width:900;height:160;registry:fakeRegistry;appearance:({textColor:"#514b67",surfaceColor:"#f7edff",focusColor:"#bd8198"});style:({variant:"orb",layout:{visibleColumns:2}})}}
         SignalSpy {id:launchSpy;signalName:"launch"}
+        function test_button_carousel_scoped_overflow_and_focus(){
+            const items=[];for(let i=0;i<20;i++)items.push({id:"button-"+i,name:"Button "+i,action:{type:"switch-input",input:i%8+1}})
+            const carousel=createTemporaryObject(carouselComponent,tests.parent,{buttonItems:items,style:{layout:{mode:"row",columns:20,rows:1,visibleColumns:4,gap:12},moreLabel:"More buttons",galleryTitle:"Input shortcuts"}});verify(carousel!==null)
+            launchSpy.target=carousel;launchSpy.clear();compare(carousel.cards.length,4);compare(carousel.cards[3].name,"More buttons");compare(carousel.galleryApps.length,20)
+            carousel.selectedId="__more__";carousel.handleCommand(inputManager.confirm);verify(carousel.focusState().galleryOpen)
+            carousel.handleCommand(inputManager.navigateDown);compare(carousel.galleryId,"button-4");carousel.handleCommand(inputManager.confirm)
+            compare(launchSpy.count,1);compare(launchSpy.signalArguments[0][0].input,5)
+            const saved=carousel.focusState();verify(saved.galleryOpen);carousel.restoreFocusState(saved);compare(carousel.galleryId,"button-4")
+            carousel.handleCommand(inputManager.back);verify(!carousel.focusState().galleryOpen);compare(carousel.selectedId,"__more__")
+            carousel.style={layout:{mode:"row",columns:20,rows:1,visibleColumns:1},moreLabel:"More buttons"};compare(carousel.cards.length,1);compare(carousel.cards[0].id,"__more__");compare(carousel.galleryApps.length,20)
+            carousel.style={layout:{mode:"grid",columns:2,rows:2},moreLabel:"More buttons"};carousel.selectedId="button-0"
+            verify(carousel.handleCommand(inputManager.navigateDown));compare(carousel.selectedId,"button-2");compare(carousel.cards.length,4)
+            carousel.buttonItems=[{id:"unassigned",name:"Unassigned"}];carousel.activate("unassigned");compare(launchSpy.count,1);verify(carousel.message.length>0)
+        }
         QtObject {
             id:storeCatalog
             property var storeOptions:({platforms:[{type:"android",label:"Android"},{type:"web",label:"Chromium"}],columns:2,spacing:20,cardHeight:142})
@@ -274,6 +312,84 @@ Item {
             compare(JSON.stringify(editor.session.document),before);compare(more.item.presentation.icon,"grid")
             compare(studioFixture.disk(),diskBaseline)
         }
+        function test_shapes_have_authored_bounds_labels_and_no_runtime_focus() {
+            const shape={id:"shape",name:"Editor name",componentType:"shape",widgetType:"shape",presentation:{shape:"ellipse",surfaceColor:"#ff0000",fillMode:"gradient",fillEndColor:"#0000ff",fillDirection:"horizontal",visibleLabel:"Visible caption",labelPosition:"hidden"}}
+            const card=createTemporaryObject(shapeCardComponent,tests.parent,{item:shape,selected:true})
+            verify(card!==null);verify(waitForRendering(card));verify(card.ellipse);compare(card.interactive,false)
+            compare(card.title,"Visible caption");compare(card.item.name,"Editor name")
+            const body=findChild(card,"cardSurface");compare(body.width,240);compare(body.height,240)
+            compare(card.ellipseScaleY,0.5);compare(card.focusFrame.width,246);compare(card.focusFrame.height,123)
+            verify(body.gradient!==null)
+            const host=createTemporaryObject(menuHomeComponent,tests.parent,{items:[shape]})
+            verify(host!==null);compare(host.focusable(shape),false)
+            host.editMode=true;compare(host.focusable(shape),true)
+            const text=createTemporaryObject(shapeCardComponent,tests.parent,{item:{id:"body",name:"Independent editor name",componentType:"text",widgetType:"text",presentation:{bodyText:"Body content",visibleLabel:"Caption",labelPosition:"hidden"}}})
+            compare(text.title,"Caption");compare(findChild(text,"componentBodyText").text,"Body content")
+            compare(studioFixture.disk(),diskBaseline)
+        }
+        function test_visual_app_picker_order_cancel_missing_and_pointer_parity() {
+            const apps=["one","two","three"].map(id=>({name:id,action:{type:"launch-app",appId:id}}))
+            const picker=createTemporaryObject(collectionPickerComponent,tests.parent,{apps:apps})
+            verify(picker!==null);collectionPickerSpy.target=picker;collectionPickerSpy.clear()
+            const initial=["three","one","missing"]
+            picker.begin(initial);picker.control=3;picker.handleCommand(inputManager.confirm)
+            verify(picker.selectedView);verify(picker.entries[2].missing)
+            picker.handleCommand(inputManager.confirm);compare(picker.movingId,"three")
+            picker.handleCommand(inputManager.navigateRight);compare(picker.selection.join(","),"one,three,missing")
+            picker.handleCommand(inputManager.back);compare(picker.selection.join(","),initial.join(","))
+            picker.index=0;picker.handleCommand(inputManager.confirm);picker.handleCommand(inputManager.navigateRight);picker.handleCommand(inputManager.confirm)
+            compare(picker.movingId,"");picker.toolsFocused=true;picker.control=5;picker.handleCommand(inputManager.confirm)
+            compare(collectionPickerSpy.count,1);const remote=JSON.stringify(collectionPickerSpy.signalArguments[0][1])
+            compare(remote,JSON.stringify(["one","three","missing"]))
+            picker.begin(initial)
+            mouseClick(findChild(picker,"studioAppPickerTool-3"))
+            verify(waitForRendering(findChild(picker,"studioAppChoice-three")))
+            mouseClick(findChild(picker,"studioAppChoice-three"));compare(picker.movingId,"three")
+            mouseClick(findChild(picker,"studioAppChoice-one"));compare(picker.movingId,"")
+            mouseClick(findChild(picker,"studioAppPickerTool-5"))
+            compare(collectionPickerSpy.count,2);compare(JSON.stringify(collectionPickerSpy.signalArguments[1][1]),remote)
+            picker.apps=Array.from({length:129},(_,i)=>({name:"App "+i,action:{type:"launch-app",appId:"app-"+i}}))
+            picker.begin(initial);picker.control=1;picker.handleCommand(inputManager.confirm)
+            compare(picker.selection.join(","),initial.join(","));verify(picker.message.length>0)
+            compare(studioFixture.disk(),diskBaseline);collectionPickerSpy.target=null
+        }
+        function test_android_app_selection_catalog_inspector_and_dynamic_registry() {
+            const actions=[
+                {name:"Desktop app",appType:"desktop",appSection:"TV",action:{type:"launch-app",appId:"desktop-app"}},
+                {name:"Android app",appType:"android",appSection:"TV",action:{type:"launch-app",appId:"android-app"}},
+                {name:"Web app",appType:"web",appSection:"Music",action:{type:"launch-app",appId:"web-app"}},
+                {name:"Mock app",appType:"mock",appSection:"TV",action:{type:"launch-app",appId:"mock-app"}},
+                {name:"Store",appType:"store",appSection:"TV",action:{type:"launch-app",appId:"store"}}
+            ]
+            const fixtureSession={availableActions:actions,document:{}}
+            const catalog=createTemporaryObject(appPickerCatalogComponent,tests.parent,{session:fixtureSession,options:homeLayout.studioOptions,appearance:editor.page.appearance})
+            const inspector=createTemporaryObject(appPickerInspectorComponent,tests.parent,{session:fixtureSession,options:homeLayout.studioOptions,appearance:editor.page.appearance,page:{items:[{id:"apps",appCollection:{section:"TV"}}]},selectedIds:["apps"]})
+            verify(catalog!==null);verify(inspector!==null)
+            compare(catalog.apps.map(a=>a.action.appId).join(","),"desktop-app,android-app,web-app")
+            compare(inspector.apps.map(a=>a.action.appId).join(","),"desktop-app,android-app")
+            const family=catalog.families.findIndex(f=>f.id==="app-bar")
+            verify(family>=0);catalog.chooseFamily(family)
+            verify(catalog.appPicker!==null);catalog.appPicker.toolsFocused=false;catalog.appPicker.index=1
+            catalog.handleCommand(inputManager.confirm)
+            verify(catalog.appPicker.selection.indexOf("android-app")<0)
+            catalog.handleCommand(inputManager.confirm)
+            verify(catalog.appPicker.selection.indexOf("android-app")>=0)
+            appPickerSpy.target=catalog;appPickerSpy.clear()
+            catalog.appPicker.toolsFocused=true;catalog.appPicker.control=5;catalog.handleCommand(inputManager.confirm)
+            compare(appPickerSpy.count,1)
+            verify(appPickerSpy.signalArguments[0][1].appCollection.ids.indexOf("android-app")>=0)
+            inspector.appSelection=[];inspector.view="apps";verify(inspector.appPicker!==null);inspector.appPicker.toolsFocused=false;inspector.appPicker.index=1
+            inspector.handleCommand(inputManager.confirm)
+            compare(inspector.appPicker.selection.join(","),"android-app")
+            // Registry refresh/removal must update both selectors without
+            // silently replacing the user's explicit selected identities.
+            const remaining={availableActions:actions.filter(a=>a.action.appId!=="android-app"),document:{}}
+            catalog.session=remaining;inspector.session=remaining
+            compare(catalog.apps.length,2);compare(inspector.apps.length,1)
+            compare(inspector.appPicker.selection.join(","),"android-app")
+            compare(studioFixture.disk(),diskBaseline)
+            appPickerSpy.target=null
+        }
         function test_app_collection_registry_membership_overflow_and_return() {
             fakeRegistry.apps=[{id:"one",name:"One",type:"desktop",section:"Games"},{id:"mock",name:"Fake",type:"mock"},{id:"two",name:"Two",type:"web",section:"Music"},{id:"three",name:"Three",type:"desktop",section:"Games"}]
             const carousel=createTemporaryObject(carouselComponent,tests.parent)
@@ -307,7 +423,8 @@ Item {
             carousel.collection={mode:"all",ids:[]};compare(carousel.collectionTooLarge,true);compare(carousel.eligible.length,0)
             carousel.collection={mode:"selected",ids:["three","one"],section:"Games"};compare(carousel.eligible.length,2)
             fakeRegistry.apps=[{id:"one",name:"One",type:"desktop",section:"Games"}]
-            compare(carousel.eligible.length,1);compare(carousel.selectedId,"one")
+            compare(carousel.eligible.length,2);compare(carousel.eligible[0].id,"three");verify(!!carousel.eligible[0].unavailableReason)
+            carousel.activate("three");compare(launchSpy.count,1);verify(carousel.message.length>0)
             carousel.readOnly=true;carousel.activate("one");compare(launchSpy.count,1)
             launchSpy.target=null
         }

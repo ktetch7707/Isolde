@@ -14,6 +14,7 @@
 #include <QRegularExpression>
 #include <QtMath>
 #include <QCryptographicHash>
+#include <QMap>
 
 namespace {
 
@@ -317,6 +318,19 @@ QVariantMap HomeLayout::studioOptions() const
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
     if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
     if(object.contains("guide") && ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap()).isEmpty())return {};
+    if(object.contains("headerDefaults")) {
+        const auto defaults=object["headerDefaults"].toObject();
+        if(defaults.size()!=2 || !defaults.contains("navigation") || !defaults.contains("identity"))return {};
+        for(const auto &mode:QStringList{"navigation","identity"})if(!defaults[mode].isObject()
+            || !ComponentSchema::validComposition({{"schemaVersion",1},{"headerMode",mode},{"showClock",true},{"header",defaults[mode].toObject().toVariantMap()}}))return {};
+    }
+    if(object.contains("appPicker")) {
+        const auto picker=object["appPicker"].toObject();
+        const QMap<QString,QPair<int,int>> bounds{{"columns",{2,6}},{"cardHeight",{96,240}},{"gap",{0,32}},{"radius",{0,40}},{"margin",{8,48}},{"labelSize",{14,28}},{"logoSize",{24,96}}};
+        if(picker.size()!=bounds.size())return {};
+        for(auto it=bounds.cbegin();it!=bounds.cend();++it){const auto value=picker[it.key()];const auto n=value.toDouble(-1);if(!value.isDouble() || !std::isfinite(n) || std::floor(n)!=n || n<it.value().first || n>it.value().second)return {};}
+        if(picker["cardHeight"].toInt()<picker["logoSize"].toInt()+2*picker["labelSize"].toInt()+2*picker["gap"].toInt())return {};
+    }
     const auto desktop=object["desktop"].toObject();
     if(desktop.size()!=8)return {};
     for(const auto &key:QStringList{"title","returnLabel","returnShortcut"})if(!desktop[key].isString() || desktop[key].toString().trimmed().isEmpty() || desktop[key].toString().size()>80 || desktop[key].toString().contains(QChar::Null))return {};
@@ -347,14 +361,47 @@ QVariantMap HomeLayout::studioOptions() const
     for(const auto &entry:panel["children"].toArray()){const auto child=ComponentSchema::component(entry.toObject().toVariantMap(),true);if(child.isEmpty())return {};panelItems.append(QJsonObject::fromVariantMap(child));}
     if(!ComponentSchema::hierarchyFits(panelItems,{{"schemaVersion",1},{"enabled",true},{"grid",object["defaultGrid"].toObject().toVariantMap()}},{}))return {};
     const auto presets=object["componentPresets"].toObject();
-    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
+    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","shape","text","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
+    if(object.contains("shapeChoices")) {
+        if(!object["shapeChoices"].isArray() || object["shapeChoices"].toArray().isEmpty() || object["shapeChoices"].toArray().size()>8)return {};
+        for(const auto &value:object["shapeChoices"].toArray()) {
+            const auto choice=value.toObject();const auto type=choice["type"].toString();
+            if(choice.size()!=3 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() || choice["name"].toString().size()>80 || !QStringList{"shape","container"}.contains(type) || !choice["presentation"].isObject())return {};
+            auto candidate=type=="shape"?presets["shape"].toObject():object["groupPreset"].toObject();auto style=candidate["presentation"].toObject();
+            const auto changes=choice["presentation"].toObject();for(auto it=changes.begin();it!=changes.end();++it)style[it.key()]=it.value();candidate["presentation"]=style;
+            if(ComponentSchema::component(candidate.toVariantMap(),true).isEmpty())return {};
+        }
+    }
+    if(object.contains("replacementChoices")) {
+        const auto choices=object["replacementChoices"].toArray();
+        if(!object["replacementChoices"].isArray() || choices.isEmpty() || choices.size()>5)return {};
+        QSet<QString> types;
+        for(const auto &value:choices){const auto choice=value.toObject();const auto type=choice["type"].toString();if(choice.size()!=2 || !choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() || choice["name"].toString().size()>80 || !QStringList{"button","image","text","shape","container"}.contains(type) || types.contains(type))return {};types.insert(type);}
+    }
     const auto catalog=object["catalog"].toArray();QSet<QString> catalogIds;
     if(presets.isEmpty() || presets.size()>16 || catalog.isEmpty() || catalog.size()>16 || object["inspector"].toObject()["fields"].toArray().size()>160)return {};
     for(const auto &entry:catalog){const auto item=entry.toObject();const auto id=item["id"].toString(),name=item["name"].toString();
         if((id!="widgets" && !presets.contains(id)) || catalogIds.contains(id) || name.trimmed().isEmpty() || name.size()>80 || item["description"].toString().size()>160)return {};
         catalogIds.insert(id);
     }
-    for(const auto &entry:object["actions"].toArray())if(ComponentSchema::action(entry.toObject()["action"].toObject().toVariantMap()).isEmpty())return {};
+    for(const auto &entry:object["actions"].toArray()) {
+        const auto choice=entry.toObject();
+        if(!choice["name"].isString() || choice["name"].toString().trimmed().isEmpty() || choice["name"].toString().size()>160 || ComponentSchema::action(choice["action"].toObject().toVariantMap()).isEmpty())return {};
+        if(choice.contains("aliases")) {
+            if(!choice["aliases"].isArray() || choice["aliases"].toArray().size()>8)return {};
+            for(const auto &alias:choice["aliases"].toArray())if(!alias.isString() || alias.toString().size()>80 || alias.toString().contains(QChar::Null))return {};
+        }
+    }
+    const auto actionCategories=object["actionCategories"].toArray();
+    if(!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size()>12)return {};
+    const QStringList pickerTypes{"none","media-picker","root-page","open-page","launch-app","app-drawer","open-collection","open-guide","play-movie","open-show","switch-input","settings","desktop-mode","open-file","open-folder","open-url","open-disc"};
+    for(const auto &value:actionCategories) {
+        const auto category=value.toObject();
+        if(category.size()!=2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() || category["name"].toString().size()>80 || !category["types"].isArray() || category["types"].toArray().size()>pickerTypes.size())return {};
+        QSet<QString> types;
+        for(const auto &type:category["types"].toArray()){if(!type.isString() || !pickerTypes.contains(type.toString()) || types.contains(type.toString()))return {};types.insert(type.toString());}
+    }
+    if(!actionCategories.first().toObject()["types"].toArray().isEmpty())return {};
     QSet<QString> ids;
     for(const auto &entry:object["gridModes"].toArray()) {
         const auto mode=entry.toObject();const auto id=mode["id"].toString(),name=mode["name"].toString();

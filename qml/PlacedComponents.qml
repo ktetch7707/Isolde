@@ -23,6 +23,7 @@ Item {
             Accessible.name:(modelData.item.accessibility || {}).name || modelData.item.name || "Component"
             Accessible.description:(modelData.item.accessibility || {}).hint || modelData.item.unavailableReason || ""
             readonly property bool apps:!!modelData.item.appCollection
+            readonly property bool buttons:modelData.item.family==="carousel" && !surface.host.editMode
             readonly property bool pageMenu:modelData.item.family==="page-menu"
             readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu
             readonly property bool library:modelData.item.componentType==="library"
@@ -62,17 +63,22 @@ Item {
             }
             Rectangle {
                 id:groupSurface
-                anchors.fill:parent;visible:node.group;radius:Math.min((node.style.radius || 0)*surface.unit,width/2,height/2)
+                anchors.fill:parent;visible:node.group;radius:node.style.shape==="rectangle"?0:node.style.shape==="pill"?Math.min(width,height)/2:Math.min((node.style.radius || 0)*surface.unit,width/2,height/2)
                 readonly property color ink:node.style.surfaceColor || surface.host.appearance.surfaceColor || surface.host.backgroundEnd
                 color:Qt.rgba(ink.r,ink.g,ink.b,node.style.surfaceOpacity===undefined?1:node.style.surfaceOpacity)
+                gradient:node.style.fillMode==="gradient"?groupGradient:null
+                Gradient {id:groupGradient;orientation:node.style.fillDirection==="horizontal"?Gradient.Horizontal:Gradient.Vertical
+                    GradientStop {position:0;color:groupSurface.color}
+                    GradientStop {position:1;color:{const ink=Qt.darker(node.style.fillEndColor || groupSurface.ink,1);return Qt.rgba(ink.r,ink.g,ink.b,node.style.surfaceOpacity===undefined?1:node.style.surfaceOpacity)}}
+                }
                 ArtworkImage {anchors.fill:parent;source:node.modelData.item.logoSource || "";crop:node.style.imageCrop || null;radius:parent.radius;fit:node.style.artFit || "cover";focalX:node.style.artFocalX===undefined?.5:node.style.artFocalX;focalY:node.style.artFocalY===undefined?.5:node.style.artFocalY;zoom:node.style.artZoom || 1}
                 readonly property bool selected:node.selected
                 border.width:(selected?Math.max(2,node.style.focusWidth===undefined?3:node.style.focusWidth):node.style.borderWidth || 0)*surface.unit
                 border.color:selected?node.style.focusColor || surface.host.appearance.focusColor || surface.host.appearance.textColor || "transparent":node.style.borderColor || "transparent"
             }
             Text {
-                visible:node.group && !!node.style.showHeading;x:node.padding;y:node.padding;width:parent.width-2*node.padding;height:node.headingHeight
-                text:(node.modelData.item.name || "")+(node.modelData.item.unavailableReason?"\n"+node.modelData.item.unavailableReason:"");textFormat:Text.PlainText;elide:Text.ElideRight;maximumLineCount:2;wrapMode:Text.Wrap
+                visible:(node.group || node.apps) && !!node.style.showHeading;x:node.padding;y:node.padding;width:parent.width-2*node.padding;height:node.headingHeight
+                text:(node.style.visibleLabel===undefined?node.modelData.item.name || "":node.style.visibleLabel)+(node.modelData.item.unavailableReason?"\n"+node.modelData.item.unavailableReason:"");textFormat:Text.PlainText;elide:Text.ElideRight;maximumLineCount:2;wrapMode:Text.Wrap
                 color:node.style.headingColor || node.style.labelColor || surface.host.appearance.textColor || "transparent";font.pixelSize:(node.style.headingSize || 24)*surface.unit
                 font.bold:!!node.style.headingBold; font.family:surface.host.appearance.fontFamily || "DejaVu Sans"
             }
@@ -85,9 +91,9 @@ Item {
             Flickable {
                 id:viewport;x:node.padding;y:node.padding+node.headingHeight;width:parent.width-2*node.padding;height:parent.height-2*node.padding-node.headingHeight
                 contentWidth:node.localMetrics.valid?node.localMetrics.columns*node.localMetrics.cellW+(node.localMetrics.columns-1)*node.localMetrics.gap:width
-                contentHeight:height;clip:true;interactive:node.group && !surface.host.editMode;boundsBehavior:Flickable.StopAtBounds
+                contentHeight:height;visible:!node.buttons;clip:true;interactive:node.group && !surface.host.editMode;boundsBehavior:Flickable.StopAtBounds
                 Loader {
-                id:contents;width:viewport.contentWidth;height:viewport.height
+                id:contents;width:viewport.contentWidth;height:viewport.height;active:!node.buttons
                 function viewportRect(){const point=viewport.mapToItem(surface.host,0,0);return {x:point.x,y:point.y,width:viewport.width,height:viewport.height}}
                 function revealPlacement(p){const start=p.x*(node.localMetrics.cellW+node.localMetrics.gap),end=start+p.width*node.localMetrics.cellW+(p.width-1)*node.localMetrics.gap;if(start<viewport.contentX)viewport.contentX=start;else if(end>viewport.contentX+viewport.width)viewport.contentX=Math.min(viewport.contentWidth-viewport.width,end-viewport.width)}
                 function editorViewport(){return {x:viewport.contentX,y:viewport.contentY}}
@@ -107,16 +113,17 @@ Item {
                 function onFocused(card){if(card && card.modelData)contents.revealPlacement(card.modelData.placement);surface.focused(card)}
             }
             Loader {
-                id:appsLoader;anchors.fill:parent;active:node.apps
+                id:appsLoader;x:node.padding;y:node.padding+node.headingHeight;width:parent.width-2*node.padding;height:parent.height-2*node.padding-node.headingHeight;active:node.apps || node.buttons
                 sourceComponent:PageAppCarousel {
-                    registry:surface.host.appProvider;collection:node.modelData.item.appCollection;style:node.style;appearance:surface.host.appearance;unit:surface.unit
+                    buttonItems:node.buttons?node.childEntries.filter(e=>!e.item.hidden).sort((a,b)=>a.placement.y-b.placement.y || a.placement.x-b.placement.x).map(e=>e.item):null
+                    registry:surface.host.appProvider;collection:node.modelData.item.appCollection || ({mode:"selected",ids:[]});style:Object.assign({},node.buttons?((surface.host.collectionDefaults || {}).carousel || {}).presentation || {}:{},node.style);appearance:surface.host.appearance;unit:surface.unit
                     readOnly:surface.host.editMode || surface.host.previewOnly
                     engaged:surface.host.activeMediaWidgetId===node.modelData.item.id;highlighted:node.selected
                     onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
                     onLaunch:action=>{if(surface.host.rememberAppFocus)surface.host.rememberAppFocus(node.modelData.item.id,focusState());surface.host.actionActivated(action,node.modelData.item.id)}
                 }
                 onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
-                Component.onDestruction:if(!surface.previewOverlay && node.apps && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
+                Component.onDestruction:if(!surface.previewOverlay && (node.apps || node.buttons) && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
             }
             Loader {
                 id:menuLoader;anchors.fill:parent;active:node.pageMenu
@@ -148,11 +155,13 @@ Item {
             }
             }
             Rectangle {
+                id:recoveryFocus
                 objectName:"studioRecoveryFocus-"+node.modelData.item.id
                 // Selection is editor state; never brighten the user's artwork.
                 visible:surface.host.editMode && node.selected && ((node.modelData.item.opacity===undefined?1:node.modelData.item.opacity)<.35 || node.style.focusEnabled===false)
                 readonly property var frame:!node.group && !node.library && !node.apps ? card.focusFrame : ({x:0,y:0,width:node.width,height:node.height,radius:groupSurface.radius,color:node.style.focusColor || surface.host.appearance.focusColor,lineWidth:Math.max(2,node.style.focusWidth===undefined?3:node.style.focusWidth)*surface.unit})
-                x:frame.x;y:frame.y;width:frame.width;height:frame.height;radius:frame.radius
+                x:frame.x;y:frame.y;width:frame.ellipse?Math.max(frame.width,frame.height):frame.width;height:frame.ellipse?width:frame.height;radius:frame.radius
+                transform:Scale {xScale:recoveryFocus.frame.ellipse && recoveryFocus.width?recoveryFocus.frame.width/recoveryFocus.width:1;yScale:recoveryFocus.frame.ellipse && recoveryFocus.height?recoveryFocus.frame.height/recoveryFocus.height:1}
                 color:"transparent";border.color:frame.color;border.width:frame.lineWidth
             }
         }

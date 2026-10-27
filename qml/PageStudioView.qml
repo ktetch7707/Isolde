@@ -18,10 +18,14 @@ Item {
     property bool scopeOverview:false
     property real sectionHeightDraft:0
     property string selectedId: ""
+    property string headerSelection:""
+    readonly property var headerParts:["title"].concat(page && page.composition.showClock?["clock"]:[]).concat(page?page.composition.headerControls || (page.composition.headerMode==="identity"?["search","settings"]:["settings","edit"]):[])
     property string mode: "canvas"
     property bool toolbarFocus: true
     property int tool: 0
     property int menuIndex:0
+    property bool historyFocus:false
+    property int historyIndex:0
     property int choice: 0
     property string message: ""
     property string addingType: ""
@@ -42,6 +46,8 @@ Item {
     property var duplicateBefore:[]
     property var pageFocus:({})
     property var candidate: ({x:0,y:0,width:1,height:1})
+    property string pointerBoundaryError:""
+    onCandidateChanged:pointerBoundaryError=""
     property var flowIds: []
     property int flowOriginIndex: 0
     property int flowTargetIndex: 0
@@ -62,6 +68,7 @@ Item {
     property var origin: ({})
     property var gestureViewport: ({})
     property var proposal: ({})
+    property var replacementLosses:[]
     property var gridDraft: ({})
     property var gridBaselineComposition:({})
     property bool gridWasPlaced:false
@@ -88,7 +95,7 @@ Item {
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
     property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
-    readonly property var draftModel: session ? ((gridEditing || mode==="flowMove" || mode==="scrolling" || mode==="arrange" || mode==="childLayout" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
+    readonly property var draftModel: session ? ((gridEditing || mode==="flowMove" || mode==="scrolling" || mode==="arrange" || mode==="childLayout" || mode==="replaceReview" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
     readonly property var pageGrid:page?page.grid:({})
@@ -131,7 +138,7 @@ Item {
     }
     function editorReveals(item){if(!item.hidden)return true;if(mode==="preview")return false;let id=selectedId;for(let depth=0;id && depth<=4;++depth){if(id===item.id)return true;const node=items.find(i=>i.id===id);id=node?node.parentId || "":""}return false}
     readonly property string operationSummary:componentName(addingType?null:current)+" · row "+(candidate.y+1)+", column "+(candidate.x+1)+" · "+candidate.width+" × "+candidate.height+" cells"
-    readonly property string operationTitle:({noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",groupDestination:"Move into a group",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
+    readonly property string operationTitle:({headerContext:"Header",editorSettings:"Editor settings",replaceReview:"Replace component",restoreDefaults:"Reset page",apply:"Review changes",view:"Canvas view",noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",groupDestination:"Move into a group",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
     readonly property string footerText: {
         if(mode==="flowMove")return message
         if(mode==="move" || mode==="resize")return (addingType?"Adding ":mode==="move"?(grid.overlap?"Moving layer · ":"Moving "):"Resizing ")+componentName(addingType?null:current)+(message?" · "+message:mode==="move" && collisionPreview.valid===false?" · "+collisionPreview.reason:"")
@@ -179,6 +186,7 @@ Item {
     }
     readonly property var placementOptions:parentScopeId?({parentId:parentScopeId,categoryId:""}):sectionMode?({parentId:"",categoryId:scopeId}):({parentId:""})
     function collisionProposal(strategy) {
+        if(pointerBoundaryError)return ({valid:false,reason:pointerBoundaryError})
         if(strategy==="swap" && mode!=="collision" && mode!=="collisionDetails")return ({})
         if((mode!=="collision" && mode!=="collisionDetails" && mode!=="move" && mode!=="resize" && mode!=="size") || !session)return ({})
         return addingType?session.additionProposal(addingType,candidate,strategy,pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId,addingConfiguration,pendingScrollEnable)
@@ -199,14 +207,17 @@ Item {
         +groupBreadcrumb()
     function groupBreadcrumb(){let result=[],id=parentScopeId;for(let depth=0;id && depth<4;++depth){const group=items.find(i=>i.id===id);if(!group)break;result.unshift(group.name || group.id);id=group.parentId || ""}return result.length?" / "+result.join(" / "):""}
     readonly property var menuEntries:[{label:"＋ Add page",action:"new"}].concat(pageEntries.map(p=>({label:(p.id===draftModel.homePageId?"⌂ ":"")+p.name,action:"page",id:p.id}))).concat([
-        {label:"＋ Add component",action:"add"},{label:"Page appearance",action:"appearance"},{label:"More tools",action:"more"},{label:"Review & Apply",action:"apply"},{label:"Edit page →",action:"edit"}])
+        {label:"＋ Add component",action:"add"},{label:"Page appearance",action:"appearance"},{label:"Layers",action:"layers"},{label:"Saved designs",action:"designs"},{label:"Editor settings",action:"editorSettings"},{label:"Review & Apply",action:"apply"},{label:"Edit page →",action:"edit"}])
     function activateMenu(index) {
         menuIndex=index;const entry=menuEntries[index];if(!entry)return
-        choice=0
+        choice=0;historyFocus=false
         if(entry.action==="new")beginKeyboard("newPage","")
         else if(entry.action==="page"){pageFocus[pageId]=selectedId;pageId=entry.id;selectedId=pageFocus[pageId] || "";mode="pageContext"}
         else if(entry.action==="add")chooseTool(0)
         else if(entry.action==="appearance")openInspector(true)
+        else if(entry.action==="layers")mode="layers"
+        else if(entry.action==="editorSettings")mode="editorSettings"
+        else if(entry.action==="designs"){if(session.dirty)message="Apply or discard this draft before opening saved designs.";else skinsRequested()}
         else if(entry.action==="more")mode="more"
         else if(entry.action==="apply")mode="apply"
         else {toolbarFocus=false;mode="canvas";if(!current && scopedItems.length)selectedId=scopedItems[0].id}
@@ -220,13 +231,16 @@ Item {
     onScopeIdChanged:if(open && sectionMode && !scopeOverview)Qt.callLater(()=>{if(open && sectionMode)preview.revealScope(scopeId)})
 
     function show(id, component) {
+        historyFocus=false
+        headerSelection=""
+        pointerBoundaryError=""
         session = layoutModel.beginStudio()
         pageId = id || (!session.model.rootPageVisible?session.model.homePageId:""); selectedId = component || "";pageFocus=({})
         mode = "canvas"; toolbarFocus = true; tool = 0;menuIndex=0; message = "";deletedSelection=""
         scopeOverview=true;scopeId=current?current.categoryId || "":page && page.sections.length?page.sections[0].id || "":""
         open = true
     }
-    function close() { if(session) session.invalidate(); open=false; closed() }
+    function close() { pointerBoundaryError=""; if(session) session.invalidate(); open=false; closed() }
     function command(op,args) {
         if (!session || !session.execute(op,args || {},["newPage","renamePage","duplicatePage","reorderPage","removePage","setHomePage","studioAppearance"].indexOf(op)>=0 ? "" : pageId)) {
             message = session ? session.errorString : "The edit session is closed."
@@ -236,10 +250,26 @@ Item {
         return true
     }
     function openInspector(asPage){mode="inspector";toolbarFocus=false;inspector.begin(asPage)}
+    function openHeader(part) {
+        headerSelection=part || "title"
+        openInspector(true);inspector.tab=inspector.tabs.indexOf("Header");inspector.view="fields";inspector.controlsShown=true
+        const key=headerSelection==="title"?"identity":headerSelection==="clock"?"showClock":headerSelection==="search" || headerSelection==="settings" || headerSelection==="edit"?"headerControls":"headerMode"
+        inspector.selected=Math.max(0,inspector.fields.findIndex(field=>field.key===key))
+    }
     function openStructureInspector(type,id){openInspector(false);inspector.structureType=type;inspector.structureId=id;structureType=type;structureId=id}
     function projected(item){return mode==="inspector" && inspector.editingState!=="base" && (inspector.structureType==="section"?item.categoryId===inspector.structureId:inspector.selectedIds.indexOf(item.id)>=0)?Object.assign({},item,{designState:inspector.editingState}):item}
     function inspectorOperation(name){
         inspectorReturn=false
+        if(name.indexOf("replace:")===0){
+            const type=name.slice(8),proposal=session.replacementProposal(selectedId,type,pageId)
+            if(!proposal.valid){inspector.message=proposal.reason;return}
+            if(!session.previewCommand("replaceComponent",{id:selectedId,type:type},pageId)){inspector.message=session.errorString;return}
+            replacementLosses=proposal.losses || [];mode="replaceReview";choice=1
+            message="Position, identity and compatible appearance stay in place."+(replacementLosses.length?" Removes: "+replacementLosses.join(", ")+".":" No content or links will be removed.")
+            return
+        }
+        if(name==="headerEditor"){openHeader(headerSelection || "title");return}
+        if(name==="editorColorsReset"){command("studioAppearance",{value:{}});return}
         if(name==="editableMenu"){
             const menu=items.find(i=>i.family==="page-menu")
             if(menu){selectedId=menu.id;toolbarFocus=false;mode="context";choice=0;return}
@@ -269,10 +299,18 @@ Item {
         if(index!==undefined){context(index);if(mode!=="canvas")inspectorReturn=true}
     }
     function position(item) { return item && item.placement ? Object.assign({},item.placement) : ({x:0,y:0,width:1,height:1}) }
+    function boundaryDistance(placement) {
+        return Math.max(0,-placement.x)+Math.max(0,-placement.y)
+            +Math.max(0,1-placement.width)+Math.max(0,1-placement.height)
+            +Math.max(0,placement.height-grid.rows)
+            +Math.max(0,placement.x+placement.width-grid.columns)
+            +Math.max(0,placement.y+placement.height-placementRows)
+    }
     function beginGesture(resize){beginGestureInScope(resize,false)}
     function beginGestureInScope(resize,forceGrid) {
         if (!current) { message="Choose a component in Layers first."; return }
         if(current.locked){message="This component is locked. Choose Edit component → Lock / unlock first.";return}
+        pointerBoundaryError=""
         gestureViewport=preview.editorViewport()
         originScopeOverview=scopeOverview
         originParentId=current.parentId || "";originScopeId=scopeId
@@ -298,6 +336,7 @@ Item {
         mode=resize ? "resize" : "move"; toolbarFocus=false
     }
     function cancelGesture() {
+        pointerBoundaryError=""
         if(mode==="flowMove")session.cancelPreview()
         parentScopeId=originParentId;scopeId=originScopeId;scopeOverview=originScopeOverview
         if(!addingType && current)candidate=Object.assign({},origin)
@@ -392,6 +431,7 @@ Item {
         return {key:"sectionHeight",min:60,max:800,integer:false,step:20}
     }
     function acceptCandidate(strategy) {
+        if(pointerBoundaryError){message=pointerBoundaryError;return}
         if (addingType) {
             proposal=session.additionProposal(addingType,candidate,strategy || "shift",pageId,parentScopeId?"":sectionMode?scopeId:"",parentScopeId,addingConfiguration,pendingScrollEnable)
             if(!proposal.valid){message=proposal.reason;if(mode!=="size"){mode="noRoom";choice=0}return}
@@ -407,6 +447,7 @@ Item {
         if(mode!=="size" || (axis!=="width" && axis!=="height"))return
         const limit=axis==="width"?grid.columns:grid.rows
         if(value<1 || value>limit || Math.floor(value)!==value)return
+        pointerBoundaryError=""
         let next=Object.assign({},candidate);next[axis]=value
         // Preview edge anchoring visibly, so the full page span is selectable
         // even when the component did not start in the first column/row.
@@ -416,6 +457,7 @@ Item {
     }
     function beginKeyboard(action, value) { keyboardReturnMode=mode; keyboardAction=action; keyboard.value=value || ""; keyboard.selectedIndex=0; mode="keyboard" }
     function startAddition(type,configuration) {
+        pointerBoundaryError=""
         pendingScrollEnable=false;addingType=type;addingConfiguration=configuration || ({})
         const prototype=session.componentPrototype(type,addingConfiguration)
         if(!prototype.root){message=session.errorString;return}
@@ -474,6 +516,7 @@ Item {
         else if(index===17){let selection=multiSelection.slice();const index=selection.indexOf(selectedId);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(selectedId);else{message="Select at most 32 components.";return}multiSelection=selection;mode="layers";choice=0;message="Choose Group selected at the end of Layers. Right expands; Left collapses."}
     }
     function dialogLabels() {
+        if(mode==="replaceReview")return ["Use replacement in draft","Cancel"]
         if(mode==="noRoom")return [!scrollingEnabled && !parentScopeId && !sectionMode?"Enable vertical scrolling":"Vertical scrolling unavailable here","Choose another position","Change size",sectionMode?"Choose another section":"Choose another group","Cancel"]
 if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Templates"]
         if(mode==="navigation")return ["＋ Add navigation tab"].concat((page.composition.navigation || []).map(t=>t.name))
@@ -488,8 +531,9 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="confirmDeletePage")return ["Delete page in draft","Cancel"]
         if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
         if(mode==="editorAppearance")return ["Surface color","Selected surface","Text color","Supporting text","Focus color","Reset Studio colors"]
+        if(mode==="editorSettings")return ["Canvas view","Studio colors","Reset interface…"]
         if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance","Canvas view","Saved skins","Restore defaults"]
-        if(mode==="restoreDefaults")return ["Cancel","Restore Home layout; keep other pages"]
+        if(mode==="restoreDefaults")return ["Cancel","Restore this page in draft; keep other pages"]
         if(mode==="context") return (current && (current.componentType==="container" || current.componentType==="carousel")) ? ["Move","Edit component","Duplicate","Delete…","Edit contents"] : ["Move","Edit component","Duplicate","Delete…"]
         if(mode==="flowMove")return ["Move before…","Move after…","Convert to a grid…","Cancel"]
         if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Move into group…","Return to "+gestureMode]
@@ -498,7 +542,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="groupDestination")return destinationGroups.map(g=>destinationGroupLabel(g)+(g.id===originParentId?" · Current":""))
         if(mode==="orderBefore" || mode==="orderAfter")return relativeItems.length?relativeItems.map(i=>i.name || i.widgetType || i.id):["No other components in this section · Back returns"]
         if(mode==="properties")return contextActions.slice(2)
-        if(mode==="layers") return layerRows.map(row=>"  ".repeat(row.depth)+(row.item.componentType==="container"?(expandedGroups[row.item.id]?"▾ ":"▸ "):"  ")+(multiSelection.indexOf(row.item.id)>=0?"✓ ":"")+(row.item.name || row.item.widgetType || row.item.id)+(row.item.hidden?" · Hidden":"")+(row.item.locked?" · Locked":"")).concat(multiSelection.length>=2?["Group "+multiSelection.length+" selected components","Align / distribute selected…"]:[]).concat(["Inspect reading order / directional focus"])
+        if(mode==="layers") return layerRows.map(row=>"  ".repeat(row.depth)+(row.item.componentType==="container"?(expandedGroups[row.item.id]?"▾ ":"▸ "):"  ")+(multiSelection.indexOf(row.item.id)>=0?"✓ ":"")+(row.item.name || row.item.widgetType || row.item.id)+(row.item.hidden?" · Hidden":"")+(row.item.locked?" · Locked":"")).concat(multiSelection.length>=2?["Group "+multiSelection.length+" selected components","Align / distribute selected…"]:[]).concat(["Inspect reading order / directional focus","Header"])
+        if(mode==="headerContext")return ["Edit header","Title and logo","Clock and date","Search and Settings","Header layout"]
         if(mode==="view")return ["Zoom in · "+Math.round(camera.zoom*100)+"%","Zoom out","Pan left","Pan right","Pan up","Pan down","Fit / reset view"]
         if(mode==="childLayout")return ["Layout: "+childLayoutDraft.mode,"Columns: "+childLayoutDraft.columns,"Rows: "+childLayoutDraft.rows,"Gap: "+childLayoutDraft.gap,"Padding: "+childLayoutDraft.padding,"Arrange children in draft","Cancel"]
         if(mode==="arrange")return ["Align left","Center horizontally","Align right","Align top","Center vertically","Align bottom","Distribute horizontally","Distribute vertically"]
@@ -518,11 +563,24 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="dirty") return ["Keep editing", "Discard draft…", "Review & Apply"]
         if(mode==="discard") return ["Keep editing", "Discard all draft pages"]
         if(mode==="remove") return ["Cancel", "Delete component"]
-        if(mode==="apply") return ["Apply all draft changes", "Keep editing"]
+        if(mode==="apply") return ["Apply all draft changes", "Keep editing","Try interaction"]
         if(mode==="history") return ["Keep history and cancel edit", "Release history; keep draft"]
         return []
     }
     function activateChoice() {
+        if(mode==="replaceReview"){
+            if(choice===1){session.cancelPreview();mode="inspector";message=""}
+            else if(session.acceptPreview()){mode="inspector";inspector.begin(false);inspector.view="fields";message="Replacement accepted in draft."}
+            else message=session.errorString
+            return
+        }
+        if(mode==="editorSettings"){
+            if(choice===0){mode="view";choice=0}
+            else if(choice===1){openInspector(false);inspector.editorMode=true;inspector.view="fields";inspector.tab=0;inspector.controlsShown=true}
+            else{mode="restoreDefaults";choice=0;message="Replace this page's layout with packaged defaults in the draft. Other pages, apps, accounts and Kodi media stay unchanged. Undo restores the page; Apply saves it."}
+            return
+        }
+        if(mode==="headerContext"){openHeader(choice===1?"title":choice===2?"clock":choice===3?"settings":choice===4?"layout":headerSelection);return}
         if(mode==="noRoom"){
             if(choice===0){if(!scrollingEnabled && !parentScopeId && !sectionMode){pendingScrollEnable=true;mode="move";suggestAdditionPosition()}else message="Choose a position, a different size or another container."}
             else if(choice===1){mode="move";message=""}
@@ -563,14 +621,11 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(command("removePage",args)){pageId=draftModel.homePageId;selectedId=pageFocus[pageId] || "";mode="canvas";toolbarFocus=true;menuIndex=0}
             return
         }
-        if(mode==="pageAppearance"){const key=["backgroundStart","backgroundEnd","surfaceColor","textColor","focusColor"][choice];beginKeyboard("pageColor:"+key,String(page.appearance[key] || ""));return}
+        if(mode==="pageAppearance"){const key=["backgroundStart","backgroundEnd","surfaceColor","textColor","focusColor"][choice];openInspector(true);inspector.view="fields";inspector.tab=inspector.tabs.indexOf("Colors");const field=inspector.fields.find(f=>f.scope==="theme" && f.key===key);if(field)inspector.activateField(field);return}
         if(mode==="restoreDefaults") {
             if(choice===1) {
-                session.invalidate()
-                const ok=layoutModel.resetToDefaults(),error=layoutModel.errorString
-                show("","")
-                if(!ok)message=error
-            } else {mode="more";choice=9}
+                if(command("restorePageDefaults",{})){selectedId="";headerSelection="";mode="canvas";toolbarFocus=true}
+            } else {mode="editorSettings";choice=2}
             return
         }
         if(mode==="more"){
@@ -582,8 +637,9 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(choice===7){mode="view";choice=0;return}if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return
         }
         if(mode==="editorAppearance") {
-            if(choice===5){command("studioAppearance",{value:{}});return}
-            const key=["surfaceColor","selectedColor","textColor","mutedColor","focusColor"][choice];beginKeyboard("studioColor:"+key,String(palette[key]));return
+            const key=["surfaceColor","selectedColor","textColor","mutedColor","focusColor"][choice];openInspector(false);inspector.editorMode=true;inspector.view="fields";inspector.tab=0;inspector.controlsShown=true
+            if(choice===5){inspector.operation("editorColorsReset");return}
+            const field=inspector.fields.find(f=>f.key===key);if(field)inspector.activateField(field);return
         }
         if(mode==="context") {
             if(choice===0)beginGesture(false)
@@ -600,7 +656,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(choice>0){scopeId=page.sections[choice-1].id || "";const item=items.find(i=>(i.categoryId || "")===scopeId);selectedId=item?item.id:""}
             mode="canvas";toolbarFocus=false;Qt.callLater(()=>preview.revealScope(scopeId));return
         }
-        if(mode==="layers") {if(choice===layerRows.length+(multiSelection.length>=2?2:0)){mode="navigationOrder";choice=0;message="Reading order follows this list. D-pad movement uses the displayed row and column in the current scope.";return}if(choice===layerRows.length){if(command("group",{ids:multiSelection})){multiSelection=[];mode="canvas";toolbarFocus=false}return}if(choice===layerRows.length+1){beginArrangement();return}if(layerRows[choice])selectedId=layerRows[choice].item.id;mode="canvas";toolbarFocus=false;return}
+        if(mode==="layers") {if(choice===layerRows.length+(multiSelection.length>=2?2:0)+1){openHeader("title");return}if(choice===layerRows.length+(multiSelection.length>=2?2:0)){mode="navigationOrder";choice=0;message="Reading order follows this list. D-pad movement uses the displayed row and column in the current scope.";return}if(choice===layerRows.length){if(command("group",{ids:multiSelection})){multiSelection=[];mode="canvas";toolbarFocus=false}return}if(choice===layerRows.length+1){beginArrangement();return}if(layerRows[choice])selectedId=layerRows[choice].item.id;headerSelection="";mode="canvas";toolbarFocus=false;return}
         if(mode==="view"){
             if(choice===0)camera.zoom=Math.min(2,camera.zoom+0.1)
             else if(choice===1)camera.zoom=Math.max(0.5,camera.zoom-0.1)
@@ -672,7 +728,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(choice===1){const id=selectedId;if(!command("remove",{id:id}))return;deletedSelection=id;selectedId=items.length?items[0].id:""}
             mode="canvas";return
         }
-        if(mode==="apply") {if(choice===1)mode="canvas";else if(preview.layoutError)message=preview.layoutError;else if(session.apply(selectedId)){mode="canvas";message="Applied successfully. All pages saved."}else message=session.errorString;return}
+        if(mode==="apply") {if(choice===1)mode="canvas";else if(choice===2)chooseTool(7);else if(preview.layoutError)message=preview.layoutError;else if(session.apply(selectedId)){mode="canvas";message="Applied successfully. All pages saved."}else message=session.errorString;return}
         if(mode==="history") {
             if(choice===1){session.continueWithNewHistoryBaseline();mode=addingType?"move":"canvas"}
             else if(addingType)cancelGesture()
@@ -732,6 +788,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="keyboard") {keyboard.handleCommand(c);return}
         if(mode==="preview") {if(c===inputManager.back)mode="canvas";else preview.handleCommand(c);return}
         if(c===inputManager.back) {
+            if(mode==="replaceReview"){session.cancelPreview();mode="inspector";message="";return}
+            if(mode==="canvas" && historyFocus){historyFocus=false;return}
             if(mode==="history" && addingType){cancelGesture();return}
             if(mode==="collisionDetails"){mode="collision";choice=collisionStrategy==="shift"?0:1;return}
             if(["move","resize","collision","geometry","moveOptions","destination","groupDestination","anchors","noRoom"].indexOf(mode)>=0){cancelGesture();return}
@@ -746,6 +804,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(c===inputManager.menu){gestureMode=mode;mode="moveOptions";choice=0;return}
             const dx=c===inputManager.navigateRight?1:c===inputManager.navigateLeft?-1:0
             const dy=c===inputManager.navigateDown?1:c===inputManager.navigateUp?-1:0
+            if(!dx && !dy)return
             let p=Object.assign({},candidate)
             if(mode==="move"){p.x+=dx;p.y+=dy}
             else if(resizeAxis==="width")p.width+=dx
@@ -755,7 +814,14 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 if(resizeAnchor.indexOf("right")>=0)p.x-=p.width-candidate.width
                 if(resizeAnchor.indexOf("bottom")>=0)p.y-=p.height-candidate.height
             }
-            if(p.x<0 || p.y<0 || p.width<1 || p.height<1 || p.height>grid.rows || p.x+p.width>grid.columns || p.y+p.height>placementRows){message="Grid boundary: choose a position or size inside the grid.";return}
+            if(p.x===candidate.x && p.y===candidate.y && p.width===candidate.width && p.height===candidate.height)return
+            if(boundaryDistance(p)>0){
+                // A refused pointer target may be several cells outside the
+                // scope. Let the remote walk it back without accepting it or
+                // snapping it silently to an unrelated valid position.
+                if(boundaryDistance(p)<boundaryDistance(candidate))candidate=p
+                message="Grid boundary: choose a position or size inside the grid.";return
+            }
             candidate=p;preview.revealPlacement(p,scopeId,parentScopeId);message="";return
         }
         if(mode!=="canvas") {
@@ -784,10 +850,18 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             else if(c===inputManager.confirm)activateChoice()
             return
         }
+        if(mode==="canvas" && !toolbarFocus && headerSelection){
+            if(c===inputManager.confirm || c===inputManager.menu){mode="headerContext";choice=0}
+            else if(c===inputManager.navigateLeft || c===inputManager.navigateRight){const index=headerParts.indexOf(headerSelection);headerSelection=headerParts[Math.max(0,Math.min(headerParts.length-1,index+(c===inputManager.navigateRight?1:-1)))]}
+            else if(c===inputManager.navigateDown)headerSelection=""
+            else if(c===inputManager.navigateUp)toolbarFocus=true
+            return
+        }
         if(c===inputManager.menu){if(current){mode="context";choice=0}else toolbarFocus=true;return}
         if(c===inputManager.search){chooseTool(0);return}
         if(toolbarFocus) {
-            if(c===inputManager.navigateUp)menuIndex=Math.max(0,menuIndex-1)
+            if(historyFocus){if(c===inputManager.navigateLeft || c===inputManager.navigateRight)historyIndex=c===inputManager.navigateRight?1:0;else if(c===inputManager.confirm)chooseTool(historyIndex===0?3:4);else if(c===inputManager.navigateDown)historyFocus=false;return}
+            if(c===inputManager.navigateUp){if(menuIndex===0)historyFocus=true;else menuIndex--}
             else if(c===inputManager.navigateDown)menuIndex=Math.min(menuEntries.length-1,menuIndex+1)
             else if(c===inputManager.navigateRight){toolbarFocus=false;if(!current && scopedItems.length)selectedId=scopedItems[0].id}
             else if(c===inputManager.confirm)activateMenu(menuIndex)
@@ -807,6 +881,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     if(distance<score){score=distance;best=item}
                 }
                 if(best)selectedId=best.id
+                else if(dy<0 && page.composition.enabled)headerSelection="title"
                 else if(dy<0)toolbarFocus=true
                 else message="Canvas boundary. Menu opens editing tools."
             } else if(c===inputManager.navigateUp)toolbarFocus=true
@@ -829,8 +904,23 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 anchors.fill:parent;anchors.margins:studio.spacing;spacing:studio.spacing/2
                 Text {text:"Page Studio";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
                 Text {id:menuStatus;width:parent.width;text:session && session.errorString?"Edit refused: "+session.errorString:session && session.dirty?"Draft · "+session.changeCount+" changes":"Your interface";wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+                Row {
+                    width:parent.width;spacing:studio.spacing/2
+                    Repeater {model:2;delegate:Rectangle {
+                        required property int index
+                        objectName:index===0?"studioUndo":"studioRedo"
+                        width:(pageRail.width-2*studio.spacing-studio.spacing/2)/2;height:40*studio.textScale;radius:studio.spacing/3
+                        readonly property bool available:!!studio.session && (index===0?studio.session.canUndo:studio.session.canRedo)
+                        color:studio.historyFocus && studio.historyIndex===index?studio.palette.selectedColor:"transparent"
+                        border.width:studio.historyFocus && studio.historyIndex===index?2:0;border.color:studio.palette.focusColor
+                        opacity:available?1:0.55
+                        Accessible.role:Accessible.Button;Accessible.name:index===0?"Undo":"Redo";Accessible.description:available?"":index===0?"No changes to undo":"No changes to redo"
+                        Text {anchors.centerIn:parent;text:index===0?"↶ Undo":"↷ Redo";color:studio.palette.textColor;font.pixelSize:17*studio.textScale}
+                        MouseArea {anchors.fill:parent;onClicked:{studio.historyFocus=true;studio.historyIndex=index;studio.chooseTool(index===0?3:4)}}
+                    }}
+                }
                 ListView {
-                    width:parent.width;height:Math.max(100,pageRail.height-150*studio.textScale-menuStatus.implicitHeight);clip:true
+                    width:parent.width;height:Math.max(100,pageRail.height-200*studio.textScale-menuStatus.implicitHeight);clip:true
                     model:studio.menuEntries;currentIndex:studio.menuIndex;highlightRangeMode:ListView.ApplyRange
                     delegate:Rectangle {
                         required property int index;required property var modelData
@@ -853,19 +943,22 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 x:(canvasArea.width-width*scale)/2+panX;y:(canvasArea.height-height*scale)/2+panY
                 HomeScreen {
                     id:preview;objectName:"studioPreview"
+                    artworkResolver:studio.draftModel;headerDefaults:studio.layoutModel?studio.layoutModel.studioOptions.headerDefaults || {}:({})
+                    editHeaderSelection:studio.headerSelection
+                    onEditHeaderSelected:part=>{if(studio.mode!=="canvas")return;studio.headerSelection=part;studio.toolbarFocus=false;studio.mode="headerContext";studio.choice=0}
                     menuPages:studio.pageEntries;menuActiveId:studio.pageId
                     anchors.fill:parent
                     items:studio.page?studio.page.items.filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i)):[]
                     sections:studio.page?studio.page.sections.map(s=>Object.assign({},s,{items:(s.items || []).filter(i=>studio.editorReveals(i)).map(i=>studio.projected(i))})):[]
                     appearance:studio.page?studio.page.appearance:studio.palette;composition:studio.page?Object.assign({},studio.page.composition,studio.pendingScrollEnable?{verticalScrolling:true}:{}):({})
-                    previewExtentRows:studio.scrollingEnabled && !studio.parentScopeId && studio.manipulating?Math.max(studio.candidate.y+studio.candidate.height,...(studio.collisionPreview.placements || []).map(p=>p.placement.y+p.placement.height)):0
+                    previewExtentRows:studio.scrollingEnabled && !studio.parentScopeId && studio.manipulating?Math.min(studio.placementRows,Math.max(studio.candidate.y+studio.candidate.height,...(studio.collisionPreview.placements || []).map(p=>p.placement.y+p.placement.height))):0
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
                     libraryProvider:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating || studio.gridEditing || studio.mode==="arrange" || studio.mode==="childLayout";samplePreview:studio.samplePreview
                     sampleItems:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
                     editSelection:studio.selectedId
                     suppressedComponentIds:studio.collisionPreview.valid?studio.collisionPreview.placements.map(p=>p.id):studio.manipulating && studio.mode!=="flowMove" && !studio.addingType && studio.current?[studio.selectedId]:[]
-                    onEditSelected:componentId=>{if(studio.mode!=="canvas")return;studio.selectedId=componentId;studio.toolbarFocus=false;studio.mode="context";studio.choice=0}
+                    onEditSelected:componentId=>{if(studio.mode!=="canvas")return;studio.headerSelection="";studio.selectedId=componentId;studio.toolbarFocus=false;studio.mode="context";studio.choice=0}
                     brandVisible:studio.page?studio.page.brandVisible:false;tileRoundness:studio.page?studio.page.tileRoundness:0
                     backgroundStart:studio.page?studio.page.backgroundStart:studio.layoutModel.backgroundStart
                     backgroundEnd:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd
@@ -974,7 +1067,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                         pointerDrag.edgeBudget=studio.candidate.y===before?0:pointerDrag.edgeBudget-1
                                     }
                                 }
-                                onPressed:mouse=>{if(studio.mode!=="canvas"){mouse.accepted=false;return}studio.selectedId=modelData.id;studio.toolbarFocus=false;dragging=false;edgeDirection=0;edgeBudget=0;start=mapToItem(studio,mouse.x,mouse.y);originScreen=mapToItem(studio,0,0);edgeAnchor=start}
+                                onPressed:mouse=>{if(studio.mode!=="canvas"){mouse.accepted=false;return}studio.headerSelection="";studio.selectedId=modelData.id;studio.toolbarFocus=false;dragging=false;edgeDirection=0;edgeBudget=0;start=mapToItem(studio,mouse.x,mouse.y);originScreen=mapToItem(studio,0,0);edgeAnchor=start}
                                 onPositionChanged:mouse=>{
                                     if(!pressed)return
                                     const point=mapToItem(studio,mouse.x,mouse.y)
@@ -988,9 +1081,13 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                     if(!dragging || studio.mode!=="move")return
                                     const screen=mapToItem(studio,0,0),metrics=preview.gridMetricsFor(studio.scopeId,studio.parentScopeId)
                                     let p=Object.assign({},studio.origin)
-                                    p.x+=Math.round((point.x-start.x-screen.x+originScreen.x)/(metrics.cellW+metrics.gap))
-                                    p.y+=Math.round((point.y-start.y-screen.y+originScreen.y)/(metrics.cellH+metrics.gap))
-                                    if(p.x>=0 && p.y>=0 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.placementRows){studio.candidate=p;preview.revealPlacement(p,studio.scopeId,studio.parentScopeId);studio.message=""}
+                                    p.x+=Math.round((point.x-start.x-screen.x+originScreen.x)/(camera.scale*(metrics.cellW+metrics.gap)))
+                                    p.y+=Math.round((point.y-start.y-screen.y+originScreen.y)/(camera.scale*(metrics.cellH+metrics.gap)))
+                                    // Keep the refused target, rather than committing the last
+                                    // valid position when the pointer is released outside bounds.
+                                    // The shared proposal validator owns acceptance for both inputs.
+                                    studio.candidate=p
+                                    if(p.x>=0 && p.y>=0 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.placementRows){preview.revealPlacement(p,studio.scopeId,studio.parentScopeId);studio.message=""}
                                     else studio.message="Grid boundary: choose a position inside the grid."
                                     updateEdge(point)
                                 }
@@ -1006,7 +1103,19 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                 MouseArea {
                                     anchors.fill:parent;property point start
                                     onPressed:mouse=>{start=Qt.point(mouse.x,mouse.y);studio.beginGesture(true)}
-                                    onPositionChanged:mouse=>{if(!pressed)return;const metrics=preview.gridMetricsFor(studio.scopeId,studio.parentScopeId);let p=Object.assign({},studio.origin);p.width+=Math.round((mouse.x-start.x)/(metrics.cellW+metrics.gap));p.height+=Math.round((mouse.y-start.y)/(metrics.cellH+metrics.gap));if(p.width>=1 && p.height>=1 && p.x+p.width<=studio.grid.columns && p.y+p.height<=studio.placementRows && p.height<=studio.grid.rows)studio.candidate=p;else studio.message="Grid boundary: choose a size inside the grid."}
+                                    onPositionChanged:mouse=>{
+                                        if(!pressed || studio.mode!=="resize")return
+                                        const metrics=preview.gridMetricsFor(studio.scopeId,studio.parentScopeId)
+                                        let p=Object.assign({},studio.origin)
+                                        p.width+=Math.round((mouse.x-start.x)/(metrics.cellW+metrics.gap))
+                                        p.height+=Math.round((mouse.y-start.y)/(metrics.cellH+metrics.gap))
+                                        // Positive out-of-bounds sizes remain visible refused
+                                        // proposals. A nonpositive rectangle cannot be rendered;
+                                        // retain its error so release/Confirm cannot save a stale size.
+                                        studio.pointerBoundaryError=p.width<1 || p.height<1?"Choose a size of at least one cell.":""
+                                        if(!studio.pointerBoundaryError)studio.candidate=p
+                                        studio.message=studio.pointerBoundaryError || (studio.boundaryDistance(p)>0?"Grid boundary: choose a size inside the grid.":"")
+                                    }
                                     onReleased:if(studio.mode==="resize")studio.acceptCandidate()
                                     onCanceled:if(studio.mode==="resize")studio.cancelGesture()
                                 }

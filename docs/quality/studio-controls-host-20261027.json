@@ -1,0 +1,34 @@
+{
+  "passed": true,
+  "scope": "Host JavaScript syntax and actual-method smoke checks only; no Qt/native/VM/visual acceptance",
+  "compiledFunctions": 243,
+  "compiledHandlers": 68,
+  "checks": [
+    "header defaults and 64 KiB settings bound",
+    "shared app picker remote reorder/cancel",
+    "missing selection retained",
+    "pointer and remote order parity",
+    "All installed mode retained",
+    "Select all refuses 129 without truncation",
+    "action alias search and category filtering",
+    "action picker selection and cancel",
+    "button gallery scope, launch, return, grid navigation and unassigned refusal"
+  ],
+  "hashes": {
+    "qml/PageStudioView.qml": "d43bbfd710435e92f754946f415a73c558fdca2b427f2b855a70af8c6d01e480",
+    "qml/ComposedHome.qml": "be76c5edc7325e7944306a5adc9bc2e67af8245d24111db01dd7497b94544e0c",
+    "qml/HomeScreen.qml": "2c1a13d326ccb9e8f9e4cb09d9498773d2f1fb5160da6f32a384b0ce4a518ccf",
+    "qml/StudioInspector.qml": "4b6089d0385254f686e24baeebe418923896312e8f98a1d91b22fdfb4d176c03",
+    "qml/StudioCatalog.qml": "baffc8c46798d6bb7e223c4a24ddcc4d6527adfd413ade686a1b7750011bd81f",
+    "qml/StudioAppPicker.qml": "deb095b186b42b34686e671c6e0eba651f6d76f1cba54c3ca801515eb152b566",
+    "qml/StudioActionPicker.qml": "d7dceca996dbdd9e379a872c20b8edcef65d9917bc83556b582ed261f2e9dc19",
+    "qml/PageAppCarousel.qml": "c1bd37fe4ca900c1120175a17c37903c078126a2e567e2f5a534f8693b586893",
+    "qml/HomeCard.qml": "4b99c795e6f21e560e4b2463988fa0efddaa4ffc0cc67800180e159eaf922784",
+    "qml/PlacedComponents.qml": "ffcb13d4cc46fb911aba59c3ae76ca286b7958dad42c0ee945b8cb61124d98b5",
+    "qml/OrbCard.qml": "a274b202eff5a01f98095fd01924172de0a9e914d07e82c031d08f872ccd3e01",
+    "qml/LineIcon.qml": "322d367c5a564252de8bd773ae8c88dca20a1227eb7a7127c7b584dfc2ee8122",
+    "tests/studio/tst_editor.qml": "62955b2561c977c3784e2f56ab864c0552def784bec46909bcf072a6e5ee1eaa",
+    "tests/studio/tst_gestures.qml": "a31457e6d9e532c1f13a8dfbc899aecb59815e88dc3dc3902384ac448d730bbe",
+    "tests/studio/tst_selection.qml": "13170e4008f17883907cf28aeefa1f57614c414f8c6ceb3f6560e1bbb791ec06"
+  }
+}

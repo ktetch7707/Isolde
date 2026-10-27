@@ -80,6 +80,10 @@ private slots:
     void studioOrderedInsertionPreservesSlotsAndIsAtomic();
     void studioOverlayMovementKeepsNeighborsAndBounds();
     void studioCatalogLinksInspectorAndStagedArtwork();
+    void studioHeaderValidationAndDraftRollback();
+    void studioPageDefaultsAreDraftOnlyAndScoped();
+    void studioShapesLabelsAndReplacementAreAtomic();
+    void studioButtonCollectionsAreBoundedAndAtomic();
 };
 static AppDefinition gamesRuntime(const QString &id="psp-test") {
     AppDefinition app;app.id=id;app.name="PSP runtime";app.type="desktop";
@@ -1437,10 +1441,10 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     QVERIFY(!ComponentSchema::validPresentation({{"libraryView","playlist"},{"libraryValue","../private.xsp"}},true));
     QVERIFY(!ComponentSchema::validPresentation({{"libraryView","playlist"},{"libraryValue","https://private.xsp"}},true));
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);const auto user=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),user));
-    const auto options=home.studioOptions();QCOMPARE(options["catalog"].toList().size(),10);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
+    const auto options=home.studioOptions();QVERIFY(options["catalog"].toList().size()>=12);QVERIFY(!options["inspector"].toMap()["fields"].toList().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);auto doc=QJsonDocument::fromJson(session->draft()).object();doc["components"]=QJsonArray{};doc["categories"]=QJsonArray{};
     doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(options["defaultGrid"].toMap())}};QVERIFY(session->pushEdit(QJsonDocument(doc).toJson()));const auto empty=session->draft();
-    for(const auto &type:QStringList{"button","image","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
+    for(const auto &type:QStringList{"button","image","shape","text","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}){const auto prototype=session->componentPrototype(type);QVERIFY2(!prototype.isEmpty(),qPrintable(type+": "+session->errorString()));QCOMPARE(session->draft(),empty);}
     const auto appPrototype=session->componentPrototype("app-bar");
     const auto historyPrototype=session->componentPrototype("recently-viewed");
     const auto historyRoot=historyPrototype["root"].toMap();
@@ -1552,6 +1556,107 @@ void ComponentTests::studioOverlayMovementKeepsNeighborsAndBounds()
     QVERIFY(session->execute("state",{{"id","clock"},{"key","locked"},{"value",true}}));const auto locked=session->draft();
     QVERIFY(!session->placementProposal("clock",target,"shift")["valid"].toBool());QCOMPARE(session->draft(),locked);
     QVERIFY(!QFile::exists(user));
+}
+void ComponentTests::studioHeaderValidationAndDraftRollback()
+{
+    const QVariantMap style{{"schemaVersion",1},{"height",72},{"titleSize",40},{"padding",4},{"opacity",0.4},
+        {"showDate",true},{"controlDisplay","both"},{"timeFormat","HH:mm"},{"dateFormat","yyyy-MM-dd"},
+        {"order",QVariantList{"clock","title","controls"}}};
+    QVariantMap composition{{"schemaVersion",1},{"headerMode","identity"},{"showClock",true},{"header",style}};
+    QVERIFY(ComponentSchema::validComposition(composition));
+    const QVariantList malformed{QVariantMap{{"schemaVersion",2}},QVariantMap{{"height","72"}},
+        QVariantMap{{"opacity",1.1}},QVariantMap{{"height",42},{"titleSize",96}},
+        QVariantMap{{"order",QVariantList{"clock","clock","controls"}}},
+        QVariantMap{{"customLogo","../private.png"}},QVariantMap{{"customLogo","https://example.invalid/logo.png"}},
+        QVariantMap{{"timeFormat","arbitrary"}},QVariantMap{{"backgroundColor","transparent"}},QVariantMap{{"script","anything"}}};
+    for(const auto &entry:malformed){auto invalid=composition;invalid["header"]=entry;QVERIFY(!ComponentSchema::validComposition(invalid));}
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
+    const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    QVERIFY(!home.studioOptions().value("headerDefaults").toMap().isEmpty());
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto before=session->draft();
+    QVERIFY(session->previewCommand("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),0);QVERIFY(!QFile::exists(path));
+    session->cancelPreview();QCOMPARE(session->draft(),before);
+    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    QCOMPARE(session->changeCount(),1);const auto valid=session->draft();
+    QVERIFY(!session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"header",QVariantMap{{"schemaVersion",2}}}}}}));
+    QCOMPARE(session->draft(),valid);QCOMPARE(session->changeCount(),1);QVERIFY(!QFile::exists(path));
+    QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+}
+void ComponentTests::studioPageDefaultsAreDraftOnlyAndScoped()
+{
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
+    const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVERIFY(session->execute("newPage",{{"name","Reading room"}}));
+    QVERIFY(session->execute("pagePatch",{{"scope","theme"},{"value",QVariantMap{{"backgroundStart","#123456"}}}}));
+    const auto before=session->draft();const auto beforeDoc=session->document();const auto count=session->changeCount();
+    QVERIFY(!session->execute("restorePageDefaults",{{"scope","invalid"}}));QCOMPARE(session->draft(),before);
+    QVERIFY(!session->execute("restorePageDefaults",{},"missing-page"));QCOMPARE(session->draft(),before);
+    QVERIFY(session->execute("restorePageDefaults",{}));
+    QCOMPARE(session->document()["pages"],beforeDoc["pages"]);QCOMPARE(session->changeCount(),count+1);
+    QVERIFY(!QFile::exists(path));QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+    const auto pages=beforeDoc["pages"].toList();QVERIFY(!pages.isEmpty());const auto id=pages.first().toMap()["id"].toString();
+    QVERIFY(session->execute("restorePageDefaults",{},id));
+    auto original=beforeDoc,changed=session->document();original.remove("pages");changed.remove("pages");QCOMPARE(changed,original);
+    QVERIFY(!QFile::exists(path));QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+}
+void ComponentTests::studioShapesLabelsAndReplacementAreAtomic()
+{
+    QVariantMap shape{{"id","decoration"},{"kind","widget"},{"widgetType","shape"},{"componentType","shape"},{"name","Decorative background"},
+        {"presentation",QVariantMap{{"shape","ellipse"},{"visibleLabel","Caption"},{"fillMode","gradient"},{"fillEndColor","#123456"},{"fillDirection","horizontal"}}}};
+    QVERIFY(!ComponentSchema::component(shape).isEmpty());
+    auto invalid=shape;invalid["action"]=QVariantMap{{"type","settings"},{"section",1}};QVERIFY(ComponentSchema::component(invalid).isEmpty());
+    invalid=shape;invalid["customLogo"]="artwork/picture.png";QVERIFY(ComponentSchema::component(invalid).isEmpty());
+    QVERIFY(!ComponentSchema::validPresentation({{"bodyText",QString(4097,'x')}}));
+    QVERIFY(!ComponentSchema::validPresentation({{"visibleLabel",QString(161,'x')}}));
+    QVERIFY(!ComponentSchema::validPresentation({{"shape","script"}}));
+    QVERIFY(!ComponentSchema::validPresentation({{"fillDirection","diagonal"}}));
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
+    const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    auto document=QJsonDocument::fromJson(session->draft()).object();document["components"]=QJsonArray{};document["categories"]=QJsonArray{};
+    document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",8},{"rows",5},{"mode","screen"}}}};
+    QVERIFY(session->pushEdit(QJsonDocument(document).toJson()));
+    QVERIFY(session->execute("addPlaced",{{"type","button"},{"placement",QVariantMap{{"x",2},{"y",1},{"width",3},{"height",2}}},
+        {"configuration",QVariantMap{{"name","Library shortcut"},{"action",QVariantMap{{"type","settings"},{"section",1}}},{"presentation",QVariantMap{{"visibleLabel","My library"}}}}}}));
+    const auto before=session->draft();const auto count=session->changeCount();const auto original=session->document()["components"].toList().first().toMap();const auto id=original["id"].toString();
+    const auto image=session->replacementProposal(id,"image");QVERIFY2(image["valid"].toBool(),qPrintable(image["reason"].toString()));QCOMPARE(session->draft(),before);
+    QVERIFY(session->previewCommand("replaceComponent",{{"id",id},{"type","image"}}));QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),count);
+    session->cancelPreview();QCOMPARE(session->draft(),before);
+    QVERIFY(session->execute("replaceComponent",{{"id",id},{"type","image"}}));
+    const auto replaced=session->document()["components"].toList().first().toMap();QCOMPARE(replaced["id"],original["id"]);QCOMPARE(replaced["placement"],original["placement"]);QCOMPARE(replaced["action"],original["action"]);
+    QCOMPARE(replaced["presentation"].toMap()["visibleLabel"].toString(),QString("My library"));QCOMPARE(session->changeCount(),count+1);
+    QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+    const auto text=session->replacementProposal(id,"text");QVERIFY(text["valid"].toBool());QVERIFY(text["losses"].toStringList().contains("Action link"));
+    QVERIFY(!session->replacementProposal(id,"executable")["valid"].toBool());QCOMPARE(session->draft(),before);QVERIFY(!QFile::exists(path));
+}
+void ComponentTests::studioButtonCollectionsAreBoundedAndAtomic()
+{
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
+    const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QVariantList buttons;for(int i=0;i<128;++i)buttons.append(QVariantMap{{"name",QString("Input %1").arg(i+1)},{"action",QVariantMap{{"type","switch-input"},{"input",i%8+1}}}});
+    const auto before=session->draft();const auto prototype=session->componentPrototype("carousel",{{"buttons",buttons}});
+    QVERIFY2(!prototype.isEmpty(),qPrintable(session->errorString()));QCOMPARE(prototype["components"].toList().size(),129);QCOMPARE(session->draft(),before);
+    const auto root=prototype["root"].toMap();QCOMPARE(root["presentation"].toMap()["layout"].toMap()["columns"].toInt(),128);
+    auto excess=buttons;excess.append(buttons.first());QVERIFY(session->componentPrototype("carousel",{{"buttons",excess}}).isEmpty());QCOMPARE(session->draft(),before);
+    const auto row=QVariantMap{{"schemaVersion",1},{"mode","row"},{"columns",128},{"rows",1},{"gap",14},{"padding",12},{"visibleColumns",4}};
+    QVERIFY(ComponentSchema::validChildLayout(row));auto invalid=row;invalid["columns"]=129;QVERIFY(!ComponentSchema::validChildLayout(invalid));
+    invalid=row;invalid["mode"]="grid";QVERIFY(!ComponentSchema::validChildLayout(invalid));
+    auto document=QJsonDocument::fromJson(before).object();document["components"]=QJsonArray::fromVariantList(prototype["components"].toList());document["categories"]=QJsonArray{};
+    document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",8},{"rows",5},{"mode","screen"}}}};
+    QVERIFY2(session->pushEdit(QJsonDocument(document).toJson()),qPrintable(session->errorString()));QVERIFY(!QFile::exists(path));
+    const auto withCollection=session->draft();const auto id=root["id"].toString();
+    QVERIFY(session->execute("remove",{{"id",id}}));QVERIFY(session->document()["components"].toList().isEmpty());
+    QVERIFY(session->undo());QCOMPARE(session->draft(),withCollection);QVERIFY(!QFile::exists(path));
+    auto appRoot=session->componentPrototype("app-bar")["root"].toMap();appRoot["appCollection"]=QVariantMap{{"mode","selected"},{"ids",QVariantList{"previously-installed"}}};
+    document["components"]=QJsonArray{QJsonObject::fromVariantMap(appRoot)};
+    QVERIFY(session->pushEdit(QJsonDocument(document).toJson()));const auto appId=appRoot["id"].toString();const auto missingBaseline=session->draft();
+    QVERIFY(session->execute("setApps",{{"id",appId},{"mode","selected"},{"apps",QVariantList{"previously-installed"}}}));
+    QVERIFY(!session->execute("setApps",{{"id",appId},{"mode","selected"},{"apps",QVariantList{"new-missing-app"}}}));QCOMPARE(session->draft(),missingBaseline);
+    QVERIFY(session->execute("setApps",{{"id",appId},{"mode","selected"},{"apps",QVariantList{}}}));
+    QVERIFY(session->undo());QCOMPARE(session->draft(),missingBaseline);QVERIFY(!QFile::exists(path));
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

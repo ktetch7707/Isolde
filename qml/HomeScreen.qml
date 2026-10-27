@@ -8,6 +8,10 @@ Item {
     property var authoredItems: items
     property var authoredSections: sections
     property bool editMode:false
+    property var artworkResolver:typeof homeLayout!=="undefined"?homeLayout:null
+    property var headerDefaults:typeof homeLayout!=="undefined" && homeLayout?homeLayout.studioOptions.headerDefaults || {}:({})
+    property string editHeaderSelection:""
+    signal editHeaderSelected(string part)
     property var suppressedComponentIds:[]
     property string editSelection:""
     property var editTargets:({})
@@ -118,6 +122,7 @@ Item {
     property var gridCollisions: null
     property var libraryProvider: null
     property var appProvider:typeof appRegistry!=="undefined"?appRegistry:null
+    property var collectionDefaults:typeof homeLayout!=="undefined"?homeLayout.studioOptions.componentPresets || ({}):({})
     property bool previewOnly:false
     property bool freezeData:false
     property bool samplePreview:false
@@ -181,7 +186,7 @@ Item {
             return "Network needed"
         return ""
     }
-    function focusable(item){return editMode || item && !(item.componentType==="image" && !item.action)}
+    function focusable(item){return editMode || item && item.componentType!=="shape" && !(item.componentType==="image" && !item.action)}
     function repairFocus(){if(editMode)return;if(composition.enabled && (sections || []).some(s=>(s.presentation || {}).variant==="library")){recoveryFocused=false;return;}if(items[focusedIndex] && focusable(items[focusedIndex]))return;const first=items.findIndex(i=>focusable(i));if(first<0){recoveryFocused=true;return}focusedIndex=first;focusedItemId=items[first].id;recoveryFocused=false}
 
     function visualEntries() {

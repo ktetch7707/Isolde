@@ -16,6 +16,8 @@ Canvas {
         c.beginPath()
         if (name === "arrow-right") {
             c.moveTo(4,16);c.lineTo(27,16);c.moveTo(19,8);c.lineTo(27,16);c.lineTo(19,24)
+        } else if(name === "text") {
+            c.moveTo(5,7);c.lineTo(27,7);c.moveTo(16,7);c.lineTo(16,27);c.moveTo(11,27);c.lineTo(21,27)
         } else if(name === "image") {
             c.roundedRect(3,3,26,26,3,3);c.moveTo(8,24);c.lineTo(14,15);c.lineTo(19,21);c.lineTo(23,16);c.lineTo(28,24);c.moveTo(13,10);c.arc(10,10,3,0,Math.PI*2)
         } else if(name === "carousel") {

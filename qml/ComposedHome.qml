@@ -31,6 +31,15 @@ Item {
     }
     readonly property var headerControls: config.headerControls || (config.headerMode === "identity" ? ["search", "settings"] : ["settings", "edit"])
     readonly property bool identityHeader: config.headerMode === "identity"
+    readonly property var headerStyle:Object.assign({},(host.headerDefaults || {})[identityHeader?"identity":"navigation"] || {},config.header || {})
+    readonly property var headerOrder:headerStyle.order || ["title","controls","clock"]
+    readonly property color headerInk:headerStyle.textColor || host.appearance.textColor || "#EEEAF0"
+    readonly property string headerLogo:headerStyle.customLogo && host.artworkResolver?host.artworkResolver.resolveArtwork(headerStyle.customLogo):""
+    function headerPosition(part) {
+        let position=(headerStyle.padding || 0)*root.unit
+        for(const id of headerOrder){if(id===part)break;const size=id==="title"?navigationStrip.width:id==="controls"?controls.width:clock.visible?clock.width:0;if(size>0)position+=size+(headerStyle.gap===undefined?22:headerStyle.gap)*root.unit}
+        return position
+    }
     property date now: new Date()
     property string sectionActionId: ""
     property string activeWidget: ""
@@ -252,6 +261,7 @@ Item {
     }
     function activateControl(index) {
         const control = headerControls[index]
+        if(host.editMode){host.editHeaderSelected(control);return}
         if (control === "search") host.searchRequested()
         else host.settingsRequested(control === "edit" ? 1 : -1)
     }
@@ -260,7 +270,7 @@ Item {
         sectionActionId=entry.sectionAction || entry.widget?entry.id:""
         if(!entry.sectionAction && !entry.widget)host.focusedIndex=host.itemIndex(entry.id)
         const item=(host.items || []).find(i=>i.id===entry.id)
-        const collection=entry.widget || item && (item.componentType==="library" || item.appCollection || item.family==="page-menu")
+        const collection=entry.widget || item && (item.componentType==="library" || item.appCollection || item.family==="page-menu" || item.family==="carousel")
         if(collection && widgets[entry.id])activeWidget=entry.id
     }
     function handleCommand(command) {
@@ -290,7 +300,7 @@ Item {
         if (!current) { host.recoveryFocused = true; return }
         const focusedItem=(host.items || []).find(i=>i.id===current.id)
         const pageMenu=focusedItem && focusedItem.family==="page-menu"
-        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || focusedItem.family==="page-menu")) && widgets[current.id]
+        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || focusedItem.family==="page-menu" || focusedItem.family==="carousel")) && widgets[current.id]
             && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm || pageMenu && (command===inputManager.navigateUp || command===inputManager.navigateDown))) {
             activeWidget=current.id
             const handled=widgets[current.id].handleCommand(command)
@@ -301,7 +311,7 @@ Item {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
             if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) host.actionActivated(section.presentation.trailingAction,current.id); return }
             const item = host.items[host.itemIndex(current.id)]
-            if(item && (item.componentType==="library" || item.appCollection || item.family==="page-menu")){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
+            if(item && (item.componentType==="library" || item.appCollection || item.family==="page-menu" || item.family==="carousel")){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
             if(item && item.componentType==="container"){
                 const children=(host.items || []).filter(i=>(i.parentId || "")===item.id && host.focusable(i))
                 if(children.length){activeGroup=item.id;host.focusedIndex=host.itemIndex(children[0].id)}
@@ -327,15 +337,21 @@ Item {
     }
     Column {
         anchors.fill: parent; anchors.margins: root.margin; spacing: root.gap
-        Row {
-            id: header; width: parent.width; height: (root.identityHeader ? 58 : 42)*root.unit; spacing: 22*root.unit
+        Item {
+            id: header;objectName:"pageHeader"; width: parent.width; height: (root.headerStyle.height || (root.identityHeader ? 58 : 42))*root.unit
+            readonly property real innerHeight:height-2*(root.headerStyle.padding || 0)*root.unit
+            Rectangle {anchors.fill:parent;radius:(root.headerStyle.radius || 0)*root.unit;color:root.headerStyle.backgroundColor || host.appearance.surfaceColor || "transparent";opacity:root.headerStyle.opacity || 0}
+            Rectangle {anchors.fill:parent;color:"transparent";radius:(root.headerStyle.radius || 0)*root.unit;border.width:host.editMode && !!host.editHeaderSelection?(root.headerStyle.focusWidth || 2)*root.unit:0;border.color:root.headerStyle.focusColor || host.appearance.focusColor || root.headerInk}
             Flickable {
                 id: navigationStrip; clip: true; contentWidth: root.identityHeader ? width : navigationRow.implicitWidth
-                width: parent.width - controls.width - (clock.visible ? clock.width : 0) - parent.spacing*(clock.visible ? 2 : 1); height: parent.height
+                objectName:"pageHeader-title";x:root.headerPosition("title");y:(root.headerStyle.padding || 0)*root.unit
+                width: Math.max(0,parent.width - controls.width - (clock.visible ? clock.width : 0) - (root.headerStyle.gap===undefined?22:root.headerStyle.gap)*root.unit*(clock.visible ? 2 : 1)-2*(root.headerStyle.padding || 0)*root.unit); height: header.innerHeight
                 Row {
-                    visible: root.identityHeader; height: parent.height; spacing: 10*root.unit
-                    LineIcon { name:"sparkle"; width:38*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
-                    Text { anchors.verticalCenter:parent.verticalCenter; text:root.config.identity || "Isolde"; color:host.appearance.textColor || "#514B67"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:48*root.unit; font.weight:Font.Light }
+                    visible: root.identityHeader && root.headerStyle.showTitle!==false; height: parent.height; spacing: 10*root.unit
+                    width:implicitWidth;x:root.headerStyle.titleAlignment==="right"?parent.width-width:root.headerStyle.titleAlignment==="center"?(parent.width-width)/2:0
+                    LineIcon { visible:!root.headerLogo;name:"sparkle"; width:38*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
+                    ArtworkImage {visible:!!root.headerLogo;source:root.headerLogo;width:(root.headerStyle.titleSize || 48)*root.unit*2;height:parent.height;fit:"contain"}
+                    Text { visible:!root.headerLogo;anchors.verticalCenter:parent.verticalCenter;width:Math.min(implicitWidth,Math.max(0,navigationStrip.width-48*root.unit));elide:Text.ElideRight;text:root.config.identity===undefined?"Isolde":root.config.identity; color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.titleSize || 48)*root.unit; font.weight:Font.Light }
                 }
                 Row {
                     id: navigationRow; visible:!root.identityHeader; height:parent.height; spacing:26*root.unit
@@ -348,35 +364,41 @@ Item {
                                 color:index === root.activeTab || (root.navigationFocused && index === root.focusedTab) ? host.appearance.textColor || "#EEEAF0" : host.appearance.mutedColor || "#AAA4B2"
                                 font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:21*root.unit*host.textScale; font.weight:index === root.activeTab ? Font.DemiBold : Font.Normal }
                             Rectangle { anchors.bottom:parent.bottom; width:parent.width; height:2*root.unit; color:host.appearance.focusColor || "#BD8198"; visible:root.navigationFocused && index === root.focusedTab }
-                            MouseArea { anchors.fill:parent; onClicked:{root.sectionActionId="";root.navigationFocused=true;root.activateTab(index)} }
+                            MouseArea { anchors.fill:parent; onClicked:{if(host.editMode){host.editHeaderSelected("title");return}root.sectionActionId="";root.navigationFocused=true;root.activateTab(index)} }
                         }
                     }
                 }
+                MouseArea {anchors.fill:parent;enabled:host.editMode;onClicked:host.editHeaderSelected("title")}
             }
             Item {
-                id:controls; width:controlRow.implicitWidth; height:header.height
-                FrostedPanel { anchors.fill:parent; anchors.topMargin:4*root.unit; anchors.bottomMargin:4*root.unit; visible:root.identityHeader; wallpaperItem:host.backdropItem; radius:26*root.unit; tintOpacity:0.5 }
+                id:controls;objectName:"pageHeader-controls";x:root.headerPosition("controls");y:(root.headerStyle.padding || 0)*root.unit; width:controlRow.implicitWidth; height:header.innerHeight
+                FrostedPanel { anchors.fill:parent; anchors.topMargin:4*root.unit; anchors.bottomMargin:4*root.unit; visible:root.identityHeader; wallpaperItem:host.backdropItem; radius:(root.headerStyle.radius===undefined?26:root.headerStyle.radius)*root.unit; tintOpacity:0.5 }
                 Row {
                     id:controlRow; height:parent.height; spacing:root.identityHeader ? 0 : 10*root.unit
                     Repeater {
                         model:root.headerControls
                         delegate:Rectangle {
                             required property int index; required property string modelData
-                            width:(root.identityHeader ? 120 : 100)*root.unit; height:parent.height; radius:root.identityHeader ? 26*root.unit : 12*root.unit
+                            objectName:"pageHeader-"+modelData
+                            width:(root.headerStyle.controlWidth || (root.identityHeader ? 120 : 100))*root.unit; height:parent.height; radius:(root.headerStyle.radius===undefined?(root.identityHeader ? 26:12):root.headerStyle.radius)*root.unit
                             color:root.identityHeader ? "transparent" : host.appearance.surfaceColor || "#28262F"
-                            border.width:!host.editMode && host.recoveryFocused && host.recoveryIndex === index ? 2 : 0; border.color:host.appearance.focusColor || "#BD8198"
-                            LineIcon { visible:root.identityHeader; x:16*root.unit; anchors.verticalCenter:parent.verticalCenter; width:23*root.unit; height:width; name:modelData === "search" ? "search" : "settings"; ink:host.appearance.textColor || "#514B67" }
-                            Text { anchors.verticalCenter:parent.verticalCenter; x:root.identityHeader ? 47*root.unit : (parent.width-width)/2
-                                text:modelData === "edit" ? host.editLabel : modelData === "search" ? "Search" : "Settings"; color:host.appearance.textColor || "#EEEAF0"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.identityHeader ? 14 : 15)*root.unit }
+                            border.width:(!host.editMode && host.recoveryFocused && host.recoveryIndex === index || host.editMode && host.editHeaderSelection===modelData)?(root.headerStyle.focusWidth || 2)*root.unit:0; border.color:root.headerStyle.focusColor || host.appearance.focusColor || "#BD8198"
+                            LineIcon { visible:(root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))!=="label"; x:root.headerStyle.controlDisplay==="icon"?(parent.width-width)/2:16*root.unit; anchors.verticalCenter:parent.verticalCenter; width:(root.headerStyle.iconSize || 23)*root.unit; height:width; name:modelData === "search" ? "search" : "settings"; ink:root.headerInk }
+                            Text { visible:root.headerStyle.controlDisplay!=="icon";anchors.verticalCenter:parent.verticalCenter; x:(root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))==="both"?(24+(root.headerStyle.iconSize || 23))*root.unit:(parent.width-width)/2
+                                width:Math.min(implicitWidth,Math.max(0,parent.width-((root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))==="both"?32+(root.headerStyle.iconSize || 23):16)*root.unit));elide:Text.ElideRight
+                                text:modelData === "edit" ? host.editLabel : modelData === "search" ? "Search" : "Settings"; color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.controlSize || (root.identityHeader ? 14 : 15))*root.unit }
                             MouseArea { anchors.fill:parent; onClicked:root.activateControl(index) }
                         }
                     }
                 }
             }
-            Column {
-                id:clock; visible:root.config.showClock === true; width:100*root.unit; anchors.verticalCenter:parent.verticalCenter; spacing:3*root.unit
-                Text { text:Qt.formatTime(root.now,"h:mm AP"); color:host.appearance.textColor || "#514B67"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:18*root.unit }
-                Text { text:Qt.formatDate(root.now,"ddd, MMM d"); color:host.appearance.mutedColor || "#625B73"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:12*root.unit }
+            Item {
+                id:clock;objectName:"pageHeader-clock"; visible:root.config.showClock === true; width:(root.headerStyle.clockWidth || 100)*root.unit;height:clockBody.implicitHeight;x:root.headerPosition("clock");anchors.verticalCenter:parent.verticalCenter
+                Column {id:clockBody;width:parent.width;spacing:3*root.unit
+                Text { width:parent.width;elide:Text.ElideRight;text:Qt.formatTime(root.now,root.headerStyle.timeFormat || "h:mm AP"); color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.clockSize || 18)*root.unit }
+                Text { width:parent.width;elide:Text.ElideRight;visible:root.headerStyle.showDate!==false;text:Qt.formatDate(root.now,root.headerStyle.dateFormat || "ddd, MMM d"); color:root.headerStyle.textColor || host.appearance.mutedColor || "#625B73"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.dateSize || 12)*root.unit }
+                }
+                MouseArea {anchors.fill:parent;enabled:host.editMode;onClicked:host.editHeaderSelected("clock")}
             }
         }
         Flickable {
