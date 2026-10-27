@@ -1,6 +1,7 @@
 #include "app/AppRegistry.h"
 #include "app/AppArtwork.h"
 #include "app/AppCatalog.h"
+#include "app/FdroidProvider.h"
 #include "input/InputManager.h"
 #include "sessions/SessionManager.h"
 #include "home/HomeLayout.h"
@@ -30,11 +31,15 @@
 
 class CountingStoreProvider final : public StoreProvider {
 public:
-    QString identity="fdroid";int searches=0;mutable int artifacts=0;
+    QString identity="fdroid";int searches=0;int pages=0;int cancellations=0;mutable int artifacts=0;QString lastQuery;
     QString providerId() const override{return identity;}
     QString providerName() const override{return "Test repository";}
     bool isOnline() const override{return true;}
-    QVariantList search(const QString &) override{++searches;return {QVariantMap{{"id","test-app"},{"storeId","test-app"},{"type","android"},{"storeType","android"},{"name","Test app"}}};}
+    QVariantList search(const QString &query) override{lastQuery=query;++searches;return {QVariantMap{{"id","test-app"},{"storeId","test-app"},{"type","android"},{"storeType","android"},{"name","Test app"}}};}
+    void requestPage(int direction) override{pages+=direction;}
+    void cancel() override{++cancellations;}
+    bool hasNextPage() const override{return true;}
+    void publishLate(){emit resultsChanged();}
     QUrl artifactUrl(const QString &) const override{++artifacts;return QUrl("https://example.invalid/app.apk");}
     QByteArray artifactHash(const QString &) const override{return {};}
     QString provenanceText(const QString &) const override{return "test";}
@@ -44,6 +49,24 @@ class IsoldeTests final : public QObject {
     Q_OBJECT
 
 private slots:
+    void fdroidBrowsingStaysOfflineUntilOptInAndDropsLateResults() {
+        FdroidProvider live;
+        QVERIFY(live.results().isEmpty());QVERIFY(live.status().isEmpty());
+        QVERIFY(!live.hasNextPage());QVERIFY(live.artifactUrl("unknown").isEmpty());
+        AppRegistry registry;AppCatalog catalog(&registry);CountingStoreProvider provider;
+        catalog.setStoreProvider(&provider);
+        catalog.searchStore("newpipe");catalog.changeStorePage(1);
+        QCOMPARE(provider.searches,0);QCOMPARE(provider.pages,0);
+        QVERIFY(!catalog.hasNextStorePage());
+        catalog.setOnlineStoreSearch(true);
+        QCOMPARE(provider.searches,1);QCOMPARE(provider.lastQuery,QString("newpipe"));
+        QVERIFY(catalog.hasNextStorePage());catalog.changeStorePage(1);QCOMPARE(provider.pages,1);
+        QCOMPARE(catalog.allEntries().size(),1);
+        catalog.setOnlineStoreSearch(false);QCOMPARE(provider.cancellations,1);
+        provider.publishLate();catalog.changeStorePage(1);
+        QVERIFY(catalog.providerResults().isEmpty());QVERIFY(catalog.allEntries().isEmpty());
+        QCOMPARE(provider.pages,1);QVERIFY(!catalog.hasNextStorePage());
+    }
     void downloadedAndroidManifestPersistsAndRejectsTampering() {
         QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir temp;
         AppRegistry registry;AppCatalog catalog(&registry);

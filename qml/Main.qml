@@ -266,7 +266,7 @@ Window {
                 id: store
                 anchors.fill: parent
                 visible: sessionManager.active && sessionManager.currentAppType === "store"
-                entries: appCatalog.entries
+                entries: appCatalog.allEntries
                 appearance: homeLayout.homeAppearance
                 onOperationSettled: { if(visible){window.raise();window.requestActivate();shellSurface.forceActiveFocus()} }
                 onOpenRequested: appId => { sessionManager.exitCurrent(); Qt.callLater(()=>sessionManager.launch(appId)) }

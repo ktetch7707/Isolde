@@ -26,6 +26,10 @@ public:
     [[nodiscard]] virtual QVariantList search(const QString &query) = 0;
     virtual void requestSearch(const QString &query) { m_results=search(query); emit resultsChanged(); }
     virtual void cancel() {}
+    virtual void requestPage(int) {}
+    [[nodiscard]] virtual QString status() const { return {}; }
+    [[nodiscard]] virtual bool hasNextPage() const { return false; }
+    [[nodiscard]] virtual bool hasPreviousPage() const { return false; }
     [[nodiscard]] QVariantList results() const { return m_results; }
 
     [[nodiscard]] virtual QUrl artifactUrl(const QString &storeId) const = 0;

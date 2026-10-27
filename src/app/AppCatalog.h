@@ -25,6 +25,9 @@ class AppCatalog final : public QObject {
     Q_PROPERTY(QVariantList allEntries READ allEntries NOTIFY entriesChanged)
     Q_PROPERTY(QString downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
     Q_PROPERTY(QString storeSourceName READ storeSourceName NOTIFY entriesChanged)
+    Q_PROPERTY(QString storeStatus READ storeStatus NOTIFY entriesChanged)
+    Q_PROPERTY(bool hasNextStorePage READ hasNextStorePage NOTIFY entriesChanged)
+    Q_PROPERTY(bool hasPreviousStorePage READ hasPreviousStorePage NOTIFY entriesChanged)
 
 public:
     explicit AppCatalog(AppRegistry *registry, QObject *parent = nullptr);
@@ -40,6 +43,10 @@ public:
     Q_INVOKABLE StoreProvider *storeProvider() const { return m_provider; }
     Q_INVOKABLE void setOnlineStoreSearch(bool enabled);
     Q_INVOKABLE void searchStore(const QString &query);
+    Q_INVOKABLE void changeStorePage(int direction);
+    QString storeStatus() const { return m_onlineStoreSearch && m_provider ? m_provider->status() : QString(); }
+    bool hasNextStorePage() const { return m_onlineStoreSearch && m_provider && m_provider->hasNextPage(); }
+    bool hasPreviousStorePage() const { return m_onlineStoreSearch && m_provider && m_provider->hasPreviousPage(); }
     Q_INVOKABLE bool load(const QString &catalogPath = {}, const QString &statePath = {}, const QString &installRoot = {});
     Q_INVOKABLE bool install(const QString &id);
     Q_INVOKABLE bool uninstall(const QString &id);
@@ -109,6 +116,7 @@ private:
     QByteArray m_operationEvents;
     QPointer<StoreProvider> m_provider;
     bool m_onlineStoreSearch = false;
+    QString m_storeQuery;
     QVariantList m_providerResults;
     QString m_downloadProgress;
     QNetworkAccessManager m_network;

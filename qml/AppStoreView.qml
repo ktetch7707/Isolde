@@ -21,6 +21,7 @@ Item {
  property string area:"grid"
  property int headerIndex:2
  property int actionIndex:0
+ property int toolIndex:0
  property string confirmation:""
  property int confirmIndex:0
  property string searchText:""
@@ -67,7 +68,7 @@ Item {
   if(platforms[platformIndex].type==="web"){addWebOpen=true;webField=0;webName="";webAddress=""}
   else catalog.setOnlineStoreSearch(!catalog.onlineStoreSearch)
  }
- function request(op){if(!selected || busy)return;if(op==="open"){returnAppId=selected.id;openRequested(selected.id)}else{confirmation=op;confirmIndex=0}}
+ function request(op){if(!selected || busy || (op==="install" && selected.compatible===false))return;if(op==="open"){returnAppId=selected.id;openRequested(selected.id)}else{confirmation=op;confirmIndex=0}}
  function commit(){if(!selected || busy)return;const op=confirmation;confirmation="";pendingOperation=op;if(op==="install")catalog.install(selected.id);else catalog.uninstall(selected.id);area="actions";actionIndex=0}
  function handleCommand(cmd){
   if(searchOpen){keyboard.handleCommand(cmd);return true}
@@ -87,11 +88,13 @@ Item {
   if(confirmation){if(cmd===inputManager.back)confirmation="";else if(cmd===inputManager.navigateLeft || cmd===inputManager.navigateRight)confirmIndex=1-confirmIndex;else if(cmd===inputManager.confirm){if(confirmIndex===1)commit();else confirmation=""}return true}
   if(cmd===inputManager.back){if(area==="actions"){area="grid";return true}return false}
   if(cmd===inputManager.search){beginSearch();return true}
-  if(cmd===inputManager.menu && !deviceApps){area="tools";return true}
+  if(cmd===inputManager.menu && !deviceApps){area="tools";toolIndex=0;return true}
   if(area==="tools"){
    if(cmd===inputManager.navigateDown)area=filtered.length?"grid":"header"
    else if(cmd===inputManager.navigateUp)area="header"
-   else if(cmd===inputManager.confirm)storeTool()
+   else if(cmd===inputManager.navigateLeft)toolIndex=Math.max(0,toolIndex-1)
+   else if(cmd===inputManager.navigateRight)toolIndex=Math.min(pager.visible?2:0,toolIndex+1)
+   else if(cmd===inputManager.confirm){if(toolIndex===0)storeTool();else catalog.changeStorePage(toolIndex===1?-1:1)}
    return true
   }
   if(area==="header"){
@@ -138,10 +141,20 @@ Item {
    }
   }
   Row {width:parent.width;height:50*root.typeScale;spacing:root.gap
-   Text {textFormat:Text.PlainText;width:parent.width-storeToolButton.width-root.gap;anchors.verticalCenter:parent.verticalCenter;text:(root.deviceApps?qsTr("Device apps"):root.platforms[root.platformIndex]?root.platforms[root.platformIndex].label+qsTr(" apps"):"")+"  ·  "+root.filtered.length;color:root.ink;font.pixelSize:23*root.typeScale;font.weight:Font.DemiBold}
-   Rectangle {id:storeToolButton;objectName:"storeTool";visible:!root.deviceApps;width:toolLabel.implicitWidth+28;height:parent.height;radius:root.corners;color:root.surface;border.width:root.area==="tools"?3:1;border.color:root.focusColor
+   Text {textFormat:Text.PlainText;width:Math.max(0,parent.width-storeToolButton.width-(pager.visible?pager.width+root.gap:0)-root.gap);elide:Text.ElideRight;anchors.verticalCenter:parent.verticalCenter;text:(root.deviceApps?qsTr("Device apps"):root.platforms[root.platformIndex]?root.platforms[root.platformIndex].label+qsTr(" apps"):"")+"  ·  "+root.filtered.length;color:root.ink;font.pixelSize:23*root.typeScale;font.weight:Font.DemiBold}
+   Rectangle {id:storeToolButton;objectName:"storeTool";visible:!root.deviceApps;width:toolLabel.implicitWidth+28;height:parent.height;radius:root.corners;color:root.surface;border.width:root.area==="tools" && root.toolIndex===0?3:1;border.color:root.focusColor
     Text {id:toolLabel;textFormat:Text.PlainText;anchors.centerIn:parent;text:root.platforms[root.platformIndex] && root.platforms[root.platformIndex].type==="web"?qsTr("Add website"):qsTr("F-Droid search: ")+(root.catalog.onlineStoreSearch?qsTr("On"):qsTr("Off"));color:root.ink;font.pixelSize:18*root.typeScale}
-    MouseArea {anchors.fill:parent;onClicked:{root.area="tools";root.storeTool()}}
+    MouseArea {anchors.fill:parent;onClicked:{root.area="tools";root.toolIndex=0;root.storeTool()}}
+   }
+   Row {id:pager;visible:!root.deviceApps && root.catalog.onlineStoreSearch && root.platforms[root.platformIndex] && root.platforms[root.platformIndex].type==="android";height:parent.height;spacing:root.gap
+    Repeater {model:[qsTr("Previous"),qsTr("Next")]
+     delegate:Rectangle {required property int index;required property string modelData;objectName:"store-page-"+index
+      readonly property bool available:index===0?!!root.catalog.hasPreviousStorePage:!!root.catalog.hasNextStorePage
+      width:pageLabel.implicitWidth+28;height:pager.height;radius:root.corners;color:root.surface;opacity:available?1:0.5;border.width:root.area==="tools" && root.toolIndex===index+1?3:1;border.color:root.focusColor
+      Text {id:pageLabel;textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData;color:root.ink;font.pixelSize:18*root.typeScale}
+      MouseArea {anchors.fill:parent;enabled:parent.available;onClicked:{root.area="tools";root.toolIndex=index+1;root.catalog.changeStorePage(index===0?-1:1)}}
+     }
+    }
    }
   }
   Row {
@@ -167,12 +180,14 @@ Item {
     Column {id:detailContent;width:details.width;spacing:root.gap
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.name:"";color:root.ink;font.pixelSize:32*root.typeScale;font.weight:Font.DemiBold;wrapMode:Text.WordWrap}
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.publisher:"";color:root.ink;opacity:0.65;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
+     Text {textFormat:Text.PlainText;width:parent.width;visible:!!text;text:root.selected?root.selected.provenance || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
+     Text {textFormat:Text.PlainText;width:parent.width;visible:!!text;text:root.selected?root.selected.compatibilityReason || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.description:"";color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap;maximumLineCount:5;elide:Text.ElideRight}
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected && root.selected.installed?qsTr("Added to your current profile."):qsTr("Available to add to your profile.");color:root.ink;opacity:0.65;font.pixelSize:16*root.typeScale;wrapMode:Text.WordWrap}
      Repeater {id:actions;model:root.selected?(root.selected.installed?[qsTr("Open app"),qsTr("Uninstall")]:[qsTr("Install app")]):[]
       delegate:Rectangle {required property int index;required property string modelData;objectName:"store-action-"+index
        width:parent.width;height:54*root.typeScale;radius:root.corners;color:index===0?Qt.lighter(root.surface,1.8):root.surface
-       border.width:root.area==="actions" && root.actionIndex===index?3:1;border.color:root.area==="actions" && root.actionIndex===index?root.focusColor:Qt.lighter(root.surface,1.4);opacity:root.busy?0.45:1
+       border.width:root.area==="actions" && root.actionIndex===index?3:1;border.color:root.area==="actions" && root.actionIndex===index?root.focusColor:Qt.lighter(root.surface,1.4);opacity:root.busy || (root.selected && root.selected.compatible===false)?0.45:1
        Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData;color:root.ink;font.pixelSize:20*root.typeScale;font.weight:Font.DemiBold}
        MouseArea {anchors.fill:parent;enabled:!root.busy;onClicked:root.request(index===1?"uninstall":root.selected.installed?"open":"install")}
       }
@@ -182,7 +197,7 @@ Item {
    }
   }
  }
- Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;text:root.busy?(root.pendingOperation==="uninstall"?qsTr("Removing %1… Please wait.").arg(root.operationName):qsTr("Installing %1… Please wait.").arg(root.operationName)):root.catalog.errorString || qsTr("D-pad Browse · OK Select · Search Find an app · Back Return");color:root.ink;font.pixelSize:17*root.typeScale;elide:Text.ElideRight}
+ Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;text:root.busy?(root.pendingOperation==="uninstall"?qsTr("Removing %1… Please wait.").arg(root.operationName):qsTr("Installing %1… %2").arg(root.operationName).arg(root.catalog.downloadProgress || qsTr("Please wait."))):root.catalog.errorString || root.catalog.storeStatus || qsTr("D-pad Browse · OK Select · Search Find an app · Back Return");color:root.ink;font.pixelSize:17*root.typeScale;elide:Text.ElideRight}
  Rectangle {anchors.fill:parent;visible:root.addWebOpen;z:5;color:Qt.rgba(0,0,0,0.7)
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.horizontalCenter:parent.horizontalCenter;y:root.searchOpen?root.gap:(parent.height-height)/2;width:parent.width*0.76;height:webForm.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
@@ -204,6 +219,7 @@ Item {
    Column {id:body;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
     Text {textFormat:Text.PlainText;width:parent.width;text:(root.confirmation==="install"?qsTr("Install "):qsTr("Uninstall "))+(root.selected?root.selected.name:"")+"?";color:root.ink;font.pixelSize:28*root.typeScale;font.weight:Font.DemiBold;wrapMode:Text.WordWrap}
     Text {textFormat:Text.PlainText;width:parent.width;text:root.confirmation==="install"?(root.selected && root.selected.type==="android"?qsTr("Install the verified Android package in your current profile."):qsTr("Add this app to your current profile.")):root.selected && root.selected.type==="android"?qsTr("Remove the Android app and its Android app data from this profile. Your pages and other profiles stay unchanged."):qsTr("Remove this app from your profile. Saved sign-in data is kept. Your pages stay unchanged.");color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap}
+    Text {textFormat:Text.PlainText;width:parent.width;visible:root.confirmation==="install" && !!text;text:root.selected?root.selected.consentText || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap;maximumLineCount:5;elide:Text.ElideRight}
     Row {width:parent.width;spacing:root.gap
      Repeater {model:[qsTr("Cancel"),root.confirmation==="install"?qsTr("Install"):qsTr("Uninstall")]
       delegate:Rectangle {required property int index;required property string modelData;width:(body.width-root.gap)/2;height:54;radius:root.corners;color:root.surface;border.width:root.confirmIndex===index?3:1;border.color:root.focusColor

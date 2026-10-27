@@ -52,6 +52,8 @@ add_library(isolde_core STATIC
     src/app/AppCatalog.cpp
     src/app/LocalCatalogProvider.cpp
     src/app/LocalCatalogProvider.h
+    src/app/FdroidProvider.cpp
+    src/app/FdroidProvider.h
     src/app/StoreProvider.h
     src/app/AppCatalog.h
     src/app/AppRegistry.cpp
@@ -293,6 +295,8 @@ configure_file(config/game-runtimes.json ${CMAKE_CURRENT_BINARY_DIR}/share/isold
 install(FILES tools/provision-default-apps.py DESTINATION share/isolde)
 install(FILES tools/provision-android.py DESTINATION share/isolde)
 install(FILES tools/android-session.py DESTINATION share/isolde)
+install(FILES tools/fdroid-store.py DESTINATION share/isolde)
+configure_file(tools/fdroid-store.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/fdroid-store.py COPYONLY)
 configure_file(tools/android-session.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/android-session.py COPYONLY)
 install(FILES config/android-runtime.json DESTINATION share/isolde/config)
 configure_file(tools/provision-android.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/provision-android.py COPYONLY)
@@ -438,6 +442,7 @@ if(BUILD_TESTING)
         add_test(NAME appliance_installation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appliance_install.py)
         add_test(NAME default_app_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_apps.py)
         add_test(NAME android_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_android_provisioning.py)
+        add_test(NAME fdroid_store COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_fdroid_store.py)
         add_test(NAME games_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_games_provisioning.py)
         add_test(NAME vpn_setup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_vpn_setup.py)
         qt_add_executable(isolde_vpn_tests tests/tst_vpn.cpp)

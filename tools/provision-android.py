@@ -162,7 +162,7 @@ def system(source, software_rendering=False):
         shared.atomic(Path("/etc/apt/preferences.d/isolde-waydroid"),
                       b"Package: *\nPin: origin repo.waydro.id\nPin-Priority: 100\n", 0o644)
         shared.run("apt-get", "update")
-        shared.run("apt-get", "install", "-y", "waydroid="+data["runtimeVersion"], "aapt", "apksigner", timeout=900)
+        shared.run("apt-get", "install", "-y", "waydroid="+data["runtimeVersion"], "aapt", "apksigner", "openssl", timeout=900)
         require_idle_runtime(initialized)
         app = data["apps"]["smarttube"]
         apk = scratch/"smarttube.apk"

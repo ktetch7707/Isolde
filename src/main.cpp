@@ -1,5 +1,6 @@
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
+#include "app/FdroidProvider.h"
 #include "input/InputManager.h"
 #include "home/HomeLayout.h"
 #include "home/ActionDispatcher.h"
@@ -47,6 +48,7 @@
 struct ProfileRuntime {
     AppRegistry registry;
     SessionManager sessions{&registry};
+    FdroidProvider storeProvider;
     AppCatalog catalog{&registry};
     HomeLayout homeLayout{&registry};
     DisplaySettings displaySettings;
@@ -83,6 +85,7 @@ struct ProfileRuntime {
 
     explicit ProfileRuntime(ProfileManager &profiles, bool initialLaunch, AudioSettings &audio, CaptureController &capture)
         : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()) {
+    catalog.setStoreProvider(&storeProvider);
     if (initialLaunch && QCoreApplication::arguments().contains("--setup")) setup.restart();
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);

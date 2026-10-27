@@ -266,6 +266,8 @@ Verify: QML header-switch/query/results/empty/keyboard/late-callback tests in `h
 
 ## T29 — Actual Store integration: real Android and Chromium app stores (L, depends: T01,T03; current authorized slice)
 
+F-Droid browsing code update (2026-10-26): [provider/handoff](fdroid-store-2026-10-26.md) adds the live profile-scoped provider, signed SHA-256 entry/v2 index verification, bounded search/pages, runtime compatibility explanations and installer wiring. Host regressions 12/12 pass; the official 4,866-app index verifies and real searches return results. Android host suite remains 11 tests OK / 5 Linux-only skipped. No VM/C++ build/installed acceptance run per user direction; the other agent owns those checks. This supersedes the earlier installer-only note's absent-provider limitation, without closing broad gates. T29 remains 1/8 = 13%; sum 860 / 27; Overall 32%.
+
 Entry docs: `docs/android-apps-2026-10-25.md`, `docs/store-lifecycle-2026-10-25.md`, `docs/default-apps-2026-10-23.md`, `docs/actual-stores-integration-plan.md`, `docs/packages.md` §Trust boundary, `docs/unified-master-plan.txt` §15 Generator Test.
 Entry files: `src/app/StoreProvider.h`, `src/app/LocalCatalogProvider.{h,cpp}`, `src/app/AppCatalog.{h,cpp}`, `qml/AppStoreView.qml`, `qml/SettingsView.qml`, `tests/tst_isolde.cpp`, `CMakeLists.txt`.
 

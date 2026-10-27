@@ -122,7 +122,8 @@ void AppCatalog::setOnlineStoreSearch(bool enabled)
     if (m_onlineStoreSearch == enabled) return;
     m_onlineStoreSearch = enabled;
     if (enabled && m_provider) {
-        m_provider->requestSearch(QString());
+        setError({});
+        m_provider->requestSearch(m_storeQuery);
     } else {
         if(m_provider)m_provider->cancel();
         m_providerResults.clear();
@@ -136,7 +137,13 @@ void AppCatalog::setOnlineStoreSearch(bool enabled)
 void AppCatalog::searchStore(const QString &query)
 {
     if(query.size()>128){setError(tr("Use a search of at most 128 characters."));return;}
-    if(m_provider && (!m_provider->isOnline() || m_onlineStoreSearch))m_provider->requestSearch(query.trimmed());
+    m_storeQuery=query.trimmed();
+    if(m_provider && (!m_provider->isOnline() || m_onlineStoreSearch)){setError({});m_provider->requestSearch(m_storeQuery);}
+}
+
+void AppCatalog::changeStorePage(int direction)
+{
+    if(!busy() && m_onlineStoreSearch && m_provider){setError({});m_provider->requestPage(direction);}
 }
 
 QVariantList AppCatalog::allEntries() const
