@@ -556,7 +556,9 @@ class Oracle:
                    "--output-junit", str(self.run / "ctest.xml")]
         if suite != "all":
             command += ["-R", pattern]
-        self.stage("ctest", command, 360, env)
+        # The full suite now contains 39 serial suites. Keep individual test
+        # deadlines intact while allowing the complete run to report failures.
+        self.stage("ctest", command, 600 if suite == "all" else 360, env)
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":

@@ -342,6 +342,7 @@ Item {
             compare(collectionPickerSpy.count,1);const remote=JSON.stringify(collectionPickerSpy.signalArguments[0][1])
             compare(remote,JSON.stringify(["one","three","missing"]))
             picker.begin(initial)
+            editor.visible=false;picker.z=10000;verify(waitForRendering(picker))
             mouseClick(findChild(picker,"studioAppPickerTool-3"))
             verify(waitForRendering(findChild(picker,"studioAppChoice-three")))
             mouseClick(findChild(picker,"studioAppChoice-three"));compare(picker.movingId,"three")
@@ -361,7 +362,7 @@ Item {
                 {name:"Mock app",appType:"mock",appSection:"TV",action:{type:"launch-app",appId:"mock-app"}},
                 {name:"Store",appType:"store",appSection:"TV",action:{type:"launch-app",appId:"store"}}
             ]
-            const fixtureSession={availableActions:actions,document:{}}
+            const fixtureSession={availableActions:actions,document:{},componentPrototype:(type,configuration)=>editor.session.componentPrototype(type,configuration)}
             const catalog=createTemporaryObject(appPickerCatalogComponent,tests.parent,{session:fixtureSession,options:homeLayout.studioOptions,appearance:editor.page.appearance})
             const inspector=createTemporaryObject(appPickerInspectorComponent,tests.parent,{session:fixtureSession,options:homeLayout.studioOptions,appearance:editor.page.appearance,page:{items:[{id:"apps",appCollection:{section:"TV"}}]},selectedIds:["apps"]})
             verify(catalog!==null);verify(inspector!==null)

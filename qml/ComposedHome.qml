@@ -368,7 +368,9 @@ Item {
                         }
                     }
                 }
-                MouseArea {anchors.fill:parent;enabled:host.editMode;onClicked:host.editHeaderSelected("title")}
+                // Flickable children belong to its content item. Empty navigation
+                // has zero content width, but its header remains editable.
+                MouseArea {width:Math.max(navigationStrip.width,navigationStrip.contentWidth);height:navigationStrip.height;enabled:host.editMode;onClicked:host.editHeaderSelected("title")}
             }
             Item {
                 id:controls;objectName:"pageHeader-controls";x:root.headerPosition("controls");y:(root.headerStyle.padding || 0)*root.unit; width:controlRow.implicitWidth; height:header.innerHeight

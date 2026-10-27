@@ -1603,7 +1603,7 @@ void ComponentTests::studioPageDefaultsAreDraftOnlyAndScoped()
 }
 void ComponentTests::studioShapesLabelsAndReplacementAreAtomic()
 {
-    QVariantMap shape{{"id","decoration"},{"kind","widget"},{"widgetType","shape"},{"componentType","shape"},{"name","Decorative background"},
+    QVariantMap shape{{"id","decoration"},{"kind","widget"},{"widgetType","shape"},{"componentType","shape"},{"name","Decorative background"},{"source",QVariantMap{{"schemaVersion",1},{"provider","shell"},{"kind","shape"}}},
         {"presentation",QVariantMap{{"shape","ellipse"},{"visibleLabel","Caption"},{"fillMode","gradient"},{"fillEndColor","#123456"},{"fillDirection","horizontal"}}}};
     QVERIFY(!ComponentSchema::component(shape,false).isEmpty());
     auto invalid=shape;invalid["action"]=QVariantMap{{"type","settings"},{"section",1}};QVERIFY(ComponentSchema::component(invalid,false).isEmpty());

@@ -102,7 +102,14 @@ Item {
                     Text {anchors.top:parent.top;anchors.right:parent.right;anchors.margins:root.settings.gap*root.unit;text:parent.chosen?"✓":"□";color:root.appearance.textColor;font.pixelSize:root.settings.labelSize*root.unit}
                     Text {anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.settings.gap*root.unit;text:(modelData.missing?"Unavailable · ":"")+modelData.name;textFormat:Text.PlainText;wrapMode:Text.Wrap;maximumLineCount:2;elide:Text.ElideRight;color:root.appearance.textColor;font.family:root.appearance.fontFamily || "DejaVu Sans";font.pixelSize:root.settings.labelSize*root.unit}
                     Accessible.role:Accessible.CheckBox;Accessible.name:modelData.name;Accessible.checked:chosen
-                    MouseArea {anchors.fill:parent;onClicked:{root.toolsFocused=false;if(root.movingId)root.moveTo(index);else root.index=index;root.activateItem()}}
+                    MouseArea {anchors.fill:parent;onClicked:{
+                        // Moving replaces the model and can destroy this delegate.
+                        // Keep the picker alive in this handler's local scope.
+                        const picker=root,target=index
+                        picker.toolsFocused=false
+                        if(picker.movingId)picker.moveTo(target);else picker.index=target
+                        picker.activateItem()
+                    }}
                 }
             }
         }

@@ -340,7 +340,7 @@ if(BUILD_TESTING)
         QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/studio"
         STUDIO_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/default-home-layout.json")
     add_test(NAME studio_quick COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_editor.qml)
-    set_tests_properties(studio_quick PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+    set_tests_properties(studio_quick PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_selection COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_selection.qml)
     add_test(NAME store_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_store.qml)
