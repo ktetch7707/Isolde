@@ -1605,9 +1605,9 @@ void ComponentTests::studioShapesLabelsAndReplacementAreAtomic()
 {
     QVariantMap shape{{"id","decoration"},{"kind","widget"},{"widgetType","shape"},{"componentType","shape"},{"name","Decorative background"},
         {"presentation",QVariantMap{{"shape","ellipse"},{"visibleLabel","Caption"},{"fillMode","gradient"},{"fillEndColor","#123456"},{"fillDirection","horizontal"}}}};
-    QVERIFY(!ComponentSchema::component(shape).isEmpty());
-    auto invalid=shape;invalid["action"]=QVariantMap{{"type","settings"},{"section",1}};QVERIFY(ComponentSchema::component(invalid).isEmpty());
-    invalid=shape;invalid["customLogo"]="artwork/picture.png";QVERIFY(ComponentSchema::component(invalid).isEmpty());
+    QVERIFY(!ComponentSchema::component(shape,false).isEmpty());
+    auto invalid=shape;invalid["action"]=QVariantMap{{"type","settings"},{"section",1}};QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+    invalid=shape;invalid["customLogo"]="artwork/picture.png";QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
     QVERIFY(!ComponentSchema::validPresentation({{"bodyText",QString(4097,'x')}}));
     QVERIFY(!ComponentSchema::validPresentation({{"visibleLabel",QString(161,'x')}}));
     QVERIFY(!ComponentSchema::validPresentation({{"shape","script"}}));
