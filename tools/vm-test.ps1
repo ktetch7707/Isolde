@@ -8,7 +8,7 @@ param(
     [switch]$Storage,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','games','guide')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','games','guide','artifacts')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
@@ -65,6 +65,23 @@ try {
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
+        if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'artifacts') {
+            $maintenanceFiles = @('tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tests/tst_home_navigation.cpp','CMakeLists.txt')
+            $maintenanceLines = foreach ($relative in $maintenanceFiles) {
+                $hash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
+                "$hash  $relative"
+            }
+            $maintenanceManifest = Join-Path $local 'maintenance-files.sha256'
+            [IO.File]::WriteAllText($maintenanceManifest,($maintenanceLines -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
+            $maintenanceHash = (Get-FileHash -LiteralPath $maintenanceManifest -Algorithm SHA256).Hash.ToLowerInvariant()
+            $bundle = "$guestHome/isolde-oracle/bin/maintenance-$driverHash-$maintenanceHash"
+            $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "mkdir -p $bundle/tools $bundle/tests") -TimeoutSeconds 25 -Log $transport
+            foreach ($relative in $maintenanceFiles) {
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @((Join-Path $repo $relative),"isolde-dev@127.0.0.1:$bundle/$relative")) -TimeoutSeconds 30 -Log $transport
+            }
+            $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($maintenanceManifest,"isolde-dev@127.0.0.1:$bundle/files.sha256")) -TimeoutSeconds 30 -Log $transport
+            $command += " --maintenance-tests-digest $maintenanceHash"
+        }
         if ($WaitSeconds) { $command += " --wait-seconds $WaitSeconds" }
         $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'games') { 2500 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')

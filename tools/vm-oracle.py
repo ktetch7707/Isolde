@@ -279,6 +279,52 @@ def extract_snapshot(run):
     return source, entries
 
 
+def remove_guest_source_snapshot(candidate, runs, mounts):
+    """Remove a reproducible extracted copy, preserving its verified archive."""
+    candidate, runs = Path(candidate), Path(runs)
+    source = candidate / "source"
+    if (runs.resolve() != runs or candidate.parent != runs or candidate.resolve() != candidate
+            or source.resolve() != source or not source.is_dir()):
+        raise RuntimeError("Unsafe guest source snapshot path")
+    if any(m == source or m.is_relative_to(source) or (m != Path("/") and source.is_relative_to(m)) for m in mounts):
+        raise RuntimeError("Refusing mounted guest source snapshot")
+    for name in ("source.tar.gz", "archive.sha256", "files.sha256"):
+        path = candidate / name
+        if path.is_symlink() or not path.is_file():
+            raise RuntimeError("Missing regular recovery archive or manifest")
+    archive_path = candidate / "source.tar.gz"
+    if archive_path.stat().st_size > 256 * 1024**2:
+        raise RuntimeError("Recovery archive exceeds maintenance bounds")
+    expected = (candidate / "archive.sha256").read_text().split()
+    if not expected or not re.fullmatch(r"[0-9a-f]{64}", expected[0]) or digest(archive_path) != expected[0]:
+        raise RuntimeError("Recovery archive checksum mismatch")
+    entries = manifest(candidate / "files.sha256")
+    if len(entries) > 10000:
+        raise RuntimeError("Recovery manifest exceeds maintenance bounds")
+    seen, total = set(), 0
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for member in archive:
+            name = str(safe_relative(member.name))
+            total += member.size
+            if name not in entries or name in seen or not member.isfile() or total > 1024**3:
+                raise RuntimeError("Invalid bounded recovery archive entry")
+            with archive.extractfile(member) as incoming:
+                actual = hashlib.file_digest(incoming, "sha256").hexdigest()
+            if actual != entries[name]:
+                raise RuntimeError("Recovery archive member checksum mismatch")
+            seen.add(name)
+    if seen != set(entries):
+        raise RuntimeError("Recovery archive and manifest disagree")
+    verify_tree(source, entries)
+    for path in source.rglob("*"):
+        if path.is_symlink():
+            raise RuntimeError("Refusing linked extracted source")
+        if path.is_file() and path.relative_to(source).as_posix() not in entries:
+            if path.suffix != ".pyc" or path.parent.name != "__pycache__":
+                raise RuntimeError("Unrecorded extracted source file; preserve for inspection")
+    shutil.rmtree(source)
+
+
 def sync_workspace(source, destination, entries, previous):
     """Keep timestamps on identical files so Ninja can reuse compiled objects."""
     destination.mkdir(parents=True, exist_ok=True)
@@ -608,8 +654,30 @@ class Oracle:
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
 
-    def configure_native(self, target="native"):
-        if target not in {"native","surfshark","android","android-repair","games","guide"}: raise ValueError("Unsupported guest configuration target")
+    def configure_native(self, target="native", maintenance_tests_digest=None):
+        if target not in {"native","surfshark","android","android-repair","games","guide","artifacts"}: raise ValueError("Unsupported guest configuration target")
+        if target=="artifacts":
+            if self.command("hostname")!="isolde-test" or self.root!=Path.home()/"isolde-oracle" or self.root.resolve()!=self.root:
+                raise RuntimeError("Artifact maintenance is restricted to the native Isolde-Test oracle")
+            if not isinstance(maintenance_tests_digest,str) or not re.fullmatch(r"[0-9a-f]{64}",maintenance_tests_digest):
+                raise RuntimeError("Artifact maintenance requires matching runner self-tests")
+            driver_digest=digest(Path(__file__))
+            bundle=self.root/"bin"/("maintenance-"+driver_digest+"-"+maintenance_tests_digest)
+            tests=bundle/"tests/test_vm_oracle.py"
+            hashes=bundle/"files.sha256"
+            if bundle.resolve()!=bundle or hashes.resolve()!=hashes or digest(hashes)!=maintenance_tests_digest:
+                raise RuntimeError("Maintenance self-test bundle checksum mismatch")
+            entries=manifest(hashes)
+            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tests/tst_home_navigation.cpp","CMakeLists.txt"} or entries["tools/vm-oracle.py"]!=driver_digest:
+                raise RuntimeError("Unexpected maintenance self-test dependencies")
+            if any((bundle/name).resolve()!=bundle/name for name in entries):
+                raise RuntimeError("Redirected maintenance self-test dependency")
+            verify_tree(bundle,entries)
+            self.stage("guest-maintenance-self-tests",[sys.executable,str(tests)],90)
+            self.prepare_guest_space(3, prune_sources=True)
+            if shutil.disk_usage(self.root).free<3*1024**3:
+                raise RuntimeError("Verified obsolete artifacts could not recover 3 GiB; inspect storage evidence")
+            return
         payload=self.tested_payload()
         if target=="guide":
             if self.command("hostname")!="isolde-test":raise RuntimeError("PVR setup is restricted to Isolde-Test")
@@ -790,14 +858,20 @@ class Oracle:
             time.sleep(0.5)
         raise RuntimeError("Selected release failed to start; inspect restart.log and journal. No automatic rollback.")
 
-    def prepare_guest_space(self, target_gib=5):
+    def prepare_guest_space(self, target_gib=5, prune_sources=False):
         if self.command("hostname") != "isolde-test":
             raise RuntimeError("Guest provisioning is restricted to Isolde-Test")
+        if self.root != Path.home()/"isolde-oracle" or self.root.resolve() != self.root:
+            raise RuntimeError("Guest maintenance requires the native oracle directory")
         # Only obsolete generated payloads; source, logs, screenshots, releases,
         # native build cache and all profile/account trees are retained.
         runs = self.root / "runs"
         candidates = sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p:p.stat().st_mtime, reverse=True)
         protected = {self.run, *candidates[:3]}
+        if prune_sources:
+            # Explicit source-copy maintenance retains every staged acceptance
+            # payload, including the last passing candidate used for captures.
+            protected.update(p for p in candidates if (p/"payload").exists() or (p/"payload").is_symlink())
         mounts = [Path(line.split()[4].replace("\\040", " ")) for line in Path("/proc/self/mountinfo").read_text().splitlines()]
         cleanup_path = self.run / "guest-payload-cleanup.json"
         removed = json.loads(cleanup_path.read_text()).get("targets", []) if cleanup_path.exists() else []
@@ -841,6 +915,27 @@ class Oracle:
                 removed.append(str(target))
                 atomic_json(cleanup_path, {"guest": "isolde-test", "targets": removed})
                 remove_guest_build(target, legacy, mounts)
+        if prune_sources:
+            receipt = self.run / "guest-source-cleanup.json"
+            records = []
+            for candidate in reversed(candidates[:512]):
+                if shutil.disk_usage(self.root).free >= target_gib * 1024**3: break
+                if candidate in protected or (candidate/"payload").exists() or (candidate/"payload").is_symlink() or not (candidate/"source").is_dir(): continue
+                state_path=candidate/"status.json"
+                if not state_path.is_file() or state_path.is_symlink(): continue
+                state=json.loads(state_path.read_text())
+                if state.get("state") not in {"passed","failed","cancelled"}: continue
+                recovery=[candidate/name for name in ("source.tar.gz","archive.sha256","files.sha256")]
+                if any(not path.exists() and not path.is_symlink() for path in recovery):
+                    records.append({"target":str(candidate/"source"),"state":"preserved-missing-recovery-evidence"})
+                    atomic_json(receipt,{"guest":"isolde-test","targets":records})
+                    continue
+                record={"target":str(candidate/"source"),"archive":str(candidate/"source.tar.gz"),"state":"checking"}
+                records.append(record)
+                atomic_json(receipt,{"guest":"isolde-test","targets":records})
+                remove_guest_source_snapshot(candidate,runs,mounts)
+                record["state"]="removed"
+                atomic_json(receipt,{"guest":"isolde-test","targets":records,"freeGiB":round(shutil.disk_usage(self.root).free/1024**3,2)})
     def provision(self):
         self.tested_payload()
         deployment = json.loads((self.run / "deploy-result.json").read_text())
@@ -1027,7 +1122,8 @@ def main():
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","artifacts"],default="native")
+    parser.add_argument("--maintenance-tests-digest")
     args = parser.parse_args()
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
@@ -1114,7 +1210,7 @@ def main():
             elif args.action == "diagnose":
                 oracle.diagnose(args.native_app)
             elif args.action == "configure":
-                oracle.configure_native(args.configure_target)
+                oracle.configure_native(args.configure_target,args.maintenance_tests_digest)
             elif args.action == "recover":
                 lease = root / "service-lease.json"
                 if lease.is_file():

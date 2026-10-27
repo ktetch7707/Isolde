@@ -8,6 +8,10 @@ The Windows host is the user's personal machine. Keep host changes within the au
 
 The VM is the existing **Isolde-Test** developer machine. Preserve Household, Kodi, installed releases and the graphical login. Routine testing goes through `tools/vm-test.ps1` in **PowerShell 7**. Do not assemble ad hoc SSH/build/capture loops.
 
+## Verified artifact maintenance
+
+After reviewing `Status -Storage`, use `./tools/vm-test.ps1 Configure -ConfigureTarget artifacts -RunId <unique-id>` to recover guest space without a passing application payload. This runs the matching, hash-verified runner self-tests before cleanup. It retains staged payloads, the current/newest runs, archives/manifests, evidence, profiles and the incremental build cache. Obsolete extracted source copies are removed only after archive/member/source checksum and link/mount checks; unknown or modified files stop maintenance. The receipt records checked guest paths. This action requires the native Isolde-Test oracle directory, aims for 3 GiB free, and never performs host cleanup or deployment.
+
 ## Commands
 
 From the repository root:

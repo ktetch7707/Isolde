@@ -104,7 +104,7 @@ class OracleTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform=="linux","Guest-only cleanup")
     def test_android_space_preparation_preserves_recent_payloads_and_profile_data(self):
         home=self.root/"home";home.mkdir()
-        runner=oracle.Oracle(home/"oracle","current")
+        runner=oracle.Oracle(home/"isolde-oracle","current")
         for i in range(1,5):
             old=runner.root/"runs"/str(i);(old/"payload").mkdir(parents=True)
             (old/"payload/bin").write_text("obsolete payload")
@@ -241,6 +241,72 @@ class OracleTests(unittest.TestCase):
         oracle.verify_tree(source, entries)
         with self.assertRaisesRegex(RuntimeError, "already extracted"):
             oracle.extract_snapshot(run)
+
+    def recovery_snapshot(self, name):
+        runs=self.root/"runs";runs.mkdir(exist_ok=True)
+        run=self.snapshot().rename(runs/name)
+        oracle.extract_snapshot(run)
+        return run,runs
+
+    def test_source_cleanup_preserves_verified_recovery_and_reextracts(self):
+        run,runs=self.recovery_snapshot("old")
+        preserved={name:(run/name).read_bytes() for name in ("source.tar.gz","archive.sha256","files.sha256")}
+        (run/"evidence.log").write_text("preserve acceptance")
+        cache=run/"source/src/__pycache__";cache.mkdir();(cache/"main.cpython-313.pyc").write_bytes(b"disposable cache")
+        oracle.remove_guest_source_snapshot(run,runs,[])
+        self.assertFalse((run/"source").exists());self.assertEqual((run/"evidence.log").read_text(),"preserve acceptance")
+        for name,content in preserved.items():self.assertEqual((run/name).read_bytes(),content)
+        source,entries=oracle.extract_snapshot(run);oracle.verify_tree(source,entries)
+        self.assertEqual((source/"src/main.cpp").read_bytes(),b"source bytes\n")
+
+    @unittest.skipUnless(sys.platform=="linux","Guest-only maintenance orchestration")
+    def test_source_maintenance_preserves_unrecoverable_payload_and_recent_runs(self):
+        home=self.root/"home";home.mkdir();runner=oracle.Oracle(home/"isolde-oracle","current");runs=runner.root/"runs"
+        valid=self.snapshot().rename(runs/"valid");oracle.extract_snapshot(valid)
+        missing=runs/"missing";payload=runs/"payload-run";recent=[runs/"recent-a",runs/"recent-b"]
+        for run in (missing,payload,*recent):
+            (run/"source").mkdir(parents=True);(run/"source/retained.txt").write_text("retain this source")
+        (payload/"payload").mkdir();(payload/"payload/isolde").write_text("last passing payload")
+        for i,run in enumerate((missing,valid,payload,*recent),1):
+            (run/"status.json").write_text(json.dumps({"state":"passed"}));os.utime(run,(i,i))
+        def usage(_):return SimpleNamespace(free=(2 if (valid/"source").exists() else 4)*1024**3)
+        original_read=oracle.Path.read_text
+        def read_text(path,*args,**kwargs):
+            if path==Path("/proc/self/mountinfo"):return "1 0 0:1 / / rw - ext4 /dev/unit-test rw\n"
+            return original_read(path,*args,**kwargs)
+        with patch.object(runner,"command",return_value="isolde-test"),patch.object(runner,"stage"),patch.object(oracle.Path,"home",return_value=home),patch.object(oracle.Path,"read_text",read_text),patch.object(oracle.shutil,"disk_usage",side_effect=usage):
+            runner.prepare_guest_space(3,prune_sources=True)
+        self.assertFalse((valid/"source").exists());self.assertTrue((valid/"source.tar.gz").is_file())
+        for run in (missing,payload,*recent):self.assertEqual((run/"source/retained.txt").read_text(),"retain this source")
+        self.assertEqual((payload/"payload/isolde").read_text(),"last passing payload")
+        records=json.loads((runner.run/"guest-source-cleanup.json").read_text())["targets"]
+        self.assertEqual({r["target"]:r["state"] for r in records},{str(missing/"source"):"preserved-missing-recovery-evidence",str(valid/"source"):"removed"})
+
+    def test_source_cleanup_refuses_corruption_unknown_files_and_mounts(self):
+        for change in ("source","archive","manifest","extra","unowned-pyc","mount","submount","ancestor-mount"):
+            with self.subTest(change=change):
+                run,runs=self.recovery_snapshot(change);source=run/"source";mounts=[]
+                if change=="source":(source/"src/main.cpp").write_bytes(b"uncommitted valuable edits")
+                elif change=="archive":
+                    with (run/"source.tar.gz").open("ab") as output:output.write(b"corruption")
+                elif change=="manifest":(run/"files.sha256").write_text("0"*64+"  src/main.cpp\n")
+                elif change=="extra":(source/"unknown.txt").write_text("preserve unknown data")
+                elif change=="unowned-pyc":(source/"unknown.pyc").write_bytes(b"not a known cache directory")
+                else:mounts=[source if change=="mount" else source/"src" if change=="submount" else runs]
+                with self.assertRaises(RuntimeError):oracle.remove_guest_source_snapshot(run,runs,mounts)
+                self.assertTrue(source.exists());self.assertTrue((run/"source.tar.gz").exists())
+
+    @unittest.skipUnless(os.name=="posix","POSIX source symlink boundaries")
+    def test_source_cleanup_refuses_linked_sources_and_recovery_files(self):
+        for target in ("source","source/src/foreign","archive.sha256"):
+            with self.subTest(target=target):
+                run,runs=self.recovery_snapshot(target.replace("/","-"));outside=self.root/(run.name+"-outside")
+                path=run/target
+                if target=="source":path.rename(outside);path.symlink_to(outside,target_is_directory=True)
+                elif target=="archive.sha256":path.rename(outside);path.symlink_to(outside)
+                else:outside.write_text("personal bytes");path.symlink_to(outside)
+                with self.assertRaises(RuntimeError):oracle.remove_guest_source_snapshot(run,runs,[])
+                self.assertTrue(outside.exists());self.assertTrue((run/"source").exists())
 
     def test_corrupt_archive_never_extracts(self):
         run = self.snapshot()
