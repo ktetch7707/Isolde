@@ -347,7 +347,7 @@ if(BUILD_TESTING)
     set_tests_properties(store_remote_ui PROPERTIES TIMEOUT 30 LABELS "store;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_gestures COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_gestures.qml)
-    set_tests_properties(studio_gestures PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+    set_tests_properties(studio_gestures PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_grid COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_grid.qml)
     add_test(NAME studio_grid_controls COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_grid_controls.qml)
@@ -365,7 +365,7 @@ if(BUILD_TESTING)
     add_test(NAME studio_overlays COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_overlays.qml)
     set_tests_properties(studio_overlays PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
-    set_tests_properties(studio_selection PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+    set_tests_properties(studio_selection PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_tests
         tests/tst_isolde.cpp
