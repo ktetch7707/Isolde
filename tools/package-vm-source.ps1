@@ -22,7 +22,7 @@ foreach ($file in $files) {
 $head = & git rev-parse HEAD
 if ($LASTEXITCODE -ne 0) { throw 'Cannot identify HEAD.' }
 [IO.File]::WriteAllText((Join-Path $outputPath 'head.txt'), "$head`n", $utf8)
-$status = & git status --short
+$status = @(& git status --short)
 if ($LASTEXITCODE -ne 0) { throw 'Cannot record status.' }
 [IO.File]::WriteAllLines((Join-Path $outputPath 'status.txt'), $status, $utf8)
 $diffPath = Join-Path $outputPath 'working-tree.patch'
