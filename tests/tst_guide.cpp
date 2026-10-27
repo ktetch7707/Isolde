@@ -35,6 +35,7 @@ private slots:
     void profileIsolationAndInvalidation();
     void lineupPreferencesSurviveRestart();
     void numberSwapIsRevisionedAtomicAndPreservesSchedules();
+    void channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture();
     void virtualClockPausesWhileProfileIsOff();
     void unknownDatabaseIsNeverRewritten();
     void corruptKnownDatabaseIsNeverRewritten();
@@ -185,6 +186,25 @@ void GuideTests::numberSwapIsRevisionedAtomicAndPreservesSchedules() {
     QCOMPARE(store.channel("cartoons").value("revision").toInt(),2);QCOMPARE(store.channel("second").value("revision").toInt(),2);
     QVERIFY(!store.swapNumbers("cartoons","second",review));
     QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),first);QCOMPARE(store.programs("second",Now,Now+Day,1000),second);
+}
+void GuideTests::channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture() {
+    QTemporaryDir dir;const auto path=dir.filePath("policy.sqlite");auto def=definition();def["horizonDays"]=3;def["retentionDays"]=0;
+    QVariantList future;
+    {GuideStore store(path);QVERIFY(store.createLocal(def,media(),Now));QCOMPARE(store.definition("cartoons"),def);
+     QVERIFY(store.channel("cartoons").value("generatedThroughUtc").toLongLong()>=Now+3*Day);
+     future=store.programs("cartoons",Now+Day,Now+3*Day,1000);}
+    GuideStore store(path);QVERIFY(store.ready());QCOMPARE(store.definition("cartoons"),def);
+    def["horizonDays"]=1;QVERIFY(store.updateRules(def,media(),1));QVERIFY(store.maintain("cartoons",Now+Day,2));
+    QCOMPARE(store.programs("cartoons",Now+Day,Now+3*Day,1000),future); // reducing horizon preserves committed future
+    for(const auto &slot:store.programs("cartoons",Now,Now+Day,1000))QVERIFY(slot.toMap().value("endUtc").toLongLong()>Now+Day);
+    const auto saved=store.channels();
+    for(const auto &value:QVariantList{0,32,true,1.5}){auto invalid=def;invalid["horizonDays"]=value;QVERIFY(!store.updateRules(invalid,media(),2));QCOMPARE(store.channels(),saved);}
+    for(const auto &value:QVariantList{-1,8,true,1.5}){auto invalid=def;invalid["retentionDays"]=value;QVERIFY(!store.updateRules(invalid,media(),2));QCOMPARE(store.channels(),saved);}
+    auto legacy=definition("legacy",102);QVERIFY(store.createLocal(legacy,media(),Now));QCOMPARE(store.definition("legacy"),legacy);
+    QVERIFY(store.channel("legacy").value("generatedThroughUtc").toLongLong()>=Now+7*Day);
+    QVERIFY(store.maintain("legacy",Now+3*Day,1));
+    const auto retained=store.programs("legacy",Now,Now+3*Day,1000);QVERIFY(!retained.isEmpty());
+    for(const auto &slot:retained)QVERIFY(slot.toMap().value("endUtc").toLongLong()>Now+Day); // legacy two-day history
 }
 void GuideTests::virtualClockPausesWhileProfileIsOff() {
     QTemporaryDir dir; const auto path=dir.filePath("guide.sqlite"); auto def=definition(); def["clock"]="pause-when-off";

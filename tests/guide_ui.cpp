@@ -16,6 +16,9 @@
 #include <QDateTime>
 #include <QJSValue>
 #include <QTimeZone>
+#include <QQmlExpression>
+#include <QDir>
+#include <QQuickItem>
 
 class GuideDispatchProbe final:public QObject {
     Q_OBJECT
@@ -28,6 +31,8 @@ class GuideUiTests final:public QObject {
 private slots:
     void asyncPreviewCreateCancelAndProfileTeardown();
     void remoteCreatePreviewSaveAndFutureSelection();
+    void remoteAdvancedScheduleDraftCancelWritesNothing();
+    void compactPvrProgressAndAccessiblePressUseTheSameActions();
     void nestedRuleEditorDoesNotDiscardChildren();
     void remoteReorderPreviewCancelAndApply();
     void backgroundRefreshQueuesConfirmedEditsWithoutPrematureIdle();
@@ -53,6 +58,7 @@ void serve(QLocalServer &server) {
     }});
 }
 void command(QObject *object,int value) {QVERIFY(QMetaObject::invokeMethod(object,"handleCommand",Q_ARG(QVariant,value)));}
+QQuickItem *visualItem(QQuickItem *root,const QString &name) {if(root->objectName()==name)return root;for(auto *child:root->childItems())if(auto *found=visualItem(child,name))return found;return nullptr;}
 QVariantMap options() {QFile file(GUIDE_DEFAULTS);if(!file.open(QIODevice::ReadOnly))return {};return QJsonDocument::fromJson(file.readAll()).object().value("guide").toObject().toVariantMap();}
 QVariantMap appearance() {return {{"surfaceColor","#202126"},{"selectedColor","#353039"},{"textColor","#f5f1f3"},{"mutedColor","#aaa5af"},{"focusColor","#c994a5"}};}
 }
@@ -106,6 +112,34 @@ void GuideUiTests::remoteCreatePreviewSaveAndFutureSelection() {
     QVERIFY(QMetaObject::invokeMethod(view.data(),"jumpTo",Q_RETURN_ARG(QVariant,jumpResult),Q_ARG(QVariant,QDateTime::currentSecsSinceEpoch()+31*86400)));
     QVERIFY(!jumpResult.toBool());QCOMPARE(view->property("anchorUtc"),beforeJump);QVERIFY(!view->property("navigationError").toString().isEmpty());
     command(view.data(),InputManager::NavigateUp);QVERIFY(view->property("headerFocused").toBool());
+}
+void GuideUiTests::remoteAdvancedScheduleDraftCancelWritesNothing() {
+    QTemporaryDir dir;GuideController controller(dir.filePath("guide.sqlite"),"policy-ui",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("guide")),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!controller.busy());
+    command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);command(view.data(),InputManager::Confirm);
+    for(int i=0;i<8;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("schedule"));
+    command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::NavigateLeft);
+    const auto value=view->property("draft");const auto draft=value.metaType().id()==qMetaTypeId<QJSValue>()?value.value<QJSValue>().toVariant().toMap():value.toMap();QCOMPARE(draft.value("horizonDays").toInt(),8);QCOMPARE(draft.value("retentionDays").toInt(),1);
+    command(view.data(),InputManager::Back);QCOMPARE(view->property("mode").toString(),QString("create"));command(view.data(),InputManager::Back);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);
+    QVERIFY(controller.channels().isEmpty());GuideStore reader(dir.filePath("guide.sqlite"));QVERIFY(reader.channels().isEmpty());
+}
+void GuideUiTests::compactPvrProgressAndAccessiblePressUseTheSameActions() {
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    const QVariantMap current{{"launchKind","kodi_pvr"},{"startUtc",1000},{"endUtc",2000},{"clockUtc",1250},{"offsetSeconds",0},{"title","Current broadcast"}};
+    const QVariantMap row{{"id","pvr-station"},{"number",901},{"name","PVR station"},{"sourceName","Kodi PVR"},{"current",current}};
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(GUIDE_VIEW_QML).dir().filePath("GuideWidget.qml")));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"controller",QVariantMap{{"compactRows",QVariantList{row}}}},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"originId","home-guide"},{"engaged",true},{"width",640},{"height",360}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    QVariant progress;QVERIFY(QMetaObject::invokeMethod(widget.data(),"progressFor",Q_RETURN_ARG(QVariant,progress),Q_ARG(QVariant,current)));QCOMPARE(progress.toDouble(),0.25);
+    const QVariantMap noListings{{"launchKind","kodi_pvr"}};QVariant label;QVERIFY(QMetaObject::invokeMethod(widget.data(),"programLabel",Q_RETURN_ARG(QVariant,label),Q_ARG(QVariant,noListings)));QVERIFY(label.toString().contains("Watch live"));
+    auto *header=widget->findChild<QObject*>("guideWidgetHeader");QVERIFY(header);
+    QQmlExpression pressHeader(QQmlEngine::contextForObject(header),header,"Accessible.pressAction()");pressHeader.evaluate();QVERIFY2(!pressHeader.hasError(),qPrintable(pressHeader.error().toString()));QCOMPARE(dispatch.last.value("type").toString(),QString("open-guide"));
+    QQmlExpression rowCount(QQmlEngine::contextForObject(widget.data()),widget.data(),"rows.length");QCOMPARE(rowCount.evaluate().toInt(),1);
+    QQuickItem *channel=nullptr;QTRY_VERIFY((channel=visualItem(qobject_cast<QQuickItem*>(widget.data()),"guideWidgetChannel-pvr-station")));
+    QQmlExpression pressChannel(QQmlEngine::contextForObject(channel),channel,"Accessible.pressAction()");pressChannel.evaluate();QVERIFY2(!pressChannel.hasError(),qPrintable(pressChannel.error().toString()));QCOMPARE(dispatch.last.value("channelId").toString(),QString("pvr-station"));
+    QQmlExpression description(QQmlEngine::contextForObject(channel),channel,"Accessible.description");QVERIFY(description.evaluate().toString().contains("Kodi PVR"));
+    dispatch.last.clear();widget->setProperty("readOnly",true);pressChannel.evaluate();QVERIFY(dispatch.last.isEmpty());
 }
 void GuideUiTests::nestedRuleEditorDoesNotDiscardChildren() {
     InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);

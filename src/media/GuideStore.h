@@ -22,11 +22,13 @@ public:
     Q_INVOKABLE QVariantMap tuneTarget(const QString &id, qint64 nowUtc) const;
     // Candidates are bounded Kodi metadata snapshots; they are never scanned
     // from the filesystem or hydrated independently of Kodi's catalog.
-    bool createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 nowUtc, int horizonDays=7);
+    // -1 selects the validated channel policy, or its legacy seven-day default.
+    bool createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 nowUtc, int horizonDays=-1);
     bool extend(const QString &id, qint64 untilUtc, int expectedRevision);
     // Worker-only rolling maintenance. Retains committed future slots, prunes
     // bounded expired history and skips unscheduled outage history by cursor.
-    bool maintain(const QString &id,qint64 nowUtc,int expectedRevision,int horizonDays=7,int retentionDays=2);
+    // -1 uses channel policy; legacy definitions retain seven/two day defaults.
+    bool maintain(const QString &id,qint64 nowUtc,int expectedRevision,int horizonDays=-1,int retentionDays=-1);
     bool importPvr(const QString &instance,const QVariantList &channels,qint64 refreshedUtc,const QVariantMap &expectedRevisions);
     bool updateRules(const QVariantMap &definition, const QVariantList &candidates, int expectedRevision);
     QVariantMap definition(const QString &id) const;

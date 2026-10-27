@@ -127,7 +127,8 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
             return reject(error,"Invalid Kodi PVR channel identity or capabilities.");
         if(error)error->clear();return v;
     }
-    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds"})
+    if((v.contains("horizonDays") && !integer(v.value("horizonDays"),1,31)) || (v.contains("retentionDays") && !integer(v.value("retentionDays"),0,7)))return reject(error,"Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
+    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds","horizonDays","retentionDays"})
         || !integer(v.value("schemaVersion"),1,1) || !text(v.value("id"),160) || !safeId(v.value("id").toString())
         || !text(v.value("name"),160) || !integer(v.value("number"),1,99999)
         || !QStringList{"real-time","pause-when-off"}.contains(v.value("clock").toString())

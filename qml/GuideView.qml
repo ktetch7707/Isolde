@@ -59,7 +59,7 @@ Item {
     readonly property var managedChannel:controller?controller.channels.find(c=>c.id===managedId):null
     readonly property var conflictingChannel:controller?controller.channels.find(c=>c.id===numberConflictId):null
     readonly property bool previewCurrent:controller && controller.previewReady && JSON.stringify(controller.previewDefinition)===JSON.stringify(draft)
-    readonly property var createFields:["Name: "+(draft.name || ""),"Channel number: "+(draft.number || ""),"Media: "+mediaKind,"Edit matching rules","Sequence: "+(draft.sequence || ""),"Clock: "+(draft.clock || ""),"Preview matches",previewCurrent?(editRevision?"Save rules for unscheduled future slots":"Save channel"):"Preview these settings before saving","Cancel"]
+    readonly property var createFields:["Name: "+(draft.name || ""),"Channel number: "+(draft.number || ""),"Media: "+mediaKind,"Edit matching rules","Sequence: "+(draft.sequence || ""),"Clock: "+(draft.clock || ""),"Preview matches",previewCurrent?(editRevision?"Save rules for unscheduled future slots":"Save channel"):"Preview these settings before saving","Schedule horizon, history and timezone","Cancel"]
     readonly property var menuRows:buildMenu()
     visible:open && !suppressed
     signal closed(string origin)
@@ -78,6 +78,7 @@ Item {
     function timeLabel(value){return new Date(value*1000).toLocaleTimeString(Qt.locale(),"hh:mm")}
     function buildMenu(){
         if(mode==="add")return ["Create local channel","Add source","Back"]
+        if(mode==="schedule")return ["Future horizon: "+(draft.horizonDays===undefined?7:draft.horizonDays)+" days","Retained history: "+(draft.retentionDays===undefined?2:draft.retentionDays)+" days","Timezone: "+draft.timezone,"Back to channel draft"]
         if(mode==="browse")return ["Find channel: "+(channelQuery || "All"),"Favorites: "+(favoritesOnly?"Only favorites":"All channels"),"Source: "+sourceFilter,"Jump to local date and time…","Previous day","Next day","Clear filters","Group: "+(groupFilter || "All groups"),"Back"]
         if(mode==="groupFilter")return ["All groups"].concat(groupNames).concat(["Back"])
         if(mode==="sources")return options.sources.map(s=>s.name+(s.kind==="kodi-pvr"?" · Preview channel import":" · App destination")).concat(["Back"])
@@ -113,11 +114,20 @@ Item {
         else if(fieldIndex===5){value.clock=value.clock==="real-time"?"pause-when-off":"real-time";draft=value}
         else if(fieldIndex===6)controller.previewLocal(draft,mediaKind)
         else if(fieldIndex===7){if(editRevision)controller.updateLocal(draft,editRevision);else controller.createLocal(draft)}
+        else if(fieldIndex===8){navigationError="";mode="schedule";menuIndex=0}
         else {mode="discard";menuIndex=0}
+    }
+    function editSchedule(delta){
+        if(menuIndex===3){mode="create";fieldIndex=8;return}
+        editField=["horizonDays","retentionDays","timezone"][menuIndex]
+        const current=draft[editField]===undefined?(menuIndex===0?7:2):draft[editField]
+        if(delta && menuIndex<2){const value=Number(current)+delta;const minimum=menuIndex===0?1:0,maximum=menuIndex===0?31:7;if(value<minimum || value>maximum){navigationError="Choose "+minimum+"–"+maximum+" days.";return}let copy=JSON.parse(JSON.stringify(draft));copy[editField]=value;draft=copy;navigationError=""}
+        else{keyboard.value=String(current);keyboard.selectedIndex=0;keyboardReturn="schedule";mode="keyboard"}
     }
     function invokeMenu(){
         if(controller.busy && !controller.backgroundBusy)return
-        if(mode==="browse"){
+        if(mode==="schedule")editSchedule(0)
+        else if(mode==="browse"){
             navigationError=""
             if(menuIndex===0){editField="query";keyboard.value=channelQuery;keyboard.selectedIndex=0;keyboardReturn="browse";mode="keyboard"}
             else if(menuIndex===1){favoritesOnly=!favoritesOnly;applyFilter()}
@@ -186,6 +196,7 @@ Item {
         let ids=moveIds.slice();const at=ids.indexOf(managedId),to=Math.max(0,Math.min(ids.length-1,at+delta))
         if(at>=0){ids.splice(at,1);ids.splice(to,0,managedId);moveIds=ids;menuIndex=to}
     }
+    function chooseMenu(index){if(mode==="move")previewMove(index-moveIds.indexOf(managedId));else if(mode==="create"){fieldIndex=index;invokeCreate(1)}else{menuIndex=index;invokeMenu()}}
     function watch(){
         nowUtc=Date.now()/1000
         if(selectedChannel && (selectedProgram?selectedProgram.displayStartUtc<=nowUtc && selectedProgram.displayEndUtc>nowUtc:Math.abs(anchorUtc-nowUtc)<60))dispatcher.dispatch({type:"tune-channel",channelId:selectedChannel.id},originId)
@@ -203,6 +214,7 @@ Item {
         if(command===inputManager.back){
             if(controller.busy && !controller.backgroundBusy){controller.cancel();return}
             if(mode==="move"){moveIds=[];mode="context";menuIndex=2}
+            else if(mode==="schedule"){mode="create";fieldIndex=8}
             else if(mode==="create"){mode="discard";menuIndex=0}else if(mode==="context" || mode==="delete" || mode==="metadataReview"){mode="manage";menuIndex=0}else if(mode)mode="";else close()
             return
         }
@@ -223,6 +235,7 @@ Item {
         if(mode){
             if(command===inputManager.navigateUp)menuIndex=Math.max(0,menuIndex-1)
             else if(command===inputManager.navigateDown)menuIndex=Math.min(menuRows.length-1,menuIndex+1)
+            else if(mode==="schedule" && menuIndex<2 && (command===inputManager.navigateLeft || command===inputManager.navigateRight))editSchedule(command===inputManager.navigateLeft?-1:1)
             else if(command===inputManager.confirm)invokeMenu()
             return
         }
@@ -259,6 +272,9 @@ Item {
         Row {width:parent.width;height:root.fontSize*2.2;spacing:root.gap
             Repeater {model:root.options.toolbar
                 delegate:Rectangle {required property var modelData;required property int index;width:(parent.width-root.gap*(root.options.toolbar.length-1))/root.options.toolbar.length;height:parent.height;radius:root.radius;color:root.appearance.surfaceColor;border.width:!root.mode && root.headerFocused && root.headerIndex===index?2:0;border.color:root.appearance.focusColor
+                    objectName:"guideHeader-"+modelData.id
+                    Accessible.role:Accessible.Button;Accessible.name:modelData.label;Accessible.focusable:true;Accessible.focused:root.visible && !root.mode && root.headerFocused && root.headerIndex===index
+                    Accessible.onPressAction:{root.headerIndex=index;root.headerFocused=true;root.invokeHeader()}
                     Text {anchors.fill:parent;anchors.margins:root.gap;textFormat:Text.PlainText;text:modelData.label;color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight;verticalAlignment:Text.AlignVCenter}
                     MouseArea {anchors.fill:parent;onClicked:{root.headerIndex=index;root.headerFocused=true;root.invokeHeader()}}
                 }
@@ -270,12 +286,20 @@ Item {
         }
         ListView {id:timeline;width:parent.width;height:Math.max(root.fontSize*3,parent.height-root.fontSize*12);clip:true;model:root.visibleRows;currentIndex:root.visibleRows.findIndex(c=>root.selectedChannel && c.id===root.selectedChannel.id);highlightMoveDuration:0;highlightRangeMode:ListView.ApplyRange
             delegate:Item {required property var modelData;required property int index;width:timeline.width;height:timeline.height/root.rowCount
+                objectName:"guideChannel-"+modelData.id
+                Accessible.role:Accessible.Button;Accessible.name:modelData.number+" · "+modelData.name;Accessible.description:modelData.sourceName+" · "+(modelData.current.title || "No current listings");Accessible.focusable:true;Accessible.focused:root.visible && !root.mode && !root.headerFocused && !root.selectedProgram && root.selectedChannel && root.selectedChannel.id===modelData.id
+                Accessible.onPressAction:{root.headerFocused=false;root.pickChannel(root.channels.findIndex(c=>c.id===modelData.id));root.handleCommand(inputManager.confirm)}
                 Rectangle {anchors.fill:parent;anchors.bottomMargin:root.gap;color:"transparent";radius:root.radius;border.width:!root.headerFocused && !root.mode && root.selectedChannel && root.selectedChannel.id===modelData.id?2:0;border.color:root.appearance.focusColor}
                 Text {x:root.gap;y:root.gap;width:root.channelWidth-root.gap*2;height:parent.height-root.gap*2;textFormat:Text.PlainText;text:modelData.number+" · "+modelData.name+(root.sourceBadges?"\n"+modelData.sourceName:"");color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight;wrapMode:Text.WordWrap}
                 Item {x:root.channelWidth;width:parent.width-root.channelWidth;height:parent.height;clip:true
+                    property string stationName:modelData.name
+                    property string sourceName:modelData.sourceName
                     Text {anchors.fill:parent;anchors.margins:root.gap;visible:!modelData.programs.length;textFormat:Text.PlainText;text:"No listings in this time window";color:root.appearance.mutedColor;font.pixelSize:root.fontSize}
                     Repeater {model:modelData.programs
                         delegate:Rectangle {required property var modelData;x:(modelData.displayStartUtc-root.fromUtc)/(root.minutes*60)*parent.width;width:Math.max(1,(modelData.displayEndUtc-modelData.displayStartUtc)/(root.minutes*60)*parent.width-root.gap/2);height:parent.height-root.gap;radius:root.radius;color:root.appearance.surfaceColor;border.color:root.appearance.focusColor;border.width:!root.headerFocused && !root.mode && root.selectedProgram && root.selectedProgram.id===modelData.id?2:0
+                            objectName:"guideProgram-"+modelData.id
+                            Accessible.role:Accessible.Button;Accessible.name:modelData.title+" · "+root.timeLabel(modelData.displayStartUtc)+"–"+root.timeLabel(modelData.displayEndUtc);Accessible.description:parent.stationName+" · "+parent.sourceName+(modelData.status!=="ready"?" · Unavailable":"");Accessible.focusable:true;Accessible.focused:root.visible && !root.mode && !root.headerFocused && root.selectedProgram && root.selectedProgram.id===modelData.id
+                            Accessible.onPressAction:{root.headerFocused=false;root.pickChannel(root.channels.findIndex(c=>c.id===modelData.channelId));root.anchorUtc=modelData.displayStartUtc;root.handleCommand(inputManager.confirm)}
                             Text {anchors.fill:parent;anchors.margins:root.gap;visible:root.labels;textFormat:Text.PlainText;text:modelData.title+(modelData.status!=="ready"?" · Unavailable":"");color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight;wrapMode:Text.WordWrap}
                             MouseArea {anchors.fill:parent;onClicked:{root.headerFocused=false;root.pickChannel(root.channels.findIndex(c=>c.id===modelData.channelId));root.anchorUtc=modelData.displayStartUtc;root.handleCommand(inputManager.confirm)}}
                         }
@@ -295,11 +319,14 @@ Item {
             }
             ListView {id:menu;width:parent.width;height:Math.max(1,parent.height-y-feedback.height-root.gap);clip:true;model:root.mode==="create"?root.createFields:root.menuRows;currentIndex:root.mode==="create"?root.fieldIndex:root.menuIndex;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
                 delegate:Rectangle {required property int index;required property string modelData;width:menu.width;height:root.fontSize*2.3;radius:root.radius;color:root.appearance.surfaceColor;border.width:menu.currentIndex===index?2:0;border.color:root.appearance.focusColor
+                    objectName:"guideMenu-"+index
+                    Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.focusable:true;Accessible.focused:root.visible && !!root.mode && menu.currentIndex===index
+                    Accessible.onPressAction:root.chooseMenu(index)
                     Text {anchors.fill:parent;anchors.margins:root.gap;textFormat:Text.PlainText;text:modelData;color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight}
-                    MouseArea {anchors.fill:parent;onClicked:{if(root.mode==="move")root.previewMove(index-root.moveIds.indexOf(root.managedId));else if(root.mode==="create"){root.fieldIndex=index;root.invokeCreate(1)}else{root.menuIndex=index;root.invokeMenu()}}}
+                    MouseArea {anchors.fill:parent;onClicked:root.chooseMenu(index)}
                 }
             }
-            Text {id:feedback;width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;text:root.navigationError || root.controller.errorString || (root.controller.busy?"Working · Back cancels safely":root.mode==="sources" && root.menuIndex<root.options.sources.length?root.options.sources[root.menuIndex].description:root.controller.status+(root.mode==="create" && root.controller.previewReady?"\n"+(root.previewCurrent?"Current preview: ":"Settings changed — preview again: ")+root.controller.previewItems.map(i=>i.title).join(" · "):""));color:root.appearance.mutedColor;font.pixelSize:root.fontSize*.85}
+            Text {id:feedback;width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;text:root.navigationError || root.controller.errorString || (root.controller.busy?"Working · Back cancels safely":root.mode==="schedule"?"Left/Right adjusts days; Confirm enters a value. Use a named timezone, such as America/Los_Angeles. Save keeps committed future slots; regeneration is separate.":root.mode==="sources" && root.menuIndex<root.options.sources.length?root.options.sources[root.menuIndex].description:root.controller.status+(root.mode==="create" && root.controller.previewReady?"\n"+(root.previewCurrent?"Current preview: ":"Settings changed — preview again: ")+root.controller.previewItems.map(i=>i.title).join(" · "):""));color:root.appearance.mutedColor;font.pixelSize:root.fontSize*.85}
         }
     }
     GuideRuleEditor {id:rules;anchors.fill:parent;anchors.margins:root.gap*2;visible:root.mode==="rules";appearance:root.appearance;options:root.options
@@ -307,10 +334,16 @@ Item {
         onAccepted:rule=>{let value=JSON.parse(JSON.stringify(root.draft));value.rule=rule;root.draft=value;root.mode="create"}
     }
     OnScreenKeyboard {id:keyboard;anchors.centerIn:parent;width:Math.min(parent.width-root.gap*4,850);height:Math.min(parent.height,440);visible:root.mode==="keyboard";appearance:root.appearance
-        onCanceled:root.mode=root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":"context"
+        onCanceled:root.mode=root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":root.keyboardReturn==="schedule"?"schedule":"context"
         onAccepted:text=>{
             const value=root.editField==="number" || root.editField==="sourceNumber"?Number(text):text
-            if(root.keyboardReturn==="browse"){root.acceptNavigation(text);root.mode="browse"}
+            if(root.keyboardReturn==="schedule"){
+                let copy=JSON.parse(JSON.stringify(root.draft))
+                if(root.editField!=="timezone"){const number=Number(text),minimum=root.editField==="horizonDays"?1:0,maximum=root.editField==="horizonDays"?31:7;if(!/^\d{1,2}$/.test(text.trim()) || !Number.isInteger(number) || number<minimum || number>maximum){root.navigationError="Choose a whole number from "+minimum+" to "+maximum+" days.";root.mode="schedule";return}copy[root.editField]=number}
+                else copy.timezone=text.trim()
+                root.draft=copy;root.navigationError="";root.mode="schedule"
+            }
+            else if(root.keyboardReturn==="browse"){root.acceptNavigation(text);root.mode="browse"}
             else if(root.keyboardReturn==="create"){let copy=JSON.parse(JSON.stringify(root.draft));copy[root.editField]=value;root.draft=copy;root.mode="create"}
             else if(root.keyboardReturn==="sourcePreview"){root.controller.setSourceNumber(root.menuIndex,value);root.mode="sourcePreview"}
             else{let copy={};copy[root.editField]=root.editField==="groups"?(text.trim()?text.split(",").map(s=>s.trim()):[]):value;root.metadataDraft=copy;root.mode="metadataReview";root.menuIndex=0}

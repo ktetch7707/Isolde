@@ -33,9 +33,10 @@ QVariantMap channelRow(const QSqlQuery &q) {
     v.insert("favorite",q.value(3).toBool()); v.insert("position",q.value(4));
     v.insert("anchorUtc",q.value(5)); v.insert("clockUtc",q.value(6)); v.insert("active",q.value(7).toBool());
     v.insert("generatedThroughUtc",q.value(8));
+    v.insert("earliestEndUtc",q.value(9));
     return v;
 }
-const QString ChannelSelect="SELECT definition,revision,hidden,favorite,position,anchor_utc,clock_utc,active,(SELECT MAX(end_utc) FROM slots WHERE channel=channels.id) FROM channels";
+const QString ChannelSelect="SELECT definition,revision,hidden,favorite,position,anchor_utc,clock_utc,active,(SELECT MAX(end_utc) FROM slots WHERE channel=channels.id),(SELECT MIN(end_utc) FROM slots WHERE channel=channels.id) FROM channels";
 QString mediaKey(const QVariantMap &item) { return item.value("mediaType").toString()+":"+QString::number(item.value("mediaId").toInt()); }
 }
 
@@ -177,6 +178,7 @@ bool GuideStore::createLocal(const QVariantMap &definition, const QVariantList &
     if (valid.isEmpty()) return fail(error);
     if(!validateGroups(valid))return false;
     if(valid.contains("owner"))return fail(tr("Imported channels retain their source schedule; use source import."));
+    if(days==-1)days=valid.value("horizonDays",7).toInt();
     if (!instant(now) || days<1 || days>31 || !instant(now+days*Day)) return fail(tr("Choose a guide horizon of 1–31 days and a valid clock."));
     const auto selected=eligible(valid,candidates,&error); if (selected.isEmpty()) return fail(error);
     if (!m_db.transaction()) return fail(tr("The guide is busy. Retry the save."));
@@ -266,11 +268,14 @@ bool GuideStore::extend(const QString &id, qint64 until, int revision) {
     return commit();
 }
 bool GuideStore::maintain(const QString &id,qint64 wall,int revision,int horizon,int retention) {
-    if(!m_ready || !ComponentSchema::safeId(id) || !instant(wall) || horizon<1 || horizon>31 || retention<0 || retention>7)
+    if(!m_ready || !ComponentSchema::safeId(id) || !instant(wall))
         return fail(tr("Invalid rolling guide maintenance policy."));
     if(!m_db.transaction())return fail(tr("The guide is busy."));
     const auto state=channel(id);
     if(state.isEmpty() || state.contains("owner") || state.value("revision").toInt()!=revision){m_db.rollback();return fail(tr("Local channel changed. Retry maintenance with its current revision."));}
+    if(horizon==-1)horizon=state.value("horizonDays",7).toInt();
+    if(retention==-1)retention=state.value("retentionDays",2).toInt();
+    if(horizon<1 || horizon>31 || retention<0 || retention>7){m_db.rollback();return fail(tr("Invalid rolling guide maintenance policy."));}
     const auto clock=clockTime(state,wall),until=clock+horizon*Day,cutoff=std::max<qint64>(0,clock-retention*Day);
     if(!instant(until)){m_db.rollback();return fail(tr("The broadcast clock exceeds the supported schedule range."));}
     const auto continuation=state.value("generatedThroughUtc").toLongLong();

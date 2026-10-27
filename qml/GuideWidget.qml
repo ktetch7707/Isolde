@@ -18,6 +18,8 @@ Item {
     signal engage()
     onRowsChanged:if(selectedChannelId){const at=rows.findIndex(c=>c.id===selectedChannelId);selectedIndex=at>=0?at:-1;if(at<0)selectedChannelId=""}
     function select(index){selectedIndex=index;selectedChannelId=rows[index]?rows[index].id:""}
+    function progressFor(current){const duration=current.endUtc-current.startUtc;const elapsed=current.clockUtc===undefined?current.offsetSeconds:current.clockUtc-current.startUtc;return duration>0?Math.max(0,Math.min(1,elapsed/duration)):0}
+    function programLabel(current){return current.title || (current.launchKind==="kodi_pvr"?"No listings · Watch live":"No available scheduled program")}
     function openGuide(){if(!readOnly && dispatcher)dispatcher.dispatch({type:"open-guide",presentation:style},originId)}
     function handleCommand(command){
         if(readOnly)return false
@@ -32,7 +34,13 @@ Item {
     Column {
         anchors.fill:parent;anchors.margins:root.labelSize/2;spacing:root.labelSize/3
         Rectangle {
+            objectName:"guideWidgetHeader"
             width:parent.width;height:root.labelSize*2.4;color:root.appearance.selectedColor;radius:root.roundness
+            Accessible.role:Accessible.Button
+            Accessible.name:root.style.label || "TV Guide · Full guide / Add channel"
+            Accessible.focusable:!root.readOnly
+            Accessible.focused:root.visible && root.engaged && root.selectedIndex<0
+            Accessible.onPressAction:{root.engage();root.select(-1);root.openGuide()}
             border.width:root.engaged && root.selectedIndex<0?(root.style.focusWidth || 2):0;border.color:root.appearance.focusColor
             Text {anchors.fill:parent;anchors.margins:root.labelSize/3;verticalAlignment:Text.AlignVCenter;textFormat:Text.PlainText;text:root.style.label || "TV Guide · Full guide / Add channel";font.pixelSize:root.labelSize;color:root.appearance.textColor;elide:Text.ElideRight}
             MouseArea {anchors.fill:parent;onClicked:{root.engage();root.select(-1);root.openGuide()}}
@@ -41,10 +49,17 @@ Item {
             model:root.rows
             delegate:Rectangle {
                 required property var modelData;required property int index
+                objectName:"guideWidgetChannel-"+modelData.id
                 width:parent.width;height:Math.max(root.labelSize*2.2,(root.height-root.labelSize*3.5)/Math.max(1,root.rows.length)-root.labelSize/3)
+                Accessible.role:Accessible.Button
+                Accessible.name:modelData.number+" · "+modelData.name
+                Accessible.description:(modelData.sourceName || "")+" · "+root.programLabel(modelData.current)
+                Accessible.focusable:!root.readOnly
+                Accessible.focused:root.visible && root.engaged && root.selectedIndex===index
+                Accessible.onPressAction:{root.engage();root.select(index);if(!root.readOnly && root.dispatcher)root.dispatcher.dispatch({type:"tune-channel",channelId:modelData.id},root.originId)}
                 color:root.appearance.surfaceColor;radius:root.roundness;border.color:root.appearance.focusColor;border.width:root.engaged && root.selectedIndex===index?(root.style.focusWidth || 2):0
-                Text {anchors.fill:parent;anchors.margins:root.labelSize/3;textFormat:Text.PlainText;color:root.appearance.textColor;font.pixelSize:root.labelSize;elide:Text.ElideRight;text:modelData.number+" · "+modelData.name+"\n"+(modelData.current.title || "No available scheduled program")}
-                Rectangle {anchors.left:parent.left;anchors.bottom:parent.bottom;height:Math.max(2,root.labelSize/7);width:parent.width*(modelData.current.endUtc>modelData.current.startUtc?Math.max(0,Math.min(1,modelData.current.offsetSeconds/(modelData.current.endUtc-modelData.current.startUtc))):0);color:root.appearance.focusColor}
+                Text {anchors.fill:parent;anchors.margins:root.labelSize/3;textFormat:Text.PlainText;color:root.appearance.textColor;font.pixelSize:root.labelSize;elide:Text.ElideRight;text:modelData.number+" · "+modelData.name+"\n"+root.programLabel(modelData.current)}
+                Rectangle {anchors.left:parent.left;anchors.bottom:parent.bottom;height:Math.max(2,root.labelSize/7);width:parent.width*root.progressFor(modelData.current);color:root.appearance.focusColor}
                 MouseArea {anchors.fill:parent;onClicked:{root.engage();root.select(index);if(!root.readOnly && root.dispatcher)root.dispatcher.dispatch({type:"tune-channel",channelId:modelData.id},root.originId)}}
             }
         }

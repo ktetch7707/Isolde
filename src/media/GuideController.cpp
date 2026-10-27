@@ -56,7 +56,7 @@ QVariantMap snapshot(GuideStore &store,qint64 from,qint64 to,int first) {
     QVariantList compact;
     for(const auto &v:channels) {
         auto channel=v.toMap();if(channel.value("hidden").toBool())continue;if(compact.size()>=5)break;
-        const auto id=channel.value("id").toString();channel["current"]=store.tuneTarget(id,now());compact.append(channel);
+        const auto id=channel.value("id").toString();channel["current"]=store.tuneTarget(id,now());channel["sourceName"]=channel.value("owner")=="kodi-pvr"?"Kodi PVR":"Local";compact.append(channel);
     }
     return {{"channels",channels},{"rows",rows},{"compactRows",compact},{"ready",store.ready()}};
 }
@@ -129,7 +129,10 @@ void GuideController::maintainSchedules() {
         if(channel.value("owner")=="kodi-pvr")continue;
         const auto clock=channel.value("clock")=="real-time"?wall:channel.value("clockUtc").toLongLong()
             +(channel.value("active").toBool()?std::max<qint64>(0,wall-channel.value("anchorUtc").toLongLong()):0);
-        if(channel.value("generatedThroughUtc").toLongLong()>=clock+6*86400 || m_maintenanceAttempted.contains(id))continue;
+        const auto horizon=channel.value("horizonDays",7).toInt(),retention=channel.value("retentionDays",2).toInt();
+        const bool horizonDue=channel.value("generatedThroughUtc").toLongLong()<clock+horizon*86400-6*3600;
+        const bool historyDue=!channel.value("earliestEndUtc").isNull() && channel.value("earliestEndUtc").toLongLong()<=clock-retention*86400;
+        if((!horizonDue && !historyDue) || m_maintenanceAttempted.contains(id))continue;
         m_maintenanceAttempted.insert(id);const auto revision=channel.value("revision").toInt();
         submit([id,revision,wall](GuideStore &store){return outcome(store.maintain(id,wall,revision),store);},[this,id](const QVariantMap &result){
             m_scheduleStatus=result.value("ok").toBool()?tr("Rolling schedule updated · %1").arg(QDateTime::currentDateTime().toString(Qt::ISODate))
@@ -228,7 +231,7 @@ bool GuideController::createLocal(const QVariantMap &definition) {
 QVariantMap GuideController::editableDefinition(const QString &id) const {
     if(!m_valid || !ComponentSchema::safeId(id))return {};
     for(const auto &v:m_channels){auto c=v.toMap();if(c.value("id")!=id || c.contains("owner"))continue;
-        for(const auto &key:QStringList{"revision","hidden","favorite","position","anchorUtc","clockUtc","active","generatedThroughUtc"})c.remove(key);
+        for(const auto &key:QStringList{"revision","hidden","favorite","position","anchorUtc","clockUtc","active","generatedThroughUtc","earliestEndUtc"})c.remove(key);
         if(!c.contains("mediaKinds"))c["mediaKinds"]=QVariantList{"movie","episode","musicvideo","song"};
         return ComponentSchema::guideChannel(c);
     }
