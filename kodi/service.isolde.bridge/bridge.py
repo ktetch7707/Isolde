@@ -72,7 +72,7 @@ READ_METHODS = {
     "VideoLibrary.GetMovies", "VideoLibrary.GetTVShows", "VideoLibrary.GetSeasons", "VideoLibrary.GetEpisodes",
     "VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails",
     "AudioLibrary.GetAlbums", "AudioLibrary.GetSongs",
-    "PVR.GetChannels",
+    "PVR.GetChannels", "PVR.GetBroadcasts",
     "Player.GetActivePlayers", "Player.GetProperties",
 }
 MOVIE_DETAIL_PROPERTIES = {"title", "year", "plot", "runtime", "resume", "playcount", "art", "genre", "tag"}
@@ -226,7 +226,7 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
         if set(params) - {"channelgroupid", "properties", "limits"} or params.get("channelgroupid") != "alltv":
             return error(-32602, "Choose the configured Kodi TV channel group")
         fields = params.get("properties", [])
-        allowed = {"channelnumber", "broadcastnow", "broadcastnext", "locked", "hidden"}
+        allowed = {"channelnumber", "broadcastnow", "broadcastnext", "locked", "hidden", "clientid"}
         if not isinstance(fields, list) or len(fields) > len(allowed) or any(not isinstance(field, str) or field not in allowed for field in fields):
             return error(-32602, "Unsupported TV guide fields")
         limits = params.get("limits", {"start":0,"end":50})
@@ -234,6 +234,15 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
             or type(limits["end"]) is not int or not 0 <= limits["start"] <= 10000000 or not 0 < limits["end"]-limits["start"] <= 50):
             return error(-32602, "TV guide requests require pages of 1 to 50 channels")
         params = dict(params, limits=limits)
+    elif request["method"] == "PVR.GetBroadcasts":
+        allowed={"title","starttime","endtime"}
+        fields=params.get("properties",[]); limits=params.get("limits",{"start":0,"end":50})
+        if (set(params)-{"channelid","properties","limits"} or type(params.get("channelid")) is not int or not 1<=params["channelid"]<=2147483647
+                or not isinstance(fields,list) or len(fields)>len(allowed) or any(not isinstance(f,str) or f not in allowed for f in fields)
+                or not isinstance(limits,dict) or set(limits)!={"start","end"} or type(limits["start"]) is not int or type(limits["end"]) is not int
+                or not 0<=limits["start"]<=100000 or not 0<limits["end"]-limits["start"]<=50):
+            return error(-32602,"Choose a configured PVR channel and pages of at most 50 broadcast listings")
+        params=dict(params,limits=limits)
     elif request["method"].startswith("AudioLibrary."):
         allowed = {"title", "artist", "year", "art"} if request["method"] == "AudioLibrary.GetAlbums" else {"title", "artist", "album", "albumid", "track", "duration", "art"}
         if set(params) - {"properties", "limits", "sort", "filter"}:

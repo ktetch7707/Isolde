@@ -15,6 +15,7 @@
 #include <QFile>
 #include <QDateTime>
 #include <QJSValue>
+#include <QTimeZone>
 
 class GuideDispatchProbe final:public QObject {
     Q_OBJECT
@@ -32,6 +33,10 @@ private slots:
     void backgroundRefreshQueuesConfirmedEditsWithoutPrematureIdle();
     void configuredCommandPaletteGuideEntryNeedsNoLayoutRewrite();
     void rangeAndSetRulesUseRemoteEditableIndividualValues();
+    void startupMaintainsExpiredSchedulesWithoutKodiReads();
+    void pvrPreviewMappingImportAndFailedRefreshPreserveCache();
+    void pvrUtcParsingAndCacheIgnoreCivilDstGaps();
+    void remoteRuleEditDuplicateAndRegenerationAreReviewedTransactions();
 };
 namespace {
 void serve(QLocalServer &server) {
@@ -90,6 +95,16 @@ void GuideUiTests::remoteCreatePreviewSaveAndFutureSelection() {
     const auto selected=view->property("selectedChannelId");dispatch.last.clear();
     command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("details"));QVERIFY(dispatch.last.isEmpty());
     command(view.data(),InputManager::Back);QCOMPARE(view->property("selectedChannelId"),selected);
+    view->setProperty("anchorUtc",QDateTime::currentSecsSinceEpoch()+29*86400);
+    command(view.data(),InputManager::Confirm);QVERIFY(dispatch.last.isEmpty()); // future gaps never launch the currently airing item
+    view->setProperty("channelQuery","no matching station");QVERIFY(QMetaObject::invokeMethod(view.data(),"applyFilter"));
+    QVERIFY(view->property("headerFocused").toBool());
+    view->setProperty("channelQuery",QString());view->setProperty("favoritesOnly",true);QVERIFY(QMetaObject::invokeMethod(view.data(),"applyFilter"));
+    QVERIFY(view->property("headerFocused").toBool()); // empty filtered lineup retains recovery navigation
+    view->setProperty("favoritesOnly",false);QVERIFY(QMetaObject::invokeMethod(view.data(),"applyFilter"));
+    const auto beforeJump=view->property("anchorUtc");QVariant jumpResult;
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"jumpTo",Q_RETURN_ARG(QVariant,jumpResult),Q_ARG(QVariant,QDateTime::currentSecsSinceEpoch()+31*86400)));
+    QVERIFY(!jumpResult.toBool());QCOMPARE(view->property("anchorUtc"),beforeJump);QVERIFY(!view->property("navigationError").toString().isEmpty());
     command(view.data(),InputManager::NavigateUp);QVERIFY(view->property("headerFocused").toBool());
 }
 void GuideUiTests::nestedRuleEditorDoesNotDiscardChildren() {
@@ -163,6 +178,101 @@ void GuideUiTests::rangeAndSetRulesUseRemoteEditableIndividualValues() {
     const auto values=editor->property("tree").toMap().value("value").toList();QCOMPARE(values,QVariantList{QString("Favorites")});
     command(editor.data(),InputManager::Confirm);QVERIFY(editor->property("typing").toBool()); // Add value
     command(editor.data(),InputManager::Back);QCOMPARE(editor->property("tree").toMap().value("value").toList(),values);
+}
+void GuideUiTests::startupMaintainsExpiredSchedulesWithoutKodiReads() {
+    QTemporaryDir dir;const auto path=dir.filePath("guide.sqlite");const auto wall=QDateTime::currentSecsSinceEpoch();
+    QVariantMap def{{"schemaVersion",1},{"id","offline"},{"name","Offline channel"},{"number",1},{"clock","real-time"},
+        {"sequence","seeded-shuffle"},{"seed",42},{"timezone","UTC"},{"rule",QVariantMap{{"field","source"},{"op","is"},{"value","kodi"}}}};
+    const QVariantList items{QVariantMap{{"mediaType","episode"},{"mediaId",1},{"title","Cached episode"},{"duration",1800},{"source","kodi"}}};
+    {GuideStore store(path);QVERIFY(store.createLocal(def,items,wall-400*86400,1));}
+    // No bridge server exists: maintenance must use saved candidates only.
+    GuideController controller(path,"offline",nullptr,dir.filePath("no-bridge"));
+    QTRY_VERIFY(controller.ready() && !controller.busy());
+    QTRY_VERIFY(!controller.channels().isEmpty() && controller.channels().first().toMap().value("generatedThroughUtc").toLongLong()>wall+6*86400);
+    QVERIFY(controller.errorString().isEmpty());QVERIFY(!controller.scheduleStatus().isEmpty());
+    QVERIFY(!controller.compactRows().first().toMap().value("current").toMap().isEmpty());
+    const auto before=controller.rows();controller.refresh();QTRY_VERIFY(!controller.busy());QCOMPARE(controller.rows(),before);
+}
+void GuideUiTests::pvrPreviewMappingImportAndFailedRefreshPreserveCache() {
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    connect(&server,&QLocalServer::newConnection,&server,[&]{while(server.hasPendingConnections()){
+        auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
+        connect(socket,&QLocalSocket::readyRead,socket,[&,socket]{auto raw=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",raw);if(!raw.endsWith('\n'))return;
+            const auto request=QJsonDocument::fromJson(raw).object();const auto method=request.value("method").toString();QJsonObject reply{{"jsonrpc","2.0"},{"id",request.value("id")}};
+            if(server.property("fail").toBool() && method=="PVR.GetBroadcasts")reply["error"]=QJsonObject{{"code",-32100}};
+            else if(method=="PVR.GetChannels")reply["result"]=QJsonObject{{"channels",QJsonArray{
+                QJsonObject{{"channelid",7},{"clientid",9},{"uniqueid",101},{"label","PVR station"},{"channelnumber",1},{"locked",false},{"hidden",false}},
+                QJsonObject{{"channelid",8},{"clientid",9},{"uniqueid",102},{"label","No EPG station"},{"channelnumber",1},{"locked",false},{"hidden",false}}}},
+                {"limits",QJsonObject{{"start",0},{"end",2},{"total",2}}}};
+            else if(method=="PVR.GetBroadcasts"){
+                QJsonArray programs;if(request.value("params").toObject().value("channelid").toInt()==7){const auto time=QDateTime::currentDateTimeUtc();programs.append(QJsonObject{{"broadcastid",77},{"title","PVR current program"},{"starttime",time.addSecs(-600).toString("yyyy-MM-dd HH:mm:ss")},{"endtime",time.addSecs(1200).toString("yyyy-MM-dd HH:mm:ss")}});}
+                reply["result"]=QJsonObject{{"broadcasts",programs},{"limits",QJsonObject{{"start",0},{"end",programs.size()},{"total",programs.size()}}}};
+            }else QFAIL("Unexpected PVR preview method");
+            socket->write(QJsonDocument(reply).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
+        });
+    }});
+    GuideController controller(dir.filePath("guide.sqlite"),"pvr",nullptr,dir.path());QTRY_VERIFY(controller.ready() && !controller.busy());
+    QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());QVERIFY2(controller.sourcePreviewReady(),qPrintable(controller.errorString()));
+    QCOMPARE(controller.sourcePreview().size(),2);QVERIFY(controller.channels().isEmpty());
+    QCOMPARE(controller.sourcePreview()[1].toMap().value("definition").toMap().value("number").toInt(),2); // explicit reviewed mapping, not silent overwrite
+    QVERIFY(!controller.setSourceNumber(1,1));QVERIFY(controller.setSourceNumber(1,10));
+    const auto reviewed=controller.sourcePreview();
+    QVERIFY(!controller.setSourceNumber(1,10.5));QVERIFY(!controller.setSourceNumber(1,true));
+    QVERIFY(!controller.setSourceNumber(1,QString("10.5")));QCOMPARE(controller.sourcePreview(),reviewed);
+    QVERIFY(controller.importPvr());QTRY_VERIFY(!controller.busy());QCOMPARE(controller.channels().size(),2);
+    QSignalSpy tune(&controller,&GuideController::targetReady);const auto id=controller.channels()[1].toMap().value("id").toString();
+    QVERIFY(controller.tune(id,"guide"));QTRY_COMPARE(tune.size(),1);QTRY_VERIFY(!controller.busy());QCOMPARE(tune.first().first().toMap().value("launchKind").toString(),QString("kodi_pvr"));
+    const auto cached=controller.rows();server.setProperty("fail",true);QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());
+    QVERIFY(!controller.sourcePreviewReady());QVERIFY(!controller.errorString().isEmpty());QCOMPARE(controller.rows(),cached);
+    server.setProperty("fail",false);QVERIFY(controller.previewPvr());controller.cancel();QVERIFY(!controller.sourcePreviewReady());QCOMPARE(controller.channels().size(),2);
+}
+void GuideUiTests::pvrUtcParsingAndCacheIgnoreCivilDstGaps() {
+    const QTimeZone losAngeles("America/Los_Angeles");QVERIFY(losAngeles.isValid());
+    const QDate date(2026,3,8);const QTime time(2,30);
+    QVERIFY(!QDateTime(date,time,losAngeles,QDateTime::TransitionResolution::Reject).isValid());
+    QCOMPARE(GuideController::pvrUtc(QString("2026-03-08 02:30:00")),QDateTime(date,time,Qt::UTC).toSecsSinceEpoch());
+    for(const auto &bad:QVariantList{QString("2026-02-30 02:30:00"),QString("2026-03-08 25:00:00"),QString("2026-03-08T02:30:00Z"),true,123})QCOMPARE(GuideController::pvrUtc(bad),qint64(-1));
+    // The actual adapter/cache uses a recent UTC listing within its bounded refresh window.
+    const auto utc=QDateTime(QDateTime::currentDateTimeUtc().date().addDays(-1),QTime(2,30),Qt::UTC);const auto text=utc.toString("yyyy-MM-dd HH:mm:ss");
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    connect(&server,&QLocalServer::newConnection,&server,[&]{while(server.hasPendingConnections()){
+        auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
+        connect(socket,&QLocalSocket::readyRead,socket,[&,socket]{auto raw=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",raw);if(!raw.endsWith('\n'))return;
+            const auto request=QJsonDocument::fromJson(raw).object();QJsonObject result;
+            if(request.value("method").toString()=="PVR.GetChannels")result={{"channels",QJsonArray{QJsonObject{{"channelid",7},{"clientid",9},{"uniqueid",101},{"label","UTC gap station"},{"channelnumber",1},{"locked",false},{"hidden",false}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+            else result={{"broadcasts",QJsonArray{QJsonObject{{"broadcastid",77},{"title","UTC gap program"},{"starttime",text},{"endtime",utc.addSecs(1800).toString("yyyy-MM-dd HH:mm:ss")}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+            socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request.value("id")},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
+        });
+    }});
+    const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"utc-gap",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+    QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());QVERIFY2(controller.sourcePreviewReady(),qPrintable(controller.errorString()));
+    const auto entry=controller.sourcePreview().first().toMap();const auto programs=entry.value("programs").toList();QCOMPARE(programs.size(),1);QCOMPARE(programs.first().toMap().value("startUtc").toLongLong(),utc.toSecsSinceEpoch());
+    QVERIFY(controller.importPvr());QTRY_VERIFY(!controller.busy());GuideStore reader(path);
+    const auto cached=reader.programs(entry.value("definition").toMap().value("id").toString(),utc.toSecsSinceEpoch(),utc.toSecsSinceEpoch()+1800);
+    QCOMPARE(cached.size(),1);QCOMPARE(cached.first().toMap().value("startUtc").toLongLong(),utc.toSecsSinceEpoch());
+}
+void GuideUiTests::remoteRuleEditDuplicateAndRegenerationAreReviewedTransactions() {
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);
+    const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"edits",nullptr,dir.path());QTRY_VERIFY(controller.ready() && !controller.busy());
+    const auto def=controller.newDefinition();QVERIFY(controller.previewLocal(def,"episode"));QTRY_VERIFY(!controller.busy());QVERIFY(controller.createLocal(def));QTRY_VERIFY(!controller.busy());
+    const auto id=def.value("id").toString();GuideStore reader(path);const auto wall=QDateTime::currentSecsSinceEpoch();const auto committed=reader.programs(id,wall,wall+86400,1000);
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("guide")),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!controller.busy());command(view.data(),InputManager::NavigateDown);
+    command(view.data(),InputManager::Menu);for(int i=0;i<7;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);
+    QCOMPARE(view->property("mode").toString(),QString("create"));QCOMPARE(view->property("editRevision").toInt(),1);
+    command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::NavigateRight); // sequence changes only in draft
+    command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());
+    command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QCOMPARE(reader.channel(id).value("revision").toInt(),2);QCOMPARE(reader.programs(id,wall,wall+86400,1000),committed);
+    const auto duplicate=[&]{command(view.data(),InputManager::Menu);for(int i=0;i<9;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);};
+    duplicate();QTRY_COMPARE(view->property("mode").toString(),QString("create"));QCOMPARE(controller.channels().size(),1);const auto draftValue=view->property("draft");const auto draftMap=draftValue.metaType().id()==qMetaTypeId<QJSValue>()?draftValue.value<QJSValue>().toVariant().toMap():draftValue.toMap();QVERIFY(draftMap.value("id").toString()!=id);
+    command(view.data(),InputManager::Back);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QCOMPARE(controller.channels().size(),1);
+    duplicate();QTRY_COMPARE(view->property("mode").toString(),QString("create"));for(int i=0;i<7;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QCOMPARE(controller.channels().size(),2);
+    const auto copy=view->property("selectedChannelId").toString();QVERIFY(copy!=id);const auto baseline=reader.programs(copy,wall,wall+86400,1000);
+    command(view.data(),InputManager::Menu);for(int i=0;i<8;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY(!controller.regenerationReview().isEmpty());
+    command(view.data(),InputManager::Confirm);QCOMPARE(reader.programs(copy,wall,wall+86400,1000),baseline); // Cancel-first review
+    command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QCOMPARE(reader.channel(copy).value("revision").toInt(),2);
+    const auto copyStart=baseline.first().toMap().value("startUtc").toLongLong();QCOMPARE(reader.programs(copy,copyStart,copyStart+1,1).first(),baseline.first());QCOMPARE(reader.programs(id,wall,wall+86400,1000),committed);
 }
 QTEST_MAIN(GuideUiTests)
 #include "guide_ui.moc"

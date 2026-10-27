@@ -1,16 +1,18 @@
 param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
-    [ValidateSet('all','guide_contracts','games','store','vpn','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
-    [ValidateSet('studio','desktop','lounge','pastel','pages','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
+    [ValidateSet('all','guide','guide_contracts','guide_remote_ui','games','store','vpn','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
+    [ValidateSet('studio','desktop','lounge','pastel','pages','guide','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [switch]$Capture,
+    [switch]$Storage,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','games')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','games','guide')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
+if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
 if ($WaitSeconds -and $Action -notin @('Test','Configure','Visual')) { throw 'Bounded lock waiting is available for Test/Configure/Visual only.' }
 if ($Capture -and $Action -ne 'Status') { throw 'Capture is restricted to Status of an active guest setup guardian.' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Use PowerShell 7 (pwsh), not Windows PowerShell.' }
@@ -59,6 +61,7 @@ try {
     } else {
         $remoteAction = $Action.ToLowerInvariant()
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
+        if ($Storage) { $command += ' --storage' }
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }

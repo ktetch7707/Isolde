@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('pages','guide','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -55,7 +55,8 @@ $captureLine = {
         $shellInput = $Case -eq 'shell' -and $phase -in @('shellnavigation','shellgallery','shellstore','shellreturn','shellambient','shellwake')
         $androidInput = $Case -eq 'androidapps' -and $phase -in @('androidnavigation','androidgallery','androidlaunch','androidpermission','androidopen','androidremote','androidreturn')
         $gamesInput = ($Case -eq 'games' -and $phase -in @('gamespermission','gamesmenu')) -or ($Case -eq 'emulators' -and $phase -in @('emulatorspermission','emulatorsmenu','emulatorsplay'))
-        $nativePermission = $gamesInput -or $androidInput -or ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput -or $shellInput
+        $guideInput = $Case -eq 'guide' -and $phase -in @('guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn')
+        $nativePermission = $gamesInput -or $androidInput -or ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput -or $shellInput -or $guideInput
         $storeReturn = $Case -eq 'store' -and $phase -in @('storeandroidopen','storechromiumopen')
         $nativeReturn = ($Case -eq 'games' -and $phase -eq 'gamesplay') -or ($Case -eq 'emulators' -and $phase -eq 'emulatorsaction') -or $storeReturn -or ($Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')) -or ($Case -eq 'vpn' -and $phase -in @('vpnproviderreturn','vpnusreturn','cbcvpn'))
         if (($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) -or ($Case -eq 'apps' -and $phase -eq 'steaminstall') -or $nativePermission -or $nativeReturn) {
@@ -74,11 +75,15 @@ $captureLine = {
                 $keys = @($keyDocument.keys)
             }
             $scancodes = @{Home=@('e0','47','e0','c7');Return=@('1c','9c');Tab=@('0f','8f');Space=@('39','b9');Escape=@('01','81');Left=@('e0','4b','e0','cb');Right=@('e0','4d','e0','cd');Up=@('e0','48','e0','c8');Down=@('e0','50','e0','d0');ShiftTab=@('2a','0f','8f','aa');CtrlF=@('1d','21','a1','9d')}
+            if ($guideInput) { $scancodes.F9=@('43','c3') }
             if ($shellInput) { $scancodes.A=@('1e','9e') }
             if ($Case -eq 'emulators') { $scancodes.X=@('2d','ad');$scancodes.Z=@('2c','ac');$scancodes.S=@('1f','9f') }
             if ((!$keys.Count -and !$nativePermission -and $phase -ne 'steaminstall') -or $keys.Count -gt 20) { throw 'Invalid bounded guest keystroke count.' }
             foreach ($key in $keys) {
                 if (!$scancodes.ContainsKey([string]$key)) { throw "Unsupported guest key: $key" }
+            }
+            if ($guideInput) {
+                $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm',$VmName,'keyboardputscancode','aa','b6','9d','e0','9d','b8','e0','b8','e0','db','e0','dc') -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
             }
             foreach ($key in $keys) {
                 $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments (@('controlvm',$VmName,'keyboardputscancode') + $scancodes[[string]$key]) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')

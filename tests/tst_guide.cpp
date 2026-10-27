@@ -34,10 +34,15 @@ private slots:
     void targetedMissingMediaPreservesIntervals();
     void profileIsolationAndInvalidation();
     void lineupPreferencesSurviveRestart();
+    void numberSwapIsRevisionedAtomicAndPreservesSchedules();
     void virtualClockPausesWhileProfileIsOff();
     void unknownDatabaseIsNeverRewritten();
+    void corruptKnownDatabaseIsNeverRewritten();
     void intervalOverlapRejectedAtDatabaseBoundary();
     void cancelledTransactionsAndInterruptedVirtualClock();
+    void rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage();
+    void pvrGenerationIsAtomicAndPreservesUserOverrides();
+    void regenerationRequiresCurrentReviewAndPreservesAiringProgram();
 };
 
 void GuideTests::rulesAreBoundedAndMixedMediaMatches() {
@@ -168,6 +173,19 @@ void GuideTests::lineupPreferencesSurviveRestart() {
     QVERIFY(store.remove("second",revision)); QCOMPARE(store.channels().size(),1);
     QVERIFY(store.programs("second",Now,Now+Day).isEmpty());
 }
+void GuideTests::numberSwapIsRevisionedAtomicAndPreservesSchedules() {
+    QTemporaryDir dir;GuideStore store(dir.filePath("guide.sqlite"));
+    QVERIFY(store.createLocal(definition(),media(),Now,1));QVERIFY(store.createLocal(definition("second",102),media(),Now,1));
+    const auto channels=store.channels(),first=store.programs("cartoons",Now,Now+Day,1000),second=store.programs("second",Now,Now+Day,1000);
+    const QVariantMap review{{"cartoons",1},{"second",1}};
+    QVERIFY(!store.swapNumbers("cartoons","second",{{"cartoons",1},{"second",2}}));QCOMPARE(store.channels(),channels);
+    store.failNextCommitForTest();QVERIFY(!store.swapNumbers("cartoons","second",review));QCOMPARE(store.channels(),channels);
+    QVERIFY(store.swapNumbers("cartoons","second",review));
+    QCOMPARE(store.channel("cartoons").value("number").toInt(),102);QCOMPARE(store.channel("second").value("number").toInt(),101);
+    QCOMPARE(store.channel("cartoons").value("revision").toInt(),2);QCOMPARE(store.channel("second").value("revision").toInt(),2);
+    QVERIFY(!store.swapNumbers("cartoons","second",review));
+    QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),first);QCOMPARE(store.programs("second",Now,Now+Day,1000),second);
+}
 void GuideTests::virtualClockPausesWhileProfileIsOff() {
     QTemporaryDir dir; const auto path=dir.filePath("guide.sqlite"); auto def=definition(); def["clock"]="pause-when-off";
     QVariantMap paused;
@@ -175,6 +193,7 @@ void GuideTests::virtualClockPausesWhileProfileIsOff() {
         GuideStore store(path); QVERIFY(store.createLocal(def,media(),Now));
         paused=store.tuneTarget("cartoons",Now+800);
         QVERIFY(store.setActive(false,Now+800));
+        paused["displayEndUtc"]=paused.value("endUtc").toLongLong()+12*3600-800; // wall projection shifts while broadcast clock is paused
         QCOMPARE(store.tuneTarget("cartoons",Now+12*3600),paused);
     }
     GuideStore store(path); QCOMPARE(store.tuneTarget("cartoons",Now+12*3600),paused);
@@ -192,6 +211,18 @@ void GuideTests::unknownDatabaseIsNeverRewritten() {
     }
     QSqlDatabase::removeDatabase("unknown-guide"); const auto before=bytes(path); QVERIFY(!before.isEmpty());
     { GuideStore store(path); QVERIFY(!store.ready()); QVERIFY(!store.errorString().isEmpty()); }
+    QCOMPARE(bytes(path),before);
+}
+void GuideTests::corruptKnownDatabaseIsNeverRewritten() {
+    QTemporaryDir dir;const auto path=dir.filePath("corrupt.sqlite");
+    {GuideStore store(path);QVERIFY(store.createLocal(definition(),media(),Now,1));}
+    {
+        auto db=QSqlDatabase::addDatabase("QSQLITE","corrupt-guide");db.setDatabaseName(path);QVERIFY(db.open());
+        {QSqlQuery q(db);QVERIFY(q.exec("UPDATE channels SET definition='{}'"));QVERIFY(q.exec("PRAGMA wal_checkpoint(TRUNCATE)"));}
+        db.close();
+    }
+    QSqlDatabase::removeDatabase("corrupt-guide");const auto before=bytes(path);QVERIFY(!before.isEmpty());
+    {GuideStore store(path);QVERIFY(!store.ready());QVERIFY(store.errorString().contains("preserved"));}
     QCOMPARE(bytes(path),before);
 }
 void GuideTests::cancelledTransactionsAndInterruptedVirtualClock() {
@@ -221,6 +252,77 @@ void GuideTests::intervalOverlapRejectedAtDatabaseBoundary() {
         db.close();
     }
     QSqlDatabase::removeDatabase("overlap-guide");
+}
+void GuideTests::rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage() {
+    QTemporaryDir dir;GuideStore store(dir.filePath("guide.sqlite"));
+    QVERIFY(store.createLocal(definition(),media(),Now));
+    const auto committed=store.programs("cartoons",Now+5*Day,Now+7*Day,1000);
+    QVERIFY(store.maintain("cartoons",Now+5*Day,1));
+    QCOMPARE(store.programs("cartoons",Now+5*Day,Now+7*Day,1000),committed);
+    QVERIFY(!store.tuneTarget("cartoons",Now+11*Day).isEmpty());
+    QVERIFY(store.programs("cartoons",Now,Now+2*Day).isEmpty());
+    const auto future=store.programs("cartoons",Now+5*Day,Now+12*Day,1000);
+    store.failNextCommitForTest();QVERIFY(!store.maintain("cartoons",Now+6*Day,1));
+    QCOMPARE(store.programs("cartoons",Now+5*Day,Now+12*Day,1000),future);
+    QVERIFY(!store.maintain("cartoons",Now+6*Day,2));
+    // A year offline must not materialize a year's missing historical slots.
+    QVERIFY2(store.maintain("cartoons",Now+400*Day,1),qPrintable(store.errorString()));
+    QVERIFY(!store.tuneTarget("cartoons",Now+400*Day+723).isEmpty());
+    QVERIFY(!store.tuneTarget("cartoons",Now+406*Day).isEmpty());
+    const auto first=store.programs("cartoons",Now+398*Day,Now+407*Day,1000);
+    QVERIFY(!first.isEmpty());QVERIFY(first.size()<1000);
+    QVERIFY(store.maintain("cartoons",Now+400*Day,1));
+    QCOMPARE(store.programs("cartoons",Now+398*Day,Now+407*Day,1000),first);
+    auto paused=definition("paused",102);paused["clock"]="pause-when-off";
+    QVERIFY(store.createLocal(paused,media(),Now,1));QVERIFY(store.setActive(false,Now+700));
+    QVERIFY(store.maintain("paused",Now+400*Day,1));
+    QCOMPARE(store.tuneTarget("paused",Now+400*Day).value("clockUtc").toLongLong(),Now+700);
+}
+void GuideTests::pvrGenerationIsAtomicAndPreservesUserOverrides() {
+    QTemporaryDir dir;GuideStore store(dir.filePath("guide.sqlite"));
+    const auto entry=[](int kodi,int unique,int number){
+        const auto id="pvr-"+QString::fromLatin1(QCryptographicHash::hash(QByteArray("kodi-pvr:9:")+QByteArray::number(unique),QCryptographicHash::Sha256).toHex());
+        const QVariantMap def{{"schemaVersion",1},{"id",id},{"name",QString("PVR %1").arg(unique)},{"number",number},{"owner","kodi-pvr"},
+            {"source",QVariantMap{{"instance","kodi-pvr"},{"channelId",kodi},{"clientId",9},{"uniqueId",unique},{"number",number}}},{"sourceAvailable",true},{"refreshedUtc",Now}};
+        return QVariantMap{{"definition",def},{"programs",QVariantList{QVariantMap{{"broadcastId","a"},{"title","Source program"},{"startUtc",Now-600},{"endUtc",Now+1200}}}}};
+    };
+    auto first=entry(11,101,1),second=entry(12,102,2);second["programs"]=QVariantList();
+    const auto firstId=first.value("definition").toMap().value("id").toString(),secondId=second.value("definition").toMap().value("id").toString();
+    store.failNextCommitForTest();QVERIFY(!store.importPvr("kodi-pvr",{first,second},Now,{}));QVERIFY(store.channels().isEmpty());
+    QVERIFY2(store.importPvr("kodi-pvr",{first,second},Now,{}),qPrintable(store.errorString()));
+    QCOMPARE(store.tuneTarget(firstId,Now).value("launchKind").toString(),QString("kodi_pvr"));
+    QVERIFY(!store.tuneTarget(secondId,Now).isEmpty());QVERIFY(store.programs(secondId,Now,Now+1).isEmpty()); // no EPG still tunable
+    const auto baseline=store.programs(firstId,Now-600,Now+1200);
+    QVERIFY(store.setMetadata(firstId,{{"name","My station"},{"number",42},{"groups",QVariantList{QString("Favorites")}}, {"description","My station notes"}},1));QVERIFY(store.setPreferences(firstId,{{"favorite",true}},2));
+    auto invalid=first;auto bad=invalid.value("programs").toList();bad.append(bad.first());invalid["programs"]=bad;
+    const QVariantMap revisions{{firstId,3},{secondId,1}};
+    QVERIFY(!store.importPvr("kodi-pvr",{invalid,second},Now,revisions));QCOMPARE(store.programs(firstId,Now-600,Now+1200),baseline);
+    auto changed=first.value("definition").toMap();auto source=changed.value("source").toMap();source["channelId"]=99;changed["source"]=source;first["definition"]=changed;
+    auto recreatedPrograms=first.value("programs").toList();auto recreatedProgram=recreatedPrograms[0].toMap();recreatedProgram["broadcastId"]="new-kodi-database-id";recreatedPrograms[0]=recreatedProgram;first["programs"]=recreatedPrograms;
+    QVERIFY(store.importPvr("kodi-pvr",{first},Now,revisions));
+    const auto updated=store.channel(firstId);QCOMPARE(updated.value("name").toString(),QString("My station"));QCOMPARE(updated.value("number").toInt(),42);QVERIFY(updated.value("favorite").toBool());
+    QCOMPARE(updated.value("groups").toList(),QVariantList{QString("Favorites")});QCOMPARE(updated.value("description").toString(),QString("My station notes"));
+    QCOMPARE(store.tuneTarget(firstId,Now).value("mediaId").toInt(),99);auto remapped=baseline;for(auto &v:remapped){auto p=v.toMap();p["mediaId"]=99;v=p;}QCOMPARE(store.programs(firstId,Now-600,Now+1200),remapped); // stable source broadcast IDs/times
+    QVERIFY(!store.channel(secondId).value("sourceAvailable").toBool());QVERIFY(store.tuneTarget(secondId,Now).isEmpty());
+    QVERIFY(!store.importPvr("kodi-pvr",{first,second},Now,revisions)); // stale preview
+    const QVariantMap current{{firstId,4},{secondId,2}};
+    QVERIFY(store.importPvr("kodi-pvr",{first,second},Now,current));QVERIFY(!store.tuneTarget(secondId,Now).isEmpty());
+    QVERIFY(!store.maintain(firstId,Now,5)); // source is its only scheduler
+}
+void GuideTests::regenerationRequiresCurrentReviewAndPreservesAiringProgram() {
+    QTemporaryDir dir;GuideStore store(dir.filePath("guide.sqlite"));QVERIFY(store.createLocal(definition(),media(),Now,1));
+    const auto original=store.programs("cartoons",Now,Now+Day,1000);const auto airing=original.first().toMap();
+    auto def=definition();def["rule"]=QVariantMap{{"field","mediaType"},{"op","is"},{"value","movie"}};QVERIFY(store.updateRules(def,media(),1));
+    const auto review=store.regenerationPreview("cartoons",Now+100);QVERIFY(!review.isEmpty());
+    QCOMPARE(review.value("fromUtc"),airing.value("endUtc"));
+    store.failNextCommitForTest();QVERIFY(!store.regenerate("cartoons",review,Now+101));QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),original);
+    QVERIFY(!store.regenerate("cartoons",review,airing.value("endUtc").toLongLong()+1));QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),original);
+    QVERIFY2(store.regenerate("cartoons",review,Now+102),qPrintable(store.errorString()));
+    const auto replaced=store.programs("cartoons",Now,Now+Day,1000);QCOMPARE(replaced.first().toMap(),airing);
+    for(int i=1;i<replaced.size();++i){QCOMPARE(replaced[i].toMap().value("mediaType").toString(),QString("movie"));QCOMPARE(replaced[i-1].toMap().value("endUtc"),replaced[i].toMap().value("startUtc"));}
+    QVERIFY(replaced[1].toMap().value("id")!=original[1].toMap().value("id"));
+    QVERIFY(!store.regenerate("cartoons",review,Now+103)); // accepted review cannot be reused
+    QCOMPARE(store.candidateSnapshot("cartoons").size(),4);QCOMPARE(store.definition("cartoons"),def);
 }
 QTEST_GUILESS_MAIN(GuideTests)
 #include "tst_guide.moc"

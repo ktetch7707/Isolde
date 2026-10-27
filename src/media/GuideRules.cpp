@@ -82,17 +82,18 @@ QVariantMap ComponentSchema::guideOptions(const QVariantMap &value, QString *err
     QSet<QString> seen;
     for(const auto &v:value.value("toolbar").toList()) {
         const auto item=v.toMap();const auto id=item.value("id").toString();
-        if(!keys(item,{"id","label"}) || !QStringList{"now","add","manage","sources","close"}.contains(id)
+        if(!keys(item,{"id","label"}) || !QStringList{"now","add","manage","sources","browse","close"}.contains(id)
             || seen.contains(id) || !text(item.value("label"),60))return reject(error,"Invalid guide toolbar.");
         seen.insert(id);
     }
-    if(seen!=QSet<QString>{"now","add","manage","sources","close"})return reject(error,"Keep guide recovery and creation controls reachable.");
+    if(!seen.contains("now") || !seen.contains("add") || !seen.contains("manage") || !seen.contains("sources") || !seen.contains("close"))return reject(error,"Keep guide recovery and creation controls reachable.");
     seen.clear();const auto sources=value.value("sources").toList();if(sources.size()>32)return reject(error,"Too many guide service destinations.");
     for(const auto &v:sources) {
         const auto item=v.toMap();const auto id=item.value("id").toString();const auto launch=action(item.value("action").toMap());
-        if(!keys(item,{"id","name","description","action"}) || !safeId(id) || seen.contains(id)
+        const bool pvr=item.value("kind")=="kodi-pvr";
+        if(!keys(item,{"id","name","description","action","kind"}) || !safeId(id) || seen.contains(id)
             || !text(item.value("name"),80) || !text(item.value("description"),256)
-            || !QStringList{"launch-app","open-url"}.contains(launch.value("type").toString()))return reject(error,"Invalid guide service destination.");
+            || (pvr?item.contains("action"):(!QStringList{"launch-app","open-url"}.contains(launch.value("type").toString()) || item.contains("kind"))))return reject(error,"Invalid guide service destination.");
         seen.insert(id);
     }
     if(error)error->clear();return value;
@@ -105,7 +106,28 @@ QVariantMap ComponentSchema::guideRule(const QVariantMap &value, QString *error)
     return value;
 }
 QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) {
-    if (!keys(v,{"schemaVersion","id","name","number","clock","sequence","seed","timezone","rule","mediaKinds"})
+    if(v.contains("description") && !text(v.value("description"),512,true))return reject(error,"Use a plain-text channel description of at most 512 characters.");
+    if(v.contains("groups")) {
+        if(v.value("groups").metaType().id()!=QMetaType::QVariantList || v.value("groups").toList().size()>32)return reject(error,"Choose at most 32 channel groups.");
+        QSet<QString> groups;
+        for(const auto &group:v.value("groups").toList()) {
+            if(!text(group,80) || group.toString()!=group.toString().trimmed() || group.toString().contains(',') || groups.contains(group.toString().toCaseFolded()))return reject(error,"Use unique group names of at most 80 characters without commas.");
+            groups.insert(group.toString().toCaseFolded());
+        }
+    }
+    if(v.value("owner")=="kodi-pvr") {
+        const auto source=v.value("source").toMap();
+        if(!keys(v,{"schemaVersion","id","name","number","description","groups","owner","source","sourceAvailable","refreshedUtc"})
+            || !integer(v.value("schemaVersion"),1,1) || !safeId(v.value("id").toString()) || !text(v.value("name"),160)
+            || !integer(v.value("number"),1,99999) || !keys(source,{"instance","channelId","clientId","uniqueId","number"})
+            || !safeId(source.value("instance").toString()) || !integer(source.value("channelId"),1,2147483647)
+            || !integer(source.value("clientId"),-2147483648LL,2147483647) || !integer(source.value("uniqueId"),-2147483648LL,2147483647)
+            || !integer(source.value("number"),0,99999)
+            || v.value("sourceAvailable").metaType().id()!=QMetaType::Bool || !integer(v.value("refreshedUtc"),0,253402214400LL))
+            return reject(error,"Invalid Kodi PVR channel identity or capabilities.");
+        if(error)error->clear();return v;
+    }
+    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds"})
         || !integer(v.value("schemaVersion"),1,1) || !text(v.value("id"),160) || !safeId(v.value("id").toString())
         || !text(v.value("name"),160) || !integer(v.value("number"),1,99999)
         || !QStringList{"real-time","pause-when-off"}.contains(v.value("clock").toString())

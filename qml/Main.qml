@@ -48,6 +48,8 @@ Window {
 
     function showDesignatedHome() {
         guideSearchReturn=null
+        kodiLibrary.open=false
+        commandCenter.open=false
         if(tvGuide.open){guideController.cancel();tvGuide.open=false}
         sessionManager.goHome()
         if(homeLayout.homePageId)pageSurface.showPage(homeLayout.homePageId,"",true)
@@ -63,6 +65,11 @@ Window {
         if(desktopMode.busy || desktopMode.active && !desktopMode.nativeMode){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
         if(desktopMode.active && desktopMode.nativeMode && (command===inputManager.home || command===inputManager.back)){desktopMode.cancel();return}
         idleTimer.restart()
+        if(actionDispatcher.guideTransitionPending){
+            if(command===inputManager.home){actionDispatcher.cancelGuidePlayback();window.showDesignatedHome()}
+            else if(command===inputManager.back){actionDispatcher.cancelGuidePlayback();guideController.refresh()}
+            if(command!==inputManager.volumeUp && command!==inputManager.volumeDown && command!==inputManager.mute)return
+        }
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
@@ -403,7 +410,7 @@ Window {
         height:Math.max(1,(parent.height-2*window.safeAreaPixels)/window.uiScaleFactor)
         scale:window.uiScaleFactor;transformOrigin:Item.TopLeft;z:950
         controller:guideController;dispatcher:actionDispatcher;options:homeLayout.studioOptions.guide;appearance:homeLayout.homeAppearance
-        suppressed:sessionManager.active || kodiMedia.playbackActive
+        suppressed:sessionManager.active || kodiMedia.playbackActive || actionDispatcher.guideTransitionPending
         onClosed:origin=>{
             const state=window.guideSearchReturn;window.guideSearchReturn=null
             if(state){commandCenter.open=true;Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})}
@@ -485,7 +492,7 @@ Window {
     Connections {
         target: sessionManager
         function onReturnedHome(appId) {
-            if(store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
+            if(appId && store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
         }
         function onSessionRejected(reason) {
             window.launchErrorVpn=false

@@ -25,6 +25,16 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_storage_inventory_is_read_only_and_excludes_linked_runs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);payload=root/"runs/old/payload";payload.mkdir(parents=True)
+            (payload/"binary").write_bytes(b"evidence payload")
+            (payload.parent/"status.json").write_text(json.dumps({"state":"passed"}))
+            result=oracle.oracle_storage_inventory(root)
+            self.assertEqual(result["stagedPayloads"][0]["runId"],"old")
+            self.assertGreater(result["stagedPayloads"][0]["payloadBytes"],0)
+            self.assertEqual((payload/"binary").read_bytes(),b"evidence payload")
+
     def test_guide_probe_does_not_search_other_profiles_or_claim_playback(self):
         with tempfile.TemporaryDirectory() as folder:
             home=Path(folder)
@@ -97,8 +107,12 @@ class OracleTests(unittest.TestCase):
             (old/"source.log").write_text("preserve evidence")
             os.utime(old,(i,i))
         profile=home/"profile.json";profile.write_text("preserve user data")
-        with patch.object(runner,"command",return_value="isolde-test"),patch.object(oracle.Path,"home",return_value=home),patch.object(oracle.shutil,"disk_usage",return_value=SimpleNamespace(free=7*1024**3)):
+        with patch.object(runner,"command",return_value="isolde-test"),patch.object(runner,"stage") as stage,patch.object(oracle.Path,"home",return_value=home),patch.object(oracle.shutil,"disk_usage",return_value=SimpleNamespace(free=7*1024**3)):
             runner.prepare_guest_space(8)
+        stage.assert_called_once_with("guest-apt-cache-clean",["sudo","-n","apt-get","clean"],60)
+        receipt=json.loads((runner.run/"guest-package-cache-cleanup.json").read_text())
+        self.assertFalse(receipt["installedPackagesRemoved"])
+        self.assertEqual(receipt["target"],"/var/cache/apt/archives")
         self.assertFalse((runner.root/"runs/1/payload").exists())
         self.assertFalse((runner.root/"runs/2/payload").exists())
         self.assertTrue((runner.root/"runs/3/payload").exists())

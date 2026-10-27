@@ -15,6 +15,8 @@ import json
 import os
 from pathlib import Path
 import socket
+import sqlite3
+from datetime import datetime, timedelta, timezone
 import signal
 import struct
 import subprocess
@@ -53,6 +55,7 @@ def main():
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--pages", action="store_true", help="Create and customize a page through Settings, then exercise its widget against real Kodi")
     parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
+    parser.add_argument("--guide", action="store_true", help="Configure an isolated real IPTV Simple channel, then import and tune it through the Guide")
     args = parser.parse_args()
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a"); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     profile = str(uuid.uuid4())
@@ -90,9 +93,14 @@ def main():
         f"<art><poster>{escape(str(poster))}</poster></art>" + "".join(episodes) + "</tvshow><paths/></videodb>")
     exported_art = imported / "tvshows/Isolde_Television_Fixture"
     exported_art.mkdir(parents=True)
+    if args.guide:
+        # Kodi's native import resolves exported episode entries to these
+        # export-relative filenames. Supply actual fixture media there rather
+        # than relying on an ignored filenameandpath override in the XML.
+        for season, number in ((0,1),(1,1),(1,2)):
+            os.link(clip,exported_art/f"s{season:02}e{number:02}.avi")
     (exported_art / "poster.png").write_bytes(poster.read_bytes())
     (exported_art.parent / "Isolde_Television_Fixture-poster.png").write_bytes(poster.read_bytes())
-    hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in media.rglob("*") if p.is_file()}
     (userdata / "keymaps").mkdir()
     (userdata / "keymaps/tv-fixture.xml").write_text("<keymap><global><keyboard><f9>RunScript(special://profile/tv-fixture-import.py)</f9></keyboard></global></keymap>")
     (userdata / "mediasources.xml").write_text('<mediasources><network><location id="0">' + escape(str(imported)) + '/</location></network></mediasources>')
@@ -132,9 +140,29 @@ if ''' + repr(str(imported)) + ''' in selected:
             xbmc.executeJSONRPC(json.dumps({"jsonrpc":"2.0", "id":2, "method":"VideoLibrary.SetTVShowDetails",
                 "params":{"tvshowid":show["tvshowid"], "art":{"poster":''' + repr(str(poster)) + '''}}}))
 ''')
+    if args.guide:
+        if not Path("/usr/share/kodi/addons/pvr.iptvsimple/addon.xml").is_file():
+            raise RuntimeError("Run the bounded Configure guide action before this PVR acceptance case")
+        playlist=media/"fixture.m3u";epg=media/"fixture.xml"
+        playlist.write_text('#EXTM3U\n#EXTINF:-1 tvg-id="isolde-pvr-test" tvg-chno="901",Isolde PVR Test\n'+str(clip)+'\n')
+        anchor=datetime.now(timezone.utc).replace(minute=0,second=0,microsecond=0)-timedelta(days=1)
+        programs=[]
+        for i in range(72):
+            start=anchor+timedelta(hours=i);end=start+timedelta(hours=1)
+            programs.append('<programme channel="isolde-pvr-test" start="'+start.strftime('%Y%m%d%H%M%S +0000')+'" stop="'+end.strftime('%Y%m%d%H%M%S +0000')+'"><title>Isolde PVR Test Pattern '+str(i)+'</title></programme>')
+        epg.write_text('<?xml version="1.0" encoding="UTF-8"?><tv><channel id="isolde-pvr-test"><display-name>Isolde PVR Test</display-name></channel>'+''.join(programs)+'</tv>')
+        addon=userdata/'addon_data/pvr.iptvsimple';addon.mkdir(parents=True)
+        settings={'kodi_addon_instance_name':'Isolde PVR test','kodi_addon_instance_enabled':'true','m3uPathType':'0','m3uPath':str(playlist),'epgPathType':'0','epgPath':str(epg),'m3uCache':'false','epgCache':'false','startNum':'901','epgTimeShift':'0','epgTSOverride':'false'}
+        (addon/'instance-settings-1.xml').write_text('<settings version="2">'+''.join('<setting id="'+key+'">'+escape(value)+'</setting>' for key,value in settings.items())+'</settings>')
+        importer=userdata/'tv-fixture-import.py'
+        importer.write_text('import xbmc\nxbmc.executeJSONRPC(\'{"jsonrpc":"2.0","id":1,"method":"Addons.SetAddonEnabled","params":{"addonid":"pvr.iptvsimple","enabled":true}}\')\nxbmc.sleep(1500)\n'+importer.read_text())
+    hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in media.rglob("*") if p.is_file()}
     config = evidence / "config/Isolde"; config.mkdir(parents=True)
     (config / "profiles.json").write_text(json.dumps({"active": profile, "profiles": [{"id": profile, "name": "TV acceptance"}]}))
     (config / "device-setup.json").write_text('{"version":1,"step":6,"complete":true}')
+    if args.guide:
+        guide_profile=config/'profiles'/profile;guide_profile.mkdir(parents=True)
+        (guide_profile/'home-layout.json').write_text(json.dumps({'schemaVersion':1,'categories':[{'id':'apps','name':'Apps'}],'items':[{'kind':'action','id':'guide-entry','name':'TV Guide','symbol':'TV','size':'standard','categoryId':'apps','action':{'schemaVersion':1,'type':'open-guide'}}]}))
     (config / "MediaAccess.conf").write_text(f"[profiles]\n{profile}\\kodi\\folders={media}\n")
     unknown = evidence / "config/Unknown Organization"; unknown.mkdir()
     (unknown / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
@@ -194,6 +222,9 @@ if ''' + repr(str(imported)) + ''' in selected:
             (evidence/"window-discovery.json").write_text(json.dumps({"exit":result.returncode,"error":result.stderr[:2048]}))
             return []
         return [line.split(None, 4) for line in result.stdout.splitlines() if len(line.split(None, 4)) >= 5]
+    def guide_capture(phase):
+        print(phase.upper()+"_READY "+str(evidence),flush=True)
+        wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" reviewed input/capture acknowledged",seconds=110)
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
     try:
@@ -209,8 +240,39 @@ if ''' + repr(str(imported)) + ''' in selected:
             run("wmctrl", "-i", "-a", kodi, env=env)
             x11.XSetInputFocus(display, int(kodi, 16), 2, 0); x11.XSync(display, 0)
             time.sleep(1)
-            key("kodi", "Escape"); key("kodi", "Escape")  # Dismiss first-run dialogs in this new test home.
-            key("kodi", "F9")
+            if args.guide:guide_capture('guidestartup')
+            else:
+                key("kodi", "Escape"); key("kodi", "Escape")  # Dismiss first-run dialogs in this new test home.
+                key("kodi", "F9")
+            if args.guide:
+                source_channels=wait(lambda:rpc(directory,'PVR.GetChannels',{'channelgroupid':'alltv','properties':['channelnumber','locked','hidden','clientid'],'limits':{'start':0,'end':50}}).get('channels'),'Real IPTV Simple channel ready',seconds=60)
+                assert len(source_channels)==1 and source_channels[0]['label']=='Isolde PVR Test',source_channels
+                source_channel=source_channels[0]
+                source_epg=wait(lambda:rpc(directory,'PVR.GetBroadcasts',{'channelid':source_channel['channelid'],'properties':['title','starttime','endtime'],'limits':{'start':0,'end':50}}).get('broadcasts'),'Real XMLTV source listings ready',seconds=60)
+                (evidence/'pvr-source.json').write_text(json.dumps({'channel':source_channel,'broadcasts':source_epg},indent=2))
+                database=guide_profile/'guide.sqlite'
+                def imported_channels():
+                    if not database.exists():return []
+                    with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
+                        return [json.loads(row[0]) for row in db.execute('SELECT definition FROM channels')]
+                run('wmctrl','-i','-a',shell,env=env);guide_capture('guideorigin');guide_capture('guidehome');guide_capture('guideempty')
+                assert imported_channels()==[],"Source preview wrote before confirmation"
+                guide_capture('guidesource')
+                wait(lambda:len(imported_channels())==1,'Guide source import committed')
+                cached=imported_channels()[0];assert cached['owner']=='kodi-pvr' and cached['source']['channelId']==source_channel['channelid']
+                expected_title='Isolde PVR Test Pattern '+str(int((datetime.now(timezone.utc)-anchor).total_seconds()//3600))
+                with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
+                    current=db.execute('SELECT title FROM slots WHERE start_utc<=? AND end_utc>?',(int(time.time()),int(time.time()))).fetchone()
+                assert current and current[0]==expected_title,(current,expected_title)
+                guide_capture('guidepvr')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Guide tuned actual Kodi PVR channel')
+                time.sleep(3);guide_capture('guidevideo')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','PVR stop returned from owned playback')
+                run('wmctrl','-i','-a',shell,env=env);guide_capture('guidereturn')
+                assert imported_channels()==[cached]
+                for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
+                (evidence/'result.json').write_text(json.dumps({'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn'],'visualReview':'pending','profile':profile},indent=2))
+                return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
             seasons = rpc(directory, "VideoLibrary.GetSeasons", {"tvshowid": show_id, "properties": ["season"]})["seasons"]

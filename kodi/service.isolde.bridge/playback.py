@@ -17,6 +17,12 @@ class Playback:
         self.scheduled_offset = None
         self.opened_at = 0
         self.failure_reason = ""
+        self.control_error = ""
+        self.can_pause = self.can_seek = False
+        self.natural_end = False
+        self.stop_requested = False
+        self.missing_since = None
+        self.generation = 0
 
     def rpc(self, method, params=None):
         reply = json.loads(self.execute(json.dumps({"jsonrpc": "2.0", "id": 1,
@@ -43,16 +49,21 @@ class Playback:
         if method in ("Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel") or scheduled:
             media_type = "movie" if method == "Isolde.PlayMovie" else "musicvideo" if method == "Isolde.PlayMusicVideo" else "song" if method == "Isolde.PlaySong" else "channel" if method == "Isolde.PlayChannel" else "episode"
             key = media_type + "id"
-            if set(params) != {key, "resume"} or type(params[key]) is not int or params[key] < 1 or type(params["resume"]) is not bool:
+            checked_pvr = media_type == "channel" and set(params) == {key,"resume","clientid","uniqueid"}
+            if (not checked_pvr and set(params) != {key,"resume"}) or type(params.get(key)) is not int or not 1<=params[key]<=2147483647 or type(params.get("resume")) is not bool:
                 raise ValueError("A library ID and explicit resume choice are required")
+            if checked_pvr and any(type(params[field]) is not int or not -2147483648<=params[field]<=2147483647 for field in ("clientid","uniqueid")):
+                raise ValueError("Invalid PVR source identity")
             if media_type in {"song","channel"} and params["resume"]:
                 raise ValueError("Music and live TV do not use video resume")
             if self.movie is not None or self.rpc("Player.GetActivePlayers"):
                 raise ValueError("Another playback session is active")
             if media_type == "channel":
-                details = self.rpc("PVR.GetChannelDetails", {key:params[key],"properties":["channeltype","locked","hidden"]}).get("channeldetails",{})
+                details = self.rpc("PVR.GetChannelDetails", {key:params[key],"properties":["channeltype","locked","hidden"]+(["clientid"] if checked_pvr else [])}).get("channeldetails",{})
                 if details.get("channeltype") != "tv" or details.get("locked",False) or details.get("hidden",False):
                     raise ValueError("Choose an available unlocked Kodi TV channel")
+                if checked_pvr and any(type(details.get(field)) is not int or details[field]!=params[field] for field in ("clientid","uniqueid")):
+                    raise ValueError("PVR channel identity changed. Refresh and review its source mapping before tuning")
             else:
                 duration_field = "duration" if media_type == "song" else "runtime"
                 details = self.rpc("VideoLibrary.GetMovieDetails" if media_type == "movie" else "VideoLibrary.GetMusicVideoDetails" if media_type == "musicvideo" else "AudioLibrary.GetSongDetails" if media_type == "song" else "VideoLibrary.GetEpisodeDetails",
@@ -68,11 +79,16 @@ class Playback:
             if self.rpc("Player.Open", {"item": {key: params[key]}, "options": {"resume": resume}}) != "OK":
                 raise ValueError("Kodi did not accept playback")
             self.movie, self.state, self.seen, self.home = params[key], "starting", False, False
+            self.generation += 1
             self.media_type = media_type
             self.pending_stop = None
             self.scheduled_offset = offset
             self.opened_at = self.clock()
             self.failure_reason = ""
+            self.control_error = ""
+            self.can_pause = self.can_seek = False
+            self.natural_end = self.stop_requested = False
+            self.missing_since = None
             self.deadline = self.clock() + 20
             return self.status()
         if method == "Isolde.PlaybackStatus" and not params:
@@ -81,11 +97,27 @@ class Playback:
             return self.control(params["action"])
         raise ValueError("Unsupported playback request")
 
+    def stopped_notification(self, data, generation):
+        # Called only for Kodi's trusted Player.OnStop notification by service.
+        # Missing/foreign identities never authorize another playback launch.
+        if (type(generation) is not int or generation != self.generation
+            or not self.managed or self.movie is None or not self.seen or self.stop_requested
+            or not isinstance(data, dict) or data.get("end") is not True):
+            return
+        item = data.get("item")
+        if (not isinstance(item, dict) or type(item.get("id")) is not int
+            or item["id"] != self.movie or item.get("type") != self.media_type):
+            return
+        if self.rpc("Player.GetActivePlayers"):
+            return
+        self.natural_end = True
+
     def status(self):
         if self.movie is not None:
             players = self.rpc("Player.GetActivePlayers")
             videos = [p for p in players if p.get("type") == ("audio" if self.media_type == "song" else "video")]
             if videos:
+                self.missing_since = None
                 player = videos[0]["playerid"]
                 item = self.rpc("Player.GetItem", {"playerid": player}).get("item", {})
                 if item.get("type") != self.media_type or item.get("id") != self.movie:
@@ -95,7 +127,9 @@ class Playback:
                     self.movie, self.state = None, "replaced"
                 else:
                     verify_seek = self.scheduled_offset is not None and self.scheduled_offset > 0 and not self.seen and self.pending_stop is None
-                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed", "canseek", "time"] if verify_seek else ["speed"]})
+                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed", "canpause", "canseek", "time"] if verify_seek else ["speed", "canpause", "canseek"]})
+                    self.can_pause = props.get("canpause") is True
+                    self.can_seek = props.get("canseek") is True
                     if verify_seek:
                         position = props.get("time", {})
                         valid_position = (isinstance(position,dict)
@@ -124,16 +158,32 @@ class Playback:
                         self.pending_stop = None
                         self.rpc("Player.Stop", {"playerid": player})
             elif self.seen or self.clock() >= self.deadline:
+                # Give the callback pump one bounded interval to deliver Kodi's
+                # identity-bearing end event. Unknown disappearance is a stop,
+                # never implicit permission to continue a scheduled channel.
+                if self.seen and self.scheduled_offset is not None and not self.stop_requested and not self.natural_end:
+                    if self.missing_since is None: self.missing_since = self.clock()
+                    if self.clock()-self.missing_since < 0.5:
+                        return {"state":self.state,"home":self.home,"canPause":False,"canSeek":False}
                 self.movie, self.state = None, "ended" if self.seen else "failed"
                 self.builtin("Minimize")
         result = {"state": self.state, "home": self.home}
+        result["canPause"] = self.movie is not None and self.can_pause
+        result["canSeek"] = self.movie is not None and self.can_seek
+        if self.state == "ended": result["naturalEnd"] = self.natural_end and not self.stop_requested
+        if self.control_error: result["controlError"] = self.control_error
         if self.failure_reason: result["reason"] = self.failure_reason
         return result
 
     def control(self, action):
         if action not in ("pause", "stop", "home", "forward", "backward"):
             raise ValueError("Unsupported playback control")
+        if action in ("stop", "home"):
+            self.stop_requested = True
+            self.natural_end = False
+            self.home = action == "home"
         self.status()
+        self.control_error = ""
         if self.movie is None:
             return self.status()
         if action in ("stop", "home") and not self.seen:
@@ -152,7 +202,15 @@ class Playback:
                 self.home = action == "home"
                 self.rpc("Player.Stop", {"playerid": pid})
             elif action == "pause":
+                props = self.rpc("Player.GetProperties", {"playerid": pid, "properties": ["canpause"]})
+                if props.get("canpause") is not True:
+                    self.control_error = "This source does not support pausing. Playback continues."
+                    return self.status()
                 self.rpc("Player.PlayPause", {"playerid": pid, "play": "toggle"})
             else:
+                props = self.rpc("Player.GetProperties", {"playerid": pid, "properties": ["canseek"]})
+                if props.get("canseek") is not True:
+                    self.control_error = "This source does not support seeking. Playback continues."
+                    return self.status()
                 self.rpc("Player.Seek", {"playerid": pid, "value": "smallforward" if action == "forward" else "smallbackward"})
         return self.status()

@@ -86,6 +86,8 @@ def guide_backend_probe(home):
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "guide_contracts": "isolde_guide_tests",
+          "guide_remote_ui": "isolde_guide_ui_tests",
+          "guide": ("isolde_guide_tests", "isolde_guide_ui_tests", "isolde_kodi_media_tests"),
           "games": ("isolde_component_tests", "isolde_games_ui_tests", "isolde_tests"),
           "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests"),
           "profile_browser_isolation": "isolde_profile_browser_tests",
@@ -120,6 +122,8 @@ def suite_selection(suite):
         pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote)$"
     if suite == "games":
         pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning)$"
+    if suite == "guide":
+        pattern = "^(guide_contracts|guide_remote_ui|kodi_local_bridge|kodi_playback|kodi_media_client)$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
@@ -131,6 +135,7 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "apps": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--inspect"]),
          "clients": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--skip-steam", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
+         "guide": ("tv-library-acceptance.py", ["--guide", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
          "shell": ("shell-acceptance.py", []),
          "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
@@ -142,6 +147,11 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
 
 
 def visual_result_passed(case, result):
+    if case=="guide":
+        return (all(result.get(k) is True for k in ("passed","freshProfile","remoteImport","actualPvrPlayback","returned","mediaUnchanged","syntheticSource"))
+                and result.get("normalProfileUsed") is False and result.get("providerSubscriptionVerified") is False
+                and result.get("pvrAddon")=="pvr.iptvsimple" and result.get("sourceChannels")==1 and result.get("sourceListings",0)>0
+                and result.get("captures")==["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"])
     if case == "emulators":
         return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRuntimeSetup","remoteRegistration","nativeGameStarted","returned","sourceUnchanged"))
                 and result.get("runtime")=="ppsspp" and result.get("gameplayVerified") is False
@@ -559,6 +569,8 @@ class Oracle:
                 expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote"}
             if suite == "games":
                 expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning"}
+            if suite == "guide":
+                expected = {"guide_contracts", "guide_remote_ui", "kodi_local_bridge", "kodi_playback", "kodi_media_client"}
             if {c.get("name") for c in cases} != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
@@ -593,8 +605,13 @@ class Oracle:
         return self.run / "payload"
 
     def configure_native(self, target="native"):
-        if target not in {"native","surfshark","android","android-repair","games"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair","games","guide"}: raise ValueError("Unsupported guest configuration target")
         payload=self.tested_payload()
+        if target=="guide":
+            if self.command("hostname")!="isolde-test":raise RuntimeError("PVR setup is restricted to Isolde-Test")
+            self.prepare_guest_space(3)
+            self.stage("guide-pvr-install",["python3",str(self.run/"source/tools/provision-guide.py"),"--receipt",str(self.run/"guide-pvr-install.json")],300)
+            return
         if target=="games":
             if self.command("hostname")!="isolde-test":raise RuntimeError("Games setup is restricted to Isolde-Test")
             self.prepare_guest_space()
@@ -719,7 +736,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 900 if case in ("pages","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 900 if case in ("pages","guide","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -789,6 +806,17 @@ class Oracle:
             removed.append(str(target))
             atomic_json(self.run / "guest-payload-cleanup.json", {"guest": "isolde-test", "targets": removed})
             shutil.rmtree(target)
+        # Downloaded distro archives are reproducible cache, not installed
+        # packages, profiles or source evidence. Prefer this over deleting
+        # immutable source snapshots when obsolete payloads are insufficient.
+        if shutil.disk_usage(self.root).free < target_gib * 1024**3:
+            cache = Path("/var/cache/apt/archives")
+            if cache.is_dir():
+                if cache.resolve() != cache or any(m != Path("/") and (cache == m or cache.is_relative_to(m) or m.is_relative_to(cache)) for m in mounts):
+                    raise RuntimeError("Refusing redirected or mounted guest package cache")
+                before = shutil.disk_usage(self.root).free
+                self.stage("guest-apt-cache-clean", ["sudo", "-n", "apt-get", "clean"], 60)
+                atomic_json(self.run / "guest-package-cache-cleanup.json", {"guest":"isolde-test", "target":str(cache), "freeBefore":before, "freeAfter":shutil.disk_usage(self.root).free, "installedPackagesRemoved":False})
         legacy = Path.home()/"isolde-runs"
         if legacy.is_dir() and not legacy.is_symlink() and legacy.resolve() == legacy:
             old_runs = sorted((p for p in legacy.iterdir() if p.is_dir() and not p.is_symlink() and re.fullmatch(r"studio-implementation-[0-9]+", p.name)), key=lambda p:int(p.name.rsplit("-", 1)[1]))
@@ -864,7 +892,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|guide|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -964,17 +992,40 @@ def cancel_owned(root, run_id):
     raise RuntimeError("Owned runner has not finished cleanup; preserve evidence and inspect Status")
 
 
+def oracle_storage_inventory(root):
+    payloads=[]
+    for run in sorted((root/"runs").iterdir(),key=lambda p:p.stat().st_mtime)[:512]:
+        if not run.is_dir() or run.is_symlink():continue
+        payload=run/"payload"
+        if payload.is_dir() and not payload.is_symlink():payloads.append(payload)
+    sizes={}
+    if payloads:
+        result=subprocess.run(["du","-sk","--",*[str(p) for p in payloads]],capture_output=True,text=True,timeout=20)
+        if result.returncode:raise RuntimeError("Cannot inventory staged payloads safely")
+        for line in result.stdout.splitlines():
+            size,_,path=line.partition("\t");sizes[path]=int(size)*1024
+    records=[]
+    for payload in payloads:
+        statefile=payload.parent/"status.json"
+        try:state=json.loads(statefile.read_text()) if statefile.is_file() else {}
+        except (OSError,ValueError):state={}
+        records.append({"runId":payload.parent.name,"payloadBytes":sizes.get(str(payload),0),"modified":payload.stat().st_mtime,"state":state.get("state","unknown")})
+    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"])[:64]}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["check", "test", "visual", "deploy", "provision", "configure", "diagnose", "status", "recover", "cancel"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--suite", choices=SUITES, default="all")
     parser.add_argument("--wait-seconds",type=int,default=0)
+    parser.add_argument("--storage",action="store_true")
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide"],default="native")
     args = parser.parse_args()
+    if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
         parser.error("Bounded lock waiting (0–900 seconds) is restricted to Test/Configure/Visual")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", args.run_id):
@@ -984,6 +1035,7 @@ def main():
     if args.action == "status":
         path = root / "runs" / args.run_id / "status.json"
         status = json.loads(path.read_text()) if path.is_file() else {"state": "unknown", "runId": args.run_id}
+        if args.storage:status["storage"]=oracle_storage_inventory(root)
         status["activeRuns"]=[]
         for candidate in sorted((root/"runs").glob("*/status.json"),key=lambda p:p.stat().st_mtime,reverse=True)[:64]:
             try:

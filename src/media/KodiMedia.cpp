@@ -50,6 +50,7 @@ void KodiMedia::fail(const QString &message)
     m_pendingMovie = m_pendingShow = 0;
     m_pendingDirectKind.clear(); m_pendingDirectId = 0;
     const bool wasPlaying = m_playbackActive;
+    m_lastPlaybackNaturalEnd=false;
     m_pendingControl.clear();
     m_playbackPoll.stop();
     m_playbackActive = m_playbackVisible = false;
@@ -621,6 +622,7 @@ void KodiMedia::playLibraryItem(const QString &kind, int id, bool resume, bool r
     for (const auto &item : m_movies) listed |= item.toMap().value(kind + "id").toInt() == id;
     if ((requireListed && !listed) || id < 1) return;
     ++m_generation;
+    m_scheduledPlayback=false;
     m_playbackActive = true; m_playbackVisible = false; m_busy = true; m_stage = 5;
     m_presentationError.clear();
     m_playbackStatus = "Starting " + kind + "…";
@@ -632,10 +634,19 @@ bool KodiMedia::playScheduled(const QString &kind, int id, int offsetSeconds)
     if (m_busy || m_playbackActive || id<1 || offsetSeconds<0 || offsetSeconds>=86400
         || !QStringList{"movie","episode","musicvideo","song"}.contains(kind)) return false;
     ++m_generation;
+    m_scheduledPlayback=true;
     m_playbackActive=true; m_playbackVisible=false; m_busy=true; m_stage=5;
     m_presentationError.clear(); m_playbackStatus="Tuning to the channel's broadcast position…";
     emit changed();
     request("Isolde.PlayScheduled",{{"mediaType",kind},{"mediaId",id},{"offsetSeconds",offsetSeconds}});
+    return m_playbackActive;
+}
+bool KodiMedia::playPvr(int id,int clientId,int uniqueId)
+{
+    if(m_busy || m_playbackActive || id<1)return false;
+    ++m_generation;m_scheduledPlayback=false;m_playbackActive=true;m_playbackVisible=false;m_busy=true;m_stage=5;
+    m_presentationError.clear();m_playbackStatus="Tuning to the configured Kodi PVR channel…";emit changed();
+    request("Isolde.PlayChannel",{{"channelid",id},{"resume",false},{"clientid",clientId},{"uniqueid",uniqueId}});
     return m_playbackActive;
 }
 void KodiMedia::presentationFailed()
@@ -711,14 +722,18 @@ void KodiMedia::consume()
             || !result.value("home").isBool()) { fail("Invalid playback status."); return; }
         m_busy = false; releaseSocket();
         m_playbackStatus = m_presentationError.isEmpty() ? state : m_presentationError;
+        m_playbackCanPause=result.value("canPause").isBool() && result.value("canPause").toBool();
+        m_playbackCanSeek=result.value("canSeek").isBool() && result.value("canSeek").toBool();
+        if(result.value("controlError").isString())m_playbackStatus=result.value("controlError").toString().left(512);
         if (state=="failed" && result.value("reason").isString()) m_playbackStatus=result.value("reason").toString().left(512);
         if (state == "starting" || state == "playing" || state == "paused") {
             m_playbackPoll.start();
             if (state != "starting" && !m_playbackVisible) { m_playbackVisible = true; emit playbackStarted(); }
         } else {
             m_playbackPoll.stop(); m_playbackActive = m_playbackVisible = false;
+            m_lastPlaybackNaturalEnd=state=="ended" && result.value("naturalEnd").isBool() && result.value("naturalEnd").toBool();
             emit playbackReturned(result.value("home").toBool());
-            if (state == "ended") {
+            if (state == "ended" && !m_scheduledPlayback) {
                 // Kodi persists progress on stop; update the current shelf after
                 // that write without replacing the user's filter or selection.
                 const auto generation = m_generation;

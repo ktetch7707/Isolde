@@ -24,10 +24,19 @@ public:
     // from the filesystem or hydrated independently of Kodi's catalog.
     bool createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 nowUtc, int horizonDays=7);
     bool extend(const QString &id, qint64 untilUtc, int expectedRevision);
+    // Worker-only rolling maintenance. Retains committed future slots, prunes
+    // bounded expired history and skips unscheduled outage history by cursor.
+    bool maintain(const QString &id,qint64 nowUtc,int expectedRevision,int horizonDays=7,int retentionDays=2);
+    bool importPvr(const QString &instance,const QVariantList &channels,qint64 refreshedUtc,const QVariantMap &expectedRevisions);
     bool updateRules(const QVariantMap &definition, const QVariantList &candidates, int expectedRevision);
+    QVariantMap definition(const QString &id) const;
+    QVariantList candidateSnapshot(const QString &id) const;
+    QVariantMap regenerationPreview(const QString &id,qint64 nowUtc) const;
+    bool regenerate(const QString &id,const QVariantMap &review,qint64 nowUtc);
     bool setActive(bool active, qint64 nowUtc);
     bool setPreferences(const QString &id, const QVariantMap &preferences, int expectedRevision);
     bool setMetadata(const QString &id,const QVariantMap &metadata,int expectedRevision);
+    bool swapNumbers(const QString &id,const QString &otherId,const QVariantMap &expectedRevisions);
     bool reorder(const QStringList &ids, const QVariantMap &expectedRevisions);
     bool resumeClocks(qint64 nowUtc);
     qint64 broadcastTime(const QString &id, qint64 nowUtc) const;
@@ -44,7 +53,8 @@ signals:
 private:
     bool fail(const QString &message);
     bool commit();
-    bool appendSlots(const QString &id, qint64 untilUtc);
+    bool validateGroups(const QVariantMap &definition);
+    bool appendSlots(const QString &id, qint64 untilUtc,qint64 notBeforeUtc=0,qint64 continuationUtc=-1);
     QVariantList eligible(const QVariantMap &definition, const QVariantList &candidates, QString *error) const;
     qint64 clockTime(const QVariantMap &channel, qint64 nowUtc) const;
     QSqlDatabase m_db;

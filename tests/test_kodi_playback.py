@@ -22,7 +22,7 @@ class PlaybackTests(unittest.TestCase):
             def abortRequested(self): return False
             def waitForAbort(self, timeout):
                 events.append("pump")
-                return True
+                return events.count("pump") == 2
         class Player:
             managed = True
             movie = None
@@ -31,7 +31,8 @@ class PlaybackTests(unittest.TestCase):
         class Bridge:
             def __init__(self, *args): pass
             def start(self): pass
-            def poll(self): monitors[0].onNotification("isolde", "Other.pause", "")
+            def poll(self):
+                if "pump" not in events: monitors[0].onNotification("isolde", "Other.pause", "")
             def close(self): events.append("closed")
         fake = types.SimpleNamespace(Monitor=Monitor, executeJSONRPC=lambda _: None,
             executebuiltin=lambda _: None, log=lambda *args: None, LOGINFO=1, LOGWARNING=2, LOGERROR=3)
@@ -41,7 +42,7 @@ class PlaybackTests(unittest.TestCase):
                    "playlists": types.SimpleNamespace(Playlists=lambda *args: None)}
         with patch.dict(sys.modules, modules):
             runpy.run_path(str(Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/service.py"))
-        self.assertEqual(events, ["pause", "pump", "closed"])
+        self.assertEqual(events, ["pump", "pause", "pump", "closed"])
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -56,6 +57,7 @@ class PlaybackTests(unittest.TestCase):
         self.duration = 7200
         self.position = 0
         self.seekable = True
+        self.pausable = True
         self.now = 0
         self.calls, self.builtins = [], []
         self.player = module.Playback(self.execute, self.builtins.append, True, lambda: self.now)
@@ -70,9 +72,9 @@ class PlaybackTests(unittest.TestCase):
         elif method == "VideoLibrary.GetEpisodeDetails": result = {"episodedetails": {"file": str(self.path),"runtime":self.duration}}
         elif method == "VideoLibrary.GetMusicVideoDetails": result = {"musicvideodetails": {"file": str(self.path),"runtime":self.duration}}
         elif method == "AudioLibrary.GetSongDetails": result = {"songdetails": {"file": str(self.path),"duration":self.duration}}
-        elif method == "PVR.GetChannelDetails": result = {"channeldetails":{"channeltype":"tv","hidden":False,"locked":self.channel_locked}}
+        elif method == "PVR.GetChannelDetails": result = {"channeldetails":{"channeltype":"tv","hidden":False,"locked":self.channel_locked,"clientid":9,"uniqueid":101}}
         elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item}}
-        elif method == "Player.GetProperties": result = {"speed":self.speed,"canseek":self.seekable,
+        elif method == "Player.GetProperties": result = {"speed":self.speed,"canseek":self.seekable,"canpause":self.pausable,
             "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
         elif method == "Player.Stop": self.active = False
@@ -86,7 +88,34 @@ class PlaybackTests(unittest.TestCase):
         self.assertEqual(self.player.handle("Isolde.PlayChannel",{"channelid":7,"resume":False})["state"],"starting")
         self.active=True;self.assertEqual(self.player.status()["state"],"playing")
         self.assertIn(("Player.Open",{"item":{"channelid":7},"options":{"resume":False}}),self.calls)
-        self.assertEqual(self.player.control("home"),{"state":"ended","home":True})
+        self.assertEqual(self.player.control("home"),{"state":"ended","home":True,"canPause":False,"canSeek":False,"naturalEnd":False})
+
+    def test_unsupported_live_controls_keep_owned_playback_running(self):
+        self.kind = "channel"
+        self.player.handle("Isolde.PlayChannel", {"channelid": 7, "resume": False})
+        self.active = True
+        self.seekable = self.pausable = False
+        status = self.player.status()
+        self.assertFalse(status["canPause"])
+        self.assertFalse(status["canSeek"])
+        self.calls.clear()
+        for action in ("pause", "forward", "backward"):
+            result = self.player.control(action)
+            self.assertEqual(result["state"], "playing")
+            self.assertTrue(result["controlError"])
+            self.assertTrue(self.active)
+        self.assertFalse(any(method in ("Player.PlayPause", "Player.Seek", "Player.Stop") for method, _ in self.calls))
+
+    def test_pvr_import_tune_revalidates_backend_identity(self):
+        self.kind="channel"
+        params={"channelid":7,"resume":False,"clientid":9,"uniqueid":102}
+        with self.assertRaises(ValueError):self.player.handle("Isolde.PlayChannel",params)
+        self.assertFalse(any(method=="Player.Open" for method,_ in self.calls))
+        params["uniqueid"]=101
+        self.assertEqual(self.player.handle("Isolde.PlayChannel",params)["state"],"starting")
+        self.assertIn(("Player.Open",{"item":{"channelid":7},"options":{"resume":False}}),self.calls)
+        self.active=True;self.assertEqual(self.player.status()["state"],"playing")
+        self.assertEqual(self.player.control("home"),{"state":"ended","home":True,"canPause":False,"canSeek":False,"naturalEnd":False})
 
     def test_scheduled_tune_uses_absolute_broadcast_time_and_verifies_seek(self):
         self.kind="episode"
@@ -159,7 +188,7 @@ class PlaybackTests(unittest.TestCase):
         self.player.control("forward")
         self.assertIn(("Player.Seek", {"playerid": 1, "value": "smallforward"}), self.calls)
         result = self.player.control("home")
-        self.assertEqual(result, {"state": "ended", "home": True})
+        self.assertEqual(result, {"state": "ended", "home": True, "canPause": False, "canSeek": False, "naturalEnd": False})
         self.assertEqual(self.builtins, ["ActivateWindow(fullscreenvideo)", "Minimize"])
         self.assertEqual(self.path.read_bytes(), b"fixture")
 
@@ -189,6 +218,37 @@ class PlaybackTests(unittest.TestCase):
         self.now = 21
         self.assertEqual(self.player.status()["state"], "failed")
 
+    def stopped(self, event):
+        self.player.stopped_notification(event, self.player.generation)
+
+    def test_scheduled_completion_requires_matching_natural_end_event(self):
+        self.player.handle("Isolde.PlayScheduled", {"mediaType":"movie", "mediaId":7, "offsetSeconds":0})
+        self.active=True;self.assertEqual(self.player.status()["state"],"playing")
+        self.stopped({"end":True,"item":{"id":7,"type":"movie"}})
+        self.assertFalse(self.player.natural_end) # active/replacement player is never an end authorization
+        self.active=False
+        self.player.stopped_notification({"end":True,"item":{"id":7,"type":"movie"}}, self.player.generation-1)
+        self.assertFalse(self.player.natural_end)
+        for event in ({"end":False,"item":{"id":7,"type":"movie"}},
+                      {"end":True,"item":{"id":8,"type":"movie"}},
+                      {"end":True,"item":{"id":7,"type":"episode"}}, {"end":True}):
+            self.stopped(event)
+            self.assertFalse(self.player.natural_end)
+        self.assertEqual(self.player.status()["state"],"playing") # bounded callback grace
+        self.stopped({"end":True,"item":{"id":7,"type":"movie"}})
+        result=self.player.status();self.assertEqual(result["state"],"ended");self.assertTrue(result["naturalEnd"])
+
+    def test_scheduled_missing_callback_and_explicit_stop_never_continue(self):
+        self.player.handle("Isolde.PlayScheduled", {"mediaType":"movie", "mediaId":7, "offsetSeconds":0})
+        self.active=True;self.player.status();self.active=False
+        self.assertEqual(self.player.status()["state"],"playing")
+        self.now=0.6
+        result=self.player.status();self.assertEqual(result["state"],"ended");self.assertFalse(result["naturalEnd"])
+        self.player.handle("Isolde.PlayScheduled", {"mediaType":"movie", "mediaId":7, "offsetSeconds":0})
+        self.active=True;self.player.status();self.player.control("stop")
+        self.stopped({"end":True,"item":{"id":7,"type":"movie"}})
+        self.assertFalse(self.player.status()["naturalEnd"])
+
     def test_home_during_startup_stops_when_player_appears(self):
         self.player.handle("Isolde.PlayMovie", {"movieid": 7, "resume": True})
         self.player.control("home")
@@ -196,7 +256,7 @@ class PlaybackTests(unittest.TestCase):
         self.active = True
         self.player.status()
         self.assertFalse(self.active)
-        self.assertEqual(self.player.status(), {"state": "ended", "home": True})
+        self.assertEqual(self.player.status(), {"state": "ended", "home": True, "canPause": False, "canSeek": False, "naturalEnd": False})
 
     def test_transient_unknown_item_during_open_is_not_replacement(self):
         self.player.handle("Isolde.PlayMovie", {"movieid": 7, "resume": True})

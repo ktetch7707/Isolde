@@ -4,8 +4,9 @@
   "guide": {
     "rows": 5, "minutes": 120, "channelWidth": 220, "labelSize": 20, "gap": 8, "radius": 12,
     "sourceBadges": true, "labels": true,
-    "toolbar": [{"id":"now","label":"Now"},{"id":"add","label":"Add"},{"id":"manage","label":"Manage channels"},{"id":"sources","label":"Sources"},{"id":"close","label":"Back"}],
+    "toolbar": [{"id":"now","label":"Now"},{"id":"add","label":"Add"},{"id":"manage","label":"Manage channels"},{"id":"sources","label":"Sources"},{"id":"browse","label":"Find / time"},{"id":"close","label":"Back"}],
     "sources": [
+      {"id":"kodi-pvr","kind":"kodi-pvr","name":"Kodi PVR","description":"Preview configured TV channels and listings, review display-number mapping, then import. Kodi retains source and playback ownership."},
       {"id":"plex","name":"Plex","description":"Opens Plex. Channel catalog, listings and exact channel tuning have not been verified.","action":{"type":"launch-app","appId":"plex"}},
       {"id":"youtube-tv","name":"YouTube TV","description":"Opens the YouTube TV web destination. Sign-in and playback support require verification; channels cannot currently be imported.","action":{"type":"launch-app","appId":"youtube-tv"}}
     ]

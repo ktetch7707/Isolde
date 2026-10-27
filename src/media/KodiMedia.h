@@ -22,6 +22,8 @@ class KodiMedia final : public QObject {
     Q_PROPERTY(bool hasNextPage READ hasNextPage NOTIFY changed)
     Q_PROPERTY(bool playbackActive READ playbackActive NOTIFY changed)
     Q_PROPERTY(QString playbackStatus READ playbackStatus NOTIFY changed)
+    Q_PROPERTY(bool playbackCanPause READ playbackCanPause NOTIFY changed)
+    Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
     Q_PROPERTY(QString viewValue READ viewValue NOTIFY changed)
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
@@ -48,6 +50,7 @@ public:
     Q_INVOKABLE void playMedia(const QString &kind, int id, bool resume = true);
     // Guide coordinator only: explicit broadcast offset, never saved resume.
     bool playScheduled(const QString &kind, int id, int offsetSeconds);
+    bool playPvr(int id,int clientId,int uniqueId);
     Q_INVOKABLE void activate(int index);
     Q_INVOKABLE bool goBack();
     Q_INVOKABLE void playSelected(bool resume = true);
@@ -61,6 +64,9 @@ public:
     Q_INVOKABLE void previousPage();
     bool playbackActive() const { return m_playbackActive; }
     QString playbackStatus() const { return m_playbackStatus; }
+    bool playbackCanPause() const { return m_playbackActive && m_playbackCanPause; }
+    bool playbackCanSeek() const { return m_playbackActive && m_playbackCanSeek; }
+    bool lastPlaybackNaturalEnd() const { return m_lastPlaybackNaturalEnd; }
     QString viewKind() const { return m_viewKind; }
     QString viewValue() const { return m_viewValue; }
     QVariantList collections() const;
@@ -126,6 +132,9 @@ private:
     int m_scanPolls = 0;
     int m_pageStart = 0, m_requestedStart = 0, m_totalMovies = 0, m_pageCount = 0;
     bool m_playbackActive = false, m_playbackVisible = false;
+    bool m_playbackCanPause = false, m_playbackCanSeek = false;
+    bool m_lastPlaybackNaturalEnd = false;
+    bool m_scheduledPlayback = false;
     QString m_playbackStatus;
     QString m_pendingControl;
     QString m_presentationError;

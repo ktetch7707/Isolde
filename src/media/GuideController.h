@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QLocalSocket>
 #include <QVariantList>
+#include <QSet>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -19,6 +20,7 @@ class GuideController final : public QObject {
     Q_PROPERTY(bool backgroundBusy READ backgroundBusy NOTIFY changed)
     Q_PROPERTY(QString errorString READ errorString NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
+    Q_PROPERTY(QString scheduleStatus READ scheduleStatus NOTIFY changed)
     Q_PROPERTY(QVariantList channels READ channels NOTIFY changed)
     Q_PROPERTY(QVariantList rows READ rows NOTIFY changed)
     Q_PROPERTY(QVariantList compactRows READ compactRows NOTIFY changed)
@@ -27,6 +29,9 @@ class GuideController final : public QObject {
     Q_PROPERTY(int skippedCount READ skippedCount NOTIFY changed)
     Q_PROPERTY(bool previewReady READ previewReady NOTIFY changed)
     Q_PROPERTY(QVariantMap previewDefinition READ previewDefinition NOTIFY changed)
+    Q_PROPERTY(QVariantList sourcePreview READ sourcePreview NOTIFY changed)
+    Q_PROPERTY(bool sourcePreviewReady READ sourcePreviewReady NOTIFY changed)
+    Q_PROPERTY(QVariantMap regenerationReview READ regenerationReview NOTIFY changed)
 public:
     GuideController(const QString &databasePath,const QString &profile,QObject *parent=nullptr,const QString &bridgeDirectory={});
     ~GuideController() override;
@@ -35,6 +40,7 @@ public:
     bool backgroundBusy() const { return m_busy && m_background && !m_pendingJob && m_pendingDefinition.isEmpty(); }
     QString errorString() const { return m_error; }
     QString status() const { return m_status; }
+    QString scheduleStatus() const { return m_scheduleStatus; }
     QVariantList channels() const { return m_channels; }
     QVariantList rows() const { return m_rows; }
     QVariantList compactRows() const { return m_compactRows; }
@@ -43,7 +49,20 @@ public:
     int skippedCount() const { return m_skipped; }
     bool previewReady() const { return m_previewReady; }
     QVariantMap previewDefinition() const { return m_previewDefinition; }
+    QVariantList sourcePreview() const { return m_sourcePreview; }
+    bool sourcePreviewReady() const { return m_sourcePreviewReady; }
+    QVariantMap regenerationReview() const { return m_regenerationReview; }
+    static qint64 pvrUtc(const QVariant &value);
+    Q_INVOKABLE QVariantMap editableDefinition(const QString &id) const;
+    Q_INVOKABLE bool updateLocal(const QVariantMap &definition,int revision);
+    Q_INVOKABLE bool previewRegeneration(const QString &id);
+    Q_INVOKABLE bool regenerate();
+    Q_INVOKABLE bool previewDuplicate(const QString &id,int revision);
+    Q_INVOKABLE bool previewPvr();
+    Q_INVOKABLE bool importPvr();
+    Q_INVOKABLE bool setSourceNumber(int index,const QVariant &number);
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void maintainSchedules();
     Q_INVOKABLE void setWindow(qint64 fromUtc,qint64 toUtc,int firstRow=0);
     Q_INVOKABLE QVariantMap newDefinition() const;
     Q_INVOKABLE bool previewLocal(const QVariantMap &definition,const QString &mediaKind);
@@ -51,6 +70,7 @@ public:
     Q_INVOKABLE void cancel();
     Q_INVOKABLE bool setPreferences(const QString &id,const QVariantMap &preferences,int revision);
     Q_INVOKABLE bool setMetadata(const QString &id,const QVariantMap &metadata,int revision);
+    Q_INVOKABLE bool swapNumbers(const QString &id,const QString &otherId,const QVariantMap &revisions);
     Q_INVOKABLE bool reorder(const QStringList &ids,const QVariantMap &revisions);
     Q_INVOKABLE bool remove(const QString &id,int revision);
     // Execution is routed through ActionDispatcher; QML cannot launch IDs or
@@ -60,6 +80,7 @@ public:
 signals:
     void changed();
     void channelCreated(const QString &id);
+    void duplicatePrepared(const QVariantMap &definition);
     void targetReady(const QVariantMap &target,const QString &origin);
 private:
     using Job=std::function<QVariantMap(GuideStore &)>;
@@ -67,6 +88,7 @@ private:
     bool fail(const QString &message);
     void requestPage();
     void consume();
+    void consumePvr(const QVariantMap &result);
     void closeBridge();
     void readFailure(const QString &message);
     QThread m_thread;
@@ -77,12 +99,19 @@ private:
     std::function<void(const QVariantMap &)> m_pendingCompletion;
     QVariantMap m_pendingDefinition;
     QString m_pendingKind;
-    QTimer m_checkpoint,m_requestDeadline,m_catalogDeadline;
+    QTimer m_checkpoint,m_maintenance,m_requestDeadline,m_catalogDeadline;
     QLocalSocket m_socket;
     QByteArray m_input,m_request;
-    QString m_directory,m_error,m_status;
+    QString m_directory,m_error,m_status,m_scheduleStatus;
+    QSet<QString> m_maintenanceAttempted;
     QVariantList m_channels,m_rows,m_compactRows,m_candidates;
     QVariantMap m_previewDefinition;
+    QVariantList m_sourcePreview;
+    QVariantMap m_sourceRevisions;
+    QVariantMap m_regenerationReview;
+    qint64 m_sourceRefreshed=0;
+    int m_sourceIndex=-1;
+    bool m_pvrReading=false,m_sourcePreviewReady=false;
     QStringList m_kinds;
     qint64 m_from=0,m_to=0;
     int m_first=0,m_page=0,m_requestId=0,m_descriptor=-1,m_skipped=0,m_kindIndex=0,m_snapshotBytes=0;

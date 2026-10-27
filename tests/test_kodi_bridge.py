@@ -15,6 +15,16 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    def test_pvr_broadcast_reads_are_bounded_and_read_only(self):
+        calls=[]
+        def execute(raw):
+            calls.append(json.loads(raw));return json.dumps({"result":{"broadcasts":[],"limits":{"start":0,"end":0,"total":0}}})
+        params={"channelid":7,"properties":["title","starttime","endtime"],"limits":{"start":0,"end":50}}
+        self.assertIn("result",bridge.dispatch(self.request("PVR.GetBroadcasts",params),execute))
+        self.assertEqual(calls[0]["method"],"PVR.GetBroadcasts")
+        for invalid in (dict(params,channelid=True),dict(params,channelid=0),dict(params,limits={"start":0,"end":51}),dict(params,properties=["file"]),dict(params,exec="anything")):
+            self.assertIn("error",bridge.dispatch(self.request("PVR.GetBroadcasts",invalid),lambda _:self.fail("Invalid PVR read reached Kodi")))
+
     def test_guide_candidates_join_show_metadata_without_scanning_or_mutating(self):
         calls=[]
         def execute(raw):
