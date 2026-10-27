@@ -38,6 +38,19 @@ def fixture(count=1):
 
 
 class FdroidBrowsingTests(unittest.TestCase):
+    def test_update_check_includes_only_requested_subscriptions(self):
+        entry, raw = fixture(103)
+        doc=store.verified_index(entry,raw)
+        packages=["org.example.app002","org.example.app099"]
+        results=store.browse(doc,"",0,TARGET,packages)["results"]
+        self.assertEqual([r["packageName"] for r in results],packages)
+        with self.assertRaises(ValueError):store.browse(doc,"",0,TARGET,["../unsafe"])
+
+    def test_invalid_update_subscription_is_rejected_before_network(self):
+        with patch("sys.argv",["fdroid-store","--cache","unused","--packages","../unsafe"]), \
+                patch.object(store,"download") as download:
+            with self.assertRaises(ValueError):store.main()
+            download.assert_not_called()
     def test_search_pages_and_metadata_for_installer(self):
         entry, raw = fixture(103)
         doc = store.verified_index(entry, raw)

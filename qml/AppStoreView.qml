@@ -23,6 +23,10 @@ Item {
  property int actionIndex:0
  property int toolIndex:0
  property string confirmation:""
+ property string confirmationAppId:""
+ property bool setupSoftwareRendering:false
+ property bool toolsMenuOpen:false
+ property int toolsMenuIndex:0
  property int confirmIndex:0
  property string searchText:""
  property bool searchOpen:false
@@ -42,7 +46,17 @@ Item {
   return matches && (!q || [e.name,e.category,e.description,e.publisher].some(v=>String(v || "").toLowerCase().includes(q)))
  })
  readonly property var selected:filtered.find(e=>e.id===selectedId) || null
- readonly property string operationName:((entries || []).find(e=>e.id===catalog.operationId) || selected || {}).name || ""
+ readonly property var confirmationApp:(entries || []).find(e=>e.id===confirmationAppId) || null
+ readonly property var actionItems:{
+  if(!selected)return []
+  if(!selected.installed)return [{op:"install",label:qsTr("Install app")}]
+  let items=[{op:"open",label:qsTr("Open app")},{op:"uninstall",label:qsTr("Uninstall")}]
+  if(selected.updateAvailable)items.push({op:"update",label:qsTr("Update to %1").arg(selected.updateVersion)})
+  if(selected.updatesManaged)items.push({op:"subscription",label:selected.updatesEnabled?qsTr("Unsubscribe from updates"):qsTr("Subscribe to updates")})
+  return items
+ }
+ readonly property var toolsItems:[qsTr("F-Droid access: ")+(catalog.onlineStoreSearch?qsTr("On"):qsTr("Off")),qsTr("Previous page"),qsTr("Next page"),qsTr("Check app updates"),qsTr("Set up / repair Android")]
+ readonly property string operationName:catalog.operationName || ((entries || []).find(e=>e.id===catalog.operationId) || selected || {}).name || ""
  Connections {
   target:root.catalog
   function onPackageInstalled(appId){root.selectedId=appId;root.area="actions";root.actionIndex=0}
@@ -68,9 +82,54 @@ Item {
   if(platforms[platformIndex].type==="web"){addWebOpen=true;webField=0;webName="";webAddress=""}
   else catalog.setOnlineStoreSearch(!catalog.onlineStoreSearch)
  }
- function request(op){if(!selected || busy || (op==="install" && selected.compatible===false))return;if(op==="open"){returnAppId=selected.id;openRequested(selected.id)}else{confirmation=op;confirmIndex=0}}
- function commit(){if(!selected || busy)return;const op=confirmation;confirmation="";pendingOperation=op;if(op==="install")catalog.install(selected.id);else catalog.uninstall(selected.id);area="actions";actionIndex=0}
+ function request(op){
+  if(busy)return
+  if(op==="setup"){confirmation=op;confirmationAppId="";confirmIndex=0;return}
+  if(!selected || (op==="install" && selected.compatible===false))return
+  if(op==="open"){returnAppId=selected.id;openRequested(selected.id)}
+  else{confirmation=op;confirmationAppId=selected.id;confirmIndex=0}
+ }
+ function commit(){
+  if(busy)return
+  const op=confirmation,id=confirmationAppId,app=confirmationApp;confirmation="";pendingOperation=op
+  if(op==="setup")catalog.setupAndroid(setupSoftwareRendering)
+  else if(op==="install")catalog.install(id)
+  else if(op==="update")catalog.updateApp(id)
+  else if(op==="subscription" && app)catalog.setUpdatesEnabled(id,!app.updatesEnabled)
+  else if(op==="uninstall")catalog.uninstall(id)
+  area="actions";actionIndex=0
+ }
+ function chooseTool(index){
+  if(!toolAvailable(index))return
+  toolsMenuOpen=false
+  if(index===0)catalog.setOnlineStoreSearch(!catalog.onlineStoreSearch)
+  else if(index===1 || index===2)catalog.changeStorePage(index===1?-1:1)
+  else if(index===3)catalog.checkForUpdates()
+  else request("setup")
+ }
+ function toolAvailable(index){return index===1?!!catalog.hasPreviousStorePage:index===2?!!catalog.hasNextStorePage:index===3?!!catalog.onlineStoreSearch:true}
+ function confirmationTitle(){
+  if(confirmation==="setup")return qsTr("Set up Android?")
+  const app=confirmationApp,name=app?app.name:""
+  if(confirmation==="subscription")return app && app.updatesEnabled?qsTr("Unsubscribe %1 from updates?").arg(name):qsTr("Subscribe %1 to updates?").arg(name)
+  return (confirmation==="update"?qsTr("Update "):confirmation==="install"?qsTr("Install "):qsTr("Uninstall "))+name+"?"
+ }
+ function confirmationMessage(){
+  if(confirmation==="setup")return qsTr("Download and configure Android support on this appliance. Administrator approval and an internet connection are required. Existing profiles and app data are preserved. Cancel waits for the current system step to finish.")
+  if(confirmation==="subscription")return confirmationApp && confirmationApp.updatesEnabled?qsTr("Keep this app and its data. Stop offering its updates in this profile. You can subscribe again at any time."):qsTr("Include this app when you choose Check app updates. Updates are never installed automatically.")
+  if(confirmation==="update")return qsTr("Install the verified newer version in this profile. Keep the previous version and app data for rollback until the update is saved. Administrator approval may be requested to back up protected Android files.")
+  if(confirmation==="install")return confirmationApp && confirmationApp.type==="android"?qsTr("Install the verified Android package in your current profile. Administrator approval may be requested for a safe backup."):qsTr("Add this app to your current profile.")
+  return confirmationApp && confirmationApp.type==="android"?qsTr("Remove this app and its Android app data from this profile. Your pages and other profiles stay unchanged."):qsTr("Remove this app from your profile. Saved sign-in data is kept. Your pages stay unchanged.")
+ }
  function handleCommand(cmd){
+  if(busy){if((cmd===inputManager.back || cmd===inputManager.confirm) && catalog.canCancelOperation)catalog.cancelOperation();return true}
+  if(toolsMenuOpen){
+   if(cmd===inputManager.back)toolsMenuOpen=false
+   else if(cmd===inputManager.navigateUp)toolsMenuIndex=Math.max(0,toolsMenuIndex-1)
+   else if(cmd===inputManager.navigateDown)toolsMenuIndex=Math.min(toolsItems.length-1,toolsMenuIndex+1)
+   else if(cmd===inputManager.confirm)chooseTool(toolsMenuIndex)
+   return true
+  }
   if(searchOpen){keyboard.handleCommand(cmd);return true}
   if(addWebOpen){
    if(cmd===inputManager.back)addWebOpen=false
@@ -85,10 +144,16 @@ Item {
    }
    return true
   }
-  if(confirmation){if(cmd===inputManager.back)confirmation="";else if(cmd===inputManager.navigateLeft || cmd===inputManager.navigateRight)confirmIndex=1-confirmIndex;else if(cmd===inputManager.confirm){if(confirmIndex===1)commit();else confirmation=""}return true}
+  if(confirmation){
+   if(cmd===inputManager.back)confirmation=""
+   else if(cmd===inputManager.navigateLeft)confirmIndex=Math.max(0,confirmIndex-1)
+   else if(cmd===inputManager.navigateRight)confirmIndex=Math.min(confirmation==="setup"?2:1,confirmIndex+1)
+   else if(cmd===inputManager.confirm){if(confirmIndex===0)confirmation="";else if(confirmation==="setup" && confirmIndex===1)setupSoftwareRendering=!setupSoftwareRendering;else commit()}
+   return true
+  }
   if(cmd===inputManager.back){if(area==="actions"){area="grid";return true}return false}
   if(cmd===inputManager.search){beginSearch();return true}
-  if(cmd===inputManager.menu && !deviceApps){area="tools";toolIndex=0;return true}
+  if(cmd===inputManager.menu && !deviceApps){toolsMenuOpen=true;toolsMenuIndex=0;return true}
   if(area==="tools"){
    if(cmd===inputManager.navigateDown)area=filtered.length?"grid":"header"
    else if(cmd===inputManager.navigateUp)area="header"
@@ -107,9 +172,9 @@ Item {
   }
   if(area==="actions"){
    if(cmd===inputManager.navigateLeft)area="grid"
-   if(cmd===inputManager.navigateUp)actionIndex=0
-   if(cmd===inputManager.navigateDown || cmd===inputManager.navigateRight)actionIndex=selected && selected.installed?1:0
-   if(cmd===inputManager.confirm)request(actionIndex===1?"uninstall":selected && selected.installed?"open":"install")
+   if(cmd===inputManager.navigateUp)actionIndex=Math.max(0,actionIndex-1)
+   if(cmd===inputManager.navigateDown || cmd===inputManager.navigateRight)actionIndex=Math.min(actionItems.length-1,actionIndex+1)
+   if(cmd===inputManager.confirm && actionItems[actionIndex])request(actionItems[actionIndex].op)
    return true
   }
   const i=filtered.findIndex(e=>e.id===selectedId)
@@ -168,7 +233,7 @@ Item {
       Column {width:parent.width-66;spacing:8
        Text {textFormat:Text.PlainText;width:parent.width;text:modelData.name;color:root.ink;font.pixelSize:21*root.typeScale;font.weight:Font.DemiBold;elide:Text.ElideRight}
        Text {textFormat:Text.PlainText;width:parent.width;text:modelData.category;color:root.ink;opacity:0.65;font.pixelSize:16*root.typeScale;elide:Text.ElideRight}
-       Text {textFormat:Text.PlainText;text:modelData.installed?qsTr("Installed"):qsTr("Add to Isolde");color:root.ink;opacity:0.7;font.pixelSize:15*root.typeScale}
+       Text {textFormat:Text.PlainText;text:modelData.updateAvailable?qsTr("Update available"):modelData.installed?qsTr("Installed"):qsTr("Add to Isolde");color:root.ink;opacity:0.7;font.pixelSize:15*root.typeScale}
       }
      }
      MouseArea {anchors.fill:parent;onClicked:{root.selectedId=modelData.id;root.area="actions";root.actionIndex=0}}
@@ -184,12 +249,12 @@ Item {
      Text {textFormat:Text.PlainText;width:parent.width;visible:!!text;text:root.selected?root.selected.compatibilityReason || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.description:"";color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap;maximumLineCount:5;elide:Text.ElideRight}
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected && root.selected.installed?qsTr("Added to your current profile."):qsTr("Available to add to your profile.");color:root.ink;opacity:0.65;font.pixelSize:16*root.typeScale;wrapMode:Text.WordWrap}
-     Repeater {id:actions;model:root.selected?(root.selected.installed?[qsTr("Open app"),qsTr("Uninstall")]:[qsTr("Install app")]):[]
-      delegate:Rectangle {required property int index;required property string modelData;objectName:"store-action-"+index
+     Repeater {id:actions;model:root.actionItems
+      delegate:Rectangle {required property int index;required property var modelData;objectName:"store-action-"+index
        width:parent.width;height:54*root.typeScale;radius:root.corners;color:index===0?Qt.lighter(root.surface,1.8):root.surface
        border.width:root.area==="actions" && root.actionIndex===index?3:1;border.color:root.area==="actions" && root.actionIndex===index?root.focusColor:Qt.lighter(root.surface,1.4);opacity:root.busy || (root.selected && root.selected.compatible===false)?0.45:1
-       Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData;color:root.ink;font.pixelSize:20*root.typeScale;font.weight:Font.DemiBold}
-       MouseArea {anchors.fill:parent;enabled:!root.busy;onClicked:root.request(index===1?"uninstall":root.selected.installed?"open":"install")}
+       Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData.label;color:root.ink;font.pixelSize:20*root.typeScale;font.weight:Font.DemiBold}
+       MouseArea {anchors.fill:parent;enabled:!root.busy;onClicked:root.request(modelData.op)}
       }
      }
     }
@@ -197,7 +262,7 @@ Item {
    }
   }
  }
- Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;text:root.busy?(root.pendingOperation==="uninstall"?qsTr("Removing %1… Please wait.").arg(root.operationName):qsTr("Installing %1… %2").arg(root.operationName).arg(root.catalog.downloadProgress || qsTr("Please wait."))):root.catalog.errorString || root.catalog.storeStatus || qsTr("D-pad Browse · OK Select · Search Find an app · Back Return");color:root.ink;font.pixelSize:17*root.typeScale;elide:Text.ElideRight}
+ Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;text:root.busy?root.operationName:root.catalog.errorString || root.catalog.operationStatus || root.catalog.storeStatus || qsTr("D-pad Browse · OK Select · Search Find an app · Back Return");color:root.ink;font.pixelSize:17*root.typeScale;elide:Text.ElideRight}
  Rectangle {anchors.fill:parent;visible:root.addWebOpen;z:5;color:Qt.rgba(0,0,0,0.7)
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.horizontalCenter:parent.horizontalCenter;y:root.searchOpen?root.gap:(parent.height-height)/2;width:parent.width*0.76;height:webForm.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
@@ -217,16 +282,44 @@ Item {
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:body.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:body;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
-    Text {textFormat:Text.PlainText;width:parent.width;text:(root.confirmation==="install"?qsTr("Install "):qsTr("Uninstall "))+(root.selected?root.selected.name:"")+"?";color:root.ink;font.pixelSize:28*root.typeScale;font.weight:Font.DemiBold;wrapMode:Text.WordWrap}
-    Text {textFormat:Text.PlainText;width:parent.width;text:root.confirmation==="install"?(root.selected && root.selected.type==="android"?qsTr("Install the verified Android package in your current profile."):qsTr("Add this app to your current profile.")):root.selected && root.selected.type==="android"?qsTr("Remove the Android app and its Android app data from this profile. Your pages and other profiles stay unchanged."):qsTr("Remove this app from your profile. Saved sign-in data is kept. Your pages stay unchanged.");color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap}
-    Text {textFormat:Text.PlainText;width:parent.width;visible:root.confirmation==="install" && !!text;text:root.selected?root.selected.consentText || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap;maximumLineCount:5;elide:Text.ElideRight}
+    Text {textFormat:Text.PlainText;width:parent.width;text:root.confirmationTitle();color:root.ink;font.pixelSize:28*root.typeScale;font.weight:Font.DemiBold;wrapMode:Text.WordWrap;maximumLineCount:2;elide:Text.ElideRight}
+    Text {textFormat:Text.PlainText;width:parent.width;text:root.confirmationMessage();color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap}
+    Text {textFormat:Text.PlainText;width:parent.width;visible:(root.confirmation==="install" || root.confirmation==="update") && !!text;text:root.confirmationApp?(root.confirmation==="update"?root.confirmationApp.updateConsent:root.confirmationApp.consentText) || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap;maximumLineCount:5;elide:Text.ElideRight}
     Row {width:parent.width;spacing:root.gap
-     Repeater {model:[qsTr("Cancel"),root.confirmation==="install"?qsTr("Install"):qsTr("Uninstall")]
-      delegate:Rectangle {required property int index;required property string modelData;width:(body.width-root.gap)/2;height:54;radius:root.corners;color:root.surface;border.width:root.confirmIndex===index?3:1;border.color:root.focusColor
-       Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData;color:root.ink;font.pixelSize:20*root.typeScale}
-       MouseArea {anchors.fill:parent;onClicked:{if(index===1)root.commit();else root.confirmation=""}}
+     Repeater {id:confirmationButtons;model:root.confirmation==="setup"?[qsTr("Cancel"),root.setupSoftwareRendering?qsTr("Software renderer"):qsTr("Keep / default renderer"),qsTr("Set up")]:[qsTr("Cancel"),root.confirmation==="subscription"?qsTr("Confirm"):root.confirmation==="update"?qsTr("Update"):root.confirmation==="install"?qsTr("Install"):qsTr("Uninstall")]
+      delegate:Rectangle {required property int index;required property string modelData;width:(body.width-root.gap*(confirmationButtons.count-1))/confirmationButtons.count;height:72*root.typeScale;radius:root.corners;color:root.surface;border.width:root.confirmIndex===index?3:1;border.color:root.focusColor
+       Text {textFormat:Text.PlainText;anchors.fill:parent;anchors.margins:8;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter;wrapMode:Text.WordWrap;text:modelData;color:root.ink;font.pixelSize:20*root.typeScale}
+       MouseArea {anchors.fill:parent;onClicked:{root.confirmIndex=index;root.handleCommand(inputManager.confirm)}}
       }
      }
+    }
+   }
+  }
+ }
+ Rectangle {anchors.fill:parent;visible:root.toolsMenuOpen;z:7;color:Qt.rgba(0,0,0,0.7)
+  MouseArea {anchors.fill:parent}
+  Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:storeMenu.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
+   Column {id:storeMenu;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
+    Text {textFormat:Text.PlainText;text:qsTr("Store actions");color:root.ink;font.pixelSize:28*root.typeScale}
+    Repeater {model:root.toolsItems
+     delegate:Rectangle {required property int index;required property string modelData;width:storeMenu.width;height:50*root.typeScale;radius:root.corners;color:root.surface;border.color:root.focusColor;border.width:root.toolsMenuIndex===index?3:1;opacity:root.toolAvailable(index)?1:0.5
+      Text {textFormat:Text.PlainText;anchors.fill:parent;anchors.margins:10;verticalAlignment:Text.AlignVCenter;text:modelData;color:root.ink;font.pixelSize:20*root.typeScale;elide:Text.ElideRight}
+      MouseArea {anchors.fill:parent;onClicked:{root.toolsMenuIndex=index;root.chooseTool(index)}}
+     }
+    }
+   }
+  }
+ }
+ Rectangle {anchors.fill:parent;visible:root.busy;z:8;color:Qt.rgba(0,0,0,0.7)
+  MouseArea {anchors.fill:parent}
+  Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:progressBody.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
+   Column {id:progressBody;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
+    Text {textFormat:Text.PlainText;width:parent.width;text:root.pendingOperation==="setup"?qsTr("Android setup"):root.operationName;color:root.ink;font.pixelSize:28*root.typeScale;wrapMode:Text.WordWrap}
+    Text {textFormat:Text.PlainText;width:parent.width;text:root.catalog.operationStatus || qsTr("Please wait...");color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap}
+    Text {textFormat:Text.PlainText;width:parent.width;text:root.catalog.downloadProgress || "";visible:!!text;color:root.ink;font.pixelSize:20*root.typeScale}
+    Rectangle {width:parent.width;height:54*root.typeScale;radius:root.corners;color:root.surface;border.width:3;border.color:root.focusColor;opacity:root.catalog.canCancelOperation?1:0.5
+     Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:root.catalog.canCancelOperation?qsTr("Cancel operation · OK / Back"):qsTr("Finishing safely...");color:root.ink;font.pixelSize:20*root.typeScale}
+     MouseArea {anchors.fill:parent;enabled:!!root.catalog.canCancelOperation;onClicked:root.catalog.cancelOperation()}
     }
    }
   }

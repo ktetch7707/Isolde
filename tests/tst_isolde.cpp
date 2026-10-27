@@ -32,6 +32,7 @@
 class CountingStoreProvider final : public StoreProvider {
 public:
     QString identity="fdroid";int searches=0;int pages=0;int cancellations=0;mutable int artifacts=0;QString lastQuery;
+    QStringList requestedUpdates;int updateChecks=0;QVariantList updates;
     QString providerId() const override{return identity;}
     QString providerName() const override{return "Test repository";}
     bool isOnline() const override{return true;}
@@ -40,6 +41,9 @@ public:
     void cancel() override{++cancellations;}
     bool hasNextPage() const override{return true;}
     void publishLate(){emit resultsChanged();}
+    void requestUpdates(const QStringList &packages) override{requestedUpdates=packages;++updateChecks;}
+    QVariantList updateResults() const override{return updates;}
+    void publishUpdates(){emit updatesChanged();}
     QUrl artifactUrl(const QString &) const override{++artifacts;return QUrl("https://example.invalid/app.apk");}
     QByteArray artifactHash(const QString &) const override{return {};}
     QString provenanceText(const QString &) const override{return "test";}
@@ -90,6 +94,34 @@ private slots:
         QVERIFY2(restored.load(QFINDTESTDATA("../config/catalog.json"),state,packages),qPrintable(restored.errorString()));
         QVERIFY(restored.isInstalled(id));QVERIFY(restoredRegistry.find(id));
         QCOMPARE(restoredRegistry.find(id)->type,QString("android"));
+        // Subscription changes are profile-local, atomic, and suppress late offers.
+        CountingStoreProvider provider;restored.setStoreProvider(&provider);
+        QVERIFY(!restored.checkForUpdates());QCOMPARE(provider.updateChecks,0);
+        QVERIFY(restored.setUpdatesEnabled(id,false));
+        AppRegistry preferencesRegistry;AppCatalog preferences(&preferencesRegistry);
+        QVERIFY(preferences.load(QFINDTESTDATA("../config/catalog.json"),state,packages));
+        QVERIFY(preferences.m_updatesDisabled.contains(id));
+        QFile before(state);QVERIFY(before.open(QIODevice::ReadOnly));const auto original=before.readAll();before.close();
+        const auto blocked=temp.filePath("state-is-a-directory");QVERIFY(QDir().mkpath(blocked));
+        preferences.m_statePath=blocked;
+        QVERIFY(!preferences.setUpdatesEnabled(id,true));QVERIFY(preferences.m_updatesDisabled.contains(id));
+        QVERIFY(before.open(QIODevice::ReadOnly));QCOMPARE(before.readAll(),original);before.close();
+        preferences.m_statePath=state;
+        QVERIFY(restored.setUpdatesEnabled(id,true));restored.setOnlineStoreSearch(true);
+        QVERIFY(restored.checkForUpdates());QCOMPARE(provider.requestedUpdates,QStringList{package});
+        provider.updates={QVariantMap{{"packageName",package},{"versionCode","1234567891"},{"version","new"},{"compatible",true},{"metadataVerified",true}}};
+        provider.publishUpdates();QVERIFY(restored.m_availableUpdates.contains(id));
+        QVERIFY(restored.setUpdatesEnabled(id,false));provider.publishUpdates();
+        QVERIFY(!restored.m_availableUpdates.contains(id));
+        QVERIFY(!restored.checkForUpdates());QCOMPARE(provider.updateChecks,1);
+        // Failed update activation preserves the exact prior version and registry identity.
+        auto newer=manifest;newer["version"]="1234567891";AppCatalog::Entry update;
+        QVERIFY(restored.customEntry(newer,&update));restored.m_statePath=blocked;
+        QSignalSpy registryChanges(&restoredRegistry,&AppRegistry::appsChanged);
+        QVERIFY(!restored.commitUpdate(update));
+        QCOMPARE(restored.findEntry(id)->version,QString("1234567890"));
+        QCOMPARE(restoredRegistry.find(id)->launchConfiguration.value("storeVersion").toString(),QString("1234567890"));
+        QCOMPARE(restoredRegistry.apps().size(),1);QVERIFY(registryChanges.size()>=2);
     }
     void customWebAppsPersistAndRejectUnsafeInput() {
         QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir temp;

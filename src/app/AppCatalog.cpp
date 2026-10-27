@@ -78,7 +78,8 @@ static bool isValidActionHandlers(const QJsonObject &appObject, const QStringLis
 QVariantList AppCatalog::entries() const
 {
     QVariantList result;
-    for (const auto &entry : m_entries)
+    for (const auto &entry : m_entries) {
+        if(entry.custom && entry.app.type=="android" && !isInstalled(entry.app.id))continue;
         result.append(QVariantMap{{"id", entry.app.id}, {"name", entry.app.name}, {"category", entry.category},
                                   {"version", entry.version}, {"description", entry.description},
                                   {"publisher", entry.publisher}, {"provenance", entry.provenance}, {"capabilities", entry.capabilities},
@@ -91,7 +92,13 @@ QVariantList AppCatalog::entries() const
                                   {"networkRequirement", entry.app.networkRequirement},
                                   {"handledActions", entry.app.handledActions},
                                   {"accent", entry.app.accent.name()}, {"symbol", entry.app.symbol},
-                                  {"installed", isInstalled(entry.app.id)}});
+                                  {"installed", isInstalled(entry.app.id)},
+                                  {"updatesManaged",entry.custom && entry.app.type=="android"},
+                                  {"updatesEnabled",!m_updatesDisabled.contains(entry.app.id)},
+                                  {"updateAvailable",m_onlineStoreSearch && m_availableUpdates.contains(entry.app.id)},
+                                  {"updateConsent",m_availableUpdates.value(entry.app.id).value("consentText").toString()},
+                                  {"updateVersion",m_availableUpdates.value(entry.app.id).value("version").toString()}});
+    }
     return result;
 }
 
@@ -112,6 +119,22 @@ void AppCatalog::setStoreProvider(StoreProvider *provider)
             emit entriesChanged();
         }
     });
+    if(m_provider)connect(m_provider,&StoreProvider::updatesChanged,this,[this]{
+        if(!m_onlineStoreSearch || !m_provider)return;
+        m_availableUpdates.clear();
+        const auto results=m_provider->updateResults();
+        if(results.size()>256){setError(tr("Too many update results."));return;}
+        for(const auto &value:results){
+            const auto result=value.toMap();
+            const auto package=result.value("packageName").toString();
+            const auto id="fdroid-"+QString::fromLatin1(QCryptographicHash::hash(package.toUtf8(),QCryptographicHash::Sha256).toHex().left(24));
+            const auto *entry=findEntry(id);
+            if(entry && isInstalled(id) && !m_updatesDisabled.contains(id) && result.value("compatible").toBool()
+               && result.value("metadataVerified").toBool() && result.value("versionCode").toString().toULongLong()>entry->version.toULongLong())
+                m_availableUpdates.insert(id,result);
+        }
+        emit entriesChanged();
+    });
     if(m_provider)connect(m_provider,&StoreProvider::providerError,this,[this](const QString &error){setError(error.left(512));});
     emit providerResultsChanged();
     emit entriesChanged();
@@ -120,6 +143,7 @@ void AppCatalog::setStoreProvider(StoreProvider *provider)
 void AppCatalog::setOnlineStoreSearch(bool enabled)
 {
     if (m_onlineStoreSearch == enabled) return;
+    if(!busy())m_operationStatus.clear();
     m_onlineStoreSearch = enabled;
     if (enabled && m_provider) {
         setError({});
@@ -127,6 +151,7 @@ void AppCatalog::setOnlineStoreSearch(bool enabled)
     } else {
         if(m_provider)m_provider->cancel();
         m_providerResults.clear();
+        m_availableUpdates.clear();
         if(m_downloadReply)m_downloadReply->abort();
     }
     emit providerResultsChanged();
@@ -138,12 +163,13 @@ void AppCatalog::searchStore(const QString &query)
 {
     if(query.size()>128){setError(tr("Use a search of at most 128 characters."));return;}
     m_storeQuery=query.trimmed();
+    if(!busy())m_operationStatus.clear();
     if(m_provider && (!m_provider->isOnline() || m_onlineStoreSearch)){setError({});m_provider->requestSearch(m_storeQuery);}
 }
 
 void AppCatalog::changeStorePage(int direction)
 {
-    if(!busy() && m_onlineStoreSearch && m_provider){setError({});m_provider->requestPage(direction);}
+    if(!busy() && m_onlineStoreSearch && m_provider){m_operationStatus.clear();setError({});m_provider->requestPage(direction);}
 }
 
 QVariantList AppCatalog::allEntries() const
@@ -341,13 +367,28 @@ bool AppCatalog::load(const QString &catalogPath, const QString &statePath, cons
     m_packageStates.clear();
     m_failureReasons.clear();
     m_customPackages.clear();
+    m_updatesDisabled.clear();m_availableUpdates.clear();m_storeTransaction.clear();
     QDir installDirectory(m_installRoot);
     for (const auto &name : installDirectory.entryList({QStringLiteral(".staging-*")}, QDir::Dirs | QDir::NoDotAndDotDot))
         QDir(installDirectory.filePath(name)).removeRecursively();
 
     QFile state(stateReadPath);
     if (state.exists() && state.open(QIODevice::ReadOnly)) {
+        if(state.size()>1024*1024){setError(tr("App activation state exceeds its limit."));return false;}
         const auto stateObject = QJsonDocument::fromJson(state.readAll()).object();
+        if(stateReadPath==m_statePath){
+            const auto disabled=stateObject.value("updatesDisabled");
+            if(!disabled.isUndefined() && (!disabled.isArray() || disabled.toArray().size()>256)){setError(tr("Invalid update preferences."));return false;}
+            for(const auto &value:disabled.toArray()){
+                const auto id=value.toString();
+                if(!QRegularExpression("^fdroid-[a-f0-9]{24}$").match(id).hasMatch()){setError(tr("Invalid update preference identity."));return false;}
+                m_updatesDisabled.insert(id);
+            }
+            const auto transaction=stateObject.value("storeTransaction");
+            if(!transaction.isUndefined() && !transaction.isString()){setError(tr("Invalid app transaction identity."));return false;}
+            m_storeTransaction=transaction.toString();
+            if(!m_storeTransaction.isEmpty() && !QRegularExpression("^[a-f0-9]{32}$").match(m_storeTransaction).hasMatch()){setError(tr("Invalid app transaction identity."));return false;}
+        }
         if(stateReadPath==m_statePath){
             const auto custom=stateObject.value("customPackages").toObject();
             if(custom.size()>256){setError(tr("Too many custom apps in this profile."));return false;}
@@ -448,6 +489,7 @@ bool AppCatalog::customEntry(const QJsonObject &data,Entry *entry)
         const auto package=data.value("packageName").toString(),name=data.value("name").toString().trimmed();
         const auto id="fdroid-"+QString::fromLatin1(QCryptographicHash::hash(package.toUtf8(),QCryptographicHash::Sha256).toHex().left(24));
         if(data.value("schemaVersion").toInt()!=1 || data.value("id")!=id
+           || package.size()>200
            || !QRegularExpression("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$").match(package).hasMatch()
            || !QRegularExpression("^[0-9]{1,18}$").match(data.value("version").toString()).hasMatch()
            || !QRegularExpression("^[a-f0-9]{64}$").match(data.value("sha256").toString()).hasMatch()
@@ -529,7 +571,14 @@ bool AppCatalog::downloadAndInstall(const QString &storeId)
         return false;
     }
     const auto result = (*it).toMap();
-    const QUrl artifactUrl = m_provider->artifactUrl(storeId);
+    return beginDownload(result,false);
+}
+
+bool AppCatalog::beginDownload(const QVariantMap &result, bool update)
+{
+    if(!m_onlineStoreSearch || !m_provider || busy()){setError(tr("Enable online Store access and finish the current operation first."));return false;}
+    const auto storeId=result.value("storeId").toString();
+    const QUrl artifactUrl = update?QUrl(result.value("downloadUrl").toString()):m_provider->artifactUrl(storeId);
     if (!artifactUrl.isValid() || artifactUrl.scheme()!="https" || artifactUrl.host().isEmpty() || !artifactUrl.userInfo().isEmpty()) {
         setError(tr("Store provides no download URL."));
         emit operationFailed(m_errorString);
@@ -537,13 +586,16 @@ bool AppCatalog::downloadAndInstall(const QString &storeId)
     }
     m_downloadProfile=qApp->property("isoldeProfile").toString();
     m_downloadStoreId = storeId;
-    m_downloadExpectedHash = m_provider->artifactHash(storeId);
+    m_downloadExpectedHash = update?QByteArray::fromHex(result.value("sha256").toByteArray()):m_provider->artifactHash(storeId);
     if(m_downloadExpectedHash.size()!=32){setError(tr("The Store source did not supply a verified SHA-256."));return false;}
     if(m_provider->providerId()!="fdroid" || result.value("type")!="android"
        || !result.value("metadataVerified").toBool() || !result.value("compatible").toBool()) {
         setError(tr("Verified repository metadata and a compatible Android package are required."));return false;
     }
     m_downloadResult = result;
+    m_operationName=result.value("name").toString();
+    m_cancelRequested=false;m_cancellable=true;m_activationCommitted=false;
+    m_operationStatus=update?tr("Downloading update..."):tr("Downloading app...");
     QNetworkRequest request(artifactUrl);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setRawHeader("User-Agent", QByteArray("Isolde/")+QCoreApplication::applicationVersion().toUtf8());
@@ -570,20 +622,40 @@ bool AppCatalog::stageProviderArtifact(const QString &storeId, const QVariantMap
         {"packageName",package},{"version",result.value("versionCode").toString()},
         {"sha256",QString::fromLatin1(m_downloadExpectedHash.toHex())},{"provenance",result.value("provenance").toString()}};
     Entry entry;if(!customEntry(manifest,&entry))return false;
-    if(findEntry(id) || m_customPackages.size()>=256){setError(tr("App already registered or profile app limit reached."));return false;}
+    const auto *previous=findEntry(id);
+    const bool updating=previous && isInstalled(id);
+    if((previous && !updating) || (!updating && m_customPackages.size()>=256)
+       || (updating && entry.version.toULongLong()<=previous->version.toULongLong())){
+        setError(tr("App already registered, update is not newer, or profile app limit reached."));return false;
+    }
     const auto directory=QDir(m_installRoot).filePath(id+"/"+entry.version);
     const auto staging=QDir(m_installRoot).filePath(".staging-"+id);
     QDir().mkpath(m_installRoot);
     if(QFileInfo(m_installRoot).canonicalFilePath()!=QDir::cleanPath(QFileInfo(m_installRoot).absoluteFilePath())
-       || QFileInfo(QDir(m_installRoot).filePath(id)).isSymLink() || QFileInfo(directory).exists() || QFileInfo(staging).exists()
-       || !QDir().mkpath(staging)){setError(tr("Unable to stage Android package in profile storage."));return false;}
-    const auto write=[&](const QString &name,const QByteArray &bytes){QSaveFile file(QDir(staging).filePath(name));
-        return file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size() && file.commit();};
-    if(!write("app.apk",m_downloadData) || !write("manifest.json",entry.manifestData)
-       || !QDir().mkpath(QFileInfo(directory).absolutePath()) || !QDir().rename(staging,directory)){
-        QDir(staging).removeRecursively();setError(tr("Unable to save verified Android package."));return false;}
-    m_entries.append(entry);
-    if(!androidOperation(entry,"install")){m_entries.removeLast();QDir(directory).removeRecursively();return false;}
+       || QFileInfo(QDir(m_installRoot).filePath(id)).isSymLink() || QFileInfo(directory).isSymLink()){
+        setError(tr("Android package storage is redirected."));return false;
+    }
+    if(QFileInfo(directory).exists()){
+        QFile manifestFile(directory+"/manifest.json"),apkFile(directory+"/app.apk");
+        if(QFileInfo(manifestFile).isSymLink() || QFileInfo(apkFile).isSymLink()
+           || QFileInfo(manifestFile).size()>65536 || QFileInfo(apkFile).size()>128*1024*1024
+           || !manifestFile.open(QIODevice::ReadOnly) || manifestFile.readAll()!=entry.manifestData
+           || !apkFile.open(QIODevice::ReadOnly)
+           || QCryptographicHash::hash(apkFile.readAll(),QCryptographicHash::Sha256)!=m_downloadExpectedHash){
+            setError(tr("Existing staged package differs from this verified update. Preserve it and retry recovery."));return false;
+        }
+    }else{
+        if(QFileInfo(staging).exists() || !QDir().mkpath(staging)){setError(tr("Unable to stage Android package in profile storage."));return false;}
+        const auto write=[&](const QString &name,const QByteArray &bytes){QSaveFile file(QDir(staging).filePath(name));
+            return file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size() && file.commit();};
+        if(!write("app.apk",m_downloadData) || !write("manifest.json",entry.manifestData)
+           || !QDir().mkpath(QFileInfo(directory).absolutePath()) || !QDir().rename(staging,directory)){
+            QDir(staging).removeRecursively();setError(tr("Unable to save verified Android package."));return false;
+        }
+    }
+    if(updating)m_pendingUpdate=entry;
+    else m_entries.append(entry);
+    if(!androidOperation(entry,"install")){if(updating)m_pendingUpdate.reset();else m_entries.removeLast();QDir(directory).removeRecursively();return false;}
     return true;
 }
 
@@ -591,7 +663,7 @@ void AppCatalog::onDownloadFinished()
 {
     if(!m_downloadReply)return;
     if (m_downloadReply->error() != QNetworkReply::NoError) {
-        const QString error = tr("Download failed: %1").arg(m_downloadReply->errorString());
+        const QString error = m_cancelRequested?tr("Download cancelled. No app was changed."):tr("Download failed: %1").arg(m_downloadReply->errorString());
         qWarning() << "Download error" << m_downloadReply->error() << error;
         setError(error);
         emit operationFailed(error);
@@ -664,6 +736,7 @@ bool AppCatalog::uninstall(const QString &id)
     }
     QDir(QDir(m_installRoot).filePath(entry->packageId)).removeRecursively();
     if(entry->custom){
+        m_availableUpdates.remove(id);
         m_customPackages.remove(id);
         for(qsizetype i=0;i<m_entries.size();++i)if(m_entries[i].app.id==id){m_entries.removeAt(i);break;}
     }
@@ -680,40 +753,33 @@ bool AppCatalog::androidOperation(const Entry &entry, const QString &operation)
         if(QFileInfo(path).isFile()){helper=path;break;}
     if(helper.isEmpty()){setError(tr("Android support is missing. Run the Isolde installer with Android support."));return false;}
     auto profile=qApp->property("isoldeProfile").toString();if(profile.isEmpty())profile="default";
+    m_operationProfile=profile;
+    m_operationName=entry.app.name;
     m_operationId=entry.app.id;m_operation=operation;m_operationEvents.clear();setError({});
+    m_cancelRequested=false;m_cancellable=true;m_activationCommitted=false;
+    m_operationStatus=tr("Preparing safe Android transaction...");
     m_androidProcess.disconnect(this);
     connect(&m_androidProcess,&QProcess::readyReadStandardOutput,this,[this]{
-        m_operationEvents=(m_operationEvents+m_androidProcess.readAllStandardOutput()).right(65536);
+        m_operationEvents+=m_androidProcess.readAllStandardOutput();
+        if(m_operationEvents.size()>65536){cancelOperation();setError(tr("Invalid Android status output."));return;}
+        while(m_operationEvents.contains('\n')){
+            const auto end=m_operationEvents.indexOf('\n');
+            const auto event=QJsonDocument::fromJson(m_operationEvents.left(end)).object();
+            m_operationEvents.remove(0,end+1);androidEvent(event);
+        }
     });
     connect(&m_androidProcess,&QProcess::readyReadStandardError,this,[this]{m_androidProcess.readAllStandardError();});
     connect(&m_androidProcess,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){
-        if(error==QProcess::FailedToStart){m_operationId.clear();setError(tr("Android could not start. Check installer setup and retry."));emit entriesChanged();}
+        if(error==QProcess::FailedToStart){m_pendingUpdate.reset();m_operationId.clear();setError(tr("Android could not start. Use Android setup and retry."));emit entriesChanged();}
     });
-    connect(&m_androidProcess,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this,profile](int code,QProcess::ExitStatus status){
-        const auto id=m_operationId,operation=m_operation;
-        bool verified=false;QString message;
-        for(const auto &line:m_operationEvents.split('\n')){const auto event=QJsonDocument::fromJson(line).object();
-            if(event.value("event")=="completed" && event.value("operation")==operation
-                && event.value(operation=="install"?"packagePresent":"packageAbsent").toBool())verified=true;
-            if(event.value("event")=="error")message=event.value("message").toString().left(512);
-        }
-        auto active=qApp->property("isoldeProfile").toString();if(active.isEmpty())active="default";
-        if(active!=profile){m_operationId.clear();setError(tr("The active profile changed; app activation was not saved."));emit entriesChanged();return;}
-        if(!code && status==QProcess::NormalExit && verified){
-            m_committing=true;
-            const bool committed=operation=="install"?install(id):(!isInstalled(id) || uninstall(id));
-            m_committing=false;
-            if(!committed && operation=="install") {
-                // Undo the runtime install when activation could not be saved.
-                const auto *entry=findEntry(id);
-                if(entry && entry->custom){const Entry rollback=*entry;m_operationId.clear();androidOperation(rollback,"uninstall");return;}
-            }
-        }
-        else setError(message.isEmpty()?tr("Android could not finish. Your app list is unchanged; retry the operation."):message);
-        m_operationId.clear();emit entriesChanged();
+    connect(&m_androidProcess,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus status){
+        if(!m_operationEvents.isEmpty()){androidEvent(QJsonDocument::fromJson(m_operationEvents).object());m_operationEvents.clear();}
+        if(!m_activationCommitted && m_errorString.isEmpty())setError(m_cancelRequested?tr("Cancelled. No activation change was saved."):tr("Android did not commit this operation. Retry; profile data is preserved."));
+        if(m_activationCommitted && (code || status!=QProcess::NormalExit))setError(tr("App activation was saved; Android cleanup needs recovery before the next operation."));
+        m_pendingUpdate.reset();m_operationId.clear();m_operationStatus.clear();emit entriesChanged();
     });
     m_androidProcess.setProgram("/usr/bin/python3");
-    QStringList arguments{helper,"--profile",profile,"--app",entry.app.launchConfiguration.value("runtimeApp").toString(),"--operation",operation};
+    QStringList arguments{helper,"--profile",profile,"--app",entry.app.launchConfiguration.value("runtimeApp").toString(),"--operation",operation,"--transaction"};
     if(entry.custom && entry.app.type=="android")arguments << "--store-version" << entry.version;
     m_androidProcess.setArguments(arguments);
     m_androidProcess.start();emit entriesChanged();return true;
@@ -764,10 +830,13 @@ bool AppCatalog::saveState()
         if (!reason.isEmpty())
             failureReasons.insert(id, reason);
     }
+    QJsonArray disabled;
+    auto disabledIds=m_updatesDisabled.values();std::sort(disabledIds.begin(),disabledIds.end());
+    for(const auto &id:disabledIds)disabled.append(id);
     QSaveFile file(m_statePath);
     const auto data = QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"installed", installed},
                                                 {"packageStates", packageStates},
-                                                {"failureReasons", failureReasons},{"customPackages",customPackages}}).toJson();
+                                                {"failureReasons", failureReasons},{"customPackages",customPackages},{"updatesDisabled",disabled},{"storeTransaction",m_storeTransaction}}).toJson();
     if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
         setError(tr("Unable to save app installation state."));
         emit operationFailed(m_errorString);

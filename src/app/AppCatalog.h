@@ -12,6 +12,7 @@
 #include <QNetworkReply>
 #include <QPointer>
 #include <QJsonObject>
+#include <optional>
 
 class AppCatalog final : public QObject {
     Q_OBJECT
@@ -28,6 +29,9 @@ class AppCatalog final : public QObject {
     Q_PROPERTY(QString storeStatus READ storeStatus NOTIFY entriesChanged)
     Q_PROPERTY(bool hasNextStorePage READ hasNextStorePage NOTIFY entriesChanged)
     Q_PROPERTY(bool hasPreviousStorePage READ hasPreviousStorePage NOTIFY entriesChanged)
+    Q_PROPERTY(bool canCancelOperation READ canCancelOperation NOTIFY entriesChanged)
+    Q_PROPERTY(QString operationStatus READ operationStatus NOTIFY entriesChanged)
+    Q_PROPERTY(QString operationName READ operationName NOTIFY entriesChanged)
 
 public:
     explicit AppCatalog(AppRegistry *registry, QObject *parent = nullptr);
@@ -44,6 +48,14 @@ public:
     Q_INVOKABLE void setOnlineStoreSearch(bool enabled);
     Q_INVOKABLE void searchStore(const QString &query);
     Q_INVOKABLE void changeStorePage(int direction);
+    Q_INVOKABLE bool checkForUpdates();
+    Q_INVOKABLE bool setUpdatesEnabled(const QString &id, bool enabled);
+    Q_INVOKABLE bool updateApp(const QString &id);
+    Q_INVOKABLE void cancelOperation();
+    Q_INVOKABLE bool setupAndroid(bool softwareRendering = false);
+    bool canCancelOperation() const { return busy() && m_cancellable && !m_cancelRequested; }
+    QString operationStatus() const { return m_operationStatus; }
+    QString operationName() const { return m_operationName; }
     QString storeStatus() const { return m_onlineStoreSearch && m_provider ? m_provider->status() : QString(); }
     bool hasNextStorePage() const { return m_onlineStoreSearch && m_provider && m_provider->hasNextPage(); }
     bool hasPreviousStorePage() const { return m_onlineStoreSearch && m_provider && m_provider->hasPreviousPage(); }
@@ -98,6 +110,9 @@ private:
     void onDownloadError(QNetworkReply::NetworkError code);
     bool customEntry(const QJsonObject &data,Entry *entry);
     bool installCustom(const QJsonObject &data);
+    bool beginDownload(const QVariantMap &result, bool update);
+    bool commitUpdate(const Entry &entry);
+    void androidEvent(const QJsonObject &event);
 
     AppRegistry *m_registry;
     QVector<Entry> m_entries;
@@ -127,4 +142,14 @@ private:
     QByteArray m_downloadExpectedHash;
     QVariantMap m_downloadResult;
     QHash<QString,QString> m_customPackages;
+    QSet<QString> m_updatesDisabled;
+    QHash<QString,QVariantMap> m_availableUpdates;
+    std::optional<Entry> m_pendingUpdate;
+    QString m_storeTransaction;
+    QString m_operationStatus;
+    QString m_operationName;
+    QString m_operationProfile;
+    bool m_cancelRequested = false;
+    bool m_cancellable = true;
+    bool m_activationCommitted = false;
 };

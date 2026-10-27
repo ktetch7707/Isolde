@@ -249,12 +249,16 @@ def compatible(package, target):
             and set(package.get("features", [])) <= set(target["features"]))
 
 
-def browse(document, query, page, target):
+def browse(document, query, page, target, packages=None):
     if len(query) > 128 or page < 0 or page > 400:
         raise ValueError("Invalid F-Droid search or page")
     results = []
+    if packages is not None and (len(packages)>256 or any(not PACKAGE.fullmatch(p) for p in packages)):
+        raise ValueError("Invalid update subscription list")
     for app in document["apps"]:
         identity = app.get("packageName", "")
+        if packages is not None and identity not in packages:
+            continue
         if not PACKAGE.fullmatch(identity) or len(identity) > 200 or app.get("disabled"):
             continue
         localized = app.get("localized", {}).get("en-US", {})
@@ -299,9 +303,10 @@ def browse(document, query, page, target):
             "compatible": usable, "compatibilityReason": reason,
             "consentText": plain("; ".join(str(p) for p in package.get("uses-permission", [])), 2000)})
     results.sort(key=lambda r: (r["name"].casefold(), r["id"]))
-    start = page*PAGE_SIZE
-    return {"results": results[start:start+PAGE_SIZE], "page": page,
-            "hasPrevious": page > 0, "hasNext": start+PAGE_SIZE < len(results), "total": len(results)}
+    size = 256 if packages is not None else PAGE_SIZE
+    start = page*size
+    return {"results": results[start:start+size], "page": page,
+            "hasPrevious": page > 0, "hasNext": start+size < len(results), "total": len(results)}
 
 
 def main():
@@ -309,7 +314,13 @@ def main():
     parser.add_argument("--query", default="")
     parser.add_argument("--page", type=int, default=0)
     parser.add_argument("--cache", type=Path, required=True)
+    parser.add_argument("--packages", default=None)
     args = parser.parse_args()
+    packages = args.packages.split(',') if args.packages is not None else None
+    if len(args.query)>128 or not 0<=args.page<=400:
+        raise ValueError("Invalid F-Droid search or page")
+    if packages is not None and (len(packages)>256 or any(len(p)>200 or not PACKAGE.fullmatch(p) for p in packages)):
+        raise ValueError("Invalid update subscription list")
     cache = args.cache.absolute()
     if cache.resolve() != cache:
         raise ValueError("F-Droid profile cache is redirected")
@@ -345,7 +356,9 @@ def main():
             os.replace(temporary, destination)
         finally:
             Path(temporary).unlink(missing_ok=True)
-    print(json.dumps(browse(document, args.query, args.page, runtime_target()), ensure_ascii=True))
+    output=json.dumps(browse(document, args.query, args.page, runtime_target(), packages), ensure_ascii=True)
+    if len(output)>4*1024**2: raise ValueError("F-Droid results exceed their output limit")
+    print(output)
 
 
 if __name__ == "__main__":

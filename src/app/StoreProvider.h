@@ -5,6 +5,7 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QByteArray>
+#include <QStringList>
 
 class StoreProvider : public QObject {
     Q_OBJECT
@@ -27,6 +28,8 @@ public:
     virtual void requestSearch(const QString &query) { m_results=search(query); emit resultsChanged(); }
     virtual void cancel() {}
     virtual void requestPage(int) {}
+    virtual void requestUpdates(const QStringList &) {}
+    [[nodiscard]] virtual QVariantList updateResults() const { return {}; }
     [[nodiscard]] virtual QString status() const { return {}; }
     [[nodiscard]] virtual bool hasNextPage() const { return false; }
     [[nodiscard]] virtual bool hasPreviousPage() const { return false; }
@@ -37,6 +40,7 @@ public:
     [[nodiscard]] virtual QString provenanceText(const QString &storeId) const = 0;
 
 signals:
+    void updatesChanged();
     void resultsChanged();
     void providerError(const QString &message);
 protected:

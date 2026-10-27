@@ -50,7 +50,16 @@ void FdroidProvider::requestPage(int direction)
     if ((direction == 1 && m_next) || (direction == -1 && m_previous)) start(m_page + direction);
 }
 
-void FdroidProvider::start(int page)
+void FdroidProvider::requestUpdates(const QStringList &packages)
+{
+    if(packages.isEmpty() || packages.size()>256) return;
+    for(const auto &package:packages)
+        if(!QRegularExpression("^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+$").match(package).hasMatch())return;
+    m_updateQuery=packages;
+    start(0, true);
+}
+
+void FdroidProvider::start(int page, bool updates)
 {
     cancel();
     if (qApp->property("isoldeProfile").toString() != m_profile) {
@@ -77,7 +86,7 @@ void FdroidProvider::start(int page)
     auto output = std::make_shared<QByteArray>();
     connect(process, &QProcess::readyReadStandardOutput, this, [process, output] {
         *output += process->readAllStandardOutput();
-        if (output->size() > 1024*1024) process->kill();
+        if (output->size() > 4*1024*1024) process->kill();
     });
     connect(process, &QProcess::readyReadStandardError, this, [process] { process->readAllStandardError(); });
     connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
@@ -87,17 +96,22 @@ void FdroidProvider::start(int page)
         emit resultsChanged();
     });
     connect(process, qOverload<int,QProcess::ExitStatus>(&QProcess::finished), this,
-        [this, process, output, page](int code, QProcess::ExitStatus exit) {
+        [this, process, output, page, updates](int code, QProcess::ExitStatus exit) {
         if (m_process != process) return;
         m_process = nullptr; m_status.clear();
         *output += process->readAllStandardOutput();
         process->deleteLater();
         if (qApp->property("isoldeProfile").toString() != m_profile) return;
-        const auto document = output->size() <= 1024*1024 ? QJsonDocument::fromJson(*output).object() : QJsonObject{};
+        const auto document = output->size() <= 4*1024*1024 ? QJsonDocument::fromJson(*output).object() : QJsonObject{};
         const auto rows = document.value("results").toArray();
-        if (code || exit != QProcess::NormalExit || !document.value("results").isArray() || rows.size() > 50) {
+        if (code || exit != QProcess::NormalExit || !document.value("results").isArray() || rows.size() > (updates?256:50)) {
             emit providerError(document.value("error").toString(tr("F-Droid could not load or verify the repository. Search again to retry.")));
             emit resultsChanged(); return;
+        }
+        if(updates){
+            m_updates=document.value("results").toVariant().toList();
+            m_status=tr("Update check complete. Select an installed app to review its update.");
+            emit updatesChanged();emit resultsChanged();return;
         }
         m_page = page;
         m_results = document.value("results").toVariant().toList();
@@ -111,7 +125,9 @@ void FdroidProvider::start(int page)
     connect(timer, &QTimer::timeout, process, &QProcess::kill);
     timer->start(150000);
     process->setProgram(python);
-    process->setArguments({helper, "--cache", cache, "--query", m_query, "--page", QString::number(page)});
+    QStringList arguments{helper,"--cache",cache,"--query",updates?QString():m_query,"--page",QString::number(page)};
+    if(updates)arguments << "--packages" << m_updateQuery.join(',');
+    process->setArguments(arguments);
     process->start();
 }
 

@@ -12,6 +12,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import importlib.util
+import select
 
 stopping = False
 
@@ -114,13 +116,110 @@ def store_package(app_id, version, profile, data_home):
     return app, apk
 
 
+def package_tool(arguments):
+    with tempfile.TemporaryFile() as output:
+        try:
+            child=subprocess.Popen(arguments,stdout=output,stderr=subprocess.STDOUT)
+        except OSError as error:
+            raise RuntimeError("Android verification tools are missing. Use Store actions > Set up / repair Android.") from error
+        deadline=time.monotonic()+30
+        try:
+            while child.poll() is None:
+                check_stop()
+                if time.monotonic()>deadline or output.tell()>1024**2:
+                    raise RuntimeError("Android signature/metadata verification exceeded its time or output limit")
+                time.sleep(.1)
+            output.seek(0);data=output.read(1024**2+1)
+            if child.returncode or len(data)>1024**2:
+                raise RuntimeError("Android package signature or metadata verification failed")
+            return data
+        finally:
+            if child.poll() is None:
+                child.terminate()
+                try: child.wait(timeout=3)
+                except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
+
+
+def validate_store_apk(apk, app, version):
+    package_tool(["/usr/bin/apksigner", "verify", str(apk)])
+    metadata=package_tool(["/usr/bin/aapt", "dump", "badging", str(apk)])
+    identity = re.search(rb"^package: name='([^']+)' versionCode='([^']+)'", metadata, re.MULTILINE)
+    if not identity or identity.groups() != (app["packageName"].encode(), version.encode()):
+        raise ValueError("Downloaded Android package identity or version does not match the verified index")
+
+
+def installed_artifact(data, expected, package=None):
+    """A package name alone does not prove that an asynchronous update finished."""
+    parent = data/"app"
+    if parent.resolve()!=parent or not parent.is_dir(): return False
+    count = 0
+    candidates = []
+    for directory in parent.iterdir():
+        if directory.is_symlink() or not directory.is_dir(): continue
+        count += 1
+        if count>4096: raise RuntimeError("Android package directory exceeds its limit")
+        if package is None or directory.name.startswith(package+"-"): candidates.append(directory/"base.apk")
+        for child in directory.iterdir():
+            count += 1
+            if count>4096: raise RuntimeError("Android package directory exceeds its limit")
+            if not child.is_symlink() and child.is_dir() and (package is None or child.name.startswith(package+"-")): candidates.append(child/"base.apk")
+    for path in candidates:
+        try:
+            if path.is_symlink() or not path.is_file() or not 0<path.stat().st_size<=128*1024**2: continue
+            digest=hashlib.sha256()
+            with path.open("rb") as stream:
+                for block in iter(lambda:stream.read(65536),b""): digest.update(block)
+            if digest.hexdigest()==expected: return True
+        except PermissionError:
+            continue
+    return False
+
+
+def administrator_transaction(action, root, activation, profile):
+    """Back up Android-owned files without granting root to a user-writable script."""
+    helper=Path("/usr/lib/isolde-android-setup/android-setup.py")
+    for path in (helper,*helper.parents):
+        if not path.exists() or path.is_symlink() or path.stat().st_uid!=0 or path.stat().st_mode & 0o022:
+            raise RuntimeError("Open Store actions > Set up / repair Android to enable safe app transactions")
+    activation.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if activation.parent.resolve()!=activation.parent: raise ValueError("App activation storage is redirected")
+    activation.parent.chmod(0o700)
+    marker=root/".store-cancel"
+    if action=="prepare": marker.unlink(missing_ok=True)
+    emit("status",message="Administrator approval may be needed for protected Android data backup or recovery.")
+    with tempfile.TemporaryFile() as output:
+        child=subprocess.Popen(["/usr/bin/pkexec",str(helper),"--transaction-action",action,
+            "--profile",profile,"--profile-root",str(root),"--activation",str(activation)],
+            stdout=output,stderr=subprocess.STDOUT,stdin=subprocess.DEVNULL)
+        deadline=time.monotonic()+300
+        while child.poll() is None:
+            if stopping and action=="prepare": marker.touch()
+            if time.monotonic()>deadline or output.tell()>65536:
+                marker.touch()
+                raise RuntimeError("Android backup or recovery did not finish. Preserve profile storage and retry recovery.")
+            time.sleep(.1)
+        output.seek(0);raw=output.read(65537)
+        result=None
+        for line in raw.splitlines():
+            try: event=json.loads(line)
+            except ValueError: continue
+            if event.get("event")=="transaction": result=event
+            elif event.get("event")=="error": raise RuntimeError(event.get("message","Android backup failed"))
+        if child.returncode or result is None:
+            raise RuntimeError("Android backup/recovery approval was cancelled or failed. Retry the operation; app data is preserved.")
+        return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
     parser.add_argument("--app", required=True)
     parser.add_argument("--operation", choices=("launch", "install", "uninstall"), default="launch")
     parser.add_argument("--store-version")
+    parser.add_argument("--transaction", action="store_true")
     args = parser.parse_args()
+    if args.transaction and args.operation=="launch":
+        raise ValueError("Store transactions are only valid for install or removal")
     if sys.platform != "linux" or os.getuid() == 0:
         raise RuntimeError("Android apps require the Linux desktop session, without administrator privileges.")
     config_path = Path(__file__).with_name("config")/"android-runtime.json"
@@ -133,6 +232,7 @@ def main():
         raise RuntimeError("Invalid Android runtime configuration.")
     if args.store_version:
         app, apk = store_package(args.app, args.store_version, args.profile, data_home)
+        validate_store_apk(apk, app, args.store_version)
         package = app["packageName"]
     else:
         if args.app not in config.get("apps", {}):
@@ -164,6 +264,12 @@ def main():
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config")))
     data_home = Path(os.environ.get("XDG_DATA_HOME", str(Path.home()/".local/share")))
     root = profile_root(args.profile, config_home, data_home)
+    activation = config_home/"Isolde/profiles"/args.profile/"installed-apps.json"
+    transaction_spec = importlib.util.spec_from_file_location("android_transaction", Path(__file__).with_name("android-store-transaction.py"))
+    transaction = importlib.util.module_from_spec(transaction_spec); transaction_spec.loader.exec_module(transaction)
+    transaction.recover(root, activation)  # Recover compatibility snapshots from earlier releases.
+    if (root/".store-recovery").exists(): administrator_transaction("recover",root,activation,args.profile)
+    token = administrator_transaction("prepare",root,activation,args.profile).get("token") if args.transaction else None
     package_receipt = root/"packages.json"
     if package_receipt.is_symlink() or (package_receipt.exists() and package_receipt.stat().st_size > 65536):
         raise RuntimeError("Invalid Android profile package receipt.")
@@ -207,7 +313,7 @@ def main():
                     if time.monotonic()>deadline: raise RuntimeError("Android did not finish removing the app. Retry removal.")
                     time.sleep(1)
             packages.pop(args.app, None); save_packages(package_receipt, packages)
-            emit("completed", operation="uninstall", packageAbsent=True)
+            emit("verified", operation="uninstall", packageAbsent=True)
             return
         if "packageName: "+package not in apps.splitlines() or packages.get(args.app) != app["sha256"]:
             emit("installing")
@@ -217,20 +323,21 @@ def main():
             deadline = time.monotonic()+60
             while True:
                 verify()
-                if "packageName: "+package in command(env, "app", "list", timeout=15).splitlines(): break
+                if ("packageName: "+package in command(env, "app", "list", timeout=15).splitlines()
+                        and (not args.store_version or installed_artifact(data, app["sha256"], package))): break
                 if time.monotonic() > deadline: raise RuntimeError("Android did not finish installing the app. Return Home and retry.")
                 time.sleep(1)
             packages[args.app] = app["sha256"]
             save_packages(package_receipt, packages)
         if args.operation == "install":
-            emit("completed", operation="install", packagePresent=True)
+            emit("verified", operation="install", packagePresent=True)
             return
         verify(); command(env, "app", "launch", package)
         emit("ready")
         while True:
             verify(); time.sleep(.5)
     except Stopped:
-        pass
+        emit("cancelled", operation=args.operation)
     finally:
         if child is not None and child.poll() is None:
             child.send_signal(signal.SIGTERM if owned(session(), child.pid, data) else signal.SIGUSR1)
@@ -238,6 +345,23 @@ def main():
             except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
         if child is not None and owned(session(), child.pid, data):
             raise RuntimeError("Android did not release this profile's session. Retry after closing Android.")
+        if token:
+            if not stopping and sys.exc_info()[0] is None:
+                emit("prepared", operation=args.operation, token=token,
+                     packagePresent=args.operation=="install", packageAbsent=args.operation=="uninstall")
+                deadline = time.monotonic()+30
+                while not stopping and time.monotonic()<deadline:
+                    if select.select([sys.stdin], [], [], .1)[0]:
+                        sys.stdin.readline()  # Activation token on disk decides commit vs rollback.
+                        break
+            committed = administrator_transaction("recover",root,activation,args.profile).get("committed",False)
+            if not committed:
+                emit("cancelled", operation=args.operation, rolledBack=True)
+        else:
+            committed = True
+        if committed and not stopping and sys.exc_info()[0] is None:
+            emit("completed", operation=args.operation,
+                 packagePresent=args.operation=="install", packageAbsent=args.operation=="uninstall")
 
 
 if __name__ == "__main__":
@@ -247,6 +371,8 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     try: main()
+    except Stopped:
+        emit("cancelled")
     except Exception as error:
         emit("error", message=str(error) if isinstance(error, (RuntimeError, ValueError)) else "Android setup could not be read. Run the Isolde installer with Android support and retry.")
         sys.exit(1)

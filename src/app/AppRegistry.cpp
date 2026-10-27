@@ -160,6 +160,17 @@ bool AppRegistry::addApp(const AppDefinition &app)
     return true;
 }
 
+bool AppRegistry::replaceApp(const AppDefinition &app)
+{
+    if(!app.isValid() || !validIconName(app))return false;
+    for(auto &existing:m_apps)if(existing.id==app.id){
+        if(existing.type!=app.type || existing.legacyIds()!=app.legacyIds())return false;
+        auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,true);
+        existing=resolved;emit appsChanged();return true;
+    }
+    return false;
+}
+
 bool AppRegistry::removeApp(const QString &id)
 {
     for (qsizetype i = 0; i < m_apps.size(); ++i) {

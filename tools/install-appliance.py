@@ -20,7 +20,7 @@ DEPENDENCIES = [
     "qml6-module-qtquick", "qml6-module-qtquick-window", "qml6-module-qtquick-controls",
     "qml6-module-qtquick-layouts", "qml6-module-qtquick-templates", "qml6-module-qtqml-workerscript",
     "qml6-module-qtwebengine", "qml6-module-qtwebchannel", "qml6-module-qtquick-dialogs", "qml6-module-qtmultimedia",
-    "bubblewrap", "dbus-daemon", "libglib2.0-bin", "python3",
+    "bubblewrap", "dbus-daemon", "libglib2.0-bin", "python3", "pkexec",
     "network-manager", "pulseaudio-utils", "wireplumber", "pipewire-pulse", "wmctrl",
     "kodi", "gstreamer1.0-tools", "gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good",
     "gstreamer1.0-plugins-bad", "gstreamer1.0-libav", "gstreamer1.0-gl",
