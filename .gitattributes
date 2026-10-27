@@ -1,0 +1,4 @@
+# These scripts execute directly in the Linux appliance/VM. CRLF corrupts
+# their shebang interpreter paths when checked out on Windows.
+*.py text eol=lf
+*.sh text eol=lf
