@@ -33,6 +33,7 @@ private slots:
     void remoteCreatePreviewSaveAndFutureSelection();
     void remoteAdvancedScheduleDraftCancelWritesNothing();
     void compactPvrProgressAndAccessiblePressUseTheSameActions();
+    void remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision();
     void nestedRuleEditorDoesNotDiscardChildren();
     void remoteReorderPreviewCancelAndApply();
     void backgroundRefreshQueuesConfirmedEditsWithoutPrematureIdle();
@@ -77,7 +78,11 @@ void GuideUiTests::asyncPreviewCreateCancelAndProfileTeardown() {
         QVERIFY(controller.createLocal(definition));QTRY_VERIFY(!controller.busy());QCOMPARE(controller.channels().size(),1);
         const auto before=server.property("requests").toInt();controller.refresh();QTRY_VERIFY(!controller.busy());QCOMPARE(server.property("requests").toInt(),before);
         QVERIFY(!controller.compactRows().isEmpty());QVERIFY(!controller.rows().isEmpty());
-        controller.invalidate();QVERIFY(!controller.ready());QVERIFY(!controller.previewLocal(definition,"episode"));
+        QVERIFY(controller.previewLocal(definition,"mixed"));QTRY_VERIFY(!controller.busy());QVERIFY(controller.previewReady());
+        const auto savedId=definition.value("id").toString();const auto savedSlot=controller.rows().first().toMap().value("programs").toList().first().toMap().value("id").toString();
+        QVERIFY(controller.previewRepair(savedId,savedSlot,1));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.repairReview().isEmpty());
+        QVERIFY(controller.previewRegeneration(savedId));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.regenerationReview().isEmpty());
+        controller.invalidate();QVERIFY(!controller.ready());QVERIFY(!controller.previewReady());QVERIFY(controller.previewDefinition().isEmpty());QVERIFY(controller.repairReview().isEmpty());QVERIFY(controller.regenerationReview().isEmpty());QVERIFY(!controller.previewLocal(definition,"episode"));
     }
     GuideStore reopened(path);QVERIFY(reopened.ready());QCOMPARE(reopened.channels().size(),1);
     GuideController other(dir.filePath("b/guide.sqlite"),"b",nullptr,dir.path());QTRY_VERIFY(other.ready() && !other.busy());QVERIFY(other.channels().isEmpty());
@@ -140,6 +145,23 @@ void GuideUiTests::compactPvrProgressAndAccessiblePressUseTheSameActions() {
     QQmlExpression pressChannel(QQmlEngine::contextForObject(channel),channel,"Accessible.pressAction()");pressChannel.evaluate();QVERIFY2(!pressChannel.hasError(),qPrintable(pressChannel.error().toString()));QCOMPARE(dispatch.last.value("channelId").toString(),QString("pvr-station"));
     QQmlExpression description(QQmlEngine::contextForObject(channel),channel,"Accessible.description");QVERIFY(description.evaluate().toString().contains("Kodi PVR"));
     dispatch.last.clear();widget->setProperty("readOnly",true);pressChannel.evaluate();QVERIFY(dispatch.last.isEmpty());
+}
+void GuideUiTests::remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision() {
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);
+    const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"repair-ui",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+    const auto def=controller.newDefinition();QVERIFY(controller.previewLocal(def,"episode"));QTRY_VERIFY(!controller.busy());QVERIFY(controller.createLocal(def));QTRY_VERIFY(!controller.busy());
+    const auto id=def.value("id").toString();const auto wall=QDateTime::currentSecsSinceEpoch();GuideStore reader(path);const auto before=reader.programs(id,wall,wall+86400,1000);
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("guide")),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!controller.busy());command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Menu);
+    for(int i=0;i<12;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QCOMPARE(view->property("mode").toString(),QString("repair"));
+    QCOMPARE(controller.repairReview().value("alternatives").toList().size(),50);QCOMPARE(controller.repairReview().value("total").toInt(),101);
+    command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("repairConfirm"));command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("repair"));QCOMPARE(reader.programs(id,wall,wall+86400,1000),before);
+    command(view.data(),InputManager::Back);QCOMPARE(view->property("mode").toString(),QString("context"));QCOMPARE(reader.channel(id).value("revision").toInt(),1);
+    command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());command(view.data(),InputManager::Confirm);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QCOMPARE(reader.channel(id).value("revision").toInt(),2);
+    const auto repaired=reader.programs(id,wall,wall+86400,1000);QCOMPARE(repaired.size(),before.size());for(int i=0;i<before.size();++i)for(const auto &key:QStringList{"id","startUtc","endUtc"})QCOMPARE(repaired[i].toMap().value(key),before[i].toMap().value(key));
+    command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY(!controller.repairReview().isEmpty());
+    QVERIFY(reader.setPreferences(id,{{"favorite",true}},2));command(view.data(),InputManager::Confirm);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY(controller.errorString().contains("changed"));QCOMPARE(reader.programs(id,wall,wall+86400,1000),repaired);QCOMPARE(reader.channel(id).value("revision").toInt(),3);
 }
 void GuideUiTests::nestedRuleEditorDoesNotDiscardChildren() {
     InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
@@ -259,6 +281,7 @@ void GuideUiTests::pvrPreviewMappingImportAndFailedRefreshPreserveCache() {
     const auto cached=controller.rows();server.setProperty("fail",true);QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());
     QVERIFY(!controller.sourcePreviewReady());QVERIFY(!controller.errorString().isEmpty());QCOMPARE(controller.rows(),cached);
     server.setProperty("fail",false);QVERIFY(controller.previewPvr());controller.cancel();QVERIFY(!controller.sourcePreviewReady());QCOMPARE(controller.channels().size(),2);
+    QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());QVERIFY(controller.sourcePreviewReady());controller.invalidate();QVERIFY(!controller.sourcePreviewReady());QVERIFY(controller.sourcePreview().isEmpty());
 }
 void GuideUiTests::pvrUtcParsingAndCacheIgnoreCivilDstGaps() {
     const QTimeZone losAngeles("America/Los_Angeles");QVERIFY(losAngeles.isValid());

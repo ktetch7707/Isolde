@@ -32,6 +32,7 @@ class GuideController final : public QObject {
     Q_PROPERTY(QVariantList sourcePreview READ sourcePreview NOTIFY changed)
     Q_PROPERTY(bool sourcePreviewReady READ sourcePreviewReady NOTIFY changed)
     Q_PROPERTY(QVariantMap regenerationReview READ regenerationReview NOTIFY changed)
+    Q_PROPERTY(QVariantMap repairReview READ repairReview NOTIFY changed)
 public:
     GuideController(const QString &databasePath,const QString &profile,QObject *parent=nullptr,const QString &bridgeDirectory={});
     ~GuideController() override;
@@ -52,11 +53,14 @@ public:
     QVariantList sourcePreview() const { return m_sourcePreview; }
     bool sourcePreviewReady() const { return m_sourcePreviewReady; }
     QVariantMap regenerationReview() const { return m_regenerationReview; }
+    QVariantMap repairReview() const { return m_repairReview; }
     static qint64 pvrUtc(const QVariant &value);
     Q_INVOKABLE QVariantMap editableDefinition(const QString &id) const;
     Q_INVOKABLE bool updateLocal(const QVariantMap &definition,int revision);
     Q_INVOKABLE bool previewRegeneration(const QString &id);
     Q_INVOKABLE bool regenerate();
+    Q_INVOKABLE bool previewRepair(const QString &id,const QString &slotId,int revision,int first=0);
+    Q_INVOKABLE bool repair(const QVariant &choice);
     Q_INVOKABLE bool previewDuplicate(const QString &id,int revision);
     Q_INVOKABLE bool previewPvr();
     Q_INVOKABLE bool importPvr();
@@ -109,6 +113,7 @@ private:
     QVariantList m_sourcePreview;
     QVariantMap m_sourceRevisions;
     QVariantMap m_regenerationReview;
+    QVariantMap m_repairReview;
     qint64 m_sourceRefreshed=0;
     int m_sourceIndex=-1;
     bool m_pvrReading=false,m_sourcePreviewReady=false;

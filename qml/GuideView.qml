@@ -37,6 +37,8 @@ Item {
     property bool sourceSaving:false
     property int editRevision:0
     property bool regenerationSaving:false
+    property bool repairSaving:false
+    property int repairChoice:-1
     property string channelQuery:""
     property string sourceFilter:"all"
     property string groupFilter:""
@@ -61,6 +63,7 @@ Item {
     readonly property bool previewCurrent:controller && controller.previewReady && JSON.stringify(controller.previewDefinition)===JSON.stringify(draft)
     readonly property var createFields:["Name: "+(draft.name || ""),"Channel number: "+(draft.number || ""),"Media: "+mediaKind,"Edit matching rules","Sequence: "+(draft.sequence || ""),"Clock: "+(draft.clock || ""),"Preview matches",previewCurrent?(editRevision?"Save rules for unscheduled future slots":"Save channel"):"Preview these settings before saving","Schedule horizon, history and timezone","Cancel"]
     readonly property var menuRows:buildMenu()
+    readonly property var repairItems:buildRepairItems()
     visible:open && !suppressed
     signal closed(string origin)
     function show(origin,style){originId=origin || "";presentation=style || {};open=true;mode="";headerFocused=true;headerIndex=0;nowUtc=Date.now()/1000;anchorUtc=nowUtc;fromUtc=Math.floor(nowUtc/1800)*1800;loadWindow()}
@@ -85,7 +88,9 @@ Item {
         if(mode==="sourcePreview")return controller.sourcePreviewReady?controller.sourcePreview.map(e=>"Source "+e.definition.source.number+" → "+e.definition.number+" · "+e.definition.name+" · "+e.programs.length+" listings").concat(["Import reviewed lineup","Cancel"]):["Reading channels and listings…","Cancel"]
         if(mode==="manage")return (controller?controller.channels:[]).map(c=>c.number+" · "+c.name+(c.hidden?" · Hidden":"")+(c.favorite?" · Favorite":"")).concat(["Back"])
         if(mode==="move")return moveIds.map(id=>{const c=controller.channels.find(c=>c.id===id);return c?c.number+" · "+c.name:"Removed channel"})
-        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];return base.concat(managedChannel && managedChannel.owner==="kodi-pvr"?[]:["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]).concat(["Description","Channel groups","Back"])}
+        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && managedChannel.owner!=="kodi-pvr";return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…"]:[]).concat(["Back"])}
+        if(mode==="repair")return repairItems.map(item=>item.label)
+        if(mode==="repairConfirm")return ["Cancel",repairChoice<0?"Mark only this slot unavailable":"Apply reviewed replacement"]
         if(mode==="regenerate")return ["Cancel",controller.regenerationReview.slotCount?"Replace reviewed future schedule":"No reviewed replacement boundary available"]
         if(mode==="numberConflict")return ["Choose another number",conflictingChannel?"Confirm swap with "+conflictingChannel.name:"Channel no longer available","Cancel"]
         if(mode==="delete")return ["Cancel","Remove guide channel and cached schedule"]
@@ -103,6 +108,26 @@ Item {
         else if(id==="sources"){mode="sources";menuIndex=0}
         else if(id==="browse"){mode="browse";menuIndex=0}
         else close()
+    }
+    function buildRepairItems(){
+        const review=controller?controller.repairReview:{};if(!review.slotId)return [{label:"Back",action:"back"}]
+        const choices=(review.alternatives || []).map((item,index)=>({label:item.title+" · "+item.duration+" seconds",action:"choose",choice:index}))
+        if(review.offset>0)choices.push({label:"Previous replacement page",action:"previous"})
+        if(review.offset+review.alternatives.length<review.total)choices.push({label:"Next replacement page",action:"next"})
+        return choices.concat([{label:"Mark only this slot unavailable…",action:"unavailable"},{label:"Back",action:"back"}])
+    }
+    function repairDescription(){
+        const review=controller.repairReview;if(!review.program)return "Reading the selected program…"
+        let text=review.program.title+" · "+new Date(review.program.displayStartUtc*1000).toLocaleString()+" – "+timeLabel(review.program.displayEndUtc)+"\n"
+        if(mode==="repairConfirm")text+=(repairChoice<0?"Mark this slot unavailable.":"Replace with "+review.alternatives[repairChoice].title+".")+" Its ID and time interval stay unchanged; other programs are untouched."
+        else text+=review.total+" matching-duration replacements · "+review.incompatibleCount+" different-duration items excluded. Choose a replacement or leave this slot unavailable; nothing is saved until confirmation."
+        return text
+    }
+    function panelTitle(){
+        if(mode==="context")return managedChannel?managedChannel.name:"Channel options"
+        if(mode==="create")return editRevision?"Edit local channel · Committed slots stay unchanged until explicit regeneration":"Create local channel · Unsaved draft"
+        const titles={add:"Add channel",sources:"Sources · App destinations do not supply channel listings",sourcePreview:"Review source channel mapping",manage:"Manage channels",move:"Move preview · D-pad reorders · Confirm applies · Back cancels",regenerate:"Regenerate future schedule",repair:"Repair selected program",repairConfirm:"Review program repair",numberConflict:"Channel number already in use",metadataReview:"Review channel changes",details:"Program details",browse:"Find channels and time",groupFilter:"Choose channel group",schedule:"Schedule policy · Unsaved draft",delete:"Remove only this guide channel and cached schedule? Media and Kodi stay unchanged.",discard:"Discard these unsaved channel edits?"}
+        return titles[mode] || "Live TV options"
     }
     function invokeCreate(delta){
         if(controller.busy && !controller.backgroundBusy)return
@@ -167,7 +192,20 @@ Item {
             else if(menuIndex===8 && c.owner!=="kodi-pvr"){if(controller.previewRegeneration(c.id)){mode="regenerate";menuIndex=0}}
             else if(menuIndex===9 && c.owner!=="kodi-pvr")controller.previewDuplicate(c.id,c.revision)
             else if(menuIndex===(c.owner==="kodi-pvr"?7:10) || menuIndex===(c.owner==="kodi-pvr"?8:11)){editField=menuIndex===(c.owner==="kodi-pvr"?7:10)?"description":"groups";keyboard.value=editField==="groups"?(c.groups || []).join(", "):(c.description || "");keyboard.selectedIndex=0;keyboardReturn="metadataReview";mode="keyboard"}
+            else if(menuIndex===12 && c.owner!=="kodi-pvr"){
+                navigationError=""
+                if(!selectedProgram || selectedProgram.channelId!==managedId){navigationError="Select a program on this channel in the guide, then open Menu to repair it.";return}
+                if(controller.previewRepair(managedId,selectedProgram.id,c.revision)){mode="repair";menuIndex=0}
+            }
             else{mode="manage";menuIndex=0}
+        }else if(mode==="repair"){
+            const choice=repairItems[menuIndex];if(!choice)return
+            if(choice.action==="choose" || choice.action==="unavailable"){repairChoice=choice.action==="unavailable"?-1:choice.choice;mode="repairConfirm";menuIndex=0}
+            else if(choice.action==="previous" || choice.action==="next"){const review=controller.repairReview;if(controller.previewRepair(review.channelId,review.slotId,review.revision,review.offset+(choice.action==="next"?50:-50)))menuIndex=0}
+            else{mode="context";menuIndex=12}
+        }else if(mode==="repairConfirm"){
+            if(menuIndex===1)repairSaving=controller.repair(repairChoice)
+            else{mode="repair";menuIndex=0}
         }else if(mode==="regenerate"){
             if(menuIndex===1 && controller.regenerationReview.slotCount)regenerationSaving=controller.regenerate()
             else{mode="context";menuIndex=8}
@@ -214,6 +252,8 @@ Item {
         if(command===inputManager.back){
             if(controller.busy && !controller.backgroundBusy){controller.cancel();return}
             if(mode==="move"){moveIds=[];mode="context";menuIndex=2}
+            else if(mode==="repairConfirm"){mode="repair";menuIndex=0}
+            else if(mode==="repair"){mode="context";menuIndex=12}
             else if(mode==="schedule"){mode="create";fieldIndex=8}
             else if(mode==="create"){mode="discard";menuIndex=0}else if(mode==="context" || mode==="delete" || mode==="metadataReview"){mode="manage";menuIndex=0}else if(mode)mode="";else close()
             return
@@ -257,6 +297,7 @@ Item {
         function onDuplicatePrepared(value){root.editRevision=0;root.draft=value;root.mediaKind=root.kindFor(value);root.fieldIndex=0;root.mode="create"}
         function onChannelCreated(id){root.mode="";root.headerFocused=false;root.nowUtc=Date.now()/1000;root.anchorUtc=root.nowUtc;root.fromUtc=Math.floor(root.nowUtc/1800)*1800;root.pickChannel(root.channels.findIndex(c=>c.id===id));root.loadWindow()}
         function onChanged(){
+            if(root.repairSaving && !root.controller.busy){root.repairSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=12}}
             if(root.regenerationSaving && !root.controller.busy){root.regenerationSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=8}}
             if(root.sourceSaving && !root.controller.busy){root.sourceSaving=false;if(!root.controller.errorString){root.mode="";root.loadWindow()}}
             if(root.metadataSaving && !root.controller.busy){root.metadataSaving=false;if(!root.controller.errorString)root.mode="manage"}
@@ -313,10 +354,11 @@ Item {
     }
     Rectangle {anchors.fill:parent;anchors.margins:root.gap;visible:!!root.mode;color:root.appearance.surfaceColor;radius:root.radius
         Column {anchors.fill:parent;anchors.margins:root.gap*2;spacing:root.gap;visible:root.mode!=="keyboard" && root.mode!=="rules"
-            Text {width:parent.width;textFormat:Text.PlainText;text:root.mode==="move"?"Move preview · D-pad reorders · Confirm applies · Back cancels":root.mode==="create"?(root.editRevision?"Edit local channel · Committed slots stay unchanged until explicit regeneration":"Create local channel · Unsaved draft"):root.mode==="sources"?"Sources · App destinations do not supply channel listings":root.mode==="delete"?"Remove only this guide channel and cached schedule? Media and Kodi stay unchanged.":root.mode==="discard"?"Discard these unsaved channel edits?":root.managedChannel && root.mode==="context"?root.managedChannel.name:root.mode;wrapMode:Text.WordWrap;color:root.appearance.textColor;font.pixelSize:root.fontSize*1.2}
+            Text {width:parent.width;textFormat:Text.PlainText;text:root.panelTitle();wrapMode:Text.WordWrap;color:root.appearance.textColor;font.pixelSize:root.fontSize*1.2}
             Text {width:parent.width;visible:root.mode==="regenerate" || root.mode==="numberConflict";textFormat:Text.PlainText;wrapMode:Text.WordWrap;color:root.appearance.textColor;font.pixelSize:root.fontSize
                 text:root.mode==="regenerate"?(root.controller.regenerationReview.slotCount?"Replace "+root.controller.regenerationReview.slotCount+" future slots starting "+new Date(root.controller.regenerationReview.displayFromUtc*1000).toLocaleString()+". The airing program and earlier slots stay unchanged.":"Reviewing the replacement boundary…"):root.numberSwapReview.firstName+": "+root.numberSwapReview.firstNumber+" → "+root.numberSwapReview.secondNumber+"\n"+root.numberSwapReview.secondName+": "+root.numberSwapReview.secondNumber+" → "+root.numberSwapReview.firstNumber+"\nConfirm swaps both numbers together. Back changes neither."
             }
+            Text {width:parent.width;visible:root.mode==="repair" || root.mode==="repairConfirm";textFormat:Text.PlainText;wrapMode:Text.WordWrap;color:root.appearance.textColor;font.pixelSize:root.fontSize;text:visible?root.repairDescription():""}
             ListView {id:menu;width:parent.width;height:Math.max(1,parent.height-y-feedback.height-root.gap);clip:true;model:root.mode==="create"?root.createFields:root.menuRows;currentIndex:root.mode==="create"?root.fieldIndex:root.menuIndex;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
                 delegate:Rectangle {required property int index;required property string modelData;width:menu.width;height:root.fontSize*2.3;radius:root.radius;color:root.appearance.surfaceColor;border.width:menu.currentIndex===index?2:0;border.color:root.appearance.focusColor
                     objectName:"guideMenu-"+index

@@ -35,6 +35,8 @@ public:
     QVariantList candidateSnapshot(const QString &id) const;
     QVariantMap regenerationPreview(const QString &id,qint64 nowUtc) const;
     bool regenerate(const QString &id,const QVariantMap &review,qint64 nowUtc);
+    QVariantMap repairPreview(const QString &id,const QString &slotId,int expectedRevision,qint64 nowUtc,int first=0) const;
+    bool repairSlot(const QString &id,const QString &slotId,const QString &mediaType,int mediaId,int expectedRevision);
     bool setActive(bool active, qint64 nowUtc);
     bool setPreferences(const QString &id, const QVariantMap &preferences, int expectedRevision);
     bool setMetadata(const QString &id,const QVariantMap &metadata,int expectedRevision);

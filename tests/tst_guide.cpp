@@ -36,6 +36,7 @@ private slots:
     void lineupPreferencesSurviveRestart();
     void numberSwapIsRevisionedAtomicAndPreservesSchedules();
     void channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture();
+    void selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices();
     void virtualClockPausesWhileProfileIsOff();
     void unknownDatabaseIsNeverRewritten();
     void corruptKnownDatabaseIsNeverRewritten();
@@ -205,6 +206,24 @@ void GuideTests::channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture() 
     QVERIFY(store.maintain("legacy",Now+3*Day,1));
     const auto retained=store.programs("legacy",Now,Now+3*Day,1000);QVERIFY(!retained.isEmpty());
     for(const auto &slot:retained)QVERIFY(slot.toMap().value("endUtc").toLongLong()>Now+Day); // legacy two-day history
+}
+void GuideTests::selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices() {
+    QTemporaryDir dir;GuideStore store(dir.filePath("repair.sqlite"));auto candidates=media();
+    for(int i=0;i<candidates.size();++i){auto item=candidates[i].toMap();item["duration"]=i==7?1900:1800;candidates[i]=item;}
+    QVERIFY(store.createLocal(definition(),candidates,Now,1));const auto schedule=store.programs("cartoons",Now,Now+Day,1000);int index=0;while(schedule[index].toMap().value("endUtc").toLongLong()-schedule[index].toMap().value("startUtc").toLongLong()!=1800)++index;const auto slot=schedule[index].toMap();const auto id=slot.value("id").toString();
+    const auto review=store.repairPreview("cartoons",id,1,Now);QVERIFY(!review.isEmpty());QCOMPARE(review.value("incompatibleCount").toInt(),1);
+    const auto alternatives=review.value("alternatives").toList();QVERIFY(!alternatives.isEmpty());QVariantMap replacement;
+    for(const auto &value:alternatives){const auto item=value.toMap();if(item.value("mediaId")!=slot.value("mediaId")){replacement=item;break;}}
+    QVERIFY(!replacement.isEmpty());const auto state=store.channel("cartoons");const auto savedCandidates=store.candidateSnapshot("cartoons");
+    QVERIFY(!store.repairSlot("cartoons",id,"movie",99999,1));QVERIFY(!store.repairSlot("cartoons",id,"movie",8,1));
+    store.failNextCommitForTest();QVERIFY(!store.repairSlot("cartoons",id,replacement.value("mediaType").toString(),replacement.value("mediaId").toInt(),1));
+    QCOMPARE(store.channel("cartoons"),state);QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),schedule);
+    QVERIFY(store.repairSlot("cartoons",id,replacement.value("mediaType").toString(),replacement.value("mediaId").toInt(),1));
+    auto expected=schedule;auto changed=slot;for(const auto &key:QStringList{"mediaType","mediaId","title"})changed[key]=replacement.value(key);changed["status"]="ready";expected[index]=changed;
+    QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),expected);QCOMPARE(store.candidateSnapshot("cartoons"),savedCandidates);
+    QVERIFY(!store.repairSlot("cartoons",id,QString(),0,1));QVERIFY(store.repairPreview("cartoons",id,1,Now).isEmpty());
+    QVERIFY(store.repairSlot("cartoons",id,QString(),0,2));changed["status"]="unavailable";expected[index]=changed;QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),expected);
+    auto finalState=store.channel("cartoons");finalState["revision"]=state.value("revision");QCOMPARE(finalState,state);
 }
 void GuideTests::virtualClockPausesWhileProfileIsOff() {
     QTemporaryDir dir; const auto path=dir.filePath("guide.sqlite"); auto def=definition(); def["clock"]="pause-when-off";

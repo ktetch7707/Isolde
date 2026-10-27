@@ -101,7 +101,9 @@ void GuideController::invalidate() {
     if(!m_valid)return;
     m_valid=false;++m_jobId;m_pendingJob={};m_pendingCompletion={};m_pendingDefinition.clear();if(m_cancel)m_cancel->store(true);m_checkpoint.stop();m_maintenance.stop();m_catalogDeadline.stop();m_reading=false;closeBridge();
     QMetaObject::invokeMethod(m_worker,[worker=m_worker]{if(worker->store){worker->store->setCancellationCheck({});worker->store->setActive(false,now());worker->store.reset();}},Qt::BlockingQueuedConnection);
-    m_thread.quit();m_thread.wait();m_busy=false;m_ready=false;m_channels.clear();m_rows.clear();m_compactRows.clear();m_candidates.clear();emit changed();
+    m_thread.quit();m_thread.wait();m_busy=false;m_ready=false;m_channels.clear();m_rows.clear();m_compactRows.clear();m_candidates.clear();
+    m_previewReady=m_sourcePreviewReady=false;m_previewDefinition.clear();m_sourcePreview.clear();m_sourceRevisions.clear();m_regenerationReview.clear();m_repairReview.clear();
+    emit changed();
 }
 bool GuideController::fail(const QString &message) {m_error=message;emit changed();return false;}
 bool GuideController::submit(Job job,std::function<void(const QVariantMap &)> completion,bool background) {
@@ -261,6 +263,18 @@ bool GuideController::previewDuplicate(const QString &id,int revision) {
         return QVariantMap{{"ok",true},{"definition",def},{"candidates",items}};
     },[this](const QVariantMap &r){if(!r.value("ok").toBool())return;m_previewDefinition=r.value("definition").toMap();m_candidates=r.value("candidates").toList();m_previewReady=true;emit changed();emit duplicatePrepared(m_previewDefinition);});
 }
+bool GuideController::previewRepair(const QString &id,const QString &slotId,int revision,int first) {
+    return submit([id,slotId,revision,first](GuideStore &s){const auto review=s.repairPreview(id,slotId,revision,now(),first);return QVariantMap{{"ok",!review.isEmpty()},{"review",review},{"error",review.isEmpty()?QString("This local program changed or its channel needs repair. Refresh the selection and retry."):QString()}};},
+        [this](const QVariantMap &r){m_repairReview=r.value("review").toMap();emit changed();});
+}
+bool GuideController::repair(const QVariant &choice) {
+    const auto alternatives=m_repairReview.value("alternatives").toList();
+    if(m_repairReview.isEmpty() || !integer(choice,-1,alternatives.size()-1))return fail(tr("Review an available repair choice before applying it."));
+    const auto item=choice.toInt()==-1?QVariantMap():alternatives[choice.toInt()].toMap();
+    const auto id=m_repairReview.value("channelId").toString(),slot=m_repairReview.value("slotId").toString();const auto revision=m_repairReview.value("revision").toInt();
+    return submit([id,slot,revision,item](GuideStore &s){return outcome(s.repairSlot(id,slot,item.value("mediaType").toString(),item.value("mediaId").toInt(),revision),s);},
+        [this](const QVariantMap &r){if(r.value("ok").toBool()){m_repairReview.clear();emit changed();}});
+}
 bool GuideController::previewPvr() {
     if(!m_valid)return fail(tr("This guide profile is no longer active."));
     if(m_busy){
@@ -346,7 +360,7 @@ void GuideController::cancel() {
     m_pendingJob={};m_pendingCompletion={};m_pendingDefinition.clear();m_pendingKind.clear();
     if(m_cancel)m_cancel->store(true);
     if(m_reading){m_reading=m_busy=false;m_catalogDeadline.stop();closeBridge();}
-    m_previewReady=m_sourcePreviewReady=false;m_candidates.clear();m_sourcePreview.clear();m_regenerationReview.clear();m_status=m_busy?tr("Cancellation requested. Waiting for the current transaction result…"):tr("Preview cancelled.");emit changed();
+    m_previewReady=m_sourcePreviewReady=false;m_candidates.clear();m_sourcePreview.clear();m_regenerationReview.clear();m_repairReview.clear();m_status=m_busy?tr("Cancellation requested. Waiting for the current transaction result…"):tr("Preview cancelled.");emit changed();
 }
 bool GuideController::setPreferences(const QString &id,const QVariantMap &p,int revision){return submit([id,p,revision](GuideStore &store){return outcome(store.setPreferences(id,p,revision),store);});}
 bool GuideController::setMetadata(const QString &id,const QVariantMap &p,int revision){return submit([id,p,revision](GuideStore &store){return outcome(store.setMetadata(id,p,revision),store);});}
