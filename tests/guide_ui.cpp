@@ -31,6 +31,7 @@ class GuideUiTests final:public QObject {
 private slots:
     void asyncPreviewCreateCancelAndProfileTeardown();
     void remoteCreatePreviewSaveAndFutureSelection();
+    void remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot();
     void remoteAdvancedScheduleDraftCancelWritesNothing();
     void compactPvrProgressAndAccessiblePressUseTheSameActions();
     void remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision();
@@ -53,8 +54,10 @@ void serve(QLocalServer &server) {
             auto input=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",input);if(!input.endsWith('\n'))return;
             const auto request=QJsonDocument::fromJson(input).object();server.setProperty("requests",server.property("requests").toInt()+1);
             const auto params=request.value("params").toObject();const auto kind=params.value("kind").toString();const int start=params.value("start").toInt(),end=qMin(101,start+50);
-            QJsonArray items;for(int i=start;i<end;++i)items.append(QJsonObject{{"mediaType",kind},{"mediaId",i+1},{"title",QString("Cartoon %1").arg(i+1)},{"duration",1800},{"source","kodi"},{"studio",QJsonArray{"Cartoon Network"}}});
-            const QJsonObject result{{"items",items},{"limits",QJsonObject{{"start",start},{"end",end},{"total",101}}},{"skipped",0}};
+            QJsonArray items;int total=101,actualEnd=end;
+            if(server.property("watchFixture").isValid()){const auto fixture=server.property("watchFixture").toList();total=fixture.size();actualEnd=qMin(total,start+50);for(int i=start;i<actualEnd;++i){auto item=fixture[i].toMap();item["mediaType"]=kind;items.append(QJsonObject::fromVariantMap(item));}}
+            else for(int i=start;i<end;++i)items.append(QJsonObject{{"mediaType",kind},{"mediaId",i+1},{"title",QString("Cartoon %1").arg(i+1)},{"duration",1800},{"source","kodi"},{"studio",QJsonArray{"Cartoon Network"}}});
+            const QJsonObject result{{"items",items},{"limits",QJsonObject{{"start",start},{"end",actualEnd},{"total",total}}},{"skipped",0}};
             socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request.value("id")},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
         });
     }});
@@ -118,6 +121,28 @@ void GuideUiTests::remoteCreatePreviewSaveAndFutureSelection() {
     QVERIFY(QMetaObject::invokeMethod(view.data(),"jumpTo",Q_RETURN_ARG(QVariant,jumpResult),Q_ARG(QVariant,QDateTime::currentSecsSinceEpoch()+31*86400)));
     QVERIFY(!jumpResult.toBool());QCOMPARE(view->property("anchorUtc"),beforeJump);QVERIFY(!view->property("navigationError").toString().isEmpty());
     command(view.data(),InputManager::NavigateUp);QVERIFY(view->property("headerFocused").toBool());
+}
+void GuideUiTests::remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot() {
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    QVariantList fixture;const QVariantList states{0,1,QVariant(),false,QString("0")};
+    for(int i=0;i<states.size();++i){QVariantMap item{{"mediaId",i+1},{"title",QString("Episode %1").arg(i+1)},{"duration",1800},{"studio",QStringList{"Cartoon Network"}},{"showtitle","Series"},{"season",1},{"episode",i+1}};if(states[i].isValid())item["playcount"]=states[i];fixture.append(item);}
+    server.setProperty("watchFixture",fixture);serve(server);
+    const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"unwatched",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("guide-tile")),Q_ARG(QVariant,QVariantMap())));
+    command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);command(view.data(),InputManager::Confirm);
+    for(int i=0;i<4;++i)command(view.data(),InputManager::NavigateDown);
+    for(int i=0;i<3;++i)command(view.data(),InputManager::Confirm);
+    QCOMPARE(view->property("draft").toMap().value("sequence").toString(),QString("next-unwatched"));
+    command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);
+    QTRY_VERIFY(!controller.busy());QVERIFY(controller.previewReady());QCOMPARE(controller.previewCount(),1);QCOMPARE(controller.previewItems().first().toMap().value("mediaId").toInt(),1);QVERIFY(controller.channels().isEmpty());
+    const auto definition=controller.previewDefinition();const auto id=definition.value("id").toString();
+    // Kodi changes after preview cannot silently change the reviewed save.
+    auto changed=fixture;auto item=changed[0].toMap();item["playcount"]=1;changed[0]=item;server.setProperty("watchFixture",changed);
+    command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy()&&controller.channels().size()==1);
+    GuideStore reader(path);const auto wall=QDateTime::currentSecsSinceEpoch();const auto programs=reader.programs(id,wall,wall+86400,1000);QVERIFY(!programs.isEmpty());for(const auto &program:programs)QCOMPARE(program.toMap().value("mediaId").toInt(),1);
+    QVERIFY(controller.previewLocal(definition,"episode"));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.previewReady());QCOMPARE(controller.previewCount(),0);QCOMPARE(reader.programs(id,wall,wall+86400,1000),programs);
 }
 void GuideUiTests::remoteAdvancedScheduleDraftCancelWritesNothing() {
     QTemporaryDir dir;GuideController controller(dir.filePath("guide.sqlite"),"policy-ui",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());

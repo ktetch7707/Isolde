@@ -162,7 +162,7 @@ Item {
         if(fieldIndex===0 || fieldIndex===1){editField=fieldIndex===0?"name":"number";keyboard.value=String(draft[editField]);keyboard.selectedIndex=0;keyboardReturn="create";mode="keyboard"}
         else if(fieldIndex===2){const kinds=["episode","movie","mixed","musicvideo","song","all"];mediaKind=kinds[(kinds.indexOf(mediaKind)+delta+kinds.length)%kinds.length];value.mediaKinds=mediaKind==="mixed"?["movie","episode"]:mediaKind==="all"?["movie","episode","musicvideo","song"]:[mediaKind];draft=value}
         else if(fieldIndex===3){rules.begin(draft.rule);mode="rules"}
-        else if(fieldIndex===4){const values=["seeded-shuffle","episode-order","rotation"];value.sequence=values[(values.indexOf(value.sequence)+delta+values.length)%values.length];draft=value}
+        else if(fieldIndex===4){const values=["seeded-shuffle","episode-order","rotation","next-unwatched"];value.sequence=values[(values.indexOf(value.sequence)+delta+values.length)%values.length];draft=value}
         else if(fieldIndex===5){value.clock=value.clock==="real-time"?"pause-when-off":"real-time";draft=value}
         else if(fieldIndex===6)controller.previewLocal(draft,mediaKind)
         else if(fieldIndex===7){if(editRevision)controller.updateLocal(draft,editRevision);else controller.createLocal(draft)}

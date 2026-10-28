@@ -213,7 +213,7 @@ void GuideController::consume() {
     if(!result.value("items").isArray() || start!=m_page || end<start || end>start+50 || total<end || total>100000 || (end==start && total>end)
         || skipped<0 || items.size()+skipped!=end-start){readFailure(tr("Kodi returned an invalid guide metadata page."));return;}
     for(const auto &v:items) {
-        const auto item=v.toObject().toVariantMap();if(!GuideRules::matches(m_previewDefinition.value("rule").toMap(),item))continue;
+        const auto item=v.toObject().toVariantMap();if(!GuideRules::matchesChannel(m_previewDefinition,item))continue;
         m_snapshotBytes+=QJsonDocument::fromVariant(item).toJson(QJsonDocument::Compact).size()+1;
         if(m_candidates.size()>=10000 || m_snapshotBytes>4*1024*1024-2){readFailure(tr("More media matches than one channel can hold. Narrow the rules before saving."));return;}
         m_candidates.append(item);
@@ -223,6 +223,7 @@ void GuideController::consume() {
     if(m_kindIndex<m_kinds.size()){m_status=tr("Previewing local media · %1 matches").arg(m_candidates.size());emit changed();const auto generation=m_catalogGeneration;QTimer::singleShot(0,this,[this,generation]{if(m_valid && m_reading && generation==m_catalogGeneration)requestPage();});return;}
     m_catalogDeadline.stop();m_reading=m_busy=false;m_previewReady=!m_candidates.isEmpty();
     m_status=tr("%1 matching items · %2 items skipped (remote or unknown duration)").arg(m_candidates.size()).arg(m_skipped);
+    if(m_previewDefinition.value("sequence")=="next-unwatched")m_status+=tr(" · Unwatched in Kodi at preview; repeats in episode order. Refresh rules to update watch state; committed programs stay unchanged.");
     if(!m_previewReady)m_error=tr("No playable local media matches. Adjust the rules or update Kodi's metadata.");emit changed();
 }
 bool GuideController::createLocal(const QVariantMap &definition) {

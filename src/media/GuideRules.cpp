@@ -136,7 +136,7 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
         || !integer(v.value("schemaVersion"),1,1) || !text(v.value("id"),160) || !safeId(v.value("id").toString())
         || !text(v.value("name"),160) || !integer(v.value("number"),1,99999)
         || !QStringList{"real-time","pause-when-off"}.contains(v.value("clock").toString())
-        || !QStringList{"episode-order","seeded-shuffle","rotation"}.contains(v.value("sequence").toString())
+        || !QStringList{"episode-order","seeded-shuffle","rotation","next-unwatched"}.contains(v.value("sequence").toString())
         || !integer(v.value("seed"),0,2147483647) || !text(v.value("timezone"),128)
         || !QTimeZone(v.value("timezone").toString().toUtf8()).isValid()
         || v.value("rule").metaType().id()!=QMetaType::QVariantMap || guideRule(v.value("rule").toMap()).isEmpty())
@@ -151,6 +151,13 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
     }
     if (error) error->clear();
     return v;
+}
+
+bool GuideRules::matchesChannel(const QVariantMap &definition, const QVariantMap &metadata) {
+    if (definition.contains("mediaKinds") && !definition.value("mediaKinds").toList().contains(metadata.value("mediaType"))) return false;
+    // Missing, malformed or unknown watch state is never treated as unwatched.
+    if (definition.value("sequence")=="next-unwatched" && !integer(metadata.value("playcount"),0,0)) return false;
+    return matches(definition.value("rule").toMap(),metadata);
 }
 
 bool GuideRules::matches(const QVariantMap &rule, const QVariantMap &metadata) {

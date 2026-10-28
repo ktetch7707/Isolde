@@ -36,6 +36,7 @@ private slots:
     void persistsSevenDaysAndTwelveHourOffset();
     void channelAndExtensionFailuresRollback();
     void rulesOnlyAffectUncommittedSlots();
+    void nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedule();
     void targetedMissingMediaPreservesIntervals();
     void profileIsolationAndInvalidation();
     void lineupPreferencesSurviveRestart();
@@ -144,6 +145,29 @@ void GuideTests::rulesOnlyAffectUncommittedSlots() {
     QVERIFY(store.extend("cartoons",Now+2*Day,2));
     const auto boundary=baseline.last().toMap().value("endUtc").toLongLong();
     for (const auto &v:store.programs("cartoons",boundary,Now+2*Day,1000)) QCOMPARE(v.toMap().value("mediaType").toString(),QString("movie"));
+}
+void GuideTests::nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedule() {
+    auto def=definition();def["sequence"]="next-unwatched";
+    QVariantList candidates;
+    const QVariantList states{0,0,1,QVariant(),false,QString("0"),-1};
+    for(int i=0;i<states.size();++i){auto item=media().first().toMap();item["mediaId"]=i+1;item["duration"]=3600;item["episode"]=2-i;item["showtitle"]="Series";if(states[i].isValid())item["playcount"]=states[i];else item.remove("playcount");candidates.append(item);}
+    QTemporaryDir dir;const auto path=dir.filePath("guide.sqlite");QVariantList committed;
+    {
+        GuideStore store(path);QVERIFY(store.createLocal(def,candidates,Now,1));
+        committed=store.programs("cartoons",Now,Now+Day,1000);QCOMPARE(committed.size(),24);
+        for(int i=0;i<committed.size();++i)QCOMPARE(committed[i].toMap().value("mediaId").toInt(),i%2?1:2);
+        auto watched=candidates;for(auto &value:watched){auto item=value.toMap();item["playcount"]=1;value=item;}
+        const auto channels=store.channels();
+        auto empty=def;empty["id"]="all-watched";empty["number"]=102;QVERIFY(!store.createLocal(empty,watched,Now));QCOMPARE(store.channels(),channels);
+        QVERIFY(!store.updateRules(def,watched,1));QCOMPARE(store.channels(),channels);QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),committed);
+        auto refreshed=candidates;auto first=refreshed[0].toMap();first["playcount"]=1;refreshed[0]=first;
+        auto third=refreshed[2].toMap();third["playcount"]=0;third["episode"]=0;refreshed[2]=third;
+        QVERIFY(store.updateRules(def,refreshed,1));QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),committed);
+        QVERIFY(store.extend("cartoons",Now+2*Day,2));const auto later=store.programs("cartoons",Now+Day,Now+2*Day,1000);QCOMPARE(later.size(),24);
+        for(int i=0;i<later.size();++i)QCOMPARE(later[i].toMap().value("mediaId").toInt(),i%2?2:3);
+    }
+    GuideStore reopened(path);QCOMPARE(reopened.programs("cartoons",Now,Now+Day,1000),committed);
+    QCOMPARE(reopened.tuneTarget("cartoons",Now+Day).value("mediaId").toInt(),3);
 }
 void GuideTests::targetedMissingMediaPreservesIntervals() {
     QTemporaryDir dir; GuideStore store(dir.filePath("guide.sqlite"));

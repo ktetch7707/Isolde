@@ -166,8 +166,7 @@ QVariantList GuideStore::eligible(const QVariantMap &definition, const QVariantL
             *error=tr("Each channel item needs a unique Kodi identity, title and known positive duration (at most one day)."); return {};
         }
         seen.insert(mediaKey(item));
-        if ((!definition.contains("mediaKinds") || definition.value("mediaKinds").toList().contains(kind))
-            && GuideRules::matches(definition.value("rule").toMap(),item)) result.append(item);
+        if (GuideRules::matchesChannel(definition,item)) result.append(item);
     }
     if (result.isEmpty()) *error=tr("No media matches these channel rules. Adjust the rules before saving.");
     return result;
