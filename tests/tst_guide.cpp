@@ -63,9 +63,9 @@ void GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries() {
     auto unknown=packaged;unknown["executableLayout"]="script";QVERIFY(ComponentSchema::guideOptions(unknown).isEmpty());
     QTemporaryDir dir;AppRegistry registry;HomeLayout normal(&registry);QVERIFY(normal.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("normal-profile.json")));QVERIFY(!normal.studioOptions().isEmpty());
     const auto localDefaults=dir.filePath("default-home-layout.json");QVERIFY(QFile::copy(QFINDTESTDATA("../config/default-home-layout.json"),localDefaults));
-    auto custom=document;custom["guide"]=QJsonObject::fromVariantMap(legacy);const auto legacyBytes=QJsonDocument(custom).toJson();const auto customPath=dir.filePath("studio-defaults.json");
+    auto custom=document;custom["guide"]=QJsonObject::fromVariantMap(legacy);const auto legacyBytes=QJsonDocument(custom).toJson(QJsonDocument::Compact);QVERIFY(legacyBytes.size()<=64*1024);const auto customPath=dir.filePath("studio-defaults.json");
     {QFile output(customPath);QVERIFY(output.open(QIODevice::WriteOnly));QCOMPARE(output.write(legacyBytes),legacyBytes.size());}
-    HomeLayout compatible(&registry);QVERIFY(compatible.load(localDefaults,dir.filePath("legacy-profile.json")));const auto resolved=compatible.studioOptions();QVERIFY(!resolved.isEmpty());
+    QVERIFY(QFile::exists(":/config/studio-defaults.json"));HomeLayout compatible(&registry);QVERIFY(compatible.load(localDefaults,dir.filePath("legacy-profile.json")));const auto resolved=compatible.studioOptions();QVERIFY(!resolved.isEmpty());
     for(const auto &key:QStringList{"surface","overlayWidth","overlayHeight","overlayRows","overlayPosition"})QCOMPARE(resolved.value("guide").toMap().value(key),packaged.value(key));
     QCOMPARE(bytes(customPath),legacyBytes);QVERIFY(!QFile::exists(dir.filePath("legacy-profile.json")));
 }
