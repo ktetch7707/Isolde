@@ -92,7 +92,7 @@ def guide_candidates(params, execute):
     kind=params["kind"]
     fields={
         "movie":["title","runtime","studio","genre","tag","year","rating","playcount","director","cast","file","streamdetails"],
-        "episode":["title","runtime","showtitle","season","episode","tvshowid","firstaired","rating","playcount","director","cast","file","streamdetails","tag"],
+        "episode":["title","runtime","showtitle","season","episode","tvshowid","firstaired","rating","playcount","director","cast","file","streamdetails"],
         "musicvideo":["title","runtime","studio","genre","tag","year","playcount","director","file","streamdetails"],
         "song":["title","duration","genre","year","playcount","file"]}[kind]
     def query(method,arguments):

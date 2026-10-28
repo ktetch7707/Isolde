@@ -31,7 +31,9 @@ class BridgeTests(unittest.TestCase):
             request=json.loads(raw);calls.append(request);method=request["method"];params=request["params"]
             if method=="VideoLibrary.GetEpisodes":
                 self.assertEqual(params["limits"],{"start":0,"end":50})
-                result={"episodes":[{"episodeid":7,"tvshowid":9,"title":"Local cartoon","runtime":1200,"file":"/media/cartoon.mkv","showtitle":"Series","season":1,"episode":1,"firstaired":"2020-01-02"},
+                self.assertNotIn("tag",params["properties"])
+                result={"episodes":[{"episodeid":7,"tvshowid":9,"title":"Local cartoon","runtime":1200,"file":"/media/cartoon.mkv","showtitle":"Series","season":1,"episode":1,"firstaired":"2020-01-02",
+                    "cast":[{"name":"Fixture actor"}],"streamdetails":{"audio":[{"language":"eng"}]}},
                     {"episodeid":8,"tvshowid":9,"title":"Remote","runtime":1200,"file":"https://example.invalid/video"}],"limits":{"start":0,"end":2,"total":2}}
             elif method=="VideoLibrary.GetTVShowDetails":
                 self.assertEqual(params["tvshowid"],9);result={"tvshowdetails":{"studio":["Cartoon Network"],"genre":["Animation"],"tag":["Family"],"year":2019}}
@@ -41,10 +43,44 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(result["skipped"],1);self.assertEqual(len(result["items"]),1)
         item=result["items"][0];self.assertEqual(item["mediaType"],"episode");self.assertEqual(item["mediaId"],7)
         self.assertEqual(item["studio"],["Cartoon Network"]);self.assertEqual(item["genre"],["Animation"]);self.assertEqual(item["year"],2020)
+        self.assertEqual(item["tag"],["Family"]);self.assertEqual(item["actor"],["Fixture actor"]);self.assertEqual(item["language"],["eng"])
         self.assertEqual([r["method"] for r in calls],["VideoLibrary.GetEpisodes","VideoLibrary.GetTVShowDetails"])
         for invalid in ({"kind":"shell","start":0,"end":50},{"kind":"movie","start":False,"end":50},{"kind":"movie","start":0,"end":51},{"kind":"movie","start":0,"end":50,"file":"/private"}):
             result=bridge.dispatch(self.request("Isolde.GuideCandidates",invalid),lambda _:self.fail("Invalid parameters reached Kodi"))
             self.assertIn("error",result)
+
+    def test_guide_metadata_requests_obey_kodi_field_enums(self):
+        # Supported subset from Omega schema/types.json, not the bridge's field map.
+        # Episode deliberately has no tag; parent TVShow does.
+        common={"title","file","playcount","year","genre","rating","lastplayed"}
+        allowed={"movie":common|{"runtime","studio","tag","director","cast","streamdetails","plot","country"},
+                 "episode":(common-{"genre"})|{"runtime","showtitle","season","episode","tvshowid","firstaired","director","cast","streamdetails","plot"},
+                 "musicvideo":common|{"runtime","studio","tag","director","streamdetails","artist","album","plot"},
+                 "song":(common-{"rating"})|{"duration","artist","album","track","disc","comment"}}
+        methods={"movie":("VideoLibrary.GetMovies","movies"),"episode":("VideoLibrary.GetEpisodes","episodes"),
+                 "musicvideo":("VideoLibrary.GetMusicVideos","musicvideos"),"song":("AudioLibrary.GetSongs","songs")}
+        for kind,(method,key) in methods.items():
+            with self.subTest(kind=kind):
+                calls=[]
+                def execute(raw):
+                    request=json.loads(raw);calls.append(request);params=request["params"]
+                    if request["method"]==method:
+                        self.assertLessEqual(set(params["properties"]),allowed[kind])
+                        self.assertEqual(params["limits"],{"start":0,"end":50})
+                        row={kind+"id":7,"title":"Local fixture","file":"/media/local.mkv","runtime":1200,"duration":1200,"playcount":0}
+                        if kind=="episode":row["tvshowid"]=9
+                        row={field:value for field,value in row.items() if field==kind+"id" or field in params["properties"]}
+                        result={key:[row],"limits":{"start":0,"end":1,"total":1}}
+                    elif request["method"]=="VideoLibrary.GetTVShowDetails" and kind=="episode":
+                        self.assertLessEqual(set(params["properties"]),{"title","studio","genre","tag","year","plot","episode"})
+                        result={"tvshowdetails":{field:value for field,value in {"tag":["Inherited"]}.items() if field in params["properties"]}}
+                    else:self.fail("Unexpected/mutating metadata query: "+request["method"])
+                    return json.dumps({"result":result})
+                reply=bridge.dispatch(self.request("Isolde.GuideCandidates",{"kind":kind,"start":0,"end":50}),execute)
+                self.assertIn("result",reply);self.assertEqual(reply["result"]["skipped"],0)
+                item=reply["result"]["items"][0];self.assertEqual((item["mediaType"],item["mediaId"],item["playcount"]),(kind,7,0))
+                if kind=="episode":self.assertEqual(item["tag"],["Inherited"])
+                self.assertEqual(len(calls),2 if kind=="episode" else 1)
 
     @unittest.skipUnless(os.name=="posix","Kodi playlist writes run inside the Linux guest")
     def test_create_playlist_is_kodi_owned_atomic_and_profile_bounded(self):
