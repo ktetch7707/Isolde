@@ -56,7 +56,9 @@ def main():
     parser.add_argument("--pages", action="store_true", help="Create and customize a page through Settings, then exercise its widget against real Kodi")
     parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
     parser.add_argument("--guide", action="store_true", help="Configure an isolated real IPTV Simple channel, then import and tune it through the Guide")
+    parser.add_argument("--guide-surfaces", action="store_true", help="Also create two local channels through the UI and review compact/overlay/full return")
     args = parser.parse_args()
+    if args.guide_surfaces and not args.guide:parser.error("--guide-surfaces requires --guide")
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a"); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     profile = str(uuid.uuid4())
     evidence = Path(tempfile.mkdtemp(prefix="isolde-tv-acceptance-"))
@@ -162,7 +164,17 @@ if ''' + repr(str(imported)) + ''' in selected:
     (config / "device-setup.json").write_text('{"version":1,"step":6,"complete":true}')
     if args.guide:
         guide_profile=config/'profiles'/profile;guide_profile.mkdir(parents=True)
-        (guide_profile/'home-layout.json').write_text(json.dumps({'schemaVersion':1,'categories':[{'id':'apps','name':'Apps'}],'items':[{'kind':'action','id':'guide-entry','name':'TV Guide','symbol':'TV','size':'standard','categoryId':'apps','action':{'schemaVersion':1,'type':'open-guide'}}]}))
+        guide_home={'schemaVersion':1,'categories':[{'id':'apps','name':'Apps'}],'items':[{'kind':'action','id':'guide-entry','name':'TV Guide','symbol':'TV','size':'standard','categoryId':'apps','action':{'schemaVersion':1,'type':'open-guide'}}]}
+        if args.guide_surfaces:
+            defaults=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
+            widget=defaults['componentPresets']['tv-guide']
+            widget.update(id='guide-widget',categoryId='apps',placement={'x':0,'y':1,'width':6,'height':4})
+            widget['presentation']['libraryLimit']=3
+            guide_home['items'][0]['placement']={'x':0,'y':0,'width':2,'height':1}
+            guide_home['items'].append(widget)
+            grid=dict(defaults['defaultGrid']);grid.update(columns=8,rows=6,mode='screen')
+            guide_home['composition']={'schemaVersion':1,'enabled':True,'showClock':False,'grid':grid}
+        (guide_profile/'home-layout.json').write_text(json.dumps(guide_home))
     (config / "MediaAccess.conf").write_text(f"[profiles]\n{profile}\\kodi\\folders={media}\n")
     unknown = evidence / "config/Unknown Organization"; unknown.mkdir()
     (unknown / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
@@ -270,8 +282,47 @@ if ''' + repr(str(imported)) + ''' in selected:
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','PVR stop returned from owned playback')
                 run('wmctrl','-i','-a',shell,env=env);guide_capture('guidereturn')
                 assert imported_channels()==[cached]
+                surface_phases=[]
+                if args.guide_surfaces:
+                    # Every write below is performed through the reviewed remote UI.
+                    # SQLite is opened read-only solely to verify committed results.
+                    guide_capture('guidelocaldraft')
+                    assert len(imported_channels())==1,'Opening a local draft saved a channel'
+                    guide_capture('guidelocalpreview')
+                    assert len(imported_channels())==1,'Preview saved a local channel before reviewed confirmation'
+                    time.sleep(2)  # Let the bounded three-item fixture preview finish before reviewing Save.
+                    guide_capture('guidelocalreview')
+                    wait(lambda:len(imported_channels())==2,'Local channel committed through Preview and Save')
+                    local=next(c for c in imported_channels() if c.get('owner')!='kodi-pvr')
+                    guide_capture('guidelocalcreated')
+                    guide_capture('guideduplicatedraft')
+                    wait(lambda:len(imported_channels())==3,'Reviewed duplicate local channel committed')
+                    lineup=imported_channels();native=[c for c in lineup if c.get('owner')!='kodi-pvr']
+                    assert len(native)==2 and len({c['id'] for c in lineup})==3 and len({c['number'] for c in lineup})==3,lineup
+                    assert native[0]['rule']==native[1]['rule'] and native[0]['sequence']==native[1]['sequence']
+                    assert next(c for c in lineup if c.get('owner')=='kodi-pvr')==cached
+                    def cached_slots():
+                        with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
+                            return list(db.execute('SELECT id,channel,media_type,media_id,title,start_utc,end_utc,status FROM slots ORDER BY channel,start_utc'))
+                    committed_slots=cached_slots()
+                    guide_capture('guidelineup')
+                    guide_capture('guidewidgetentry')
+                    wall=int(time.time());current_rows=[]
+                    with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
+                        for channel in lineup:
+                            current=db.execute('SELECT title,start_utc,end_utc FROM slots WHERE channel=? AND start_utc<=? AND end_utc>?',(channel['id'],wall,wall)).fetchone()
+                            assert current,(channel,wall)
+                            progress=(wall-current[1])/(current[2]-current[1]);assert 0<=progress<1
+                            current_rows.append({'id':channel['id'],'number':channel['number'],'name':channel['name'],'source':'Kodi PVR' if channel.get('owner')=='kodi-pvr' else 'Local','title':current[0],'startUtc':current[1],'endUtc':current[2],'progress':progress})
+                    (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'atUtc':wall,'rows':current_rows,'widgetId':'guide-widget','pvrChannelId':cached['id'],'localCreatedId':local['id']},indent=2))
+                    for phase in ('guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn'):guide_capture(phase)
+                    assert imported_channels()==lineup,'Browsing surfaces changed saved channel definitions'
+                    assert cached_slots()==committed_slots,'Browsing surfaces regenerated or changed committed slots'
+                    surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
-                (evidence/'result.json').write_text(json.dumps({'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn'],'visualReview':'pending','profile':profile},indent=2))
+                result={'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn']+surface_phases,'visualReview':'pending','profile':profile}
+                if args.guide_surfaces:result.update(nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True)
+                (evidence/'result.json').write_text(json.dumps(result,indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")

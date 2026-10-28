@@ -15,6 +15,7 @@ Item {
     readonly property var rows:controller?controller.compactRows.slice(0,Math.min(5,style.libraryLimit || 5)):[]
     readonly property real labelSize:(style.labelSize || options.labelSize)*(appearance.typographyScale || 1)
     readonly property real roundness:style.radius===undefined?options.radius:style.radius
+    readonly property bool sourceBadges:style.guideSourceBadges===undefined?options.sourceBadges:style.guideSourceBadges
     signal engage()
     onRowsChanged:if(selectedChannelId){const at=rows.findIndex(c=>c.id===selectedChannelId);selectedIndex=at>=0?at:-1;if(at<0)selectedChannelId=""}
     function select(index){selectedIndex=index;selectedChannelId=rows[index]?rows[index].id:""}
@@ -64,7 +65,7 @@ Item {
                 Accessible.focused:root.visible && root.engaged && root.selectedIndex===index
                 Accessible.onPressAction:{root.engage();root.select(index);if(!root.readOnly && root.dispatcher)root.dispatcher.dispatch({type:"tune-channel",channelId:modelData.id},root.originId)}
                 color:root.appearance.surfaceColor;radius:root.roundness;border.color:root.appearance.focusColor;border.width:root.engaged && root.selectedIndex===index?(root.style.focusWidth || 2):0
-                Text {anchors.fill:parent;anchors.margins:root.labelSize/3;textFormat:Text.PlainText;color:root.appearance.textColor;font.pixelSize:root.labelSize;elide:Text.ElideRight;text:modelData.number+" · "+modelData.name+"\n"+root.programLabel(modelData.current)}
+                Text {objectName:"guideWidgetLabel-"+modelData.id;anchors.fill:parent;anchors.margins:root.labelSize/3;textFormat:Text.PlainText;color:root.appearance.textColor;font.pixelSize:root.labelSize;elide:Text.ElideRight;text:modelData.number+" · "+modelData.name+(root.sourceBadges && modelData.sourceName?" · "+modelData.sourceName:"")+"\n"+root.programLabel(modelData.current)}
                 Rectangle {anchors.left:parent.left;anchors.bottom:parent.bottom;height:Math.max(2,root.labelSize/7);width:parent.width*root.progressFor(modelData.current);color:root.appearance.focusColor}
                 MouseArea {anchors.fill:parent;onClicked:{root.engage();root.select(index);if(!root.readOnly && root.dispatcher)root.dispatcher.dispatch({type:"tune-channel",channelId:modelData.id},root.originId)}}
             }

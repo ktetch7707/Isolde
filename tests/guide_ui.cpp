@@ -145,6 +145,10 @@ void GuideUiTests::compactPvrProgressAndAccessiblePressUseTheSameActions() {
     QQuickItem *channel=nullptr;QTRY_VERIFY((channel=visualItem(qobject_cast<QQuickItem*>(widget.data()),"guideWidgetChannel-pvr-station")));
     QQmlExpression pressChannel(QQmlEngine::contextForObject(channel),channel,"Accessible.pressAction()");pressChannel.evaluate();QVERIFY2(!pressChannel.hasError(),qPrintable(pressChannel.error().toString()));QCOMPARE(dispatch.last.value("channelId").toString(),QString("pvr-station"));
     QQmlExpression description(QQmlEngine::contextForObject(channel),channel,"Accessible.description");QVERIFY(description.evaluate().toString().contains("Kodi PVR"));
+    QQuickItem *sourceLabel=nullptr;QTRY_VERIFY((sourceLabel=visualItem(qobject_cast<QQuickItem*>(widget.data()),"guideWidgetLabel-pvr-station")));
+    widget->setProperty("style",QVariantMap{{"guideSourceBadges",true}});QTRY_VERIFY(sourceLabel->property("text").toString().contains("Kodi PVR"));
+    widget->setProperty("style",QVariantMap{{"guideSourceBadges",false}});QTRY_VERIFY(!sourceLabel->property("text").toString().contains("Kodi PVR"));
+    QVERIFY(description.evaluate().toString().contains("Kodi PVR"));
     dispatch.last.clear();command(widget.data(),InputManager::Menu);QCOMPARE(dispatch.last.value("type").toString(),QString("open-guide"));QCOMPARE(dispatch.last.value("focusChannelId").toString(),QString("pvr-station"));QCOMPARE(dispatch.last.value("presentation").toMap().value("guideSurface").toString(),QString("overlay"));
     dispatch.last.clear();widget->setProperty("readOnly",true);pressChannel.evaluate();QVERIFY(dispatch.last.isEmpty());
     command(widget.data(),InputManager::Menu);QVERIFY(dispatch.last.isEmpty());

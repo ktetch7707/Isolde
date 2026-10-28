@@ -375,6 +375,21 @@ class OracleTests(unittest.TestCase):
             self.assertTrue(archive.getnames()[0].endswith("result.json"))
 
     def test_visual_results_use_each_harness_contract(self):
+        guide=dict(passed=True,freshProfile=True,normalProfileUsed=False,pvrAddon="pvr.iptvsimple",sourceChannels=1,sourceListings=50,
+                   remoteImport=True,actualPvrPlayback=True,returned=True,mediaUnchanged=True,syntheticSource=True,providerSubscriptionVerified=False,
+                   captures=["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"])
+        self.assertTrue(oracle.visual_result_passed("guide",guide))
+        surfaces=dict(guide,nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True,
+                      captures=guide["captures"]+["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"])
+        self.assertTrue(oracle.visual_result_passed("guide-surfaces",surfaces))
+        self.assertFalse(oracle.visual_result_passed("guide-surfaces",guide))
+        for key in ("surfaceJourneyInputAcknowledged","committedSlotsUnchanged","sourceCachePreserved","actualPvrPlayback"):
+            incomplete=dict(surfaces);incomplete[key]=False;self.assertFalse(oracle.visual_result_passed("guide-surfaces",incomplete))
+        for key in ("nativeChannelsCreated","cachedChannelCount"):
+            incomplete=dict(surfaces);incomplete[key]=True;self.assertFalse(oracle.visual_result_passed("guide-surfaces",incomplete))
+        for index in range(len(surfaces["captures"])):
+            incomplete=dict(surfaces);incomplete["captures"]=surfaces["captures"][:index]+surfaces["captures"][index+1:];self.assertFalse(oracle.visual_result_passed("guide-surfaces",incomplete))
+        self.assertEqual(oracle.CASES["guide-surfaces"],("tv-library-acceptance.py",["--guide","--guide-surfaces","--inspect"]))
         emulators=dict(passed=True,freshProfile=True,remoteRuntimeSetup=True,remoteRegistration=True,nativeGameStarted=True,
             returned=True,sourceUnchanged=True,runtime="ppsspp",gameplayVerified=False,physicalControllerVerified=False,
             captures=["emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",

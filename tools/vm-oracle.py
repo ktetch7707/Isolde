@@ -138,6 +138,7 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "clients": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--skip-steam", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
          "guide": ("tv-library-acceptance.py", ["--guide", "--inspect"]),
+         "guide-surfaces": ("tv-library-acceptance.py", ["--guide", "--guide-surfaces", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
          "shell": ("shell-acceptance.py", []),
          "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
@@ -149,6 +150,14 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
 
 
 def visual_result_passed(case, result):
+    if case=="guide-surfaces":
+        initial=["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"]
+        extra=["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"]
+        base=dict(result);base["captures"]=initial
+        return (visual_result_passed("guide",base) and result.get("captures")==initial+extra
+                and type(result.get("nativeChannelsCreated")) is int and result["nativeChannelsCreated"]==2
+                and type(result.get("cachedChannelCount")) is int and result["cachedChannelCount"]==3
+                and all(result.get(key) is True for key in ("surfaceJourneyInputAcknowledged","committedSlotsUnchanged","sourceCachePreserved")))
     if case=="guide":
         return (all(result.get(k) is True for k in ("passed","freshProfile","remoteImport","actualPvrPlayback","returned","mediaUnchanged","syntheticSource"))
                 and result.get("normalProfileUsed") is False and result.get("providerSubscriptionVerified") is False
@@ -808,7 +817,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 900 if case in ("pages","guide","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 900 if case in ("pages","guide","guide-surfaces","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -991,7 +1000,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|guide|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|guide|guide-surfaces|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

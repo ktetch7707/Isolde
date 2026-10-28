@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('pages','guide','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('pages','guide','guide-surfaces','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -55,7 +55,7 @@ $captureLine = {
         $shellInput = $Case -eq 'shell' -and $phase -in @('shellnavigation','shellgallery','shellstore','shellreturn','shellambient','shellwake')
         $androidInput = $Case -eq 'androidapps' -and $phase -in @('androidnavigation','androidgallery','androidlaunch','androidpermission','androidopen','androidremote','androidreturn')
         $gamesInput = ($Case -eq 'games' -and $phase -in @('gamespermission','gamesmenu')) -or ($Case -eq 'emulators' -and $phase -in @('emulatorspermission','emulatorsmenu','emulatorsplay'))
-        $guideInput = $Case -eq 'guide' -and $phase -in @('guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn')
+        $guideInput = $Case -in @('guide','guide-surfaces') -and $phase -in @('guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn','guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn')
         $nativePermission = $gamesInput -or $androidInput -or ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput -or $shellInput -or $guideInput
         $storeReturn = $Case -eq 'store' -and $phase -in @('storeandroidopen','storechromiumopen')
         $nativeReturn = ($Case -eq 'games' -and $phase -eq 'gamesplay') -or ($Case -eq 'emulators' -and $phase -eq 'emulatorsaction') -or $storeReturn -or ($Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')) -or ($Case -eq 'vpn' -and $phase -in @('vpnproviderreturn','vpnusreturn','cbcvpn'))
