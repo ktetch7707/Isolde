@@ -32,6 +32,7 @@ private slots:
     void asyncPreviewCreateCancelAndProfileTeardown();
     void remoteCreatePreviewSaveAndFutureSelection();
     void remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot();
+    void unavailableIdentityOnlyChangesMatchingCachedPrograms();
     void remoteAdvancedScheduleDraftCancelWritesNothing();
     void compactPvrProgressAndAccessiblePressUseTheSameActions();
     void remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision();
@@ -144,6 +145,25 @@ void GuideUiTests::remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot() {
     GuideStore reader(path);const auto wall=QDateTime::currentSecsSinceEpoch();const auto programs=reader.programs(id,wall,wall+86400,1000);QVERIFY(!programs.isEmpty());for(const auto &program:programs)QCOMPARE(program.toMap().value("mediaId").toInt(),1);
     QVERIFY(controller.previewLocal(definition,"episode"));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.previewReady());QCOMPARE(controller.previewCount(),0);QCOMPARE(reader.programs(id,wall,wall+86400,1000),programs);
 }
+void GuideUiTests::unavailableIdentityOnlyChangesMatchingCachedPrograms() {
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);
+    const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"missing",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+    auto episode=controller.newDefinition();episode["sequence"]="episode-order";QVERIFY(controller.previewLocal(episode,"episode"));QTRY_VERIFY(!controller.busy());QVERIFY(controller.createLocal(episode));QTRY_VERIFY(!controller.busy());
+    auto movie=controller.newDefinition();movie["mediaKinds"]=QVariantList{QString("movie")};movie["sequence"]="episode-order";QVERIFY(controller.previewLocal(movie,"movie"));QTRY_VERIFY(!controller.busy());QVERIFY(controller.createLocal(movie));QTRY_VERIFY(!controller.busy());
+    GuideStore reader(path);const auto episodeId=episode.value("id").toString(),movieId=movie.value("id").toString();const auto wall=QDateTime::currentSecsSinceEpoch();
+    const auto before=reader.programs(episodeId,wall,wall+7*86400,1000),other=reader.programs(movieId,wall,wall+7*86400,1000);const auto otherCandidates=reader.candidateSnapshot(movieId);QVERIFY(!before.isEmpty());
+    const auto missingId=before.first().toMap().value("mediaId").toInt();QVERIFY(controller.markUnavailable("episode",missingId));QTRY_VERIFY(!controller.busy());
+    const auto after=reader.programs(episodeId,wall,wall+7*86400,1000);QCOMPARE(after.size(),before.size());
+    for(int i=0;i<before.size();++i){auto expected=before[i].toMap();if(expected.value("mediaId").toInt()==missingId)expected["status"]="unavailable";QCOMPARE(after[i].toMap(),expected);}
+    QCOMPARE(reader.programs(movieId,wall,wall+7*86400,1000),other);QCOMPARE(reader.candidateSnapshot(movieId),otherCandidates);
+    for(const auto &item:reader.candidateSnapshot(episodeId))QVERIFY(item.toMap().value("mediaId").toInt()!=missingId);
+    QVERIFY(reader.tuneTarget(episodeId,wall).isEmpty());
+    QVariantMap cached;for(const auto &row:controller.compactRows())if(row.toMap().value("id")==episodeId)cached=row.toMap().value("current").toMap();
+    QCOMPARE(cached.value("id"),before.first().toMap().value("id"));QCOMPARE(cached.value("title"),before.first().toMap().value("title"));QCOMPARE(cached.value("status").toString(),QString("unavailable"));
+    QCOMPARE(cached.value("startUtc"),before.first().toMap().value("startUtc"));QCOMPARE(cached.value("endUtc"),before.first().toMap().value("endUtc"));QVERIFY(cached.value("clockUtc").toLongLong()>=cached.value("startUtc").toLongLong());
+    for(const auto &row:controller.rows())if(row.toMap().value("id")==episodeId)QCOMPARE(row.toMap().value("current").toMap().value("id"),cached.value("id"));
+    controller.invalidate();QVERIFY(!controller.markUnavailable("episode",missingId));QCOMPARE(reader.programs(movieId,wall,wall+7*86400,1000),other);
+}
 void GuideUiTests::remoteAdvancedScheduleDraftCancelWritesNothing() {
     QTemporaryDir dir;GuideController controller(dir.filePath("guide.sqlite"),"policy-ui",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
     InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
@@ -177,6 +197,12 @@ void GuideUiTests::compactPvrProgressAndAccessiblePressUseTheSameActions() {
     dispatch.last.clear();command(widget.data(),InputManager::Menu);QCOMPARE(dispatch.last.value("type").toString(),QString("open-guide"));QCOMPARE(dispatch.last.value("focusChannelId").toString(),QString("pvr-station"));QCOMPARE(dispatch.last.value("presentation").toMap().value("guideSurface").toString(),QString("overlay"));
     dispatch.last.clear();widget->setProperty("readOnly",true);pressChannel.evaluate();QVERIFY(dispatch.last.isEmpty());
     command(widget.data(),InputManager::Menu);QVERIFY(dispatch.last.isEmpty());
+    auto unavailable=current;unavailable["status"]="unavailable";auto unavailableRow=row;unavailableRow["current"]=unavailable;
+    widget->setProperty("controller",QVariantMap{{"compactRows",QVariantList{unavailableRow}}});
+    QTRY_VERIFY((sourceLabel=visualItem(qobject_cast<QQuickItem*>(widget.data()),"guideWidgetLabel-pvr-station"))&&sourceLabel->property("text").toString().contains("Current broadcast · Unavailable"));
+    channel=visualItem(qobject_cast<QQuickItem*>(widget.data()),"guideWidgetChannel-pvr-station");QVERIFY(channel);
+    QQmlExpression unavailableDescription(QQmlEngine::contextForObject(channel),channel,"Accessible.description");QVERIFY(unavailableDescription.evaluate().toString().contains("Unavailable"));
+    QVariant unavailableProgress;QVERIFY(QMetaObject::invokeMethod(widget.data(),"progressFor",Q_RETURN_ARG(QVariant,unavailableProgress),Q_ARG(QVariant,unavailable)));QCOMPARE(unavailableProgress.toDouble(),0.25);
 }
 void GuideUiTests::overlayAndFocusedEntryPreserveGuideStateWithoutSaving() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);

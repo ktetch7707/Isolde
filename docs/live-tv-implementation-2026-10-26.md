@@ -19,7 +19,13 @@ The master-plan Live TV Engine sections 1–12 and [reviewed amendment](live-tv-
 | T24 prerequisites | Shared appearance/editor controls, focus/remote parity, rollback/profile tests, both reference pairs, accessibility/performance/usability evidence | Pending |
 | Final acceptance | Full CTest, installed captures and playback, disconnected Generator, source hashes and service restoration | Pending |
 
-## Active implementation: next-unwatched sequencing
+## Active implementation slices
+
+### Follow-on slice: scheduled local media availability
+
+The bridge now returns an explicit failed-start availability acknowledgement when a scheduled local file is not readable, without exposing its path or opening a player. KodiMedia uses the identity from its own scheduled request to notify the active Guide. The Guide worker invokes the existing atomic affected-media invalidation: only matching programs become unavailable, matching candidate snapshots are removed, and unrelated program identities and times remain unchanged. Cached current-program presentation retains the unavailable title, interval and progress while execution still refuses the tune; compact text and accessibility say Unavailable. The user can review the existing slot-repair workflow after return. Generic bridge/player failures, duration mismatches and PVR failures do not invalidate local media. This seven-file slice awaits dedicated tests; no acceptance credit yet.
+
+### Next-unwatched sequencing
 
 The remote channel draft now offers `next-unwatched` alongside shuffle, episode order and rotation. Preview and save share one predicate: only items whose Kodi snapshot explicitly reports numeric playcount zero qualify; missing, malformed and watched states are excluded. The selected snapshot repeats in stable show/season/episode order. The preview explains that watch state is captured at preview time; editing and previewing rules refreshes it for unscheduled work, while committed programs remain unchanged unless future regeneration is explicitly reviewed. This adds no independent watch-state database or Kodi writes. Regression verification is pending after the frozen `40c2703` full/visual candidate; no acceptance credit yet.
 

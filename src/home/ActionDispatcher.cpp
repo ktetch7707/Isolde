@@ -22,6 +22,9 @@ ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, 
         clearGuidePlayback();
         emit restoreFocusRequested(m_origin.isEmpty() ? app : m_origin);
     });
+    connect(media,&KodiMedia::scheduledMediaUnavailable,this,[this](const QString &kind,int id){
+        if(m_guide && !m_guideChannel.isEmpty())m_guide->markUnavailable(kind,id);
+    });
     connect(media, &KodiMedia::playbackReturned, this, [this](bool home) {
         if(!home && m_guide && !m_guideChannel.isEmpty() && m_media->lastPlaybackNaturalEnd()) {
             const auto now=QDateTime::currentSecsSinceEpoch();

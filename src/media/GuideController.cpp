@@ -37,6 +37,17 @@ bool integer(const QVariant &value,qint64 minimum,qint64 maximum) {
     return ok && std::isfinite(number) && std::floor(number)==number && number>=minimum && number<=maximum;
 }
 QVariantMap outcome(bool ok,GuideStore &store) { return {{"ok",ok},{"error",ok?QString():store.errorString()}}; }
+QVariantMap cachedCurrent(GuideStore &store,const QString &id,qint64 wall) {
+    auto current=store.tuneTarget(id,wall);if(!current.isEmpty())return current;
+    // Presentation retains an unavailable listing even when execution cannot
+    // produce a tune target. This is a bounded cached read, never a media scan.
+    const auto clock=store.broadcastTime(id,wall);const auto programs=store.programs(id,clock,clock+1,1);
+    if(programs.isEmpty())return {};
+    current=programs.first().toMap();current["clockUtc"]=clock;current["offsetSeconds"]=clock-current.value("startUtc").toLongLong();
+    current["displayStartUtc"]=current.value("startUtc").toLongLong()-clock+wall;
+    current["displayEndUtc"]=current.value("endUtc").toLongLong()-clock+wall;
+    current["status"]="unavailable";return current;
+}
 QVariantMap snapshot(GuideStore &store,qint64 from,qint64 to,int first) {
     QVariantList rows; const auto channels=store.channels(); int visible=0;
     for (const auto &v:channels) {
@@ -51,12 +62,12 @@ QVariantMap snapshot(GuideStore &store,qint64 from,qint64 to,int first) {
             auto slot=entry.toMap(); slot["displayStartUtc"]=slot.value("startUtc").toLongLong()-delta;
             slot["displayEndUtc"]=slot.value("endUtc").toLongLong()-delta; entry=slot;
         }
-        channel["programs"]=programs; channel["current"]=store.tuneTarget(id,wall); channel["sourceName"]=channel.value("owner")=="kodi-pvr"?"Kodi PVR":"Local"; rows.append(channel);
+        channel["programs"]=programs; channel["current"]=cachedCurrent(store,id,wall); channel["sourceName"]=channel.value("owner")=="kodi-pvr"?"Kodi PVR":"Local"; rows.append(channel);
     }
     QVariantList compact;
     for(const auto &v:channels) {
         auto channel=v.toMap();if(channel.value("hidden").toBool())continue;if(compact.size()>=5)break;
-        const auto id=channel.value("id").toString();channel["current"]=store.tuneTarget(id,now());channel["sourceName"]=channel.value("owner")=="kodi-pvr"?"Kodi PVR":"Local";compact.append(channel);
+        const auto id=channel.value("id").toString();channel["current"]=cachedCurrent(store,id,now());channel["sourceName"]=channel.value("owner")=="kodi-pvr"?"Kodi PVR":"Local";compact.append(channel);
     }
     return {{"channels",channels},{"rows",rows},{"compactRows",compact},{"ready",store.ready()}};
 }
@@ -368,6 +379,12 @@ bool GuideController::setMetadata(const QString &id,const QVariantMap &p,int rev
 bool GuideController::swapNumbers(const QString &id,const QString &otherId,const QVariantMap &revisions){return submit([id,otherId,revisions](GuideStore &store){return outcome(store.swapNumbers(id,otherId,revisions),store);});}
 bool GuideController::reorder(const QStringList &ids,const QVariantMap &revisions){return submit([ids,revisions](GuideStore &store){return outcome(store.reorder(ids,revisions),store);});}
 bool GuideController::remove(const QString &id,int revision){return submit([id,revision](GuideStore &store){return outcome(store.remove(id,revision),store);});}
+bool GuideController::markUnavailable(const QString &kind,int mediaId) {
+    if(!QStringList{"movie","episode","musicvideo","song"}.contains(kind) || mediaId<1)return fail(tr("Invalid unavailable-media identity."));
+    return submit([kind,mediaId](GuideStore &store){return outcome(store.markUnavailable(kind,mediaId),store);},[this](const QVariantMap &result){
+        if(result.value("ok").toBool()){m_status=tr("Unavailable media marked only in affected programs. Select a program and review Repair; other programs keep their times.");emit changed();}
+    });
+}
 bool GuideController::tune(const QString &id,const QString &origin) {
     if(!ComponentSchema::safeId(id) || (!origin.isEmpty() && !ComponentSchema::safeId(origin)))return fail(tr("Invalid guide selection."));
     return submit([id](GuideStore &store){const auto target=store.tuneTarget(id,now());return QVariantMap{{"ok",!target.isEmpty()},{"target",target},{"error",target.isEmpty()?QString("This channel has no available scheduled program. Check its source or schedule."):QString()}};},

@@ -70,6 +70,11 @@ class Playback:
                                    {key: params[key], "properties": ["file", duration_field] if scheduled else ["file"]})
                 path = details.get(media_type + "details", {}).get("file", "")
                 if not isinstance(path, str) or not os.path.isabs(path) or not os.path.isfile(path) or not os.access(path, os.R_OK):
+                    if scheduled:
+                        # An explicit negative acknowledgement, not an RPC or
+                        # player failure. Never expose the local path.
+                        return {"state":"failed", "home":False, "availability":"unavailable",
+                                "reason":"Scheduled local media is unavailable. Return to the guide to review a replacement."}
                     raise ValueError("This media is not an available local file")
                 if scheduled:
                     duration = details.get(media_type+"details", {}).get(duration_field)

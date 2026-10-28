@@ -20,7 +20,7 @@ Item {
     onRowsChanged:if(selectedChannelId){const at=rows.findIndex(c=>c.id===selectedChannelId);selectedIndex=at>=0?at:-1;if(at<0)selectedChannelId=""}
     function select(index){selectedIndex=index;selectedChannelId=rows[index]?rows[index].id:""}
     function progressFor(current){const duration=current.endUtc-current.startUtc;const elapsed=current.clockUtc===undefined?current.offsetSeconds:current.clockUtc-current.startUtc;return duration>0?Math.max(0,Math.min(1,elapsed/duration)):0}
-    function programLabel(current){return current.title || (current.launchKind==="kodi_pvr"?"No listings · Watch live":"No available scheduled program")}
+    function programLabel(current){return current.title?(current.title+(current.status==="unavailable"?" · Unavailable":"")):(current.launchKind==="kodi_pvr"?"No listings · Watch live":"No available scheduled program")}
     function openGuide(surface){
         if(readOnly || !dispatcher)return
         const action={type:"open-guide",presentation:Object.assign({},style,surface?{guideSurface:surface}:{})}

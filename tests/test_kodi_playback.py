@@ -156,6 +156,27 @@ class PlaybackTests(unittest.TestCase):
         with self.assertRaises(ValueError):self.player.handle("Isolde.PlayScheduled",valid)
         self.assertNotIn("Player.Open",[m for m,_ in self.calls])
 
+    def test_deleted_scheduled_local_media_returns_typed_unavailable_without_open(self):
+        for kind in ("movie","episode","musicvideo","song"):
+            with self.subTest(kind=kind):
+                self.kind=kind;self.path.write_bytes(b"fixture")
+                self.player=module.Playback(self.execute,self.builtins.append,True,lambda:self.now)
+                params={"mediaType":kind,"mediaId":7,"offsetSeconds":0}
+                self.assertEqual(self.player.handle("Isolde.PlayScheduled",params)["state"],"starting")
+                self.assertIn("Player.Open",[method for method,_ in self.calls])
+                self.path.unlink();self.calls=[]
+                self.player=module.Playback(self.execute,self.builtins.append,True,lambda:self.now)
+                result=self.player.handle("Isolde.PlayScheduled",params)
+                self.assertEqual(result["state"],"failed")
+                self.assertIs(result["home"],False)
+                self.assertEqual(result["availability"],"unavailable")
+                self.assertNotIn(str(self.path),json.dumps(result))
+                self.assertNotIn("Player.Open",[method for method,_ in self.calls])
+                details=("AudioLibrary.GetSongDetails" if kind=="song" else "VideoLibrary.Get"+{"movie":"Movie","episode":"Episode","musicvideo":"MusicVideo"}[kind]+"Details")
+                self.assertIn((details,{kind+"id":7,"properties":["file","duration" if kind=="song" else "runtime"]}),self.calls)
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.PlayMovie",{"movieid":7,"resume":False})
+
     def test_scheduled_musicvideo_uses_kodi_library_identity(self):
         self.kind="musicvideo"
         self.player.handle("Isolde.PlayScheduled",{"mediaType":"musicvideo","mediaId":7,"offsetSeconds":0})

@@ -635,6 +635,7 @@ bool KodiMedia::playScheduled(const QString &kind, int id, int offsetSeconds)
         || !QStringList{"movie","episode","musicvideo","song"}.contains(kind)) return false;
     ++m_generation;
     m_scheduledPlayback=true;
+    m_scheduledKind=kind;m_scheduledId=id;
     m_playbackActive=true; m_playbackVisible=false; m_busy=true; m_stage=5;
     m_presentationError.clear(); m_playbackStatus="Tuning to the channel's broadcast position…";
     emit changed();
@@ -732,6 +733,11 @@ void KodiMedia::consume()
         } else {
             m_playbackPoll.stop(); m_playbackActive = m_playbackVisible = false;
             m_lastPlaybackNaturalEnd=state=="ended" && result.value("naturalEnd").isBool() && result.value("naturalEnd").toBool();
+            // Trust only a negative start acknowledgement for the identity we
+            // requested. Timeouts, PVR failures and later player errors do not
+            // invalidate local schedules or candidate snapshots.
+            if(m_stage==5 && m_scheduledPlayback && state=="failed" && !result.value("home").toBool() && result.value("availability")=="unavailable")
+                emit scheduledMediaUnavailable(m_scheduledKind,m_scheduledId);
             emit playbackReturned(result.value("home").toBool());
             if (state == "ended" && !m_scheduledPlayback) {
                 // Kodi persists progress on stop; update the current shelf after

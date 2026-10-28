@@ -28,6 +28,7 @@ private slots:
     void pagesLibraryAndResets();
     void playbackLifecycle();
     void scheduledPlaybackUsesExplicitBroadcastOffset();
+    void scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdentity();
     void localViewsAndCollections();
     void manualMovieCollections();
     void manualShowCollections();
@@ -153,6 +154,8 @@ static void serve(QLocalServer &server, int version)
                     server.setProperty("lastPlayParams", request.value("params").toObject().toVariantMap());
                     server.setProperty("playRequests", server.property("playRequests").toInt() + 1);
                     result = QJsonObject{{"state", server.property("playState").toString()}, {"home", server.property("playHome").toBool()}};
+                    const auto overrideKey=request.value("method")=="Isolde.PlaybackStatus"?"pollResult":"playResult";
+                    if(server.property(overrideKey).isValid())result=QJsonObject::fromVariantMap(server.property(overrideKey).toMap());
                 }
                 else if (request.value("method") == "Isolde.GetPlaylists") {
                     result=QJsonObject{{"playlists",QJsonArray{QJsonObject{{"playlistid",1},{"title","Family films"},{"playlistName","Family films.xsp"}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
@@ -821,6 +824,32 @@ void KodiMediaTests::scheduledPlaybackUsesExplicitBroadcastOffset()
     server.setProperty("playState","playing"); QTRY_COMPARE(started.size(),1);
     server.setProperty("playState","ended"); media.playbackControl("stop");
     QTRY_VERIFY(!media.playbackActive()); QCOMPARE(returned.size(),1);
+}
+void KodiMediaTests::scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdentity()
+{
+    const QVariantMap unavailable{{"state","failed"},{"home",false},{"availability","unavailable"},{"mediaType","movie"},{"mediaId",999}};
+    QVariantList results{unavailable};
+    for(const auto &home:QVariantList{QVariant(),0,QString("false"),true}){auto invalid=unavailable;if(home.isValid())invalid["home"]=home;else invalid.remove("home");results.append(invalid);}
+    auto generic=unavailable;generic.remove("availability");results.append(generic);
+    auto malformed=unavailable;malformed["availability"]=true;results.append(malformed);
+    for(int index=0;index<results.size();++index){
+        QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server,13);server.setProperty("playResult",results[index]);
+        KodiMedia media("missing",nullptr,dir.path());QSignalSpy missing(&media,&KodiMedia::scheduledMediaUnavailable);
+        QVERIFY(media.playScheduled("episode",7,0));QTRY_VERIFY(!media.playbackActive());
+        QCOMPARE(missing.size(),index==0?1:0);if(index==0){QCOMPARE(missing[0][0].toString(),QString("episode"));QCOMPARE(missing[0][1].toInt(),7);}
+    }
+    {
+        QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server,13);server.setProperty("playResult",unavailable);
+        KodiMedia media("pvr",nullptr,dir.path());QSignalSpy missing(&media,&KodiMedia::scheduledMediaUnavailable);QVERIFY(media.playPvr(7,9,101));QTRY_VERIFY(!media.playbackActive());QVERIFY(missing.isEmpty());
+    }
+    {
+        QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server,13);server.setProperty("playState","playing");server.setProperty("pollResult",unavailable);
+        KodiMedia media("late-failure",nullptr,dir.path());QSignalSpy missing(&media,&KodiMedia::scheduledMediaUnavailable);QVERIFY(media.playScheduled("episode",7,0));QTRY_VERIFY(!media.playbackActive());QVERIFY(missing.isEmpty());
+    }
+    {
+        QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server,13);server.setProperty("playResult",unavailable);
+        KodiMedia media("invalidated",nullptr,dir.path());QSignalSpy missing(&media,&KodiMedia::scheduledMediaUnavailable);QVERIFY(media.playScheduled("episode",7,0));media.invalidate("Profile closed");QTest::qWait(100);QVERIFY(missing.isEmpty());
+    }
 }
 void KodiMediaTests::readsLibraryThroughTwoRequests()
 {

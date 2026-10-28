@@ -99,6 +99,7 @@ signals:
     void quitReply(bool accepted);
     void playbackStarted();
     void playbackReturned(bool home);
+    void scheduledMediaUnavailable(const QString &kind,int id);
     void playlistSaved(const QString &filename);
 private:
     void request(const QString &method, const QJsonObject &params = {});
@@ -135,6 +136,8 @@ private:
     bool m_playbackCanPause = false, m_playbackCanSeek = false;
     bool m_lastPlaybackNaturalEnd = false;
     bool m_scheduledPlayback = false;
+    QString m_scheduledKind;
+    int m_scheduledId = 0;
     QString m_playbackStatus;
     QString m_pendingControl;
     QString m_presentationError;

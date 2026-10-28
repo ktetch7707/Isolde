@@ -174,6 +174,9 @@ void GuideTests::targetedMissingMediaPreservesIntervals() {
     QVERIFY(store.createLocal(definition(),media(),Now,1));
     const auto baseline=store.programs("cartoons",Now,Now+Day,1000);
     const auto missing=baseline.first().toMap();
+    const auto candidates=store.candidateSnapshot("cartoons");store.failNextCommitForTest();
+    QVERIFY(!store.markUnavailable(missing.value("mediaType").toString(),missing.value("mediaId").toInt()));
+    QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),baseline);QCOMPARE(store.candidateSnapshot("cartoons"),candidates);
     QVERIFY(store.markUnavailable(missing.value("mediaType").toString(),missing.value("mediaId").toInt()));
     const auto repaired=store.programs("cartoons",Now,Now+Day,1000); QCOMPARE(baseline.size(),repaired.size());
     for (int i=0;i<baseline.size();++i) {

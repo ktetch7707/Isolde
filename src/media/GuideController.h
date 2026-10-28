@@ -80,6 +80,7 @@ public:
     // Execution is routed through ActionDispatcher; QML cannot launch IDs or
     // offsets obtained from an arbitrary source.
     bool tune(const QString &id,const QString &origin);
+    bool markUnavailable(const QString &kind,int mediaId);
     void invalidate();
 signals:
     void changed();
