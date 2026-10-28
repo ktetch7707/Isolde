@@ -524,6 +524,7 @@ Window {
         function onPlaybackReturned(home){
             if(tvGuide.open){if(home){tvGuide.open=false;window.showDesignatedHome()}else guideController.refresh()}
             if(home && pageSurface.open && !kodiLibrary.returnToSearchAfterPlayback)pageSurface.closeAll()
+            if(!sessionManager.active && !desktopMode.active){window.raise();window.requestActivate()}
         }
     }
     Connections {

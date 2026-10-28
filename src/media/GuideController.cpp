@@ -140,7 +140,7 @@ void GuideController::maintainSchedules() {
     for(const auto &v:m_channels){
         const auto channel=v.toMap();const auto id=channel.value("id").toString();
         if(channel.value("owner")=="kodi-pvr")continue;
-        const auto clock=channel.value("clock")=="real-time"?wall:channel.value("clockUtc").toLongLong()
+        const auto clock=channel.value("clock")=="real-time"?wall+channel.value("clockOffsetSeconds",0).toLongLong():channel.value("clockUtc").toLongLong()
             +(channel.value("active").toBool()?std::max<qint64>(0,wall-channel.value("anchorUtc").toLongLong()):0);
         const auto horizon=channel.value("horizonDays",7).toInt(),retention=channel.value("retentionDays",2).toInt();
         const bool horizonDue=channel.value("generatedThroughUtc").toLongLong()<clock+horizon*86400-6*3600;
@@ -246,7 +246,7 @@ bool GuideController::previewClockAdjustment(const QString &id,const QVariant &d
 bool GuideController::adjustClock() {
     if(m_clockReview.isEmpty())return fail(tr("Preview the broadcast-clock adjustment before applying it."));
     const auto review=m_clockReview;
-    return submit([review](GuideStore &store){return outcome(store.adjustClock(review,now()),store);},[this](const QVariantMap &result){if(result.value("ok").toBool()){m_clockReview.clear();emit changed();}});
+    return submit([review](GuideStore &store){return outcome(store.adjustClock(review,now()),store);},[this,review](const QVariantMap &result){if(result.value("ok").toBool()){m_clockReview.clear();m_maintenanceAttempted.remove(review.value("channelId").toString());emit changed();QTimer::singleShot(0,this,&GuideController::maintainSchedules);}});
 }
 bool GuideController::createLocal(const QVariantMap &definition) {
     if(!m_previewReady || definition!=m_previewDefinition)return fail(tr("Preview these exact channel settings before saving."));

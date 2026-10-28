@@ -280,7 +280,11 @@ if ''' + repr(str(imported)) + ''' in selected:
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Guide tuned actual Kodi PVR channel')
                 time.sleep(3);guide_capture('guidevideo')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','PVR stop returned from owned playback')
-                run('wmctrl','-i','-a',shell,env=env);guide_capture('guidereturn')
+                def shell_active():
+                    active_window=run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).strip().split()[-1]
+                    return int(active_window,16)==int(shell,16)
+                wait(shell_active,'Automatic native playback focus returned to shell',seconds=8)
+                guide_capture('guidereturn')
                 assert imported_channels()==[cached]
                 surface_phases=[]
                 if args.guide_surfaces:
@@ -314,17 +318,23 @@ if ''' + repr(str(imported)) + ''' in selected:
                             assert current,(channel,wall)
                             progress=(wall-current[1])/(current[2]-current[1]);assert 0<=progress<1
                             current_rows.append({'id':channel['id'],'number':channel['number'],'name':channel['name'],'source':'Kodi PVR' if channel.get('owner')=='kodi-pvr' else 'Local','title':current[0],'startUtc':current[1],'endUtc':current[2],'progress':progress})
-                    (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'atUtc':wall,'rows':current_rows,'widgetId':'guide-widget','pvrChannelId':cached['id'],'localCreatedId':local['id']},indent=2))
+                    (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'atUtc':wall,'rows':current_rows,'widgetId':'guide-widget','pvrChannelId':cached['id'],'localCreatedId':local['id'],'localCreation':local_creation},indent=2))
                     for phase in ('guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn'):guide_capture(phase)
                     assert imported_channels()==lineup,'Browsing surfaces changed saved channel definitions'
                     assert cached_slots()==committed_slots,'Browsing surfaces regenerated or changed committed slots'
                     surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
-                result={'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn']+surface_phases,'visualReview':'pending','profile':profile}
+                result={'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'automaticNativeReturn':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn']+surface_phases,'visualReview':'pending','profile':profile}
                 if args.guide_surfaces:result.update(nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True)
                 (evidence/'result.json').write_text(json.dumps(result,indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
+                    with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
+                        candidates=json.loads(db.execute('SELECT candidates FROM channels WHERE id=?',(local['id'],)).fetchone()[0])
+                        initial_slots=db.execute('SELECT id,media_type,media_id,title,start_utc,end_utc,status FROM slots WHERE channel=? ORDER BY start_utc LIMIT 50',(local['id'],)).fetchall()
+                        slot_count=db.execute('SELECT COUNT(*) FROM slots WHERE channel=?',(local['id'],)).fetchone()[0]
+                    assert candidates and initial_slots and slot_count>=len(initial_slots)
+                    local_creation={'definition':local,'candidateCount':len(candidates),'candidates':[{k:item[k] for k in ('mediaType','mediaId','title','duration') if k in item} for item in candidates[:50]],'slotCount':slot_count,'initialSlots':initial_slots}
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
             seasons = rpc(directory, "VideoLibrary.GetSeasons", {"tvshowid": show_id, "properties": ["season"]})["seasons"]
             assert {s["season"] for s in seasons} == {0, 1}

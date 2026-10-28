@@ -400,14 +400,18 @@ class OracleTests(unittest.TestCase):
 
     def test_visual_results_use_each_harness_contract(self):
         guide=dict(passed=True,freshProfile=True,normalProfileUsed=False,pvrAddon="pvr.iptvsimple",sourceChannels=1,sourceListings=50,
-                   remoteImport=True,actualPvrPlayback=True,returned=True,mediaUnchanged=True,syntheticSource=True,providerSubscriptionVerified=False,
+                   remoteImport=True,actualPvrPlayback=True,returned=True,automaticNativeReturn=True,mediaUnchanged=True,syntheticSource=True,providerSubscriptionVerified=False,
                    captures=["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"])
         self.assertTrue(oracle.visual_result_passed("guide",guide))
+        for claimed in (None,False,1,"true"):
+            incomplete=dict(guide);incomplete["automaticNativeReturn"]=claimed
+            self.assertFalse(oracle.visual_result_passed("guide",incomplete))
+        incomplete=dict(guide);del incomplete["automaticNativeReturn"];self.assertFalse(oracle.visual_result_passed("guide",incomplete))
         surfaces=dict(guide,nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True,
                       captures=guide["captures"]+["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"])
         self.assertTrue(oracle.visual_result_passed("guide-surfaces",surfaces))
         self.assertFalse(oracle.visual_result_passed("guide-surfaces",guide))
-        for key in ("surfaceJourneyInputAcknowledged","committedSlotsUnchanged","sourceCachePreserved","actualPvrPlayback"):
+        for key in ("surfaceJourneyInputAcknowledged","committedSlotsUnchanged","sourceCachePreserved","actualPvrPlayback","automaticNativeReturn"):
             incomplete=dict(surfaces);incomplete[key]=False;self.assertFalse(oracle.visual_result_passed("guide-surfaces",incomplete))
         for key in ("nativeChannelsCreated","cachedChannelCount"):
             incomplete=dict(surfaces);incomplete[key]=True;self.assertFalse(oracle.visual_result_passed("guide-surfaces",incomplete))

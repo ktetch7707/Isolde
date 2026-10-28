@@ -390,7 +390,10 @@ Item {
                 Accessible.role:Accessible.Button;Accessible.name:modelData.number+" · "+modelData.name;Accessible.description:modelData.sourceName+" · "+(modelData.current.title || "No current listings");Accessible.focusable:true;Accessible.focused:root.visible && !root.mode && !root.headerFocused && !root.selectedProgram && root.selectedChannel && root.selectedChannel.id===modelData.id
                 Accessible.onPressAction:{root.headerFocused=false;root.pickChannel(root.channels.findIndex(c=>c.id===modelData.id));root.handleCommand(inputManager.confirm)}
                 Rectangle {anchors.fill:parent;anchors.bottomMargin:root.gap;color:"transparent";radius:root.radius;border.width:!root.headerFocused && !root.mode && root.selectedChannel && root.selectedChannel.id===modelData.id?2:0;border.color:root.appearance.focusColor}
-                Text {x:root.gap;y:root.gap;width:root.channelWidth-root.gap*2;height:parent.height-root.gap*2;textFormat:Text.PlainText;text:modelData.number+" · "+modelData.name+(root.sourceBadges?"\n"+modelData.sourceName:"");color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight;wrapMode:Text.WordWrap}
+                Column {x:root.gap;y:root.gap;width:root.channelWidth-root.gap*2
+                    Text {width:parent.width;textFormat:Text.PlainText;text:modelData.number+" · "+modelData.name;color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight}
+                    Text {objectName:"guideSource-"+modelData.id;width:parent.width;visible:root.sourceBadges;textFormat:Text.PlainText;text:modelData.sourceName;color:root.appearance.textColor;font.pixelSize:root.fontSize*.85;elide:Text.ElideRight}
+                }
                 Item {x:root.channelWidth;width:parent.width-root.channelWidth;height:parent.height;clip:true
                     property string stationName:modelData.name
                     property string sourceName:modelData.sourceName

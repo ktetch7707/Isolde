@@ -50,6 +50,8 @@ private slots:
     void configuredCommandPaletteGuideEntryNeedsNoLayoutRewrite();
     void rangeAndSetRulesUseRemoteEditableIndividualValues();
     void startupMaintainsExpiredSchedulesWithoutKodiReads();
+    void adjustedClockMaintenanceUsesBroadcastTimeWithoutKodiReads();
+    void longChannelNamesKeepSourceLabelsVisibleAcrossSurfaces();
     void pvrPreviewMappingImportAndFailedRefreshPreserveCache();
     void pvrUtcParsingAndCacheIgnoreCivilDstGaps();
     void remoteRuleEditDuplicateAndRegenerationAreReviewedTransactions();
@@ -423,6 +425,51 @@ void GuideUiTests::startupMaintainsExpiredSchedulesWithoutKodiReads() {
     QCOMPARE(after,before);QCOMPARE(persisted.channels(),channels);
     QCOMPARE(persisted.programs("offline",wall-2*86400,wall+8*86400,1000),programs);
     QCOMPARE(persisted.candidateSnapshot("offline"),candidates);QVERIFY(controller.errorString().isEmpty());
+}
+void GuideUiTests::adjustedClockMaintenanceUsesBroadcastTimeWithoutKodiReads() {
+    for(const bool forward:{true,false}) {
+        QTemporaryDir dir;const auto path=dir.filePath("guide.sqlite");const auto wall=QDateTime::currentSecsSinceEpoch();
+        QVariantMap def{{"schemaVersion",1},{"id","adjusted"},{"name","Adjusted channel"},{"number",1},{"clock","real-time"},{"clockOffsetSeconds",(forward?6:-6)*86400},
+            {"sequence","episode-order"},{"seed",42},{"timezone","UTC"},{"rule",QVariantMap{{"field","source"},{"op","is"},{"value","kodi"}}}};
+        const QVariantList items{QVariantMap{{"mediaType","episode"},{"mediaId",1},{"title","Cached episode"},{"duration",21600},{"source","kodi"}}};
+        {GuideStore store(path);QVERIFY(store.createLocal(def,items,forward?wall-3*86400:wall));}
+        GuideStore reader(path);const auto preserved=reader.programs("adjusted",wall+6*86400,wall+10*86400,1000),candidates=reader.candidateSnapshot("adjusted");
+        GuideController controller(path,"adjusted",nullptr,dir.filePath("no-bridge"));QTRY_VERIFY(controller.ready()&&!controller.busy());
+        if(forward) {
+            QTRY_VERIFY(reader.channel("adjusted").value("generatedThroughUtc").toLongLong()>=wall+13*86400);
+            QVERIFY(!controller.scheduleStatus().isEmpty());QCOMPARE(reader.programs("adjusted",wall+6*86400,wall+10*86400,1000),preserved);
+            QVERIFY(controller.previewClockAdjustment("adjusted",86400,reader.channel("adjusted").value("revision").toInt()));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.clockReview().isEmpty());
+            QVERIFY(controller.adjustClock());QTRY_VERIFY(!controller.busy());controller.maintainSchedules();QTRY_VERIFY(!controller.busy());
+            QTRY_VERIFY(reader.channel("adjusted").value("generatedThroughUtc").toLongLong()>=wall+14*86400);
+            QCOMPARE(reader.programs("adjusted",wall+6*86400,wall+10*86400,1000),preserved);
+        } else {
+            const auto state=reader.channels(),slots=reader.programs("adjusted",wall-7*86400,wall+2*86400,1000);
+            controller.maintainSchedules();QVERIFY(!controller.busy());QVERIFY(controller.scheduleStatus().isEmpty());
+            QCOMPARE(reader.channels(),state);QCOMPARE(reader.programs("adjusted",wall-7*86400,wall+2*86400,1000),slots);
+        }
+        QCOMPARE(reader.candidateSnapshot("adjusted"),candidates);QVERIFY(controller.errorString().isEmpty());
+    }
+}
+void GuideUiTests::longChannelNamesKeepSourceLabelsVisibleAcrossSurfaces() {
+    QTemporaryDir dir;const auto path=dir.filePath("guide.sqlite");const auto wall=QDateTime::currentSecsSinceEpoch();
+    QVariantMap def{{"schemaVersion",1},{"id","long-name"},{"name",QString(100,'N')},{"number",1},{"clock","real-time"},
+        {"sequence","episode-order"},{"seed",42},{"timezone","UTC"},{"rule",QVariantMap{{"field","source"},{"op","is"},{"value","kodi"}}}};
+    QVariantMap saved;{GuideStore store(path);QVERIFY(store.createLocal(def,{QVariantMap{{"mediaType","episode"},{"mediaId",1},{"title","Current episode"},{"duration",1800},{"source","kodi"}}},wall));saved=store.definition("long-name");}
+    GuideController controller(path,"long-name",nullptr,dir.filePath("no-bridge"));QTRY_VERIFY(controller.ready()&&!controller.busy());
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);QQuickWindow window;window.resize(1280,720);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1100},{"height",480}}));QVERIFY2(view,qPrintable(component.errorString()));
+    auto *root=qobject_cast<QQuickItem*>(view.data());root->setParentItem(window.contentItem());window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+    for(const auto &surface:QStringList{"overlay","full"}) {
+        view->setProperty("height",surface=="overlay"?480:720);
+        const QVariantMap style{{"guideSurface",surface},{"guideSourceBadges",true}};
+        QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("origin")),Q_ARG(QVariant,style)));QTRY_VERIFY(!controller.busy());
+        QQuickItem *source=nullptr,*row=nullptr;QTRY_VERIFY((source=visualItem(root,"guideSource-long-name"))&&(row=visualItem(root,"guideChannel-long-name")));
+        QTRY_VERIFY(source->isVisible());QCOMPARE(source->property("text").toString(),QString("Local"));QVERIFY(!source->property("truncated").toBool());
+        const auto point=source->mapToItem(row,QPointF());QVERIFY(point.y()>=0);QVERIFY2(point.y()+source->height()<=row->height(),qPrintable(QString("Source bottom %1 exceeds row %2").arg(point.y()+source->height()).arg(row->height())));
+        QQmlExpression description(QQmlEngine::contextForObject(row),row,"Accessible.description");QVERIFY(description.evaluate().toString().contains("Local"));QVERIFY(!description.hasError());
+        auto hidden=style;hidden["guideSourceBadges"]=false;view->setProperty("presentation",hidden);QTRY_VERIFY(!source->isVisible());QVERIFY(description.evaluate().toString().contains("Local"));
+    }
+    GuideStore reader(path);QCOMPARE(reader.definition("long-name"),saved);QVERIFY(dispatch.last.isEmpty());
 }
 void GuideUiTests::pvrPreviewMappingImportAndFailedRefreshPreserveCache() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
