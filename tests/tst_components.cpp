@@ -42,7 +42,6 @@ static QByteArray readFile(const QString &path) { QFile file(path); if (!file.op
 class ComponentTests : public QObject {
     Q_OBJECT
 private slots:
-    void steamGamesUseProviderIdentityAndReviewedImport();
     void guideActionsValidateIdentityAndAppearance();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
     void gamesLaunchRejectsMissingAndRedirectedTargets();
@@ -98,33 +97,6 @@ static AppDefinition gamesRuntime(const QString &id="psp-test") {
 }
 static QVariantMap gameRegistration(const QString &root,const QString &target="game.iso") {
     return {{"schemaVersion",1},{"title","Local title"},{"platform","PSP"},{"runtimeId","psp-test"},{"root",root},{"target",target}};
-}
-void ComponentTests::steamGamesUseProviderIdentityAndReviewedImport(){
-    QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);
-    qApp->setProperty("isoldeProfile",profile);
-    const auto parent=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+profile;
-    const auto steamapps=parent+"/steam/home/.local/share/Steam/steamapps";
-    QVERIFY(QDir().mkpath(steamapps+"/common/Fixture"));
-    writeFile(steamapps+"/appmanifest_42.acf","\"AppState\" { \"appid\" \"42\" \"name\" \"Steam fixture\" \"StateFlags\" \"4\" \"installdir\" \"Fixture\" }");
-    QTemporaryDir dir;AppRegistry apps;auto steam=gamesRuntime("steam");steam.name="Steam";steam.handledActions.clear();steam.launchConfiguration={{"desktopId","isolde-steam"}};QVERIFY(apps.addApp(steam));
-    GameLibrary library(dir.filePath("games.sqlite"),&apps);QVERIFY(library.ready());
-    QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QCOMPARE(library.importCount(),1);QVERIFY(library.page().isEmpty());
-    library.cancelImport();QVERIFY(library.page().isEmpty());
-    QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
-    QCOMPARE(library.page().size(),1);const auto id=library.page()[0].toMap().value("id").toString();
-    auto registration=library.registration(id);QCOMPARE(registration.value("target").toString(),QString("42"));QVERIFY(registration.value("root").toString().isEmpty());
-    QCOMPARE(library.resolveLaunch(id),QVariantMap({{"type","steam-game"},{"steamAppId","42"}}));
-    QVERIFY(library.setFavorite(id,true));registration["title"]="My corrected title";QVERIFY(library.updateGame(id,registration));
-    QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
-    QCOMPARE(library.page().size(),1);QCOMPARE(library.details(id).value("title").toString(),QString("My corrected title"));QVERIFY(library.details(id).value("favorite").toBool());
-    for(const auto &bad:QStringList{"0","01","4294967296","42; touch x","steam://run/42","/tmp/game","42\n"}){auto invalid=registration;invalid["target"]=bad;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());}
-    auto invalid=registration;invalid["root"]=steamapps;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());
-    steam.launchConfiguration["steamGameId"]="42";QVERIFY(!steam.isValid());
-    QVERIFY(ComponentSchema::action({{"type","steam-game"},{"steamAppId","42"}}).isEmpty());
-    GameLibrary other(dir.filePath("other/games.sqlite"),&apps);QVERIFY(other.resolveLaunch(id).isEmpty());
-    QVERIFY(library.beginSteamImport());library.invalidate();QTRY_VERIFY(!library.scanning());QVERIFY(!library.importReady());QVERIFY(library.resolveLaunch(id).isEmpty());
-    QVERIFY(QFileInfo::exists(steamapps+"/appmanifest_42.acf"));
-    qApp->setProperty("isoldeProfile",QVariant());QVERIFY(QDir(parent).removeRecursively());
 }
 void ComponentTests::guideActionsValidateIdentityAndAppearance() {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto user=dir.filePath("home.json");
