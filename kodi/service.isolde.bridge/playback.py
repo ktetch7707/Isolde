@@ -151,9 +151,11 @@ class Playback:
                         seconds = position["hours"]*3600+position["minutes"]*60+position["seconds"] if valid_position else -1
                         elapsed = max(0,self.clock()-self.opened_at)
                         verified = (props.get("canseek") is True and valid_position
-                            and self.scheduled_offset-3 <= seconds <= self.scheduled_offset+elapsed+3)
+                            and self.scheduled_offset+elapsed-3 <= seconds <= self.scheduled_offset+elapsed+3)
                         if not verified:
-                            if props.get("canseek") is False or self.clock() >= self.deadline:
+                            # The owned player can appear before its demuxer
+                            # reports seek capability or applies the open offset.
+                            if self.clock() >= self.deadline:
                                 # This is still the exact owned item checked above.
                                 # Never report a restart-at-zero as a live tune.
                                 self.rpc("Player.Stop", {"playerid":player})

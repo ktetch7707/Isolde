@@ -166,12 +166,40 @@ class PlaybackTests(unittest.TestCase):
     def test_scheduled_seek_failure_is_not_reported_as_live_playback(self):
         self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
         self.active=True;self.seekable=False
+        for instant in (0,19.99):
+            self.now=instant;self.assertEqual(self.player.status()["state"],"starting");self.assertTrue(self.active)
+        self.assertFalse(any(method=="Player.Stop" for method,_ in self.calls))
+        self.now=20
         result=self.player.status()
         self.assertEqual(result["state"],"failed");self.assertIn("broadcast position",result["reason"])
         self.assertFalse(self.active)
         self.assertNotIn("ActivateWindow(fullscreenvideo)",self.builtins)
 
+    def test_scheduled_startup_waits_for_seek_capability_and_position(self):
+        self.kind="episode";self.seekable=False
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"episode","mediaId":7,"offsetSeconds":800});self.active=True
+        self.assertEqual(self.player.status()["state"],"starting");self.now=1
+        self.assertEqual(self.player.status()["state"],"starting");self.assertTrue(self.active)
+        self.assertNotIn("ActivateWindow(fullscreenvideo)",self.builtins)
+        self.seekable=True;self.assertEqual(self.player.status()["state"],"starting") # Capability alone is not successful seek.
+        self.position=801;self.assertEqual(self.player.status()["state"],"playing")
+        self.assertIn("ActivateWindow(fullscreenvideo)",self.builtins)
+        self.assertFalse(any(method=="Player.Stop" for method,_ in self.calls))
+
+    def test_scheduled_position_must_follow_live_clock_not_eventually_reach_initial_offset(self):
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":5});self.active=True
+        self.now=5;self.position=5;self.assertEqual(self.player.status()["state"],"starting")
+        self.now=6;self.position=11;self.assertEqual(self.player.status()["state"],"playing")
+
+    def test_restart_at_zero_never_catches_up_to_a_moving_broadcast_position(self):
+        self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":5});self.active=True
+        for instant in (0,1,5,10,19):
+            self.now=instant;self.position=instant;self.assertEqual(self.player.status()["state"],"starting");self.assertTrue(self.active)
+        self.assertNotIn("ActivateWindow(fullscreenvideo)",self.builtins)
+        self.now=self.position=20;self.assertEqual(self.player.status()["state"],"failed");self.assertFalse(self.active)
+
     def test_scheduled_startup_home_and_replacement_preserve_ownership(self):
+        self.seekable=False
         self.player.handle("Isolde.PlayScheduled",{"mediaType":"movie","mediaId":7,"offsetSeconds":800})
         self.player.control("home");self.active=True;self.player.status()
         self.assertFalse(self.active);self.assertTrue(self.player.status()["home"])

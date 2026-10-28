@@ -307,7 +307,17 @@ if ''' + repr(str(imported)) + ''' in selected:
                     (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'localCreation':local_creation},indent=2))
                     time.sleep(5)  # Require a real nonzero scheduled seek, not a restart-at-zero claim.
                     guide_capture('guidelocalcreated')
-                    local_state=wait(lambda:(value if (value:=rpc(directory,'Isolde.PlaybackStatus')).get('state')=='playing' else None),'Local channel began managed scheduled playback')
+                    last_local_status=None
+                    def local_playing():
+                        nonlocal last_local_status
+                        value=rpc(directory,'Isolde.PlaybackStatus')
+                        status={k:value[k] for k in ('state','reason','home','canPause','canSeek') if k in value}
+                        if status!=last_local_status:
+                            (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'localCreation':local_creation,'localStatus':status},indent=2));last_local_status=status
+                        if value.get('state') in ('failed','replaced'):
+                            raise AssertionError('Local scheduled playback '+value['state']+': '+str(value.get('reason','No playback reason supplied')))
+                        return value if value.get('state')=='playing' else None
+                    local_state=wait(local_playing,'Local channel began managed scheduled playback')
                     assert local_state.get('canPause') is True,'Local fixture requires known pause/OSD capability before reviewed Stop'
                     players=rpc(directory,'Player.GetActivePlayers');assert len(players)==1 and players[0].get('type')=='video',players
                     player=players[0]['playerid'];assert type(player) is int and player==1
