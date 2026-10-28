@@ -152,11 +152,13 @@ void GuideUiTests::remoteCreationRetainsVisibleFocusAndRecoversFailedSave() {
         QTRY_COMPARE(menu->property("currentIndex").toInt(),6);QCOMPARE(view->property("fieldIndex").toInt(),6);
         QQuickItem *selected=nullptr;QTRY_VERIFY((selected=visualItem(root,"guideMenu-6")));
         QTRY_COMPARE(QQmlExpression(engine.rootContext(),selected,"border.width").evaluate().toInt(),2);
-        QVERIFY(QQmlExpression(engine.rootContext(),selected,"Accessible.focused").evaluate().toBool());
+        QQmlExpression accessiblePreview(QQmlEngine::contextForObject(selected),selected,"Accessible.focused");const auto previewFocused=accessiblePreview.evaluate();
+        QVERIFY2(!accessiblePreview.hasError(),qPrintable(accessiblePreview.error().toString()));QVERIFY(previewFocused.toBool());
         controller.refresh();QTRY_VERIFY(!controller.busy());QTRY_COMPARE(menu->property("currentIndex").toInt(),6);
         command(view.data(),InputManager::NavigateDown);QCOMPARE(view->property("fieldIndex").toInt(),7);QTRY_COMPARE(menu->property("currentIndex").toInt(),7);
         QTRY_VERIFY((selected=visualItem(root,"guideMenu-7")));QTRY_COMPARE(QQmlExpression(engine.rootContext(),selected,"border.width").evaluate().toInt(),2);
-        QVERIFY(QQmlExpression(engine.rootContext(),selected,"Accessible.focused").evaluate().toBool());
+        QQmlExpression accessibleSave(QQmlEngine::contextForObject(selected),selected,"Accessible.focused");const auto saveFocused=accessibleSave.evaluate();
+        QVERIFY2(!accessibleSave.hasError(),qPrintable(accessibleSave.error().toString()));QVERIFY(saveFocused.toBool());
         const auto connection="guide-failed-create-"+QUuid::createUuid().toString();
         {
             auto database=QSqlDatabase::addDatabase("QSQLITE",connection);database.setDatabaseName(path);QVERIFY(database.open());QSqlQuery query(database);
