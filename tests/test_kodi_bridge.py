@@ -15,6 +15,21 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    def test_player_identity_read_is_strict_and_path_free(self):
+        calls=[]
+        def execute(raw):
+            request=json.loads(raw);calls.append(request)
+            self.assertEqual(request["method"],"Player.GetItem");self.assertEqual(request["params"]["properties"],[])
+            return json.dumps({"result":{"item":{"id":7,"type":"episode","label":"Local fixture"}}})
+        for player in (0,1):
+            reply=bridge.dispatch(self.request("Player.GetItem",{"playerid":player,"properties":[]}),execute)
+            self.assertEqual(reply["result"]["item"]["id"],7);self.assertNotIn("file",reply["result"]["item"])
+        self.assertEqual(len(calls),2)
+        for params in ({"playerid":True,"properties":[]},{"playerid":"1","properties":[]},{"playerid":2,"properties":[]},
+                       {"playerid":1,"properties":[],"extra":0},{"playerid":1,"properties":["file"]},
+                       {"playerid":1},{"properties":[]},{"playerid":1,"properties":{}},{"playerid":1,"properties":None}):
+            self.assertIn("error",bridge.dispatch(self.request("Player.GetItem",params),lambda _:self.fail("Invalid identity request reached Kodi")))
+
     def test_pvr_broadcast_reads_are_bounded_and_read_only(self):
         calls=[]
         def execute(raw):

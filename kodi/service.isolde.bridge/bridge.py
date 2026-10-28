@@ -73,7 +73,7 @@ READ_METHODS = {
     "VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails",
     "AudioLibrary.GetAlbums", "AudioLibrary.GetSongs",
     "PVR.GetChannels", "PVR.GetBroadcasts",
-    "Player.GetActivePlayers", "Player.GetProperties",
+    "Player.GetActivePlayers", "Player.GetProperties", "Player.GetItem",
 }
 MOVIE_DETAIL_PROPERTIES = {"title", "year", "plot", "runtime", "resume", "playcount", "art", "genre", "tag"}
 TVSHOW_DETAIL_PROPERTIES = {"title", "year", "plot", "episode", "watchedepisodes", "art", "genre", "tag"}
@@ -194,6 +194,10 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
             or len(params["properties"]) > len(allowed_properties)
             or any(not isinstance(value, str) or value not in allowed_properties for value in params["properties"])):
             return error(-32602, "Library details require a valid ID and supported properties")
+    if request["method"] == "Player.GetItem":
+        if (set(params) != {"playerid", "properties"} or type(params.get("playerid")) is not int
+            or params["playerid"] not in (0, 1) or not isinstance(params.get("properties"), list) or params["properties"]):
+            return error(-32602, "Player identity requires an audio/video player and no extra properties")
     if request["method"] in playback_methods:
         try:
             if playback is None:

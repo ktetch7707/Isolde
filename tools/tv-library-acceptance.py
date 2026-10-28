@@ -298,7 +298,33 @@ if ''' + repr(str(imported)) + ''' in selected:
                     guide_capture('guidelocalreview')
                     wait(lambda:len(imported_channels())==2,'Local channel committed through Preview and Save')
                     local=next(c for c in imported_channels() if c.get('owner')!='kodi-pvr')
+                    with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
+                        candidates=json.loads(db.execute('SELECT candidates FROM channels WHERE id=?',(local['id'],)).fetchone()[0])
+                        initial_slots=db.execute('SELECT id,media_type,media_id,title,start_utc,end_utc,status FROM slots WHERE channel=? ORDER BY start_utc LIMIT 50',(local['id'],)).fetchall()
+                        slot_count=db.execute('SELECT COUNT(*) FROM slots WHERE channel=?',(local['id'],)).fetchone()[0]
+                    assert candidates and initial_slots and slot_count>=len(initial_slots)
+                    local_creation={'definition':local,'candidateCount':len(candidates),'candidates':[{k:item[k] for k in ('mediaType','mediaId','title','duration') if k in item} for item in candidates[:50]],'slotCount':slot_count,'initialSlots':initial_slots}
+                    (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'localCreation':local_creation},indent=2))
+                    time.sleep(5)  # Require a real nonzero scheduled seek, not a restart-at-zero claim.
                     guide_capture('guidelocalcreated')
+                    local_state=wait(lambda:(value if (value:=rpc(directory,'Isolde.PlaybackStatus')).get('state')=='playing' else None),'Local channel began managed scheduled playback')
+                    assert local_state.get('canPause') is True,'Local fixture requires known pause/OSD capability before reviewed Stop'
+                    players=rpc(directory,'Player.GetActivePlayers');assert len(players)==1 and players[0].get('type')=='video',players
+                    player=players[0]['playerid'];assert type(player) is int and player==1
+                    item=rpc(directory,'Player.GetItem',{'playerid':player,'properties':[]})['item']
+                    observed_at=time.time();position=rpc(directory,'Player.GetProperties',{'playerid':player,'properties':['time']})['time']
+                    actual_seconds=position['hours']*3600+position['minutes']*60+position['seconds']+position.get('milliseconds',0)/1000
+                    with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
+                        current=db.execute('SELECT id,media_type,media_id,start_utc,end_utc FROM slots WHERE channel=? AND start_utc<=? AND end_utc>?',(local['id'],int(observed_at),int(observed_at))).fetchone()
+                    local_playback={'observedItem':{k:item.get(k) for k in ('id','type')},'actualPositionSeconds':actual_seconds,'observedAtUtc':observed_at,'savedSlot':current,'expectedOffsetSeconds':observed_at-current[3] if current else None,'toleranceSeconds':3}
+                    (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'localCreation':local_creation,'localPlayback':local_playback},indent=2))
+                    assert current and item.get('type')==current[1] and item.get('id')==current[2],(current,item)
+                    expected_seconds=observed_at-current[3];assert expected_seconds>=5 and abs(actual_seconds-expected_seconds)<=3,(actual_seconds,expected_seconds)
+                    local_playback.update(slotId=current[0],mediaType=current[1],mediaId=current[2],startUtc=current[3],endUtc=current[4],canPause=True)
+                    guide_capture('guidelocalvideo')
+                    wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Local scheduled playback stopped')
+                    wait(shell_active,'Automatic local playback focus returned to shell',seconds=8)
+                    guide_capture('guidelocalreturn')
                     guide_capture('guideduplicatedraft')
                     wait(lambda:len(imported_channels())==3,'Reviewed duplicate local channel committed')
                     lineup=imported_channels();native=[c for c in lineup if c.get('owner')!='kodi-pvr']
@@ -318,23 +344,17 @@ if ''' + repr(str(imported)) + ''' in selected:
                             assert current,(channel,wall)
                             progress=(wall-current[1])/(current[2]-current[1]);assert 0<=progress<1
                             current_rows.append({'id':channel['id'],'number':channel['number'],'name':channel['name'],'source':'Kodi PVR' if channel.get('owner')=='kodi-pvr' else 'Local','title':current[0],'startUtc':current[1],'endUtc':current[2],'progress':progress})
-                    (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'atUtc':wall,'rows':current_rows,'widgetId':'guide-widget','pvrChannelId':cached['id'],'localCreatedId':local['id'],'localCreation':local_creation},indent=2))
+                    (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'atUtc':wall,'rows':current_rows,'widgetId':'guide-widget','pvrChannelId':cached['id'],'localCreatedId':local['id'],'localCreation':local_creation,'localPlayback':local_playback},indent=2))
                     for phase in ('guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn'):guide_capture(phase)
                     assert imported_channels()==lineup,'Browsing surfaces changed saved channel definitions'
                     assert cached_slots()==committed_slots,'Browsing surfaces regenerated or changed committed slots'
-                    surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
+                    surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
                 result={'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'automaticNativeReturn':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn']+surface_phases,'visualReview':'pending','profile':profile}
-                if args.guide_surfaces:result.update(nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True)
+                if args.guide_surfaces:result.update(nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True,actualLocalElapsedSeek=True,automaticLocalReturn=True)
                 (evidence/'result.json').write_text(json.dumps(result,indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
-                    with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:
-                        candidates=json.loads(db.execute('SELECT candidates FROM channels WHERE id=?',(local['id'],)).fetchone()[0])
-                        initial_slots=db.execute('SELECT id,media_type,media_id,title,start_utc,end_utc,status FROM slots WHERE channel=? ORDER BY start_utc LIMIT 50',(local['id'],)).fetchall()
-                        slot_count=db.execute('SELECT COUNT(*) FROM slots WHERE channel=?',(local['id'],)).fetchone()[0]
-                    assert candidates and initial_slots and slot_count>=len(initial_slots)
-                    local_creation={'definition':local,'candidateCount':len(candidates),'candidates':[{k:item[k] for k in ('mediaType','mediaId','title','duration') if k in item} for item in candidates[:50]],'slotCount':slot_count,'initialSlots':initial_slots}
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
             seasons = rpc(directory, "VideoLibrary.GetSeasons", {"tvshowid": show_id, "properties": ["season"]})["seasons"]
             assert {s["season"] for s in seasons} == {0, 1}
