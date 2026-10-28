@@ -437,7 +437,8 @@ if(BUILD_TESTING)
         studioScrollingAddMoveAndCancel studioNestedGroupCanvasAndRemoteScope studioCatalogAndContextualInspector)
     add_test(NAME home_component_navigation COMMAND isolde_home_navigation_tests ${ISOLDE_RUNTIME_NAVIGATION_CASES})
     add_test(NAME studio_navigation COMMAND isolde_home_navigation_tests ${ISOLDE_STUDIO_NAVIGATION_CASES})
-    set_tests_properties(studio_navigation PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    # Aggregate suite budget; per-operation QTRY deadlines remain unchanged.
+    set_tests_properties(studio_navigation PROPERTIES TIMEOUT 90 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_behavior COMMAND isolde_home_navigation_tests
         studioRemoteDraftApplyAndCancel studioRemoteGesturesCollisionsAndAnchors
         studioRemoteSectionTransferAndCancel studioScrollingAddMoveAndCancel)

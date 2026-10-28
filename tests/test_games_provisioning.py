@@ -139,7 +139,12 @@ class GameFixtureTests(unittest.TestCase):
                 builder.run(sys.executable,"-c",script,str(marker),timeout=1)
             child=Path("/proc")/marker.read_text()/"stat"
             # Reaping an orphan is init's responsibility; a zombie has stopped.
-            if child.exists():self.assertEqual(child.read_text().split()[2],"Z")
+            try:
+                child_state=child.read_text().split()[2]
+            except (FileNotFoundError,ProcessLookupError):
+                pass  # The terminated descendant was already reaped.
+            else:
+                self.assertEqual(child_state,"Z")
 
     def test_archive_pin_and_traversal_refused_without_extraction(self):
         spec=importlib.util.spec_from_file_location("fixture_fetch",Path(__file__).parents[1]/"tools/fetch-game-fixtures.py")
