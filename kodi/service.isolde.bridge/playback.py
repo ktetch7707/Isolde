@@ -59,7 +59,7 @@ class Playback:
             if self.movie is not None or self.rpc("Player.GetActivePlayers"):
                 raise ValueError("Another playback session is active")
             if media_type == "channel":
-                details = self.rpc("PVR.GetChannelDetails", {key:params[key],"properties":["channeltype","locked","hidden"]+(["clientid"] if checked_pvr else [])}).get("channeldetails",{})
+                details = self.rpc("PVR.GetChannelDetails", {key:params[key],"properties":["channeltype","locked","hidden"]+(["clientid","uniqueid"] if checked_pvr else [])}).get("channeldetails",{})
                 if details.get("channeltype") != "tv" or details.get("locked",False) or details.get("hidden",False):
                     raise ValueError("Choose an available unlocked Kodi TV channel")
                 if checked_pvr and any(type(details.get(field)) is not int or details[field]!=params[field] for field in ("clientid","uniqueid")):

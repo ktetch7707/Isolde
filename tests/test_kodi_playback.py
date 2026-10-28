@@ -53,6 +53,7 @@ class PlaybackTests(unittest.TestCase):
         self.item = 7
         self.kind = "movie"
         self.channel_locked = False
+        self.omit_pvr_uniqueid = False
         self.speed = 1
         self.duration = 7200
         self.position = 0
@@ -72,7 +73,11 @@ class PlaybackTests(unittest.TestCase):
         elif method == "VideoLibrary.GetEpisodeDetails": result = {"episodedetails": {"file": str(self.path),"runtime":self.duration}}
         elif method == "VideoLibrary.GetMusicVideoDetails": result = {"musicvideodetails": {"file": str(self.path),"runtime":self.duration}}
         elif method == "AudioLibrary.GetSongDetails": result = {"songdetails": {"file": str(self.path),"duration":self.duration}}
-        elif method == "PVR.GetChannelDetails": result = {"channeldetails":{"channeltype":"tv","hidden":False,"locked":self.channel_locked,"clientid":9,"uniqueid":101}}
+        elif method == "PVR.GetChannelDetails":
+            details={"channeltype":"tv","hidden":False,"locked":self.channel_locked}
+            for key,value in (("clientid",9),("uniqueid",101)):
+                if key in params["properties"] and not (key=="uniqueid" and self.omit_pvr_uniqueid):details[key]=value
+            result={"channeldetails":details}
         elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item}}
         elif method == "Player.GetProperties": result = {"speed":self.speed,"canseek":self.seekable,"canpause":self.pausable,
             "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
@@ -113,9 +118,16 @@ class PlaybackTests(unittest.TestCase):
         self.assertFalse(any(method=="Player.Open" for method,_ in self.calls))
         params["uniqueid"]=101
         self.assertEqual(self.player.handle("Isolde.PlayChannel",params)["state"],"starting")
+        self.assertIn(("PVR.GetChannelDetails",{"channelid":7,"properties":["channeltype","locked","hidden","clientid","uniqueid"]}),self.calls)
         self.assertIn(("Player.Open",{"item":{"channelid":7},"options":{"resume":False}}),self.calls)
         self.active=True;self.assertEqual(self.player.status()["state"],"playing")
         self.assertEqual(self.player.control("home"),{"state":"ended","home":True,"canPause":False,"canSeek":False,"naturalEnd":False})
+
+    def test_checked_pvr_tune_rejects_missing_requested_identity_without_open(self):
+        self.omit_pvr_uniqueid=True
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.PlayChannel",{"channelid":7,"resume":False,"clientid":9,"uniqueid":101})
+        self.assertFalse(any(method=="Player.Open" for method,_ in self.calls))
 
     def test_scheduled_tune_uses_absolute_broadcast_time_and_verifies_seek(self):
         self.kind="episode"

@@ -226,7 +226,7 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
         if set(params) - {"channelgroupid", "properties", "limits"} or params.get("channelgroupid") != "alltv":
             return error(-32602, "Choose the configured Kodi TV channel group")
         fields = params.get("properties", [])
-        allowed = {"channelnumber", "broadcastnow", "broadcastnext", "locked", "hidden", "clientid"}
+        allowed = {"channelnumber", "broadcastnow", "broadcastnext", "locked", "hidden", "clientid", "uniqueid"}
         if not isinstance(fields, list) or len(fields) > len(allowed) or any(not isinstance(field, str) or field not in allowed for field in fields):
             return error(-32602, "Unsupported TV guide fields")
         limits = params.get("limits", {"start":0,"end":50})

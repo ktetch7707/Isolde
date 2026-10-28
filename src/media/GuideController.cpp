@@ -196,7 +196,7 @@ void GuideController::requestPage() {
     m_request=QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",++m_requestId},{"method","Isolde.GuideCandidates"},
         {"params",QJsonObject{{"kind",m_pvrReading?QString():m_kinds[m_kindIndex]},{"start",m_page},{"end",m_page+50}}}}).toJson(QJsonDocument::Compact)+'\n';
     if(m_pvrReading){
-        const auto params=m_sourceIndex<0?QVariantMap{{"channelgroupid","alltv"},{"properties",QVariantList{"channelnumber","locked","hidden","clientid"}},{"limits",QVariantMap{{"start",m_page},{"end",m_page+50}}}}
+        const auto params=m_sourceIndex<0?QVariantMap{{"channelgroupid","alltv"},{"properties",QVariantList{"channelnumber","locked","hidden","clientid","uniqueid"}},{"limits",QVariantMap{{"start",m_page},{"end",m_page+50}}}}
             :QVariantMap{{"channelid",m_sourcePreview[m_sourceIndex].toMap().value("definition").toMap().value("source").toMap().value("channelId")},
                 {"properties",QVariantList{"title","starttime","endtime"}},{"limits",QVariantMap{{"start",m_page},{"end",m_page+50}}}};
         m_request=QJsonDocument::fromVariant(QVariantMap{{"jsonrpc","2.0"},{"id",m_requestId},{"method",m_sourceIndex<0?"PVR.GetChannels":"PVR.GetBroadcasts"},{"params",params}}).toJson(QJsonDocument::Compact)+'\n';

@@ -257,7 +257,7 @@ if ''' + repr(str(imported)) + ''' in selected:
                 key("kodi", "Escape"); key("kodi", "Escape")  # Dismiss first-run dialogs in this new test home.
                 key("kodi", "F9")
             if args.guide:
-                source_channels=wait(lambda:rpc(directory,'PVR.GetChannels',{'channelgroupid':'alltv','properties':['channelnumber','locked','hidden','clientid'],'limits':{'start':0,'end':50}}).get('channels'),'Real IPTV Simple channel ready',seconds=60)
+                source_channels=wait(lambda:rpc(directory,'PVR.GetChannels',{'channelgroupid':'alltv','properties':['channelnumber','locked','hidden','clientid','uniqueid'],'limits':{'start':0,'end':50}}).get('channels'),'Real IPTV Simple channel ready',seconds=60)
                 assert len(source_channels)==1 and source_channels[0]['label']=='Isolde PVR Test',source_channels
                 source_channel=source_channels[0]
                 source_epg=wait(lambda:rpc(directory,'PVR.GetBroadcasts',{'channelid':source_channel['channelid'],'properties':['title','starttime','endtime'],'limits':{'start':0,'end':50}}).get('broadcasts'),'Real XMLTV source listings ready',seconds=60)

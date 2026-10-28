@@ -374,6 +374,30 @@ class OracleTests(unittest.TestCase):
             self.assertEqual(len(archive.getnames()), 1)
             self.assertTrue(archive.getnames()[0].endswith("result.json"))
 
+    @unittest.skipUnless(os.name == "posix", "Linux /tmp evidence paths")
+    def test_guide_evidence_keeps_source_and_cache_but_refuses_private_or_oversized_files(self):
+        evidence=Path(tempfile.mkdtemp(prefix="isolde-tv-acceptance-"))
+        self.addCleanup(lambda:__import__("shutil").rmtree(evidence))
+        (evidence/"pvr-source.json").write_text('{"channel":{"channelid":7,"uniqueid":101}}')
+        (evidence/"guide-surfaces-cache.json").write_text('{"rows":[]}')
+        (evidence/"shell.log").write_text("fixture log")
+        secret=self.root/"private-token";secret.write_text("excluded secret")
+        (evidence/"credentials.json").write_text("excluded")
+        (evidence/"cache").mkdir();(evidence/"cache/cookie").write_text("excluded")
+        oracle.collect_evidence(self.root,"guide-surfaces",{evidence})
+        first=next(self.root.glob("evidence-guide-surfaces-*.tar.gz"))
+        with tarfile.open(first) as archive:
+            self.assertEqual({Path(name).name for name in archive.getnames()},{"pvr-source.json","guide-surfaces-cache.json","shell.log"})
+        (evidence/"pvr-source.json").unlink();(evidence/"pvr-source.json").symlink_to(secret)
+        (evidence/"guide-surfaces-cache.json").write_bytes(b"x"*(8*1024**2+1))
+        oracle.collect_evidence(self.root,"guide-surfaces",{evidence})
+        second=next(path for path in self.root.glob("evidence-guide-surfaces-*.tar.gz") if path!=first)
+        with tarfile.open(second) as archive:self.assertEqual({Path(name).name for name in archive.getnames()},{"shell.log"})
+        (evidence/"pvr-source.json").unlink();(evidence/"pvr-source.json").write_text("{}")
+        (evidence/"guide-surfaces-cache.json").write_text("{}")
+        oracle.collect_evidence(self.root,"studio",{evidence})
+        with tarfile.open(next(self.root.glob("evidence-studio-*.tar.gz"))) as archive:self.assertEqual({Path(name).name for name in archive.getnames()},{"shell.log"})
+
     def test_visual_results_use_each_harness_contract(self):
         guide=dict(passed=True,freshProfile=True,normalProfileUsed=False,pvrAddon="pvr.iptvsimple",sourceChannels=1,sourceListings=50,
                    remoteImport=True,actualPvrPlayback=True,returned=True,mediaUnchanged=True,syntheticSource=True,providerSubscriptionVerified=False,

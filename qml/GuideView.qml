@@ -36,6 +36,7 @@ Item {
     property var moveRevisions:({})
     property bool moveSaving:false
     property bool sourceSaving:false
+    property int sourceOriginIndex:0
     property int editRevision:0
     property bool regenerationSaving:false
     property bool repairSaving:false
@@ -116,7 +117,7 @@ Item {
         if(mode==="browse")return ["Find channel: "+(channelQuery || "All"),"Favorites: "+(favoritesOnly?"Only favorites":"All channels"),"Source: "+sourceFilter,"Jump to local date and time…","Previous day","Next day","Clear filters","Group: "+(groupFilter || "All groups"),"Back"]
         if(mode==="groupFilter")return ["All groups"].concat(groupNames).concat(["Back"])
         if(mode==="sources")return options.sources.map(s=>s.name+(s.kind==="kodi-pvr"?" · Preview channel import":" · App destination")).concat(["Back"])
-        if(mode==="sourcePreview")return controller.sourcePreviewReady?controller.sourcePreview.map(e=>"Source "+e.definition.source.number+" → "+e.definition.number+" · "+e.definition.name+" · "+e.programs.length+" listings").concat(["Import reviewed lineup","Cancel"]):["Reading channels and listings…","Cancel"]
+        if(mode==="sourcePreview")return controller.sourcePreviewReady?controller.sourcePreview.map(e=>"Source "+e.definition.source.number+" → "+e.definition.number+" · "+e.definition.name+" · "+e.programs.length+" listings").concat(["Import reviewed lineup","Cancel"]):[controller.busy?"Reading channels and listings…":"Retry source preview","Cancel"]
         if(mode==="manage")return (controller?controller.channels:[]).map(c=>c.number+" · "+c.name+(c.hidden?" · Hidden":"")+(c.favorite?" · Favorite":"")).concat(["Back"])
         if(mode==="move")return moveIds.map(id=>{const c=controller.channels.find(c=>c.id===id);return c?c.number+" · "+c.name:"Removed channel"})
         if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && managedChannel.owner!=="kodi-pvr";return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…","Adjust broadcast clock…"]:[]).concat(["Back"])}
@@ -221,13 +222,13 @@ Item {
             if(menuIndex===0){editRevision=0;draft=controller.newDefinition();mediaKind="episode";fieldIndex=0;mode="create"}
             else if(menuIndex===1){mode="sources";menuIndex=0}else mode=""
         }else if(mode==="sources"){
-            if(menuIndex<options.sources.length){const source=options.sources[menuIndex];if(source.kind==="kodi-pvr"){if(controller.previewPvr()){mode="sourcePreview";menuIndex=0}}else dispatcher.dispatch(source.action,originId)}
+            if(menuIndex<options.sources.length){const source=options.sources[menuIndex];if(source.kind==="kodi-pvr"){sourceOriginIndex=menuIndex;if(controller.previewPvr()){mode="sourcePreview";menuIndex=0}}else dispatcher.dispatch(source.action,originId)}
             else mode=""
         }else if(mode==="sourcePreview"){
-            if(!controller.sourcePreviewReady){controller.cancel();mode="sources";menuIndex=0}
+            if(!controller.sourcePreviewReady){if(menuIndex===0 && !controller.busy)controller.previewPvr();else{controller.cancel();mode="sources";menuIndex=sourceOriginIndex}}
             else if(menuIndex<controller.sourcePreview.length){editField="sourceNumber";keyboard.value=String(controller.sourcePreview[menuIndex].definition.number);keyboard.selectedIndex=0;keyboardReturn="sourcePreview";mode="keyboard"}
             else if(menuIndex===controller.sourcePreview.length)sourceSaving=controller.importPvr()
-            else{controller.cancel();mode="sources";menuIndex=0}
+            else{controller.cancel();mode="sources";menuIndex=sourceOriginIndex}
         }else if(mode==="manage"){
             if(menuIndex<controller.channels.length){managedId=controller.channels[menuIndex].id;mode="context";menuIndex=0}else mode=""
         }else if(mode==="context"){
@@ -307,6 +308,7 @@ Item {
             if(mode==="move"){moveIds=[];mode="context";menuIndex=2}
             else if(mode==="clockReview"){controller.cancel();mode="clock";menuIndex=4}
             else if(mode==="clock"){controller.cancel();mode="context";menuIndex=13}
+            else if(mode==="sourcePreview"){controller.cancel();mode="sources";menuIndex=sourceOriginIndex}
             else if(mode==="repairConfirm"){mode="repair";menuIndex=0}
             else if(mode==="repair"){mode="context";menuIndex=12}
             else if(mode==="schedule"){mode="create";fieldIndex=8}

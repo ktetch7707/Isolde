@@ -110,7 +110,7 @@ class BridgeTests(unittest.TestCase):
         calls=[]
         def execute(raw):
             calls.append(json.loads(raw));return '{"jsonrpc":"2.0","id":7,"result":{}}'
-        valid={"channelgroupid":"alltv","properties":["channelnumber","broadcastnow","broadcastnext"],"limits":{"start":0,"end":50}}
+        valid={"channelgroupid":"alltv","properties":["channelnumber","broadcastnow","broadcastnext","clientid","uniqueid"],"limits":{"start":0,"end":50}}
         self.assertNotIn("error",bridge.dispatch(self.request("PVR.GetChannels",valid),execute))
         for change in ({"channelgroupid":"allradio"},{"limits":{"start":0,"end":51}},{"properties":["file"]},{"url":"https://example.invalid"}):
             self.assertIn("error",bridge.dispatch(self.request("PVR.GetChannels",dict(valid,**change)),execute))

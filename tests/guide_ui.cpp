@@ -362,10 +362,15 @@ void GuideUiTests::pvrPreviewMappingImportAndFailedRefreshPreserveCache() {
         connect(socket,&QLocalSocket::readyRead,socket,[&,socket]{auto raw=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",raw);if(!raw.endsWith('\n'))return;
             const auto request=QJsonDocument::fromJson(raw).object();const auto method=request.value("method").toString();QJsonObject reply{{"jsonrpc","2.0"},{"id",request.value("id")}};
             if(server.property("fail").toBool() && method=="PVR.GetBroadcasts")reply["error"]=QJsonObject{{"code",-32100}};
-            else if(method=="PVR.GetChannels")reply["result"]=QJsonObject{{"channels",QJsonArray{
+            else if(method=="PVR.GetChannels"){
+                const auto properties=request.value("params").toObject().value("properties").toArray();server.setProperty("channelProperties",properties.toVariantList());
+                QJsonArray channels{
                 QJsonObject{{"channelid",7},{"clientid",9},{"uniqueid",101},{"label","PVR station"},{"channelnumber",1},{"locked",false},{"hidden",false}},
-                QJsonObject{{"channelid",8},{"clientid",9},{"uniqueid",102},{"label","No EPG station"},{"channelnumber",1},{"locked",false},{"hidden",false}}}},
+                QJsonObject{{"channelid",8},{"clientid",9},{"uniqueid",102},{"label","No EPG station"},{"channelnumber",1},{"locked",false},{"hidden",false}}};
+                if(!properties.contains("uniqueid") || server.property("omitUniqueId").toBool())for(int i=0;i<channels.size();++i){auto item=channels[i].toObject();item.remove("uniqueid");channels[i]=item;}
+                reply["result"]=QJsonObject{{"channels",channels},
                 {"limits",QJsonObject{{"start",0},{"end",2},{"total",2}}}};
+            }
             else if(method=="PVR.GetBroadcasts"){
                 QJsonArray programs;if(request.value("params").toObject().value("channelid").toInt()==7){const auto time=QDateTime::currentDateTimeUtc();programs.append(QJsonObject{{"broadcastid",77},{"title","PVR current program"},{"starttime",time.addSecs(-600).toString("yyyy-MM-dd HH:mm:ss")},{"endtime",time.addSecs(1200).toString("yyyy-MM-dd HH:mm:ss")}});}
                 reply["result"]=QJsonObject{{"broadcasts",programs},{"limits",QJsonObject{{"start",0},{"end",programs.size()},{"total",programs.size()}}}};
@@ -376,6 +381,7 @@ void GuideUiTests::pvrPreviewMappingImportAndFailedRefreshPreserveCache() {
     GuideController controller(dir.filePath("guide.sqlite"),"pvr",nullptr,dir.path());QTRY_VERIFY(controller.ready() && !controller.busy());
     QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());QVERIFY2(controller.sourcePreviewReady(),qPrintable(controller.errorString()));
     QCOMPARE(controller.sourcePreview().size(),2);QVERIFY(controller.channels().isEmpty());
+    QVERIFY(server.property("channelProperties").toList().contains(QString("uniqueid")));QVERIFY(server.property("channelProperties").toList().contains(QString("clientid")));
     QCOMPARE(controller.sourcePreview()[1].toMap().value("definition").toMap().value("number").toInt(),2); // explicit reviewed mapping, not silent overwrite
     QVERIFY(!controller.setSourceNumber(1,1));QVERIFY(controller.setSourceNumber(1,10));
     const auto reviewed=controller.sourcePreview();
@@ -386,7 +392,19 @@ void GuideUiTests::pvrPreviewMappingImportAndFailedRefreshPreserveCache() {
     QVERIFY(controller.tune(id,"guide"));QTRY_COMPARE(tune.size(),1);QTRY_VERIFY(!controller.busy());QCOMPARE(tune.first().first().toMap().value("launchKind").toString(),QString("kodi_pvr"));
     const auto cached=controller.rows();server.setProperty("fail",true);QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());
     QVERIFY(!controller.sourcePreviewReady());QVERIFY(!controller.errorString().isEmpty());QCOMPARE(controller.rows(),cached);
-    server.setProperty("fail",false);QVERIFY(controller.previewPvr());controller.cancel();QVERIFY(!controller.sourcePreviewReady());QCOMPARE(controller.channels().size(),2);
+    server.setProperty("fail",false);server.setProperty("omitUniqueId",true);QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());QVERIFY(!controller.sourcePreviewReady());QVERIFY(!controller.errorString().isEmpty());QCOMPARE(controller.rows(),cached);QCOMPARE(controller.channels().size(),2);
+    server.setProperty("omitUniqueId",false);QVERIFY(controller.previewPvr());controller.cancel();QVERIFY(!controller.sourcePreviewReady());QCOMPARE(controller.channels().size(),2);QTRY_VERIFY(!controller.busy());
+    {
+        GuideStore reader(dir.filePath("guide.sqlite"));const auto saved=reader.channels();
+        auto configured=options();auto sources=configured.value("sources").toList();auto second=sources.first().toMap();second["id"]="second-pvr";second["name"]="Second configured backend";configured["sources"]=QVariantList{sources.first(),second};
+        InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+        QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",configured},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+        QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("source-origin")),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!controller.busy());
+        for(int i=0;i<3;++i)command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);command(view.data(),InputManager::NavigateDown);server.setProperty("omitUniqueId",true);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY(!controller.sourcePreviewReady());
+        QQmlExpression firstChoice(QQmlEngine::contextForObject(view.data()),view.data(),"menuRows[0]");QCOMPARE(firstChoice.evaluate().toString(),QString("Retry source preview"));QCOMPARE(reader.channels(),saved);
+        server.setProperty("omitUniqueId",false);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY2(controller.sourcePreviewReady(),qPrintable(controller.errorString()));QCOMPARE(view->property("mode").toString(),QString("sourcePreview"));
+        command(view.data(),InputManager::Back);QCOMPARE(view->property("mode").toString(),QString("sources"));QCOMPARE(view->property("menuIndex").toInt(),1);QCOMPARE(reader.channels(),saved);
+    }
     QVERIFY(controller.previewPvr());QTRY_VERIFY(!controller.busy());QVERIFY(controller.sourcePreviewReady());controller.invalidate();QVERIFY(!controller.sourcePreviewReady());QVERIFY(controller.sourcePreview().isEmpty());
 }
 void GuideUiTests::pvrUtcParsingAndCacheIgnoreCivilDstGaps() {
@@ -402,7 +420,11 @@ void GuideUiTests::pvrUtcParsingAndCacheIgnoreCivilDstGaps() {
         auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
         connect(socket,&QLocalSocket::readyRead,socket,[&,socket]{auto raw=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",raw);if(!raw.endsWith('\n'))return;
             const auto request=QJsonDocument::fromJson(raw).object();QJsonObject result;
-            if(request.value("method").toString()=="PVR.GetChannels")result={{"channels",QJsonArray{QJsonObject{{"channelid",7},{"clientid",9},{"uniqueid",101},{"label","UTC gap station"},{"channelnumber",1},{"locked",false},{"hidden",false}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+            if(request.value("method").toString()=="PVR.GetChannels"){
+                QJsonObject channel{{"channelid",7},{"clientid",9},{"label","UTC gap station"},{"channelnumber",1},{"locked",false},{"hidden",false}};
+                if(request.value("params").toObject().value("properties").toArray().contains("uniqueid"))channel["uniqueid"]=101;
+                result={{"channels",QJsonArray{channel}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+            }
             else result={{"broadcasts",QJsonArray{QJsonObject{{"broadcastid",77},{"title","UTC gap program"},{"starttime",text},{"endtime",utc.addSecs(1800).toString("yyyy-MM-dd HH:mm:ss")}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
             socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request.value("id")},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
         });
