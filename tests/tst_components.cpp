@@ -452,7 +452,7 @@ void ComponentTests::starterPageUpdatesPreserveDesignAndRollback()
         auto c = components[i].toObject(); const auto id = c["id"].toString();
         if (id == "music" || id == "games" || id == "guide") {
             c["action"] = id == "guide" ? QJsonObject{{"type","settings"},{"section",4}} : QJsonObject{{"type","app-drawer"}};
-            c["source"] = QJsonObject{{"schemaVersion",1},{"kind",id == "guide" ? "settings" : "app-drawer"},{"provider","shell"}};
+            if(c["componentType"]!="button")c["source"] = QJsonObject{{"schemaVersion",1},{"kind",id == "guide" ? "settings" : "app-drawer"},{"provider","shell"}};
             components[i] = c;
         }
     }
