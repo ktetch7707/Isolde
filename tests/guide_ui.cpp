@@ -353,7 +353,20 @@ void GuideUiTests::startupMaintainsExpiredSchedulesWithoutKodiReads() {
     QTRY_VERIFY(!controller.channels().isEmpty() && controller.channels().first().toMap().value("generatedThroughUtc").toLongLong()>wall+6*86400);
     QVERIFY(controller.errorString().isEmpty());QVERIFY(!controller.scheduleStatus().isEmpty());
     QVERIFY(!controller.compactRows().first().toMap().value("current").toMap().isEmpty());
-    const auto before=controller.rows();controller.refresh();QTRY_VERIFY(!controller.busy());QCOMPARE(controller.rows(),before);
+    GuideStore persisted(path);QVERIFY(persisted.ready());
+    const auto channels=persisted.channels(),programs=persisted.programs("offline",wall-2*86400,wall+8*86400,1000),candidates=persisted.candidateSnapshot("offline");
+    auto before=controller.rows();QVERIFY(!before.isEmpty());auto oldRow=before.first().toMap();
+    const auto oldCurrent=oldRow.take("current").toMap();
+    QCOMPARE(oldCurrent,persisted.tuneTarget("offline",oldCurrent.value("clockUtc").toLongLong()));before[0]=oldRow;
+    // Live progress must advance across refresh; it is not persisted schedule data.
+    QTRY_VERIFY(QDateTime::currentSecsSinceEpoch()>oldCurrent.value("clockUtc").toLongLong());
+    controller.refresh();QTRY_VERIFY(!controller.busy());auto after=controller.rows();QCOMPARE(after.size(),before.size());
+    auto newRow=after.first().toMap();const auto current=newRow.take("current").toMap();
+    QVERIFY(current.value("clockUtc").toLongLong()>oldCurrent.value("clockUtc").toLongLong());
+    QCOMPARE(current,persisted.tuneTarget("offline",current.value("clockUtc").toLongLong()));after[0]=newRow;
+    QCOMPARE(after,before);QCOMPARE(persisted.channels(),channels);
+    QCOMPARE(persisted.programs("offline",wall-2*86400,wall+8*86400,1000),programs);
+    QCOMPARE(persisted.candidateSnapshot("offline"),candidates);QVERIFY(controller.errorString().isEmpty());
 }
 void GuideUiTests::pvrPreviewMappingImportAndFailedRefreshPreserveCache() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
