@@ -474,6 +474,13 @@ void ComponentTests::starterPageUpdatesPreserveDesignAndRollback()
     QVERIFY2(layout.applySkinPageUpdates("builtin-pastel"), qPrintable(layout.errorString()));
     QCOMPARE(layout.pages().size(), 5); QCOMPARE(layout.appearance()["fontFamily"].toString(), QString("Serif"));
     const auto after = QJsonDocument::fromJson(layout.committedDocument()).object();
+    int updatedButtons=0;for(const auto &value:after["components"].toArray()){
+        const auto item=value.toObject();if(item["id"]=="music" || item["id"]=="games" || item["id"]=="guide"){
+            ++updatedButtons;
+            QCOMPARE(item["componentType"].toString(),QString("button"));QCOMPARE(item["source"].toObject()["kind"].toString(),QString("button"));QCOMPARE(item["action"].toObject()["type"].toString(),QString("open-page"));
+        }
+    }
+    QCOMPARE(updatedButtons,3);
     QCOMPARE(after["pages"].toArray().at(0), pages.at(0)); QCOMPARE(after["pages"].toArray().at(1), pages.at(1));
     QVERIFY(layout.skinPageUpdates("builtin-pastel").isEmpty());
     const auto saved = readFile(dir.filePath("home.json"));

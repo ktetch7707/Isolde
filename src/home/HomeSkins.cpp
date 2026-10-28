@@ -220,7 +220,8 @@ bool HomeLayout::applySkinPageUpdates(const QString &id) {
         for (int i = 0; i < components.size(); ++i) if (components[i].toObject()["id"].toString() == update["componentId"].toString()) {
             auto component = components[i].toObject();
             component["action"] = QJsonObject{{"type", "open-page"}, {"pageId", pageId}};
-            component["source"] = QJsonObject{{"schemaVersion", 1}, {"kind", "page"}, {"provider", "shell"}, {"id", pageId}};
+            if (component["componentType"].toString() != "button")
+                component["source"] = QJsonObject{{"schemaVersion", 1}, {"kind", "page"}, {"provider", "shell"}, {"id", pageId}};
             components[i] = component;
         }
     }
