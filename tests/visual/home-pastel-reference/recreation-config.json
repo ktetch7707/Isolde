@@ -45,7 +45,7 @@
     "backgroundStart": "#e9c7da",
     "brandVisible": false,
     "textColor": "#514b67",
-    "typographyScale": 1.0,
+    "typographyScale": 1,
     "mutedColor": "#625b73",
     "homeColumns": 5,
     "focusColor": "#ffffff",
@@ -147,7 +147,7 @@
   ],
   "components": [
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "hdmi1",
       "name": "HDMI 1",
       "action": {
@@ -163,20 +163,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 0.0,
+        "y": 0,
         "width": 1,
         "x": 0
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
         "schemaVersion": 1,
-        "kind": "settings"
-      }
+        "provider": "shell",
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "hdmi2",
       "name": "HDMI 2",
       "action": {
@@ -192,20 +193,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 0.0,
+        "y": 0,
         "width": 1,
         "x": 1
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
         "schemaVersion": 1,
-        "kind": "settings"
-      }
+        "provider": "shell",
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "hdmi3",
       "name": "HDMI 3",
       "action": {
@@ -221,20 +223,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 0.0,
+        "y": 0,
         "width": 1,
         "x": 2
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
         "schemaVersion": 1,
-        "kind": "settings"
-      }
+        "provider": "shell",
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "hdmi4",
       "name": "HDMI 4",
       "action": {
@@ -250,20 +253,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 0.0,
+        "y": 0,
         "width": 1,
         "x": 3
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
         "schemaVersion": 1,
-        "kind": "settings"
-      }
+        "provider": "shell",
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "desktop",
       "name": "Desktop",
       "action": {
@@ -278,20 +282,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 0.0,
+        "y": 0,
         "width": 1,
         "x": 4
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
-        "provider": "shell",
         "schemaVersion": 1,
-        "kind": "desktop-mode"
-      }
+        "provider": "shell",
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "guide",
       "name": "TV Guide",
       "action": {
@@ -307,21 +312,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 2.0,
+        "y": 2,
         "width": 1,
         "x": 0
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
-        "kind": "page",
-        "id": "live-tv",
         "schemaVersion": 1,
-        "provider": "shell"
-      }
+        "provider": "shell",
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "movies",
       "name": "Movies",
       "action": {
@@ -337,21 +342,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 2.0,
+        "y": 2,
         "width": 1,
         "x": 1
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
         "schemaVersion": 1,
         "provider": "shell",
-        "id": "library-movies",
-        "kind": "page"
-      }
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "shows",
       "name": "TV Shows",
       "action": {
@@ -367,21 +372,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 2.0,
+        "y": 2,
         "width": 1,
         "x": 2
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
         "schemaVersion": 1,
         "provider": "shell",
-        "id": "library-shows",
-        "kind": "page"
-      }
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "music",
       "name": "Music",
       "action": {
@@ -397,21 +402,21 @@
       },
       "placement": {
         "height": 2,
-        "y": 2.0,
+        "y": 2,
         "width": 1,
         "x": 3
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
         "schemaVersion": 1,
-        "id": "library-music",
-        "kind": "page",
-        "provider": "shell"
-      }
+        "provider": "shell",
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
-      "kind": "action",
+      "kind": "widget",
       "id": "games",
       "name": "Games",
       "action": {
@@ -427,18 +432,18 @@
       },
       "placement": {
         "height": 2,
-        "y": 2.0,
+        "y": 2,
         "width": 1,
         "x": 4
       },
-      "componentType": "launcher",
+      "componentType": "button",
       "schemaVersion": 1,
       "source": {
         "schemaVersion": 1,
         "provider": "shell",
-        "kind": "page",
-        "id": "library-games"
-      }
+        "kind": "button"
+      },
+      "widgetType": "button"
     },
     {
       "id": "favorite-apps",

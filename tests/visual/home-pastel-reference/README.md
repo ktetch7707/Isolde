@@ -16,6 +16,8 @@ The 1280 × 720 reference may be adapted to the test display while preserving it
 
 ## Fixture and assets
 
+Source revision, 2026-10-27: the ten shortcut/input tiles are now registered editable Button components, with the same stable IDs, actions, placements and appearance. The packaged preset and recreation data are identical. This is a semantic data revision, not a new native or visual acceptance result; both recreation/reset pairs must be rerun. Existing saved layouts are not migrated.
+
 The current recreation configuration is the layout from the packaged opt-in Pastel preset: one production app collection and one registered Recently viewed component. [collections.json](collections.json) supplies deterministic local movie/episode history, including completed and partial items, and the IDs of actual packaged catalog apps to restore inside the disposable acceptance profile. The acceptance-only provider feeds the normal Kodi bridge and artwork interfaces; it is not part of the application. Runtime presets use real providers or honest empty/unavailable states. Existing user layouts are never rewritten on load.
 
 [recreation-config.json](recreation-config.json) uses the shared composed-Home model. [interaction.json](interaction.json) supplies only the existing remote keys needed to reach the editor; it is test automation, not product layout code. History artwork is original generated geometric test art. The reference is retained for comparison and is never supplied as a rendered card or Home surface. Labels, symbols, circles, panels and focus rings are rendered by the production components.

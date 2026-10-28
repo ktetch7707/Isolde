@@ -413,7 +413,8 @@ if(BUILD_TESTING)
         studioShiftCascadesAreBoundedAndAtomic studioScrollingPagesAreBoundedAndAtomic
         studioHomeDesignationIsAtomicAndProtected studioHeaderValidationAndDraftRollback
         studioPageDefaultsAreDraftOnlyAndScoped studioShapesLabelsAndReplacementAreAtomic
-        studioButtonCollectionsAreBoundedAndAtomic studioGifArtworkIsBoundedStagedAndProfileScoped)
+        studioButtonCollectionsAreBoundedAndAtomic studioGifArtworkIsBoundedStagedAndProfileScoped
+        studioPastelPresetUsesEditableButtons)
     set_tests_properties(studio_unit PROPERTIES TIMEOUT 30 LABELS "studio;quick;unit")
     qt_add_executable(isolde_home_navigation_tests tests/tst_home_navigation.cpp)
     target_link_libraries(isolde_home_navigation_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
