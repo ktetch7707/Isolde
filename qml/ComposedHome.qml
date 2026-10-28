@@ -463,6 +463,7 @@ Item {
                                     model:sectionView.modelData.items
                                     delegate:HomeCard {
                                         id:authoredCard
+                                        artworkResolver:host.artworkResolver;artworkMotionAllowed:host.artworkMotionAllowed!==false && !host.editMode && !host.freezeData
                                         required property var modelData; required property int index
                                         Component.onCompleted:host.registerEditTarget(modelData.id,authoredCard,false)
                                         Component.onDestruction:host.registerEditTarget(modelData.id,authoredCard,true)

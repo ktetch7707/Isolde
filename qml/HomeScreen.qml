@@ -8,6 +8,7 @@ Item {
     property var authoredItems: items
     property var authoredSections: sections
     property bool editMode:false
+    property bool artworkMotionAllowed:true
     property var artworkResolver:typeof homeLayout!=="undefined"?homeLayout:null
     property var headerDefaults:typeof homeLayout!=="undefined" && homeLayout?homeLayout.studioOptions.headerDefaults || {}:({})
     property string editHeaderSelection:""

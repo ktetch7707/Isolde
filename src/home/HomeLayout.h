@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QVariantList>
 #include <QSet>
+#include <QCache>
 
 class PageModel;
 class StudioSession;
@@ -158,6 +159,8 @@ public:
     Q_INVOKABLE QVariantList gridCollisions(const QString &itemId, const QVariantMap &placement) const;
     [[nodiscard]] QString wallpaperSource() const;
     Q_INVOKABLE QString resolveArtwork(const QString &relative) const;
+    Q_INVOKABLE QVariantMap artworkAnimation(const QString &relative, const QString &owner);
+    Q_INVOKABLE void releaseArtworkAnimation(const QString &owner);
     Q_INVOKABLE bool setWallpaper(const QString &sourceUrl);
     Q_INVOKABLE bool setComposition(const QVariantMap &value);
 
@@ -226,6 +229,9 @@ private:
     QString m_focusOrigin;
     bool m_draftOnly = false;
     QHash<QString,QString> m_assetPaths;
+    QSet<QString> m_animationOwners;
+    mutable QCache<QString,QString> m_gifStills{8*1024*1024};
+    QString managedArtworkSource(const QString &relative) const;
     StudioSession *m_studio = nullptr;
 
 };

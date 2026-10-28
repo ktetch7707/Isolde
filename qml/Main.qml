@@ -12,6 +12,7 @@ Window {
     readonly property real uiScaleFactor: displaySettings.uiScale / 100
     readonly property int safeAreaPixels: Math.round(Math.min(width, height) * displaySettings.safeArea / 100)
     property bool ambientActive: false
+    readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
     property string launchErrorText: ""
     property string launchErrorAppId: ""
     property bool launchErrorVpn: false
@@ -205,6 +206,7 @@ Window {
 
             HomeScreen {
                 id: home
+                artworkMotionAllowed:window.homeArtworkMotionActive
                 anchors.fill: parent
                 visible: (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android")) && !pageSurface.open
                 items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
@@ -294,6 +296,7 @@ Window {
 
             PageSurface {
                 id:pageSurface;anchors.fill:parent;visible:open && (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android"))
+                artworkMotionAllowed:window.homeArtworkMotionActive
                 layoutModel:homeLayout;provider:pageData;availableApps:appRegistry.apps;artwork:artPacks.artwork;themes:artPacks.themes
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}

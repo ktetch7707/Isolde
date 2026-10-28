@@ -5,6 +5,8 @@ Item {
     required property var item
     property string variant: "source"
     property var appearance: ({})
+    property var artworkResolver:typeof homeLayout!=="undefined"?homeLayout:null
+    property bool artworkMotionAllowed:true
     property bool selected: false
     property string selectMode: "single"
     property string selectTrigger: "click"
@@ -59,6 +61,8 @@ Item {
         border.width:root.kind==="shape" && root.style.shape==="divider"?0:root.style.borderWidth===undefined?(root.kind === "recent" ? 1 : 0):root.style.borderWidth*root.unit; border.color:root.style.borderColor || "#B0FFFFFF"
         ArtworkImage {
             objectName: "cardArtwork"
+            animationResolver:root.artworkResolver;managedAsset:root.item.customLogo || ""
+            motionEnabled:root.artworkMotionAllowed && root.style.animateArtwork===true;reducedMotion:root.appearance.motionEnabled===false
             anchors.fill: parent; source: root.kind === "orb" ? "" : root.item.logoSource || ""
             crop: root.style.imageCrop || null; radius: surface.radius
             visible:root.item.showLogo!==false

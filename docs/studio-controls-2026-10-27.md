@@ -38,6 +38,6 @@ The testing agent should read `docs/vm-oracle.md`, use the bounded runner, run t
 
 ## Remaining gate scope
 
-GIF animation through the bounded managed-artwork pipeline is still unimplemented; accepting a filename extension would not satisfy it. Recently viewed defaults to genuine Kodi history; no external app-history adapter/account capability has been selected or proved. The user requested clarification of that distinction, not a provider selection. Keep provider integration open without scraping browser history or inventing results.
+GIF animation was unimplemented at checkpoint `8d60fcb`; the subsequent [bounded GIF source batch](studio-gif-2026-10-27.md) adds the pipeline and regression cases, with native/runtime evidence still pending. Recently viewed defaults to genuine Kodi history; no external app-history adapter/account capability has been selected or proved. The user requested clarification of that distinction, not a provider selection. Keep provider integration open without scraping browser history or inventing results.
 
 T21 also retains its fixture/design, complete control-disclosure and uncoached discovery gates. T22 templates/tokens/reuse/portability and T23 complete Apply/versions/restore/health remain open; this checkpoint does not bypass their dependencies. VM testing is delegated, not counted as a pass. No software or release completion is claimed.

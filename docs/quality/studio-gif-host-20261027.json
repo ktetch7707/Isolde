@@ -1,0 +1,50 @@
+{
+  "passed": true,
+  "scope": "Host JavaScript syntax and actual-method smoke checks only; no Qt/native/VM/visual acceptance",
+  "compiledFunctions": 276,
+  "compiledHandlers": 89,
+  "checks": [
+    "header defaults and 64 KiB settings bound",
+    "shared app picker remote reorder/cancel",
+    "missing selection retained",
+    "pointer and remote order parity",
+    "All installed mode retained",
+    "Select all refuses 129 without truncation",
+    "action alias search and category filtering",
+    "action picker selection and cancel",
+    "button gallery scope, launch, return, grid navigation and unassigned refusal",
+    "GIF opt-in, finite loops, inactive/offscreen/clip pause, reduced motion and lease release"
+  ],
+  "hashes": {
+    "qml/PageStudioView.qml": "d43bbfd710435e92f754946f415a73c558fdca2b427f2b855a70af8c6d01e480",
+    "qml/ComposedHome.qml": "f30db45b890462e24f23face0afa8f5a979167f69a9b12dfb8a8c47376016c48",
+    "qml/HomeScreen.qml": "7ef51f058f817e909d6bd02756c07cea4568ff0607b29c59b812ec7eb9434437",
+    "qml/StudioInspector.qml": "3fdf73a1abe876057efa8e679d348d430d54e4022073d283e18f69e686d0b680",
+    "qml/StudioCatalog.qml": "082389a1a936617622ea5bd0604764ae58647f911e0c617d73821f180af140a8",
+    "qml/StudioAppPicker.qml": "deb095b186b42b34686e671c6e0eba651f6d76f1cba54c3ca801515eb152b566",
+    "qml/StudioActionPicker.qml": "d7dceca996dbdd9e379a872c20b8edcef65d9917bc83556b582ed261f2e9dc19",
+    "qml/PageAppCarousel.qml": "c1bd37fe4ca900c1120175a17c37903c078126a2e567e2f5a534f8693b586893",
+    "qml/HomeCard.qml": "cf4825f6a8309204c4a813c2a9b387f3a33df646bdecb271972bd5eeebd66813",
+    "qml/ArtworkImage.qml": "47dc1e496fde8f818abf10d5200a263ccc4cac04037708ca4de381aa434d6046",
+    "qml/PageSurface.qml": "432450e663983d62640607c6a5f51c5bea1f4ada421acb7fb8fe1a578cf72b6f",
+    "qml/Main.qml": "afdb2e19e3c8509752768cefca4dc7d0048b71d0d5fd92e91ca684f374befd48",
+    "qml/PlacedComponents.qml": "8d8e834d1b3ffc08d4470ffa9fa3ccb50c09e14fd455ac7b664bab4cd2ef5acc",
+    "qml/OrbCard.qml": "a274b202eff5a01f98095fd01924172de0a9e914d07e82c031d08f872ccd3e01",
+    "qml/LineIcon.qml": "322d367c5a564252de8bd773ae8c88dca20a1227eb7a7127c7b584dfc2ee8122",
+    "tests/studio/tst_editor.qml": "62955b2561c977c3784e2f56ab864c0552def784bec46909bcf072a6e5ee1eaa",
+    "tests/studio/tst_gestures.qml": "a31457e6d9e532c1f13a8dfbc899aecb59815e88dc3dc3902384ac448d730bbe",
+    "tests/studio/tst_selection.qml": "4e3a72e575386435fd0c7f007a707d913b352b8c14727aac61f99a2e570eb787"
+  },
+  "nativeSourceHashes": {
+    "src/home/ManagedGif.cpp": "667e8d458168a19bd5f079f4c5cef4df635500f26f02503cafda36dc1cc9f8af",
+    "src/home/ManagedGif.h": "431592a1fba391db24114984dc75b6ce1aae7c10f9f2ebc2eef91992920e3f72",
+    "src/home/HomeLayout.cpp": "f743f86d0d8897d07deafe79e580c6d11b428c7274f8d5a9ac117ca5b7058cc5",
+    "src/home/HomeLayout.h": "2d8995324a71ea1ede23b53d3ef14e5bfa8f88c007bc8cacfe7469e1fc2ecb12",
+    "src/home/HomeSkins.cpp": "402e7e6e93adc47cdc403bb1c8b5453c4b001be9949db0cf454b015bf72265e2",
+    "src/home/ComponentSchema.cpp": "199c49afb1c2f1ee4a3798392316b91e5478569d31261f8c26dacdd52934ad63",
+    "src/home/StudioSession.cpp": "fec21cccd1669e3a5eb17d96e8890f9ea418ed9b39134898d8246421ceb4524c",
+    "tests/tst_components.cpp": "5deef55ce5457759b81c995e567e667404a710c95f5e70b7c4ecfc05616a6816",
+    "config/studio-defaults.json": "c99ab75025996c215237a136a9b2c19d2ac1e7f953618d9541ccab98a1301c38",
+    "CMakeLists.txt": "befbf21ae6831b2d053491967a58ca88a882f64fa17f7e6d5ec33e50697dffae"
+  }
+}

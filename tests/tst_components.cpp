@@ -7,6 +7,7 @@
 #include "media/CaptureController.h"
 #include "media/KodiService.h"
 #include "home/StudioSession.h"
+#include "home/ManagedGif.h"
 #include "games/GameLibrary.h"
 #include "games/GameEmulators.h"
 #include <QStandardPaths>
@@ -84,6 +85,7 @@ private slots:
     void studioPageDefaultsAreDraftOnlyAndScoped();
     void studioShapesLabelsAndReplacementAreAtomic();
     void studioButtonCollectionsAreBoundedAndAtomic();
+    void studioGifArtworkIsBoundedStagedAndProfileScoped();
 };
 static AppDefinition gamesRuntime(const QString &id="psp-test") {
     AppDefinition app;app.id=id;app.name="PSP runtime";app.type="desktop";
@@ -1667,6 +1669,36 @@ void ComponentTests::studioButtonCollectionsAreBoundedAndAtomic()
     QVERIFY(!session->execute("setApps",{{"id",appId},{"mode","selected"},{"apps",QVariantList{"new-missing-app"}}}));QCOMPARE(session->draft(),missingBaseline);
     QVERIFY(session->execute("setApps",{{"id",appId},{"mode","selected"},{"apps",QVariantList{}}}));
     QVERIFY(session->undo());QCOMPARE(session->draft(),missingBaseline);QVERIFY(!QFile::exists(path));
+}
+void ComponentTests::studioGifArtworkIsBoundedStagedAndProfileScoped()
+{
+    const auto gif=[](int count,int delay=10){
+        auto bytes=QByteArray::fromHex("47494638396101000100800000000000ffffff");
+        for(int i=0;i<count;++i){bytes+=QByteArray::fromHex("21f90400");bytes+=char(delay&255);bytes+=char((delay>>8)&255);bytes+=QByteArray::fromHex("00002c0000000001000100000202440100");}
+        bytes+=char(0x3b);return bytes;
+    };
+    QString error;const auto valid=gif(2);const auto decoded=ManagedGif::decode(valid,true,&error);
+    QVERIFY2(!decoded.isEmpty(),qPrintable(error));QCOMPARE(decoded["frameCount"].toInt(),2);QCOMPARE(decoded["frames"].toList().size(),2);
+    QVERIFY(decoded["frames"].toList().first().toString().startsWith("data:image/png;base64,"));
+    QVERIFY(ManagedGif::decode(gif(61),false,&error).isEmpty());QVERIFY(!error.isEmpty());
+    QVERIFY(ManagedGif::decode(gif(2,101),false,&error).isEmpty());
+    QVERIFY(ManagedGif::decode(gif(31,100),false,&error).isEmpty());
+    auto huge=valid;huge[6]=char(0);huge[7]=char(8);QVERIFY(ManagedGif::decode(huge,false,&error).isEmpty());
+    QVERIFY(ManagedGif::decode(QByteArray("GIF89a"),false,&error).isEmpty());
+    QVERIFY(ManagedGif::decode(valid+QByteArray(2*1024*1024,'x'),false,&error).isEmpty());
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
+    const auto path=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto baseline=session->draft();
+    const auto source=dir.filePath("source.gif");QFile file(source);QVERIFY(file.open(QIODevice::WriteOnly));QCOMPARE(file.write(valid),qint64(valid.size()));file.close();
+    const auto relative=session->stageArtwork(QUrl::fromLocalFile(source).toString());QVERIFY2(relative.endsWith(".gif"),qPrintable(session->errorString()));QCOMPARE(session->draft(),baseline);QVERIFY(!QFile::exists(path));
+    auto *draft=qobject_cast<HomeLayout *>(session->model());QVERIFY(draft);
+    for(int i=0;i<8;++i)QVERIFY(draft->artworkAnimation(relative,QString("owner-%1").arg(i)).contains("frames"));
+    QVERIFY(draft->artworkAnimation(relative,"ninth-owner").contains("error"));draft->releaseArtworkAnimation("owner-0");
+    QVERIFY(draft->artworkAnimation(relative,"ninth-owner").contains("frames"));
+    QVERIFY(draft->artworkAnimation("../source.gif","unsafe").contains("error"));
+    QVERIFY(home.artworkAnimation(relative,"other-model").contains("error"));
+    QVERIFY(draft->resolveArtwork(relative).startsWith("data:image/png;base64,"));session->invalidate();QVERIFY(draft->resolveArtwork(relative).isEmpty());QVERIFY(!QFile::exists(path));
+    QVERIFY(ComponentSchema::validPresentation({{"animateArtwork",true}}));QVERIFY(!ComponentSchema::validPresentation({{"animateArtwork","true"}}));
 }
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

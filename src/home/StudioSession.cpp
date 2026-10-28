@@ -1,5 +1,6 @@
 #include "home/StudioSession.h"
 #include "home/ComponentSchema.h"
+#include "home/ManagedGif.h"
 #include "home/HomeLayout.h"
 
 #include <QJsonArray>
@@ -39,7 +40,7 @@ QVariantList StudioSession::artworkChoices() const
     };
     const auto directory=QFileInfo(m_profilePath).absolutePath();
     const QStringList roots{QDir(directory).filePath("artwork"),QDir(QFileInfo(m_live->m_defaultPath).absolutePath()).filePath("skins"),QDir(QFileInfo(m_live->m_defaultPath).absolutePath()).filePath("artwork")};
-    for(const auto &root:roots){QDirIterator files(root,{"*.png","*.jpg","*.jpeg"},QDir::Files,QDirIterator::Subdirectories);int inspected=0;while(files.hasNext() && ++inspected<=512 && result.size()<256){const auto path=files.next(),canonical=QFileInfo(path).canonicalFilePath(),base=QFileInfo(root).canonicalFilePath();if(!canonical.isEmpty() && !base.isEmpty() && !QDir(base).relativeFilePath(canonical).startsWith("../"))append(canonical);}}
+    for(const auto &root:roots){QDirIterator files(root,{"*.png","*.jpg","*.jpeg","*.gif"},QDir::Files,QDirIterator::Subdirectories);int inspected=0;while(files.hasNext() && ++inspected<=512 && result.size()<256){const auto path=files.next(),canonical=QFileInfo(path).canonicalFilePath(),base=QFileInfo(root).canonicalFilePath();if(!canonical.isEmpty() && !base.isEmpty() && !QDir(base).relativeFilePath(canonical).startsWith("../"))append(canonical);}}
     for(const auto &path:m_stagedAssets)append(path);
     return result;
 }
@@ -47,10 +48,11 @@ QString StudioSession::stageArtwork(const QString &source)
 {
     if(!m_active || !m_live){setError(tr("Reopen Studio before importing artwork."));return {};}
     const QUrl url(source);const auto path=url.isLocalFile()?url.toLocalFile():url.scheme().isEmpty()?source:QString();
-    QFile input(path);if(path.isEmpty() || !input.open(QIODevice::ReadOnly) || input.size()<8 || input.size()>20*1024*1024){setError(tr("Choose a local PNG or JPEG of at most 20 MiB."));return {};}
+    QFile input(path);if(path.isEmpty() || !input.open(QIODevice::ReadOnly) || input.size()<8 || input.size()>20*1024*1024){setError(tr("Choose a local PNG/JPEG of at most 20 MiB, or a bounded GIF of at most 2 MiB."));return {};}
     const auto data=input.readAll();QBuffer buffer;buffer.setData(data);buffer.open(QIODevice::ReadOnly);QImageReader reader(&buffer);const auto format=reader.format();const auto size=reader.size();
-    if(!QList<QByteArray>{"png","jpeg","jpg"}.contains(format) || !size.isValid() || size.width()>16384 || size.height()>16384 || qint64(size.width())*size.height()>32*1024*1024 || reader.read().isNull()){setError(tr("Artwork must be a valid PNG/JPEG within 16384 pixels and 32 megapixels."));return {};}
-    const auto relative="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex())+(format=="png"?".png":".jpg");
+    const bool gif=format=="gif";QString gifError;if(gif && ManagedGif::decode(data,true,&gifError).isEmpty()){setError(gifError);return {};}
+    if((!gif && !QList<QByteArray>{"png","jpeg","jpg"}.contains(format)) || !size.isValid() || size.width()>16384 || size.height()>16384 || qint64(size.width())*size.height()>32*1024*1024 || reader.read().isNull()){setError(tr("Artwork must be valid PNG/JPEG (16384 pixels / 32 megapixels) or a bounded GIF."));return {};}
+    const auto relative="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex())+(gif?".gif":format=="png"?".png":".jpg");
     if(m_stagedAssets.contains(relative))return relative;
     qint64 total=data.size();for(const auto &path:m_stagedAssets)total+=QFileInfo(path).size();
     if(m_stagedAssets.size()>=128 || total>64*1024*1024){setError(tr("This draft's artwork budget is 128 images / 64 MiB. Apply or discard before importing more."));return {};}
@@ -188,7 +190,7 @@ QVariantMap StudioSession::replacementProposal(const QString &id,const QString &
     auto presentation=replacement["presentation"].toObject();const auto oldStyle=original["presentation"].toObject();
     for(auto it=oldStyle.begin();it!=oldStyle.end();++it) {
         const auto key=it.key();
-        const bool semantic=key.startsWith("library") || key.startsWith("guide") || (key=="bodyText" && type!="text")
+        const bool semantic=key.startsWith("library") || key.startsWith("guide") || (key=="bodyText" && type!="text") || (key=="animateArtwork" && type!="image")
             || (key=="shape" && type!="shape" && (type!="container" || it.value()=="ellipse" || it.value()=="divider"));
         if(semantic || !ComponentSchema::validPresentation({{key,it.value().toVariant()}},false,type=="container")){losses.append(key=="layout"?tr("Container layout"):key=="shape"?tr("Shape outline"):key=="bodyText"?tr("Text body"):tr("Presentation: %1").arg(key));continue;}
         presentation[key]=it.value();
@@ -276,6 +278,7 @@ void StudioSession::invalidate()
     if (m_model) {
         m_model->m_items = {};
         m_model->m_assetPaths.clear();
+        m_model->m_animationOwners.clear();m_model->m_gifStills.clear();
         m_model->m_categories = {};
         m_model->m_pages = {};
         m_model->m_collections = {};

@@ -569,6 +569,7 @@
       {"tab":"Content","scope":"presentation","key":"subtitle","label":"Text / supporting text","type":"text","excludeTypes":["container"]},
       {"tab":"Content","scope":"presentation","key":"label","label":"Artwork badge","type":"text","advanced":true,"excludeTypes":["container"]},
       {"tab":"Content","scope":"component","key":"customLogo","label":"Artwork","type":"artwork","excludeTypes":["library","section","navigation"]},
+      {"tab":"Content","scope":"presentation","key":"animateArtwork","label":"Play GIF animation","type":"toggle","types":["image"],"fallback":false},
       {"tab":"Content","scope":"presentation","key":"icon","label":"More apps icon","type":"choice","families":["app-bar"],"choices":["grid","display","film","music","gamepad","search","settings","heart","clock","arrow-right"],"fallback":"grid"},
       {"tab":"Content","scope":"presentation","key":"icon","label":"Icon","type":"choice","choices":["display","film","music","gamepad","grid","search","settings","heart","clock","arrow-right"],"excludeTypes":["container"]},
       {"tab":"Content","scope":"presentation","key":"libraryKind","excludeFamilies":["recently-viewed","music-library","tv-guide"],"label":"Library source","type":"choice","types":["library","section"],"choices":["movies","shows","games"]},

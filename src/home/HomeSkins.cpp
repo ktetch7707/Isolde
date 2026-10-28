@@ -1,5 +1,6 @@
 #include "HomeLayout.h"
 #include "ComponentSchema.h"
+#include "ManagedGif.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -8,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QRegularExpression>
 #include <QUuid>
 #include <functional>
 
@@ -45,7 +47,7 @@ QJsonValue artwork(QJsonValue value, const std::function<QString(const QString &
     return value;
 }
 bool safeArtwork(const QString &path) {
-    return ComponentSchema::validComposition({{"schemaVersion", 1}, {"wallpaper", path}});
+    return QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$").match(path).hasMatch();
 }
 }
 
@@ -75,7 +77,9 @@ QString HomeLayout::saveSkin(const QString &name) {
         if (assets.contains(path)) return path;
         QFile file(QDir(QFileInfo(m_userPath).absolutePath()).filePath(path));
         if (!safeArtwork(path) || !file.open(QIODevice::ReadOnly) || file.size() > 20 * 1024 * 1024) { valid = false; return path; }
-        assets[path] = QString::fromLatin1(file.readAll().toBase64());
+        const auto bytes=file.readAll();
+        if((QFileInfo(path).suffix()=="gif")!=ManagedGif::matches(bytes) || (ManagedGif::matches(bytes) && ManagedGif::decode(bytes,true).isEmpty())){valid=false;return path;}
+        assets[path] = QString::fromLatin1(bytes.toBase64());
         return path;
     });
     if (!valid) { setError(tr("A Home image is missing or too large. Choose it again before saving a skin.")); return {}; }
@@ -127,7 +131,8 @@ bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &asse
         const auto decoded = QByteArray::fromBase64Encoding(assets[path].toString().toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
         const auto bytes = decoded.decoded;
         if (!decoded || bytes.isEmpty() || bytes.size() > 20 * 1024 * 1024
-            || (!bytes.startsWith("\x89PNG\r\n\x1a\n") && !bytes.startsWith("\xff\xd8\xff"))) { valid = false; return path; }
+            || (!bytes.startsWith("\x89PNG\r\n\x1a\n") && !bytes.startsWith("\xff\xd8\xff") && !ManagedGif::matches(bytes))) { valid = false; return path; }
+        if((QFileInfo(path).suffix()=="gif")!=ManagedGif::matches(bytes) || (ManagedGif::matches(bytes) && ManagedGif::decode(bytes,true).isEmpty())){valid=false;return path;}
         const auto relative = "artwork/skin-" + QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex()) + "." + QFileInfo(path).suffix();
         QDir base(QFileInfo(m_userPath).absolutePath()); base.mkpath("artwork");
         QSaveFile file(base.filePath(relative));

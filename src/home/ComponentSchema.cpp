@@ -136,7 +136,8 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
         } else if(key=="artFit" || key=="labelPosition" || key=="textAlign" || key=="logoMode") {
             const auto choices=key=="logoMode"?QStringList{"cutout","original","tile"}:key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
             if(it.value().metaType().id()!=QMetaType::QString || !choices.contains(it.value().toString()))return false;
-        } else if(key=="labelBold" || key=="labelWrap" || key=="focusEnabled") {
+        } else if(key=="labelBold" || key=="labelWrap" || key=="focusEnabled" || key=="animateArtwork") {
+            if(key=="animateArtwork" && (section || container))return false;
             if(it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if(key=="artFocalX" || key=="artFocalY" || key=="artZoom" || key=="focusWidth" || key=="borderWidth" || key=="labelLines" || key=="libraryLimit") {
             if(it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool)return false;
@@ -529,8 +530,9 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     }
     if (input.contains("presentation") && (input.value("presentation").metaType().id() != QMetaType::QVariantMap
         || !validPresentation(input.value("presentation").toMap(),type=="library",type=="container"))) return reject(error, "Invalid component presentation.");
+    if(type!="image" && input.value("presentation").toMap().contains("animateArtwork"))return reject(error,"GIF motion belongs to an Image component.");
     if (!input.value("customLogo").toString().isEmpty()) {
-        static const QRegularExpression artwork("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg)$");
+        static const QRegularExpression artwork("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$");
         if (!artwork.match(input.value("customLogo").toString()).hasMatch()) return reject(error, "Invalid saved artwork path.");
     }
     result["schemaVersion"] = 1; result["componentType"] = type;

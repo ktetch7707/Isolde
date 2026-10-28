@@ -1,5 +1,6 @@
 #include "home/HomeLayout.h"
 #include "home/ComponentSchema.h"
+#include "home/ManagedGif.h"
 #include "home/StudioSession.h"
 
 #include <QCoreApplication>
@@ -552,10 +553,10 @@ QString HomeLayout::wallpaperSource() const
 {
     return resolveArtwork(m_composition.value("wallpaper").toString());
 }
-QString HomeLayout::resolveArtwork(const QString &relative) const
+QString HomeLayout::managedArtworkSource(const QString &relative) const
 {
     if(relative.isEmpty())return {};
-    if(!QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg)$").match(relative).hasMatch())return {};
+    if(!QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$").match(relative).hasMatch())return {};
     if(m_assetPaths.contains(relative))return QUrl::fromLocalFile(m_assetPaths.value(relative)).toString();
     if(m_userPath.isEmpty())return {};
     const auto profile=QFileInfo(QFileInfo(m_userPath).absolutePath()).canonicalFilePath();
@@ -564,6 +565,26 @@ QString HomeLayout::resolveArtwork(const QString &relative) const
     if(!canonical.isEmpty() && (profile.isEmpty() || QDir(profile).relativeFilePath(canonical).startsWith("../")))return {};
     return QUrl::fromLocalFile(path).toString();
 }
+QString HomeLayout::resolveArtwork(const QString &relative) const
+{
+    const auto source=managedArtworkSource(relative);if(!relative.endsWith(".gif"))return source;
+    QFile input(QUrl(source).toLocalFile());if(source.isEmpty() || !input.open(QIODevice::ReadOnly) || input.size()>2*1024*1024){const_cast<HomeLayout *>(this)->setError(tr("The managed GIF is missing or exceeds 2 MiB."));return {};}
+    const auto bytes=input.readAll();const auto key=QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex());
+    if(const auto *cached=m_gifStills.object(key))return *cached;
+    QString error;const auto decoded=ManagedGif::decode(bytes,true,&error);if(decoded.isEmpty()){const_cast<HomeLayout *>(this)->setError(error);return {};}
+    const auto still=decoded["frames"].toList().first().toString();m_gifStills.insert(key,new QString(still),int(still.size()*2));return still;
+}
+QVariantMap HomeLayout::artworkAnimation(const QString &relative,const QString &owner)
+{
+    const auto fail=[&](const QString &reason){setError(reason);return QVariantMap{{"error",reason}};};
+    if(!ComponentSchema::safeId(owner) || !relative.endsWith(".gif"))return fail(tr("Choose managed GIF artwork."));
+    if(!m_animationOwners.contains(owner) && m_animationOwners.size()>=8)return fail(tr("Eight artwork animations are already active. Other images remain still."));
+    const auto source=QUrl(managedArtworkSource(relative));QFile input(source.toLocalFile());
+    if(!source.isLocalFile() || !input.open(QIODevice::ReadOnly) || input.size()>2*1024*1024)return fail(tr("The managed GIF is missing or exceeds 2 MiB."));
+    QString error;const auto result=ManagedGif::decode(input.readAll(),true,&error);if(result.isEmpty())return fail(error);
+    m_animationOwners.insert(owner);return result;
+}
+void HomeLayout::releaseArtworkAnimation(const QString &owner){m_animationOwners.remove(owner);}
 bool HomeLayout::setWallpaper(const QString &sourceUrl)
 {
     const QUrl url(sourceUrl);
@@ -608,6 +629,8 @@ QString HomeLayout::errorString() const { return m_errorString; }
 
 bool HomeLayout::load(const QString &defaultPath, const QString &userPath)
 {
+    m_animationOwners.clear();
+    m_gifStills.clear();
     if (m_studio) m_studio->invalidate();
     m_legacyDocument.clear();
     m_defaultPath = defaultPath;

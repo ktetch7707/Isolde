@@ -54,6 +54,7 @@ Item {
                 objectName:"placedCard-"+node.modelData.item.id
                 visible:!node.group && !node.library && !node.apps && !node.pageMenu
                 anchors.fill:parent;item:modelData.item;appearance:surface.host.appearance;unit:surface.unit
+                artworkResolver:surface.host.artworkResolver;artworkMotionAllowed:surface.host.artworkMotionAllowed!==false && !surface.host.editMode && !surface.host.freezeData
                 selectMode:surface.host.selectMode;selectTrigger:surface.host.selectTrigger
                 selectAction:surface.host.selectAction;selectionColor:surface.host.selectionColor
                 selected:node.selected

@@ -32,7 +32,7 @@ Item {
         if(view==="media")return mediaChoices.map(m=>m.name)
         if(view==="apps")return ["All installed apps","Use "+selectedApps.length+" selected apps"].concat(apps.map(a=>(selectedApps.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
         if(view==="carousel")return ["Start with three editable buttons · links are unassigned","Start with an empty carousel"]
-        if(view==="artwork")return ["Import a local PNG / JPEG…"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
+        if(view==="artwork")return ["Import a local PNG / JPEG / GIF…"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
         return []
     }
     function chooseFamily(index){

@@ -18,6 +18,7 @@ Item {
     property string homeOrigin:""
     readonly property var pageEntries:layoutModel.studioPages
     property bool editing:false
+    property bool artworkMotionAllowed:true
     property bool internetAvailable:true
     property bool localNetworkAvailable:true
     signal closed(string origin)
@@ -50,6 +51,7 @@ Item {
     PageBackdrop {id:wallpaper;anchors.fill:parent;source:root.model?root.model.wallpaperSource:"";config:root.config.background || {};startColor:root.model?root.model.backgroundStart:"transparent";endColor:root.model?root.model.backgroundEnd:"transparent"}
     HomeScreen {
         id:content;objectName:"pageContent"
+        artworkMotionAllowed:root.artworkMotionAllowed && !root.editing
         anchors.fill:parent
         items:root.model?root.model.items:[];sections:root.model?root.model.sections:[];composition:model?model.composition:({});grid:root.grid;placements:root.placements;pageKey:root.activeId;libraryProvider:root.provider
         selectMode:model && model.selectMode || "single"; selectTrigger:model && model.selectTrigger || "click"; selectAction:model && model.selectAction || "navigate"; selectionColor:model && model.selectionColor || ""

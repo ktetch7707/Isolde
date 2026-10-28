@@ -259,7 +259,7 @@ Item {
         if(view==="choices")return choices.map(c=>c.name)
         if(view==="playlistSource")return ["Refresh Kodi playlists"].concat(playlistClient?(playlistClient.items || []).map(i=>i.title || i.playlistName):[])
 if(view==="colorWheel")return ["Back"]
-        if(view==="artwork")return ["Import local PNG / JPEG…","Clear image"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
+        if(view==="artwork")return [pageMode?"Import local PNG / JPEG…":"Import local PNG / JPEG / GIF…","Clear image"].concat(assets.map(a=>a.name+" · "+a.width+" × "+a.height))
         if(view==="crop")return ["Fit: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFit",fallback:"cover"}),"Focal X: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalX",fallback:.5}),"Focal Y: "+effective(current,{scope:pageMode?"background":"presentation",key:"artFocalY",fallback:.5}),"Zoom: "+effective(current,{scope:pageMode?"background":"presentation",key:"artZoom",fallback:1}),"Pixel crop…","Use full artwork","Back"]
         if(view==="pixelCrop")return ["Left: "+cropDraft.x,"Top: "+cropDraft.y,"Width: "+cropDraft.width,"Height: "+cropDraft.height,"Use this crop","Cancel"]
         if(view==="layout")return ["Layout: "+layoutDraft.mode,"Columns: "+layoutDraft.columns,"Rows: "+layoutDraft.rows,"Gap: "+layoutDraft.gap,"Padding: "+layoutDraft.padding,"Visible columns: "+(layoutDraft.visibleColumns || layoutDraft.columns),"Wrap navigation: "+(layoutDraft.wrap?"On":"Off"),"Use this arrangement","Cancel"]

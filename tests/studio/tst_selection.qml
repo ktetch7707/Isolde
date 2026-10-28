@@ -34,6 +34,21 @@ Item {
         }
         Component {id:backdropComponent;App.PageBackdrop {width:320;height:180;startColor:"black";endColor:"blue"}}
         Component {id:shapeCardComponent;App.HomeCard {width:240;height:120;appearance:homeLayout.appearance}}
+        Component {id:motionImageComponent;App.ArtworkImage {width:100;height:100;property bool screenGate:true;function onScreen(){return screenGate}}}
+        function test_gif_motion_default_pause_and_release(){
+            let acquired=0,released=0
+            const still=Qt.resolvedUrl("../visual/home-pastel-reference/wallpaper.png").toString()
+            const resolver={artworkAnimation:function(relative,owner){acquired++;return {frames:[still,still],delays:[1000,1000]}},releaseArtworkAnimation:function(owner){released++}}
+            const image=createTemporaryObject(motionImageComponent,tests.parent,{managedAsset:"artwork/animation.gif",animationResolver:resolver});verify(image!==null)
+            image.advanceAnimation();compare(acquired,0);compare(image.animationFrame,0)
+            image.motionEnabled=true;image.advanceAnimation();compare(acquired,1);compare(image.animation.frames.length,2)
+            image.advanceAnimation();compare(image.animationFrame,1)
+            image.reducedMotion=true;compare(released,1);compare(image.animation.frames,undefined);image.advanceAnimation();compare(acquired,1)
+            image.reducedMotion=false;image.screenGate=false;image.advanceAnimation();compare(acquired,1)
+            image.screenGate=true;image.advanceAnimation();compare(acquired,2)
+            image.screenGate=false;image.advanceAnimation();compare(released,2);compare(image.animation.frames,undefined)
+            image.screenGate=true;image.advanceAnimation();compare(acquired,3);image.animationResolver=null;compare(released,3)
+        }
         Component {id:orbComponent;App.OrbCard {width:140;height:150;item:({name:"Logo",logoSource:Qt.resolvedUrl("../visual/home-pastel-reference/wallpaper.png")})}}
         Component {id:menuComponent;App.PageMenuWidget {width:600;height:120;appearance:({textColor:"white",surfaceColor:"#202126",focusColor:"pink"});style:({layout:{mode:"row",columns:3,rows:1,padding:8,gap:8}})}}
         Component {id:menuHomeComponent;App.HomeScreen {width:1280;height:720;sections:[];brandVisible:false;backgroundStart:"black";backgroundEnd:"black";tileRoundness:0.2;internetAvailable:false;localNetworkAvailable:false;hasContextualSources:false}}
