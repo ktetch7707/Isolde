@@ -71,7 +71,7 @@ Item {
     readonly property var managedChannel:controller?controller.channels.find(c=>c.id===managedId):null
     readonly property var conflictingChannel:controller?controller.channels.find(c=>c.id===numberConflictId):null
     readonly property bool previewCurrent:controller && controller.previewReady && JSON.stringify(controller.previewDefinition)===JSON.stringify(draft)
-    readonly property var createFields:["Name: "+(draft.name || ""),"Channel number: "+(draft.number || ""),"Media: "+mediaKind,"Edit matching rules","Sequence: "+(draft.sequence || ""),"Clock: "+(draft.clock || ""),"Preview matches",previewCurrent?(editRevision?"Save rules for unscheduled future slots":"Save channel"):"Preview these settings before saving","Schedule horizon, history and timezone","Cancel"]
+    readonly property var createFields:["Name: "+(draft.name || ""),"Channel number: "+(draft.number || ""),"Media: "+mediaKind,"Edit matching rules","Sequence: "+(draft.sequence || ""),"Clock: "+(draft.clock || "")+(draft.clockOffsetSeconds?" · Offset "+draft.clockOffsetSeconds/60+" minutes":""),"Preview matches",previewCurrent?(editRevision?"Save rules for unscheduled future slots":"Save channel"):"Preview these settings before saving","Schedule horizon, history and timezone","Cancel"]
     readonly property var menuRows:buildMenu()
     readonly property var repairItems:buildRepairItems()
     visible:open && !suppressed
@@ -169,7 +169,7 @@ Item {
         else if(fieldIndex===2){const kinds=["episode","movie","mixed","musicvideo","song","all"];mediaKind=kinds[(kinds.indexOf(mediaKind)+delta+kinds.length)%kinds.length];value.mediaKinds=mediaKind==="mixed"?["movie","episode"]:mediaKind==="all"?["movie","episode","musicvideo","song"]:[mediaKind];draft=value}
         else if(fieldIndex===3){rules.begin(draft.rule);mode="rules"}
         else if(fieldIndex===4){const values=["seeded-shuffle","episode-order","rotation","next-unwatched"];value.sequence=values[(values.indexOf(value.sequence)+delta+values.length)%values.length];draft=value}
-        else if(fieldIndex===5){value.clock=value.clock==="real-time"?"pause-when-off":"real-time";draft=value}
+        else if(fieldIndex===5){value.clock=value.clock==="real-time"?"pause-when-off":"real-time";if(value.clock==="pause-when-off")delete value.clockOffsetSeconds;draft=value}
         else if(fieldIndex===6)controller.previewLocal(draft,mediaKind)
         else if(fieldIndex===7){if(editRevision)controller.updateLocal(draft,editRevision);else controller.createLocal(draft)}
         else if(fieldIndex===8){navigationError="";mode="schedule";menuIndex=0}

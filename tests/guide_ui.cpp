@@ -34,6 +34,7 @@ private slots:
     void remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot();
     void unavailableIdentityOnlyChangesMatchingCachedPrograms();
     void remoteClockAdjustmentRequiresReviewAndPreservesPrograms();
+    void remoteClockDraftPolicySwitchShowsAndClearsOffset();
     void remoteAdvancedScheduleDraftCancelWritesNothing();
     void compactPvrProgressAndAccessiblePressUseTheSameActions();
     void remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision();
@@ -164,6 +165,16 @@ void GuideUiTests::unavailableIdentityOnlyChangesMatchingCachedPrograms() {
     QCOMPARE(cached.value("startUtc"),before.first().toMap().value("startUtc"));QCOMPARE(cached.value("endUtc"),before.first().toMap().value("endUtc"));QVERIFY(cached.value("clockUtc").toLongLong()>=cached.value("startUtc").toLongLong());
     for(const auto &row:controller.rows())if(row.toMap().value("id")==episodeId)QCOMPARE(row.toMap().value("current").toMap().value("id"),cached.value("id"));
     controller.invalidate();QVERIFY(!controller.markUnavailable("episode",missingId));QCOMPARE(reader.programs(movieId,wall,wall+7*86400,1000),other);
+}
+void GuideUiTests::remoteClockDraftPolicySwitchShowsAndClearsOffset() {
+    QTemporaryDir dir;GuideController controller(dir.filePath("guide.sqlite"),"clock-draft");QTRY_VERIFY(controller.ready()&&!controller.busy());
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("clock-origin")),Q_ARG(QVariant,QVariantMap())));command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);command(view.data(),InputManager::Confirm);
+    auto draft=controller.newDefinition();draft["clockOffsetSeconds"]=3600;view->setProperty("draft",draft);
+    QQmlExpression label(QQmlEngine::contextForObject(view.data()),view.data(),"createFields[5]");QVERIFY(label.evaluate().toString().contains("Offset 60 minutes"));
+    for(int i=0;i<5;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);
+    const auto changed=view->property("draft").toMap();QCOMPARE(changed.value("clock").toString(),QString("pause-when-off"));QVERIFY(!changed.contains("clockOffsetSeconds"));QVERIFY(!ComponentSchema::guideChannel(changed).isEmpty());QVERIFY(controller.channels().isEmpty());
 }
 void GuideUiTests::remoteClockAdjustmentRequiresReviewAndPreservesPrograms() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);
