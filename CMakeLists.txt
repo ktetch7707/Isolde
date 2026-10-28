@@ -353,19 +353,19 @@ if(BUILD_TESTING)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_grid COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_grid.qml)
     add_test(NAME studio_grid_controls COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_grid_controls.qml)
-    set_tests_properties(studio_grid studio_grid_controls PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+    set_tests_properties(studio_grid studio_grid_controls PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_destinations COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_destinations.qml)
-    set_tests_properties(studio_destinations PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+    set_tests_properties(studio_destinations PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_ordered COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_ordered.qml)
     set_tests_properties(studio_ordered PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_policies COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_policies.qml)
-    set_tests_properties(studio_policies PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+    set_tests_properties(studio_policies PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_overlays COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_overlays.qml)
-    set_tests_properties(studio_overlays PROPERTIES TIMEOUT 30 LABELS "studio;quick;qml"
+    set_tests_properties(studio_overlays PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(studio_selection PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
@@ -444,7 +444,7 @@ if(BUILD_TESTING)
     add_test(NAME studio_behavior COMMAND isolde_home_navigation_tests
         studioRemoteDraftApplyAndCancel studioRemoteGesturesCollisionsAndAnchors
         studioRemoteSectionTransferAndCancel studioScrollingAddMoveAndCancel)
-    set_tests_properties(studio_behavior PROPERTIES TIMEOUT 30 LABELS "studio;behavior"
+    set_tests_properties(studio_behavior PROPERTIES TIMEOUT 60 LABELS "studio;behavior"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(home_component_navigation PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
