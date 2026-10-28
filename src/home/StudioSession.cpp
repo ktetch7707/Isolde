@@ -126,9 +126,16 @@ QVariantMap StudioSession::componentPrototype(const QString &type,const QVariant
     } else {setError(tr("Choose a registered component type."));return {};}
     if(nodes.isEmpty() || nodes.size()>129){setError(tr("The packaged component preset is invalid."));return {};}
     auto configured=nodes.first().toObject();
+    if(configuration.contains("variant")) {
+        if(configuration["variant"].metaType().id()!=QMetaType::QString){setError(tr("Choose a registered starting style."));return {};}
+        QVariantMap selected;for(const auto &entry:options.value("componentVariants").toMap().value(type).toList())if(entry.toMap().value("id")==configuration["variant"])selected=entry.toMap();
+        if(selected.isEmpty()){setError(tr("This starting style is not available for that component."));return {};}
+        auto style=configured["presentation"].toObject();const auto changes=selected["presentation"].toMap();for(auto it=changes.cbegin();it!=changes.cend();++it)style[it.key()]=QJsonValue::fromVariant(it.value());configured["presentation"]=style;
+        auto placement=configured["placement"].toObject();const auto span=selected["span"].toMap();placement["width"]=QJsonValue::fromVariant(span["width"]);placement["height"]=QJsonValue::fromVariant(span["height"]);configured["placement"]=placement;
+    }
     for(auto it=configuration.cbegin();it!=configuration.cend();++it){
-        if(!QStringList{"name","action","customLogo","presentation","appCollection","apps","buttons"}.contains(it.key())){setError(tr("Unsupported component configuration."));return {};}
-        if(it.key()=="apps" || it.key()=="buttons")continue;
+        if(!QStringList{"name","action","customLogo","presentation","appCollection","apps","buttons","variant"}.contains(it.key())){setError(tr("Unsupported component configuration."));return {};}
+        if(it.key()=="apps" || it.key()=="buttons" || it.key()=="variant")continue;
         if(it.key()=="presentation"){
             if(it.value().metaType().id()!=QMetaType::QVariantMap){setError(tr("Choose valid presentation values."));return {};}
             auto style=configured["presentation"].toObject();const auto changes=it.value().toMap();for(auto change=changes.cbegin();change!=changes.cend();++change)style[change.key()]=QJsonValue::fromVariant(change.value());configured["presentation"]=style;

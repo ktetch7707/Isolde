@@ -12,6 +12,20 @@ Item {
         Component {id:appPickerCatalogComponent;App.StudioCatalog {width:1280;height:720}}
         Component {id:appPickerInspectorComponent;App.StudioInspector {width:1280;height:720}}
         SignalSpy {id:appPickerSpy;signalName:"picked"}
+        function test_starting_styles_remote_cancel_and_pointer_parity(){
+            const catalog=createTemporaryObject(appPickerCatalogComponent,tests.parent,{session:editor.session,options:homeLayout.studioOptions,appearance:editor.page.appearance});verify(catalog!==null);catalog.z=10000
+            appPickerSpy.target=catalog;appPickerSpy.clear();const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
+            const family=catalog.families.findIndex(f=>f.id==="button");catalog.chooseFamily(family);compare(catalog.view,"variants")
+            catalog.handleCommand(inputManager.back);compare(catalog.view,"families");compare(appPickerSpy.count,0)
+            catalog.chooseFamily(family);catalog.handleCommand(inputManager.navigateRight);catalog.handleCommand(inputManager.confirm)
+            compare(catalog.configuration.variant,"round");compare(catalog.view,"links")
+            catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm);compare(appPickerSpy.count,1)
+            const remote=editor.session.componentPrototype("button",appPickerSpy.signalArguments[0][1]);compare(remote.root.placement.width,2);compare(remote.root.presentation.variant,"orb")
+            appPickerSpy.clear();catalog.begin();catalog.chooseFamily(family);const round=findChild(catalog,"studioVariant-round");verify(round!==null)
+            mouseClick(round,round.width/2,round.height/2);compare(catalog.view,"links");catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm)
+            compare(appPickerSpy.count,1);const pointer=editor.session.componentPrototype("button",appPickerSpy.signalArguments[0][1]);compare(JSON.stringify(pointer),JSON.stringify(remote))
+            compare(JSON.stringify(editor.session.document),before);compare(editor.session.changeCount,count);compare(studioFixture.disk(),diskBaseline)
+        }
         Component {id:collectionPickerComponent;App.StudioAppPicker {width:1280;height:720;settings:homeLayout.studioOptions.appPicker;appearance:homeLayout.studioAppearance}}
         SignalSpy {id:collectionPickerSpy;signalName:"accepted"}
         Component {id:actionPickerComponent;App.StudioActionPicker {width:1280;height:720;categories:homeLayout.studioOptions.actionCategories;appearance:homeLayout.studioAppearance}}

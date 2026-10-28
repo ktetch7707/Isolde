@@ -363,6 +363,22 @@ QVariantMap HomeLayout::studioOptions() const
     for(const auto &entry:panel["children"].toArray()){const auto child=ComponentSchema::component(entry.toObject().toVariantMap(),true);if(child.isEmpty())return {};panelItems.append(QJsonObject::fromVariantMap(child));}
     if(!ComponentSchema::hierarchyFits(panelItems,{{"schemaVersion",1},{"enabled",true},{"grid",object["defaultGrid"].toObject().toVariantMap()}},{}))return {};
     const auto presets=object["componentPresets"].toObject();
+    if(object.contains("componentVariants")) {
+        if(!object["componentVariants"].isObject() || object["componentVariants"].toObject().size()>3)return {};
+        const auto families=object["componentVariants"].toObject();
+        for(auto family=families.begin();family!=families.end();++family) {
+            if(!QStringList{"button","image","text"}.contains(family.key()) || !family.value().isArray() || family.value().toArray().isEmpty() || family.value().toArray().size()>8)return {};
+            QSet<QString> variants;
+            for(const auto &value:family.value().toArray()) {
+                const auto variant=value.toObject();const auto id=variant["id"].toString();
+                if(variant.size()!=5 || !variant["id"].isString() || !ComponentSchema::safeId(id) || variants.contains(id) || !variant["name"].isString() || variant["name"].toString().trimmed().isEmpty() || variant["name"].toString().size()>80 || !variant["description"].isString() || variant["description"].toString().size()>160 || !variant["presentation"].isObject() || !variant["span"].isObject() || variant["span"].toObject().size()!=2)return {};
+                auto candidate=presets[family.key()].toObject(),style=candidate["presentation"].toObject();const auto changes=variant["presentation"].toObject();for(auto it=changes.begin();it!=changes.end();++it)style[it.key()]=it.value();candidate["presentation"]=style;
+                const auto span=variant["span"].toObject();QJsonObject placement{{"x",0},{"y",0},{"width",span["width"]},{"height",span["height"]}};candidate["placement"]=placement;
+                if(ComponentSchema::component(candidate.toVariantMap(),true).isEmpty())return {};
+                variants.insert(id);
+            }
+        }
+    }
     for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","shape","text","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
     if(object.contains("shapeChoices")) {
         if(!object["shapeChoices"].isArray() || object["shapeChoices"].toArray().isEmpty() || object["shapeChoices"].toArray().size()>8)return {};

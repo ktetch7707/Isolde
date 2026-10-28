@@ -18,12 +18,14 @@ Item {
     property string keyboardAction:""
     property string keyboardReturn:""
     readonly property var families:options.catalog || []
+    readonly property var variants:(options.componentVariants || {})[family] || []
     readonly property var actions:(session?session.availableActions:[]).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])
     readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
     readonly property var mediaChoices:[{name:"Games · All local games",kind:"games",view:"all"},{name:"Games · Recently added",kind:"games",view:"recent"},{name:"Movies · All",kind:"movies",view:"all"},{name:"Movies · Recently watched",kind:"movies",view:"watched"},{name:"Movies · Recently added",kind:"movies",view:"recent"},{name:"Movies · Continue watching",kind:"movies",view:"continue"},{name:"Shows · All",kind:"shows",view:"all"},{name:"Shows · Recently watched",kind:"shows",view:"watched"},{name:"Shows · Recently added",kind:"shows",view:"recent"},{name:"Shows · Continue watching",kind:"shows",view:"continue"}].concat(actions.filter(a=>a.action && a.action.type==="open-collection").map(a=>({name:a.name,kind:a.mediaKind || "movies",view:"collection",value:a.action.collectionId})))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     signal picked(string type,var configuration)
     signal canceled()
+    function variantItem(entry){const base=(options.componentPresets || {})[family] || {};return Object.assign({},base,{name:entry.name,presentation:Object.assign({},base.presentation || {},entry.presentation || {})})}
     function begin(){view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page."}
     function labels(){
         if(view==="shapes")return (options.shapeChoices || []).map(choice=>choice.name)
@@ -37,6 +39,7 @@ Item {
     }
     function chooseFamily(index){
         const entry=families[index];if(!entry)return;family=entry.id;configuration=({});selected=0
+        if(variants.length){view="variants";return}
         if(family==="button")view="links"
         else if(family==="shape")view="shapes"
         else if(family==="text")finish("text")
@@ -56,6 +59,13 @@ Item {
         if(family==="image" && entry.action && entry.action.type){beginKeyboard("imageName","Image link","links");return}finish(family)
     }
     function activate(){
+        if(view==="variants"){
+            const entry=variants[selected];if(!entry)return;configuration=Object.assign({},configuration,{variant:entry.id});selected=0
+            if(family==="button")view="links"
+            else if(family==="image"){assets=session.artworkChoices();view="artwork"}
+            else finish(family)
+            return
+        }
         if(view==="shapes"){const entry=(options.shapeChoices || [])[selected];if(entry){configuration={presentation:entry.presentation};finish(entry.type)}return}
         if(view==="families"){chooseFamily(selected);return}
         if(view==="widgets"){finish(["clock","text","container","input-panel"][selected]);return}
@@ -81,9 +91,9 @@ Item {
         if(view==="apps"){if(appPicker)appPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
-        if(command===inputManager.back){if(view==="families")canceled();else{view="families";selected=0}return}
+        if(command===inputManager.back){if(view==="families")canceled();else{view="families";selected=Math.max(0,families.findIndex(f=>f.id===family))}return}
         if(command===inputManager.confirm){activate();return}
-        const count=view==="families"?families.length:labels().length,step=view==="families"?2:1
+        const count=view==="families"?families.length:view==="variants"?variants.length:labels().length,step=view==="families" || view==="variants"?2:1
         if(command===inputManager.navigateDown)selected=Math.min(count-1,selected+step)
         else if(command===inputManager.navigateUp)selected=Math.max(0,selected-step)
         else if(command===inputManager.navigateRight)selected=Math.min(count-1,selected+1)
@@ -95,18 +105,26 @@ Item {
         color:root.appearance.surfaceColor;radius:20*root.unit;border.width:2;border.color:root.appearance.focusColor
         Column {
             anchors.fill:parent;anchors.margins:24*root.unit;spacing:14*root.unit
-            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:root.view==="families"?"Add component":root.view==="widgets"?"Widgets":root.view==="links"?"On select":root.view==="media"?"Choose Kodi content":root.view==="apps"?"Choose installed apps":root.view==="artwork"?"Choose artwork":"Button carousel";color:root.appearance.textColor;font.pixelSize:28*root.unit}
+            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";text:root.view==="families"?"Add component":root.view==="variants"?"Choose a starting style":root.view==="widgets"?"Widgets":root.view==="links"?"On select":root.view==="media"?"Choose Kodi content":root.view==="apps"?"Choose installed apps":root.view==="artwork"?"Choose artwork":"Button carousel";color:root.appearance.textColor;font.pixelSize:28*root.unit}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";width:parent.width;text:root.message;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
             GridView {
-                id:grid;width:parent.width;height:parent.height-120*root.unit;visible:root.view==="families";clip:true
-                cellWidth:width/2;cellHeight:height/3;model:root.families;currentIndex:root.selected
+                id:grid;width:parent.width;height:parent.height-120*root.unit;visible:root.view==="families" || root.view==="variants";clip:true
+                cellWidth:width/2;cellHeight:height/3;model:root.view==="variants"?root.variants:root.families;currentIndex:root.selected
                 delegate:Rectangle {
                     required property int index;required property var modelData
+                    objectName:(root.view==="variants"?"studioVariant-":"studioFamily-")+modelData.id
                     width:grid.cellWidth-12*root.unit;height:grid.cellHeight-12*root.unit;radius:12*root.unit
                     color:index===root.selected?root.appearance.selectedColor:root.appearance.surfaceColor;border.width:index===root.selected?3:1;border.color:root.appearance.focusColor
                     Row {
                         anchors.fill:parent;anchors.margins:14*root.unit;spacing:16*root.unit
-                        Rectangle {width:90*root.unit;height:90*root.unit;anchors.verticalCenter:parent.verticalCenter;radius:14*root.unit;color:root.appearance.selectedColor;LineIcon {anchors.centerIn:parent;width:48*root.unit;height:width;name:modelData.icon;ink:root.appearance.textColor}}
+                        Rectangle {width:90*root.unit;height:90*root.unit;anchors.verticalCenter:parent.verticalCenter;radius:14*root.unit;color:root.appearance.selectedColor
+                            LineIcon {visible:root.view!=="variants";anchors.centerIn:parent;width:48*root.unit;height:width;name:modelData.icon || "grid";ink:root.appearance.textColor}
+                            HomeCard {visible:root.view==="variants";enabled:false;Accessible.ignored:true;anchors.centerIn:parent
+                                width:Math.min(parent.width,parent.height*(modelData.span || {width:1,height:1}).width/(modelData.span || {width:1,height:1}).height)
+                                height:Math.min(parent.height,parent.width*(modelData.span || {width:1,height:1}).height/(modelData.span || {width:1,height:1}).width)
+                                item:root.variantItem(modelData);appearance:root.appearance;unit:root.unit*.55;artworkMotionAllowed:false
+                            }
+                        }
                         Column {width:parent.width-106*root.unit;anchors.verticalCenter:parent.verticalCenter;spacing:7*root.unit
                             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";width:parent.width;text:modelData.name;wrapMode:Text.Wrap;color:root.appearance.textColor;font.pixelSize:21*root.unit;font.bold:true}
                             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";width:parent.width;text:modelData.description;wrapMode:Text.Wrap;color:root.appearance.mutedColor;font.pixelSize:15*root.unit}
@@ -117,7 +135,7 @@ Item {
                 }
             }
             ListView {
-                width:parent.width;height:parent.height-120*root.unit;visible:root.view!=="families" && root.view!=="keyboard";clip:true
+                width:parent.width;height:parent.height-120*root.unit;visible:root.view!=="families" && root.view!=="variants" && root.view!=="keyboard";clip:true
                 model:root.labels();currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange;spacing:6*root.unit
                 delegate:Rectangle {
                     required property int index;required property string modelData
@@ -143,7 +161,7 @@ Item {
         onLoaded:item.begin(root.selectedApps,((((root.options.componentPresets || {})["app-bar"] || {}).appCollection || {}).mode || "all"))
         sourceComponent:Component {StudioAppPicker {
             anchors.fill:parent;apps:root.apps;settings:root.options.appPicker || ({});appearance:root.appearance
-            onCanceled:{root.view="families";root.selected=0}
+            onCanceled:{root.view="families";root.selected=Math.max(0,root.families.findIndex(f=>f.id===root.family))}
             onAccepted:(mode,ids)=>{root.configuration={appCollection:{mode:mode,ids:ids}};root.finish("app-bar")}
         }}
     }

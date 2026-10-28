@@ -88,6 +88,7 @@ private slots:
     void studioButtonCollectionsAreBoundedAndAtomic();
     void studioGifArtworkIsBoundedStagedAndProfileScoped();
     void studioPastelPresetUsesEditableButtons();
+    void studioStartingStylesAreValidatedDraftData();
 };
 static AppDefinition gamesRuntime(const QString &id="psp-test") {
     AppDefinition app;app.id=id;app.name="PSP runtime";app.type="desktop";
@@ -1751,5 +1752,31 @@ void ComponentTests::studioPastelPresetUsesEditableButtons()
     const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
     QVERIFY2(home.loadDocument(QJsonDocument(layout).toJson(),false),qPrintable(home.errorString()));QVERIFY(!QFile::exists(path));
 }
+void ComponentTests::studioStartingStylesAreValidatedDraftData()
+{
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
+    const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto before=session->draft();
+    const auto variants=home.studioOptions()["componentVariants"].toMap();QCOMPARE(variants.size(),3);
+    for(auto family=variants.cbegin();family!=variants.cend();++family)for(const auto &value:family.value().toList()) {
+        const auto variant=value.toMap();const auto prototype=session->componentPrototype(family.key(),{{"variant",variant["id"]}});
+        QVERIFY2(!prototype.isEmpty(),qPrintable(session->errorString()));const auto root=prototype["root"].toMap();
+        QCOMPARE(root["componentType"].toString(),family.key());QVERIFY(!root.contains("variant"));
+        const auto span=variant["span"].toMap();QCOMPARE(root["placement"].toMap()["width"],span["width"]);QCOMPARE(root["placement"].toMap()["height"],span["height"]);
+        const auto presentation=variant["presentation"].toMap();for(auto it=presentation.cbegin();it!=presentation.cend();++it)QCOMPARE(root["presentation"].toMap()[it.key()],it.value());
+        QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),0);
+    }
+    QVERIFY(session->componentPrototype("button",{{"variant","unknown"}}).isEmpty());
+    QVERIFY(session->componentPrototype("button",{{"variant",42}}).isEmpty());
+    QVERIFY(session->componentPrototype("app-bar",{{"variant","round"}}).isEmpty());
+    QCOMPARE(session->draft(),before);QVERIFY(!QFile::exists(path));
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json");const auto localDefaults=dir.filePath("default-home-layout.json");QVERIFY(QFile::copy(defaults,localDefaults));
+    auto options=QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/studio-defaults.json"))).object();
+    auto familyOptions=options["componentVariants"].toObject();auto buttonOptions=familyOptions["button"].toArray();auto invalid=buttonOptions.first().toObject();
+    invalid["span"]=QJsonObject{{"width",17},{"height",1}};buttonOptions[0]=invalid;familyOptions["button"]=buttonOptions;options["componentVariants"]=familyOptions;
+    const auto localOptions=dir.filePath("studio-defaults.json");writeFile(localOptions,QJsonDocument(options).toJson());
+    HomeLayout refused(&registry);QVERIFY(refused.load(localDefaults,dir.filePath("refused.json")));QVERIFY(refused.studioOptions().isEmpty());
+}
+
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"

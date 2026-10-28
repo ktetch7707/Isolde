@@ -1575,7 +1575,7 @@ void HomeNavigationTests::studioCatalogAndContextualInspector()
     // Inspect every family's content step and cancel without writes/history.
     for(int i=0;i<6;++i){catalog->setProperty("selected",i);QVERIFY(key(InputManager::Confirm));QVERIFY(catalog->property("view").toString()!="families");QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),baseline);}
     const auto unassigned=session->componentPrototype("button",{{"action",QVariantMap()}});QVERIFY(!unassigned.value("root").toMap().isEmpty());QVERIFY(!unassigned.value("root").toMap().contains("action"));QCOMPARE(session->draft(),baseline);
-    QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));
+    catalog->setProperty("selected",0);QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("variants"));QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));
     QCOMPARE(session->draft(),baseline);QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("canvas"));QCOMPARE(session->changeCount(),1);
     const auto selected=root->property("selectedId").toString();QVERIFY(!selected.isEmpty());
     QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("inspector"));
