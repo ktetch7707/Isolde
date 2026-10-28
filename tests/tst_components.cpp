@@ -108,6 +108,16 @@ void ComponentTests::guideActionsValidateIdentityAndAppearance() {
     QVERIFY(!ComponentSchema::validPresentation({{"guideRows",2}}));
     QVERIFY(!ComponentSchema::validPresentation({{"guideMinutes","120"}}));
     QVERIFY(ComponentSchema::validPresentation({{"guideRows",5},{"guideMinutes",120},{"guideChannelWidth",220},{"guideLabels",true},{"guideSourceBadges",false}}));
+    QVERIFY(!ComponentSchema::action({{"type","open-guide"},{"focusChannelId","local-station"},{"presentation",QVariantMap{{"guideSurface","overlay"}}}}).isEmpty());
+    for(const auto &id:QVariantList{true,123,QString("../other")}){
+        QVERIFY(ComponentSchema::action({{"type","open-guide"},{"focusChannelId",id}}).isEmpty());
+        QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId",id}}).isEmpty());
+    }
+    QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","station"},{"focusChannelId","station"}}).isEmpty());
+    for(const auto &position:QStringList{"top-left","top-center","top-right","center-left","center","center-right","bottom-left","bottom-center","bottom-right"})QVERIFY(ComponentSchema::validPresentation({{"guideSurface","overlay"},{"guideOverlayPosition",position},{"guideOverlayWidth",65},{"guideOverlayHeight",100},{"guideOverlayRows",3}}));
+    for(const auto &invalid:QVariantList{QString("video-overlay"),123,true})QVERIFY(!ComponentSchema::validPresentation({{"guideSurface",invalid}}));
+    for(const auto &invalid:QVariantList{64,101,65.5,true,QString("95")})QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayWidth",invalid}}));
+    QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayRows",6}}));QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayPosition","offscreen"}}));
 }
 void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCoreApplication::setApplicationVersion("0.0.1.2");

@@ -26,7 +26,7 @@ public:
 signals:
     void guidePlaybackChanged();
     void drawerRequested();
-    void guideRequested(const QString &originId,const QVariantMap &presentation);
+    void guideRequested(const QString &originId,const QVariantMap &presentation,const QString &focusChannelId);
     void pageRequested(const QString &id, const QString &originId);
     void rejected(const QString &reason);
     void libraryRequested(bool returnHomeAfterPlayback);

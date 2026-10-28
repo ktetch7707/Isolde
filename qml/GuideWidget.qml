@@ -20,11 +20,16 @@ Item {
     function select(index){selectedIndex=index;selectedChannelId=rows[index]?rows[index].id:""}
     function progressFor(current){const duration=current.endUtc-current.startUtc;const elapsed=current.clockUtc===undefined?current.offsetSeconds:current.clockUtc-current.startUtc;return duration>0?Math.max(0,Math.min(1,elapsed/duration)):0}
     function programLabel(current){return current.title || (current.launchKind==="kodi_pvr"?"No listings · Watch live":"No available scheduled program")}
-    function openGuide(){if(!readOnly && dispatcher)dispatcher.dispatch({type:"open-guide",presentation:style},originId)}
+    function openGuide(surface){
+        if(readOnly || !dispatcher)return
+        const action={type:"open-guide",presentation:Object.assign({},style,surface?{guideSurface:surface}:{})}
+        if(selectedChannelId)action.focusChannelId=selectedChannelId
+        dispatcher.dispatch(action,originId)
+    }
     function handleCommand(command){
         if(readOnly)return false
         if(command===inputManager.back)return false
-        if(command===inputManager.menu){openGuide();return true}
+        if(command===inputManager.menu){openGuide("overlay");return true}
         if(command===inputManager.navigateUp){if(selectedIndex<0)return false;select(selectedIndex-1);return true}
         if(command===inputManager.navigateDown){if(selectedIndex+1<rows.length)select(selectedIndex+1);return true}
         if(command===inputManager.confirm){if(selectedIndex<0)openGuide();else if(dispatcher)dispatcher.dispatch({type:"tune-channel",channelId:rows[selectedIndex].id},originId);return true}
@@ -38,6 +43,7 @@ Item {
             width:parent.width;height:root.labelSize*2.4;color:root.appearance.selectedColor;radius:root.roundness
             Accessible.role:Accessible.Button
             Accessible.name:root.style.label || "TV Guide · Full guide / Add channel"
+            Accessible.description:"Confirm opens the configured guide view. Menu opens the expanded overlay."
             Accessible.focusable:!root.readOnly
             Accessible.focused:root.visible && root.engaged && root.selectedIndex<0
             Accessible.onPressAction:{root.engage();root.select(-1);root.openGuide()}

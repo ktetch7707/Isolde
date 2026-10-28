@@ -16,6 +16,7 @@ Item {
     property bool headerFocused:true
     property int selectedIndex:0
     property string selectedChannelId:""
+    property string pendingFocusChannelId:""
     property real nowUtc:Date.now()/1000
     property real anchorUtc:nowUtc
     property real fromUtc:Math.floor(nowUtc/1800)*1800
@@ -47,7 +48,14 @@ Item {
     readonly property real fontSize:(presentation.labelSize || options.labelSize)*(appearance.typographyScale || 1)
     readonly property real gap:presentation.cardGap===undefined?options.gap:presentation.cardGap
     readonly property real radius:presentation.radius===undefined?options.radius:presentation.radius
-    readonly property int rowCount:presentation.guideRows || options.rows
+    readonly property bool overlay:(presentation.guideSurface || options.surface)==="overlay"
+    readonly property bool inOverlay:overlay && !mode
+    readonly property real overlayWidthFraction:(presentation.guideOverlayWidth===undefined?options.overlayWidth:presentation.guideOverlayWidth)/100
+    readonly property real overlayHeightFraction:(presentation.guideOverlayHeight===undefined?options.overlayHeight:presentation.guideOverlayHeight)/100
+    readonly property string overlayPosition:presentation.guideOverlayPosition || options.overlayPosition || ""
+    readonly property real overlayHorizontal:overlayPosition.endsWith("left")?0:overlayPosition.endsWith("right")?1:0.5
+    readonly property real overlayVertical:overlayPosition.startsWith("top")?0:overlayPosition.startsWith("bottom")?1:0.5
+    readonly property int rowCount:inOverlay?(presentation.guideOverlayRows || options.overlayRows):(presentation.guideRows || options.rows)
     readonly property int minutes:presentation.guideMinutes || options.minutes
     readonly property real channelWidth:presentation.guideChannelWidth || options.channelWidth
     readonly property bool labels:presentation.guideLabels===undefined?options.labels:presentation.guideLabels
@@ -66,8 +74,27 @@ Item {
     readonly property var repairItems:buildRepairItems()
     visible:open && !suppressed
     signal closed(string origin)
-    function show(origin,style){originId=origin || "";presentation=style || {};open=true;mode="";headerFocused=true;headerIndex=0;nowUtc=Date.now()/1000;anchorUtc=nowUtc;fromUtc=Math.floor(nowUtc/1800)*1800;loadWindow()}
-    function close(){open=false;mode="";closed(originId)}
+    function show(origin,style){showFocused(origin,style,"")}
+    function showFocused(origin,style,focusChannelId){
+        originId=origin || "";presentation=style || {};open=true;mode="";headerFocused=true;headerIndex=0
+        nowUtc=Date.now()/1000;anchorUtc=nowUtc;fromUtc=Math.floor(nowUtc/1800)*1800;navigationError=""
+        pendingFocusChannelId=focusChannelId || "";applyPendingFocus()
+        loadWindow()
+    }
+    function applyPendingFocus(){
+        if(!open || !controller || !pendingFocusChannelId || !controller.ready || controller.busy)return false
+        const focusChannelId=pendingFocusChannelId;pendingFocusChannelId=""
+        if(controller.channels.some(c=>c.id===focusChannelId && !c.hidden) && !channels.some(c=>c.id===focusChannelId)){
+                channelQuery="";sourceFilter="all";groupFilter="";favoritesOnly=false
+        }
+        const index=channels.findIndex(c=>c.id===focusChannelId)
+        selectedIndex=index>=0?index:0;selectedChannelId=selectedChannel?selectedChannel.id:""
+        navigationError=index>=0?"":"The requested channel is no longer visible. Showing the nearest available channel."
+        headerFocused=index<0
+        return true
+    }
+    function close(){open=false;mode="";pendingFocusChannelId="";closed(originId)}
+    function toggleSurface(){presentation=Object.assign({},presentation,{guideSurface:overlay?"full":"overlay"})}
     function matchesChannel(c){return !c.hidden && (!favoritesOnly || c.favorite) && (!groupFilter || (c.groups || []).indexOf(groupFilter)>=0) && (sourceFilter==="all" || (sourceFilter==="pvr")===(c.owner==="kodi-pvr")) && (!channelQuery || (String(c.number)+" "+c.name).toLocaleLowerCase().indexOf(channelQuery.toLocaleLowerCase())>=0)}
     function collectGroups(){let names=[];if(controller)for(const c of controller.channels)for(const group of c.groups || [])if(names.indexOf(group)<0)names.push(group);return names.sort()}
     function loadWindow(){if(controller){const all=controller.channels.filter(c=>!c.hidden);const index=selectedChannel?all.findIndex(c=>c.id===selectedChannel.id):0;controller.setWindow(Math.floor(fromUtc),Math.floor(fromUtc+minutes*60),Math.floor(Math.max(0,index)/50)*50)}}
@@ -279,7 +306,7 @@ Item {
             else if(command===inputManager.confirm)invokeMenu()
             return
         }
-        if(command===inputManager.menu){if(selectedChannel){managedId=selectedChannel.id;mode="context"}else mode="add";menuIndex=0;return}
+        if(command===inputManager.menu){if(headerFocused){toggleSurface();return}if(selectedChannel){managedId=selectedChannel.id;mode="context"}else mode="add";menuIndex=0;return}
         if(headerFocused){
             if(command===inputManager.navigateLeft)headerIndex=Math.max(0,headerIndex-1)
             else if(command===inputManager.navigateRight)headerIndex=Math.min(options.toolbar.length-1,headerIndex+1)
@@ -303,13 +330,14 @@ Item {
             if(root.metadataSaving && !root.controller.busy){root.metadataSaving=false;if(!root.controller.errorString)root.mode="manage"}
             if(root.moveSaving && !root.controller.busy){root.moveSaving=false;if(!root.controller.errorString){root.moveIds=[];root.mode="context";root.menuIndex=2}}
             if(root.selectedChannelId){const index=root.channels.findIndex(c=>c.id===root.selectedChannelId);if(index>=0)root.selectedIndex=index;else if(root.selectedIndex>=root.channels.length)root.selectedIndex=Math.max(0,root.channels.length-1)}
+            if(root.applyPendingFocus())root.loadWindow()
         }
     }
     Timer {interval:30000;repeat:true;running:root.open;onTriggered:{root.nowUtc=Date.now()/1000;if(!root.controller.busy)root.loadWindow()}}
-    Rectangle {anchors.fill:parent;color:root.appearance.backgroundStart || root.appearance.surfaceColor}
+    Rectangle {anchors.fill:parent;radius:root.inOverlay?root.radius:0;color:root.appearance.backgroundStart || root.appearance.surfaceColor;opacity:root.presentation.surfaceOpacity===undefined?1:root.presentation.surfaceOpacity}
     Column {
         anchors.fill:parent;anchors.margins:root.gap*2;spacing:root.gap
-        Text {width:parent.width;textFormat:Text.PlainText;text:"Live TV · "+root.timeLabel(root.nowUtc);font.pixelSize:root.fontSize*1.4;color:root.appearance.textColor}
+        Text {width:parent.width;textFormat:Text.PlainText;text:"Live TV · "+root.timeLabel(root.nowUtc)+(root.headerFocused?" · Menu: "+(root.overlay?"Full guide":"Overlay"):"");font.pixelSize:root.fontSize*1.4;color:root.appearance.textColor;elide:Text.ElideRight}
         Row {width:parent.width;height:root.fontSize*2.2;spacing:root.gap
             Repeater {model:root.options.toolbar
                 delegate:Rectangle {required property var modelData;required property int index;width:(parent.width-root.gap*(root.options.toolbar.length-1))/root.options.toolbar.length;height:parent.height;radius:root.radius;color:root.appearance.surfaceColor;border.width:!root.mode && root.headerFocused && root.headerIndex===index?2:0;border.color:root.appearance.focusColor

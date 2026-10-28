@@ -110,7 +110,7 @@ Window {
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
         if(command===inputManager.home){window.showDesignatedHome();return}
         if(tvGuide.open && !sessionManager.active && !launchErrorOverlay.visible){tvGuide.handleCommand(command);return}
-        if (kodiLibrary.open) { kodiLibrary.handleCommand(command); return }
+        if (kodiLibrary.open && !sessionManager.active) { kodiLibrary.handleCommand(command); return }
         if (launchErrorOverlay.visible) {
             launchErrorOverlay.handleCommand(command)
         } else if (!sessionManager.active && pageSurface.open) {
@@ -405,16 +405,20 @@ Window {
     property var pendingGuideSearchReturn:null
     property var guideSearchReturn:null
     GuideView {
-        id:tvGuide;x:window.safeAreaPixels;y:window.safeAreaPixels
-        width:Math.max(1,(parent.width-2*window.safeAreaPixels)/window.uiScaleFactor)
-        height:Math.max(1,(parent.height-2*window.safeAreaPixels)/window.uiScaleFactor)
+        id:tvGuide
+        readonly property real availableWidth:Math.max(1,(parent.width-2*window.safeAreaPixels)/window.uiScaleFactor)
+        readonly property real availableHeight:Math.max(1,(parent.height-2*window.safeAreaPixels)/window.uiScaleFactor)
+        x:window.safeAreaPixels+(availableWidth-width)*window.uiScaleFactor*overlayHorizontal
+        y:window.safeAreaPixels+(availableHeight-height)*window.uiScaleFactor*overlayVertical
+        width:availableWidth*(inOverlay?overlayWidthFraction:1)
+        height:availableHeight*(inOverlay?overlayHeightFraction:1)
         scale:window.uiScaleFactor;transformOrigin:Item.TopLeft;z:950
         controller:guideController;dispatcher:actionDispatcher;options:homeLayout.studioOptions.guide;appearance:homeLayout.homeAppearance
         suppressed:sessionManager.active || kodiMedia.playbackActive || actionDispatcher.guideTransitionPending
         onClosed:origin=>{
             const state=window.guideSearchReturn;window.guideSearchReturn=null
             if(state){commandCenter.open=true;Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})}
-            else if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)
+            else if(!kodiLibrary.open){if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)}
         }
     }
     CommandCenter {
@@ -522,7 +526,7 @@ Window {
     Connections {
         target: actionDispatcher
         function onDrawerRequested() { commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
-        function onGuideRequested(origin,presentation){window.guideSearchReturn=window.pendingGuideSearchReturn;commandCenter.open=false;kodiLibrary.open=false;tvGuide.show(origin,presentation)}
+        function onGuideRequested(origin,presentation,focusChannelId){window.guideSearchReturn=window.pendingGuideSearchReturn;commandCenter.open=false;if((presentation.guideSurface || homeLayout.studioOptions.guide.surface)!=="overlay")kodiLibrary.open=false;tvGuide.showFocused(origin,presentation,focusChannelId)}
         function onRestoreFocusRequested(originId) {
             if(tvGuide.open)return
             if (kodiLibrary.returnToSearchAfterPlayback) return

@@ -156,6 +156,14 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().size() > 160) return false;
         } else if (QStringList{"surfaceColor", "fillEndColor", "panelColor", "headingColor", "iconColor", "labelColor", "selectedLabelColor"}.contains(key)) {
             const QColor color(it.value().toString()); if (!color.isValid() || color.alpha() != 255) return false;
+        } else if(key=="guideSurface") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"full","overlay"}.contains(it.value().toString()))return false;
+        } else if(key=="guideOverlayPosition") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"top-left","top-center","top-right","center-left","center","center-right","bottom-left","bottom-center","bottom-right"}.contains(it.value().toString()))return false;
+        } else if(key=="guideOverlayWidth" || key=="guideOverlayHeight" || key=="guideOverlayRows") {
+            const int low=key=="guideOverlayRows"?3:65,high=key=="guideOverlayRows"?5:100;
+            bool ok=false;const auto n=it.value().toDouble(&ok);
+            if(!ok || it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool || !std::isfinite(n) || n<low || n>high || n!=std::floor(n))return false;
         } else if(key=="guideRows" || key=="guideMinutes" || key=="guideChannelWidth") {
             const int low=key=="guideRows"?3:key=="guideMinutes"?30:120,high=key=="guideRows"?12:key=="guideMinutes"?240:400;
             bool ok=false;const auto n=it.value().toDouble(&ok);
@@ -398,12 +406,16 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
         }
     } else if(type=="open-guide" || type=="tune-channel") {
         for(auto it=input.cbegin();it!=input.cend();++it)
-            if(!QStringList{"schemaVersion","type","channelId","presentation"}.contains(it.key()))return reject(error,"Guide actions contain identities and validated presentation only.");
+            if(!QStringList{"schemaVersion","type","channelId","focusChannelId","presentation"}.contains(it.key()))return reject(error,"Guide actions contain identities and validated presentation only.");
         if(type=="tune-channel") {
-            if(!safeId(input.value("channelId").toString()) || input.contains("presentation"))return reject(error,"Choose a valid guide channel.");
+            if(input.value("channelId").metaType().id()!=QMetaType::QString || !safeId(input.value("channelId").toString()) || input.contains("presentation") || input.contains("focusChannelId"))return reject(error,"Choose a valid guide channel.");
             result["channelId"]=input.value("channelId");
         } else {
             if(input.contains("channelId"))return reject(error,"Open Guide does not tune a channel.");
+            if(input.contains("focusChannelId")) {
+                if(input.value("focusChannelId").metaType().id()!=QMetaType::QString || !safeId(input.value("focusChannelId").toString()))return reject(error,"Choose a valid guide focus channel.");
+                result["focusChannelId"]=input.value("focusChannelId");
+            }
             if(input.contains("presentation")) {
                 if(input.value("presentation").metaType().id()!=QMetaType::QVariantMap || !validPresentation(input.value("presentation").toMap(),true))return reject(error,"Invalid guide presentation.");
                 result["presentation"]=input.value("presentation");

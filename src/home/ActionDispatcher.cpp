@@ -127,7 +127,7 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         if(m_layout && m_layout->pageModel(id)){emit pageRequested(id,originId);accepted=true;}
         else emit rejected("This page was removed. Open Settings → Home → Pages to repair its link.");
     }
-    else if (type == "open-guide") { emit guideRequested(originId,value.value("presentation").toMap());accepted=true; }
+    else if (type == "open-guide") { emit guideRequested(originId,value.value("presentation").toMap(),value.value("focusChannelId").toString());accepted=true; }
     else if (type == "tune-channel") {
         if(!m_guide)emit rejected("The guide is unavailable for this profile.");
         else accepted=m_guide->tune(value.value("channelId").toString(),originId);

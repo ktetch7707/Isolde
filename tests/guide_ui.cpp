@@ -34,6 +34,7 @@ private slots:
     void remoteAdvancedScheduleDraftCancelWritesNothing();
     void compactPvrProgressAndAccessiblePressUseTheSameActions();
     void remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision();
+    void overlayAndFocusedEntryPreserveGuideStateWithoutSaving();
     void nestedRuleEditorDoesNotDiscardChildren();
     void remoteReorderPreviewCancelAndApply();
     void backgroundRefreshQueuesConfirmedEditsWithoutPrematureIdle();
@@ -144,7 +145,28 @@ void GuideUiTests::compactPvrProgressAndAccessiblePressUseTheSameActions() {
     QQuickItem *channel=nullptr;QTRY_VERIFY((channel=visualItem(qobject_cast<QQuickItem*>(widget.data()),"guideWidgetChannel-pvr-station")));
     QQmlExpression pressChannel(QQmlEngine::contextForObject(channel),channel,"Accessible.pressAction()");pressChannel.evaluate();QVERIFY2(!pressChannel.hasError(),qPrintable(pressChannel.error().toString()));QCOMPARE(dispatch.last.value("channelId").toString(),QString("pvr-station"));
     QQmlExpression description(QQmlEngine::contextForObject(channel),channel,"Accessible.description");QVERIFY(description.evaluate().toString().contains("Kodi PVR"));
+    dispatch.last.clear();command(widget.data(),InputManager::Menu);QCOMPARE(dispatch.last.value("type").toString(),QString("open-guide"));QCOMPARE(dispatch.last.value("focusChannelId").toString(),QString("pvr-station"));QCOMPARE(dispatch.last.value("presentation").toMap().value("guideSurface").toString(),QString("overlay"));
     dispatch.last.clear();widget->setProperty("readOnly",true);pressChannel.evaluate();QVERIFY(dispatch.last.isEmpty());
+    command(widget.data(),InputManager::Menu);QVERIFY(dispatch.last.isEmpty());
+}
+void GuideUiTests::overlayAndFocusedEntryPreserveGuideStateWithoutSaving() {
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);
+    const auto path=dir.filePath("guide.sqlite");GuideController setup(path,"overlay",nullptr,dir.path());QTRY_VERIFY(setup.ready()&&!setup.busy());
+    const auto def=setup.newDefinition();QVERIFY(setup.previewLocal(def,"episode"));QTRY_VERIFY(!setup.busy());QVERIFY(setup.createLocal(def));QTRY_VERIFY(!setup.busy());
+    GuideController controller(path,"overlay",nullptr,dir.path());QVERIFY(!controller.ready());
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    const QVariantMap overlay{{"guideSurface","overlay"},{"guideOverlayWidth",80},{"guideOverlayHeight",70},{"guideOverlayRows",3},{"guideOverlayPosition","top-right"}};const auto id=def.value("id").toString();
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"showFocused",Q_ARG(QVariant,QString("guide-tile")),Q_ARG(QVariant,overlay),Q_ARG(QVariant,id)));
+    QTRY_VERIFY(controller.ready()&&!controller.busy());QTRY_COMPARE(view->property("selectedChannelId").toString(),id);QVERIFY(!view->property("headerFocused").toBool());QVERIFY(view->property("inOverlay").toBool());QCOMPARE(view->property("rowCount").toInt(),3);
+    QCOMPARE(view->property("overlayWidthFraction").toDouble(),0.8);QCOMPARE(view->property("overlayHorizontal").toDouble(),1.0);QCOMPARE(view->property("overlayVertical").toDouble(),0.0);
+    GuideStore reader(path);const auto channels=reader.channels();const auto wall=QDateTime::currentSecsSinceEpoch();const auto programs=reader.programs(id,wall,wall+86400,1000);
+    view->setProperty("channelQuery",def.value("name"));view->setProperty("anchorUtc",wall+3600);const auto anchor=view->property("anchorUtc");
+    command(view.data(),InputManager::NavigateUp);command(view.data(),InputManager::Menu);QVERIFY(!view->property("overlay").toBool());QCOMPARE(view->property("anchorUtc"),anchor);QCOMPARE(view->property("selectedChannelId").toString(),id);QCOMPARE(view->property("channelQuery").toString(),def.value("name").toString());
+    command(view.data(),InputManager::Menu);QVERIFY(view->property("inOverlay").toBool());command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("add"));QVERIFY(!view->property("inOverlay").toBool());command(view.data(),InputManager::Back);QVERIFY(view->property("inOverlay").toBool());
+    view->setProperty("channelQuery","unmatched filter");QVERIFY(QMetaObject::invokeMethod(view.data(),"showFocused",Q_ARG(QVariant,QString("guide-tile")),Q_ARG(QVariant,overlay),Q_ARG(QVariant,id)));QTRY_COMPARE(view->property("selectedChannelId").toString(),id);QCOMPARE(view->property("channelQuery").toString(),QString());
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"showFocused",Q_ARG(QVariant,QString("guide-tile")),Q_ARG(QVariant,overlay),Q_ARG(QVariant,QString("missing-channel"))));QTRY_VERIFY(!controller.busy()&&!view->property("navigationError").toString().isEmpty());QVERIFY(view->property("headerFocused").toBool());
+    QCOMPARE(reader.channels(),channels);QCOMPARE(reader.programs(id,wall,wall+86400,1000),programs);QVERIFY(dispatch.last.isEmpty());
 }
 void GuideUiTests::remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);
