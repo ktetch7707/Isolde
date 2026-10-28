@@ -443,9 +443,9 @@ void GuideUiTests::adjustedClockMaintenanceUsesBroadcastTimeWithoutKodiReads() {
             QTRY_VERIFY(reader.channel("adjusted").value("generatedThroughUtc").toLongLong()>=wall+14*86400);
             QCOMPARE(reader.programs("adjusted",wall+6*86400,wall+10*86400,1000),preserved);
         } else {
-            const auto state=reader.channels(),slots=reader.programs("adjusted",wall-7*86400,wall+2*86400,1000);
+            const auto state=reader.channels(),savedSlots=reader.programs("adjusted",wall-7*86400,wall+2*86400,1000);
             controller.maintainSchedules();QVERIFY(!controller.busy());QVERIFY(controller.scheduleStatus().isEmpty());
-            QCOMPARE(reader.channels(),state);QCOMPARE(reader.programs("adjusted",wall-7*86400,wall+2*86400,1000),slots);
+            QCOMPARE(reader.channels(),state);QCOMPARE(reader.programs("adjusted",wall-7*86400,wall+2*86400,1000),savedSlots);
         }
         QCOMPARE(reader.candidateSnapshot("adjusted"),candidates);QVERIFY(controller.errorString().isEmpty());
     }
