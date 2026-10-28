@@ -19,6 +19,22 @@ The master-plan Live TV Engine sections 1–12 and [reviewed amendment](live-tv-
 | T24 prerequisites | Shared appearance/editor controls, focus/remote parity, rollback/profile tests, both reference pairs, accessibility/performance/usability evidence | Pending |
 | Final acceptance | Full CTest, installed captures and playback, disconnected Generator, source hashes and service restoration | Pending |
 
+## Closed automated acceptance checks — 2026-10-27
+
+These existing technical requirements are accepted at their stated native/offscreen scope. They are supporting evidence for T11.1–T11.3, not new Scope boxes or substitutes for actual playback, disconnected operation, visual/representative review or a passing full candidate. No backlog denominator or percentage changes.
+
+Candidate `7ddeaa8`: `t11-overlay-boundary-guide-20261027-b` **5/5** and `t11-overlay-schema-20261027-b` **1/1**, same source digest `3e18c90e900de99c717bf775a5386aa980ace7d02abec6b90de337fd026453af`. Reports: `build/t11-unblocked-20261027/build/vm-oracle/<run>/report/`; service active, zero restarts, unchanged release links.
+
+| Accepted check | Exact evidence | Scope still requiring product acceptance |
+| --- | --- | --- |
+| Atomic channel/schedule writes and rollback | `channelAndExtensionFailuresRollback`, `cancelledTransactionsAndInterruptedVirtualClock`, database overlap/unknown/corrupt-preservation tests | Interrupted process/startup recovery beyond injected failures |
+| Committed seven-day shuffle stability and persisted clock calculation | `persistsSevenDaysAndTwelveHourOffset`, `virtualClockPausesWhileProfileIsOff`, rolling-maintenance continuity tests | Actual 12-hour-off player seek and clock-correction workflows |
+| Targeted repair preserves every unaffected interval and identity | `selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices`, remote selected-slot review/cancel/stale test | Real removed-file detection/playback; differing-duration policies |
+| Guide database/client profile isolation and teardown | `profileIsolationAndInvalidation`, `asyncPreviewCreateCancelAndProfileTeardown`, nonempty review invalidation | Complete graphical account/profile-switch journey |
+| Cached refresh/maintenance does not request catalog indexing | Request-count assertions in `asyncPreviewCreateCancelAndProfileTeardown` and `startupMaintainsExpiredSchedulesWithoutKodiReads` | Whole-product disconnected Generator and performance measurements |
+| Remote overlay/full/dialog state and cancellation are read-only | `overlayAndFocusedEntryPreserveGuideStateWithoutSaving`, compact Menu/accessibility/read-only tests | Actual three-channel widget/overlay/full frames and exact visible origin return |
+| Packaged and legacy Guide configuration validates without rewriting files | `packagedGuideOptionsValidateOverlayAndLegacyBoundaries`, `guideActionsValidateIdentityAndAppearance` | Both current-candidate generic visual recreation/reset pairs |
+
 ## Completion-blocker audit and active repair track
 
 User direction: identify and fix every blocker, including setting up a PVR channel in Isolde-Test (2026-10-26). The following is the remaining completion checklist, not a reduced definition of T11. A fixture/backend pass does not establish subscription-provider support or physical acceptance.
