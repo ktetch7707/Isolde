@@ -40,6 +40,8 @@ Item {
     property bool regenerationSaving:false
     property bool repairSaving:false
     property int repairChoice:-1
+    property int clockDeltaSeconds:0
+    property bool clockSaving:false
     property string channelQuery:""
     property string sourceFilter:"all"
     property string groupFilter:""
@@ -109,13 +111,15 @@ Item {
     function buildMenu(){
         if(mode==="add")return ["Create local channel","Add source","Back"]
         if(mode==="schedule")return ["Future horizon: "+(draft.horizonDays===undefined?7:draft.horizonDays)+" days","Retained history: "+(draft.retentionDays===undefined?2:draft.retentionDays)+" days","Timezone: "+draft.timezone,"Back to channel draft"]
+        if(mode==="clock")return ["Earlier by 15 minutes","Later by 15 minutes","Enter adjustment: "+clockDeltaSeconds/60+" minutes","Return to wall-clock position","Review adjustment: "+clockDeltaSeconds/60+" minutes","Cancel"]
+        if(mode==="clockReview")return ["Cancel",controller.clockReview.channelId?"Apply reviewed clock adjustment":"No valid clock adjustment"]
         if(mode==="browse")return ["Find channel: "+(channelQuery || "All"),"Favorites: "+(favoritesOnly?"Only favorites":"All channels"),"Source: "+sourceFilter,"Jump to local date and time…","Previous day","Next day","Clear filters","Group: "+(groupFilter || "All groups"),"Back"]
         if(mode==="groupFilter")return ["All groups"].concat(groupNames).concat(["Back"])
         if(mode==="sources")return options.sources.map(s=>s.name+(s.kind==="kodi-pvr"?" · Preview channel import":" · App destination")).concat(["Back"])
         if(mode==="sourcePreview")return controller.sourcePreviewReady?controller.sourcePreview.map(e=>"Source "+e.definition.source.number+" → "+e.definition.number+" · "+e.definition.name+" · "+e.programs.length+" listings").concat(["Import reviewed lineup","Cancel"]):["Reading channels and listings…","Cancel"]
         if(mode==="manage")return (controller?controller.channels:[]).map(c=>c.number+" · "+c.name+(c.hidden?" · Hidden":"")+(c.favorite?" · Favorite":"")).concat(["Back"])
         if(mode==="move")return moveIds.map(id=>{const c=controller.channels.find(c=>c.id===id);return c?c.number+" · "+c.name:"Removed channel"})
-        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && managedChannel.owner!=="kodi-pvr";return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…"]:[]).concat(["Back"])}
+        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && managedChannel.owner!=="kodi-pvr";return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…","Adjust broadcast clock…"]:[]).concat(["Back"])}
         if(mode==="repair")return repairItems.map(item=>item.label)
         if(mode==="repairConfirm")return ["Cancel",repairChoice<0?"Mark only this slot unavailable":"Apply reviewed replacement"]
         if(mode==="regenerate")return ["Cancel",controller.regenerationReview.slotCount?"Replace reviewed future schedule":"No reviewed replacement boundary available"]
@@ -151,6 +155,8 @@ Item {
         return text
     }
     function panelTitle(){
+        if(mode==="clock")return "Adjust broadcast clock · Unsaved choice"
+        if(mode==="clockReview")return "Review clock position · Saved programs stay unchanged"
         if(mode==="context")return managedChannel?managedChannel.name:"Channel options"
         if(mode==="create")return editRevision?"Edit local channel · Committed slots stay unchanged until explicit regeneration":"Create local channel · Unsaved draft"
         const titles={add:"Add channel",sources:"Sources · App destinations do not supply channel listings",sourcePreview:"Review source channel mapping",manage:"Manage channels",move:"Move preview · D-pad reorders · Confirm applies · Back cancels",regenerate:"Regenerate future schedule",repair:"Repair selected program",repairConfirm:"Review program repair",numberConflict:"Channel number already in use",metadataReview:"Review channel changes",details:"Program details",browse:"Find channels and time",groupFilter:"Choose channel group",schedule:"Schedule policy · Unsaved draft",delete:"Remove only this guide channel and cached schedule? Media and Kodi stay unchanged.",discard:"Discard these unsaved channel edits?"}
@@ -176,9 +182,28 @@ Item {
         if(delta && menuIndex<2){const value=Number(current)+delta;const minimum=menuIndex===0?1:0,maximum=menuIndex===0?31:7;if(value<minimum || value>maximum){navigationError="Choose "+minimum+"–"+maximum+" days.";return}let copy=JSON.parse(JSON.stringify(draft));copy[editField]=value;draft=copy;navigationError=""}
         else{keyboard.value=String(current);keyboard.selectedIndex=0;keyboardReturn="schedule";mode="keyboard"}
     }
+    function setClockDelta(value){
+        if(!Number.isInteger(value) || Math.abs(value)>31*86400){navigationError="Choose an adjustment within 31 days.";return false}
+        clockDeltaSeconds=value;navigationError="";return true
+    }
+    function clockDescription(){
+        const review=controller.clockReview
+        if(mode==="clockReview" && review.channelId)return "Adjust "+review.deltaSeconds/60+" minutes. Saved program IDs and times stay unchanged.\nBroadcast position (UTC): "+new Date(review.fromClockUtc*1000).toISOString()+" → "+new Date(review.toClockUtc*1000).toISOString()+"\n"+review.title+(review.status!=="ready"?" · Unavailable":"")
+        const c=managedChannel
+        return "Current policy: "+(c && c.clock==="real-time"?"Real time · Offset "+(c.clockOffsetSeconds || 0)/60+" minutes":"Pause when off")+".\nChoose earlier/later or enter signed minutes, then review before applying. The target must be inside the cached schedule."
+    }
     function invokeMenu(){
         if(controller.busy && !controller.backgroundBusy)return
-        if(mode==="schedule")editSchedule(0)
+        if(mode==="clock"){
+            if(menuIndex<2)setClockDelta(clockDeltaSeconds+(menuIndex===0?-900:900))
+            else if(menuIndex===2){editField="clockMinutes";keyboard.value=String(clockDeltaSeconds/60);keyboard.selectedIndex=0;keyboardReturn="clock";mode="keyboard"}
+            else if(menuIndex===3 && managedChannel){const wall=Math.floor(Date.now()/1000),c=managedChannel;const position=c.clock==="real-time"?wall+(c.clockOffsetSeconds || 0):c.clockUtc+(c.active?Math.max(0,wall-c.anchorUtc):0);setClockDelta(wall-position)}
+            else if(menuIndex===4 && managedChannel){if(controller.previewClockAdjustment(managedId,clockDeltaSeconds,managedChannel.revision)){mode="clockReview";menuIndex=0}}
+            else{controller.cancel();mode="context";menuIndex=13}
+        }else if(mode==="clockReview"){
+            if(menuIndex===1 && controller.clockReview.channelId)clockSaving=controller.adjustClock()
+            else{controller.cancel();mode="clock";menuIndex=4}
+        }else if(mode==="schedule")editSchedule(0)
         else if(mode==="browse"){
             navigationError=""
             if(menuIndex===0){editField="query";keyboard.value=channelQuery;keyboard.selectedIndex=0;keyboardReturn="browse";mode="keyboard"}
@@ -218,6 +243,7 @@ Item {
             else if(menuIndex===7 && c.owner!=="kodi-pvr"){editRevision=c.revision;draft=controller.editableDefinition(c.id);mediaKind=kindFor(draft);fieldIndex=3;mode="create"}
             else if(menuIndex===8 && c.owner!=="kodi-pvr"){if(controller.previewRegeneration(c.id)){mode="regenerate";menuIndex=0}}
             else if(menuIndex===9 && c.owner!=="kodi-pvr")controller.previewDuplicate(c.id,c.revision)
+            else if(menuIndex===13 && c.owner!=="kodi-pvr"){clockDeltaSeconds=0;navigationError="";mode="clock";menuIndex=0}
             else if(menuIndex===(c.owner==="kodi-pvr"?7:10) || menuIndex===(c.owner==="kodi-pvr"?8:11)){editField=menuIndex===(c.owner==="kodi-pvr"?7:10)?"description":"groups";keyboard.value=editField==="groups"?(c.groups || []).join(", "):(c.description || "");keyboard.selectedIndex=0;keyboardReturn="metadataReview";mode="keyboard"}
             else if(menuIndex===12 && c.owner!=="kodi-pvr"){
                 navigationError=""
@@ -279,6 +305,8 @@ Item {
         if(command===inputManager.back){
             if(controller.busy && !controller.backgroundBusy){controller.cancel();return}
             if(mode==="move"){moveIds=[];mode="context";menuIndex=2}
+            else if(mode==="clockReview"){controller.cancel();mode="clock";menuIndex=4}
+            else if(mode==="clock"){controller.cancel();mode="context";menuIndex=13}
             else if(mode==="repairConfirm"){mode="repair";menuIndex=0}
             else if(mode==="repair"){mode="context";menuIndex=12}
             else if(mode==="schedule"){mode="create";fieldIndex=8}
@@ -324,6 +352,7 @@ Item {
         function onDuplicatePrepared(value){root.editRevision=0;root.draft=value;root.mediaKind=root.kindFor(value);root.fieldIndex=0;root.mode="create"}
         function onChannelCreated(id){root.mode="";root.headerFocused=false;root.nowUtc=Date.now()/1000;root.anchorUtc=root.nowUtc;root.fromUtc=Math.floor(root.nowUtc/1800)*1800;root.pickChannel(root.channels.findIndex(c=>c.id===id));root.loadWindow()}
         function onChanged(){
+            if(root.clockSaving && !root.controller.busy){root.clockSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=13;root.loadWindow()}}
             if(root.repairSaving && !root.controller.busy){root.repairSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=12}}
             if(root.regenerationSaving && !root.controller.busy){root.regenerationSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=8}}
             if(root.sourceSaving && !root.controller.busy){root.sourceSaving=false;if(!root.controller.errorString){root.mode="";root.loadWindow()}}
@@ -396,7 +425,7 @@ Item {
                     MouseArea {anchors.fill:parent;onClicked:root.chooseMenu(index)}
                 }
             }
-            Text {id:feedback;width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;text:root.navigationError || root.controller.errorString || (root.controller.busy?"Working · Back cancels safely":root.mode==="schedule"?"Left/Right adjusts days; Confirm enters a value. Use a named timezone, such as America/Los_Angeles. Save keeps committed future slots; regeneration is separate.":root.mode==="sources" && root.menuIndex<root.options.sources.length?root.options.sources[root.menuIndex].description:root.controller.status+(root.mode==="create" && root.controller.previewReady?"\n"+(root.previewCurrent?"Current preview: ":"Settings changed — preview again: ")+root.controller.previewItems.map(i=>i.title).join(" · "):""));color:root.appearance.mutedColor;font.pixelSize:root.fontSize*.85}
+            Text {id:feedback;width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;text:root.navigationError || root.controller.errorString || (root.controller.busy?"Working · Back cancels safely":root.mode==="clock" || root.mode==="clockReview"?root.clockDescription():root.mode==="schedule"?"Left/Right adjusts days; Confirm enters a value. Use a named timezone, such as America/Los_Angeles. Save keeps committed future slots; regeneration is separate.":root.mode==="sources" && root.menuIndex<root.options.sources.length?root.options.sources[root.menuIndex].description:root.controller.status+(root.mode==="create" && root.controller.previewReady?"\n"+(root.previewCurrent?"Current preview: ":"Settings changed — preview again: ")+root.controller.previewItems.map(i=>i.title).join(" · "):""));color:root.appearance.mutedColor;font.pixelSize:root.fontSize*.85}
         }
     }
     GuideRuleEditor {id:rules;anchors.fill:parent;anchors.margins:root.gap*2;visible:root.mode==="rules";appearance:root.appearance;options:root.options
@@ -404,10 +433,14 @@ Item {
         onAccepted:rule=>{let value=JSON.parse(JSON.stringify(root.draft));value.rule=rule;root.draft=value;root.mode="create"}
     }
     OnScreenKeyboard {id:keyboard;anchors.centerIn:parent;width:Math.min(parent.width-root.gap*4,850);height:Math.min(parent.height,440);visible:root.mode==="keyboard";appearance:root.appearance
-        onCanceled:root.mode=root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":root.keyboardReturn==="schedule"?"schedule":"context"
+        onCanceled:root.mode=root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":root.keyboardReturn==="schedule"?"schedule":root.keyboardReturn==="clock"?"clock":"context"
         onAccepted:text=>{
             const value=root.editField==="number" || root.editField==="sourceNumber"?Number(text):text
-            if(root.keyboardReturn==="schedule"){
+            if(root.keyboardReturn==="clock"){
+                if(!/^-?\d{1,5}$/.test(text.trim()))root.navigationError="Enter a whole number of signed minutes within 31 days."
+                else root.setClockDelta(Number(text)*60)
+                root.mode="clock"
+            }else if(root.keyboardReturn==="schedule"){
                 let copy=JSON.parse(JSON.stringify(root.draft))
                 if(root.editField!=="timezone"){const number=Number(text),minimum=root.editField==="horizonDays"?1:0,maximum=root.editField==="horizonDays"?31:7;if(!/^\d{1,2}$/.test(text.trim()) || !Number.isInteger(number) || number<minimum || number>maximum){root.navigationError="Choose a whole number from "+minimum+" to "+maximum+" days.";root.mode="schedule";return}copy[root.editField]=number}
                 else copy.timezone=text.trim()

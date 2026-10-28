@@ -33,6 +33,7 @@ private slots:
     void remoteCreatePreviewSaveAndFutureSelection();
     void remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot();
     void unavailableIdentityOnlyChangesMatchingCachedPrograms();
+    void remoteClockAdjustmentRequiresReviewAndPreservesPrograms();
     void remoteAdvancedScheduleDraftCancelWritesNothing();
     void compactPvrProgressAndAccessiblePressUseTheSameActions();
     void remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision();
@@ -163,6 +164,23 @@ void GuideUiTests::unavailableIdentityOnlyChangesMatchingCachedPrograms() {
     QCOMPARE(cached.value("startUtc"),before.first().toMap().value("startUtc"));QCOMPARE(cached.value("endUtc"),before.first().toMap().value("endUtc"));QVERIFY(cached.value("clockUtc").toLongLong()>=cached.value("startUtc").toLongLong());
     for(const auto &row:controller.rows())if(row.toMap().value("id")==episodeId)QCOMPARE(row.toMap().value("current").toMap().value("id"),cached.value("id"));
     controller.invalidate();QVERIFY(!controller.markUnavailable("episode",missingId));QCOMPARE(reader.programs(movieId,wall,wall+7*86400,1000),other);
+}
+void GuideUiTests::remoteClockAdjustmentRequiresReviewAndPreservesPrograms() {
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);
+    const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"clock",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+    const auto def=controller.newDefinition();QVERIFY(controller.previewLocal(def,"episode"));QTRY_VERIFY(!controller.busy());QVERIFY(controller.createLocal(def));QTRY_VERIFY(!controller.busy());
+    GuideStore reader(path);const auto id=def.value("id").toString(),origin=QString("guide-clock-origin");const auto wall=QDateTime::currentSecsSinceEpoch();const auto programs=reader.programs(id,wall,wall+7*86400,1000),candidates=reader.candidateSnapshot(id),channels=reader.channels();const auto requests=server.property("requests").toInt();
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,origin),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!controller.busy());command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Menu);
+    for(int i=0;i<13;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("clock"));
+    command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QCOMPARE(view->property("clockDeltaSeconds").toInt(),900);
+    for(int i=0;i<3;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY(!controller.clockReview().isEmpty());QCOMPARE(reader.channels(),channels);
+    QCOMPARE(view->property("mode").toString(),QString("clockReview"));QCOMPARE(view->property("menuIndex").toInt(),0);command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("clock"));QVERIFY(controller.clockReview().isEmpty());QCOMPARE(reader.channels(),channels);
+    command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY(!controller.clockReview().isEmpty());command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QTRY_COMPARE(view->property("mode").toString(),QString("context"));
+    QCOMPARE(reader.channel(id).value("clockOffsetSeconds").toInt(),900);QCOMPARE(reader.programs(id,wall,wall+7*86400,1000),programs);QCOMPARE(reader.candidateSnapshot(id),candidates);QCOMPARE(server.property("requests").toInt(),requests);QCOMPARE(view->property("selectedChannelId").toString(),id);
+    QVERIFY(controller.previewClockAdjustment(id,900,2));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.clockReview().isEmpty());QVERIFY(!controller.previewClockAdjustment(id,true,2));QVERIFY(controller.clockReview().isEmpty());
+    QVERIFY(controller.previewClockAdjustment(id,900,2));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.clockReview().isEmpty());controller.invalidate();QVERIFY(controller.clockReview().isEmpty());QVERIFY(!controller.adjustClock());
 }
 void GuideUiTests::remoteAdvancedScheduleDraftCancelWritesNothing() {
     QTemporaryDir dir;GuideController controller(dir.filePath("guide.sqlite"),"policy-ui",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());

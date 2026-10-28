@@ -177,8 +177,10 @@ bool GuideStore::createLocal(const QVariantMap &definition, const QVariantList &
     if (valid.isEmpty()) return fail(error);
     if(!validateGroups(valid))return false;
     if(valid.contains("owner"))return fail(tr("Imported channels retain their source schedule; use source import."));
+    if(!instant(now))return fail(tr("Choose a valid broadcast clock."));
     if(days==-1)days=valid.value("horizonDays",7).toInt();
-    if (!instant(now) || days<1 || days>31 || !instant(now+days*Day)) return fail(tr("Choose a guide horizon of 1–31 days and a valid clock."));
+    const auto initial=now+valid.value("clockOffsetSeconds",0).toLongLong();
+    if (!instant(now) || !instant(initial) || days<1 || days>31 || !instant(initial+days*Day)) return fail(tr("Choose a guide horizon of 1–31 days and a valid clock."));
     const auto selected=eligible(valid,candidates,&error); if (selected.isEmpty()) return fail(error);
     if (!m_db.transaction()) return fail(tr("The guide is busy. Retry the save."));
     QSqlQuery q(m_db);
@@ -187,9 +189,9 @@ bool GuideStore::createLocal(const QVariantMap &definition, const QVariantList &
     }
     q.prepare("INSERT INTO channels(id,number,definition,candidates,position,anchor_utc,clock_utc,active) VALUES(?,?,?,?,(SELECT COALESCE(MAX(position)+1,0) FROM channels),?,?,1)");
     q.addBindValue(valid.value("id")); q.addBindValue(valid.value("number")); q.addBindValue(json(valid)); q.addBindValue(json(selected));
-    q.addBindValue(now); q.addBindValue(now);
+    q.addBindValue(now); q.addBindValue(initial);
     if (!q.exec()) { m_db.rollback(); return fail(tr("Channel ID or number is already in use, or storage is unavailable. Choose another number or retry.")); }
-    if (!appendSlots(valid.value("id").toString(),now+days*Day)) { m_db.rollback(); return false; }
+    if (!appendSlots(valid.value("id").toString(),initial+days*Day)) { m_db.rollback(); return false; }
     return commit();
 }
 bool GuideStore::appendSlots(const QString &id, qint64 until,qint64 notBefore,qint64 continuation) {
@@ -350,7 +352,8 @@ QVariantList GuideStore::programs(const QString &id, qint64 from, qint64 to, int
     return result;
 }
 qint64 GuideStore::clockTime(const QVariantMap &state, qint64 now) const {
-    if (state.value("clock")=="real-time" || state.value("owner")=="kodi-pvr") return now;
+    if (state.value("owner")=="kodi-pvr") return now;
+    if (state.value("clock")=="real-time") return now+state.value("clockOffsetSeconds",0).toLongLong();
     return state.value("clockUtc").toLongLong()+(state.value("active").toBool()?std::max<qint64>(0,now-state.value("anchorUtc").toLongLong()):0);
 }
 QVariantMap GuideStore::tuneTarget(const QString &id, qint64 now) const {
@@ -375,7 +378,8 @@ bool GuideStore::updateRules(const QVariantMap &definition, const QVariantList &
     const auto selected=eligible(def,candidates,&error); if (selected.isEmpty()) return fail(error);
     if (!m_db.transaction()) return fail(tr("The guide is busy."));
     const auto state=channel(def.value("id").toString());
-    if (state.isEmpty() || state.value("revision").toInt()!=revision || state.value("clock")!=def.value("clock") || state.value("timezone")!=def.value("timezone")) {
+    if (state.isEmpty() || state.value("revision").toInt()!=revision || state.value("clock")!=def.value("clock") || state.value("timezone")!=def.value("timezone")
+        || state.value("clockOffsetSeconds",0).toLongLong()!=def.value("clockOffsetSeconds",0).toLongLong()) {
         m_db.rollback(); return fail(tr("Channel changed, or its broadcast clock needs a separate preview. Refresh before saving."));
     }
     QSqlQuery q(m_db); q.prepare("UPDATE channels SET number=?,definition=?,candidates=?,revision=revision+1,cursor=0 WHERE id=? AND revision=?");
@@ -546,6 +550,46 @@ bool GuideStore::swapNumbers(const QString &id,const QString &otherId,const QVar
 }
 qint64 GuideStore::broadcastTime(const QString &id, qint64 now) const {
     const auto state=channel(id); return state.isEmpty() || !instant(now) ? -1 : clockTime(state,now);
+}
+QVariantMap GuideStore::clockAdjustmentPreview(const QString &id,qint64 delta,int revision,qint64 wall) const {
+    if(!m_ready || !ComponentSchema::safeId(id) || !instant(wall) || revision<1 || revision>=2147483647 || delta==0 || delta<-31*Day || delta>31*Day)return {};
+    const auto state=channel(id);
+    if(state.isEmpty() || state.contains("owner") || state.value("revision").toInt()!=revision)return {};
+    const auto current=clockTime(state,wall),target=current+delta;
+    const auto offset=state.value("clockOffsetSeconds",0).toLongLong();
+    if(!instant(current) || !instant(target) || (state.value("clock")=="real-time" && (offset+delta<-31*Day || offset+delta>31*Day)))return {};
+    const auto matches=programs(id,target,target+1,1);
+    if(matches.isEmpty())return {};
+    const auto program=matches.first().toMap();
+    return {{"channelId",id},{"revision",revision},{"deltaSeconds",delta},{"reviewedAtUtc",wall},{"clock",state.value("clock")},{"active",state.value("active").toBool()},
+        {"fromClockUtc",current},{"toClockUtc",target},{"programId",program.value("id")},{"title",program.value("title")},{"status",program.value("status")}};
+}
+bool GuideStore::adjustClock(const QVariantMap &review,qint64 wall) {
+    if(!m_ready || !instant(wall) || !number(review.value("reviewedAtUtc"),0,MaxTime) || !number(review.value("deltaSeconds"),-31*Day,31*Day)
+        || !number(review.value("revision"),1,2147483646) || review.value("active").metaType().id()!=QMetaType::Bool)return fail(tr("Review a valid local broadcast-clock adjustment first."));
+    const auto reviewed=review.value("reviewedAtUtc").toLongLong(),delta=review.value("deltaSeconds").toLongLong();const auto id=review.value("channelId").toString();
+    if(wall<reviewed || wall-reviewed>600)return fail(tr("The clock review expired or the system clock changed. Preview the adjustment again."));
+    if(!m_db.transaction())return fail(tr("The guide is busy."));
+    const auto rollback=[this](const QString &error){m_db.rollback();return fail(error);};
+    const auto state=channel(id);auto expected=clockAdjustmentPreview(id,delta,review.value("revision").toInt(),wall);
+    if(expected.isEmpty())return rollback(tr("The channel or cached clock window changed. Review the adjustment again."));
+    // Reconstruct the reviewed position across ordinary active-clock
+    // checkpoints. Their durable anchor may have advanced since the review.
+    const auto elapsed=state.value("clock")=="real-time" || state.value("active").toBool()?wall-reviewed:0;
+    const auto from=expected.value("fromClockUtc").toLongLong()-elapsed,to=from+delta;
+    const auto reviewedPrograms=programs(id,to,to+1,1);
+    if(reviewedPrograms.isEmpty())return rollback(tr("The reviewed program is no longer cached. Preview the adjustment again."));
+    const auto program=reviewedPrograms.first().toMap();
+    expected["reviewedAtUtc"]=reviewed;expected["fromClockUtc"]=from;expected["toClockUtc"]=to;
+    expected["programId"]=program.value("id");expected["title"]=program.value("title");expected["status"]=program.value("status");
+    if(expected!=review)return rollback(tr("The clock review changed. Preview the adjustment again."));
+    auto def=definition(id);const auto target=clockTime(state,wall)+delta;
+    if(state.value("clock")=="real-time")def["clockOffsetSeconds"]=state.value("clockOffsetSeconds",0).toLongLong()+delta;
+    QString error;if(ComponentSchema::guideChannel(def,&error).isEmpty())return rollback(error);
+    QSqlQuery q(m_db);q.prepare("UPDATE channels SET definition=?,anchor_utc=?,clock_utc=?,revision=revision+1 WHERE id=? AND revision=?");
+    q.addBindValue(json(def));q.addBindValue(wall);q.addBindValue(target);q.addBindValue(id);q.addBindValue(review.value("revision"));
+    if(!q.exec() || q.numRowsAffected()!=1)return rollback(tr("Could not apply the clock adjustment. Previous clock and programs were preserved."));
+    return commit();
 }
 bool GuideStore::resumeClocks(qint64 now) {
     if (!m_ready || !instant(now)) return fail(tr("Invalid broadcast clock."));

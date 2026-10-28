@@ -113,7 +113,7 @@ void GuideController::invalidate() {
     m_valid=false;++m_jobId;m_pendingJob={};m_pendingCompletion={};m_pendingDefinition.clear();if(m_cancel)m_cancel->store(true);m_checkpoint.stop();m_maintenance.stop();m_catalogDeadline.stop();m_reading=false;closeBridge();
     QMetaObject::invokeMethod(m_worker,[worker=m_worker]{if(worker->store){worker->store->setCancellationCheck({});worker->store->setActive(false,now());worker->store.reset();}},Qt::BlockingQueuedConnection);
     m_thread.quit();m_thread.wait();m_busy=false;m_ready=false;m_channels.clear();m_rows.clear();m_compactRows.clear();m_candidates.clear();
-    m_previewReady=m_sourcePreviewReady=false;m_previewDefinition.clear();m_sourcePreview.clear();m_sourceRevisions.clear();m_regenerationReview.clear();m_repairReview.clear();
+    m_previewReady=m_sourcePreviewReady=false;m_previewDefinition.clear();m_sourcePreview.clear();m_sourceRevisions.clear();m_regenerationReview.clear();m_repairReview.clear();m_clockReview.clear();
     emit changed();
 }
 bool GuideController::fail(const QString &message) {m_error=message;emit changed();return false;}
@@ -236,6 +236,17 @@ void GuideController::consume() {
     m_status=tr("%1 matching items · %2 items skipped (remote or unknown duration)").arg(m_candidates.size()).arg(m_skipped);
     if(m_previewDefinition.value("sequence")=="next-unwatched")m_status+=tr(" · Unwatched in Kodi at preview; repeats in episode order. Refresh rules to update watch state; committed programs stay unchanged.");
     if(!m_previewReady)m_error=tr("No playable local media matches. Adjust the rules or update Kodi's metadata.");emit changed();
+}
+bool GuideController::previewClockAdjustment(const QString &id,const QVariant &delta,int revision) {
+    m_clockReview.clear();
+    if(!ComponentSchema::safeId(id) || !integer(delta,-31*86400,31*86400) || delta.toLongLong()==0)return fail(tr("Choose a nonzero clock adjustment of at most 31 days."));
+    return submit([id,delta,revision](GuideStore &store){const auto review=store.clockAdjustmentPreview(id,delta.toLongLong(),revision,now());return QVariantMap{{"ok",!review.isEmpty()},{"review",review},{"error",review.isEmpty()?QString("Review an unchanged local channel and choose a position inside its cached schedule."):QString()}};},
+        [this](const QVariantMap &result){if(result.value("ok").toBool()){m_clockReview=result.value("review").toMap();emit changed();}});
+}
+bool GuideController::adjustClock() {
+    if(m_clockReview.isEmpty())return fail(tr("Preview the broadcast-clock adjustment before applying it."));
+    const auto review=m_clockReview;
+    return submit([review](GuideStore &store){return outcome(store.adjustClock(review,now()),store);},[this](const QVariantMap &result){if(result.value("ok").toBool()){m_clockReview.clear();emit changed();}});
 }
 bool GuideController::createLocal(const QVariantMap &definition) {
     if(!m_previewReady || definition!=m_previewDefinition)return fail(tr("Preview these exact channel settings before saving."));
@@ -372,7 +383,7 @@ void GuideController::cancel() {
     m_pendingJob={};m_pendingCompletion={};m_pendingDefinition.clear();m_pendingKind.clear();
     if(m_cancel)m_cancel->store(true);
     if(m_reading){m_reading=m_busy=false;m_catalogDeadline.stop();closeBridge();}
-    m_previewReady=m_sourcePreviewReady=false;m_candidates.clear();m_sourcePreview.clear();m_regenerationReview.clear();m_repairReview.clear();m_status=m_busy?tr("Cancellation requested. Waiting for the current transaction result…"):tr("Preview cancelled.");emit changed();
+    m_previewReady=m_sourcePreviewReady=false;m_candidates.clear();m_sourcePreview.clear();m_regenerationReview.clear();m_repairReview.clear();m_clockReview.clear();m_status=m_busy?tr("Cancellation requested. Waiting for the current transaction result…"):tr("Preview cancelled.");emit changed();
 }
 bool GuideController::setPreferences(const QString &id,const QVariantMap &p,int revision){return submit([id,p,revision](GuideStore &store){return outcome(store.setPreferences(id,p,revision),store);});}
 bool GuideController::setMetadata(const QString &id,const QVariantMap &p,int revision){return submit([id,p,revision](GuideStore &store){return outcome(store.setMetadata(id,p,revision),store);});}

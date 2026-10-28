@@ -132,7 +132,9 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
         if(error)error->clear();return v;
     }
     if((v.contains("horizonDays") && !integer(v.value("horizonDays"),1,31)) || (v.contains("retentionDays") && !integer(v.value("retentionDays"),0,7)))return reject(error,"Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
-    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds","horizonDays","retentionDays"})
+    if(v.contains("clockOffsetSeconds") && (!integer(v.value("clockOffsetSeconds"),-31*86400,31*86400)
+        || (v.value("clock")!="real-time" && v.value("clockOffsetSeconds").toLongLong()!=0)))return reject(error,"Only real-time local channels support a broadcast offset, bounded to 31 days.");
+    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds","horizonDays","retentionDays","clockOffsetSeconds"})
         || !integer(v.value("schemaVersion"),1,1) || !text(v.value("id"),160) || !safeId(v.value("id").toString())
         || !text(v.value("name"),160) || !integer(v.value("number"),1,99999)
         || !QStringList{"real-time","pause-when-off"}.contains(v.value("clock").toString())

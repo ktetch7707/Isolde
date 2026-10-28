@@ -6,6 +6,7 @@
 #include <QCryptographicHash>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTimeZone>
 #include "media/GuideStore.h"
 #include "media/GuideRules.h"
 #include "home/ComponentSchema.h"
@@ -27,6 +28,11 @@ QVariantList media() {
     return result;
 }
 QByteArray bytes(const QString &path) { QFile file(path); if (!file.open(QIODevice::ReadOnly)) return {}; return file.readAll(); }
+QVariant clockCursor(const QString &path) {
+    QVariant value;
+    {auto db=QSqlDatabase::addDatabase("QSQLITE","clock-cursor");db.setDatabaseName(path);db.setConnectOptions("QSQLITE_OPEN_READONLY");if(db.open()){QSqlQuery query(db);if(query.exec("SELECT cursor FROM channels WHERE id='cartoons'")&&query.next())value=query.value(0);}db.close();}
+    QSqlDatabase::removeDatabase("clock-cursor");return value;
+}
 }
 class GuideTests final : public QObject {
     Q_OBJECT
@@ -44,6 +50,7 @@ private slots:
     void channelSchedulePolicyPersistsAndPrunesWithoutReplacingFuture();
     void selectedSlotRepairPreservesIntervalsAndRejectsStaleOrForeignChoices();
     void virtualClockPausesWhileProfileIsOff();
+    void reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart();
     void unknownDatabaseIsNeverRewritten();
     void corruptKnownDatabaseIsNeverRewritten();
     void intervalOverlapRejectedAtDatabaseBoundary();
@@ -168,6 +175,37 @@ void GuideTests::nextUnwatchedUsesStrictKodiSnapshotAndPreservesCommittedSchedul
     }
     GuideStore reopened(path);QCOMPARE(reopened.programs("cartoons",Now,Now+Day,1000),committed);
     QCOMPARE(reopened.tuneTarget("cartoons",Now+Day).value("mediaId").toInt(),3);
+}
+void GuideTests::reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart() {
+    const qint64 wall=QDateTime(QDate(2026,3,8),QTime(9,30),QTimeZone::UTC).toSecsSinceEpoch(); // LA spring gap, UTC remains continuous.
+    for(const auto &offset:QVariantList{true,QString("3600"),1.5,31*86400+1,-31*86400-1}){auto invalid=definition();invalid["clockOffsetSeconds"]=offset;QVERIFY(ComponentSchema::guideChannel(invalid).isEmpty());}
+    {auto invalid=definition();invalid["clock"]="pause-when-off";invalid["clockOffsetSeconds"]=1;QVERIFY(ComponentSchema::guideChannel(invalid).isEmpty());}
+    {QTemporaryDir dir;GuideStore store(dir.filePath("initial.sqlite"));auto shifted=definition();shifted["clockOffsetSeconds"]=3600;QVERIFY(store.createLocal(shifted,media(),wall,1));QVERIFY(store.tuneTarget("cartoons",wall).value("startUtc").toLongLong()==wall+3600);QCOMPARE(store.broadcastTime("cartoons",wall),wall+3600);}
+    for(int mode=0;mode<3;++mode){
+        QTemporaryDir dir;const auto path=dir.filePath("guide.sqlite");auto def=definition();if(mode)def["clock"]="pause-when-off";
+        QVariantList committed,savedCandidates;QVariantMap applied;
+        {
+            GuideStore store(path);QVERIFY(store.createLocal(def,media(),wall,2));if(mode==2)QVERIFY(store.setActive(false,wall+30));
+            const auto baseline=store.channels();committed=store.programs("cartoons",wall,wall+2*Day,1000);savedCandidates=store.candidateSnapshot("cartoons");
+            const auto cursor=clockCursor(path);QVERIFY(cursor.isValid());
+            QVERIFY(store.clockAdjustmentPreview("missing",3600,1,wall+60).isEmpty());QVERIFY(store.clockAdjustmentPreview("cartoons",0,1,wall+60).isEmpty());
+            QVERIFY(store.clockAdjustmentPreview("cartoons",31*Day+1,1,wall+60).isEmpty());QVERIFY(store.clockAdjustmentPreview("cartoons",-3600,1,wall+60).isEmpty());
+            QVERIFY(store.clockAdjustmentPreview("cartoons",3600,2147483647,wall+60).isEmpty());
+            const auto review=store.clockAdjustmentPreview("cartoons",3600,1,wall+60);QVERIFY(!review.isEmpty());QCOMPARE(store.channels(),baseline);
+            for(const auto &key:QStringList{"channelId","title","programId","toClockUtc","active"}){auto tampered=review;tampered[key]=QString("tampered");QVERIFY(!store.adjustClock(tampered,wall+90));QCOMPARE(store.channels(),baseline);}
+            QVERIFY(!store.adjustClock(review,wall+661));QVERIFY(!store.adjustClock(review,wall+59));QCOMPARE(store.channels(),baseline);
+            store.failNextCommitForTest();QVERIFY(!store.adjustClock(review,wall+90));QCOMPARE(store.channels(),baseline);
+            if(mode==1)QVERIFY(store.setActive(true,wall+90)); // Normal checkpoint between review and apply is not a stale review.
+            QVERIFY(store.adjustClock(review,wall+120));
+            const auto expected=wall+(mode==2?30:120)+3600;QCOMPARE(store.broadcastTime("cartoons",wall+120),expected);
+            QCOMPARE(store.programs("cartoons",wall,wall+2*Day,1000),committed);QCOMPARE(store.candidateSnapshot("cartoons"),savedCandidates);
+            QCOMPARE(clockCursor(path),cursor);
+            applied=store.channel("cartoons");QCOMPARE(applied.value("revision").toInt(),2);QVERIFY(!store.adjustClock(review,wall+121));
+            if(!mode){auto bypass=store.definition("cartoons");bypass["clockOffsetSeconds"]=7200;QVERIFY(!store.updateRules(bypass,media(),2));}
+        }
+        GuideStore reopened(path);QCOMPARE(reopened.channel("cartoons"),applied);QCOMPARE(reopened.programs("cartoons",wall,wall+2*Day,1000),committed);QCOMPARE(reopened.candidateSnapshot("cartoons"),savedCandidates);
+        QCOMPARE(reopened.broadcastTime("cartoons",wall+120),wall+(mode==2?30:120)+3600);
+    }
 }
 void GuideTests::targetedMissingMediaPreservesIntervals() {
     QTemporaryDir dir; GuideStore store(dir.filePath("guide.sqlite"));
@@ -379,6 +417,7 @@ void GuideTests::pvrGenerationIsAtomicAndPreservesUserOverrides() {
     store.failNextCommitForTest();QVERIFY(!store.importPvr("kodi-pvr",{first,second},Now,{}));QVERIFY(store.channels().isEmpty());
     QVERIFY2(store.importPvr("kodi-pvr",{first,second},Now,{}),qPrintable(store.errorString()));
     QCOMPARE(store.tuneTarget(firstId,Now).value("launchKind").toString(),QString("kodi_pvr"));
+    QVERIFY(store.clockAdjustmentPreview(firstId,60,1,Now).isEmpty()); // Imported source time cannot be shifted locally.
     QVERIFY(!store.tuneTarget(secondId,Now).isEmpty());QVERIFY(store.programs(secondId,Now,Now+1).isEmpty()); // no EPG still tunable
     const auto baseline=store.programs(firstId,Now-600,Now+1200);
     QVERIFY(store.setMetadata(firstId,{{"name","My station"},{"number",42},{"groups",QVariantList{QString("Favorites")}}, {"description","My station notes"}},1));QVERIFY(store.setPreferences(firstId,{{"favorite",true}},2));

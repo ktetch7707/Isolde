@@ -44,6 +44,8 @@ public:
     bool reorder(const QStringList &ids, const QVariantMap &expectedRevisions);
     bool resumeClocks(qint64 nowUtc);
     qint64 broadcastTime(const QString &id, qint64 nowUtc) const;
+    QVariantMap clockAdjustmentPreview(const QString &id,qint64 deltaSeconds,int expectedRevision,qint64 nowUtc) const;
+    bool adjustClock(const QVariantMap &review,qint64 nowUtc);
     void setCancellationCheck(std::function<bool()> check) { m_cancelled=std::move(check); }
     bool remove(const QString &id, int expectedRevision);
     // Only affected slots change; an unavailable slate retains the interval.
