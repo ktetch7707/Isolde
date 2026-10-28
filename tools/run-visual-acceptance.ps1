@@ -75,7 +75,7 @@ $captureLine = {
                 $keys = @($keyDocument.keys)
             }
             $scancodes = @{Home=@('e0','47','e0','c7');Return=@('1c','9c');Tab=@('0f','8f');Space=@('39','b9');Escape=@('01','81');Left=@('e0','4b','e0','cb');Right=@('e0','4d','e0','cd');Up=@('e0','48','e0','c8');Down=@('e0','50','e0','d0');ShiftTab=@('2a','0f','8f','aa');CtrlF=@('1d','21','a1','9d')}
-            if ($guideInput) { $scancodes.F9=@('43','c3') }
+            if ($guideInput) { $scancodes.F9=@('43','c3');$scancodes.Menu=@('e0','5d','e0','dd') }
             if ($shellInput) { $scancodes.A=@('1e','9e') }
             if ($Case -eq 'emulators') { $scancodes.X=@('2d','ad');$scancodes.Z=@('2c','ac');$scancodes.S=@('1f','9f') }
             if ((!$keys.Count -and !$nativePermission -and $phase -ne 'steaminstall') -or $keys.Count -gt 20) { throw 'Invalid bounded guest keystroke count.' }
