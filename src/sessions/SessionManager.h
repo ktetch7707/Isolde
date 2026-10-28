@@ -43,6 +43,7 @@ public:
     // Only the identity-resolving Games dispatcher supplies this grant. It is
     // deliberately not a QML/layout action argument.
     bool launchGameFile(const QVariantMap &action, const QString &sourceRoot);
+    bool launchSteamGame(const QString &steamAppId);
     Q_INVOKABLE void exitCurrent();
     Q_INVOKABLE void goHome();
 

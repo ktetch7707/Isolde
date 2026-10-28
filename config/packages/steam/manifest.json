@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "packageId": "steam",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minIsoldeVersion": "0.0.1.2",
   "name": "Steam",
-  "description": "Steam owns the games library, downloads, updates and controller interface. Opens its living-room Big Picture library.",
+  "description": "Import installed Steam games through Games → Add game → Steam, then select a game and Play directly. Steam handles licensing, updates, compatibility and saves. Open Steam itself for first-time sign-in or installation.",
   "category": "Games",
   "publisher": "Valve",
   "provenance": "Ubuntu Steam installer and Valve Steam client",

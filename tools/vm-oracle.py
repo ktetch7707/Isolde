@@ -123,7 +123,7 @@ def suite_selection(suite):
     if suite == "store":
         pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote)$"
     if suite == "games":
-        pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning)$"
+        pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning|steam_games)$"
     if suite == "guide":
         pattern = "^(guide_contracts|guide_remote_ui|kodi_local_bridge|kodi_playback|kodi_media_client)$"
     if suite == "home_component_navigation":
@@ -627,7 +627,7 @@ class Oracle:
             if suite == "store":
                 expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote"}
             if suite == "games":
-                expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning"}
+                expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning", "steam_games"}
             if suite == "guide":
                 expected = {"guide_contracts", "guide_remote_ui", "kodi_local_bridge", "kodi_playback", "kodi_media_client"}
             if {c.get("name") for c in cases} != expected:

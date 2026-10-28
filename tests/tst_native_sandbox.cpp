@@ -13,6 +13,7 @@
 class NativeSandboxTests : public QObject {
     Q_OBJECT
 private slots:
+    void steamAdapterCannotAttachToHostGameProcesses();
     void profileAndAppStorageRemainSeparate();
     void explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
     void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
@@ -37,6 +38,17 @@ static QByteArray run(const NativeSandboxPlan &plan, const QString &script, cons
         qWarning() << process.exitCode() << process.readAllStandardError(); return "ERROR";
     }
     return process.readAllStandardOutput();
+}
+void NativeSandboxTests::steamAdapterCannotAttachToHostGameProcesses(){
+    QTemporaryDir storage;auto env=QProcessEnvironment::systemEnvironment();
+    QProcess outside;auto outsideEnv=env;outsideEnv.insert("SteamAppId","42");outside.setProcessEnvironment(outsideEnv);
+    outside.start("/usr/bin/python3",{"-c","import time; time.sleep(20)"});QVERIFY(outside.waitForStarted());
+    const auto plan=NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");QVERIFY2(plan.error.isEmpty(),qPrintable(plan.error));
+    QCOMPARE(run(plan,"import runpy; m=runpy.run_path('/run/steam-games.py'); print(m['game_processes']('42'))"),QByteArray("[]\n"));
+    QCOMPARE(run(plan,"import subprocess; p=subprocess.run(['/usr/bin/python3','/run/steam-games.py','--launch','42'],capture_output=True); assert p.returncode==2 and b'Steam game:' in p.stderr; print('missing-game-refused')"),QByteArray("missing-game-refused\n"));
+    QVERIFY(outside.state()!=QProcess::NotRunning);outside.terminate();QVERIFY(outside.waitForFinished());
+    QVERIFY(!NativeSandbox::prepare(alice,"other","/usr/bin/python3",env,{},storage.path(),{},{},"42").error.isEmpty());
+    QVERIFY(!NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42 -bad").error.isEmpty());
 }
 void NativeSandboxTests::rememberedKodiGrantsAreScopedReadOnlyAndRevocable()
 {

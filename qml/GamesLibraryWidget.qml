@@ -38,7 +38,7 @@ Item {
     property int field:0
     readonly property var runtimes:library?library.runtimes:[]
     readonly property var tools:["Add game","All","Favorites","Recent","Search","Previous","Next","Import folder","Emulator setup"]
-    readonly property var importActions:["Import all reviewed files","Cancel · save nothing","Previous preview page","Next preview page"].concat(importItems.map(g=>g.title+" · "+g.target))
+    readonly property var importActions:["Import all reviewed games","Cancel · save nothing","Previous preview page","Next preview page"].concat(importItems.map(g=>g.title+" · "+g.target))
     readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Add edition / version","Back"]:[]
     readonly property int columns:style.libraryLayout==="list"?1:Math.max(1,style.libraryColumns || 4)
     readonly property real scale:appearance.typographyScale || 1
@@ -56,7 +56,7 @@ Item {
     Connections {target:root.library;function onImportChanged(){
         if(root.mode!=="scan" && root.mode!=="importPreview")return
         root.importItems=root.library.importPage(root.importOffset)
-        if(root.library.importReady){root.mode="importPreview";root.message=root.library.importCount+" files found. Review filenames before importing; no metadata matching is assumed."}
+        if(root.library.importReady){root.mode="importPreview";root.message=root.library.importStatus || root.library.importCount+" files found. Review filenames before importing; no metadata matching is assumed."}
         else if(!root.library.scanning){root.mode="browse";root.message=root.library.errorString || "Import canceled. Nothing was saved."}
     }}
     Connections {
@@ -138,6 +138,12 @@ Item {
         }
         if(mode==="runtime"){
             const runtime=runtimes[choice];if(!runtime)return
+            if(runtime.provider==="steam"){
+                if(editionGameId){message="Import Steam games using Add game first. Steam edition association is not available here.";return}
+                importOffset=0;choice=1;mode="scan";message="Reading this profile's installed Steam games. Nothing is saved until you confirm the preview."
+                if(!library.beginSteamImport()){mode="runtime";message=library.errorString}
+                return
+            }
             if(importing && !runtime.file){message="Choose a file-based game runtime for folder import.";return}
             draft=Object.assign({},draft,{runtimeId:runtime.id},runtime.file?{}:{root:"",target:""});beginField(importing?1:0);return
         }

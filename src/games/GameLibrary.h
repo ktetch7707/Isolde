@@ -23,6 +23,7 @@ class GameLibrary final : public QObject {
     Q_PROPERTY(bool scanning READ scanning NOTIFY importChanged)
     Q_PROPERTY(int importCount READ importCount NOTIFY importChanged)
     Q_PROPERTY(bool importReady READ importReady NOTIFY importChanged)
+    Q_PROPERTY(QString importStatus READ importStatus NOTIFY importChanged)
 public:
     GameLibrary(const QString &databasePath, AppRegistry *apps, QObject *parent = nullptr);
     ~GameLibrary() override;
@@ -43,7 +44,9 @@ public:
     Q_INVOKABLE bool updateGame(const QString &gameId, const QVariantMap &registration);
     Q_INVOKABLE QVariantList editions(const QString &gameId);
     Q_INVOKABLE QString addEdition(const QString &gameId, const QVariantMap &registration);
-    bool scanning() const { return bool(m_scan); }
+    bool scanning() const { return bool(m_scan) || m_steamScan.state()!=QProcess::NotRunning; }
+    QString importStatus() const { return m_importStatus; }
+    Q_INVOKABLE bool beginSteamImport();
     int importCount() const { return m_preview.size(); }
     bool importReady() const { return m_importReady; }
     Q_INVOKABLE bool beginImport(const QString &root, const QString &runtimeId, const QString &platform);
@@ -86,4 +89,9 @@ private:
     QStringList m_importFormats;
     int m_scanEntries = 0;
     bool m_importReady = false;
+    QProcess m_steamScan;
+    QTimer m_steamScanDeadline;
+    QByteArray m_steamScanOutput;
+    bool m_steamScanCanceled = false;
+    QString m_importStatus;
 };

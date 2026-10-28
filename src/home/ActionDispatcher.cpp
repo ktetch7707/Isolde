@@ -141,6 +141,7 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         auto resolved = m_games ? m_games->resolveLaunch(value.value("gameId").toString(),value.value("editionId").toString()) : QVariantMap();
         if(resolved.isEmpty()) emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable in this profile."));
         else if(resolved.value("type")=="launch-app") accepted=launchApp(resolved.value("appId").toString());
+        else if(resolved.value("type")=="steam-game") accepted=m_sessions->launchSteamGame(resolved.value("steamAppId").toString());
         else {const auto root=resolved.take("sourceRoot").toString();accepted=m_sessions->launchGameFile(resolved,root);}
     }
     else if (type == "settings") {

@@ -143,6 +143,17 @@ bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sour
     }
     return launchFileAction(input,sourceRoot);
 }
+bool SessionManager::launchSteamGame(const QString &identity)
+{
+    const auto *steam=m_registry->find("steam");bool valid=false;const auto number=identity.toULongLong(&valid);
+    if(!steam || steam->type!="desktop" || steam->presentationMode!="game-hub" || steam->launchConfiguration.value("desktopId")!="isolde-steam"
+        || !QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch() || !valid || number>4294967295ULL || QString::number(number)!=identity){
+        emit sessionRejected(tr("This Steam game or its client is unavailable. Repair Steam and import the game again."));return false;
+    }
+    auto definition=*steam;definition.launchConfiguration.insert("steamGameId",identity);
+    definition.launchConfiguration.remove("containment"); // Never fullscreen the Steam client instead of its game.
+    return launchDefinition(definition);
+}
 bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot)
 {
     QString error;

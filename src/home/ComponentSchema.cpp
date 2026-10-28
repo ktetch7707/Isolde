@@ -382,6 +382,12 @@ QVariantMap ComponentSchema::gameRegistration(const QVariantMap &input, QString 
     const auto root=input.value("root").toString(), target=input.value("target").toString();
     if(title.trimmed().isEmpty() || title!=title.trimmed() || title.size()>256 || platform.trimmed().isEmpty() || platform.size()>80
         || !safeId(input.value("runtimeId").toString()))return reject(error,"Choose a title, platform and valid game runtime.");
+    if(input.value("runtimeId")=="steam"){
+        bool valid=false;const auto id=target.toULongLong(&valid);
+        if(!root.isEmpty() || !QRegularExpression("^[1-9][0-9]{0,9}$").match(target).hasMatch() || !valid || id>4294967295ULL || QString::number(id)!=target)
+            return reject(error,"Steam games contain a positive Steam App ID, never a path or launch command.");
+        return input;
+    }
     if(root.size()>4096 || target.size()>4096 || root.isEmpty()!=target.isEmpty())return reject(error,"Choose both a game folder and relative file, or an installed game app.");
     if(!root.isEmpty() && (!QDir::isAbsolutePath(root) || QDir::cleanPath(root)!=root
         || QDir::isAbsolutePath(target) || target.contains('\\') || QDir::cleanPath(target)!=target

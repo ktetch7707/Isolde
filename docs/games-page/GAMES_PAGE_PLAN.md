@@ -207,3 +207,5 @@ For each accepted slice retain source commit, tool/run IDs, test logs, real scre
 Resolve during G0: supported first local runtime/fixture, repository SQLite availability, safe Steam local discovery surface, reliable game/session ownership, shared external account/save limitations, controller grant/remapping support, and target hardware budgets. Unsupported provider behavior must narrow the capability, not expand permissions or invent metadata.
 
 Review result: retain the common Games page and shared Studio direction; replace speculative provider promises, the read-only-only catalog and backend-first rollout with the contracts and gated slices above. No checkbox credit or application implementation is claimed by this document.
+
+Implementation checkpoint (2026-10-27): [direct Steam import/Play](steam-direct-launch-2026-10-27.md) adds reviewed installed-title discovery and a private App-ID launch adapter. Actual Steam game/controller/save/offline acceptance and external-library connection remain open; G4 is not complete.

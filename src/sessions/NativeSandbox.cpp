@@ -36,7 +36,7 @@ bool privateDirectory(const QString &path)
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
-                                        const QString &gameSourceRoot)
+                                        const QString &gameSourceRoot, const QString &steamGameId)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -153,7 +153,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     }
     if (QFileInfo::exists(hostRuntime + "/pipewire-0")) bind(hostRuntime + "/pipewire-0", runtime + "/pipewire-0");
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
-    if(!emulatorRuntime.isEmpty()){
+    if(!emulatorRuntime.isEmpty() || !steamGameId.isEmpty()){
         // Give managed emulators gamepad nodes only. Do not expose keyboard,
         // mouse or the entire host input directory to a native game session.
         const auto nodes=QDir("/sys/class/input").entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot);
@@ -235,6 +235,17 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         }
     }
     // Start a new bus inside the sandbox. Host service activation is never used.
+    if(!steamGameId.isEmpty()){
+        bool valid=false;const auto number=steamGameId.toULongLong(&valid);
+        auto helperRoot=QCoreApplication::applicationDirPath()+"/share/isolde";
+        if(!QFileInfo(helperRoot+"/steam-games.py").isReadable())helperRoot=QCoreApplication::applicationDirPath()+"/../share/isolde";
+        const auto helper=helperRoot+"/steam-games.py";
+        if(appId!="steam" || !QRegularExpression("^[1-9][0-9]{0,9}$").match(steamGameId).hasMatch() || !valid || number>4294967295ULL || QString::number(number)!=steamGameId
+            || binary!=QFileInfo("/usr/bin/python3").canonicalFilePath() || !target.isEmpty() || !QFileInfo(helper).isReadable()){
+            plan.error="Repair the private Steam game adapter or import this game again.";return plan;
+        }
+        bind(helper,"/run/steam-games.py");
+    }
     bind(supervisor, "/run/isolde-native-host");
     bind(busConfig, "/run/isolde-session-bus.conf");
     if(!emulatorRuntime.isEmpty()){

@@ -25,6 +25,7 @@ signals:
 class GamesUiTests : public QObject {
     Q_OBJECT
 private slots:
+    void remoteSteamImportCanCancelReviewAndPlay();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
     void remoteEditCanCancelAndApplyWithoutMouse();
@@ -43,6 +44,32 @@ static void doneOnKeyboard(QObject *widget) {
     for(int i=0;i<5;++i)command(widget,InputManager::NavigateDown);
     for(int i=0;i<9;++i)command(widget,InputManager::NavigateRight);
     command(widget,InputManager::Confirm);
+}
+void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
+    QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);
+    const auto parent=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+profile;
+    const auto path=parent+"/steam/home/.local/share/Steam/steamapps";QVERIFY(QDir().mkpath(path+"/common/Fixture"));
+    QFile manifest(path+"/appmanifest_42.acf");QVERIFY(manifest.open(QIODevice::WriteOnly));manifest.write("\"AppState\" { \"appid\" \"42\" \"name\" \"Steam fixture\" \"StateFlags\" \"4\" \"installdir\" \"Fixture\" }");manifest.close();
+    QTemporaryDir dir;AppRegistry apps;auto steam=runtime();steam.id="steam";steam.name="Steam";steam.presentationMode="game-hub";steam.launchConfiguration={{"desktopId","isolde-steam"}};QVERIFY(apps.addApp(steam));
+    GameLibrary library(dir.filePath("games.sqlite"),&apps);InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"originId","steam-origin"},{"width",1000},{"height",600},{"engaged",true}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
+    QTRY_COMPARE_WITH_TIMEOUT(widget->property("mode").toString(),QString("importPreview"),10000);QVERIFY(library.page().isEmpty());
+    command(widget.data(),InputManager::Confirm);QVERIFY(library.page().isEmpty()); // Default Cancel.
+    QVERIFY(manifest.open(QIODevice::ReadOnly));const auto validManifest=manifest.readAll();manifest.close();
+    QVERIFY(manifest.open(QIODevice::WriteOnly|QIODevice::Truncate));manifest.write("invalid Steam metadata");manifest.close();
+    command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
+    QTRY_COMPARE_WITH_TIMEOUT(widget->property("mode").toString(),QString("browse"),10000);
+    QVERIFY(widget->property("message").toString().contains("Steam discovery failed"));QVERIFY(library.page().isEmpty());
+    QVERIFY(manifest.open(QIODevice::WriteOnly|QIODevice::Truncate));manifest.write(validManifest);manifest.close();
+    command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
+    QTRY_COMPARE_WITH_TIMEOUT(widget->property("mode").toString(),QString("importPreview"),10000);
+    command(widget.data(),InputManager::NavigateUp);command(widget.data(),InputManager::Confirm);QCOMPARE(library.page().size(),1);
+    command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(dispatch.lastAction.value("type").toString(),QString("launch-game"));QCOMPARE(dispatch.origin,QString("steam-origin"));
+    QCOMPARE(library.resolveLaunch(dispatch.lastAction.value("gameId").toString()).value("steamAppId").toString(),QString("42"));
+    qApp->setProperty("isoldeProfile",QVariant());QVERIFY(QDir(parent).removeRecursively());
 }
 void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);

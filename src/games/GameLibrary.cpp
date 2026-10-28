@@ -17,6 +17,7 @@
 #include <QSqlError>
 #include <QUuid>
 #include <QRegularExpression>
+#include <QSet>
 
 namespace {
 constexpr int MaxGames = 50000;
@@ -32,6 +33,40 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     : QObject(parent), m_connection("games-" + QUuid::createUuid().toString(QUuid::WithoutBraces)), m_apps(apps) {
     connect(apps,&AppRegistry::appsChanged,this,&GameLibrary::changed);
     m_emulatorProfile=qApp->property("isoldeProfile").toString();if(m_emulatorProfile.isEmpty())m_emulatorProfile="default";
+    m_steamScanDeadline.setSingleShot(true);m_steamScanDeadline.setInterval(30000);
+    connect(&m_steamScanDeadline,&QTimer::timeout,this,[this]{fail(tr("Steam discovery timed out. Nothing was imported; retry when storage is available."));cancelImport();});
+    connect(&m_steamScan,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){
+        if(error==QProcess::FailedToStart && !m_steamScanCanceled){fail(tr("Steam discovery could not start. Repair the Isolde Steam adapter and retry."));cancelImport();}
+    });
+    connect(&m_steamScan,&QProcess::readyReadStandardOutput,this,[this]{
+        m_steamScanOutput+=m_steamScan.readAllStandardOutput();
+        if(m_steamScanOutput.size()>2*1024*1024){fail(tr("Steam preview exceeds its size limit. Nothing was imported."));cancelImport();}
+    });
+    connect(&m_steamScan,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus status){
+        m_steamScanDeadline.stop();
+        if(m_steamScanCanceled || !m_ready)return;
+        if(code!=0 || status!=QProcess::NormalExit){
+            const auto error=QString::fromUtf8(m_steamScan.readAllStandardError()).right(1000);
+            fail(tr("Steam discovery failed. Nothing was imported. %1").arg(error));cancelImport();return;
+        }
+        m_steamScanOutput+=m_steamScan.readAllStandardOutput();
+        QJsonParseError parse;const auto document=QJsonDocument::fromJson(m_steamScanOutput,&parse).toVariant().toMap();
+        const auto games=document.value("games").toList();
+        if(parse.error!=QJsonParseError::NoError || document.value("games").metaType()!=QMetaType::fromType<QVariantList>() || games.size()>5000 || m_steamScanOutput.size()>2*1024*1024){fail(tr("Invalid Steam discovery response."));cancelImport();return;}
+        QSet<QString> seen;
+        for(const auto &entry:games){
+            const auto game=entry.toMap();
+            if(ComponentSchema::gameRegistration(game).isEmpty() || game.value("runtimeId")!="steam" || !game.value("root").toString().isEmpty() || seen.contains(game.value("target").toString())){
+                fail(tr("Invalid or duplicate Steam title. Nothing was imported."));cancelImport();return;
+            }
+            seen.insert(game.value("target").toString());
+        }
+        m_preview=games;m_importReady=true;
+        m_importStatus=games.isEmpty()?tr("No fully installed games were found in this profile. Open Steam once to sign in and install games, then retry."):
+            tr("%1 installed Steam games. Review before adding. Steam owns licensing, installation and saves.").arg(games.size());
+        const auto warnings=document.value("warnings").toStringList();if(!warnings.isEmpty())m_importStatus+=' '+warnings.join(' ');
+        emit importChanged();
+    });
     m_setupDeadline.setSingleShot(true);m_setupDeadline.setInterval(2400000);
     connect(&m_setupDeadline,&QTimer::timeout,this,&GameLibrary::cancelEmulatorSetup);
     connect(&m_setup,&QProcess::readyReadStandardOutput,this,[this]{m_setupOutput=(m_setupOutput+m_setup.readAllStandardOutput()).right(8192);});
@@ -82,6 +117,7 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     m_ready = true;
 }
 GameLibrary::~GameLibrary() {
+    cancelImport();if(m_steamScan.state()!=QProcess::NotRunning)m_steamScan.waitForFinished(1000);
     cancelEmulatorSetup();if(setupBusy())m_setup.waitForFinished(5000);
     m_db.close(); m_db = QSqlDatabase(); QSqlDatabase::removeDatabase(m_connection);
 }
@@ -90,6 +126,7 @@ void GameLibrary::invalidate() { cancelImport();cancelEmulatorSetup(); m_ready =
 bool GameLibrary::compatibleRuntime(const QString &id, bool file) const {
     const auto *app = m_apps->find(id);
     if (!app || app->type != "desktop") return false;
+    if(id=="steam" && !file)return app->presentationMode=="game-hub" && app->launchConfiguration.value("desktopId")=="isolde-steam";
     if (file) return QStringList{"game","game-hub"}.contains(app->presentationMode)
         && app->handledActions.contains("open-file") && app->launchConfiguration.value("actionHandlers").toMap().contains("open-file");
     return app->presentationMode == "game";
@@ -99,7 +136,7 @@ QVariantList GameLibrary::runtimes() const {
     for (const auto &entry : m_apps->apps()) {
         const auto app = entry.toMap(); const auto id = app.value("id").toString();
         if (compatibleRuntime(id,true) || compatibleRuntime(id,false))
-            result.append(QVariantMap{{"id",id},{"name",app.value("name")},{"file",compatibleRuntime(id,true)}});
+            result.append(QVariantMap{{"id",id},{"name",app.value("name")},{"file",compatibleRuntime(id,true)},{"provider",id=="steam"?"steam":"local"}});
     }
     return result;
 }
@@ -266,6 +303,12 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionI
     if (!query.exec() || !query.next()) { fail(tr("Game not found in this profile.")); return {}; }
     const auto runtime=query.value(0).toString(), root=query.value(1).toString(), relative=query.value(2).toString();
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("The game runtime is missing or incompatible. Repair it and retry.")); return {}; }
+    if(runtime=="steam"){
+        if(ComponentSchema::gameRegistration({{"schemaVersion",1},{"title","Steam game"},{"platform","Steam"},{"runtimeId",runtime},{"root",root},{"target",relative}}).isEmpty()){
+            fail(tr("Invalid Steam identity. Remove the entry and import it again."));return {};
+        }
+        return {{"type","steam-game"},{"steamAppId",relative}};
+    }
     if (root.isEmpty()) return {{"type","launch-app"},{"appId",runtime}};
     const auto target=checkedTarget(root,relative); if (target.isEmpty()) return {};
     return {{"type","open-file"},{"openWith",runtime},{"target",target},{"sourceRoot",root}};
@@ -313,9 +356,25 @@ QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
     m_hasEditions=true;m_error.clear();emit errorChanged();emit changed();return edition;
 }
 void GameLibrary::cancelImport() {
+    m_steamScanCanceled=true;m_steamScanDeadline.stop();
+    if(m_steamScan.state()!=QProcess::NotRunning)m_steamScan.kill();
+    m_steamScanOutput.clear();m_importStatus.clear();
     m_scanTimer.stop();m_scan.reset();m_preview.clear();m_importReady=false;
     m_importRoot.clear();m_importRuntime.clear();m_importPlatform.clear();m_importFormats.clear();
     m_scanEntries=0;emit importChanged();
+}
+bool GameLibrary::beginSteamImport(){
+    if(!m_ready || scanning() || m_importReady)return fail(tr("Finish or cancel the current import first."));
+    if(!compatibleRuntime("steam",false))return fail(tr("Install Steam from the Isolde Store first."));
+    if(m_emulatorProfile!="default" && (QUuid(m_emulatorProfile).isNull() || QUuid(m_emulatorProfile).toString(QUuid::WithoutBraces)!=m_emulatorProfile))return fail(tr("Invalid active profile."));
+    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/steam-games.py";
+    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/steam-games.py";
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde Steam adapter."));
+    const auto home=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+m_emulatorProfile+"/steam/home";
+    m_preview.clear();m_steamScanOutput.clear();m_steamScanCanceled=false;m_importRuntime="steam";m_importRoot=QStringLiteral("");m_importReady=false;
+    m_error.clear();emit errorChanged();m_importStatus=tr("Reading installed games in this profile's Steam library. Nothing is saved yet.");
+    m_steamScan.start(python,{helper,"--discover","--home",home});m_steamScanDeadline.start();emit importChanged();return true;
 }
 bool GameLibrary::beginImport(const QString &root,const QString &runtime,const QString &platform) {
     if(!m_ready || scanning() || m_importReady)return fail(tr("Finish or cancel the current import first."));
@@ -356,14 +415,15 @@ QVariantList GameLibrary::importPage(int offset) const {
 }
 bool GameLibrary::commitImport() {
     if(!m_ready || scanning() || !m_importReady)return fail(tr("Wait for the import preview before confirming."));
-    if(!compatibleRuntime(m_importRuntime,true))return fail(tr("The selected runtime is no longer installed."));
+    const bool steam=m_importRuntime=="steam";
+    if(!compatibleRuntime(m_importRuntime,!steam))return fail(tr("The selected runtime is no longer installed."));
     if(!m_db.transaction())return fail(m_db.lastError().text());
     QSqlQuery query(m_db);
     if(!query.exec("SELECT count(*) FROM games") || !query.next()){m_db.rollback();return fail(tr("Cannot read the games catalog."));}
     int count=query.value(0).toInt();query.finish();
     for(const auto &entry:m_preview){
         const auto value=entry.toMap();QString error;
-        if(ComponentSchema::gameRegistration(value,&error).isEmpty() || checkedTarget(m_importRoot,value.value("target").toString()).isEmpty()){
+        if(ComponentSchema::gameRegistration(value,&error).isEmpty() || (!steam && checkedTarget(m_importRoot,value.value("target").toString()).isEmpty())){
             m_db.rollback();return fail(error.isEmpty()?tr("A source changed after preview. Nothing was imported; review the folder again."):error);
         }
         query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?"+QString(m_hasEditions?" UNION ALL SELECT id FROM game_editions WHERE runtime=? AND root=? AND target=?":""));

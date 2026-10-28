@@ -25,7 +25,7 @@ struct AppDefinition {
     [[nodiscard]] bool isValid() const
     {
         if(id.trimmed().isEmpty() || name.trimmed().isEmpty() || type.trimmed().isEmpty())return false;
-        if(launchConfiguration.contains("gameSourceRoot"))return false; // Runtime-only, never app/package data.
+        if(launchConfiguration.contains("gameSourceRoot") || launchConfiguration.contains("steamGameId"))return false; // Runtime-only, never app/package data.
         if(launchConfiguration.contains("emulatorRuntime")){
             const auto runtime=launchConfiguration.value("emulatorRuntime");
             if(runtime.metaType()!=QMetaType::fromType<QString>() || runtime.toString()!=id || GameEmulators::definition(id).isEmpty()
