@@ -59,6 +59,8 @@ class PlaybackTests(unittest.TestCase):
         self.position = 0
         self.seekable = True
         self.pausable = True
+        self.pause_info = None
+        self.pause_info_error = False
         self.now = 0
         self.calls, self.builtins = [], []
         self.player = module.Playback(self.execute, self.builtins.append, True, lambda: self.now)
@@ -79,8 +81,15 @@ class PlaybackTests(unittest.TestCase):
                 if key in params["properties"] and not (key=="uniqueid" and self.omit_pvr_uniqueid):details[key]=value
             result={"channeldetails":details}
         elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item}}
-        elif method == "Player.GetProperties": result = {"speed":self.speed,"canseek":self.seekable,"canpause":self.pausable,
-            "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
+        elif method == "Player.GetProperties":
+            values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
+                    "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
+            if set(params["properties"])-set(values):return json.dumps({"error":{"code":-32602,"message":"Invalid Player property"}})
+            result={key:values[key] for key in params["properties"]}
+        elif method == "XBMC.GetInfoBooleans":
+            self.assertEqual(params,{"booleans":["Player.PauseEnabled"]})
+            if self.pause_info_error:return json.dumps({"error":{"code":-32602,"message":"Capability unavailable"}})
+            result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
         elif method == "Player.Stop": self.active = False
         return json.dumps({"result": result})
@@ -110,6 +119,20 @@ class PlaybackTests(unittest.TestCase):
             self.assertTrue(result["controlError"])
             self.assertTrue(self.active)
         self.assertFalse(any(method in ("Player.PlayPause", "Player.Seek", "Player.Stop") for method, _ in self.calls))
+
+    def test_unknown_pause_capability_preserves_playing_and_refuses_pause(self):
+        for info,error in (({"Player.PauseEnabled":False},False),({},False),
+                           ({"Player.PauseEnabled":"true"},False),({"Player.PauseEnabled":1},False),
+                           (False,False),({},True)):
+            with self.subTest(info=info,error=error):
+                self.pause_info,self.pause_info_error=info,error
+                self.player=module.Playback(self.execute,self.builtins.append,True,lambda:self.now)
+                self.active=False;self.calls=[]
+                self.player.handle("Isolde.PlayMovie",{"movieid":7,"resume":False});self.active=True
+                state=self.player.status();self.assertEqual(state["state"],"playing");self.assertIs(state["canPause"],False)
+                result=self.player.control("pause");self.assertEqual(result["state"],"playing");self.assertTrue(result["controlError"])
+                self.assertFalse(any(method in {"Player.PlayPause","Player.Stop"} for method,_ in self.calls))
+                self.assertTrue(self.active)
 
     def test_pvr_import_tune_revalidates_backend_identity(self):
         self.kind="channel"

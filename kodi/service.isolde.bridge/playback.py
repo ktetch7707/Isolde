@@ -31,6 +31,14 @@ class Playback:
             raise ValueError("Kodi rejected playback operation")
         return reply["result"]
 
+    def pause_available(self):
+        # Kodi exposes CanPause through its read-only GUI boolean, not a
+        # Player.GetProperties field. Unknown capability must not break status.
+        try:
+            return self.rpc("XBMC.GetInfoBooleans", {"booleans": ["Player.PauseEnabled"]}).get("Player.PauseEnabled") is True
+        except (ValueError, TypeError, AttributeError):
+            return False
+
     def handle(self, method, params):
         if not self.managed:
             raise ValueError("Playback requires Isolde frontend mode")
@@ -132,8 +140,8 @@ class Playback:
                     self.movie, self.state = None, "replaced"
                 else:
                     verify_seek = self.scheduled_offset is not None and self.scheduled_offset > 0 and not self.seen and self.pending_stop is None
-                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed", "canpause", "canseek", "time"] if verify_seek else ["speed", "canpause", "canseek"]})
-                    self.can_pause = props.get("canpause") is True
+                    props = self.rpc("Player.GetProperties", {"playerid": player, "properties": ["speed", "canseek", "time"] if verify_seek else ["speed", "canseek"]})
+                    self.can_pause = self.pause_available()
                     self.can_seek = props.get("canseek") is True
                     if verify_seek:
                         position = props.get("time", {})
@@ -207,8 +215,7 @@ class Playback:
                 self.home = action == "home"
                 self.rpc("Player.Stop", {"playerid": pid})
             elif action == "pause":
-                props = self.rpc("Player.GetProperties", {"playerid": pid, "properties": ["canpause"]})
-                if props.get("canpause") is not True:
+                if not self.pause_available():
                     self.control_error = "This source does not support pausing. Playback continues."
                     return self.status()
                 self.rpc("Player.PlayPause", {"playerid": pid, "play": "toggle"})
