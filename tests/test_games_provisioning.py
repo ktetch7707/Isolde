@@ -129,7 +129,7 @@ class EmulatorAdapterTests(unittest.TestCase):
 class GameFixtureTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "Guest process-group contract")
     def test_builder_timeout_terminates_descendants(self):
-        import subprocess, sys
+        import subprocess, sys, time
         spec=importlib.util.spec_from_file_location("psp_timeout",Path(__file__).parents[1]/"tools/build-ppsspp.py")
         builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(builder)
         with tempfile.TemporaryDirectory() as temporary:
@@ -138,13 +138,19 @@ class GameFixtureTests(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 builder.run(sys.executable,"-c",script,str(marker),timeout=1)
             child=Path("/proc")/marker.read_text()/"stat"
-            # Reaping an orphan is init's responsibility; a zombie has stopped.
-            try:
-                child_state=child.read_text().split()[2]
-            except (FileNotFoundError,ProcessLookupError):
-                pass  # The terminated descendant was already reaped.
-            else:
-                self.assertEqual(child_state,"Z")
+            # SIGKILL delivery to a descendant can settle after the leader's
+            # wait completes. Require it to stop within a bounded grace period;
+            # reaping an orphan is init's responsibility, so Z also means stopped.
+            deadline=time.monotonic()+2
+            while True:
+                try:
+                    child_state=child.read_text().split()[2]
+                except (FileNotFoundError,ProcessLookupError):
+                    break
+                if child_state=="Z":break
+                if time.monotonic()>=deadline:
+                    self.fail("Timed-out builder left a live descendant: "+child_state)
+                time.sleep(.02)
 
     def test_archive_pin_and_traversal_refused_without_extraction(self):
         spec=importlib.util.spec_from_file_location("fixture_fetch",Path(__file__).parents[1]/"tools/fetch-game-fixtures.py")
