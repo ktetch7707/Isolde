@@ -125,7 +125,7 @@ void GuideUiTests::remoteCreatePreviewSaveAndFutureSelection() {
 void GuideUiTests::remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
     QVariantList fixture;const QVariantList states{0,1,QVariant(),false,QString("0")};
-    for(int i=0;i<states.size();++i){QVariantMap item{{"mediaId",i+1},{"title",QString("Episode %1").arg(i+1)},{"duration",1800},{"studio",QStringList{"Cartoon Network"}},{"showtitle","Series"},{"season",1},{"episode",i+1}};if(states[i].isValid())item["playcount"]=states[i];fixture.append(item);}
+    for(int i=0;i<states.size();++i){QVariantMap item{{"source","kodi"},{"mediaId",i+1},{"title",QString("Episode %1").arg(i+1)},{"duration",1800},{"studio",QStringList{"Cartoon Network"}},{"showtitle","Series"},{"season",1},{"episode",i+1}};if(states[i].isValid())item["playcount"]=states[i];fixture.append(item);}
     server.setProperty("watchFixture",fixture);serve(server);
     const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"unwatched",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
     InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
