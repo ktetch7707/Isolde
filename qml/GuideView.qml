@@ -352,7 +352,7 @@ Item {
     }
     Connections {target:root.controller
         function onDuplicatePrepared(value){root.editRevision=0;root.draft=value;root.mediaKind=root.kindFor(value);root.fieldIndex=0;root.mode="create"}
-        function onChannelCreated(id){root.mode="";root.headerFocused=false;root.nowUtc=Date.now()/1000;root.anchorUtc=root.nowUtc;root.fromUtc=Math.floor(root.nowUtc/1800)*1800;root.pickChannel(root.channels.findIndex(c=>c.id===id));root.loadWindow()}
+        function onChannelCreated(id){root.mode="";root.nowUtc=Date.now()/1000;root.anchorUtc=root.nowUtc;root.fromUtc=Math.floor(root.nowUtc/1800)*1800;root.pendingFocusChannelId=id;root.applyPendingFocus();root.loadWindow()}
         function onChanged(){
             if(root.clockSaving && !root.controller.busy){root.clockSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=13;root.loadWindow()}}
             if(root.repairSaving && !root.controller.busy){root.repairSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=12}}
@@ -418,10 +418,15 @@ Item {
                 text:root.mode==="regenerate"?(root.controller.regenerationReview.slotCount?"Replace "+root.controller.regenerationReview.slotCount+" future slots starting "+new Date(root.controller.regenerationReview.displayFromUtc*1000).toLocaleString()+". The airing program and earlier slots stay unchanged.":"Reviewing the replacement boundary…"):root.numberSwapReview.firstName+": "+root.numberSwapReview.firstNumber+" → "+root.numberSwapReview.secondNumber+"\n"+root.numberSwapReview.secondName+": "+root.numberSwapReview.secondNumber+" → "+root.numberSwapReview.firstNumber+"\nConfirm swaps both numbers together. Back changes neither."
             }
             Text {width:parent.width;visible:root.mode==="repair" || root.mode==="repairConfirm";textFormat:Text.PlainText;wrapMode:Text.WordWrap;color:root.appearance.textColor;font.pixelSize:root.fontSize;text:visible?root.repairDescription():""}
-            ListView {id:menu;width:parent.width;height:Math.max(1,parent.height-y-feedback.height-root.gap);clip:true;model:root.mode==="create"?root.createFields:root.menuRows;currentIndex:root.mode==="create"?root.fieldIndex:root.menuIndex;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
-                delegate:Rectangle {required property int index;required property string modelData;width:menu.width;height:root.fontSize*2.3;radius:root.radius;color:root.appearance.surfaceColor;border.width:menu.currentIndex===index?2:0;border.color:root.appearance.focusColor
+            ListView {id:menu;objectName:"guideMenu";width:parent.width;height:Math.max(1,parent.height-y-feedback.height-root.gap);clip:true;model:root.mode==="create"?root.createFields:root.menuRows;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
+                readonly property int selectedRowIndex:root.mode==="create"?root.fieldIndex:root.menuIndex
+                function restoreSelection(){currentIndex=selectedRowIndex;positionViewAtIndex(selectedRowIndex,ListView.Contain)}
+                onSelectedRowIndexChanged:Qt.callLater(restoreSelection)
+                onModelChanged:Qt.callLater(restoreSelection)
+                Component.onCompleted:Qt.callLater(restoreSelection)
+                delegate:Rectangle {required property int index;required property string modelData;width:menu.width;height:root.fontSize*2.3;radius:root.radius;color:root.appearance.surfaceColor;border.width:menu.selectedRowIndex===index?2:0;border.color:root.appearance.focusColor
                     objectName:"guideMenu-"+index
-                    Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.focusable:true;Accessible.focused:root.visible && !!root.mode && menu.currentIndex===index
+                    Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.focusable:true;Accessible.focused:root.visible && !!root.mode && menu.selectedRowIndex===index
                     Accessible.onPressAction:root.chooseMenu(index)
                     Text {anchors.fill:parent;anchors.margins:root.gap;textFormat:Text.PlainText;text:modelData;color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight}
                     MouseArea {anchors.fill:parent;onClicked:root.chooseMenu(index)}

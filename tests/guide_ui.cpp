@@ -19,6 +19,10 @@
 #include <QQmlExpression>
 #include <QDir>
 #include <QQuickItem>
+#include <QQuickWindow>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QUuid>
 
 class GuideDispatchProbe final:public QObject {
     Q_OBJECT
@@ -31,6 +35,7 @@ class GuideUiTests final:public QObject {
 private slots:
     void asyncPreviewCreateCancelAndProfileTeardown();
     void remoteCreatePreviewSaveAndFutureSelection();
+    void remoteCreationRetainsVisibleFocusAndRecoversFailedSave();
     void remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot();
     void unavailableIdentityOnlyChangesMatchingCachedPrograms();
     void remoteClockAdjustmentRequiresReviewAndPreservesPrograms();
@@ -124,6 +129,55 @@ void GuideUiTests::remoteCreatePreviewSaveAndFutureSelection() {
     QVERIFY(QMetaObject::invokeMethod(view.data(),"jumpTo",Q_RETURN_ARG(QVariant,jumpResult),Q_ARG(QVariant,QDateTime::currentSecsSinceEpoch()+31*86400)));
     QVERIFY(!jumpResult.toBool());QCOMPARE(view->property("anchorUtc"),beforeJump);QVERIFY(!view->property("navigationError").toString().isEmpty());
     command(view.data(),InputManager::NavigateUp);QVERIFY(view->property("headerFocused").toBool());
+}
+void GuideUiTests::remoteCreationRetainsVisibleFocusAndRecoversFailedSave() {
+    const auto map=[](const QVariant &value){return value.metaType().id()==qMetaTypeId<QJSValue>()?value.value<QJSValue>().toVariant().toMap():value.toMap();};
+    for(const bool incompatible:{false,true}) {
+        QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
+        server.setProperty("watchFixture",QVariantList{QVariantMap{{"source","kodi"},{"mediaId",1},{"title","Local episode"},{"duration",1800}}});serve(server);
+        const auto path=dir.filePath("guide.sqlite");GuideController controller(path,"create-focus",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+        InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);QQuickWindow window;window.resize(1280,720);
+        QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+        auto *root=qobject_cast<QQuickItem*>(view.data());QVERIFY(root);root->setParentItem(window.contentItem());window.show();QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("guide-origin")),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!controller.busy());
+        view->setProperty("favoritesOnly",incompatible);view->setProperty("sourceFilter",incompatible?"pvr":"local");
+        view->setProperty("groupFilter",incompatible?"Missing group":"");view->setProperty("channelQuery",incompatible?"Unrelated":"Local");
+        QVERIFY(QMetaObject::invokeMethod(view.data(),"applyFilter"));QTRY_VERIFY(!controller.busy());
+        command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);command(view.data(),InputManager::Confirm);
+        QCOMPARE(view->property("mode").toString(),QString("create"));
+        for(int i=0;i<6;++i)command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);
+        QTRY_VERIFY(!controller.busy());QVERIFY2(controller.previewReady(),qPrintable(controller.errorString()));QCOMPARE(controller.previewCount(),1);
+        const auto draft=controller.previewDefinition();const auto id=draft.value("id").toString();
+        QQuickItem *menu=nullptr;QTRY_VERIFY((menu=visualItem(root,"guideMenu")));
+        QTRY_COMPARE(menu->property("currentIndex").toInt(),6);QCOMPARE(view->property("fieldIndex").toInt(),6);
+        QQuickItem *selected=nullptr;QTRY_VERIFY((selected=visualItem(root,"guideMenu-6")));
+        QTRY_COMPARE(QQmlExpression(engine.rootContext(),selected,"border.width").evaluate().toInt(),2);
+        QVERIFY(QQmlExpression(engine.rootContext(),selected,"Accessible.focused").evaluate().toBool());
+        controller.refresh();QTRY_VERIFY(!controller.busy());QTRY_COMPARE(menu->property("currentIndex").toInt(),6);
+        command(view.data(),InputManager::NavigateDown);QCOMPARE(view->property("fieldIndex").toInt(),7);QTRY_COMPARE(menu->property("currentIndex").toInt(),7);
+        QTRY_VERIFY((selected=visualItem(root,"guideMenu-7")));QTRY_COMPARE(QQmlExpression(engine.rootContext(),selected,"border.width").evaluate().toInt(),2);
+        QVERIFY(QQmlExpression(engine.rootContext(),selected,"Accessible.focused").evaluate().toBool());
+        const auto connection="guide-failed-create-"+QUuid::createUuid().toString();
+        {
+            auto database=QSqlDatabase::addDatabase("QSQLITE",connection);database.setDatabaseName(path);QVERIFY(database.open());QSqlQuery query(database);
+            QVERIFY(query.exec("CREATE TRIGGER fail_schedule_save BEFORE INSERT ON slots BEGIN SELECT RAISE(ABORT,'Injected schedule write failure'); END"));
+            command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy()&&!controller.errorString().isEmpty());
+            QCOMPARE(view->property("mode").toString(),QString("create"));QCOMPARE(view->property("fieldIndex").toInt(),7);
+            QTRY_COMPARE(menu->property("currentIndex").toInt(),7);QVERIFY(controller.previewReady());QCOMPARE(controller.previewDefinition(),draft);
+            QCOMPARE(map(view->property("draft")),draft);
+            QVERIFY(controller.channels().isEmpty());QVERIFY(query.exec("SELECT COUNT(*) FROM channels"));QVERIFY(query.next());QCOMPARE(query.value(0).toInt(),0);
+            QVERIFY(query.exec("SELECT COUNT(*) FROM slots"));QVERIFY(query.next());QCOMPARE(query.value(0).toInt(),0);
+            QVERIFY(query.exec("DROP TRIGGER fail_schedule_save"));
+            command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy()&&controller.channels().size()==1);
+        }
+        QSqlDatabase::removeDatabase(connection);
+        QTRY_COMPARE(view->property("selectedChannelId").toString(),id);QTRY_VERIFY(!view->property("headerFocused").toBool());QCOMPARE(view->property("mode").toString(),QString());
+        QTRY_VERIFY(!map(view->property("selectedProgram")).isEmpty());
+        QCOMPARE(view->property("favoritesOnly").toBool(),false);QCOMPARE(view->property("sourceFilter").toString(),QString(incompatible?"all":"local"));
+        QCOMPARE(view->property("groupFilter").toString(),QString());QCOMPARE(view->property("channelQuery").toString(),QString(incompatible?"":"Local"));
+        GuideStore reader(path);QVERIFY(!reader.programs(id,QDateTime::currentSecsSinceEpoch(),QDateTime::currentSecsSinceEpoch()+86400).isEmpty());
+        QVERIFY(dispatch.last.isEmpty()); // Saving/focusing never starts playback.
+    }
 }
 void GuideUiTests::remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
