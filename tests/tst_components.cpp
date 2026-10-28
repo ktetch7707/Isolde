@@ -1741,7 +1741,7 @@ void ComponentTests::studioPastelPresetUsesEditableButtons()
         const auto item=value.toObject();QVERIFY(item["componentType"]!="launcher");
         if(item["componentType"]=="button") {
             ++buttons;QCOMPARE(item["kind"].toString(),QString("widget"));QCOMPARE(item["widgetType"].toString(),QString("button"));
-            const auto normalized=ComponentSchema::component(item.toVariantMap());QVERIFY(!normalized.isEmpty());
+            const auto normalized=ComponentSchema::component(item.toVariantMap(),false);QVERIFY(!normalized.isEmpty());
             QCOMPARE(normalized["source"].toMap()["kind"].toString(),QString("button"));QVERIFY(!normalized["action"].toMap().isEmpty());
         }
         if(item.contains("appCollection"))++appCollections;
@@ -1749,8 +1749,9 @@ void ComponentTests::studioPastelPresetUsesEditableButtons()
     }
     QCOMPARE(buttons,10);QCOMPARE(appCollections,1);QCOMPARE(histories,1);
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
-    const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
-    QVERIFY2(home.loadDocument(QJsonDocument(layout).toJson(),false),qPrintable(home.errorString()));QVERIFY(!QFile::exists(path));
+    const auto path=dir.filePath("home.json"),defaults=dir.filePath("pastel-defaults.json");const auto data=QJsonDocument(layout).toJson();
+    {QFile output(defaults);QVERIFY(output.open(QIODevice::WriteOnly));QCOMPARE(output.write(data),data.size());}
+    QVERIFY2(home.load(defaults,path),qPrintable(home.errorString()));QVERIFY(!QFile::exists(path));
 }
 void ComponentTests::studioStartingStylesAreValidatedDraftData()
 {
