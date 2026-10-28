@@ -317,7 +317,8 @@ QVariantMap HomeLayout::studioOptions() const
     if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
     if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
-    if(object.contains("guide") && ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap()).isEmpty())return {};
+    auto guide=object.contains("guide")?ComponentSchema::guideOptions(object["guide"].toObject().toVariantMap()):QVariantMap();
+    if(object.contains("guide") && guide.isEmpty())return {};
     if(object.contains("headerDefaults")) {
         const auto defaults=object["headerDefaults"].toObject();
         if(defaults.size()!=2 || !defaults.contains("navigation") || !defaults.contains("identity"))return {};
@@ -409,7 +410,17 @@ QVariantMap HomeLayout::studioOptions() const
         ids.insert(id);
     }
     if(ids.size()!=2 || !ids.contains(object["defaultGrid"].toObject()["mode"].toString()))return {};
-    auto result=object.toVariantMap();result["maxScrollableRows"]=ComponentSchema::MaxScrollableRows;
+    const QStringList overlayKeys{"surface","overlayWidth","overlayHeight","overlayRows","overlayPosition"};
+    if(guide.isEmpty() || std::any_of(overlayKeys.cbegin(),overlayKeys.cend(),[&guide](const QString &key){return !guide.contains(key);})) {
+        // Older Studio options inherit presentation defaults in memory only.
+        // Their source file and every saved layout remain untouched.
+        QFile packaged(":/config/studio-defaults.json");
+        if(!packaged.open(QIODevice::ReadOnly) || packaged.size()>64*1024)return {};
+        const auto defaults=ComponentSchema::guideOptions(QJsonDocument::fromJson(packaged.readAll()).object()["guide"].toObject().toVariantMap());
+        if(defaults.isEmpty())return {};
+        for(auto it=defaults.cbegin();it!=defaults.cend();++it)if(!guide.contains(it.key()))guide[it.key()]=it.value();
+    }
+    auto result=object.toVariantMap();result["guide"]=guide;result["maxScrollableRows"]=ComponentSchema::MaxScrollableRows;
     return result;
 }
 

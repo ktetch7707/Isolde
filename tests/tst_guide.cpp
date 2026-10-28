@@ -4,9 +4,13 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QCryptographicHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "media/GuideStore.h"
 #include "media/GuideRules.h"
 #include "home/ComponentSchema.h"
+#include "home/HomeLayout.h"
+#include "app/AppRegistry.h"
 
 namespace {
 constexpr qint64 Now=1793052000, Day=86400;
@@ -28,6 +32,7 @@ class GuideTests final : public QObject {
     Q_OBJECT
 private slots:
     void rulesAreBoundedAndMixedMediaMatches();
+    void packagedGuideOptionsValidateOverlayAndLegacyBoundaries();
     void persistsSevenDaysAndTwelveHourOffset();
     void channelAndExtensionFailuresRollback();
     void rulesOnlyAffectUncommittedSlots();
@@ -47,6 +52,23 @@ private slots:
     void regenerationRequiresCurrentReviewAndPreservesAiringProgram();
 };
 
+void GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries() {
+    QFile file(QFINDTESTDATA("../config/studio-defaults.json"));QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto document=QJsonDocument::fromJson(file.readAll()).object();const auto packaged=document.value("guide").toObject().toVariantMap();QString error;
+    QVERIFY2(!ComponentSchema::guideOptions(packaged,&error).isEmpty(),qPrintable(error));
+    auto legacy=packaged;for(const auto &key:QStringList{"surface","overlayWidth","overlayHeight","overlayRows","overlayPosition"})legacy.remove(key);
+    QVERIFY2(!ComponentSchema::guideOptions(legacy,&error).isEmpty(),qPrintable(error));
+    for(const auto &value:QVariantList{64,101,95.5,true,QString("95")}){auto invalid=packaged;invalid["overlayWidth"]=value;QVERIFY(ComponentSchema::guideOptions(invalid).isEmpty());}
+    for(const auto &key:QStringList{"surface","overlayPosition"}){auto invalid=packaged;invalid[key]="unsupported";QVERIFY(ComponentSchema::guideOptions(invalid).isEmpty());}
+    auto unknown=packaged;unknown["executableLayout"]="script";QVERIFY(ComponentSchema::guideOptions(unknown).isEmpty());
+    QTemporaryDir dir;AppRegistry registry;HomeLayout normal(&registry);QVERIFY(normal.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("normal-profile.json")));QVERIFY(!normal.studioOptions().isEmpty());
+    const auto localDefaults=dir.filePath("default-home-layout.json");QVERIFY(QFile::copy(QFINDTESTDATA("../config/default-home-layout.json"),localDefaults));
+    auto custom=document;custom["guide"]=QJsonObject::fromVariantMap(legacy);const auto legacyBytes=QJsonDocument(custom).toJson();const auto customPath=dir.filePath("studio-defaults.json");
+    {QFile output(customPath);QVERIFY(output.open(QIODevice::WriteOnly));QCOMPARE(output.write(legacyBytes),legacyBytes.size());}
+    HomeLayout compatible(&registry);QVERIFY(compatible.load(localDefaults,dir.filePath("legacy-profile.json")));const auto resolved=compatible.studioOptions();QVERIFY(!resolved.isEmpty());
+    for(const auto &key:QStringList{"surface","overlayWidth","overlayHeight","overlayRows","overlayPosition"})QCOMPARE(resolved.value("guide").toMap().value(key),packaged.value(key));
+    QCOMPARE(bytes(customPath),legacyBytes);QVERIFY(!QFile::exists(dir.filePath("legacy-profile.json")));
+}
 void GuideTests::rulesAreBoundedAndMixedMediaMatches() {
     auto def=definition(); QString error;
     QVERIFY2(!ComponentSchema::guideChannel(def,&error).isEmpty(),qPrintable(error));

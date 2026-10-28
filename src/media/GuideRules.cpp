@@ -72,13 +72,17 @@ bool validRule(const QVariantMap &v, int depth, int &count) {
 }
 
 QVariantMap ComponentSchema::guideOptions(const QVariantMap &value, QString *error) {
-    if(!keys(value,{"rows","minutes","channelWidth","labelSize","gap","radius","sourceBadges","labels","toolbar","sources"})
+    if(!keys(value,{"rows","minutes","channelWidth","labelSize","gap","radius","sourceBadges","labels","toolbar","sources","surface","overlayWidth","overlayHeight","overlayRows","overlayPosition"})
         || !integer(value.value("rows"),3,12) || !integer(value.value("minutes"),30,240)
         || !integer(value.value("channelWidth"),120,400) || !integer(value.value("labelSize"),14,40)
         || !integer(value.value("gap"),0,32) || !integer(value.value("radius"),0,60)
         || value.value("sourceBadges").metaType().id()!=QMetaType::Bool || value.value("labels").metaType().id()!=QMetaType::Bool
         || value.value("toolbar").metaType().id()!=QMetaType::QVariantList || value.value("sources").metaType().id()!=QMetaType::QVariantList)
         return reject(error,"Invalid guide appearance and controls.");
+    QVariantMap presentation;
+    const QMap<QString,QString> overlayKeys{{"surface","guideSurface"},{"overlayWidth","guideOverlayWidth"},{"overlayHeight","guideOverlayHeight"},{"overlayRows","guideOverlayRows"},{"overlayPosition","guideOverlayPosition"}};
+    for(auto it=overlayKeys.cbegin();it!=overlayKeys.cend();++it)if(value.contains(it.key()))presentation[it.value()]=value.value(it.key());
+    if(!validPresentation(presentation,true))return reject(error,"Invalid guide overlay presentation.");
     QSet<QString> seen;
     for(const auto &v:value.value("toolbar").toList()) {
         const auto item=v.toMap();const auto id=item.value("id").toString();
