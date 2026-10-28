@@ -136,7 +136,7 @@ void GuideUiTests::remoteNextUnwatchedPreviewAndSaveUseTheSameKodiSnapshot() {
     for(int i=0;i<3;++i)command(view.data(),InputManager::Confirm);
     QCOMPARE(view->property("draft").toMap().value("sequence").toString(),QString("next-unwatched"));
     command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::NavigateDown);command(view.data(),InputManager::Confirm);
-    QTRY_VERIFY(!controller.busy());QVERIFY(controller.previewReady());QCOMPARE(controller.previewCount(),1);QCOMPARE(controller.previewItems().first().toMap().value("mediaId").toInt(),1);QVERIFY(controller.channels().isEmpty());
+    QTRY_VERIFY(!controller.busy());QVERIFY2(controller.previewReady(),qPrintable(controller.errorString()));QCOMPARE(controller.previewCount(),1);QCOMPARE(controller.previewItems().first().toMap().value("mediaId").toInt(),1);QVERIFY(controller.channels().isEmpty());
     const auto definition=controller.previewDefinition();const auto id=definition.value("id").toString();
     // Kodi changes after preview cannot silently change the reviewed save.
     auto changed=fixture;auto item=changed[0].toMap();item["playcount"]=1;changed[0]=item;server.setProperty("watchFixture",changed);
