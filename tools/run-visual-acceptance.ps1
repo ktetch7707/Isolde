@@ -42,6 +42,7 @@ $captureLine = {
     param($line)
     if ($line -match '^EXECUTABLE (/[A-Za-z0-9/_.-]+)$') { $captureMeta.executable=$Matches[1] }
     if ($line -match '^([A-Z]+)_READY (/tmp/isolde-(?:tv-acceptance|reference-config|components-acceptance)-[A-Za-z0-9_-]+)$') {
+        $guideReviewDeadline = [DateTime]::UtcNow.AddSeconds(100)
         $phase = $Matches[1].ToLowerInvariant(); $evidence = $Matches[2]
         if (!$phases.Add($phase)) { throw "Duplicate capture phase: $phase" }
         $capture = Join-Path $outputPath "$Case-$phase.png"
@@ -64,15 +65,40 @@ $captureLine = {
             $keys = @('Home')
             if ($phase -in @('desktoppermission','steaminstall') -or $nativePermission) {
                 $instructions = Join-Path $outputPath $(if ($phase -eq 'desktoppermission') {'desktop-permission-keys.json'} elseif($phase -eq 'steaminstall') {'steam-install-keys.json'} else {$phase+'-keys.json'})
-                Write-Host "Review $capture then provide bounded guest keys in $instructions"
-                $deadline = [DateTime]::UtcNow.AddSeconds(110)
-                while (!(Test-Path -LiteralPath $instructions)) {
+                $deadline = if ($guideInput) { $guideReviewDeadline } else { [DateTime]::UtcNow.AddSeconds(110) }
+                $refreshCount = 0
+                while ($true) {
+                    Write-Host "Review $capture then provide bounded guest keys in $instructions"
+                    while (!(Test-Path -LiteralPath $instructions)) {
+                        if ([DateTime]::UtcNow -gt $deadline) { throw 'Guest dialog review timed out; no consent input sent.' }
+                        Start-Sleep -Milliseconds 250
+                    }
                     if ([DateTime]::UtcNow -gt $deadline) { throw 'Guest dialog review timed out; no consent input sent.' }
-                    Start-Sleep -Milliseconds 250
+                    if ((Get-Item -LiteralPath $instructions).Length -gt 2048) { throw 'Oversized guest key instruction.' }
+                    $keyDocument = [IO.File]::ReadAllText($instructions) | ConvertFrom-Json
+                    $keys = @($keyDocument.keys)
+                    if ($guideInput) {
+                        $fields = @($keyDocument.PSObject.Properties.Name)
+                        if ('keys' -notin $fields -or $keyDocument.keys -isnot [array] -or @($fields | Where-Object { $_ -notin @('keys','recapture') }).Count) { throw 'Invalid Guide review instruction.' }
+                        if ('recapture' -in $fields) {
+                            if ($keyDocument.recapture -isnot [bool] -or !$keyDocument.recapture -or $keys.Count) { throw 'Guide recapture requires true and an empty keys array.' }
+                            if ($refreshCount -ge 3) { throw 'Guide review permits at most three additional captures.' }
+                            if (($deadline - [DateTime]::UtcNow).TotalSeconds -le 22) { throw 'Guide recapture would exceed the original review deadline.' }
+                            Remove-Item -LiteralPath $instructions
+                            $refreshCount++
+                            $capture = Join-Path $outputPath "$Case-$phase-review$refreshCount.png"
+                            if (Test-Path -LiteralPath $capture) { throw "Refusing to overwrite evidence: $capture" }
+                            Start-Sleep -Seconds 2
+                            $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' `
+                                -Arguments @('controlvm',$VmName,'screenshotpng',$capture) -TimeoutSeconds 20 `
+                                -Log (Join-Path $outputPath 'capture.log')
+                            if (!(Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).Length -eq 0) { throw "Screenshot missing: $phase review $refreshCount" }
+                            Write-Host "Recaptured phase $phase review $refreshCount at $capture; no input or acknowledgement sent."
+                            continue
+                        }
+                    }
+                    break
                 }
-                if ((Get-Item -LiteralPath $instructions).Length -gt 2048) { throw 'Oversized guest key instruction.' }
-                $keyDocument = [IO.File]::ReadAllText($instructions) | ConvertFrom-Json
-                $keys = @($keyDocument.keys)
             }
             $scancodes = @{Home=@('e0','47','e0','c7');Return=@('1c','9c');Tab=@('0f','8f');Space=@('39','b9');Escape=@('01','81');Left=@('e0','4b','e0','cb');Right=@('e0','4d','e0','cd');Up=@('e0','48','e0','c8');Down=@('e0','50','e0','d0');ShiftTab=@('2a','0f','8f','aa');CtrlF=@('1d','21','a1','9d')}
             if ($guideInput) { $scancodes.F9=@('43','c3');$scancodes.Menu=@('e0','5d','e0','dd') }
