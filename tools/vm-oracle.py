@@ -152,7 +152,7 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
 def visual_result_passed(case, result):
     if case=="guide-surfaces":
         initial=["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"]
-        extra=["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guidelocalvideo","guidelocalreturn","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"]
+        extra=["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guidelocalvideo","guidelocalosd","guidelocalreturn","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"]
         base=dict(result);base["captures"]=initial
         return (visual_result_passed("guide",base) and result.get("captures")==initial+extra
                 and type(result.get("nativeChannelsCreated")) is int and result["nativeChannelsCreated"]==2

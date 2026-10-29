@@ -408,7 +408,7 @@ class OracleTests(unittest.TestCase):
             self.assertFalse(oracle.visual_result_passed("guide",incomplete))
         incomplete=dict(guide);del incomplete["automaticNativeReturn"];self.assertFalse(oracle.visual_result_passed("guide",incomplete))
         surfaces=dict(guide,nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True,actualLocalElapsedSeek=True,automaticLocalReturn=True,
-                      captures=guide["captures"]+["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guidelocalvideo","guidelocalreturn","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"])
+                      captures=guide["captures"]+["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guidelocalvideo","guidelocalosd","guidelocalreturn","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"])
         self.assertTrue(oracle.visual_result_passed("guide-surfaces",surfaces))
         self.assertFalse(oracle.visual_result_passed("guide-surfaces",guide))
         for key in ("surfaceJourneyInputAcknowledged","committedSlotsUnchanged","sourceCachePreserved","actualPvrPlayback","automaticNativeReturn","actualLocalElapsedSeek","automaticLocalReturn"):

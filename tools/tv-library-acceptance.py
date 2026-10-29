@@ -332,7 +332,17 @@ if ''' + repr(str(imported)) + ''' in selected:
                     expected_seconds=observed_at-current[3];assert expected_seconds>=5 and abs(actual_seconds-expected_seconds)<=3,(actual_seconds,expected_seconds)
                     local_playback.update(slotId=current[0],mediaType=current[1],mediaId=current[2],startUtc=current[3],endUtc=current[4],canPause=True)
                     guide_capture('guidelocalvideo')
-                    wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Local scheduled playback stopped')
+                    guide_capture('guidelocalosd')
+                    def local_ended():
+                        nonlocal last_local_status
+                        value=rpc(directory,'Isolde.PlaybackStatus')
+                        status={k:value[k] for k in ('state','reason','home','canPause','canSeek') if k in value}
+                        if status!=last_local_status:
+                            (evidence/'guide-surfaces-cache.json').write_text(json.dumps({'localCreation':local_creation,'localPlayback':local_playback,'localStatus':status},indent=2));last_local_status=status
+                        if value.get('state') in ('failed','replaced'):
+                            raise AssertionError('Local stop acknowledgement '+value['state']+': '+str(value.get('reason','No playback reason supplied')))
+                        return value.get('state')=='ended'
+                    wait(local_ended,'Local scheduled playback stopped')
                     wait(shell_active,'Automatic local playback focus returned to shell',seconds=8)
                     guide_capture('guidelocalreturn')
                     guide_capture('guideduplicatedraft')
@@ -358,7 +368,7 @@ if ''' + repr(str(imported)) + ''' in selected:
                     for phase in ('guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn'):guide_capture(phase)
                     assert imported_channels()==lineup,'Browsing surfaces changed saved channel definitions'
                     assert cached_slots()==committed_slots,'Browsing surfaces regenerated or changed committed slots'
-                    surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
+                    surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalosd','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
                 result={'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'automaticNativeReturn':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn']+surface_phases,'visualReview':'pending','profile':profile}
                 if args.guide_surfaces:result.update(nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True,actualLocalElapsedSeek=True,automaticLocalReturn=True)
