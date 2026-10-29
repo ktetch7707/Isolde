@@ -339,7 +339,9 @@ def main():
                 # Begin with the packaged default. No Home layout is injected.
                 assert not layout.exists()
                 key("Up",30); key("Right"); key("Return")  # Recovery -> Edit Home.
-                key("Down",4); key("Return"); key("Down",8); key("Return")  # Studio -> More -> Saved skins.
+                defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
+                visible_pages=len(defaults.get("pages",[]))+int(defaults.get("rootPage",{}).get("visible",True))
+                key("Down",visible_pages+4); key("Return")  # Studio -> Saved designs.
                 if args.capture_library: captured("library")
                 preset_index = 2 if case.name == "home-pastel-reference" else 1
                 key("Down",preset_index); key("Return"); key("Return")
@@ -418,17 +420,21 @@ def main():
             if args.capture_library: captured("editor")
             if args.inspect: captured("resetmenu")
             current_document=json.loads(layout.read_text())
-            more_index=3+len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
-            print(f"Reset Studio More index: {more_index}",flush=True)
-            key("Down",more_index); key("Return"); key("Down",9); key("Return")  # More -> Restore defaults.
+            editor_index=5+len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
+            print(f"Reset Studio Editor settings index: {editor_index}",flush=True)
+            key("Down",editor_index); key("Return"); key("Down",2); key("Return")  # Editor settings -> Reset interface.
             if args.inspect: captured("resetconfirm")
             key("Down"); key("Return")  # Explicit scoped confirmation.
+            assert layout.read_bytes()==original_bytes,"Reset preview wrote before Apply"
+            key("Down"); key("Return"); key("Return")  # Review & Apply -> Apply all draft changes.
             defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
             def reset_verified():
-                if not current_document.get("pages"): return not layout.exists()
+                if not layout.exists(): return False
                 restored=json.loads(layout.read_text())
-                return (restored.get("pages")==current_document["pages"]
+                return (restored.get("pages",[])==current_document.get("pages",[])
                     and restored.get("homePageId","")==current_document.get("homePageId","")
+                    and restored.get("rootPage")==current_document.get("rootPage")
+                    and restored.get("studioAppearance")==current_document.get("studioAppearance")
                     and not restored.get("composition")
                     and {i["id"] for i in restored["components"]}=={i["id"] for i in defaults["items"]}
                     and restored["categories"]==defaults["categories"]
