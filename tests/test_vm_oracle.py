@@ -25,6 +25,39 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "Linux process groups/selector pipes")
+    def test_failed_stage_diagnostics_do_not_replay_capture_commands(self):
+        with tempfile.TemporaryDirectory() as folder:
+            runner=oracle.Oracle.__new__(oracle.Oracle);runner.run=Path(folder);runner.state={};runner.update=lambda **fields:runner.state.update(fields)
+            output=io.StringIO();received=[]
+            def live(line):
+                received.append(line);print(line)
+            with redirect_stdout(output),self.assertRaises(RuntimeError):
+                runner.stage("capture-failure",[sys.executable,"-c","print('CUSTOM_READY /tmp/isolde-reference-config-test');raise SystemExit(7)"],5,on_line=live)
+            self.assertEqual(received,["CUSTOM_READY /tmp/isolde-reference-config-test"])
+            self.assertEqual(output.getvalue().splitlines().count(received[0]),1)
+            self.assertIn("LOG "+received[0],output.getvalue())
+
+    def test_reference_guide_snapshot_reads_live_wal_without_mutating_it(self):
+        import sqlite3
+        path=Path(__file__).resolve().parents[1]/"tools/home-reference-acceptance.py"
+        specification=importlib.util.spec_from_file_location("reference_guide_snapshot",path)
+        reference=importlib.util.module_from_spec(specification);specification.loader.exec_module(reference)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            with self.assertRaises(RuntimeError):reference.guide_cache_snapshot(root)
+            with sqlite3.connect(root/"guide.sqlite") as database:
+                database.execute("PRAGMA journal_mode=WAL")
+                database.execute("CREATE TABLE channels(id,number,definition,candidates,cursor,revision,hidden,favorite,position)")
+                database.execute("CREATE TABLE slots(id,channel,media_type,media_id,title,start_utc,end_utc,status)")
+                database.execute("INSERT INTO channels VALUES('c',1,'{}','[]',0,1,0,0,0)")
+                database.execute("INSERT INTO slots VALUES('s','c','episode',1,'Program',10,20,'ready')")
+                database.commit()
+                before=list(database.execute("SELECT * FROM slots"))
+                channels,programs=reference.guide_cache_snapshot(root)
+                self.assertEqual(len(channels),1);self.assertEqual(programs,before)
+                self.assertEqual(list(database.execute("SELECT * FROM slots")),before)
+
     def test_store_and_audio_focused_suites_select_only_owned_tests(self):
         self.assertEqual(oracle.suite_selection("store_remote_ui"),(["isolde_studio_quick_tests"],"^store_remote_ui$"))
         self.assertEqual(oracle.suite_selection("audio_backend"),(["isolde_audio_tests"],"^audio_backend$"))

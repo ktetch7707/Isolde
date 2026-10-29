@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -171,7 +172,7 @@ QVariantList GuideStore::eligible(const QVariantMap &definition, const QVariantL
     if (result.isEmpty()) *error=tr("No media matches these channel rules. Adjust the rules before saving.");
     return result;
 }
-bool GuideStore::createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 now, int days) {
+bool GuideStore::createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 now, int days,const QVariantMap &snapshot) {
     if (!m_ready) return fail(tr("This guide profile is unavailable."));
     QString error; const auto valid=ComponentSchema::guideChannel(definition,&error);
     if (valid.isEmpty()) return fail(error);
@@ -191,8 +192,80 @@ bool GuideStore::createLocal(const QVariantMap &definition, const QVariantList &
     q.addBindValue(valid.value("id")); q.addBindValue(valid.value("number")); q.addBindValue(json(valid)); q.addBindValue(json(selected));
     q.addBindValue(now); q.addBindValue(initial);
     if (!q.exec()) { m_db.rollback(); return fail(tr("Channel ID or number is already in use, or storage is unavailable. Choose another number or retry.")); }
-    if (!appendSlots(valid.value("id").toString(),initial+days*Day)) { m_db.rollback(); return false; }
+    if(!snapshot.isEmpty()) {
+        const auto original=portableDefinition(snapshot,&error);
+        auto expected=original,actual=valid;for(const auto &key:QStringList{"id","number","name"}){expected.remove(key);actual.remove(key);}
+        const auto rollback=[this](const QString &message){m_db.rollback();return fail(message);};
+        if(original.isEmpty() || expected!=actual || !snapshot.contains("slots"))return rollback(tr("Imported schedule policy changed. Import the definition without its snapshot or restore the original policy."));
+        QMap<QString,QVariantMap> remap;QSet<QString> ambiguous;
+        const auto portableKey=[](const QVariantMap &item){return item.value("mediaType").toString()+QChar(0x1f)+item.value("title").toString()+QChar(0x1f)+QString::number(item.value("duration").toLongLong());};
+        for(const auto &v:selected){const auto item=v.toMap();const auto key=portableKey(item);if(remap.contains(key))ambiguous.insert(key);else remap[key]=item;}
+        QMap<QString,QVariantMap> oldItems;for(const auto &v:snapshot.value("items").toList()){const auto item=v.toMap();oldItems[mediaKey(item)]=item;}
+        QSqlQuery insert(m_db);insert.prepare("INSERT INTO slots(id,channel,media_type,media_id,title,start_utc,end_utc,status) VALUES(?,?,?,?,?,?,?,?)");
+        qint64 previousEnd=-1;
+        for(const auto &v:snapshot.value("slots").toList()){
+            const auto slot=v.toMap();const auto start=slot.value("startUtc").toLongLong(),end=slot.value("endUtc").toLongLong();
+            const auto key=portableKey(oldItems.value(mediaKey(slot)));const auto item=remap.value(key);
+            if(item.isEmpty() || ambiguous.contains(key))return rollback(tr("A snapshot program is missing or ambiguous in Kodi. Import without the snapshot, edit rules and preview current media instead."));
+            if(start<previousEnd || (slot.value("status")=="ready" && end-start>item.value("duration").toLongLong()))return rollback(tr("Invalid imported schedule interval. Existing channels were preserved."));
+            previousEnd=end;const auto id=valid.value("id").toString();
+            const auto slotId=QString::fromLatin1(QCryptographicHash::hash(id.toUtf8()+":import:"+QByteArray::number(start),QCryptographicHash::Sha256).toHex());
+            insert.bindValue(0,slotId);insert.bindValue(1,id);insert.bindValue(2,item.value("mediaType"));insert.bindValue(3,item.value("mediaId"));insert.bindValue(4,slot.value("title"));insert.bindValue(5,start);insert.bindValue(6,end);insert.bindValue(7,slot.value("status"));
+            if(!insert.exec())return rollback(tr("Cannot restore the reviewed schedule snapshot."));
+        }
+        q.prepare("UPDATE channels SET cursor=?,clock_utc=? WHERE id=?");q.addBindValue(snapshot.value("cursor"));q.addBindValue(snapshot.value("clockUtc"));q.addBindValue(valid.value("id"));
+        if(!q.exec())return rollback(tr("Cannot restore imported schedule continuity."));
+    }
+    const auto clock=snapshot.isEmpty()?initial:clockTime(channel(valid.value("id").toString()),now);
+    if (!appendSlots(valid.value("id").toString(),clock+days*Day,std::max<qint64>(0,clock-valid.value("retentionDays",2).toInt()*Day))) { m_db.rollback(); return false; }
     return commit();
+}
+
+QVariantMap GuideStore::portableDefinition(const QVariantMap &package,QString *error) {
+    const auto reject=[error](const QString &message){if(error)*error=message;return QVariantMap();};
+    const auto encoded=json(package);
+    if(package.size()<2 || !number(package.value("schemaVersion"),1,1) || package.value("definition").metaType().id()!=QMetaType::QVariantMap || encoded.size()>32*1024*1024)return reject(tr("Unsupported or oversized channel package."));
+    if(QRegularExpression(QStringLiteral("://[^/\\s\"]*@")).match(QString::fromUtf8(encoded)).hasMatch())return reject(tr("Credentialed URLs cannot be included in a portable channel package."));
+    for(auto it=package.cbegin();it!=package.cend();++it)if(!QStringList{"schemaVersion","definition","items","slots","cursor","clockUtc"}.contains(it.key()))return reject(tr("Unknown channel package field."));
+    const auto def=ComponentSchema::guideChannel(package.value("definition").toMap(),error);if(def.isEmpty() || def.contains("owner"))return reject(tr("Only native local channel definitions can be imported."));
+    if(package.contains("slots")){
+        if(package.value("slots").metaType().id()!=QMetaType::QVariantList || package.value("slots").toList().isEmpty() || package.value("slots").toList().size()>MaxSlotsPerChannel
+            || package.value("items").metaType().id()!=QMetaType::QVariantList || package.value("items").toList().isEmpty() || package.value("items").toList().size()>MaxCandidates
+            || !number(package.value("cursor"),0,1000000000) || !number(package.value("clockUtc"),0,MaxTime))return reject(tr("Invalid channel schedule snapshot."));
+        QSet<QString> identities;
+        for(const auto &v:package.value("items").toList()){
+            const auto item=v.toMap();if(item.size()!=4 || !QStringList{"movie","episode","musicvideo","song"}.contains(item.value("mediaType").toString())
+                || !number(item.value("mediaId"),1,2147483647) || !number(item.value("duration"),1,Day) || item.value("title").metaType().id()!=QMetaType::QString || item.value("title").toString().trimmed().isEmpty() || item.value("title").toString().size()>512 || identities.contains(mediaKey(item)))return reject(tr("Invalid portable media identity."));
+            identities.insert(mediaKey(item));
+        }
+        qint64 previous=-1;
+        for(const auto &v:package.value("slots").toList()){
+            const auto slot=v.toMap();if(slot.size()!=6 || !number(slot.value("startUtc"),0,MaxTime) || !number(slot.value("endUtc"),0,MaxTime) || !number(slot.value("mediaId"),1,2147483647)
+                || slot.value("startUtc").toLongLong()<previous || slot.value("endUtc").toLongLong()<=slot.value("startUtc").toLongLong() || slot.value("endUtc").toLongLong()-slot.value("startUtc").toLongLong()>Day
+                || !identities.contains(mediaKey(slot)) || slot.value("title").metaType().id()!=QMetaType::QString || slot.value("title").toString().trimmed().isEmpty() || slot.value("title").toString().size()>512
+                || !QStringList{"ready","unavailable"}.contains(slot.value("status").toString()))return reject(tr("Invalid or overlapping portable schedule slots."));
+            previous=slot.value("endUtc").toLongLong();
+        }
+        if(previous-package.value("slots").toList().first().toMap().value("startUtc").toLongLong()>38*Day)return reject(tr("A portable schedule spans at most 38 days including retained history."));
+    }else if(package.size()!=2)return reject(tr("A definition-only package cannot contain schedule state."));
+    if(error)error->clear();return def;
+}
+QVariantMap GuideStore::portableChannel(const QString &id,bool includeSchedule) {
+    if(!m_db.transaction()){fail(tr("The guide is busy."));return {};}
+    const auto def=definition(id);if(def.isEmpty() || def.contains("owner")){m_db.rollback();fail(tr("Choose a native local channel to export."));return {};}
+    QVariantMap package{{"schemaVersion",1},{"definition",def}};
+    if(includeSchedule){
+        QSqlQuery q(m_db);q.prepare("SELECT candidates,cursor,clock_utc FROM channels WHERE id=?");q.addBindValue(id);
+        if(!q.exec() || !q.next()){m_db.rollback();fail(tr("Cannot read a consistent channel snapshot."));return {};}
+        QVariantList items;for(const auto &v:array(q.value(0))){const auto item=v.toMap();items.append(QVariantMap{{"mediaType",item.value("mediaType")},{"mediaId",item.value("mediaId")},{"title",item.value("title")},{"duration",item.value("duration")}});}
+        package["items"]=items;package["cursor"]=q.value(1);package["clockUtc"]=q.value(2);q.finish();
+        q.prepare("SELECT media_type,media_id,title,start_utc,end_utc,status FROM slots WHERE channel=? ORDER BY start_utc LIMIT 100001");q.addBindValue(id);
+        if(!q.exec()){m_db.rollback();fail(tr("Cannot export the cached schedule."));return {};}
+        QVariantList exportedSlots;while(q.next())exportedSlots.append(QVariantMap{{"mediaType",q.value(0)},{"mediaId",q.value(1)},{"title",q.value(2)},{"startUtc",q.value(3)},{"endUtc",q.value(4)},{"status",q.value(5)}});
+        package["slots"]=exportedSlots;
+    }
+    m_db.rollback();QString error;if(portableDefinition(package,&error).isEmpty()){fail(error);return {};}
+    return package;
 }
 bool GuideStore::appendSlots(const QString &id, qint64 until,qint64 notBefore,qint64 continuation) {
     QSqlQuery q(m_db); q.prepare("SELECT definition,candidates,cursor,clock_utc,revision FROM channels WHERE id=?"); q.addBindValue(id);
@@ -207,6 +280,16 @@ bool GuideStore::appendSlots(const QString &id, qint64 until,qint64 notBefore,qi
     // Sort each cycle by a keyed hash, independent of platform PRNGs and
     // QVariant/hash iteration order. Already committed slots never change.
     const auto sequence=def.value("sequence").toString();
+    const auto policy=def.value("schedule").toMap();
+    const bool constrained=!policy.isEmpty();
+    const auto cooldown=policy.value("cooldownSeconds",0).toLongLong();
+    QMap<QString,qint64> lastEnds;
+    if(cooldown>0){
+        q.prepare("SELECT media_type,media_id,MAX(end_utc) FROM slots WHERE channel=? AND end_utc>? GROUP BY media_type,media_id");
+        q.addBindValue(id);q.addBindValue(start-cooldown);
+        if(!q.exec())return fail(tr("Cannot read the channel repetition history."));
+        while(q.next())lastEnds[q.value(0).toString()+":"+q.value(1).toString()]=q.value(2).toLongLong();q.finish();
+    }
     std::sort(items.begin(),items.end(),[](const QVariant &a,const QVariant &b) {
         const auto x=a.toMap(),y=b.toMap();
         const auto key=[](const QVariantMap &i) {
@@ -218,13 +301,15 @@ bool GuideStore::appendSlots(const QString &id, qint64 until,qint64 notBefore,qi
     qint64 cycleDuration=0;for(const auto &item:items)cycleDuration+=item.toMap().value("duration").toLongLong();
     if(cycleDuration<=0)return fail(tr("Invalid scheduled cycle duration."));
     QVariantList ordered; qint64 currentCycle=-1;
-    QSqlQuery insert(m_db); insert.prepare("INSERT INTO slots(id,channel,media_type,media_id,title,start_utc,end_utc) VALUES(?,?,?,?,?,?,?)");
+    int iterations=0;
+    QSqlQuery insert(m_db); insert.prepare("INSERT INTO slots(id,channel,media_type,media_id,title,start_utc,end_utc,status) VALUES(?,?,?,?,?,?,?,?)");
     while (start<until) {
+        if(++iterations>200000)return fail(tr("This constrained schedule exceeds the bounded generation budget. Shorten its horizon or review its block rules."));
         if (m_cancelled && m_cancelled()) return fail(tr("Cancelled. Previous channels and schedules were preserved."));
         // A cycle has the same total duration for every deterministic ordering.
         // Skip whole unseen cycles after a long outage without creating or
         // scanning historical slots. Existing committed intervals stay intact.
-        if(cursor%items.size()==0 && notBefore>start){
+        if(!constrained && cursor%items.size()==0 && notBefore>start){
             const auto cycles=(notBefore-start)/cycleDuration;
             cursor+=cycles*items.size();start+=cycles*cycleDuration;
         }
@@ -247,14 +332,38 @@ bool GuideStore::appendSlots(const QString &id, qint64 until,qint64 notBefore,qi
                     for (auto it=shows.cbegin();it!=shows.cend();++it) if (index<it.value().size()) ordered.append(it.value()[index]);
             }
         }
-        const auto item=ordered[cursor%ordered.size()].toMap(); const auto duration=item.value("duration").toLongLong();
+        auto item=ordered[cursor%ordered.size()].toMap();auto duration=item.value("duration").toLongLong();QString status="ready";
+        if(constrained){
+            const auto window=GuideRules::calendarWindow(def,start);const auto boundary=window.value("nextUtc").toLongLong();
+            const auto rule=window.value("rule").toMap();
+            const auto select=[&](const QVariantMap &match,bool respectCooldown){
+                if(match.isEmpty())return QVariantMap();
+                for(int n=0;n<ordered.size();++n){const auto candidate=ordered[(cursor+n)%ordered.size()].toMap();
+                    if(candidate.value("duration").toLongLong()<=boundary-start && GuideRules::matches(match,candidate)
+                        && (!respectCooldown || !lastEnds.contains(mediaKey(candidate)) || lastEnds.value(mediaKey(candidate))+cooldown<=start))return candidate;
+                }return QVariantMap();
+            };
+            // Odd positions are optional bumpers. If none fits, ordinary
+            // programming continues. Filler is explicit; cooldown never relaxes.
+            QVariantMap chosen;
+            if(cursor%2 && policy.contains("bumperRule"))chosen=select(policy.value("bumperRule").toMap(),true);
+            if(chosen.isEmpty())chosen=select(rule,true);
+            if(chosen.isEmpty())chosen=select(policy.value("fillerRule").toMap(),true);
+            if(chosen.isEmpty()){
+                // No eligible item fits before the next policy boundary. A
+                // cached unavailable slate makes the gap honest and finite.
+                duration=boundary-start;status="unavailable";item["title"]=tr("No eligible program in this schedule block");
+            }else{item=chosen;duration=item.value("duration").toLongLong();}
+        }
         if (duration<=0 || duration>Day || !instant(start+duration)) return fail(tr("Invalid scheduled duration."));
         if(start+duration<=notBefore){start+=duration;++cursor;continue;}
         if (++count>MaxSlotsPerChannel) return fail(tr("The channel schedule limit was reached. Shorten the horizon or remove expired history."));
         const auto slotId=QString::fromLatin1(QCryptographicHash::hash(id.toUtf8()+":"+QByteArray::number(start)+":"+QByteArray::number(cursor)+":"+QByteArray::number(generation),QCryptographicHash::Sha256).toHex());
         insert.bindValue(0,slotId); insert.bindValue(1,id); insert.bindValue(2,item.value("mediaType")); insert.bindValue(3,item.value("mediaId"));
         insert.bindValue(4,item.value("title")); insert.bindValue(5,start); insert.bindValue(6,start+duration);
+        insert.bindValue(7,status);
         if (!insert.exec()) return fail(tr("Cannot extend the guide: %1").arg(insert.lastError().text()));
+        if(status=="ready")lastEnds[mediaKey(item)]=start+duration;
         start+=duration; ++cursor;
     }
     q.prepare("UPDATE channels SET cursor=? WHERE id=?"); q.addBindValue(cursor); q.addBindValue(id);
@@ -436,7 +545,7 @@ bool GuideStore::setActive(bool active, qint64 now) {
     }
     return commit();
 }
-QVariantMap GuideStore::repairPreview(const QString &id,const QString &slotId,int revision,qint64 wall,int first) const {
+QVariantMap GuideStore::repairPreview(const QString &id,const QString &slotId,int revision,qint64 wall,int first,bool fitInterval) const {
     if(!m_ready || !ComponentSchema::safeId(id) || !ComponentSchema::safeId(slotId) || !instant(wall) || first<0 || first>=MaxCandidates)return {};
     const auto state=channel(id);
     if(state.isEmpty() || state.contains("owner") || state.value("revision").toInt()!=revision)return {};
@@ -451,13 +560,14 @@ QVariantMap GuideStore::repairPreview(const QString &id,const QString &slotId,in
     QVariantList choices;int total=0,incompatible=0;
     for(const auto &v:candidateSnapshot(id)) {
         const auto item=v.toMap();
-        if(item.value("duration").toLongLong()!=end-start){++incompatible;continue;}
+        if(item.value("duration").toLongLong()!=end-start){++incompatible;if(!fitInterval || item.value("duration").toLongLong()>end-start)continue;}
         if(total++>=first && choices.size()<50)choices.append(QVariantMap{{"mediaType",item.value("mediaType")},{"mediaId",item.value("mediaId")},{"title",item.value("title")},{"duration",item.value("duration")}});
     }
     if(first>0 && first>=total)return {};
-    return {{"channelId",id},{"slotId",slotId},{"revision",revision},{"program",program},{"alternatives",choices},{"offset",first},{"total",total},{"incompatibleCount",incompatible}};
+    QVariantMap review{{"channelId",id},{"slotId",slotId},{"revision",revision},{"program",program},{"alternatives",choices},{"offset",first},{"total",total},{"incompatibleCount",incompatible}};
+    if(fitInterval)review["fitInterval"]=true;return review;
 }
-bool GuideStore::repairSlot(const QString &id,const QString &slotId,const QString &kind,int mediaId,int revision) {
+bool GuideStore::repairSlot(const QString &id,const QString &slotId,const QString &kind,int mediaId,int revision,bool fitInterval) {
     const bool unavailable=kind.isEmpty() && mediaId==0;
     if(!m_ready || !ComponentSchema::safeId(id) || !ComponentSchema::safeId(slotId) || (!unavailable && (!QStringList{"movie","episode","musicvideo","song"}.contains(kind) || mediaId<1)))return fail(tr("Invalid local schedule repair."));
     if(!m_db.transaction())return fail(tr("The guide is busy."));
@@ -466,16 +576,24 @@ bool GuideStore::repairSlot(const QString &id,const QString &slotId,const QStrin
     if(state.isEmpty() || state.contains("owner") || state.value("revision").toInt()!=revision)return rollback(tr("The channel changed. Review this repair again."));
     QSqlQuery q(m_db);q.prepare("SELECT start_utc,end_utc FROM slots WHERE id=? AND channel=?");q.addBindValue(slotId);q.addBindValue(id);
     if(!q.exec() || !q.next())return rollback(tr("This program is no longer in the cached schedule. Select another program."));
-    const auto duration=q.value(1).toLongLong()-q.value(0).toLongLong();
+    const auto start=q.value(0).toLongLong(),end=q.value(1).toLongLong(),duration=end-start;
     if(!number(q.value(0),0,MaxTime) || !number(q.value(1),0,MaxTime) || duration<1 || duration>Day)return rollback(tr("Invalid saved program interval. Original schedule was preserved."));
     q.finish();QVariantMap replacement;
     if(!unavailable) {
         for(const auto &v:candidateSnapshot(id)){const auto item=v.toMap();if(item.value("mediaType")==kind && item.value("mediaId").toInt()==mediaId){replacement=item;break;}}
-        if(replacement.isEmpty() || replacement.value("duration").toLongLong()!=duration)return rollback(tr("Choose a matching-duration item from this channel's saved candidates, or leave the slot unavailable. No program times were shifted."));
-        q.prepare("UPDATE slots SET media_type=?,media_id=?,title=?,status='ready' WHERE id=? AND channel=?");q.addBindValue(kind);q.addBindValue(mediaId);q.addBindValue(replacement.value("title"));
+        if(replacement.isEmpty() || replacement.value("duration").toLongLong()>duration || (!fitInterval && replacement.value("duration").toLongLong()!=duration))return rollback(tr("Choose a matching-duration item or explicitly review a shorter replacement and unavailable remainder. Longer programs would overlap the next program and are refused."));
+        q.prepare("UPDATE slots SET media_type=?,media_id=?,title=?,status='ready',end_utc=? WHERE id=? AND channel=?");q.addBindValue(kind);q.addBindValue(mediaId);q.addBindValue(replacement.value("title"));
+        q.addBindValue(start+std::min(duration,replacement.value("duration").toLongLong()));
     }else q.prepare("UPDATE slots SET status='unavailable' WHERE id=? AND channel=?");
     q.addBindValue(slotId);q.addBindValue(id);
     if(!q.exec() || q.numRowsAffected()!=1)return rollback(tr("Cannot repair the selected program. Previous schedule was preserved."));
+    if(!unavailable && replacement.value("duration").toLongLong()<duration){
+        const auto remainder=start+replacement.value("duration").toLongLong();
+        const auto gapId=QString::fromLatin1(QCryptographicHash::hash(slotId.toUtf8()+":repair-gap:"+QByteArray::number(revision),QCryptographicHash::Sha256).toHex());
+        q.prepare("INSERT INTO slots(id,channel,media_type,media_id,title,start_utc,end_utc,status) VALUES(?,?,?,?,?,?,?,'unavailable')");
+        q.addBindValue(gapId);q.addBindValue(id);q.addBindValue(kind);q.addBindValue(mediaId);q.addBindValue(tr("Unfilled time after replacement"));q.addBindValue(remainder);q.addBindValue(end);
+        if(!q.exec())return rollback(tr("Cannot preserve the replacement's remaining interval. Previous schedule was preserved."));
+    }
     q.prepare("UPDATE channels SET revision=revision+1 WHERE id=? AND revision=?");q.addBindValue(id);q.addBindValue(revision);
     if(!q.exec() || q.numRowsAffected()!=1)return rollback(tr("The channel changed. Previous schedule was preserved."));
     return commit();

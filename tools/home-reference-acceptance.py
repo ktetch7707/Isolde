@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 from pathlib import Path
 import subprocess
 import tempfile
@@ -49,6 +50,19 @@ def collection_review(document):
     }
 
 
+def guide_cache_snapshot(config):
+    """Read only this disposable profile's committed guide, never Kodi data."""
+    path=config/"guide.sqlite"
+    if not path.is_file() or path.is_symlink():
+        raise RuntimeError("The disposable profile has no private guide cache")
+    with sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True) as database:
+        channels=database.execute("SELECT id,number,definition,candidates,cursor,revision,hidden,favorite,position FROM channels ORDER BY id LIMIT 1025").fetchall()
+        programs=database.execute("SELECT id,channel,media_type,media_id,title,start_utc,end_utc,status FROM slots ORDER BY channel,start_utc LIMIT 100001").fetchall()
+    if len(channels)>1024 or len(programs)>100000:
+        raise RuntimeError("Disposable guide fixture exceeds its acceptance bounds")
+    return channels,programs
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
@@ -72,6 +86,9 @@ def main():
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     executable = args.executable.resolve(strict=True)
     evidence = Path(tempfile.mkdtemp(prefix="isolde-reference-config-"))
+    # Publish before process/window discovery so the oracle can retain startup
+    # diagnostics even when no usable application window ever appears.
+    print("Evidence: " + str(evidence), flush=True)
     (evidence / "reference.jpg").write_bytes(reference_bytes)
     print("Reference SHA256: " + reference_hash, flush=True)
     config = evidence / "config" / "Isolde"
@@ -179,14 +196,24 @@ def main():
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
     desktop_probe = None
+    def captured(phase):
+        print(phase.upper() + "_READY " + str(evidence), flush=True)
+        deadline = time.monotonic() + 150
+        while not (evidence / (phase + "-captured")).exists():
+            if process is None or process.poll() is not None: raise RuntimeError("Shell exited")
+            if time.monotonic() > deadline: raise RuntimeError("Screenshot confirmation timed out")
+            time.sleep(0.2)
     try:
         if active:
             run("systemctl", "--user", "stop", "isolde.service")
         with (evidence / "shell.log").open("w") as log:
             process = subprocess.Popen([str(executable)], env=env, stdout=log, stderr=log)
             window = None
+            discovery_started=time.monotonic()
+            observed_windows=[]
             for _ in range(80):
-                for line in run("wmctrl", "-lp", env=env).splitlines():
+                observed_windows=run("wmctrl", "-lp", env=env).splitlines()
+                for line in observed_windows:
                     fields = line.split(None, 4)
                     if len(fields) >= 3 and fields[2] == str(process.pid):
                         window = fields[0]
@@ -197,6 +224,7 @@ def main():
                     raise RuntimeError("The shell failed to start; " + str(evidence))
                 time.sleep(0.1)
             if not window:
+                (evidence / "window-discovery.json").write_text(json.dumps({"processRunning":process.poll() is None,"returnCode":process.poll(),"windowCount":len(observed_windows),"matchingWindows":[line[:512] for line in observed_windows if len(line.split(None,4))>=3 and line.split(None,4)[2]==str(process.pid)],"elapsedSeconds":time.monotonic()-discovery_started},indent=2))
                 raise RuntimeError("The shell did not create an X11 window")
             run("wmctrl", "-i", "-a", window, env=env)
             time.sleep(1)
@@ -206,13 +234,6 @@ def main():
             focused = ctypes.c_ulong(); revert = ctypes.c_int()
             x11.XGetInputFocus(display, ctypes.byref(focused), ctypes.byref(revert))
             print(f"Acceptance window {window}, keyboard focus {focused.value:#x}", flush=True)
-            def captured(phase):
-                print(phase.upper() + "_READY " + str(evidence), flush=True)
-                deadline = time.monotonic() + 150
-                while not (evidence / (phase + "-captured")).exists():
-                    if process.poll() is not None: raise RuntimeError("Shell exited")
-                    if time.monotonic() > deadline: raise RuntimeError("Screenshot confirmation timed out")
-                    time.sleep(0.2)
             if args.existing_profile:
                 household = Path.home() / ".config/Isolde/home-layout.json"
                 household_before = household.read_bytes()
@@ -400,11 +421,14 @@ def main():
                 key("Escape")
                 starter(4)
                 captured("games")
+                guide_before=guide_cache_snapshot(config)
+                pvr_reads=sum(r["method"] in {"PVR.GetChannels","PVR.GetBroadcasts","Isolde.GuideCandidates"} for r in collection_provider.requests)
                 starter(0)
-                expect(lambda: any(r["method"] == "PVR.GetChannels" for r in collection_provider.requests),
-                       "Guide page requested configured Kodi channels")
+                key("Return");key("Return")  # Enter the widget, then open its cached full guide.
+                assert guide_cache_snapshot(config)==guide_before,"Opening the guide changed committed channels/programs"
+                assert sum(r["method"] in {"PVR.GetChannels","PVR.GetBroadcasts","Isolde.GuideCandidates"} for r in collection_provider.requests)==pvr_reads,"Opening the cached guide requested a source/catalog read"
                 captured("guide")
-                key("Home"); key("XF86Search")
+                key("Escape");key("Home"); key("XF86Search")
                 captured("search")
                 key("Escape"); key("Home")
                 assert layout.read_bytes() == original_bytes

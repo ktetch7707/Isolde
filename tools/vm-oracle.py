@@ -441,7 +441,10 @@ class Oracle:
                         on_line(tail)
             if code:
                 lines = log.read_text(errors="replace").splitlines()[-25:]
-                print("\n".join(lines), flush=True)
+                # A failed graphical stage already streamed control markers.
+                # Prefix diagnostic replay so the host cannot interpret an old
+                # *_READY line as a new capture/input checkpoint.
+                print("\n".join(("LOG " if on_line else "")+line for line in lines), flush=True)
                 raise RuntimeError(f"{name} exited {code}; see {log}")
         finally:
             selector.close()

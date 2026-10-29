@@ -23,7 +23,9 @@ public:
     // Candidates are bounded Kodi metadata snapshots; they are never scanned
     // from the filesystem or hydrated independently of Kodi's catalog.
     // -1 selects the validated channel policy, or its legacy seven-day default.
-    bool createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 nowUtc, int horizonDays=-1);
+    bool createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 nowUtc, int horizonDays=-1,const QVariantMap &snapshot={});
+    QVariantMap portableChannel(const QString &id,bool includeSchedule);
+    static QVariantMap portableDefinition(const QVariantMap &package,QString *error=nullptr);
     bool extend(const QString &id, qint64 untilUtc, int expectedRevision);
     // Worker-only rolling maintenance. Retains committed future slots, prunes
     // bounded expired history and skips unscheduled outage history by cursor.
@@ -35,8 +37,8 @@ public:
     QVariantList candidateSnapshot(const QString &id) const;
     QVariantMap regenerationPreview(const QString &id,qint64 nowUtc) const;
     bool regenerate(const QString &id,const QVariantMap &review,qint64 nowUtc);
-    QVariantMap repairPreview(const QString &id,const QString &slotId,int expectedRevision,qint64 nowUtc,int first=0) const;
-    bool repairSlot(const QString &id,const QString &slotId,const QString &mediaType,int mediaId,int expectedRevision);
+    QVariantMap repairPreview(const QString &id,const QString &slotId,int expectedRevision,qint64 nowUtc,int first=0,bool fitInterval=false) const;
+    bool repairSlot(const QString &id,const QString &slotId,const QString &mediaType,int mediaId,int expectedRevision,bool fitInterval=false);
     bool setActive(bool active, qint64 nowUtc);
     bool setPreferences(const QString &id, const QVariantMap &preferences, int expectedRevision);
     bool setMetadata(const QString &id,const QVariantMap &metadata,int expectedRevision);

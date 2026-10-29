@@ -61,7 +61,7 @@ public:
     Q_INVOKABLE bool updateLocal(const QVariantMap &definition,int revision);
     Q_INVOKABLE bool previewRegeneration(const QString &id);
     Q_INVOKABLE bool regenerate();
-    Q_INVOKABLE bool previewRepair(const QString &id,const QString &slotId,int revision,int first=0);
+    Q_INVOKABLE bool previewRepair(const QString &id,const QString &slotId,int revision,int first=0,bool fitInterval=false);
     Q_INVOKABLE bool previewClockAdjustment(const QString &id,const QVariant &deltaSeconds,int revision);
     Q_INVOKABLE bool adjustClock();
     Q_INVOKABLE bool repair(const QVariant &choice);
@@ -75,6 +75,8 @@ public:
     Q_INVOKABLE QVariantMap newDefinition() const;
     Q_INVOKABLE bool previewLocal(const QVariantMap &definition,const QString &mediaKind);
     Q_INVOKABLE bool createLocal(const QVariantMap &definition);
+    Q_INVOKABLE bool exportChannel(const QString &id,const QString &path,bool includeSchedule=false);
+    Q_INVOKABLE bool previewImport(const QString &path,bool restoreSchedule=false);
     Q_INVOKABLE void cancel();
     Q_INVOKABLE bool setPreferences(const QString &id,const QVariantMap &preferences,int revision);
     Q_INVOKABLE bool setMetadata(const QString &id,const QVariantMap &metadata,int revision);
@@ -120,6 +122,7 @@ private:
     QVariantMap m_regenerationReview;
     QVariantMap m_repairReview;
     QVariantMap m_clockReview;
+    QVariantMap m_importPackage;
     qint64 m_sourceRefreshed=0;
     int m_sourceIndex=-1;
     bool m_pvrReading=false,m_sourcePreviewReady=false;

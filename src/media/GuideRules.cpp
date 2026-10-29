@@ -3,6 +3,8 @@
 #include <QJsonDocument>
 #include <QSet>
 #include <QTimeZone>
+#include <QDateTime>
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -110,6 +112,47 @@ QVariantMap ComponentSchema::guideRule(const QVariantMap &value, QString *error)
     return value;
 }
 QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) {
+    if(QJsonDocument::fromVariant(v).toJson(QJsonDocument::Compact).size()>131072)return reject(error,"Channel definitions must fit within 128 KiB.");
+    if(v.contains("schedule")) {
+        const auto policy=v.value("schedule").toMap();
+        if(v.value("schedule").metaType().id()!=QMetaType::QVariantMap || !keys(policy,{"blocks","cooldownSeconds","fillerRule","bumperRule"})
+            || (policy.contains("cooldownSeconds") && !integer(policy.value("cooldownSeconds"),0,7*86400)))
+            return reject(error,"Invalid bounded channel scheduling policy.");
+        for(const auto &key:QStringList{"fillerRule","bumperRule"})
+            if(policy.contains(key) && (policy.value(key).metaType().id()!=QMetaType::QVariantMap || guideRule(policy.value(key).toMap()).isEmpty()))
+                return reject(error,"Choose valid filler and bumper rules.");
+        if(policy.contains("blocks")) {
+            if(policy.value("blocks").metaType().id()!=QMetaType::QVariantList || policy.value("blocks").toList().size()>32)
+                return reject(error,"Choose at most 32 calendar blocks.");
+            const auto blocks=policy.value("blocks").toList();
+            for(int i=0;i<blocks.size();++i) {
+                const auto b=blocks[i].toMap();
+                if(blocks[i].metaType().id()!=QMetaType::QVariantMap || !keys(b,{"name","days","startMinute","endMinute","fromDate","toDate","rule"})
+                    || !text(b.value("name"),80) || !integer(b.value("startMinute"),0,1439) || !integer(b.value("endMinute"),1,1440)
+                    || b.value("startMinute").toInt()>=b.value("endMinute").toInt()
+                    || b.value("days").metaType().id()!=QMetaType::QVariantList || b.value("days").toList().isEmpty() || b.value("days").toList().size()>7
+                    || b.value("rule").metaType().id()!=QMetaType::QVariantMap || guideRule(b.value("rule").toMap()).isEmpty())
+                    return reject(error,"Calendar blocks need a name, weekdays, increasing times and matching rules.");
+                QSet<int> days;for(const auto &day:b.value("days").toList()) {
+                    if(!integer(day,1,7) || days.contains(day.toInt()))return reject(error,"Choose unique weekdays, Monday 1 through Sunday 7.");
+                    days.insert(day.toInt());
+                }
+                for(const auto &key:QStringList{"fromDate","toDate"})if(b.contains(key)
+                    && (!text(b.value(key),10) || QDate::fromString(b.value(key).toString(),Qt::ISODate).toString(Qt::ISODate)!=b.value(key).toString()))
+                    return reject(error,"Use calendar dates in YYYY-MM-DD form.");
+                if(b.contains("fromDate") && b.contains("toDate") && b.value("fromDate").toString()>b.value("toDate").toString())
+                    return reject(error,"The last calendar date precedes the first.");
+                for(int j=0;j<i;++j) {
+                    const auto other=blocks[j].toMap();bool shared=false;
+                    for(const auto &day:other.value("days").toList())shared|=days.contains(day.toInt());
+                    if(shared && b.value("startMinute").toInt()<other.value("endMinute").toInt() && b.value("endMinute").toInt()>other.value("startMinute").toInt()
+                        && b.value("fromDate","0001-01-01").toString()<=other.value("toDate","9999-12-31").toString()
+                        && other.value("fromDate","0001-01-01").toString()<=b.value("toDate","9999-12-31").toString())
+                        return reject(error,"Calendar blocks overlap. Choose different times, days or dates.");
+                }
+            }
+        }
+    }
     if(v.contains("description") && !text(v.value("description"),512,true))return reject(error,"Use a plain-text channel description of at most 512 characters.");
     if(v.contains("groups")) {
         if(v.value("groups").metaType().id()!=QMetaType::QVariantList || v.value("groups").toList().size()>32)return reject(error,"Choose at most 32 channel groups.");
@@ -134,7 +177,7 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
     if((v.contains("horizonDays") && !integer(v.value("horizonDays"),1,31)) || (v.contains("retentionDays") && !integer(v.value("retentionDays"),0,7)))return reject(error,"Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
     if(v.contains("clockOffsetSeconds") && (!integer(v.value("clockOffsetSeconds"),-31*86400,31*86400)
         || (v.value("clock")!="real-time" && v.value("clockOffsetSeconds").toLongLong()!=0)))return reject(error,"Only real-time local channels support a broadcast offset, bounded to 31 days.");
-    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds","horizonDays","retentionDays","clockOffsetSeconds"})
+    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds","horizonDays","retentionDays","clockOffsetSeconds","schedule"})
         || !integer(v.value("schemaVersion"),1,1) || !text(v.value("id"),160) || !safeId(v.value("id").toString())
         || !text(v.value("name"),160) || !integer(v.value("number"),1,99999)
         || !QStringList{"real-time","pause-when-off"}.contains(v.value("clock").toString())
@@ -159,7 +202,36 @@ bool GuideRules::matchesChannel(const QVariantMap &definition, const QVariantMap
     if (definition.contains("mediaKinds") && !definition.value("mediaKinds").toList().contains(metadata.value("mediaType"))) return false;
     // Missing, malformed or unknown watch state is never treated as unwatched.
     if (definition.value("sequence")=="next-unwatched" && !integer(metadata.value("playcount"),0,0)) return false;
-    return matches(definition.value("rule").toMap(),metadata);
+    if(matches(definition.value("rule").toMap(),metadata))return true;
+    const auto schedule=definition.value("schedule").toMap();
+    for(const auto &key:QStringList{"fillerRule","bumperRule"})if(schedule.contains(key) && matches(schedule.value(key).toMap(),metadata))return true;
+    for(const auto &block:schedule.value("blocks").toList())if(matches(block.toMap().value("rule").toMap(),metadata))return true;
+    return false;
+}
+
+QVariantMap GuideRules::calendarWindow(const QVariantMap &definition,qint64 utc) {
+    const auto zone=QTimeZone(definition.value("timezone").toString().toUtf8());
+    const auto local=QDateTime::fromSecsSinceEpoch(utc,zone);
+    QVariantMap rule=definition.value("rule").toMap();
+    const auto blocks=definition.value("schedule").toMap().value("blocks").toList();
+    // Cooldowns/filler alone do not create a calendar cut at midnight.
+    if(blocks.isEmpty())return {{"rule",rule},{"nextUtc",utc+86400}};
+    const auto date=local.date().toString(Qt::ISODate);const int minute=local.time().hour()*60+local.time().minute();
+    for(const auto &v:blocks){const auto b=v.toMap();
+        if(b.value("days").toList().contains(local.date().dayOfWeek()) && date>=b.value("fromDate","0001-01-01").toString()
+            && date<=b.value("toDate","9999-12-31").toString() && minute>=b.value("startMinute").toInt() && minute<b.value("endMinute").toInt())
+            rule=b.value("rule").toMap();
+    }
+    // Civil-minute arithmetic is valid until the next offset transition.
+    // Splitting there handles spring gaps and both fall folds without choosing
+    // an ambiguous local QDateTime or walking every minute of every slot.
+    qint64 next=utc+(1440-minute)*60-local.time().second();
+    for(const auto &v:blocks){const auto b=v.toMap();for(const auto &key:QStringList{"startMinute","endMinute"}){
+        const auto m=b.value(key).toInt();if(m>minute)next=std::min(next,utc+(m-minute)*60-local.time().second());
+    }}
+    const auto transition=zone.nextTransition(QDateTime::fromSecsSinceEpoch(utc,QTimeZone::utc()));
+    if(transition.atUtc.isValid() && transition.atUtc.toSecsSinceEpoch()>utc)next=std::min(next,transition.atUtc.toSecsSinceEpoch());
+    return {{"rule",rule},{"nextUtc",next}};
 }
 
 bool GuideRules::matches(const QVariantMap &rule, const QVariantMap &metadata) {

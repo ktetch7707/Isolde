@@ -324,7 +324,7 @@
     "tv-guide": {
       "id":"tv-guide", "name":"TV Guide", "kind":"widget", "widgetType":"library",
       "componentType":"library", "family":"tv-guide", "placement":{"x":0,"y":0,"width":6,"height":4},
-      "presentation":{"libraryKind":"channels","libraryView":"all","libraryLimit":5,"libraryColumns":1,"libraryLayout":"list","libraryCardStyle":"summary","libraryChrome":true,"icon":"tv","subtitle":"Local and connected channels","labelSize":20,"radius":12,"cardGap":8,"focusWidth":2,"surfaceOpacity":1,"guideRows":5,"guideMinutes":120,"guideChannelWidth":220,"guideLabels":true,"guideSourceBadges":true,"guideSurface":"full","guideOverlayWidth":95,"guideOverlayHeight":72,"guideOverlayRows":3,"guideOverlayPosition":"bottom-center"}
+      "presentation":{"libraryKind":"channels","libraryView":"all","libraryLimit":5,"libraryColumns":1,"libraryLayout":"list","libraryCardStyle":"summary","libraryChrome":true,"icon":"tv","subtitle":"Local and connected channels","labelSize":20,"radius":12,"cardGap":8,"focusWidth":2,"surfaceOpacity":1,"guideVariant":"mini","guideFilter":"all","guideGroup":"","guideChannels":"","guideRows":5,"guideMinutes":120,"guideChannelWidth":220,"guideLabels":true,"guideSourceBadges":true,"guideSurface":"full","guideOverlayWidth":95,"guideOverlayHeight":72,"guideOverlayRows":3,"guideOverlayPosition":"bottom-center"}
     },
     "music-library": {
       "id":"music-library", "name":"Music library", "kind":"widget", "widgetType":"library",
@@ -621,6 +621,10 @@
       {"tab":"Layout","scope":"component","key":"layout","label":"Internal layout","type":"layout","types":["container"],"excludeTypes":["section","navigation"]},
       {"tab":"Layout","scope":"presentation","key":"libraryColumns","control":"slider","label":"Visible cards","type":"number","types":["library","section"],"min":1,"max":12,"step":1,"fallback":4},
       {"tab":"Layout","scope":"presentation","key":"guideRows","control":"slider","label":"Guide visible rows","type":"number","types":["library"],"families":["tv-guide"],"min":3,"max":12,"step":1,"fallback":5},
+      {"tab":"Layout","scope":"presentation","key":"guideVariant","label":"Channel widget","type":"choice","types":["library"],"families":["tv-guide"],"choices":["mini","now-playing","on-now","favorites","preview","upcoming","guide"],"fallback":"mini"},
+      {"tab":"Content","scope":"presentation","key":"guideFilter","label":"Channel source filter","type":"choice","types":["library"],"families":["tv-guide"],"choices":["all","local","connected","favorites"],"fallback":"all"},
+      {"tab":"Content","scope":"presentation","key":"guideGroup","label":"Channel group (empty for all)","type":"text","types":["library"],"families":["tv-guide"]},
+      {"tab":"Content","scope":"presentation","key":"guideChannels","label":"Channel IDs (comma separated; empty for all)","type":"text","types":["library"],"families":["tv-guide"]},
       {"tab":"Layout","scope":"presentation","key":"guideSurface","label":"Open guide as","type":"choice","types":["library"],"families":["tv-guide"],"choices":["full","overlay"],"fallback":"full"},
       {"tab":"Layout","scope":"presentation","key":"guideOverlayPosition","label":"Overlay position","type":"choice","types":["library"],"families":["tv-guide"],"choices":["top-left","top-center","top-right","center-left","center","center-right","bottom-left","bottom-center","bottom-right"],"fallback":"bottom-center"},
       {"tab":"Layout","scope":"presentation","key":"guideOverlayWidth","control":"slider","label":"Overlay width (percent)","type":"number","types":["library"],"families":["tv-guide"],"min":65,"max":100,"step":1,"fallback":95},

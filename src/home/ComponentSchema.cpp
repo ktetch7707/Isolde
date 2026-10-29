@@ -157,6 +157,16 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().size() > 160) return false;
         } else if (QStringList{"surfaceColor", "fillEndColor", "panelColor", "headingColor", "iconColor", "labelColor", "selectedLabelColor"}.contains(key)) {
             const QColor color(it.value().toString()); if (!color.isValid() || color.alpha() != 255) return false;
+        } else if(key=="guideVariant") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"mini","now-playing","on-now","favorites","preview","upcoming","guide"}.contains(it.value().toString()))return false;
+        } else if(key=="guideFilter") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"all","local","connected","favorites"}.contains(it.value().toString()))return false;
+        } else if(key=="guideGroup" || key=="guideChannels") {
+            if(it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>(key=="guideGroup"?80:8192))return false;
+            if(key=="guideChannels" && !it.value().toString().trimmed().isEmpty()){
+                const auto ids=it.value().toString().split(',');if(ids.size()>128)return false;QSet<QString> seen;
+                for(const auto &id:ids){if(!safeId(id.trimmed()) || seen.contains(id.trimmed()))return false;seen.insert(id.trimmed());}
+            }
         } else if(key=="guideSurface") {
             if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"full","overlay"}.contains(it.value().toString()))return false;
         } else if(key=="guideOverlayPosition") {

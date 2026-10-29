@@ -27,6 +27,12 @@ Item {
     property string managedId:""
     property string editField:""
     property string keyboardReturn:""
+    property string ruleReturn:"create"
+    property string policyRuleKey:""
+    property int blockIndex:0
+    property var blockDraft:({})
+    property string packagePath:""
+    property bool packageSchedule:false
     property var metadataDraft:({})
     property string numberConflictId:""
     property var numberSwapRevisions:({})
@@ -111,16 +117,19 @@ Item {
     function timeLabel(value){return new Date(value*1000).toLocaleTimeString(Qt.locale(),"hh:mm")}
     function buildMenu(){
         if(mode==="add")return ["Create local channel","Add source","Back"]
-        if(mode==="schedule")return ["Future horizon: "+(draft.horizonDays===undefined?7:draft.horizonDays)+" days","Retained history: "+(draft.retentionDays===undefined?2:draft.retentionDays)+" days","Timezone: "+draft.timezone,"Back to channel draft"]
+        if(mode==="schedule")return ["Future horizon: "+(draft.horizonDays===undefined?7:draft.horizonDays)+" days","Retained history: "+(draft.retentionDays===undefined?2:draft.retentionDays)+" days","Timezone: "+draft.timezone,"Back to channel draft","Calendar blocks, cooldown, filler and bumpers"]
+        if(mode==="policy")return ["Repetition cooldown: "+((draft.schedule || {}).cooldownSeconds || 0)/60+" minutes","Filler rules"+((draft.schedule || {}).fillerRule?" · Set":" · Off"),"Bumper rules"+((draft.schedule || {}).bumperRule?" · Set":" · Off"),"Remove filler rules","Remove bumper rules"].concat(((draft.schedule || {}).blocks || []).map(b=>"Edit block: "+b.name)).concat(["Add calendar block","Back to schedule"])
+        if(mode==="block")return ["Name: "+blockDraft.name,"Weekdays (Monday 1–Sunday 7): "+blockDraft.days.join(","),"Start minute of day: "+blockDraft.startMinute,"End minute of day: "+blockDraft.endMinute,"First date: "+(blockDraft.fromDate || "Any"),"Last date: "+(blockDraft.toDate || "Any"),"Edit block matching rules","Use block in draft","Remove block","Cancel block changes"]
         if(mode==="clock")return ["Earlier by 15 minutes","Later by 15 minutes","Enter adjustment: "+clockDeltaSeconds/60+" minutes","Return to wall-clock position","Review adjustment: "+clockDeltaSeconds/60+" minutes","Cancel"]
         if(mode==="clockReview")return ["Cancel",controller.clockReview.channelId?"Apply reviewed clock adjustment":"No valid clock adjustment"]
         if(mode==="browse")return ["Find channel: "+(channelQuery || "All"),"Favorites: "+(favoritesOnly?"Only favorites":"All channels"),"Source: "+sourceFilter,"Jump to local date and time…","Previous day","Next day","Clear filters","Group: "+(groupFilter || "All groups"),"Back"]
         if(mode==="groupFilter")return ["All groups"].concat(groupNames).concat(["Back"])
         if(mode==="sources")return options.sources.map(s=>s.name+(s.kind==="kodi-pvr"?" · Preview channel import":" · App destination")).concat(["Back"])
         if(mode==="sourcePreview")return controller.sourcePreviewReady?controller.sourcePreview.map(e=>"Source "+e.definition.source.number+" → "+e.definition.number+" · "+e.definition.name+" · "+e.programs.length+" listings").concat(["Import reviewed lineup","Cancel"]):[controller.busy?"Reading channels and listings…":"Retry source preview","Cancel"]
-        if(mode==="manage")return (controller?controller.channels:[]).map(c=>c.number+" · "+c.name+(c.hidden?" · Hidden":"")+(c.favorite?" · Favorite":"")).concat(["Back"])
+        if(mode==="manage")return (controller?controller.channels:[]).map(c=>c.number+" · "+c.name+(c.hidden?" · Hidden":"")+(c.favorite?" · Favorite":"")).concat(["Import local channel package","Back"])
+        if(mode==="import" || mode==="export")return ["Package file: "+(packagePath || "Choose an absolute .json path"),(mode==="export"?"Include":"Restore")+" cached schedule snapshot: "+(packageSchedule?"Yes":"No"),mode==="export"?"Save new package · Existing files are preserved":"Open as unsaved channel · Preview current Kodi matches before Save","Cancel"]
         if(mode==="move")return moveIds.map(id=>{const c=controller.channels.find(c=>c.id===id);return c?c.number+" · "+c.name:"Removed channel"})
-        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && managedChannel.owner!=="kodi-pvr";return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…","Adjust broadcast clock…"]:[]).concat(["Back"])}
+        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && managedChannel.owner!=="kodi-pvr";return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…","Adjust broadcast clock…","Export local channel…"]:[]).concat(["Back"])}
         if(mode==="repair")return repairItems.map(item=>item.label)
         if(mode==="repairConfirm")return ["Cancel",repairChoice<0?"Mark only this slot unavailable":"Apply reviewed replacement"]
         if(mode==="regenerate")return ["Cancel",controller.regenerationReview.slotCount?"Replace reviewed future schedule":"No reviewed replacement boundary available"]
@@ -146,13 +155,13 @@ Item {
         const choices=(review.alternatives || []).map((item,index)=>({label:item.title+" · "+item.duration+" seconds",action:"choose",choice:index}))
         if(review.offset>0)choices.push({label:"Previous replacement page",action:"previous"})
         if(review.offset+review.alternatives.length<review.total)choices.push({label:"Next replacement page",action:"next"})
-        return choices.concat([{label:"Mark only this slot unavailable…",action:"unavailable"},{label:"Back",action:"back"}])
+        return choices.concat([{label:"Mark only this slot unavailable…",action:"unavailable"},{label:review.fitInterval?"Show matching-duration replacements":"Include shorter replacements with an unavailable remainder…",action:"fit"},{label:"Back",action:"back"}])
     }
     function repairDescription(){
         const review=controller.repairReview;if(!review.program)return "Reading the selected program…"
         let text=review.program.title+" · "+new Date(review.program.displayStartUtc*1000).toLocaleString()+" – "+timeLabel(review.program.displayEndUtc)+"\n"
-        if(mode==="repairConfirm")text+=(repairChoice<0?"Mark this slot unavailable.":"Replace with "+review.alternatives[repairChoice].title+".")+" Its ID and time interval stay unchanged; other programs are untouched."
-        else text+=review.total+" matching-duration replacements · "+review.incompatibleCount+" different-duration items excluded. Choose a replacement or leave this slot unavailable; nothing is saved until confirmation."
+        if(mode==="repairConfirm")text+=(repairChoice<0?"Mark this slot unavailable.":"Replace with "+review.alternatives[repairChoice].title+".")+" Other programs keep their IDs and times. A shorter replacement keeps this ID, then shows unavailable time until the original end."
+        else text+=review.total+" replacements · "+(review.fitInterval?"Shorter programs leave an unavailable remainder; longer programs are excluded.":review.incompatibleCount+" different-duration items excluded.")+" Nothing is saved until confirmation."
         return text
     }
     function panelTitle(){
@@ -168,7 +177,7 @@ Item {
         let value=JSON.parse(JSON.stringify(draft));delta=delta || 1
         if(fieldIndex===0 || fieldIndex===1){editField=fieldIndex===0?"name":"number";keyboard.value=String(draft[editField]);keyboard.selectedIndex=0;keyboardReturn="create";mode="keyboard"}
         else if(fieldIndex===2){const kinds=["episode","movie","mixed","musicvideo","song","all"];mediaKind=kinds[(kinds.indexOf(mediaKind)+delta+kinds.length)%kinds.length];value.mediaKinds=mediaKind==="mixed"?["movie","episode"]:mediaKind==="all"?["movie","episode","musicvideo","song"]:[mediaKind];draft=value}
-        else if(fieldIndex===3){rules.begin(draft.rule);mode="rules"}
+        else if(fieldIndex===3){ruleReturn="create";rules.begin(draft.rule);mode="rules"}
         else if(fieldIndex===4){const values=["seeded-shuffle","episode-order","rotation","next-unwatched"];value.sequence=values[(values.indexOf(value.sequence)+delta+values.length)%values.length];draft=value}
         else if(fieldIndex===5){value.clock=value.clock==="real-time"?"pause-when-off":"real-time";if(value.clock==="pause-when-off")delete value.clockOffsetSeconds;draft=value}
         else if(fieldIndex===6)controller.previewLocal(draft,mediaKind)
@@ -177,11 +186,48 @@ Item {
         else {mode="discard";menuIndex=0}
     }
     function editSchedule(delta){
+        if(menuIndex===4){mode="policy";menuIndex=0;return}
         if(menuIndex===3){mode="create";fieldIndex=8;return}
         editField=["horizonDays","retentionDays","timezone"][menuIndex]
         const current=draft[editField]===undefined?(menuIndex===0?7:2):draft[editField]
         if(delta && menuIndex<2){const value=Number(current)+delta;const minimum=menuIndex===0?1:0,maximum=menuIndex===0?31:7;if(value<minimum || value>maximum){navigationError="Choose "+minimum+"–"+maximum+" days.";return}let copy=JSON.parse(JSON.stringify(draft));copy[editField]=value;draft=copy;navigationError=""}
         else{keyboard.value=String(current);keyboard.selectedIndex=0;keyboardReturn="schedule";mode="keyboard"}
+    }
+    function policyCopy(){let value=JSON.parse(JSON.stringify(draft));value.schedule=value.schedule || {};return value}
+    function policyKeyboard(key,value,where){editField=key;keyboard.value=String(value);keyboard.selectedIndex=0;keyboardReturn=where;mode="keyboard"}
+    function editPolicy(){
+        let value=policyCopy(),p=value.schedule,blocks=p.blocks || []
+        if(menuIndex===0){policyKeyboard("cooldownSeconds",(p.cooldownSeconds || 0)/60,"policy");return}
+        if(menuIndex===1 || menuIndex===2){policyRuleKey=menuIndex===1?"fillerRule":"bumperRule";ruleReturn="policy";rules.begin(p[policyRuleKey] || draft.rule);mode="rules";return}
+        if(menuIndex===3 || menuIndex===4){delete p[menuIndex===3?"fillerRule":"bumperRule"];draft=value;return}
+        if(menuIndex===6+blocks.length){mode="schedule";menuIndex=4;return}
+        blockIndex=menuIndex-5
+        if(blockIndex===blocks.length && blocks.length>=32){navigationError="Choose at most 32 calendar blocks.";return}
+        blockDraft=JSON.parse(JSON.stringify(blocks[blockIndex] || {name:"New block",days:[1,2,3,4,5,6,7],startMinute:0,endMinute:1440,rule:draft.rule}))
+        mode="block";menuIndex=0
+    }
+    function editBlock(){
+        const keys=["name","days","startMinute","endMinute","fromDate","toDate"]
+        if(menuIndex<6){const key=keys[menuIndex];policyKeyboard(key,key==="days"?blockDraft.days.join(","):(blockDraft[key]===undefined?"":blockDraft[key]),"block");return}
+        if(menuIndex===6){ruleReturn="block";rules.begin(blockDraft.rule);mode="rules";return}
+        if(menuIndex===7 || menuIndex===8){let value=policyCopy();value.schedule.blocks=value.schedule.blocks || [];if(menuIndex===7)value.schedule.blocks[blockIndex]=JSON.parse(JSON.stringify(blockDraft));else if(blockIndex<value.schedule.blocks.length)value.schedule.blocks.splice(blockIndex,1);draft=value}
+        mode="policy";menuIndex=0
+    }
+    function acceptPolicyText(text){
+        navigationError=""
+        if(keyboardReturn==="policy"){
+            const minutes=Number(text);if(!/^\d{1,5}$/.test(text.trim()) || !Number.isInteger(minutes) || minutes<0 || minutes>10080){navigationError="Choose 0–10080 whole minutes.";return}
+            let value=policyCopy();value.schedule.cooldownSeconds=minutes*60;draft=value;return
+        }
+        let block=JSON.parse(JSON.stringify(blockDraft))
+        if(editField==="days"){
+            const parts=text.split(",").map(s=>Number(s.trim()));if(!/^[1-7](\s*,\s*[1-7])*$/.test(text.trim()) || new Set(parts).size!==parts.length){navigationError="Enter unique weekdays 1–7 separated by commas.";return}block.days=parts
+        }else if(editField==="startMinute" || editField==="endMinute"){
+            const n=Number(text),maximum=editField==="endMinute"?1440:1439;if(!/^\d{1,4}$/.test(text.trim()) || !Number.isInteger(n) || n<0 || n>maximum || (editField==="endMinute" && n===0)){navigationError="Choose a valid minute of day.";return}block[editField]=n
+        }else if(editField==="fromDate" || editField==="toDate"){
+            if(text.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(text.trim())){navigationError="Enter YYYY-MM-DD or leave empty for any date.";return}if(text.trim())block[editField]=text.trim();else delete block[editField]
+        }else block[editField]=text.trim()
+        blockDraft=block
     }
     function setClockDelta(value){
         if(!Number.isInteger(value) || Math.abs(value)>31*86400){navigationError="Choose an adjustment within 31 days.";return false}
@@ -195,7 +241,12 @@ Item {
     }
     function invokeMenu(){
         if(controller.busy && !controller.backgroundBusy)return
-        if(mode==="clock"){
+        if(mode==="import" || mode==="export"){
+            if(menuIndex===0)policyKeyboard("packagePath",packagePath,mode)
+            else if(menuIndex===1)packageSchedule=!packageSchedule
+            else if(menuIndex===2){if(mode==="export")controller.exportChannel(managedId,packagePath,packageSchedule);else controller.previewImport(packagePath,packageSchedule)}
+            else{mode="manage";menuIndex=0}
+        }else if(mode==="clock"){
             if(menuIndex<2)setClockDelta(clockDeltaSeconds+(menuIndex===0?-900:900))
             else if(menuIndex===2){editField="clockMinutes";keyboard.value=String(clockDeltaSeconds/60);keyboard.selectedIndex=0;keyboardReturn="clock";mode="keyboard"}
             else if(menuIndex===3 && managedChannel){const wall=Math.floor(Date.now()/1000),c=managedChannel;const position=c.clock==="real-time"?wall+(c.clockOffsetSeconds || 0):c.clockUtc+(c.active?Math.max(0,wall-c.anchorUtc):0);setClockDelta(wall-position)}
@@ -204,7 +255,9 @@ Item {
         }else if(mode==="clockReview"){
             if(menuIndex===1 && controller.clockReview.channelId)clockSaving=controller.adjustClock()
             else{controller.cancel();mode="clock";menuIndex=4}
-        }else if(mode==="schedule")editSchedule(0)
+        }else if(mode==="policy")editPolicy()
+        else if(mode==="block")editBlock()
+        else if(mode==="schedule")editSchedule(0)
         else if(mode==="browse"){
             navigationError=""
             if(menuIndex===0){editField="query";keyboard.value=channelQuery;keyboard.selectedIndex=0;keyboardReturn="browse";mode="keyboard"}
@@ -230,7 +283,9 @@ Item {
             else if(menuIndex===controller.sourcePreview.length)sourceSaving=controller.importPvr()
             else{controller.cancel();mode="sources";menuIndex=sourceOriginIndex}
         }else if(mode==="manage"){
-            if(menuIndex<controller.channels.length){managedId=controller.channels[menuIndex].id;mode="context";menuIndex=0}else mode=""
+            if(menuIndex<controller.channels.length){managedId=controller.channels[menuIndex].id;mode="context";menuIndex=0}
+            else if(menuIndex===controller.channels.length){packagePath="";packageSchedule=false;mode="import";menuIndex=0}
+            else mode=""
         }else if(mode==="context"){
             const c=managedChannel;if(!c){mode="manage";menuIndex=0;return}
             if(menuIndex===0)controller.setPreferences(c.id,{favorite:!c.favorite},c.revision)
@@ -245,6 +300,7 @@ Item {
             else if(menuIndex===8 && c.owner!=="kodi-pvr"){if(controller.previewRegeneration(c.id)){mode="regenerate";menuIndex=0}}
             else if(menuIndex===9 && c.owner!=="kodi-pvr")controller.previewDuplicate(c.id,c.revision)
             else if(menuIndex===13 && c.owner!=="kodi-pvr"){clockDeltaSeconds=0;navigationError="";mode="clock";menuIndex=0}
+            else if(menuIndex===14 && c.owner!=="kodi-pvr"){packagePath="";packageSchedule=false;mode="export";menuIndex=0}
             else if(menuIndex===(c.owner==="kodi-pvr"?7:10) || menuIndex===(c.owner==="kodi-pvr"?8:11)){editField=menuIndex===(c.owner==="kodi-pvr"?7:10)?"description":"groups";keyboard.value=editField==="groups"?(c.groups || []).join(", "):(c.description || "");keyboard.selectedIndex=0;keyboardReturn="metadataReview";mode="keyboard"}
             else if(menuIndex===12 && c.owner!=="kodi-pvr"){
                 navigationError=""
@@ -255,7 +311,8 @@ Item {
         }else if(mode==="repair"){
             const choice=repairItems[menuIndex];if(!choice)return
             if(choice.action==="choose" || choice.action==="unavailable"){repairChoice=choice.action==="unavailable"?-1:choice.choice;mode="repairConfirm";menuIndex=0}
-            else if(choice.action==="previous" || choice.action==="next"){const review=controller.repairReview;if(controller.previewRepair(review.channelId,review.slotId,review.revision,review.offset+(choice.action==="next"?50:-50)))menuIndex=0}
+            else if(choice.action==="previous" || choice.action==="next"){const review=controller.repairReview;if(controller.previewRepair(review.channelId,review.slotId,review.revision,review.offset+(choice.action==="next"?50:-50),!!review.fitInterval))menuIndex=0}
+            else if(choice.action==="fit"){const review=controller.repairReview;if(controller.previewRepair(review.channelId,review.slotId,review.revision,0,!review.fitInterval))menuIndex=0}
             else{mode="context";menuIndex=12}
         }else if(mode==="repairConfirm"){
             if(menuIndex===1)repairSaving=controller.repair(repairChoice)
@@ -311,6 +368,8 @@ Item {
             else if(mode==="sourcePreview"){controller.cancel();mode="sources";menuIndex=sourceOriginIndex}
             else if(mode==="repairConfirm"){mode="repair";menuIndex=0}
             else if(mode==="repair"){mode="context";menuIndex=12}
+            else if(mode==="block"){mode="policy";menuIndex=0}
+            else if(mode==="policy"){mode="schedule";menuIndex=4}
             else if(mode==="schedule"){mode="create";fieldIndex=8}
             else if(mode==="create"){mode="discard";menuIndex=0}else if(mode==="context" || mode==="delete" || mode==="metadataReview"){mode="manage";menuIndex=0}else if(mode)mode="";else close()
             return
@@ -439,14 +498,21 @@ Item {
         }
     }
     GuideRuleEditor {id:rules;anchors.fill:parent;anchors.margins:root.gap*2;visible:root.mode==="rules";appearance:root.appearance;options:root.options
-        onCanceled:root.mode="create"
-        onAccepted:rule=>{let value=JSON.parse(JSON.stringify(root.draft));value.rule=rule;root.draft=value;root.mode="create"}
+        onCanceled:root.mode=root.ruleReturn
+        onAccepted:rule=>{
+            if(root.ruleReturn==="block"){let b=JSON.parse(JSON.stringify(root.blockDraft));b.rule=rule;root.blockDraft=b;root.mode="block";return}
+            let value=JSON.parse(JSON.stringify(root.draft));if(root.ruleReturn==="policy"){value.schedule=value.schedule || {};value.schedule[root.policyRuleKey]=rule}else value.rule=rule;root.draft=value;root.mode=root.ruleReturn
+        }
     }
     OnScreenKeyboard {id:keyboard;anchors.centerIn:parent;width:Math.min(parent.width-root.gap*4,850);height:Math.min(parent.height,440);visible:root.mode==="keyboard";appearance:root.appearance
-        onCanceled:root.mode=root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":root.keyboardReturn==="schedule"?"schedule":root.keyboardReturn==="clock"?"clock":"context"
+        onCanceled:root.mode=(["policy","block","import","export"].indexOf(root.keyboardReturn)>=0)?root.keyboardReturn:root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":root.keyboardReturn==="schedule"?"schedule":root.keyboardReturn==="clock"?"clock":"context"
         onAccepted:text=>{
             const value=root.editField==="number" || root.editField==="sourceNumber"?Number(text):text
-            if(root.keyboardReturn==="clock"){
+            if(root.keyboardReturn==="import" || root.keyboardReturn==="export"){
+                root.packagePath=text.trim();root.mode=root.keyboardReturn
+            }else if(root.keyboardReturn==="policy" || root.keyboardReturn==="block"){
+                root.acceptPolicyText(text);root.mode=root.keyboardReturn
+            }else if(root.keyboardReturn==="clock"){
                 if(!/^-?\d{1,5}$/.test(text.trim()))root.navigationError="Enter a whole number of signed minutes within 31 days."
                 else root.setClockDelta(Number(text)*60)
                 root.mode="clock"

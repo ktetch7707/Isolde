@@ -134,6 +134,7 @@ Item {
     Loader {
         id:guideLoader;anchors.fill:parent;active:root.unifiedGuide
         sourceComponent:GuideWidget {
+            provider:root.provider
             options:typeof homeLayout!=="undefined"?homeLayout.studioOptions.guide:({})
             controller:typeof guideController!=="undefined"?guideController:null
             dispatcher:typeof actionDispatcher!=="undefined"?actionDispatcher:null

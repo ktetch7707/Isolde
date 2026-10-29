@@ -58,7 +58,58 @@ private slots:
     void rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage();
     void pvrGenerationIsAtomicAndPreservesUserOverrides();
     void regenerationRequiresCurrentReviewAndPreservesAiringProgram();
+    void calendarPolicySurvivesDstAndPreservesCommittedSlots();
+    void shorterRepairAndPortableSnapshotsAreAtomicAndRemapped();
 };
+
+void GuideTests::calendarPolicySurvivesDstAndPreservesCommittedSlots() {
+    auto def=definition();def["rule"]=QVariantMap{{"field","mediaType"},{"op","is"},{"value","episode"}};
+    {
+        QTemporaryDir dir;GuideStore store(dir.filePath("cooldown-only.sqlite"));auto plain=def;plain["timezone"]="UTC";plain["schedule"]=QVariantMap{{"cooldownSeconds",0}};
+        auto items=media();for(auto &v:items){auto item=v.toMap();item["duration"]=3600;v=item;}
+        const auto late=QDateTime::fromString("2026-10-26T23:50:00Z",Qt::ISODate).toSecsSinceEpoch();
+        QVERIFY2(store.createLocal(plain,items,late,1),qPrintable(store.errorString()));const auto first=store.programs("cartoons",late,late+1,1).first().toMap();
+        QCOMPARE(first.value("endUtc").toLongLong()-first.value("startUtc").toLongLong(),qint64(3600));QCOMPARE(first.value("status").toString(),QString("ready"));
+    }
+    const QVariantMap block{{"name","Movie hour"},{"days",QVariantList{1,2,3,4,5,6,7}},{"startMinute",60},{"endMinute",120},
+        {"rule",QVariantMap{{"field","mediaType"},{"op","is"},{"value","movie"}}}};
+    def["schedule"]=QVariantMap{{"blocks",QVariantList{block}},{"cooldownSeconds",3600}};
+    QString error;QVERIFY2(!ComponentSchema::guideChannel(def,&error).isEmpty(),qPrintable(error));
+    auto invalid=def;auto policy=def.value("schedule").toMap();policy["blocks"]=QVariantList{block,block};invalid["schedule"]=policy;QVERIFY(ComponentSchema::guideChannel(invalid).isEmpty());
+    auto items=media();for(auto &v:items){auto item=v.toMap();item["duration"]=600;v=item;}
+    for(const auto &stamp:QStringList{"2026-03-08T08:00:00Z","2026-11-01T07:00:00Z"}){
+        QTemporaryDir dir;const auto path=dir.filePath("calendar.sqlite");const auto start=QDateTime::fromString(stamp,Qt::ISODate).toSecsSinceEpoch();QVariantList before;
+        {GuideStore store(path);QVERIFY2(store.createLocal(def,items,start,1),qPrintable(store.errorString()));before=store.programs("cartoons",start,start+Day,1000);QVERIFY(!before.isEmpty());qint64 end=start;QMap<QString,qint64> last;
+            for(const auto &v:before){const auto slot=v.toMap();const auto begin=slot.value("startUtc").toLongLong();QCOMPARE(begin,end);end=slot.value("endUtc").toLongLong();QVERIFY(end>begin);
+                const auto window=GuideRules::calendarWindow(def,begin);QVERIFY(end<=window.value("nextUtc").toLongLong());
+                if(slot.value("status")!="ready")continue;
+                const auto item=items[slot.value("mediaId").toInt()-1].toMap();QVERIFY(GuideRules::matches(window.value("rule").toMap(),item));
+                const auto key=slot.value("mediaType").toString()+QString::number(slot.value("mediaId").toInt());if(last.contains(key))QVERIFY(begin-last.value(key)>=3600);last[key]=end;
+            }
+            QVERIFY(end>=start+Day);store.failNextCommitForTest();QVERIFY(!store.extend("cartoons",start+2*Day,1));QCOMPARE(store.programs("cartoons",start,start+Day,1000),before);
+        }
+        GuideStore reopened(path);QVERIFY(reopened.ready());QCOMPARE(reopened.programs("cartoons",start,start+Day,1000),before);
+        QVERIFY(reopened.extend("cartoons",start+2*Day,1));QCOMPARE(reopened.programs("cartoons",start,start+Day,1000),before);
+    }
+}
+
+void GuideTests::shorterRepairAndPortableSnapshotsAreAtomicAndRemapped() {
+    QTemporaryDir dir;GuideStore store(dir.filePath("source.sqlite"));auto items=media();for(auto &v:items){auto item=v.toMap();item["duration"]=1800;v=item;}auto shortItem=items.last().toMap();shortItem["duration"]=600;items.last()=shortItem;
+    QVERIFY(store.createLocal(definition(),items,Now,1));const auto original=store.programs("cartoons",Now,Now+Day,1000);QVariantMap selected;
+    for(const auto &v:original){const auto slot=v.toMap();if(slot.value("endUtc").toLongLong()-slot.value("startUtc").toLongLong()==1800){selected=slot;break;}}
+    QVERIFY(!selected.isEmpty());const auto id=selected.value("id").toString();QVERIFY(store.repairPreview("cartoons",id,1,Now,0,true).value("fitInterval").toBool());
+    store.failNextCommitForTest();QVERIFY(!store.repairSlot("cartoons",id,"movie",8,1,true));QCOMPARE(store.programs("cartoons",Now,Now+Day,1000),original);
+    QVERIFY(store.repairSlot("cartoons",id,"movie",8,1,true));const auto after=store.programs("cartoons",Now,Now+Day,1000);QCOMPARE(after.size(),original.size()+1);
+    for(const auto &v:original){const auto slot=v.toMap();if(slot.value("id")==id)continue;QVERIFY(after.contains(v));}
+    const auto repaired=store.programs("cartoons",selected.value("startUtc").toLongLong(),selected.value("endUtc").toLongLong(),10);QCOMPARE(repaired.size(),2);QCOMPARE(repaired[0].toMap().value("id").toString(),id);QCOMPARE(repaired[1].toMap().value("status").toString(),QString("unavailable"));QCOMPARE(repaired[1].toMap().value("endUtc"),selected.value("endUtc"));
+    const auto package=store.portableChannel("cartoons",true);QString error;QVERIFY2(!GuideStore::portableDefinition(package,&error).isEmpty(),qPrintable(error));QVERIFY(!QJsonDocument::fromVariant(package).toJson().contains("path"));
+    auto imported=definition("imported",202);auto remapped=items;for(auto &v:remapped){auto item=v.toMap();item["mediaId"]=item.value("mediaId").toInt()+100;v=item;}
+    GuideStore destination(dir.filePath("destination.sqlite"));destination.failNextCommitForTest();QVERIFY(!destination.createLocal(imported,remapped,Now,1,package));QVERIFY(destination.channels().isEmpty());
+    QVERIFY2(destination.createLocal(imported,remapped,Now,1,package),qPrintable(destination.errorString()));const auto restored=destination.programs("imported",Now,Now+Day,1000);QCOMPARE(restored.size(),after.size());
+    for(int i=0;i<after.size();++i){const auto a=after[i].toMap(),b=restored[i].toMap();for(const auto &key:QStringList{"startUtc","endUtc","title","status","mediaType"})QCOMPARE(a.value(key),b.value(key));QCOMPARE(b.value("mediaId").toInt(),a.value("mediaId").toInt()+100);}
+    auto malformed=package;auto packageSlots=package.value("slots").toList();packageSlots.append(packageSlots.first());malformed["slots"]=packageSlots;QVERIFY(GuideStore::portableDefinition(malformed).isEmpty());
+    auto missing=remapped;missing.removeLast();auto other=imported;other["id"]="missing";other["number"]=203;QVERIFY(!destination.createLocal(other,missing,Now,1,package));QCOMPARE(destination.channels().size(),1);
+}
 
 void GuideTests::packagedGuideOptionsValidateOverlayAndLegacyBoundaries() {
     QFile file(QFINDTESTDATA("../config/studio-defaults.json"));QVERIFY(file.open(QIODevice::ReadOnly));
