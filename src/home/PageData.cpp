@@ -8,8 +8,11 @@ PageData::PageData(const QString &profile,KodiMedia *player,QObject *parent,cons
         const bool connected=m_player->connected();
         // A Home shelf can reach the bridge before Kodi finishes starting.
         // Retry failed clients once on the owning player's connection transition.
-        if(connected && !wasConnected && m_valid)
+        if(connected && !wasConnected && m_valid) {
             for(auto &entry:m_clients)if(!entry.client->connected() && !entry.client->busy())entry.client->refresh();
+            for(auto it=m_artwork.cbegin();it!=m_artwork.cend();++it)
+                if(it.value()->source().isEmpty())it.value()->load(it.key().section(':',0,0),it.key().section(':',1,1).toInt());
+        }
         wasConnected=connected;
     });
     connect(player,&KodiMedia::playbackReturned,this,[this](bool){

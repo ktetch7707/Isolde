@@ -92,8 +92,10 @@ GuideController::GuideController(const QString &path,const QString &profile,QObj
     connect(&m_thread,&QThread::finished,m_worker,&QObject::deleteLater);
     connect(m_worker,&GuideWorker::completed,this,[this](quint64 id,const QVariantMap &result) {
         if (!m_valid || id!=m_jobId) return;
+        const bool background=m_background;
         m_busy=m_background=false; m_ready=result.value("ready").toBool(); m_channels=result.value("channels").toList();m_rows=result.value("rows").toList();m_compactRows=result.value("compactRows").toList();
-        m_error=result.value("error").toString(); m_status=m_error.isEmpty()?tr("Saved guide ready"):m_error;
+        if(!background || !result.value("error").toString().isEmpty())m_error=result.value("error").toString();
+        m_status=m_error.isEmpty()?tr("Saved guide ready"):m_error;
         auto completed=std::move(m_completion); m_completion={}; emit changed(); if (completed) completed(result);
         if(!m_busy && !m_pendingDefinition.isEmpty()) {const auto definition=m_pendingDefinition;const auto kind=m_pendingKind;m_pendingDefinition.clear();m_pendingKind.clear();previewLocal(definition,kind);return;}
         if(!m_busy && m_pendingJob) {auto job=std::move(m_pendingJob);auto completion=std::move(m_pendingCompletion);m_pendingJob={};m_pendingCompletion={};submit(std::move(job),std::move(completion));return;}
@@ -135,7 +137,7 @@ bool GuideController::submit(Job job,std::function<void(const QVariantMap &)> co
         if(m_background && !background && !m_pendingJob && m_pendingDefinition.isEmpty()) {m_pendingJob=std::move(job);m_pendingCompletion=std::move(completion);m_status=tr("Waiting for the saved guide refresh…");emit changed();return true;}
         return fail(tr("Finish or cancel the current guide operation first."));
     }
-    m_busy=true;m_background=background;m_error.clear();m_completion=std::move(completion);const auto id=++m_jobId;
+    m_busy=true;m_background=background;if(!background)m_error.clear();m_completion=std::move(completion);const auto id=++m_jobId;
     const auto from=m_from,to=m_to;const auto first=m_first;const auto cancelled=m_cancel=std::make_shared<std::atomic_bool>(false);
     QMetaObject::invokeMethod(m_worker,[worker=m_worker,id,from,to,first,cancelled,job=std::move(job)]{
         if(!worker->store)worker->store=std::make_unique<GuideStore>(worker->path);

@@ -101,7 +101,7 @@ void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
 {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
-    int reads=0,plays=0,rejectedReads=0;QJsonObject played;
+    int reads=0,plays=0,rejectedReads=0,rejectedArtwork=0;QJsonObject played;
     QImage image(20,30,QImage::Format_RGB32);image.fill(QColor("#886677"));QByteArray png;QBuffer buffer(&png);buffer.open(QIODevice::WriteOnly);image.save(&buffer,"PNG");
     connect(&server,&QLocalServer::newConnection,&server,[&]{while(server.hasPendingConnections()){
         auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
@@ -109,7 +109,10 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
             const auto bytes=socket->property("input").toByteArray()+socket->readAll();socket->setProperty("input",bytes);if(!bytes.endsWith('\n'))return;
             const auto request=QJsonDocument::fromJson(bytes).object();const auto method=request["method"].toString();QJsonObject result;
             if(method=="JSONRPC.Version")result={{"version",QJsonObject{{"major",13}}}};
-            else if(method=="Isolde.GetArtwork")result={{"mime","image/png"},{"data",QString::fromLatin1(png.toBase64())}};
+            else if(method=="Isolde.GetArtwork"){
+                if(rejectedArtwork>0){--rejectedArtwork;socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Kodi starting"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;}
+                result={{"mime","image/png"},{"data",QString::fromLatin1(png.toBase64())}};
+            }
             else if(method=="Isolde.PlayMovie"||method=="Isolde.PlayEpisode"){++plays;played=request["params"].toObject();result={{"state","playing"},{"home",false}};}
             else if(method.startsWith("Isolde.Playback"))result={{"state",method=="Isolde.PlaybackControl"?"ended":"playing"},{"home",false}};
             else {++reads;if(rejectedReads>0){--rejectedReads;socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Kodi starting"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;}const auto key=method=="VideoLibrary.GetTVShows"?"tvshows":method=="VideoLibrary.GetEpisodes"?"episodes":"movies";QJsonArray items;
@@ -167,7 +170,10 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     rejectedReads=1;
     auto *early=qobject_cast<KodiMedia *>(startingData.client("early",{{"libraryKind","movies"},{"libraryView","watched"}}));QVERIFY(early);
     QTRY_VERIFY(!early->busy());QVERIFY(!early->connected());
+    rejectedArtwork=1;auto *earlyArt=qobject_cast<KodiArtwork *>(startingData.artwork("episode",1));QVERIFY(earlyArt);
+    QTRY_COMPARE(earlyArt->status(),QString("Artwork unavailable"));QVERIFY(earlyArt->source().isEmpty());
     startingPlayer.refresh();QTRY_VERIFY(startingPlayer.connected());QTRY_VERIFY(early->connected());QCOMPARE(early->movies().size(),8);
+    QTRY_VERIFY(earlyArt->source().startsWith("data:image/png;base64,"));QCOMPARE(startingData.artwork("episode",1),earlyArt);
     const QVariantMap historyStyle{{"libraryKind","history"},{"libraryView","watched"},{"libraryLimit",16},{"libraryColumns",5},{"libraryChrome",false},{"libraryLayout","row"}};
     QVERIFY(!startingData.client("invalid-history",{{"libraryKind","history"},{"libraryView","recent"}}));
     std::unique_ptr<QObject> history(widget.createWithInitialProperties({{"provider",QVariant::fromValue(&startingData)},{"widgetKey","history-widget"},{"style",historyStyle},{"width",800},{"height",300}}));QVERIFY(history);
