@@ -81,8 +81,19 @@ Item {
                 color:root.appearance.surfaceColor;radius:root.roundness;border.color:root.appearance.focusColor;border.width:root.engaged && root.selectedIndex===index?(root.style.focusWidth || 2):0
                 readonly property var art:root.provider && !root.readOnly && root.style.artHeight!==0 && (root.variant==="preview" || root.horizontal) && ["movie","episode","musicvideo","song"].indexOf(modelData.current.mediaType)>=0?root.provider.artwork(modelData.current.mediaType,modelData.current.mediaId):null
                 Image {anchors.fill:parent;source:parent.art?parent.art.source:"";fillMode:root.style.artFit==="contain"?Image.PreserveAspectFit:Image.PreserveAspectCrop;opacity:root.style.surfaceOpacity===undefined?1:root.style.surfaceOpacity;asynchronous:true}
-                Rectangle {anchors.bottom:parent.bottom;width:parent.width;height:Math.min(parent.height,root.labelSize*3);visible:!!parent.art;color:root.style.labelSurfaceColor || root.appearance.surfaceColor;opacity:root.style.panelOpacity===undefined?1:root.style.panelOpacity;radius:root.roundness}
-                Text {objectName:"guideWidgetLabel-"+modelData.id;anchors.bottom:parent.bottom;width:parent.width-root.labelSize*2/3;height:Math.max(0,(parent.art?Math.min(parent.height,root.labelSize*3):parent.height)-root.labelSize*2/3);anchors.left:parent.left;anchors.margins:root.labelSize/3;textFormat:Text.PlainText;color:root.appearance.textColor;font.pixelSize:root.labelSize;elide:Text.ElideRight;text:modelData.number+" · "+modelData.name+(root.sourceBadges && modelData.sourceName?" · "+modelData.sourceName:"")+"\n"+root.programLabel(modelData.current)+(root.variant==="guide" && (modelData.upcoming || []).length?"\nNext: "+modelData.upcoming[0].title:"")}
+                Rectangle {anchors.bottom:parent.bottom;width:parent.width;height:Math.min(parent.height,channelLabel.height+channelLabel.anchors.margins*2);visible:!!parent.art;color:root.style.labelSurfaceColor || root.appearance.surfaceColor;opacity:root.style.panelOpacity===undefined?1:root.style.panelOpacity;radius:root.roundness}
+                Item {
+                    id:channelLabel;objectName:"guideWidgetLabel-"+modelData.id
+                    readonly property var lines:[modelData.number+" · "+modelData.name+(root.sourceBadges && modelData.sourceName?" · "+modelData.sourceName:""),root.programLabel(modelData.current)].concat(root.variant==="guide" && (modelData.upcoming || []).length?["Next: "+modelData.upcoming[0].title]:[])
+                    readonly property string text:lines.join("\n")
+                    anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:root.labelSize/3
+                    width:Math.max(0,parent.width-anchors.margins*2);height:Math.max(0,Math.min(parent.height-anchors.margins*2,labelLines.implicitHeight));clip:true;visible:root.style.labelPosition!=="hidden"
+                    Column {id:labelLines;width:parent.width
+                        Repeater {model:channelLabel.lines
+                            Text {required property string modelData;required property int index;objectName:"guideWidgetLabelLine-"+channelLabel.parent.modelData.id+"-"+index;width:labelLines.width;textFormat:Text.PlainText;color:root.appearance.textColor;font.pixelSize:root.labelSize;elide:Text.ElideRight;text:modelData}
+                        }
+                    }
+                }
                 Rectangle {anchors.left:parent.left;anchors.bottom:parent.bottom;height:Math.max(2,root.labelSize/7);width:parent.width*root.progressFor(modelData.current);color:root.appearance.focusColor}
                 MouseArea {anchors.fill:parent;onClicked:{root.engage();root.activate(index)}}
             }
