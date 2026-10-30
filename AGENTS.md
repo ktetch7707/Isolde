@@ -2,6 +2,12 @@
 
 > Persistent instruction. Do not delete.
 
+## Autonomous backlog execution — 2026-10-29
+
+When the user says “go”, “continue”, or “work on the backlog”, follow `docs/backlog-execution.md` and resume the current checkpoint in `docs/execution-queue.md`. They define work-item selection, the focused/integration/runtime/acceptance testing ladder, failure diagnosis, evidence reuse and handoff. Read the backlog's current sections and selected task, not all historical records. The existing authorized T11 closure is the current exception; afterward return to Studio priority. Do not ask for routine next-step confirmation. Do not silently skip blocked acceptance or start an unrelated track.
+
+These execution rules clarify the testing frequency below: focused checks after complete edit batches; full CTest at coherent integration/closure checkpoints; graphical tests against the same passing payload; no new full build for documentation or a verified harness-only correction. All task Verify gates remain required before task acceptance. This planning change launches no application work or VM tests.
+
 ## Machine boundary — standing user preference (2026-10-21)
 
 The **Isolde-Test VM exists solely to test Isolde**. Necessary cleanup, build/test setup, test data and service changes **inside that guest** are authorized without repeated permission requests. Manage obsolete guest build artifacts proactively when space blocks work; preserve useful evidence and current acceptance data where practical. Verify resolved paths belong to the guest before destructive operations; never follow a shared-folder/mount path into the host. Continue using the bounded VM runner and recording what changed. This permission does not make a failed test a pass or waive verification.

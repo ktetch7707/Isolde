@@ -1,5 +1,9 @@
 # Product implementation order
 
+## Continue workflow — 2026-10-29
+
+Use [backlog-execution.md](backlog-execution.md) for selection/testing rules and [execution-queue.md](execution-queue.md) for the current resumable item. The recorded 2026-10-26 T11 authorization is the current closure exception; resume T11-R0 on the passing candidate before returning to Studio T20.5/T21 → T22 → T23 → T24 and the order below. Deferred T15.4 and the T21.9 prerequisite exception remain valid. This clarifies conflicting historical next-action statements, changes no product scope and grants no acceptance credit. Planning only; do not launch application implementation from this document edit.
+
 ## First-product software milestone — current authority, 2026-10-25
 
 Documentation clarification (user, 2026-10-25): S1/100% also requires a clear illustrated guide enabling installation/setup on the actual test computer with ordinary technology knowledge. T13.4 delivers it; T31.7 verifies an unassisted reader on a clean installation before the H05 physical repetition. Target-specific download/USB/boot/disk instructions, first-run/local playback and safe troubleshooting/recovery must be complete; existing developer/VM commands do not qualify. See the [beginner guide contract](first-product-software-scope.md#beginner-installation-guide--mandatory-for-100). Both added gates are open; task count and Overall 32% are unchanged.
