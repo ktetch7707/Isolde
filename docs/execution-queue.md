@@ -2,6 +2,8 @@
 
 Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/files/percentages: [agent-backlog.md](agent-backlog.md). This queue breaks execution into resumable outcomes without replacing or relaxing any linked requirement. A future selection reads the full owning gate before implementation. Tests below use the F/H/I/V/A ladder in the contract.
 
+**User testing-budget revision, 2026-10-29:** all I/full-suite references below are conditional under the contract's task-level budget: one task-closure run, applicable prior passes reused, additional runs only with a recorded concrete justification. They do not order a full run per row or small fix. Proceed across rows without asking or ending work at each checkpoint. Current T11 already has passing full-suite evidence; finish its missing runtime/acceptance work instead of starting another broad test cycle.
+
 Verified foundations T16, T17, T18 and T19 are not new work packages. Reopen only a demonstrated regression and preserve applicability evidence. T15's remaining review is delivered with T24.
 
 ## Current checkpoint — 2026-10-29 planning revision

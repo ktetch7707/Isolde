@@ -2,6 +2,8 @@
 
 ## Continue workflow — 2026-10-29
 
+Latest user revision: execution checkpoints are internal; “get this actually done” means finish the selected task. Apply the task-level full-suite budget in `backlog-execution.md`: default one closure run with applicable evidence reuse, not repeated runs for each queue item/candidate/fix. This overrides older test-frequency wording; final frozen T31 acceptance remains mandatory.
+
 Use [backlog-execution.md](backlog-execution.md) for selection/testing rules and [execution-queue.md](execution-queue.md) for the current resumable item. The recorded 2026-10-26 T11 authorization is the current closure exception; resume T11-R0 on the passing candidate before returning to Studio T20.5/T21 → T22 → T23 → T24 and the order below. Deferred T15.4 and the T21.9 prerequisite exception remain valid. This clarifies conflicting historical next-action statements, changes no product scope and grants no acceptance credit. Planning only; do not launch application implementation from this document edit.
 
 ## First-product software milestone — current authority, 2026-10-25
