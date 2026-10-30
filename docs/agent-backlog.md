@@ -1,6 +1,12 @@
 # Isolde Agent Backlog — first-product software completion
 Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
+## Continue command — operating plan, 2026-10-29
+
+“Continue working on the backlog” follows [the execution contract](backlog-execution.md) and [the resumable queue](execution-queue.md). **Next: T11-R0**, diagnose the existing acceptance-harness/review timeout using the already passing candidate; do not default to another full build. Finish the existing authorized T11 track, then return to Studio priority. Focused tests follow complete edit batches; full suites run at coherent integration checkpoints; harness-only fixes reuse matching tested application payloads. All Scope/Verify/visual/installed/offline gates remain mandatory at acceptance.
+
+The [weighted milestone ledger](progress-milestones.md) credits independently verified subwork in the official percentage while retaining separate final-acceptance checkboxes. This accounting revision recognizes existing evidence, not new application work or tests. META-1 is reconciled below.
+
 ## Current authority and completion target — 2026-10-25
 
 User direction: reconcile current implementation/evidence and new plans, then finish **100% of first-product software before hardware qualification**. [Software scope and audit](first-product-software-scope.md) defines S1 (software complete), H1 (hardware qualified) and R1 (release accepted). This is a planning revision, not new product acceptance or an instruction to interrupt in-flight work.
@@ -12,8 +18,8 @@ Sequencing: [implementation-order.md](implementation-order.md). Requirements/ame
 ## Completion math and evidence rules
 
 - ACTIVE: **T01,T03–T05,T09–T31 = 27 tasks**. T02/T06–T08 stay excluded. H01–H05 are a separate physical qualification ledger, not software credit.
-- Task % = round(checked task-ID Scope boxes / total task-ID Scope boxes × 100), half-up. Overall = round(sum of the 27 rounded task percentages / 27). Mandatory linked subrequirements belong to their owning boxes and cannot be skipped.
-- Sum **860**; Overall **32%**. Only new feature credit: narrow reviewed Android baseline T29.7, giving T29 = 1/8 = 13%. All other checked gates retain historical foundation credit.
+- Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each original group and task retains its weight. Overall = half-up round(sum of the 27 rounded task percentages / 27). Final acceptance remains separate; all linked requirements remain mandatory. Reproduce with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
+- Sum **932**; Overall **35%**. T11 is **67% weighted verified progress** (12/18 milestones; 0/3 final groups accepted). T31 is **5%** (inventory child only; 0/7 final groups accepted). Other values retain previous credit. This reconciles prior work; no task is newly accepted.
 - **S1 = 100% only when every active Scope box, Done when and required Verify gate passes with source/release identity, logs and reviewed evidence, including T31.** No evidence = max 90%; a functional pass cannot replace visual/semantic/user acceptance. Never round incomplete work to 100%.
 - Required documentation: T13.4 delivers a plain-language, illustrated installation/setup/recovery guide for the actual test computer; T31.7 proves a nontechnical reader can follow it without developer coaching. Developer build commands and the VM runbook do not satisfy this gate. Target-specific instructions must be complete before S1; physical installation is repeated under H05.
 - Reuse verified foundations with explicit source-applicability checks; T31 tests one final integrated candidate. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
@@ -56,14 +62,18 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 0% | partial implementation; six broad gates open |
 | T09 | 21 | Playback preference and viewing controls | 0% | direct playback exists; complete matrix open |
 | T10 | 22 | Capture/HDMI/audio software and editors | 33% | software foundation verified; physical H04 separate |
-| T11 | 23 | Guide / PseudoTV | 0% | actual schedule/backend/guide acceptance open |
+| T11 | 23 | Guide / PseudoTV | 67% | 12/18 verified milestones; 0/3 final groups accepted; runtime/offline/soak/review open |
 | T14 | 24 | Online discovery and Linguist subtitles | 0% | retained active; provider/model decisions open |
 | T30 | 25 | Unified Games, local copies/discs and emulators | 0% | new plan mapped; software 0/9; H02/H03 physical |
 | T13 | 26 | Appliance software, distribution and user setup guide | 0% | installer foundation; clean-VM/recovery and beginner guide open |
-| T31 | 27 | Frozen first-product software acceptance | 0% | final integrated S1 gate including unassisted guide walkthrough |
-| **Overall** | — | **average of 27 ACTIVE software tasks** | **32%** | **860 / 27 rounded; S1 incomplete** |
+| T31 | 27 | Frozen first-product software acceptance | 5% | tool inventory verified; 0/7 final groups accepted |
+| **Overall** | — | **average of 27 ACTIVE software tasks** | **35%** | **932 / 27 rounded; weighted progress, S1 incomplete** |
 
 ## Current checkpoint summary
+
+- 2026-10-29 reconciliation: [weighted child gates](progress-milestones.md) split current T11/Studio bottlenecks. Twelve T11 native/offscreen/runtime outcomes are independently complete; actual deleted-file repair, feature journeys, real off-time/offline playback and final review remain open. T31.6 retains its inventory child but its final parent is reopened. Older dated percentages below are historical; the current table/calculator govern.
+
+- User-requested test tooling (2026-10-29): `tools/test-all.ps1` runs full CTest plus selected same-payload graphical journeys and opens one HTML evidence report; `-ReportOnly` avoids reruns. Wrapper contracts passed via `tools/test-test-all.ps1`, evidence `build/test-all-contract-6d4d30c41a914860ab81000b40d0232f/`. This is tooling validation, not application-suite/visual acceptance. Scope checkboxes unchanged; sum remains **860**, Overall **32%** under the existing 27-task calculation.
 
 - T16–T19 foundations are verified. T20 input/nested matrices and T21 collections/history/colors/sliders/selection have substantial implementation. Known Pastel artwork/content/proportion, remaining semantics and integrated UX acceptance keep broad gates open.
 - Automatic-sidebar removal, More apps Store link/return and ambient-above-gallery preview are verified narrow repairs. Timed idle and authored screensaver pages remain open.
@@ -501,4 +511,4 @@ Excluded; obligations retained by T22–T24. Preserve existing skins/pages.
 
 ## Completion rule
 
-Overall = round(sum of ACTIVE percentages / **27**). Active: **T01,T03–T05,T09–T31**. Every box and required linked subrequirement needs passing evidence. 100% means **S1 first-product software complete, ready for hardware qualification**. H01–H05 determine H1; R1 public release requires both and final hardware fixes/reverification. Synchronize table/scopes/math/dependencies/AGENTS.md for any task change. Historical arithmetic elsewhere is not current authority.
+Overall = half-up round(sum of ACTIVE weighted milestone percentages / **27**); reproduce with `tools/backlog-progress.ps1`. Final acceptance is distinct from earned credit. Active: **T01,T03–T05,T09–T31**. Every box and required linked subrequirement needs passing evidence. 100% means **S1 first-product software complete, ready for hardware qualification**. H01–H05 determine H1; R1 public release requires both and final hardware fixes/reverification. Synchronize table/scopes/math/dependencies/AGENTS.md for any task change. Historical arithmetic elsewhere is not current authority.

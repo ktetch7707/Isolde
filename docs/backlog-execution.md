@@ -31,7 +31,7 @@ Each item needs the following before code changes. The queue supplies the outcom
 | Evidence | Candidate/source manifest, executable identity where relevant, run ID, logs/captures and their actual verdict |
 | Resume | Last completed step, next action, existing session/lock owner if any, precise blocker |
 
-Use four evidence states: **implemented**, **focused verified**, **runtime verified**, **accepted**. These are independent evidence claims, not invented fractional completion. A row may be runtime verified with acceptance still blocked. Official Scope boxes remain unchecked until all their requirements pass.
+Use four evidence states: **implemented**, **focused verified**, **runtime verified**, **accepted**. Credit the completed narrowly defined evidence milestones in `progress-milestones.md` immediately under their original group's fixed weight. A focused/native child can finish while a runtime/soak/review child remains open. Implementation alone earns no credit. Original Scope boxes indicate final group acceptance and remain unchecked until all requirements pass. Run `tools/backlog-progress.ps1` instead of hand-maintaining conflicting arithmetic.
 
 Keep a compact current checkpoint in `docs/execution-queue.md`; replace superseded resume details rather than appending every tool call. Detailed logs remain under `build/vm-oracle/<run>/`. Only material decisions/failures belong in task evidence docs. Every final update names the completed outcome, evidence, remaining blocker and next item; include official % only when reconciled.
 
@@ -99,6 +99,6 @@ During ordinary build/test execution poll the existing session with small output
 
 ## Closure and progression
 
-Map every linked subrequirement to evidence or an explicit remaining blocker before closing a Scope box. Keep official percentages under the existing 27-task arithmetic; milestone states do not change the denominator. Detect inconsistencies such as checked T31.6 versus 0/7, inspect the actual evidence, and reconcile honestly before using the number. An unchecked required gate never becomes complete from elapsed time, lines of code, a process launch or a simulated physical result.
+Map every linked subrequirement to evidence or an explicit remaining blocker before closing a Scope box. Preserve 27 task weights and original Scope group weights while splitting broad groups into independently verifiable children. A new child divides existing weight; it never creates weight. Use `progress-milestones.md` and `tools/backlog-progress.ps1` for weighted progress and report accepted groups separately. T31.6 is reconciled there: inventory verified, final-candidate parent open. An unchecked required gate never becomes accepted from elapsed time, lines of code, a process launch or a simulated physical result.
 
 Before handing off, record an exact resume action and any existing run ID. The next “continue” resumes it. Ask the user only for a required unavailable decision/credential/physical action or permission outside existing authorization; state the concrete blocker. Do not repeatedly request ordinary test/guest-maintenance permission or approval of routine implementation choices.
