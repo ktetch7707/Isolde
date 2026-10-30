@@ -304,11 +304,18 @@ void GuideUiTests::overlayAndFocusedEntryPreserveGuideStateWithoutSaving() {
     QCOMPARE(view->property("overlayWidthFraction").toDouble(),0.8);QCOMPARE(view->property("overlayHorizontal").toDouble(),1.0);QCOMPARE(view->property("overlayVertical").toDouble(),0.0);
     GuideStore reader(path);const auto channels=reader.channels();const auto wall=QDateTime::currentSecsSinceEpoch();const auto programs=reader.programs(id,wall,wall+86400,1000);
     view->setProperty("channelQuery",def.value("name"));view->setProperty("anchorUtc",wall+3600);const auto anchor=view->property("anchorUtc");
+    // A shell error temporarily owns the screen; dismissing it must restore
+    // the exact Guide selection/time/filter without closing or saving it.
+    QQuickWindow window;window.resize(1280,720);qobject_cast<QQuickItem *>(view.data())->setParentItem(window.contentItem());window.show();
+    QTRY_VERIFY(view->property("visible").toBool());
+    view->setProperty("suppressed",true);QVERIFY(!view->property("visible").toBool());QVERIFY(view->property("open").toBool());
+    view->setProperty("suppressed",false);QVERIFY(view->property("visible").toBool());QCOMPARE(view->property("anchorUtc"),anchor);QCOMPARE(view->property("selectedChannelId").toString(),id);QCOMPARE(view->property("channelQuery").toString(),def.value("name").toString());
     command(view.data(),InputManager::NavigateUp);command(view.data(),InputManager::Menu);QVERIFY(!view->property("overlay").toBool());QCOMPARE(view->property("anchorUtc"),anchor);QCOMPARE(view->property("selectedChannelId").toString(),id);QCOMPARE(view->property("channelQuery").toString(),def.value("name").toString());
     command(view.data(),InputManager::Menu);QVERIFY(view->property("inOverlay").toBool());command(view.data(),InputManager::NavigateRight);command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("add"));QVERIFY(!view->property("inOverlay").toBool());command(view.data(),InputManager::Back);QVERIFY(view->property("inOverlay").toBool());
     view->setProperty("channelQuery","unmatched filter");QVERIFY(QMetaObject::invokeMethod(view.data(),"showFocused",Q_ARG(QVariant,QString("guide-tile")),Q_ARG(QVariant,overlay),Q_ARG(QVariant,id)));QTRY_COMPARE(view->property("selectedChannelId").toString(),id);QCOMPARE(view->property("channelQuery").toString(),QString());
     QVERIFY(QMetaObject::invokeMethod(view.data(),"showFocused",Q_ARG(QVariant,QString("guide-tile")),Q_ARG(QVariant,overlay),Q_ARG(QVariant,QString("missing-channel"))));QTRY_VERIFY(!controller.busy()&&!view->property("navigationError").toString().isEmpty());QVERIFY(view->property("headerFocused").toBool());
     QCOMPARE(reader.channels(),channels);QCOMPARE(reader.programs(id,wall,wall+86400,1000),programs);QVERIFY(dispatch.last.isEmpty());
+    qobject_cast<QQuickItem *>(view.data())->setParentItem(nullptr);
 }
 void GuideUiTests::remoteSelectedSlotRepairRequiresReviewAndHonorsCancelAndStaleRevision() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);

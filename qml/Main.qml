@@ -417,7 +417,7 @@ Window {
         height:availableHeight*(inOverlay?overlayHeightFraction:1)
         scale:window.uiScaleFactor;transformOrigin:Item.TopLeft;z:950
         controller:guideController;dispatcher:actionDispatcher;options:homeLayout.studioOptions.guide;appearance:homeLayout.homeAppearance
-        suppressed:sessionManager.active || kodiMedia.playbackActive || actionDispatcher.guideTransitionPending
+        suppressed:sessionManager.active || kodiMedia.playbackActive || actionDispatcher.guideTransitionPending || launchErrorOverlay.visible
         onClosed:origin=>{
             const state=window.guideSearchReturn;window.guideSearchReturn=null
             if(state){commandCenter.open=true;Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})}
