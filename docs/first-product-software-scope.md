@@ -1,5 +1,15 @@
 # First product: software completion before hardware qualification
 
+## Current S1 authority — user revision 2026-10-29
+
+**100% means reasonable belief that the software is done, proven entirely in the VM.** [VM software completion](vm-software-completion.md) replaces every conflicting gate below and in referenced plans. All 27 task weights remain, but human-participant/approval, actual-device/model/USB/firmware, paid-account/entitlement/geo-success and target-only runtime/performance gates are redesigned as production-boundary/virtual-device tests and recorded agent walkthroughs. Actual hardware, account/service and personal-usability checks are the user's post-100% handoff, outside percentages. Long elapsed-time durability uses deterministic clock tests plus actual cold reopen; a real twelve-hour soak is optional.
+
+T13.4/T31.7 now require a complete illustrated generic installation guide and an agent-run clean-VM artifact/install/playback/recovery walkthrough. No independent reader or actual-computer details are required for S1. Final T31 still uses one frozen shipped artifact and clean-VM integration, relevant failure/security/isolation checks and agent-reviewed visuals. Existing defects and missing software remain blockers; no mock may stand in for the production feature itself. Public release is a separate user decision, not another software-completion gate.
+
+Current percentages are in the backlog and weighted milestone calculator; none is increased merely by changing this acceptance definition. The October 25 material below is a historical scope/evidence audit. Its statements that outside accounts, representatives or actual-computer details block 100% are superseded, not unresolved requirements.
+
+## Historical October 25 audit — subject to the current VM contract
+
 Reconciled 2026-10-25 at the user's request. This is a planning/evidence audit, not a new application test or implementation claim. The [backlog](agent-backlog.md) owns task status and execution order; this document defines what its 100% means.
 
 ## Milestones and scope

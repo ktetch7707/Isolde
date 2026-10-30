@@ -1,5 +1,7 @@
 # Weighted, independently verifiable milestones
 
+Latest user authority: [vm-software-completion.md](vm-software-completion.md). Every child is judged by VM-only software pass conditions; non-VM hardware, account/region, participant/approval and actual-computer checks move to the user's post-100% handoff. Existing weights and done/open states are preserved; new VM replacements must pass before earning credit. References below to installed mean installed in the guest, and visual review means agent review.
+
 Current progress authority, adopted at user request 2026-10-29. Original backlog Scope IDs remain requirement groups and preserve their original equal weight within each task. A split group's children divide only that group's existing weight equally. All 27 tasks still have equal weight in Overall. Adding rows cannot increase a group's weight.
 
 `done` means the narrowly stated outcome is proven at the stated evidence level; it does not imply installed, physical, uncoached or whole-feature acceptance. `open` means missing or not yet audited evidence, not necessarily missing code. Original Scope boxes indicate **final group acceptance**; they remain open until every child and all inherited requirements pass. Children inherit the group's full linked requirements; the final acceptance child catches unmapped requirements and cannot be removed to manufacture completion.
@@ -26,7 +28,7 @@ Each of the six children within a group is one sixth of that group's weight. The
 | T11.1.c | done | Compact, overlay and full Guide share actual channel selection/progress and remote Back return. | C-runtime; J-native: overlayAndFocusedEntryPreserveGuideStateWithoutSaving; compactPvrProgressAndAccessiblePressUseTheSameActions |
 | T11.1.d | done | Station artwork/clock/XSP validation and bounded widget variants/filter selection/focus protection pass native/offscreen tests. | J-native: artworkClockAndPlaylistBoundaries; widgetVariantsFilterBeyondFirstFiveAndKeepFutureSelectionSafe; previewArtworkCannotCoverRemoteFocus |
 | T11.1.e | open | Complete actual remote native-feed/no-EPG/error/401/OFF/refresh setup and source-presentation journey. | guide-features must pass; unit tests do not substitute for this journey |
-| T11.1.f | open | Final surface/art/filter/scale/accessibility/semantic review, clean reference/reset pairs and all remaining T11.1 linked requirements. | R4 acceptance; representative review where required |
+| T11.1.f | open | Final surface/art/filter/scale/accessibility/semantic review, clean reference/reset pairs and all remaining T11.1 linked requirements. | R4 agent-run VM task/visual acceptance; no participant dependency |
 | T11.2.a | done | WAL persistence refuses unknown/corrupt databases/overlap; write/cancel failure and real killed-writer recovery preserve committed slots. | J-native: channelAndExtensionFailuresRollback; unknownDatabaseIsNeverRewritten; corruptKnownDatabaseIsNeverRewritten; intervalOverlapRejectedAtDatabaseBoundary; killedScheduleWriterRecoversCommittedSlots |
 | T11.2.b | done | Real-time/paused/adjusted clocks, calendar/DST and changed rules preserve committed schedules under native tests. | J-native: virtualClockPausesWhileProfileIsOff; reviewedClockAdjustmentPreservesSchedulesAndSurvivesRestart; calendarPolicySurvivesDstAndPreservesCommittedSlots; rulesOnlyAffectUncommittedSlots |
 | T11.2.c | done | Rolling/expired-schedule maintenance uses cached state without Kodi reindex; profile teardown invalidates clients. | J-native: rollingMaintenancePreservesSlotsAndCatchesUpAfterLongOutage; profileIsolationAndInvalidation; startupMaintainsExpiredSchedulesWithoutKodiReads |
@@ -37,7 +39,7 @@ Each of the six children within a group is one sixth of that group's weight. The
 | T11.3.b | done | Portable snapshot remap/rollback and template isolation pass contract/offscreen tests. | J-native: shorterRepairAndPortableSnapshotsAreAtomicAndRemapped; feedRemotePreviewMappingCancelImportAndTemplateIsolation; actual portable artwork journey remains in .d |
 | T11.3.c | done | Deterministic seven-day schedule persistence and restart/offset invariants pass native tests. | J-native: persistsSevenDaysAndTwelveHourOffset; simulated offset is not actual twelve-hour outage |
 | T11.3.d | open | Actual Cartoon-Network/mixed-rule one-save, calendar/template and portable artwork/remap remote workflows pass. | guide-features, current application and all required supported variants |
-| T11.3.e | open | Real 43,200-second stopped-profile receipt → unchanged-candidate cold reopen/seek and restart stability passes. | No valid completed off-time receipt/run; guide-soak required |
+| T11.3.e | open | Actual stopped-process VM cold reopen/seek and restart stability pass alongside production-clock twelve-hour/seven-day invariants. | Actual cold-reopen runtime evidence remains open; optional long guide-soak is not required |
 | T11.3.f | open | Actual denied-network application listings/search/art/local playback/return and remaining T11.3 requirements pass. | Namespace preflight alone earns no application-offline credit; final required review remains |
 
 ## T20.5 — pointer/reflow closure (one fifth of T20)
@@ -72,7 +74,7 @@ These rows are open pending exact evidence reconciliation; code presence and his
 | T21.10.c | open | Before/after contrast/readability across all owning fields and remaining picker acceptance. | Runtime field/palette review |
 | T21.11.a | open | Type-specific Size & layout separates outer size/card size/capacity with validated bounds. | Inspector/schema coverage |
 | T21.11.b | open | Live size preview/cancel/history/remote-pointer parity and unobscured Done/Apply flow. | Production UI/transaction evidence |
-| T21.11.c | open | Exact focus/feedback and remaining workflow acceptance; T24 discovery review remains explicit. | Runtime journey; do not self-claim uncoached discovery |
+| T21.11.c | open | Exact focus/feedback and remaining workflow acceptance; T24 discovery review remains explicit. | Agent-run VM discovery task/results; no independent participant required |
 | T21.12.a | open | Runtime and Studio share authored focus/selection for every component shape. | Resolved styles and actual item bounds |
 | T21.12.b | open | Art/labels/context focus/decorative selection and reduced-motion state remain legible. | Light/dark/pastel production rendering |
 | T21.12.c | open | Complete selection matrix and remaining acceptance pass. | Runtime captures and review |
@@ -90,7 +92,7 @@ The old checked parent conflated an inventory with the complete final-candidate 
 | Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
 | --- | --- | --- | --- |
 | T31.6.a | done | Actual source-tied tool/check availability, versions and warnings inventory records unavailable tools honestly. | Q-inventory |
-| T31.6.b | open | Complete boundary risk-to-test map, meaningful failure-injection proof and independent critical-boundary review. | Baseline inventory alone does not prove all three outcomes; split further before implementation if needed |
+| T31.6.b | open | Complete boundary risk-to-test map, meaningful failure-injection proof and agent critical-boundary review. | Baseline inventory alone does not prove all three outcomes; split further before implementation if needed |
 | T31.6.c | open | Final candidate applicability, reproducible contracts and unresolved-defect disposition satisfy all remaining T31.6 requirements. | Frozen final candidate not yet available |
 
 ## Remaining work and selection rules

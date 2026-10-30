@@ -2,6 +2,10 @@
 
 > Persistent instruction. Do not delete.
 
+## S1 / 100% is VM-proven software confidence — latest user authority
+
+`docs/vm-software-completion.md` supersedes every conflicting acceptance requirement here and in linked task/design plans. 100% means reasonable belief the declared software is done, based entirely on automated/installed clean-VM evidence and agent review. Redesign every non-VM gate using that document: no physical equipment, actual-computer model, uncoached representative, user approval, unavailable paid account/entitlement/region or target-only runtime/performance requirement may block a T-task or its percentage. Use production-boundary fixtures, virtual devices, agent task walkthroughs and explicit supported matrices; never disguise known missing software or defects as external limits. H01–H05 and service/usability checks are a separate user-owned post-100% handoff, not prerequisites. S1 does not require the user to run a formal release-qualification campaign. Do not ask again to waive superseded gates.
+
 ## Autonomous backlog execution — 2026-10-29
 
 When the user says “go”, “continue”, or “work on the backlog”, follow `docs/backlog-execution.md` and resume the current checkpoint in `docs/execution-queue.md`. They define work-item selection, the focused/integration/runtime/acceptance testing ladder, failure diagnosis, evidence reuse and handoff. Read the backlog's current sections and selected task, not all historical records. The existing authorized T11 closure is the current exception; afterward return to Studio priority. Do not ask for routine next-step confirmation. Do not silently skip blocked acceptance or start an unrelated track.
@@ -23,7 +27,7 @@ Before VM actions, read `docs/vm-oracle.md`. Use `tools/vm-test.ps1` for Test/Vi
 3. Within a task, read ONLY its `Entry docs` + `Entry files`. Do not re-read the entire codebase or all planning docs.
 4. Implement its `Scope` to satisfy its `Done when` gate, preserving standing gates (both visual fixtures, profile isolation, atomic save/rollback, Kodi media ownership, offline Generator Test).
 5. Before finishing, run its `Verify` commands/tests and update `docs/agent-backlog.md`: check off sub-boxes, recompute that task's `%`, recompute `Overall %`.
-6. Never mark `100%` without evidence paths (test logs, fixture screenshots, `/tmp/...` evidence). `100% x 27 ACTIVE software tasks = S1 first-product software complete, ready for hardware qualification`; T02 is struck and T06-T08 are superseded/excluded. Keep the active count synchronized with the backlog. T30 owns Games and T31 final integrated software acceptance. H01–H05 separately gate physical qualification/public release; finish software device editors and VM acceptance first, never count simulated input/media as a physical pass.
+6. Never mark `100%` without evidence paths (test logs, fixture screenshots, `/tmp/...` evidence). `100% x 27 ACTIVE software tasks = S1 first-product software complete, ready for hardware qualification`; T02 is struck and T06-T08 are superseded/excluded. Keep the active count synchronized with the backlog. T30 owns Games and T31 final integrated software acceptance. H01–H05 are user-owned post-100% checks outside software acceptance; finish device editors and VM acceptance, label virtual evidence honestly, and do not require hardware/public-release qualification for S1.
 7. Sequencing authority: `docs/implementation-order.md`. Requirements: `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`.
 8. Core thesis — configurability + UI. Everything is configurable; nothing requires configuration. The default must be polished and TV-ready, and every tab, shelf, widget, color, density, and navigation choice must be rearrangeable via validated data. Layout is data, never executable QML/JS/shell. A theme/skin is declarative data, never code.
 9. Configurability commands (must obey):

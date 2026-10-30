@@ -1,5 +1,7 @@
 # Product implementation order
 
+Latest acceptance authority: [vm-software-completion.md](vm-software-completion.md). S1/100% is reasonable software confidence from the VM; user/hardware/account/target-machine qualification is a separate post-100% handoff. It overrides conflicting physical, representative, unassisted-reader, real-provider and actual-computer prerequisites in all historical sections and task Entry docs. Keep software implementation order and fixed progress weights; verify redesigned VM checks before awarding credit.
+
 ## Continue workflow — 2026-10-29
 
 Latest user revision: execution checkpoints are internal; “get this actually done” means finish the selected task. Apply the task-level full-suite budget in `backlog-execution.md`: default one closure run with applicable evidence reuse, not repeated runs for each queue item/candidate/fix. This overrides older test-frequency wording; final frozen T31 acceptance remains mandatory.

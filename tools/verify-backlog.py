@@ -3,6 +3,7 @@ from pathlib import Path
 import argparse
 import json
 import re
+from fractions import Fraction
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -19,15 +20,36 @@ assert len(rows) == len(expected) == 27
 assert [int(r[1]) for r in rows] == list(range(1, 28))
 assert [r[0] for r in rows] == list(tasks), 'Table/scope order differs'
 round_pct = lambda n, d: (200*n+d)//(2*d)
+milestones = {}
+for ident, state in re.findall(r'^\| (T\d{2}\.\d+\.[a-z]+) \| (done|open) \|',
+                              (ROOT/'docs/progress-milestones.md').read_text(encoding='utf-8'), re.M):
+    parent = ident.rsplit('.', 1)[0]
+    children = milestones.setdefault(parent, {})
+    assert ident not in children, ('Duplicate milestone', ident)
+    children[ident] = state == 'done'
 counts = {}
+all_parents = set()
 for task, _, pct in rows:
     scope = re.split(r'^Scope[^\n]*:\s*', tasks[task], maxsplit=1, flags=re.M)[1].split('Done when:', 1)[0]
     boxes = re.findall(r'^- \[([ x])\] ('+task+r'\.\d+)\b', scope, re.M)
     assert boxes and [int(b[1].split('.')[1]) for b in boxes] == list(range(1, len(boxes)+1)), task
     checked = sum(b[0] == 'x' for b in boxes)
-    assert round_pct(checked, len(boxes)) == int(pct), task
+    earned = Fraction(0)
+    for state, ident in boxes:
+        all_parents.add(ident)
+        if ident in milestones:
+            values = list(milestones[ident].values())
+            assert state != 'x' or all(values), ('Checked parent with open milestone', ident)
+            earned += Fraction(sum(values), len(values))
+        else:
+            earned += state == 'x'
+    calculated = round_pct(earned, len(boxes))
+    if checked != len(boxes):
+        calculated = min(99, calculated)
+    assert calculated == int(pct), (task, calculated, pct)
     assert 'Verify:' in tasks[task] and re.search(r'\bevidence:', tasks[task], re.I), task
     counts[task] = {'checked': checked, 'total': len(boxes), 'percent': int(pct)}
+assert set(milestones) <= all_parents, 'Milestones reference unknown Scope groups'
 total = sum(r['percent'] for r in counts.values())
 overall = (2*total+len(counts))//(2*len(counts))
 overall_row = re.search(r'^\| \*\*Overall\*\*[^\n]*\| \*\*(\d+)%\*\*', active, re.M)
@@ -51,6 +73,13 @@ def visit(task, path=()):
         visit(dep, path+(task,))
 for task in deps:
     visit(task)
+vm_contract = (ROOT/'docs/vm-software-completion.md').read_text(encoding='utf-8')
+for task in expected:
+    assert re.search(r'\b'+task+r'\b', vm_contract), ('Missing VM gate mapping', task)
+for name in ['AGENTS.md', 'docs/agent-backlog.md', 'docs/backlog-execution.md',
+             'docs/execution-queue.md', 'docs/progress-milestones.md',
+             'docs/first-product-software-scope.md', 'docs/implementation-order.md']:
+    assert 'vm-software-completion.md' in (ROOT/name).read_text(encoding='utf-8'), name
 for name in ['docs/first-product-software-scope.md', 'docs/implementation-order.md',
              'docs/agent-backlog.md', 'docs/agent-backlog-history-2026-10-25.md']:
     path = ROOT/name
@@ -72,6 +101,6 @@ if args.evidence:
     assert online['state'] == 'passed' and online['tests'] == 3 and not online['fullSuite']
 print(json.dumps({'result': 'PASS', 'activeTasks': len(counts), 'sumPercentages': total,
                   'overallPercent': overall, 'physicalGates': 5,
-                  'checks': ['scope/table/order', 'checkbox math', 'entrypoint synchronization',
-                             'dependency graph', 'local document links'],
+                  'checks': ['scope/table/order', 'fixed-weight milestone math', 'entrypoint synchronization',
+                             'dependency graph', 'local document links', '27 VM gate mappings'],
                   'retainedEvidenceChecked': args.evidence, 'tasks': counts}, indent=2))
