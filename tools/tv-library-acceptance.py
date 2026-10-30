@@ -425,6 +425,7 @@ provider.setSettingString("searchlanguage","en-US")
                     from guide_features import exercise,PHASES
                     features=exercise(evidence,media,database,directory,local,poster,rpc,guide_capture,wait,shell_active,lambda name:key(shell,name,delay=0.06))
                     surface_phases+=PHASES
+                    soak_ready=True
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
                 result={'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'automaticNativeReturn':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn']+surface_phases,'visualReview':'pending','profile':profile}
                 if args.guide_surfaces:result.update(nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True,actualLocalElapsedSeek=True,automaticLocalReturn=True)

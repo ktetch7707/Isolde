@@ -156,17 +156,22 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
 
 def visual_result_passed(case, result):
     if case in {"guide-soak","guide-reopen"}:
-        mode=(result.get('realTwelveHourOff') is True and result.get('offlineNamespace') is True if case=='guide-soak' else result.get('actualColdReopen') is True and result.get('realTwelveHourOff') is False and result.get('offlineNamespace') is False and result.get('network',{}).get('mode')=='host-inherited')
+        network=result.get('network',{})
+        denied=(result.get('offlineSocketFilter') is True and network.get('mode')=='seccomp-af-inet-denied' and network.get('socketErrnos')==[101,101]
+                and network.get('unixSocketAvailable') is True and network.get('rootOwners')=={'/':0,'/usr/lib/isolde-native/bwrap':0}
+                and all(type(owner) is int for owner in network.get('rootOwners',{}).values()))
+        inherited=network.get('mode')=='host-inherited' and result.get('offlineSocketFilter') in (None,False)
+        mode=(result.get('realTwelveHourOff') is True and result.get('offlineNamespace') is True if case=='guide-soak' else result.get('actualColdReopen') is True and result.get('realTwelveHourOff') is False and result.get('offlineNamespace') is False and (denied or inherited))
         elapsed=(type(result.get('elapsedOffSeconds')) in (int,float) and 43200<=result['elapsedOffSeconds']<=7*86400) if case=='guide-soak' else result.get('elapsedOffSeconds') is None
         return (mode and all(result.get(key) is True for key in ('passed','actualLocalElapsedSeek','committedSevenDaySlotsUnchanged','automaticNativeReturn'))
                 and result.get('normalProfileUsed') is False and elapsed
                 and type(result.get('localSearchMatches')) is int and result['localSearchMatches']>0
                 and result.get('captures')==['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
     if case=="guide-features":
-        phases=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated']
+        phases=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated','guidedirectdraft','guidedirectpreview','guidedirectimported','guidefeedrefreshfailed']
         base=dict(result);base['captures']=result.get('captures',[])[:-len(phases)];base['cachedChannelCount']=3
-        return (visual_result_passed('guide-surfaces',base) and result.get('captures',[])[-len(phases):]==phases and type(result.get('cachedChannelCount')) is int and result['cachedChannelCount']==9
-                and all(result.get(key) is True for key in ('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules')))
+        return (visual_result_passed('guide-surfaces',base) and result.get('captures',[])[-len(phases):]==phases and type(result.get('cachedChannelCount')) is int and result['cachedChannelCount']==10
+                and all(result.get(key) is True for key in ('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules','directSourceImport','failedFeedRefreshPreservesCache')))
     if case=="guide-lifecycle":
         phases=['guidecontinuousready','guidecontinuousvideo','guidecontinuousnext','guidesurfed','guidesurfreturn','guidedeletedready','guidedeletedfile','guidedeletedreturn','guiderepairselect','guiderepaircontext','guiderepairreview','guiderepairconfirm','guiderepaired']
         base=dict(result);base['captures']=result.get('captures',[])[:-len(phases)]
@@ -446,10 +451,34 @@ def payload_hashes(payload):
         if path.is_symlink():
             raise RuntimeError("Payload contains a symlink")
         if path.is_file():
-            result[str(path.relative_to(payload))] = digest(path)
+            result[path.relative_to(payload).as_posix()] = digest(path)
     if "bin/isolde" not in result:
         raise RuntimeError("Missing staged executable")
     return result
+
+
+def remove_generated_payload_cache(run):
+    """Restore exact tested bytes; never ignore extras in integrity checks."""
+    record=run/'test-result.json';payload=run/'payload'
+    if not record.is_file() or not payload.is_dir():return []
+    if run.resolve()!=run or payload.resolve()!=payload:raise RuntimeError('Redirected payload cache maintenance')
+    tested=json.loads(record.read_text());expected=tested.get('payload',{})
+    if tested.get('passed') is not True or tested.get('fullSuite') is not True:return []
+    actual=payload_hashes(payload)
+    if any(actual.get(name)!=value for name,value in expected.items()):raise RuntimeError('Tested payload bytes changed; cache cleanup refused')
+    candidates=[]
+    for name in sorted(set(actual)-set(expected)):
+        path=payload/name;match=re.fullmatch(r'([A-Za-z0-9_-]+)\.cpython-[0-9]+(?:\.opt-[12])?\.pyc',path.name)
+        if path.parent.name!='__pycache__' or not match or path.stat().st_size>4*1024*1024:
+            raise RuntimeError('Unrecognized extra payload file; cache cleanup refused')
+        source=path.parent.parent/(match[1]+'.py');source_name=source.relative_to(payload).as_posix()
+        if source_name not in expected or actual.get(source_name)!=expected[source_name]:raise RuntimeError('Cache source is not a verified tested module')
+        candidates.append({'path':str(path),'sha256':actual[name],'source':source_name,'sourceSha256':expected[source_name]})
+    if candidates:
+        atomic_json(run/'guest-python-cache-cleanup.json',{'targets':candidates,'testedFilesModified':False})
+        for candidate in candidates:Path(candidate['path']).unlink()
+        if payload_hashes(payload)!=expected:raise RuntimeError('Payload did not return to its exact tested identity')
+    return candidates
 
 
 def stop_owned(process):
@@ -748,8 +777,12 @@ class Oracle:
         result = json.loads((self.run / "test-result.json").read_text())
         if not result.get("passed") or not result.get("fullSuite"):
             raise RuntimeError("This run has no passing full-suite payload; run Test -Suite all")
-        if payload_hashes(self.run / "payload") != result["payload"]:
-            raise RuntimeError("Staged payload changed after testing; refuse use")
+        actual=payload_hashes(self.run / "payload")
+        if actual != result["payload"]:
+            expected=result['payload']
+            mismatch={'added':sorted(set(actual)-set(expected))[:20],'missing':sorted(set(expected)-set(actual))[:20],
+                      'changed':sorted(name for name in set(actual)&set(expected) if actual[name]!=expected[name])[:20]}
+            raise RuntimeError("Staged payload changed after testing; refuse use: "+json.dumps(mismatch))
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
 
@@ -773,6 +806,7 @@ class Oracle:
                 raise RuntimeError("Redirected maintenance self-test dependency")
             verify_tree(bundle,entries)
             self.stage("guest-maintenance-self-tests",[sys.executable,str(tests)],90)
+            remove_generated_payload_cache(self.run)
             self.prepare_guest_space(3, prune_sources=True)
             if shutil.disk_usage(self.root).free<3*1024**3:
                 raise RuntimeError("Verified obsolete artifacts could not recover 3 GiB; inspect storage evidence")
@@ -898,7 +932,7 @@ class Oracle:
             self.update(acceptanceHelperSha256=feature_helper_digest)
         if case=="guide-reopen":
             helper=verified_reopen_helper(self.root,reopen_helper_digest)
-            arguments=[str(helper),str(executable),'--cold-reopen','--receipt',str(self.run/'guide-soak-receipt.json')]
+            arguments=[str(helper),str(executable),'--cold-reopen','--deny-network','--receipt',str(self.run/'guide-soak-receipt.json')]
             command=['python3','-c','import sys,runpy;sys.path.insert(0,sys.argv.pop(1));path=sys.argv[1];sys.argv=sys.argv[1:];runpy.run_path(path,run_name="__main__")',str(source/'tools')]+arguments
             self.update(acceptanceHelperSha256=reopen_helper_digest)
         if case=="guide-soak":command += ['--receipt',str(self.run/'guide-soak-receipt.json')]
@@ -922,7 +956,7 @@ class Oracle:
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
-            if case=="guide-lifecycle":
+            if case=="guide-lifecycle" or (case=="guide-features" and any((p/'guide-soak-ready.json').is_file() for p in evidence)):
                 write_soak_receipt(self.run,evidence,executable)
             self.update(visualCase=case, visualPassed=True, visualReview="pending",
                         visualAcceptance="pending", semanticAcceptance="not_verified", executable=str(executable))
@@ -980,6 +1014,9 @@ class Oracle:
         runs = self.root / "runs"
         candidates = sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p:p.stat().st_mtime, reverse=True)
         protected = {self.run, *candidates[:3]}
+        # A stopped-profile acceptance receipt still needs its exact executable.
+        # Never discard that payload while reclaiming older generated runs.
+        protected.update(p for p in candidates if (p/'guide-soak-receipt.json').exists() or (p/'guide-soak-receipt.json').is_symlink())
         if prune_sources:
             # Explicit source-copy maintenance retains every staged acceptance
             # payload, including the last passing candidate used for captures.
@@ -1092,8 +1129,8 @@ def collect_evidence(run, case, directories):
             if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
                 paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json")]
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
-            if case=="guide-features":paths += [directory/'guide-features.json']
-            if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json')]
+            if case=="guide-features":paths += [directory/name for name in ('guide-features.json','guide-soak-ready.json')]
+            if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json','cached-artwork-observation.json','original-home-layout.json')]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:

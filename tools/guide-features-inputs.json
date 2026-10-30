@@ -190,24 +190,11 @@
       "Escape"
     ],
     "guidefeedreturn": [
-      "Menu",
-      "Down",
-      "Down",
-      "Down",
       "Down",
       "Return"
     ],
     "guidefeedauth": [
-      "Escape",
-      "Up",
-      "Up",
-      "Up",
-      "Up",
-      "Up",
-      "Up",
-      "Right",
-      "Right",
-      "Right"
+      "Escape"
     ],
     "guidefeedoff": [],
     "guidestationselect": [
@@ -240,7 +227,11 @@
       "Down",
       "Return"
     ],
-    "guidemixedcreated": []
+    "guidemixedcreated": [],
+    "guidedirectdraft": [],
+    "guidedirectpreview": [],
+    "guidedirectimported": [],
+    "guidefeedrefreshfailed": []
   },
   "schemaVersion": 1
 }

@@ -17,7 +17,7 @@ import unittest
 from unittest.mock import patch
 from unittest.mock import Mock
 from types import SimpleNamespace
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, closing
 
 spec = importlib.util.spec_from_file_location("oracle", Path(__file__).resolve().parents[1] / "tools/vm-oracle.py")
 oracle = importlib.util.module_from_spec(spec)
@@ -59,6 +59,11 @@ class OracleTests(unittest.TestCase):
                     automaticNativeReturn=True,normalProfileUsed=False,localSearchMatches=3,
                     captures=['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
         self.assertTrue(oracle.visual_result_passed('guide-reopen',result))
+        offline=dict(result,offlineSocketFilter=True,network={'mode':'seccomp-af-inet-denied','socketErrnos':[101,101],'unixSocketAvailable':True,'rootOwners':{'/':0,'/usr/lib/isolde-native/bwrap':0}})
+        self.assertTrue(oracle.visual_result_passed('guide-reopen',offline))
+        self.assertFalse(oracle.visual_result_passed('guide-soak',offline))
+        for network in ({},dict(offline['network'],socketErrnos=[0,101]),dict(offline['network'],unixSocketAvailable=False),dict(offline['network'],rootOwners={'/':65534,'/usr/lib/isolde-native/bwrap':65534})):
+            self.assertFalse(oracle.visual_result_passed('guide-reopen',dict(offline,network=network)))
         self.assertFalse(oracle.visual_result_passed('guide-soak',result))
         result['realTwelveHourOff']=True
         self.assertFalse(oracle.visual_result_passed('guide-soak',result))
@@ -66,6 +71,22 @@ class OracleTests(unittest.TestCase):
         result['elapsedOffSeconds']=43200
         result['offlineNamespace']=True
         self.assertTrue(oracle.visual_result_passed('guide-soak',result))
+
+    def test_cold_ready_window_accounts_for_unavailable_airings_without_changing_slots(self):
+        path=Path(__file__).resolve().parents[1];spec=importlib.util.spec_from_file_location('guide_ready_fixture',path/'tools/guide-soak-acceptance.py');module=importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules,{'guide_lifecycle':SimpleNamespace(position=None),'guide_features':SimpleNamespace(remote_text=None)}):spec.loader.exec_module(module)
+        import sqlite3
+        with tempfile.TemporaryDirectory() as folder:
+            database=Path(folder)/'guide.sqlite'
+            with closing(sqlite3.connect(database)) as connection:
+                connection.execute('CREATE TABLE slots(channel TEXT,start_utc INTEGER,end_utc INTEGER,status TEXT)')
+                connection.executemany('INSERT INTO slots VALUES(?,?,?,?)',[('local',1000,1120,'unavailable'),('local',1120,1240,'unavailable'),('local',1240,1360,'ready'),('pvr',1000,2000,'ready')])
+                connection.commit()
+            channels=[{'id':'pvr','owner':'kodi-pvr'},{'id':'local'}]
+            self.assertEqual(module.ready_window(database,channels,1005),(1245,channels[1]))
+            self.assertEqual(module.ready_window(database,channels,1250),(1250,channels[1]))
+            with self.assertRaises(RuntimeError):module.ready_window(database,channels,800)
+            with closing(sqlite3.connect(database)) as connection:self.assertEqual(connection.execute('SELECT COUNT(*) FROM slots WHERE status="unavailable"').fetchone()[0],2)
 
     def test_reopen_helper_must_match_exact_file_digest(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -76,6 +97,14 @@ class OracleTests(unittest.TestCase):
             path.write_bytes(b'# modified helper')
             with self.assertRaises(RuntimeError):oracle.verified_reopen_helper(root,checksum)
             with self.assertRaises(RuntimeError):oracle.verified_reopen_helper(root,'../../other')
+
+    @unittest.skipUnless(sys.platform=='linux' and __import__('platform').machine()=='x86_64','Linux x86-64 socket fixture')
+    def test_offline_socket_filter_denies_internet_but_preserves_unix_and_root_identity(self):
+        path=Path(__file__).resolve().parents[1]
+        spec=importlib.util.spec_from_file_location('guide_socket_fixture',path/'tools/guide-soak-acceptance.py');module=importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules,{'guide_lifecycle':SimpleNamespace(position=None),'guide_features':SimpleNamespace(remote_text=None)}):spec.loader.exec_module(module)
+        program="import os,socket,errno;assert os.stat('/').st_uid==0;unix=socket.socket(socket.AF_UNIX);unix.close();\nfor family in (socket.AF_INET,socket.AF_INET6):\n try: socket.socket(family)\n except OSError as error: assert error.errno==errno.ENETUNREACH\n else: raise AssertionError('Internet socket allowed')"
+        subprocess.run([sys.executable,'-c',program],preexec_fn=module.install_socket_filter,check=True,timeout=5)
 
     def test_soak_receipt_uses_frozen_manifest_without_test_process_state(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -106,6 +135,39 @@ class OracleTests(unittest.TestCase):
             helper.write_bytes(b'modified')
             with self.assertRaises(RuntimeError):oracle.verified_guide_helper(root,checksum,'features')
             with self.assertRaises(RuntimeError):oracle.verified_guide_helper(root,checksum,'other')
+
+    def test_native_media_fixture_serves_exact_http_ranges_and_honest_failures(self):
+        spec=importlib.util.spec_from_file_location('guide_http_fixture',Path(__file__).resolve().parents[1]/'tools/guide_features.py')
+        features=importlib.util.module_from_spec(spec);spec.loader.exec_module(features)
+        requests=[];handler=features.stream_handler(b'0123456789',requests)
+        def response(header='',path='/stream.ogv',head=False):
+            request=object.__new__(handler);request.connection=Mock();request.command='HEAD' if head else 'GET';request.path=path;request.headers={'Range':header};request.wfile=io.BytesIO()
+            headers={};codes=[];request.send_response=codes.append;request.send_header=lambda key,value:headers.update({key:value});request.end_headers=lambda:None
+            request.serve(not head)
+            return codes[0],headers,request.wfile.getvalue()
+        code,headers,body=response();self.assertEqual((code,headers['Content-Length'],body),(200,'10',b'0123456789'))
+        for header,expected,content_range in [('bytes=0-',b'0123456789','bytes 0-9/10'),('bytes=7-',b'789','bytes 7-9/10'),('bytes=2-4',b'234','bytes 2-4/10'),('bytes=-3',b'789','bytes 7-9/10'),('bytes=8-99',b'89','bytes 8-9/10')]:
+            code,headers,body=response(header);self.assertEqual((code,body,headers['Content-Range'],headers['Content-Length']),(206,expected,content_range,str(len(expected))))
+            code,headers,body=response(header,head=True);self.assertEqual((code,body,headers['Content-Range']),(206,b'',content_range))
+        for header in ('bytes=10-','bytes=5-2','bytes=-0','bytes=-','bytes=0-1,4-5','invalid','bytes='+('9'*200)+'-'):
+            code,headers,body=response(header);self.assertEqual((code,headers['Content-Range'],body),(416,'bytes */10',b''))
+        self.assertEqual(response(path='/auth')[0],401);self.assertEqual(response(path='/missing')[0],404)
+        for _ in range(150):response()
+        self.assertEqual(len(requests),128)
+        with self.assertRaises(ValueError):features.stream_handler(b'',[])
+
+    def test_payload_cache_cleanup_restores_hashes_and_refuses_changed_or_unknown_bytes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            run=Path(folder).resolve();payload=run/'payload';(payload/'bin').mkdir(parents=True);(payload/'bin/isolde').write_bytes(b'executable')
+            source=payload/'share/isolde/helper.py';source.parent.mkdir(parents=True);source.write_bytes(b'verified module')
+            expected=oracle.payload_hashes(payload);(run/'test-result.json').write_text(json.dumps({'passed':True,'fullSuite':True,'payload':expected}))
+            cache=source.parent/'__pycache__';cache.mkdir();generated=cache/'helper.cpython-314.pyc';generated.write_bytes(b'generated runtime cache')
+            removed=oracle.remove_generated_payload_cache(run);self.assertEqual(len(removed),1);self.assertFalse(generated.exists());self.assertEqual(oracle.payload_hashes(payload),expected)
+            generated.write_bytes(b'cache');source.write_bytes(b'changed code')
+            with self.assertRaises(RuntimeError):oracle.remove_generated_payload_cache(run)
+            self.assertTrue(generated.exists());source.write_bytes(b'verified module');unknown=payload/'unexpected.py';unknown.write_bytes(b'unreviewed')
+            with self.assertRaises(RuntimeError):oracle.remove_generated_payload_cache(run)
+            self.assertTrue(unknown.exists());self.assertTrue(generated.exists())
 
     def test_remote_fixture_text_uses_production_keyboard_and_only_dpad(self):
         path=Path(__file__).resolve().parents[1]
@@ -250,13 +312,14 @@ class OracleTests(unittest.TestCase):
             (old/"source.log").write_text("preserve evidence")
             os.utime(old,(i,i))
         profile=home/"profile.json";profile.write_text("preserve user data")
+        (runner.root/'runs/1/guide-soak-receipt.json').write_text('{}');os.utime(runner.root/'runs/1',(1,1))
         with patch.object(runner,"command",return_value="isolde-test"),patch.object(runner,"stage") as stage,patch.object(oracle.Path,"home",return_value=home),patch.object(oracle.shutil,"disk_usage",return_value=SimpleNamespace(free=7*1024**3)):
             runner.prepare_guest_space(8)
         stage.assert_called_once_with("guest-apt-cache-clean",["sudo","-n","apt-get","clean"],60)
         receipt=json.loads((runner.run/"guest-package-cache-cleanup.json").read_text())
         self.assertFalse(receipt["installedPackagesRemoved"])
         self.assertEqual(receipt["target"],"/var/cache/apt/archives")
-        self.assertFalse((runner.root/"runs/1/payload").exists())
+        self.assertTrue((runner.root/"runs/1/payload").exists())
         self.assertFalse((runner.root/"runs/2/payload").exists())
         self.assertTrue((runner.root/"runs/3/payload").exists())
         self.assertTrue((runner.root/"runs/4/payload").exists())
@@ -559,8 +622,8 @@ class OracleTests(unittest.TestCase):
         self.assertEqual(oracle.CASES["guide-surfaces"],("tv-library-acceptance.py",["--guide","--guide-surfaces","--inspect"]))
         spec=importlib.util.spec_from_file_location('guide_feature_contract',Path(__file__).resolve().parents[1]/'tools/guide_features.py')
         features=importlib.util.module_from_spec(spec);spec.loader.exec_module(features)
-        feature_flags=('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules')
-        feature_result=dict(surfaces,captures=surfaces['captures']+features.PHASES,cachedChannelCount=9,**dict.fromkeys(feature_flags,True))
+        feature_flags=('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules','directSourceImport','failedFeedRefreshPreservesCache')
+        feature_result=dict(surfaces,captures=surfaces['captures']+features.PHASES,cachedChannelCount=10,**dict.fromkeys(feature_flags,True))
         self.assertTrue(oracle.visual_result_passed('guide-features',feature_result))
         for phase in features.PHASES:
             incomplete=dict(feature_result,captures=[item for item in feature_result['captures'] if item!=phase])

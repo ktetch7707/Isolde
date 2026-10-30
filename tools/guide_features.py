@@ -3,6 +3,7 @@ from collections import deque
 import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import re
 from pathlib import Path
 import sqlite3
 import threading
@@ -10,7 +11,7 @@ import time
 from datetime import datetime
 from xml.etree import ElementTree
 
-PHASES=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated']
+PHASES=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated','guidedirectdraft','guidedirectpreview','guidedirectimported','guidefeedrefreshfailed']
 KEYS=['1','2','3','4','5','6','7','8','9','0','q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l','-','Shift','z','x','c','v','b','n','m','_','Del','Space','.','@','#','!','?',',',':','/','Clear','Done']
 
 
@@ -44,24 +45,48 @@ def definitions(database):
     with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as connection:return [json.loads(row[0]) for row in connection.execute('SELECT definition FROM channels ORDER BY position,id')]
 
 
-def exercise(evidence,media,database,directory,local,poster,rpc,capture,wait,shell_active,key):
-    from guide_lifecycle import slots
-    requests=[];payload=next(media.glob('Isolde Television Fixture/Fixture S01E01.ogv')).read_bytes()
+def stream_handler(payload, requests):
+    """A seekable HTTP media fixture: Kodi probes the tail before playback."""
+    if not payload:raise ValueError('Media fixture must contain bytes')
     class Stream(BaseHTTPRequestHandler):
         def do_HEAD(self):self.serve(False)
         def do_GET(self):self.serve(True)
         def log_message(self,*args):pass
         def serve(self,body):
-            self.connection.settimeout(5);code=401 if self.path=='/auth' else 200 if self.path=='/stream.ogv' else 404
-            requests.append({'method':self.command,'path':self.path,'status':code,'range':self.headers.get('Range','')[:128]})
+            self.connection.settimeout(5)
+            code=401 if self.path=='/auth' else 200 if self.path=='/stream.ogv' else 404
+            header=self.headers.get('Range','');start,end=0,len(payload)-1
+            if code==200 and header:
+                match=re.fullmatch(r'bytes=(\d*)-(\d*)',header) if len(header)<=128 else None
+                if not match or not any(match.groups()):code=416
+                elif not match[1]:
+                    suffix=int(match[2]);start=max(0,len(payload)-suffix)
+                    if suffix==0:code=416
+                else:
+                    start=int(match[1]);end=min(int(match[2]),end) if match[2] else end
+                    if start>end or start>=len(payload):code=416
+                if code==200 and start < len(payload) and start <= end:code=206
+            requests.append({'method':self.command,'path':self.path,'status':code,'range':header[:128]})
             if len(requests)>128:del requests[:-128]
-            self.send_response(code);self.send_header('Content-Type','video/ogg');self.send_header('Content-Length',str(len(payload) if code==200 else 0));self.end_headers()
-            if body and code==200:
-                try:self.wfile.write(payload)
+            content=payload[start:end+1] if code in (200,206) else b''
+            self.send_response(code);self.send_header('Content-Type','video/ogg');self.send_header('Content-Length',str(len(content)))
+            if code in (200,206):self.send_header('Accept-Ranges','bytes')
+            if code==206:self.send_header('Content-Range',f'bytes {start}-{end}/{len(payload)}')
+            elif code==416:self.send_header('Content-Range',f'bytes */{len(payload)}')
+            self.end_headers()
+            if body and content:
+                try:self.wfile.write(content)
                 except (BrokenPipeError,ConnectionResetError):pass
-    server=HTTPServer(('127.0.0.1',0),Stream);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+    return Stream
+
+
+def exercise(evidence,media,database,directory,local,poster,rpc,capture,wait,shell_active,key):
+    from guide_lifecycle import slots
+    requests=[];payload=next(media.glob('Isolde Television Fixture/Fixture S01E01.ogv')).read_bytes()
+    server=HTTPServer(('127.0.0.1',0),stream_handler(payload,requests));thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     url='http://127.0.0.1:'+str(server.server_port)
-    playlist=evidence/'live.m3u';xml=media/'fixture.xml';package=evidence/'channel.json'
+    playlist=evidence/'live.m3u';xml=evidence/'native.xml';package=evidence/'channel.json'
+    xml.write_bytes((media/'fixture.xml').read_bytes())
     playlist.write_text('#EXTM3U\n#EXTINF:-1 tvg-id="unmapped",Native Live\n'+url+'/stream.ogv\n#EXTINF:-1 tvg-id="no-epg",No Listings\n'+url+'/stream.ogv\n#EXTINF:-1 tvg-id="auth",Authentication Required\n'+url+'/auth\n')
     def keys(*names):
         for name in names:key(name)
@@ -105,6 +130,7 @@ def exercise(evidence,media,database,directory,local,poster,rpc,capture,wait,she
             (evidence/'guide-features.json').write_text(json.dumps({'passed':False,'stage':'native-stream-observation','samples':samples,'httpRequests':requests},indent=2))
             time.sleep(1)
         print('NATIVE_STREAM_OBSERVATION '+json.dumps({'samples':samples,'httpRequests':requests[-8:]}),flush=True)
+        assert all(sample['state'].get('state')=='playing' and sample['players'] for sample in samples),'Native stream ended before visible-video review'
         capture('guidefeednolistings');wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Native stream Stop returned');wait(shell_active,'Native stream automatic focus return',seconds=8)
         capture('guidefeedreturn')
         wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='failed' and 'authentication' in rpc(directory,'Isolde.PlaybackStatus').get('reason','').lower(),'Authentication failure is distinct from connection failure')
@@ -167,8 +193,33 @@ def exercise(evidence,media,database,directory,local,poster,rpc,capture,wait,she
         with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as connection:items=json.loads(connection.execute('SELECT candidates FROM channels WHERE id=?',(mixed['id'],)).fetchone()[0])
         assert {item['mediaType'] for item in items}=={'movie','episode'} and len(items)==4
         capture('guidemixedcreated')
+        # Independently configure the direct-URL/no-XMLTV route, through the
+        # same visible source form. Keep Kodi's original PVR fixture untouched.
+        for _ in range(10):key('Up')
+        keys('Left','Left','Left','Left','Left','Right','Right','Right','Return','Down','Return')
+        capture('guidedirectdraft')
+        key('Return');text('t11-direct');keys('Down','Return');text('');keys('Down','Return');text('')
+        keys('Down','Return');text(url+'/stream.ogv');keys('Down','Return');text('Direct Live');keys('Down','Return')
+        capture('guidedirectpreview');assert len(channels())==9,'Direct source preview persisted before Import'
+        keys('Down','Return');wait(lambda:len(channels())==10,'Direct URL source imported without XMLTV')
+        direct=next(item for item in channels() if item.get('source',{}).get('instance')=='t11-direct')
+        assert direct['name']=='Direct Live' and direct['source']['url']==url+'/stream.ogv'
+        with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as connection:
+            assert connection.execute('SELECT COUNT(*) FROM slots WHERE channel=?',(direct['id'],)).fetchone()[0]==0,'Direct source invented XMLTV listings'
+        capture('guidedirectimported')
+        # Malformed external source data must fail refresh without replacing
+        # the committed lineup or cached intervals; only fixture bytes change.
+        key('Return');keys('Down','Return');key('Return');text('t11-feed')
+        keys('Down','Return');text(playlist);keys('Down','Return');text(xml)
+        keys('Down','Return');text('');keys('Down','Return');text('')
+        cached=slots(database);saved=channels();xml_bytes=xml.read_bytes()
+        try:
+            xml.write_text('<tv><programme');keys('Down','Return');time.sleep(1)
+            capture('guidefeedrefreshfailed')
+            assert channels()==saved and slots(database)==cached,'Failed source refresh changed committed cache'
+        finally:xml.write_bytes(xml_bytes)
         result={key:True for key in ('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy')}
-        result.update(cartoonNetworkOneSave=True,mixedNestedRules=True)
+        result.update(cartoonNetworkOneSave=True,mixedNestedRules=True,directSourceImport=True,failedFeedRefreshPreservesCache=True)
         result.update(importedChannelId=imported['id'],calendarChannelId=created['id'],httpRequests=requests,cachedChannelCount=len(channels()))
         (evidence/'guide-features.json').write_text(json.dumps(result,indent=2));return result
     finally:
