@@ -228,7 +228,13 @@ def main():
                 key('Return');time.sleep(0.6)
             capture('guidesoakguide')
             observed=wait(lambda:position(rpc,directory,current(database,target['id'])),'Actual cold-reopen local identity and elapsed seek verified' if args.cold_reopen else 'Actual twelve-hour-off local identity and elapsed seek verified')
-            capture('guidesoakvideo');wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Cold playback Stop')
+            capture('guidesoakvideo')
+            def stopped_status():
+                status=rpc(directory,'Isolde.PlaybackStatus')
+                return status if status.get('state')=='ended' else None
+            stopped=wait(stopped_status,'Cold playback Stop')
+            if stopped.get('naturalEnd') is not False:raise RuntimeError('Cold return requires explicit Stop, not natural completion')
+            print('GUIDE_EXPLICIT_STOP '+json.dumps(stopped),flush=True)
             wait(lambda:int(run('xprop','-root','_NET_ACTIVE_WINDOW',env=env).strip().split()[-1],16)==int(shell[0],16),'Offline automatic exact-window return',8)
             capture('guidesoakreturn');capture('guidesoaksearch')
             # Use only D-pad/Confirm to enter a local search on the disconnected app.
@@ -241,6 +247,7 @@ def main():
             if any(after.get(row[0])!=row for row in receipt['nativeSlots']):raise RuntimeError('Restart changed committed seven-day native slots')
             proof=json.loads((evidence/'network-denial.json').read_text());result={'passed':True,'realTwelveHourOff':not args.cold_reopen,'actualColdReopen':True,'elapsedOffSeconds':None if args.cold_reopen else elapsed,'secondsSinceFixturePreparation':elapsed,'offlineNamespace':not args.cold_reopen,'actualLocalElapsedSeek':True,'committedSevenDaySlotsUnchanged':True,'localSearchMatches':len(matches),'automaticNativeReturn':True,'normalProfileUsed':False,'captures':PHASES,'playback':observed,'network':proof,'visualReview':'pending'}
             result['offlineSocketFilter']=bool(args.deny_network)
+            result['explicitManagedStop']=True
             (evidence/'result.json').write_text(json.dumps(result,indent=2))
     finally:
         if process and process.poll() is None:

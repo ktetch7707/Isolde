@@ -1,7 +1,7 @@
 # Declarative fixture keys only; no text, pointer, shell or native-app permission replay.
 function Import-GuideInputPlan {
     param([string]$Path, [string]$Case)
-    if ($Case -notin @('guide-lifecycle','guide-reopen','guide-features')) { throw 'Fixture input replay is restricted to Guide acceptance cases.' }
+    if ($Case -notin @('guide-surfaces','guide-lifecycle','guide-reopen','guide-features')) { throw 'Fixture input replay is restricted to Guide acceptance cases.' }
     $file = Get-Item -LiteralPath $Path
     if ($file.Length -gt 65536) { throw 'Oversized Guide input plan.' }
     $plan = Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json -AsHashtable

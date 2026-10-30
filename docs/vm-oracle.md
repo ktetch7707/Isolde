@@ -43,6 +43,10 @@ From the repository root:
 ./tools/vm-test.ps1 Test -Suite component_contracts
 # Fast Studio: studio_quick, studio_selection, studio_unit, studio_behavior, or studio (all four).
 ./tools/vm-test.ps1 Test -Suite studio
+
+# Bounded Guide QML-only correction: reuse a verified original full pass.
+# Current guide_remote_ui tests and a rebuilt/staged application are required.
+./tools/vm-test.ps1 Test -Suite guide_remote_ui -ReuseFullRun <full-run-id> -RunId <new-id>
 # Other choices: home_component_navigation, kodi_media_client. Default: all.
 
 # Use the exact RUN_ID printed by the passing full Test.
@@ -62,6 +66,8 @@ From the repository root:
 # After a crashed guardian, restore its recorded service state if no test owns either lock.
 ./tools/vm-test.ps1 Recover -RunId <id>
 ```
+
+`-ReuseFullRun` is restricted to existing `GuideWidget.qml` / `GuideView.qml` changes plus their named acceptance/test files and documentation. C++/configuration/build/runtime changes, new/deleted files, another focused suite, a focused-only base or a modified base payload are refused. The runner verifies both manifests and the original full payload, runs current Guide UI tests, builds/stages the current application, and records `fullSuite: false` with an explicit coverage-reuse proof. Visual rechecks that proof and both payload identities. This implements reuse for a bounded visual correction; T31 still requires one exact final-candidate full run.
 
 The `pages` case is opt-in (`-Cases pages`): it exercises real Kodi in a fresh UUID native profile and synthetic media under `~/Videos/Isolde-Acceptance/`. It is not preservation testing of an existing Kodi installation. Do not point it at Household or `~/.kodi`.
 

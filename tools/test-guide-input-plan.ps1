@@ -18,4 +18,6 @@ Check-Plan @{schemaVersion=1;case='guide-lifecycle';phases=@{guidevideo=@('Retur
 $rejected=$false
 try{$null=Import-GuideInputPlan -Path $path -Case apps}catch{$rejected=$true}
 if(!$rejected){throw 'Native permissions must never replay'}
+@{schemaVersion=1;case='guide-surfaces';phases=@{guidevideo=@('Escape')}} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $path
+$null=Import-GuideInputPlan -Path $path -Case guide-surfaces
 Write-Output "PASS: Guide replay bounds, keys, schema, empty keys and native-case refusal; evidence=$folder"

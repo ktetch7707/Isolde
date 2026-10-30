@@ -413,6 +413,7 @@ provider.setSettingString("searchlanguage","en-US")
                     for phase in ('guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn'):guide_capture(phase)
                     assert imported_channels()==lineup,'Browsing surfaces changed saved channel definitions'
                     assert cached_slots()==committed_slots,'Browsing surfaces regenerated or changed committed slots'
+                    soak_ready=True
                     surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalosd','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
                 lifecycle={}
                 features={}

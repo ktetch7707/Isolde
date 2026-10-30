@@ -165,6 +165,7 @@ def visual_result_passed(case, result):
         elapsed=(type(result.get('elapsedOffSeconds')) in (int,float) and 43200<=result['elapsedOffSeconds']<=7*86400) if case=='guide-soak' else result.get('elapsedOffSeconds') is None
         return (mode and all(result.get(key) is True for key in ('passed','actualLocalElapsedSeek','committedSevenDaySlotsUnchanged','automaticNativeReturn'))
                 and result.get('normalProfileUsed') is False and elapsed
+                and (case=='guide-soak' or result.get('explicitManagedStop') is True)
                 and type(result.get('localSearchMatches')) is int and result['localSearchMatches']>0
                 and result.get('captures')==['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
     if case=="guide-features":
@@ -283,6 +284,18 @@ def verified_guide_helper(root, expected, kind):
 def feature_helper_command(source, helper, executable, flags):
     bootstrap="import sys,runpy,importlib.util;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);spec=importlib.util.spec_from_file_location('guide_features',helper);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);sys.modules['guide_features']=module;path=sys.argv[1];sys.argv=sys.argv[1:];runpy.run_path(path,run_name='__main__')"
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/'tv-library-acceptance.py'),str(executable)]+flags
+
+
+def verified_studio_helper(root, expected):
+    if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):raise RuntimeError('Studio requires an exact helper digest')
+    path=root/'bin'/('studio-helper-'+expected+'.py')
+    if path.is_symlink() or path.resolve()!=path or not path.is_file() or digest(path)!=expected:raise RuntimeError('Studio helper identity mismatch')
+    return path
+
+
+def studio_helper_command(source, helper, executable):
+    bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio','--inspect']
 
 
 def guide_backend_diagnostics(run):
@@ -498,6 +511,32 @@ def write_soak_receipt(run, evidence, executable):
     atomic_json(run/'guide-soak-receipt.json',{'receipt':str(receipts[0]),'sourceDigest':digest(run/'files.sha256'),'executableSha256':digest(executable)})
 
 
+def guide_qml_coverage(root, run, base_id, suite):
+    """Reuse a real full pass only for a focused, bounded Guide QML correction."""
+    if suite!='guide_remote_ui' or not isinstance(base_id,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',base_id):
+        raise RuntimeError('Guide QML reuse requires guide_remote_ui and an exact base run')
+    base=root/'runs'/base_id
+    if base==run or base.is_symlink() or base.resolve()!=base:
+        raise RuntimeError('Unsafe full-suite base run')
+    result=json.loads((base/'test-result.json').read_text())
+    if result.get('passed') is not True or result.get('fullSuite') is not True or result.get('sourceDigest')!=digest(base/'files.sha256'):
+        raise RuntimeError('Guide QML reuse requires a passing original full suite')
+    if payload_hashes(base/'payload')!=result.get('payload'):
+        raise RuntimeError('Full-suite base payload changed')
+    before=manifest(base/'files.sha256');after=manifest(run/'files.sha256')
+    changed=sorted(name for name in before.keys()|after.keys() if before.get(name)!=after.get(name))
+    qml={'qml/GuideWidget.qml','qml/GuideView.qml'}
+    harness={'tests/guide_ui.cpp','tests/test_vm_oracle.py','tests/test_kodi_bridge.py',
+             'tools/vm-test.ps1','tools/vm-oracle.py','tools/guide-soak-acceptance.py','tools/guide-reopen-inputs.json','tools/tv-library-acceptance.py',
+             'tools/guide-input-plan.ps1','tools/test-guide-input-plan.ps1'}
+    if not qml.intersection(changed) or any(name not in qml|harness and not name.startswith('docs/') for name in changed):
+        raise RuntimeError('Source changes exceed the focused Guide QML coverage boundary')
+    if any(name not in before or name not in after for name in changed):
+        raise RuntimeError('Guide QML reuse cannot add or remove source files')
+    return {'baseRunId':base_id,'baseSourceDigest':result['sourceDigest'],
+            'sourceDigest':digest(run/'files.sha256'),'changedPaths':changed,'changedGuideQml':sorted(qml.intersection(changed))}
+
+
 class Oracle:
     def __init__(self, root, run_id):
         self.root = root
@@ -706,10 +745,11 @@ class Oracle:
                               for key, separator, value in [line.partition("=")] if separator and key in {"XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "WAYLAND_DISPLAY", "DISPLAY"}}
         atomic_json(self.run/"android-capabilities.json", android)
 
-    def test(self, suite):
+    def test(self, suite, reuse_full_run=None):
         self.check()
         service_before, releases_before = self.state["service"], self.state["releases"]
         source, entries = extract_snapshot(self.run)
+        reuse=guide_qml_coverage(self.root,self.run,reuse_full_run,suite) if reuse_full_run else None
         self.stage("oracle-self-test", ["python3", str(source / "tests/test_vm_oracle.py")], 30)
         work = self.root / "work"
         old = json.loads((work / "manifest.json").read_text()) if (work / "manifest.json").exists() else {}
@@ -721,6 +761,7 @@ class Oracle:
                                  "-DBUILD_TESTING=ON", "-DCMAKE_BUILD_TYPE=Debug"], 120)
         command = ["cmake", "--build", str(build), "--parallel", "2"]
         targets, pattern = suite_selection(suite)
+        if reuse:targets=targets+['isolde']
         if targets:
             command += ["--target"] + targets
         self.stage("build", command, 1200)
@@ -767,7 +808,8 @@ class Oracle:
                   "tests": len(cases), "sourceDigest": digest(self.run / "files.sha256"),
                   "serviceBefore": service_before, "serviceAfter": service_after,
                   "releasesBefore": releases_before, "releasesAfter": releases_after}
-        if suite == "all":
+        if reuse:result['coverageReuse']=reuse
+        if suite == "all" or reuse:
             self.stage("stage-payload", ["cmake", "--install", str(build), "--prefix", str(self.run / "payload")], 120)
             result["payload"] = payload_hashes(self.run / "payload")
         atomic_json(self.run / "test-result.json", result)
@@ -775,8 +817,12 @@ class Oracle:
 
     def tested_payload(self):
         result = json.loads((self.run / "test-result.json").read_text())
-        if not result.get("passed") or not result.get("fullSuite"):
+        if not result.get("passed") or (not result.get("fullSuite") and not result.get('coverageReuse')):
             raise RuntimeError("This run has no passing full-suite payload; run Test -Suite all")
+        if not result.get('fullSuite'):
+            proof=result['coverageReuse']
+            if proof!=guide_qml_coverage(self.root,self.run,proof.get('baseRunId'),result.get('suite')):
+                raise RuntimeError('Guide QML coverage proof changed')
         actual=payload_hashes(self.run / "payload")
         if actual != result["payload"]:
             expected=result['payload']
@@ -910,8 +956,9 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None):
+    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None):
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
+        if studio_helper_digest and case!='studio':raise RuntimeError('Studio helper is studio-only')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
@@ -926,6 +973,10 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
+        if case=='studio' and studio_helper_digest:
+            helper=verified_studio_helper(self.root,studio_helper_digest)
+            command=studio_helper_command(source,helper,executable)
+            self.update(acceptanceHelperSha256=studio_helper_digest)
         if case=='guide-features' and feature_helper_digest:
             helper=verified_guide_helper(self.root,feature_helper_digest,'features')
             command=feature_helper_command(source,helper,executable,flags)
@@ -956,7 +1007,7 @@ class Oracle:
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
-            if case=="guide-lifecycle" or (case=="guide-features" and any((p/'guide-soak-ready.json').is_file() for p in evidence)):
+            if case=="guide-lifecycle" or (case in {'guide-features','guide-surfaces'} and any((p/'guide-soak-ready.json').is_file() for p in evidence)):
                 write_soak_receipt(self.run,evidence,executable)
             self.update(visualCase=case, visualPassed=True, visualReview="pending",
                         visualAcceptance="pending", semanticAcceptance="not_verified", executable=str(executable))
@@ -1127,7 +1178,7 @@ def collect_evidence(run, case, directories):
                 raise RuntimeError("Unexpected evidence root")
             paths = [directory / name for name in ("result.json", "shell.log", "android.log", "window-discovery.json", "attempt-config.json", "provider-requests.json")]
             if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
-                paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json")]
+                paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json","guide-soak-ready.json")]
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
             if case=="guide-features":paths += [directory/name for name in ('guide-features.json','guide-soak-ready.json')]
             if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json','cached-artwork-observation.json','original-home-layout.json')]
@@ -1271,6 +1322,7 @@ def main():
     parser.add_argument("action", choices=["check", "test", "visual", "deploy", "provision", "configure", "diagnose", "status", "recover", "cancel"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--suite", choices=SUITES, default="all")
+    parser.add_argument('--reuse-full-run')
     parser.add_argument("--wait-seconds",type=int,default=0)
     parser.add_argument("--storage",action="store_true")
     parser.add_argument('--guide-diagnostics',action='store_true')
@@ -1281,6 +1333,7 @@ def main():
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")
     parser.add_argument("--feature-helper-digest")
+    parser.add_argument('--studio-helper-digest')
     args = parser.parse_args()
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
@@ -1358,9 +1411,9 @@ def main():
             if args.action == "check":
                 oracle.check()
             elif args.action == "test":
-                oracle.test(args.suite)
+                oracle.test(args.suite,args.reuse_full_run)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":

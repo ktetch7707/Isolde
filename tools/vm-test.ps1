@@ -5,6 +5,7 @@ param(
     [ValidateSet('studio','desktop','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [string]$GuideReplayPlan,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ReuseFullRun,
     [switch]$Capture,
     [switch]$Storage,
     [switch]$GuideDiagnostics,
@@ -14,9 +15,10 @@ param(
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
+if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -ne 'guide_remote_ui')) { throw 'ReuseFullRun requires Test -Suite guide_remote_ui and supports only bounded Guide QML changes.' }
 if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
 if ($GuideDiagnostics -and $Action -ne 'Status') { throw 'GuideDiagnostics is Status-only.' }
-if ($GuideReplayPlan -and ($Action -ne 'Visual' -or $Cases.Count -ne 1 -or $Cases[0] -notin @('guide-lifecycle','guide-reopen','guide-features'))) { throw 'GuideReplayPlan requires one supported Guide Visual case.' }
+if ($GuideReplayPlan -and ($Action -ne 'Visual' -or $Cases.Count -ne 1 -or $Cases[0] -notin @('guide-surfaces','guide-lifecycle','guide-reopen','guide-features'))) { throw 'GuideReplayPlan requires one supported Guide Visual case.' }
 if ($WaitSeconds -and $Action -notin @('Test','Configure','Visual')) { throw 'Bounded lock waiting is available for Test/Configure/Visual only.' }
 if ($Capture -and $Action -ne 'Status') { throw 'Capture is restricted to Status of an active guest setup guardian.' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Use PowerShell 7 (pwsh), not Windows PowerShell.' }
@@ -59,6 +61,12 @@ try {
         foreach ($case in $Cases) {
             $reopenDigest = ''
             $featureDigest = ''
+            $studioDigest = ''
+            if ($case -eq 'studio') {
+                $helper = Join-Path $PSScriptRoot 'home-components-acceptance.py'
+                $studioDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/studio-helper-$studioDigest.py")) -TimeoutSeconds 30 -Log $transport
+            }
             if ($case -eq 'guide-features') {
                 $helper = Join-Path $PSScriptRoot 'guide_features.py'
                 $featureDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -72,7 +80,7 @@ try {
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
         }
     } else {
         $remoteAction = $Action.ToLowerInvariant()
@@ -80,6 +88,7 @@ try {
         if ($Storage) { $command += ' --storage' }
         if ($GuideDiagnostics) { $command += ' --guide-diagnostics' }
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
+        if ($ReuseFullRun) { $command += " --reuse-full-run $ReuseFullRun" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
         if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'artifacts') {

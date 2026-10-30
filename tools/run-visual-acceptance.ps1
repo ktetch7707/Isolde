@@ -9,6 +9,7 @@ param(
     [string]$GuideReplayPlan,
     [string]$ReopenHelperDigest,
     [string]$FeatureHelperDigest,
+    [string]$StudioHelperDigest,
     [ValidateRange(30,1800)][int]$TimeoutSeconds = 1000,
     [ValidateRange(0,900)][int]$WaitSeconds = 0,
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation',
@@ -42,6 +43,10 @@ if ($GuestRunner) {
     if ($FeatureHelperDigest) {
         if ($Case -ne 'guide-features' -or $FeatureHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Guide feature helper identity.' }
         $command += " --feature-helper-digest $FeatureHelperDigest"
+    }
+    if ($StudioHelperDigest) {
+        if ($Case -ne 'studio' -or $StudioHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Studio helper identity.' }
+        $command += " --studio-helper-digest $StudioHelperDigest"
     }
 } elseif ($Case -in @('studio','desktop')) {
     $desktopFlag = if ($Case -eq 'desktop') { ' --desktop' } else { '' }

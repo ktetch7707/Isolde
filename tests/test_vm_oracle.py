@@ -54,13 +54,14 @@ class OracleTests(unittest.TestCase):
                 self.assertEqual(active,[])
 
     def test_cold_reopen_never_counts_as_real_twelve_hour_soak(self):
-        result=dict(passed=True,actualColdReopen=True,realTwelveHourOff=False,elapsedOffSeconds=None,
+        result=dict(passed=True,actualColdReopen=True,explicitManagedStop=True,realTwelveHourOff=False,elapsedOffSeconds=None,
                     offlineNamespace=False,network={'mode':'host-inherited'},actualLocalElapsedSeek=True,committedSevenDaySlotsUnchanged=True,
                     automaticNativeReturn=True,normalProfileUsed=False,localSearchMatches=3,
                     captures=['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
         self.assertTrue(oracle.visual_result_passed('guide-reopen',result))
         offline=dict(result,offlineSocketFilter=True,network={'mode':'seccomp-af-inet-denied','socketErrnos':[101,101],'unixSocketAvailable':True,'rootOwners':{'/':0,'/usr/lib/isolde-native/bwrap':0}})
         self.assertTrue(oracle.visual_result_passed('guide-reopen',offline))
+        self.assertFalse(oracle.visual_result_passed('guide-reopen',dict(offline,explicitManagedStop=False)))
         self.assertFalse(oracle.visual_result_passed('guide-soak',offline))
         for network in ({},dict(offline['network'],socketErrnos=[0,101]),dict(offline['network'],unixSocketAvailable=False),dict(offline['network'],rootOwners={'/':65534,'/usr/lib/isolde-native/bwrap':65534})):
             self.assertFalse(oracle.visual_result_passed('guide-reopen',dict(offline,network=network)))
@@ -377,6 +378,60 @@ class OracleTests(unittest.TestCase):
         self.assertTrue(oracle.visual_result_passed("pastel", functional))
         functional["functional_journey_passed"] = False
         self.assertFalse(oracle.visual_result_passed("pastel", functional))
+
+    def test_studio_helper_preserves_frozen_paths_arguments_and_dependencies(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();source=root/'source';folder=source/'tools';folder.mkdir(parents=True)
+            frozen=folder/'home-components-acceptance.py';frozen.write_text("raise RuntimeError('frozen helper must remain untouched')")
+            (folder/'frozen_dependency.py').write_text("VALUE='frozen dependency'")
+            code="import sys,json,frozen_dependency;print(json.dumps({'file':__file__,'args':sys.argv,'dependency':frozen_dependency.VALUE}))"
+            expected=hashlib.sha256(code.encode()).hexdigest();helper=root/'bin'/('studio-helper-'+expected+'.py');helper.parent.mkdir();helper.write_bytes(code.encode())
+            self.assertEqual(oracle.verified_studio_helper(root,expected),helper)
+            executable=root/'payload/bin/isolde candidate'
+            command=oracle.studio_helper_command(source,helper,executable);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'file':str(frozen),'args':[str(frozen),str(executable),'--studio','--inspect'],'dependency':'frozen dependency'})
+            self.assertIn('must remain untouched',frozen.read_text())
+            helper.write_bytes(b'changed')
+            with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected)
+            with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,'../bad')
+
+    def test_focused_guide_qml_reuse_requires_unchanged_production_and_original_full_pass(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();base=root/'runs/base';current=root/'runs/focused'
+            base.mkdir(parents=True);current.mkdir()
+            files={'qml/GuideWidget.qml':b'old','src/main.cpp':b'core','CMakeLists.txt':b'build',
+                   'tests/guide_ui.cpp':b'tests','docs/review.md':b'notes'}
+            def write_manifest(run,values):
+                source=run/'source';source.mkdir(exist_ok=True)
+                for name,data in values.items():
+                    path=source/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+                (run/'files.sha256').write_text(''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(values.items())))
+            write_manifest(base,files);fresh=dict(files,**{'qml/GuideWidget.qml':b'new','tests/guide_ui.cpp':b'regression'})
+            write_manifest(current,fresh)
+            for run in (base,current):
+                executable=run/'payload/bin/isolde';executable.parent.mkdir(parents=True);executable.write_bytes(run.name.encode())
+            baseline={'passed':True,'fullSuite':True,'sourceDigest':oracle.digest(base/'files.sha256'),'payload':oracle.payload_hashes(base/'payload')}
+            oracle.atomic_json(base/'test-result.json',baseline)
+            proof=oracle.guide_qml_coverage(root,current,'base','guide_remote_ui')
+            self.assertEqual(proof['changedGuideQml'],['qml/GuideWidget.qml'])
+            runner=oracle.Oracle(root,'focused')
+            oracle.atomic_json(current/'test-result.json',{'passed':True,'fullSuite':False,'suite':'guide_remote_ui','coverageReuse':proof,'payload':oracle.payload_hashes(current/'payload')})
+            self.assertEqual(runner.tested_payload(),current/'payload')
+            for suite in ('all','guide','studio'):
+                with self.assertRaises(RuntimeError):oracle.guide_qml_coverage(root,current,'base',suite)
+            with self.assertRaises(RuntimeError):oracle.guide_qml_coverage(root,current,'../base','guide_remote_ui')
+            for name in ('src/main.cpp','CMakeLists.txt','tools/unreviewed-runtime.py'):
+                write_manifest(current,dict(fresh,**{name:b'changed'}))
+                with self.assertRaises(RuntimeError):oracle.guide_qml_coverage(root,current,'base','guide_remote_ui')
+            write_manifest(current,dict(fresh,**{'qml/GuideView.qml':b'added'}))
+            with self.assertRaises(RuntimeError):oracle.guide_qml_coverage(root,current,'base','guide_remote_ui')
+            write_manifest(current,fresh)
+            oracle.atomic_json(base/'test-result.json',dict(baseline,fullSuite=False))
+            with self.assertRaises(RuntimeError):oracle.guide_qml_coverage(root,current,'base','guide_remote_ui')
+            oracle.atomic_json(base/'test-result.json',baseline)
+            (base/'payload/bin/isolde').write_bytes(b'tampered')
+            with self.assertRaises(RuntimeError):runner.tested_payload()
 
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")

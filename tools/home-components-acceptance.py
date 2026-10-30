@@ -286,9 +286,14 @@ def main():
                     return
 
                 def undo_operation():
-                    key("Escape"); key("Down", 2); key("Return"); key("Return")  # More -> Undo.
-                    key("Up", 2); key("Right")  # Restore Add menu origin and the selected canvas item.
+                    key("Escape"); key("Up", 30); key("Left"); key("Return")  # Named Undo above the page menu.
+                    key("Down"); key("Down", 2); key("Right")  # Add menu origin; same selected canvas item.
                     assert layout.read_bytes() == original_bytes
+
+                def page_menu(index):
+                    # Called with the page menu already owning focus. Up reaches
+                    # its named history row; Down restores the first menu item.
+                    key("Up", 30); key("Down"); key("Down", index); key("Return")
 
                 key("Return"); key("Return"); key("Left")  # Moving into occupied space previews neighbors making room.
                 capture("reflow")
@@ -306,14 +311,14 @@ def main():
                 key("Return"); key("Return"); key("Right", 20); key("Escape")
                 assert layout.read_bytes() == original_bytes
 
-                key("Escape"); key("Down", 2); key("Return"); key("Return")  # Pages -> More -> Undo.
-                key("Return"); key("Down"); key("Return")  # More -> Redo.
-                key("Return"); key("Down", 4); key("Return")  # Optional Try interaction.
+                key("Escape"); key("Up", 30); key("Left"); key("Return")  # Named Undo.
+                key("Right"); key("Return"); key("Down")  # Named Redo, then page menu.
+                page_menu(7); key("Down", 2); key("Return")  # Review & Apply -> Try interaction.
                 assert layout.read_bytes() == original_bytes
                 capture("studio")
                 key("Escape")
                 assert layout.read_bytes() == original_bytes
-                key("Down"); key("Return"); key("Return")  # Apply summary -> atomic Apply.
+                key("Return"); key("Return")  # Same Review & Apply origin -> atomic Apply.
                 expect(lambda: len(json.loads(layout.read_text()).get("components", [])) == 2,
                        "Studio page menu/direct editing/history/Try interaction/Apply passed")
                 applied = layout.read_bytes()
@@ -338,11 +343,11 @@ def main():
                 assert layout.read_bytes() == applied
                 capture("inside")
                 key("Escape")  # Exact containing group selection.
-                key("Escape"); key("Down", 2); key("Return"); key("Down", 2); key("Return")  # More -> Layers.
+                key("Escape"); page_menu(4)  # Named Layers.
                 key("Down", 2); key("Right")  # Expand the group without changing its data.
                 capture("layers")
                 assert layout.read_bytes() == applied
-                key("Escape"); key("Down"); key("Return"); key("Return")  # Layers returns to the still-open page menu.
+                key("Escape"); page_menu(7); key("Return")  # Review & Apply from the still-open page menu.
                 expect(lambda: len(json.loads(layout.read_text()).get("components", [])) == 11,
                        "Nested input slots render and apply atomically")
                 grouped = json.loads(layout.read_text())["components"]
@@ -353,20 +358,20 @@ def main():
                 assert panel["presentation"]["layout"]["rows"] == 2
                 assert {(item["placement"]["x"], item["placement"]["y"]) for item in children} == {(x, y) for y in range(2) for x in range(4)}
                 grouped_bytes = layout.read_bytes()
-                key("Up", 2); key("Return")  # Page appearance from the Apply menu origin.
+                page_menu(3)  # Named Page appearance from the Apply menu origin.
                 key("Down", 2); key("Return"); key("Return")  # Layout -> scrolling checkbox.
                 key("Return")  # Preview enabled; no saved setting yet.
                 capture("scrollingoption")
                 assert layout.read_bytes() == grouped_bytes
                 key("Down"); key("Return"); key("Escape", 2)  # Done -> canvas.
-                key("Escape"); key("Down"); key("Return"); key("Down", 2); key("Return")  # More -> Layers.
+                key("Escape"); page_menu(4)  # Named Layers.
                 key("Down"); key("Return")  # Select Clock by its stable layer order.
                 key("Return"); key("Return"); key("Down", 15)
                 capture("scrolling")  # Three viewport heights below the first row, same card size.
                 assert layout.read_bytes() == grouped_bytes
                 key("Escape")  # Complete gesture/viewport cancellation.
                 key("Return"); key("Return"); key("Down", 15); key("Return")
-                key("Escape"); key("Down"); key("Return"); key("Return")  # Atomic Apply.
+                key("Escape"); page_menu(7); key("Return")  # Atomic Review & Apply.
                 expect(lambda: json.loads(layout.read_text())["composition"].get("verticalScrolling") is True,
                        "Scrolling page saved through the normal Studio checkbox")
                 scrolling_document = json.loads(layout.read_text())
