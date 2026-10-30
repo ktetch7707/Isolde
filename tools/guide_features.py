@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from xml.etree import ElementTree
 
-PHASES=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated']
+PHASES=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated']
 KEYS=['1','2','3','4','5','6','7','8','9','0','q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l','-','Shift','z','x','c','v','b','n','m','_','Del','Space','.','@','#','!','?',',',':','/','Clear','Done']
 
 
@@ -53,7 +53,7 @@ def exercise(evidence,media,database,directory,local,poster,rpc,capture,wait,she
         def log_message(self,*args):pass
         def serve(self,body):
             self.connection.settimeout(5);code=401 if self.path=='/auth' else 200 if self.path=='/stream.ogv' else 404
-            requests.append({'method':self.command,'path':self.path,'status':code})
+            requests.append({'method':self.command,'path':self.path,'status':code,'range':self.headers.get('Range','')[:128]})
             if len(requests)>128:del requests[:-128]
             self.send_response(code);self.send_header('Content-Type','video/ogg');self.send_header('Content-Length',str(len(payload) if code==200 else 0));self.end_headers()
             if body and code==200:
@@ -97,6 +97,14 @@ def exercise(evidence,media,database,directory,local,poster,rpc,capture,wait,she
             # matches Kodi's exact file URL. Public identity reads stay path-free.
             return len(players)==1 and players[0].get('type')=='video' and any(request['method']=='GET' and request['path']=='/stream.ogv' for request in requests)
         wait(streaming,'Actual no-EPG native stream plays through Kodi')
+        # Keep path-free production observations even if a later authoring
+        # step fails. A bridge acknowledgement alone is not visible-video proof.
+        samples=[]
+        for _ in range(3):
+            samples.append({'state':rpc(directory,'Isolde.PlaybackStatus'),'players':rpc(directory,'Player.GetActivePlayers'),'shellActive':bool(shell_active())})
+            (evidence/'guide-features.json').write_text(json.dumps({'passed':False,'stage':'native-stream-observation','samples':samples,'httpRequests':requests},indent=2))
+            time.sleep(1)
+        print('NATIVE_STREAM_OBSERVATION '+json.dumps({'samples':samples,'httpRequests':requests[-8:]}),flush=True)
         capture('guidefeednolistings');wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Native stream Stop returned');wait(shell_active,'Native stream automatic focus return',seconds=8)
         capture('guidefeedreturn')
         wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='failed' and 'authentication' in rpc(directory,'Isolde.PlaybackStatus').get('reason','').lower(),'Authentication failure is distinct from connection failure')
@@ -110,6 +118,7 @@ def exercise(evidence,media,database,directory,local,poster,rpc,capture,wait,she
         keys('Down','Return','Down','Return');wait(lambda:all(item.get('sourceEnabled',True) for item in channels() if item.get('owner')=='guide-feed'),'Native source explicitly enabled')
         keys('Escape','Escape','Down');
         for _ in range(4):key('Up')
+        capture('guidestationselect')
         key('Menu');down(15);key('Return');text(poster)
         wait(lambda:bool(channel().get('logo')),'Managed station logo saved')
         key('Escape');capture('guidestationlogo');key('Menu');down(16);keys('Return','Return')

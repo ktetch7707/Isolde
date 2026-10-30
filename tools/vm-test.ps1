@@ -58,6 +58,12 @@ try {
     if ($Action -eq 'Visual') {
         foreach ($case in $Cases) {
             $reopenDigest = ''
+            $featureDigest = ''
+            if ($case -eq 'guide-features') {
+                $helper = Join-Path $PSScriptRoot 'guide_features.py'
+                $featureDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-features-$featureDigest.py")) -TimeoutSeconds 30 -Log $transport
+            }
             if ($case -eq 'guide-reopen') {
                 $helper = Join-Path $PSScriptRoot 'guide-soak-acceptance.py'
                 $reopenDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -66,7 +72,7 @@ try {
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
         }
     } else {
         $remoteAction = $Action.ToLowerInvariant()

@@ -14,10 +14,11 @@ All task outcomes below use [vm-software-completion.md](vm-software-completion.m
 
 - Selected track: **T11**, existing closure exception; return to Studio afterward.
 - R0/R1 done: bounded reviewed input plans; actual lifecycle/repair PASS, all 36 captures reviewed. See [runtime evidence](t11-runtime-2026-10-29.md).
-- K payload `t11-acceptance-harness-20261029-k`: existing 41/41 CTests reused; 215 current application files match its source manifest. No new full build for tooling changes.
-- Next: **T11-R2**, source/authoring. Sources navigation now works and exact 72-interval import passes. Attempts 074040-214 and 074532-140 both fail at actual no-EPG playback; the row-offset hypothesis was disproven. No session remains active. Next diagnose visible feed-row selection/filter state and bridge playback outcome before another journey; automatic failed-state framebuffer capture has been added. No complete-source credit yet.
+- C payload `t11-visible-errors-20261030-c` passes 41/41 CTests and 44/44 runner tests. All 221 production/config/bridge entries match K except the visually verified `Main.qml` error-overlay fix; K backend evidence remains applicable.
+- **T11.3.d accepted:** C feature attempt `attempt-20261030-083420-219` passes; all 47 captures reviewed. Actual managed logo/color, portable artwork/snapshot remap, template reuse, Cartoon Network/calendar one-save and mixed movie/episode nested-rule creation are verified. Source/whole-task acceptance remains open.
+- Next: **T11-R2**, visible native streaming and remaining direct/refresh source coverage. Native-stream bridge/active-player/GET assertions pass, but captures still show Guide rather than video. **Active diagnostic Visual: exec session 13397, same C payload, plan `build/t11-stream-diagnostic-c.json`. Poll it; no second build.** The current helper is separately hash-verified and records path-free playback/player/shell samples plus fixture HTTP Range requests. No further application full run is needed for this helper diagnosis. See [runtime evidence](t11-runtime-2026-10-29.md).
 - R3 partial: actual cold restart/playback/seek/return and all 10,080 slots unchanged prove T11.3.e. Search/offline remains open. Rootless network isolation remaps trusted root ownership; resolve isolation without weakening production validation.
-- T11 **78% (14/18)**, 1/3 groups accepted; T31 5%; Overall **35%**, sum **943**. Preserve mixed staged/unstaged work.
+- T11 **83% (15/18)**, 1/3 groups accepted; T31 5%; Overall **35%**, sum **948**. Preserve mixed staged/unstaged work.
 
 ## Immediate closure sequence
 

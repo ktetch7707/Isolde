@@ -177,19 +177,43 @@
       "Return"
     ],
     "guidefeedimported": [
+      "Left",
+      "Left",
+      "Left",
+      "Return",
+      "Right",
+      "Right",
+      "Right",
       "Down"
     ],
     "guidefeednolistings": [
       "Escape"
     ],
     "guidefeedreturn": [
+      "Menu",
+      "Down",
+      "Down",
+      "Down",
       "Down",
       "Return"
     ],
     "guidefeedauth": [
-      "Escape"
+      "Escape",
+      "Up",
+      "Up",
+      "Up",
+      "Up",
+      "Up",
+      "Up",
+      "Right",
+      "Right",
+      "Right"
     ],
     "guidefeedoff": [],
+    "guidestationselect": [
+      "Down",
+      "Down"
+    ],
     "guidestationlogo": [],
     "guidestationcolor": [],
     "guideappearanceapplied": [],
@@ -204,10 +228,14 @@
     "guideimported": [],
     "guidetemplatesaved": [],
     "guidetemplatereuse": [],
-    "guidecartoonrules": [],
+    "guidecartoonrules": [
+      "Return"
+    ],
     "guidecalendarblock": [],
     "guidecalendarsaved": [],
-    "guidemixedrules": [],
+    "guidemixedrules": [
+      "Return"
+    ],
     "guidemixedpreview": [
       "Down",
       "Return"

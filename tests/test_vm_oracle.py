@@ -91,6 +91,22 @@ class OracleTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):oracle.write_soak_receipt(run,{evidence,other},executable)
             self.assertEqual(json.loads((run/'guide-soak-receipt.json').read_text()),receipt)
 
+    def test_feature_helper_override_preserves_frozen_script_arguments_and_dependencies(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder).resolve();source=root/'source';scripts=source/'tools';scripts.mkdir(parents=True);(root/'bin').mkdir()
+            (scripts/'guide_features.py').write_text("raise RuntimeError('stale feature helper imported')")
+            (scripts/'fixture_dependency.py').write_text("VALUE='frozen dependency'")
+            value=b"from fixture_dependency import VALUE\n"
+            checksum=hashlib.sha256(value).hexdigest();helper=root/'bin'/('guide-features-'+checksum+'.py');helper.write_bytes(value)
+            (scripts/'tv-library-acceptance.py').write_text("import guide_features,json,sys;print(json.dumps([guide_features.VALUE,sys.argv[1:]]))")
+            verified=oracle.verified_guide_helper(root,checksum,'features')
+            command=oracle.feature_helper_command(source,verified,root/'payload'/'isolde',['--guide-features','--inspect'])
+            result=subprocess.run([sys.executable]+command[1:],capture_output=True,text=True,timeout=5,check=True)
+            self.assertEqual(json.loads(result.stdout),['frozen dependency',[str(root/'payload'/'isolde'),'--guide-features','--inspect']])
+            helper.write_bytes(b'modified')
+            with self.assertRaises(RuntimeError):oracle.verified_guide_helper(root,checksum,'features')
+            with self.assertRaises(RuntimeError):oracle.verified_guide_helper(root,checksum,'other')
+
     def test_remote_fixture_text_uses_production_keyboard_and_only_dpad(self):
         path=Path(__file__).resolve().parents[1]
         spec=importlib.util.spec_from_file_location('guide_feature_keys',path/'tools/guide_features.py');features=importlib.util.module_from_spec(spec);spec.loader.exec_module(features)
@@ -541,6 +557,16 @@ class OracleTests(unittest.TestCase):
         for index in range(len(surfaces["captures"])):
             incomplete=dict(surfaces);incomplete["captures"]=surfaces["captures"][:index]+surfaces["captures"][index+1:];self.assertFalse(oracle.visual_result_passed("guide-surfaces",incomplete))
         self.assertEqual(oracle.CASES["guide-surfaces"],("tv-library-acceptance.py",["--guide","--guide-surfaces","--inspect"]))
+        spec=importlib.util.spec_from_file_location('guide_feature_contract',Path(__file__).resolve().parents[1]/'tools/guide_features.py')
+        features=importlib.util.module_from_spec(spec);spec.loader.exec_module(features)
+        feature_flags=('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules')
+        feature_result=dict(surfaces,captures=surfaces['captures']+features.PHASES,cachedChannelCount=9,**dict.fromkeys(feature_flags,True))
+        self.assertTrue(oracle.visual_result_passed('guide-features',feature_result))
+        for phase in features.PHASES:
+            incomplete=dict(feature_result,captures=[item for item in feature_result['captures'] if item!=phase])
+            self.assertFalse(oracle.visual_result_passed('guide-features',incomplete),phase)
+        for flag in feature_flags:
+            self.assertFalse(oracle.visual_result_passed('guide-features',dict(feature_result,**{flag:False})),flag)
         lifecycle_phases=['guidecontinuousready','guidecontinuousvideo','guidecontinuousnext','guidesurfed','guidesurfreturn','guidedeletedready','guidedeletedfile','guidedeletedreturn','guiderepairselect','guiderepaircontext','guiderepairreview','guiderepairconfirm','guiderepaired']
         lifecycle=dict(surfaces,captures=surfaces['captures']+lifecycle_phases,continuousTransition=True,remoteSurf=True,actualDeletedFile=True,targetedRepair=True,unaffectedSlotsPreserved=True,cachedFirstPaintMs=[40,80])
         self.assertTrue(oracle.visual_result_passed('guide-lifecycle',lifecycle))

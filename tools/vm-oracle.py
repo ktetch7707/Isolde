@@ -163,7 +163,7 @@ def visual_result_passed(case, result):
                 and type(result.get('localSearchMatches')) is int and result['localSearchMatches']>0
                 and result.get('captures')==['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
     if case=="guide-features":
-        phases=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated']
+        phases=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated']
         base=dict(result);base['captures']=result.get('captures',[])[:-len(phases)];base['cachedChannelCount']=3
         return (visual_result_passed('guide-surfaces',base) and result.get('captures',[])[-len(phases):]==phases and type(result.get('cachedChannelCount')) is int and result['cachedChannelCount']==9
                 and all(result.get(key) is True for key in ('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules')))
@@ -261,12 +261,23 @@ def digest(path):
 
 
 def verified_reopen_helper(root, expected):
+    return verified_guide_helper(root,expected,'reopen')
+
+
+def verified_guide_helper(root, expected, kind):
+    if kind not in {'reopen','features'}:
+        raise RuntimeError('Unsupported Guide helper kind')
     if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):
-        raise RuntimeError('Cold-reopen requires an exact helper digest')
-    path=root/'bin'/('guide-reopen-'+expected+'.py')
+        raise RuntimeError('Guide requires an exact helper digest')
+    path=root/'bin'/('guide-'+kind+'-'+expected+'.py')
     if path.is_symlink() or path.resolve()!=path or not path.is_file() or digest(path)!=expected:
         raise RuntimeError('Cold-reopen helper identity mismatch')
     return path
+
+
+def feature_helper_command(source, helper, executable, flags):
+    bootstrap="import sys,runpy,importlib.util;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);spec=importlib.util.spec_from_file_location('guide_features',helper);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);sys.modules['guide_features']=module;path=sys.argv[1];sys.argv=sys.argv[1:];runpy.run_path(path,run_name='__main__')"
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/'tv-library-acceptance.py'),str(executable)]+flags
 
 
 def guide_backend_diagnostics(run):
@@ -865,7 +876,8 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None):
+    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None):
+        if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
@@ -880,6 +892,10 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
+        if case=='guide-features' and feature_helper_digest:
+            helper=verified_guide_helper(self.root,feature_helper_digest,'features')
+            command=feature_helper_command(source,helper,executable,flags)
+            self.update(acceptanceHelperSha256=feature_helper_digest)
         if case=="guide-reopen":
             helper=verified_reopen_helper(self.root,reopen_helper_digest)
             arguments=[str(helper),str(executable),'--cold-reopen','--receipt',str(self.run/'guide-soak-receipt.json')]
@@ -1227,6 +1243,7 @@ def main():
     parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","artifacts"],default="native")
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")
+    parser.add_argument("--feature-helper-digest")
     args = parser.parse_args()
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
@@ -1306,7 +1323,7 @@ def main():
             elif args.action == "test":
                 oracle.test(args.suite)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed,args.reopen_helper_digest)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":
