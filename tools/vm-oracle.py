@@ -139,6 +139,11 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
          "guide": ("tv-library-acceptance.py", ["--guide", "--inspect"]),
          "guide-surfaces": ("tv-library-acceptance.py", ["--guide", "--guide-surfaces", "--inspect"]),
+         "guide-lifecycle": ("tv-library-acceptance.py", ["--guide-lifecycle", "--inspect"]),
+         "guide-features": ("tv-library-acceptance.py", ["--guide-features", "--inspect"]),
+         "guide-soak": ("guide-soak-acceptance.py", []),
+         "guide-reopen": ("guide-soak-acceptance.py", ["--cold-reopen"]),
+         "movieart": ("tv-library-acceptance.py", ["--movie-art", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
          "shell": ("shell-acceptance.py", []),
          "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
@@ -150,6 +155,25 @@ CASES = {"studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
 
 
 def visual_result_passed(case, result):
+    if case in {"guide-soak","guide-reopen"}:
+        mode=(result.get('realTwelveHourOff') is True and result.get('offlineNamespace') is True if case=='guide-soak' else result.get('actualColdReopen') is True and result.get('realTwelveHourOff') is False and result.get('offlineNamespace') is False and result.get('network',{}).get('mode')=='host-inherited')
+        elapsed=(type(result.get('elapsedOffSeconds')) in (int,float) and 43200<=result['elapsedOffSeconds']<=7*86400) if case=='guide-soak' else result.get('elapsedOffSeconds') is None
+        return (mode and all(result.get(key) is True for key in ('passed','actualLocalElapsedSeek','committedSevenDaySlotsUnchanged','automaticNativeReturn'))
+                and result.get('normalProfileUsed') is False and elapsed
+                and type(result.get('localSearchMatches')) is int and result['localSearchMatches']>0
+                and result.get('captures')==['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
+    if case=="guide-features":
+        phases=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated']
+        base=dict(result);base['captures']=result.get('captures',[])[:-len(phases)];base['cachedChannelCount']=3
+        return (visual_result_passed('guide-surfaces',base) and result.get('captures',[])[-len(phases):]==phases and type(result.get('cachedChannelCount')) is int and result['cachedChannelCount']==9
+                and all(result.get(key) is True for key in ('nativeFeedImport','sourceTimesRetained','explicitEpgMapping','actualNoEpgPlayback','authenticationFailureVisible','sourceOffPreservesCache','managedStationLogo','remoteColorWheel','portableArtwork','portableSchedule','savedRuleTemplate','remoteCalendarPolicy','cartoonNetworkOneSave','mixedNestedRules')))
+    if case=="guide-lifecycle":
+        phases=['guidecontinuousready','guidecontinuousvideo','guidecontinuousnext','guidesurfed','guidesurfreturn','guidedeletedready','guidedeletedfile','guidedeletedreturn','guiderepairselect','guiderepaircontext','guiderepairreview','guiderepairconfirm','guiderepaired']
+        base=dict(result);base['captures']=result.get('captures',[])[:-len(phases)]
+        timings=result.get('cachedFirstPaintMs')
+        return (visual_result_passed('guide-surfaces',base) and result.get('captures',[])[-len(phases):]==phases
+                and all(result.get(key) is True for key in ('continuousTransition','remoteSurf','actualDeletedFile','targetedRepair','unaffectedSlotsPreserved'))
+                and isinstance(timings,list) and 1<=len(timings)<=64 and all(type(value) is int and 0<=value<=1000 for value in timings))
     if case=="guide-surfaces":
         initial=["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"]
         extra=["guidelocaldraft","guidelocalpreview","guidelocalreview","guidelocalcreated","guidelocalvideo","guidelocalosd","guidelocalreturn","guideduplicatedraft","guidelineup","guidewidgetentry","guidecompact","guideoverlay","guideexpanded","guideoverlayreturn","guidecompactreturn"]
@@ -169,6 +193,10 @@ def visual_result_passed(case, result):
                 and result.get("physicalControllerVerified") is False and result.get("captures")==[
                     "emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",
                     "emulatorsdetails","emulatorspermission","emulatorsmenu","emulatorsplay","emulatorsaction","emulatorsreturn","emulatorsrestored"])
+    if case == "movieart":
+        return (all(result.get(key) is True for key in ("passed","freshProfile","scrapedByKodi","media_unchanged"))
+                and all(result.get(key) is False for key in ("normalProfileUsed","metadataSupplied","playbackVerified"))
+                and result.get("artworkBytes",0)>4096)
     if case == "games":
         return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRegistration","nativeGameStarted","returned"))
                 and result.get("gameplayVerified") is False and result.get("physicalControllerVerified") is False and len(result.get("captures",[]))==9)
@@ -230,6 +258,48 @@ def digest(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def verified_reopen_helper(root, expected):
+    if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):
+        raise RuntimeError('Cold-reopen requires an exact helper digest')
+    path=root/'bin'/('guide-reopen-'+expected+'.py')
+    if path.is_symlink() or path.resolve()!=path or not path.is_file() or digest(path)!=expected:
+        raise RuntimeError('Cold-reopen helper identity mismatch')
+    return path
+
+
+def guide_backend_diagnostics(run):
+    wrapper=run/'guide-soak-receipt.json'
+    if not wrapper.is_file():return None
+    receipt_path=Path(json.loads(wrapper.read_text())['receipt'])
+    if receipt_path.is_symlink() or not re.fullmatch(r'/tmp/isolde-tv-acceptance-[A-Za-z0-9_-]+/guide-soak-ready.json',str(receipt_path)):
+        raise RuntimeError('Unsafe Guide diagnostic receipt')
+    receipt=json.loads(receipt_path.read_text());profile=receipt['profile']
+    if not re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}',profile):raise RuntimeError('Invalid Guide diagnostic profile')
+    database=receipt_path.parent/'config/Isolde/profiles'/profile/'guide.sqlite'
+    if str(database)!=receipt.get('database') or database.resolve()!=database:raise RuntimeError('Unsafe Guide diagnostic database')
+    import sqlite3
+    from contextlib import closing
+    with closing(sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True)) as connection:
+        current_slots=list(connection.execute('SELECT id,channel,media_type,media_id,title,start_utc,end_utc,status FROM slots ORDER BY channel,start_utc'))
+        by_id={row[0]:list(row) for row in current_slots};expected=receipt['nativeSlots']
+        clock=time.time();now=[row for row in current_slots if row[5]<=clock<row[6]]
+        slot_proof={'compared':len(expected),'committedUnchanged':all(by_id.get(row[0])==row for row in expected),'currentPrograms':now[:16]}
+    base=Path.home()/'.local/share/Isolde/native-profiles'/profile/'kodi'
+    logs={}
+    for name in ('home/.kodi/temp/kodi.log','home/.cache/kodi/kodi.log','home/.cache/kodi.log'):
+        path=base/name
+        if path.is_file() and path.resolve().is_relative_to(base.resolve()):
+            with path.open('rb') as stream:stream.seek(max(0,path.stat().st_size-8192));logs[name]=stream.read(8192).decode('utf-8','replace')
+    sandbox=Path('/usr/lib/isolde-native/bwrap');probe={}
+    if sandbox.is_file() and all(not p.is_symlink() and p.stat().st_uid==0 and not (p.stat().st_mode & 0o022) for p in (sandbox,*sandbox.parents)):
+        code='import os,json;print(json.dumps({"uid":os.getuid(),"uidMap":open("/proc/self/uid_map").read(),"sandboxOwner":os.stat("/usr/lib/isolde-native/bwrap").st_uid,"rootOwner":os.stat("/").st_uid}))'
+        for name,flags in (('userAndNetwork',['--unshare-user','--unshare-net']),('networkOnly',['--unshare-net'])):
+            result=subprocess.run([str(sandbox),*flags,'--cap-drop','ALL','--bind','/','/','--proc','/proc','--','python3','-c',code],capture_output=True,text=True,timeout=10)
+            probe[name]={'exit':result.returncode,'output':result.stdout[-1024:],'error':result.stderr[-1024:]}
+    privilege=subprocess.run(['sudo','-n','-l'],capture_output=True,text=True,timeout=5)
+    return {'profile':profile,'rootExists':base.is_dir(),'backendLogs':logs,'slots':slot_proof,'namespaceIdentityProbe':probe,'guestTestPrivileges':privilege.stdout[-4096:],'sandboxMode':oct(sandbox.stat().st_mode & 0o7777) if sandbox.exists() else None}
 
 
 def safe_relative(name):
@@ -380,6 +450,12 @@ def stop_owned(process):
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         process.wait(timeout=5)
+
+
+def write_soak_receipt(run, evidence, executable):
+    receipts=[p/'guide-soak-ready.json' for p in evidence if (p/'guide-soak-ready.json').is_file()]
+    if len(receipts)!=1:raise RuntimeError('Missing unique twelve-hour-off preparation receipt')
+    atomic_json(run/'guide-soak-receipt.json',{'receipt':str(receipts[0]),'sourceDigest':digest(run/'files.sha256'),'executableSha256':digest(executable)})
 
 
 class Oracle:
@@ -680,7 +756,7 @@ class Oracle:
             if bundle.resolve()!=bundle or hashes.resolve()!=hashes or digest(hashes)!=maintenance_tests_digest:
                 raise RuntimeError("Maintenance self-test bundle checksum mismatch")
             entries=manifest(hashes)
-            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tests/tst_home_navigation.cpp","CMakeLists.txt"} or entries["tools/vm-oracle.py"]!=driver_digest:
+            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt"} or entries["tools/vm-oracle.py"]!=driver_digest:
                 raise RuntimeError("Unexpected maintenance self-test dependencies")
             if any((bundle/name).resolve()!=bundle/name for name in entries):
                 raise RuntimeError("Redirected maintenance self-test dependency")
@@ -789,7 +865,7 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False):
+    def visual(self, case, installed=False, reopen_helper_digest=None):
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
@@ -804,6 +880,12 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
+        if case=="guide-reopen":
+            helper=verified_reopen_helper(self.root,reopen_helper_digest)
+            arguments=[str(helper),str(executable),'--cold-reopen','--receipt',str(self.run/'guide-soak-receipt.json')]
+            command=['python3','-c','import sys,runpy;sys.path.insert(0,sys.argv.pop(1));path=sys.argv[1];sys.argv=sys.argv[1:];runpy.run_path(path,run_name="__main__")',str(source/'tools')]+arguments
+            self.update(acceptanceHelperSha256=reopen_helper_digest)
+        if case=="guide-soak":command += ['--receipt',str(self.run/'guide-soak-receipt.json')]
         if case in ("lounge", "pastel", "repairs", "apps", "clients"):
             fixture = "home-reference" if case == "lounge" else "home-pastel-reference"
             command += ["--case", str(source / "tests/visual" / fixture)]
@@ -820,10 +902,12 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 900 if case in ("pages","guide","guide-surfaces","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("pages","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
+            if case=="guide-lifecycle":
+                write_soak_receipt(self.run,evidence,executable)
             self.update(visualCase=case, visualPassed=True, visualReview="pending",
                         visualAcceptance="pending", semanticAcceptance="not_verified", executable=str(executable))
         finally:
@@ -989,8 +1073,11 @@ def collect_evidence(run, case, directories):
             if not re.fullmatch(r"/tmp/isolde-(?:components-acceptance|reference-config|tv-acceptance)-[A-Za-z0-9_-]+", str(directory)):
                 raise RuntimeError("Unexpected evidence root")
             paths = [directory / name for name in ("result.json", "shell.log", "android.log", "window-discovery.json", "attempt-config.json", "provider-requests.json")]
-            if case in {"guide","guide-surfaces"}:
+            if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
                 paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json")]
+            if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
+            if case=="guide-features":paths += [directory/'guide-features.json']
+            if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json')]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:
@@ -1005,7 +1092,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|guide|guide-surfaces|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -1133,11 +1220,13 @@ def main():
     parser.add_argument("--suite", choices=SUITES, default="all")
     parser.add_argument("--wait-seconds",type=int,default=0)
     parser.add_argument("--storage",action="store_true")
+    parser.add_argument('--guide-diagnostics',action='store_true')
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
     parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","artifacts"],default="native")
     parser.add_argument("--maintenance-tests-digest")
+    parser.add_argument("--reopen-helper-digest")
     args = parser.parse_args()
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
@@ -1151,6 +1240,7 @@ def main():
         status = json.loads(path.read_text()) if path.is_file() else {"state": "unknown", "runId": args.run_id}
         if args.storage:status["storage"]=oracle_storage_inventory(root)
         status["activeRuns"]=[]
+        if args.guide_diagnostics:status['guideBackend']=guide_backend_diagnostics(root/'runs'/args.run_id)
         for candidate in sorted((root/"runs").glob("*/status.json"),key=lambda p:p.stat().st_mtime,reverse=True)[:64]:
             try:
                 active=json.loads(candidate.read_text())
@@ -1216,7 +1306,7 @@ def main():
             elif args.action == "test":
                 oracle.test(args.suite)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":

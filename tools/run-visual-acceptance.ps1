@@ -1,11 +1,13 @@
 param(
-    [ValidateSet('pages','guide','guide-surfaces','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
     [string]$GuestRunner,
     [string]$RunId,
     [switch]$Installed,
+    [string]$GuideReplayPlan,
+    [string]$ReopenHelperDigest,
     [ValidateRange(30,1800)][int]$TimeoutSeconds = 1000,
     [ValidateRange(0,900)][int]$WaitSeconds = 0,
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation',
@@ -20,10 +22,21 @@ foreach ($path in @($SourceRoot,$Executable)) {
 }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 $outputPath = (Resolve-Path -LiteralPath $OutputDirectory).Path
+$guidePlan = $null
+if ($GuideReplayPlan) {
+    . "$PSScriptRoot/guide-input-plan.ps1"
+    $guidePlan = Import-GuideInputPlan -Path $GuideReplayPlan -Case $Case
+    $guidePlan | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outputPath 'reviewed-input-plan.json')
+    Write-Host 'Replaying bounded fixture input; captured screenshots still require review.'
+}
 $sshArgs = Get-OracleSshArguments $IdentityFile
 if ($GuestRunner) {
     if ($GuestRunner -notmatch '^/[A-Za-z0-9/_.-]+$' -or $RunId -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') { throw 'Invalid oracle runner/run ID.' }
     $command = "python3 $GuestRunner visual --run-id $RunId --case $Case" + $(if ($Installed) { ' --installed' } else { '' })
+    if ($ReopenHelperDigest) {
+        if ($Case -ne 'guide-reopen' -or $ReopenHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid cold-reopen helper identity.' }
+        $command += " --reopen-helper-digest $ReopenHelperDigest"
+    }
     if($WaitSeconds){$command += " --wait-seconds $WaitSeconds"}
 } elseif ($Case -in @('studio','desktop')) {
     $desktopFlag = if ($Case -eq 'desktop') { ' --desktop' } else { '' }
@@ -40,6 +53,25 @@ $phases = [Collections.Generic.HashSet[string]]::new()
 $captureMeta = @{ executable=$Executable }
 $captureLine = {
     param($line)
+    if ($Case -in @('guide-lifecycle','guide-features','guide-reopen') -and $line -match '^Inspect: /tmp/isolde-tv-acceptance-[A-Za-z0-9_-]+$') {
+        if ($VmName -ne 'Isolde-Test') { throw 'Guide diagnostics are restricted to Isolde-Test.' }
+        # Capture the failed state while the helper still owns its windows.
+        # This sends no input and preserves the original failing exit status.
+        $failureCapture = Join-Path $outputPath "$Case-failure.png"
+        if (!(Test-Path -LiteralPath $failureCapture)) {
+            $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm',$VmName,'screenshotpng',$failureCapture) -TimeoutSeconds 15 -Log (Join-Path $outputPath 'capture.log')
+        }
+    }
+    if ($line -eq "STAGE visual-$Case" -and $Case -in @('guide-lifecycle','guide-features','guide-reopen')) {
+        if ($VmName -ne 'Isolde-Test') { throw 'Guide input is restricted to Isolde-Test.' }
+        # Clear compositor search/context overlays before the fresh test windows
+        # exist. The guest guardian already owns the lock at this stage marker.
+        $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm',$VmName,'keyboardputscancode','01','81','01','81','01','81') -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
+    }
+    if ($Case -eq 'guide-reopen' -and $line -match '^GUIDE_REOPEN_TARGET ([0-9]{1,2})$') {
+        $captureMeta.reopenTarget = [int]$Matches[1]
+        if ($captureMeta.reopenTarget -gt 16) { throw 'Unbounded cold-reopen fixture target.' }
+    }
     if ($line -match '^EXECUTABLE (/[A-Za-z0-9/_.-]+)$') { $captureMeta.executable=$Matches[1] }
     if ($line -match '^([A-Z]+)_READY (/tmp/isolde-(?:tv-acceptance|reference-config|components-acceptance)-[A-Za-z0-9_-]+)$') {
         $guideReviewDeadline = [DateTime]::UtcNow.AddSeconds(100)
@@ -56,7 +88,7 @@ $captureLine = {
         $shellInput = $Case -eq 'shell' -and $phase -in @('shellnavigation','shellgallery','shellstore','shellreturn','shellambient','shellwake')
         $androidInput = $Case -eq 'androidapps' -and $phase -in @('androidnavigation','androidgallery','androidlaunch','androidpermission','androidopen','androidremote','androidreturn')
         $gamesInput = ($Case -eq 'games' -and $phase -in @('gamespermission','gamesmenu')) -or ($Case -eq 'emulators' -and $phase -in @('emulatorspermission','emulatorsmenu','emulatorsplay'))
-        $guideInput = $Case -in @('guide','guide-surfaces') -and $phase -in @('guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn','guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalosd','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn')
+        $guideInput = $Case -in @('guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen') -and $phase -in @('guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn','guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalosd','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn','guidecontinuousready','guidecontinuousvideo','guidecontinuousnext','guidesurfed','guidesurfreturn','guidedeletedready','guidedeletedfile','guidedeletedreturn','guiderepairselect','guiderepaircontext','guiderepairreview','guiderepairconfirm','guiderepaired','guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated','guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery')
         $nativePermission = $gamesInput -or $androidInput -or ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput -or $shellInput -or $guideInput
         $storeReturn = $Case -eq 'store' -and $phase -in @('storeandroidopen','storechromiumopen')
         $nativeReturn = ($Case -eq 'games' -and $phase -eq 'gamesplay') -or ($Case -eq 'emulators' -and $phase -eq 'emulatorsaction') -or $storeReturn -or ($Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')) -or ($Case -eq 'vpn' -and $phase -in @('vpnproviderreturn','vpnusreturn','cbcvpn'))
@@ -65,10 +97,20 @@ $captureLine = {
             $keys = @('Home')
             if ($phase -in @('desktoppermission','steaminstall') -or $nativePermission) {
                 $instructions = Join-Path $outputPath $(if ($phase -eq 'desktoppermission') {'desktop-permission-keys.json'} elseif($phase -eq 'steaminstall') {'steam-install-keys.json'} else {$phase+'-keys.json'})
+                if ($guideInput -and $guidePlan -and $guidePlan.phases.Contains($phase)) {
+                    if (Test-Path -LiteralPath $instructions) { throw 'Refusing to replace an existing input instruction.' }
+                    $replayKeys=@($guidePlan.phases[$phase])
+                    if ($Case -eq 'guide-reopen' -and $phase -eq 'guidesoakguide') {
+                        if (!$captureMeta.ContainsKey('reopenTarget')) { throw 'Missing verified cold-reopen fixture target.' }
+                        $replayKeys=@((0..$captureMeta.reopenTarget | ForEach-Object {'Down'})+@('Return'))
+                    }
+                    @{keys=$replayKeys} | ConvertTo-Json -Compress | Set-Content -LiteralPath $instructions -Encoding utf8NoBOM
+                    Write-Host "Replayed fixture phase $phase; screenshot review pending."
+                }
                 $deadline = if ($guideInput) { $guideReviewDeadline } else { [DateTime]::UtcNow.AddSeconds(110) }
                 $refreshCount = 0
                 while ($true) {
-                    Write-Host "Review $capture then provide bounded guest keys in $instructions"
+                    if (!(Test-Path -LiteralPath $instructions)) { Write-Host "Review $capture then provide bounded guest keys in $instructions" }
                     while (!(Test-Path -LiteralPath $instructions)) {
                         if ([DateTime]::UtcNow -gt $deadline) { throw 'Guest dialog review timed out; no consent input sent.' }
                         Start-Sleep -Milliseconds 250
@@ -101,7 +143,9 @@ $captureLine = {
                 }
             }
             $scancodes = @{Home=@('e0','47','e0','c7');Return=@('1c','9c');Tab=@('0f','8f');Space=@('39','b9');Escape=@('01','81');Left=@('e0','4b','e0','cb');Right=@('e0','4d','e0','cd');Up=@('e0','48','e0','c8');Down=@('e0','50','e0','d0');ShiftTab=@('2a','0f','8f','aa');CtrlF=@('1d','21','a1','9d')}
-            if ($guideInput) { $scancodes.F9=@('43','c3');$scancodes.Menu=@('e0','5d','e0','dd') }
+            # Use Isolde's existing application Search shortcut; XF86Search is
+            # intercepted by GNOME and opens the desktop overview instead.
+            if ($guideInput) { $scancodes.F9=@('43','c3');$scancodes.Menu=@('e0','5d','e0','dd');$scancodes.Search=@('35','b5') }
             if ($shellInput) { $scancodes.A=@('1e','9e') }
             if ($Case -eq 'emulators') { $scancodes.X=@('2d','ad');$scancodes.Z=@('2c','ac');$scancodes.S=@('1f','9f') }
             if ((!$keys.Count -and !$nativePermission -and $phase -ne 'steaminstall') -or $keys.Count -gt 20) { throw 'Invalid bounded guest keystroke count.' }
@@ -133,7 +177,7 @@ $captureLine = {
         }
         $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "touch $evidence/$phase-captured") `
             -TimeoutSeconds 20 -Log (Join-Path $outputPath 'acknowledgements.log')
-        Write-Host "Captured $capture (visual review still required)"
+        if ($guidePlan) { Write-Host "CAPTURE $phase review=pending" } else { Write-Host "Captured $capture (visual review still required)" }
     }
 }
 try {

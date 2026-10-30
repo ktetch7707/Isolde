@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "case": "guide-reopen",
+  "phases": {
+    "guidesoakhome": [
+      "Return"
+    ],
+    "guidesoakguide": [],
+    "guidesoakvideo": [
+      "Escape"
+    ],
+    "guidesoakreturn": [
+      "Escape"
+    ],
+    "guidesoaksearch": [
+      "Search",
+      "Return"
+    ],
+    "guidesoakresults": [
+      "Escape"
+    ],
+    "guidesoakrecovery": []
+  }
+}

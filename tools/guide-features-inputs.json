@@ -1,0 +1,218 @@
+{
+  "case": "guide-features",
+  "phases": {
+    "guidelineup": [
+      "Escape",
+      "Down"
+    ],
+    "guideempty": [
+      "Right",
+      "Right",
+      "Right",
+      "Return",
+      "Return"
+    ],
+    "guideexpanded": [
+      "Menu"
+    ],
+    "guideoverlayreturn": [
+      "Escape"
+    ],
+    "guidelocalreview": [
+      "Down",
+      "Return"
+    ],
+    "guidestartup": [
+      "Left",
+      "Return",
+      "Escape",
+      "Escape",
+      "F9"
+    ],
+    "guideorigin": [
+      "Escape"
+    ],
+    "guidesurfed": [
+      "Escape"
+    ],
+    "guidelocalpreview": [],
+    "guidepvr": [
+      "Down",
+      "Return"
+    ],
+    "guidevideo": [
+      "Escape"
+    ],
+    "guidehome": [
+      "Return"
+    ],
+    "guidecompactreturn": [],
+    "guidecontinuousnext": [
+      "Down"
+    ],
+    "guidesurfreturn": [],
+    "guidecontinuousready": [
+      "Down",
+      "Return"
+    ],
+    "guidelocalosd": [
+      "Escape"
+    ],
+    "guideduplicatedraft": [
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Return"
+    ],
+    "guidelocalcreated": [
+      "Return"
+    ],
+    "guideoverlay": [
+      "Up",
+      "Menu"
+    ],
+    "guidelocalvideo": [
+      "Return"
+    ],
+    "guidedeletedready": [],
+    "guidesource": [
+      "Down",
+      "Return"
+    ],
+    "guidecompact": [
+      "Menu"
+    ],
+    "guidelocalreturn": [
+      "Menu",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Return"
+    ],
+    "guidelocaldraft": [
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Return"
+    ],
+    "guidereturn": [
+      "Up",
+      "Left",
+      "Left",
+      "Return",
+      "Return"
+    ],
+    "guidewidgetentry": [
+      "Down"
+    ],
+    "guidecontinuousvideo": [],
+    "guidedeletedfile": [
+      "Return"
+    ],
+    "guidedeletedreturn": [
+      "Escape",
+      "Menu"
+    ],
+    "guiderepairselect": [
+      "Menu"
+    ],
+    "guiderepaircontext": [
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Down",
+      "Return"
+    ],
+    "guiderepairreview": [
+      "Return"
+    ],
+    "guiderepairconfirm": [
+      "Down",
+      "Return"
+    ],
+    "guiderepaired": [],
+    "guidefeedsetup": [
+      "Escape",
+      "Up",
+      "Up",
+      "Up",
+      "Left",
+      "Left",
+      "Left",
+      "Left",
+      "Left",
+      "Right",
+      "Right",
+      "Right",
+      "Return",
+      "Down",
+      "Return"
+    ],
+    "guidefeedpreview": [],
+    "guidefeedmapped": [
+      "Down",
+      "Down",
+      "Down",
+      "Return"
+    ],
+    "guidefeedimported": [
+      "Down"
+    ],
+    "guidefeednolistings": [
+      "Escape"
+    ],
+    "guidefeedreturn": [
+      "Down",
+      "Return"
+    ],
+    "guidefeedauth": [
+      "Escape"
+    ],
+    "guidefeedoff": [],
+    "guidestationlogo": [],
+    "guidestationcolor": [],
+    "guideappearanceapplied": [],
+    "guideexport": [
+      "Return"
+    ],
+    "guideimportdraft": [],
+    "guideimportpreview": [
+      "Down",
+      "Return"
+    ],
+    "guideimported": [],
+    "guidetemplatesaved": [],
+    "guidetemplatereuse": [],
+    "guidecartoonrules": [],
+    "guidecalendarblock": [],
+    "guidecalendarsaved": [],
+    "guidemixedrules": [],
+    "guidemixedpreview": [
+      "Down",
+      "Return"
+    ],
+    "guidemixedcreated": []
+  },
+  "schemaVersion": 1
+}

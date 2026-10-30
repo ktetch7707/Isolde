@@ -25,6 +25,96 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_cold_readers_close_every_connection_even_when_queries_fail(self):
+        import sqlite3
+        from contextlib import closing
+        path=Path(__file__).resolve().parents[1]/'tools'
+        specification=importlib.util.spec_from_file_location('cold_readers',path/'guide-soak-acceptance.py')
+        module=importlib.util.module_from_spec(specification)
+        sys.path.insert(0,str(path))
+        try:specification.loader.exec_module(module)
+        finally:sys.path.pop(0)
+        active=[];connect=sqlite3.connect
+        class Tracked(sqlite3.Connection):
+            def __init__(self,*args,**kwargs):super().__init__(*args,**kwargs);active.append(self)
+            def close(self):
+                super().close()
+                if self in active:active.remove(self)
+        with tempfile.TemporaryDirectory() as folder:
+            database=Path(folder)/'guide.sqlite'
+            with closing(connect(database)) as connection:
+                connection.execute('CREATE TABLE slots(id,channel,media_type,media_id,title,start_utc,end_utc,status)')
+                now=time.time();connection.execute('INSERT INTO slots VALUES(?,?,?,?,?,?,?,?)',('s','c','episode',1,'Fixture',now-10,now+120,'ready'));connection.commit()
+            with patch.object(module.sqlite3,'connect',side_effect=lambda *a,**k:connect(*a,**k,factory=Tracked)):
+                for _ in range(500):
+                    self.assertEqual(module.current(database,'c')[0],'s');self.assertEqual(len(module.slots(database)),1)
+                self.assertEqual(active,[])
+                with closing(connect(database)) as connection:connection.execute('DROP TABLE slots');connection.commit()
+                with self.assertRaises(sqlite3.OperationalError):module.current(database,'c')
+                self.assertEqual(active,[])
+
+    def test_cold_reopen_never_counts_as_real_twelve_hour_soak(self):
+        result=dict(passed=True,actualColdReopen=True,realTwelveHourOff=False,elapsedOffSeconds=None,
+                    offlineNamespace=False,network={'mode':'host-inherited'},actualLocalElapsedSeek=True,committedSevenDaySlotsUnchanged=True,
+                    automaticNativeReturn=True,normalProfileUsed=False,localSearchMatches=3,
+                    captures=['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
+        self.assertTrue(oracle.visual_result_passed('guide-reopen',result))
+        self.assertFalse(oracle.visual_result_passed('guide-soak',result))
+        result['realTwelveHourOff']=True
+        self.assertFalse(oracle.visual_result_passed('guide-soak',result))
+        self.assertFalse(oracle.visual_result_passed('guide-reopen',result))
+        result['elapsedOffSeconds']=43200
+        result['offlineNamespace']=True
+        self.assertTrue(oracle.visual_result_passed('guide-soak',result))
+
+    def test_reopen_helper_must_match_exact_file_digest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder).resolve();(root/'bin').mkdir();value=b'# reviewed helper'
+            checksum=hashlib.sha256(value).hexdigest();path=root/'bin'/('guide-reopen-'+checksum+'.py')
+            path.write_bytes(value)
+            self.assertEqual(oracle.verified_reopen_helper(root,checksum),path)
+            path.write_bytes(b'# modified helper')
+            with self.assertRaises(RuntimeError):oracle.verified_reopen_helper(root,checksum)
+            with self.assertRaises(RuntimeError):oracle.verified_reopen_helper(root,'../../other')
+
+    def test_soak_receipt_uses_frozen_manifest_without_test_process_state(self):
+        with tempfile.TemporaryDirectory() as folder:
+            run=Path(folder);evidence=run/'evidence';evidence.mkdir();executable=run/'isolde'
+            executable.write_bytes(b'frozen executable');(run/'files.sha256').write_text('frozen source manifest')
+            with self.assertRaises(RuntimeError):oracle.write_soak_receipt(run,{evidence},executable)
+            self.assertFalse((run/'guide-soak-receipt.json').exists())
+            (evidence/'guide-soak-ready.json').write_text('{}')
+            oracle.write_soak_receipt(run,{evidence},executable)
+            receipt=json.loads((run/'guide-soak-receipt.json').read_text())
+            self.assertEqual(receipt,{'receipt':str(evidence/'guide-soak-ready.json'),'sourceDigest':oracle.digest(run/'files.sha256'),'executableSha256':oracle.digest(executable)})
+            other=run/'other';other.mkdir();(other/'guide-soak-ready.json').write_text('{}')
+            with self.assertRaises(RuntimeError):oracle.write_soak_receipt(run,{evidence,other},executable)
+            self.assertEqual(json.loads((run/'guide-soak-receipt.json').read_text()),receipt)
+
+    def test_remote_fixture_text_uses_production_keyboard_and_only_dpad(self):
+        path=Path(__file__).resolve().parents[1]
+        spec=importlib.util.spec_from_file_location('guide_feature_keys',path/'tools/guide_features.py');features=importlib.util.module_from_spec(spec);spec.loader.exec_module(features)
+        source=(path/'qml/OnScreenKeyboard.qml').read_text()
+        arrays=re.search(r'readonly property var keys: shift\s*\?\s*(\[[\s\S]*?\])\s*:\s*(\[[\s\S]*?\])',source)
+        self.assertIsNotNone(arrays);upper,lower=(json.loads(arrays.group(index)) for index in (1,2))
+        for text in ('/tmp/isolde-tv-acceptance-test/channel.json','/home/isolde-dev/Videos/Isolde-Acceptance/Poster.png','saved tv','http://127.0.0.1:12345/stream.ogv'):
+            at=0;shift=False;value='previous draft';accepted=[];events=[]
+            def key(command):
+                nonlocal at,shift,value
+                self.assertIn(command,('Up','Down','Left','Right','Return'));events.append(command);keys=upper if shift else lower
+                if command=='Up':at=max(0,at-10)
+                elif command=='Down':at=min(len(keys)-1,at+10)
+                elif command=='Left':at=max(0,at-1)
+                elif command=='Right':at=min(len(keys)-1,at+1)
+                else:
+                    item=keys[at]
+                    if item=='Shift':shift=not shift
+                    elif item=='Clear':value=''
+                    elif item=='Done':accepted.append(value)
+                    elif item=='Del':value=value[:-1]
+                    elif item=='Space':value+=' '
+                    else:value+=item;shift=False
+            features.remote_text(key,text);self.assertEqual(accepted,[text]);self.assertLess(len(events),1000)
     @unittest.skipUnless(os.name == "posix", "Linux process groups/selector pipes")
     def test_failed_stage_diagnostics_do_not_replay_capture_commands(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -451,6 +541,17 @@ class OracleTests(unittest.TestCase):
         for index in range(len(surfaces["captures"])):
             incomplete=dict(surfaces);incomplete["captures"]=surfaces["captures"][:index]+surfaces["captures"][index+1:];self.assertFalse(oracle.visual_result_passed("guide-surfaces",incomplete))
         self.assertEqual(oracle.CASES["guide-surfaces"],("tv-library-acceptance.py",["--guide","--guide-surfaces","--inspect"]))
+        lifecycle_phases=['guidecontinuousready','guidecontinuousvideo','guidecontinuousnext','guidesurfed','guidesurfreturn','guidedeletedready','guidedeletedfile','guidedeletedreturn','guiderepairselect','guiderepaircontext','guiderepairreview','guiderepairconfirm','guiderepaired']
+        lifecycle=dict(surfaces,captures=surfaces['captures']+lifecycle_phases,continuousTransition=True,remoteSurf=True,actualDeletedFile=True,targetedRepair=True,unaffectedSlotsPreserved=True,cachedFirstPaintMs=[40,80])
+        self.assertTrue(oracle.visual_result_passed('guide-lifecycle',lifecycle))
+        for key in ('continuousTransition','remoteSurf','actualDeletedFile','targetedRepair','unaffectedSlotsPreserved'):
+            invalid=dict(lifecycle);invalid[key]=False;self.assertFalse(oracle.visual_result_passed('guide-lifecycle',invalid))
+        for timing in ([],[1001],[True],[0.5]):
+            invalid=dict(lifecycle,cachedFirstPaintMs=timing);self.assertFalse(oracle.visual_result_passed('guide-lifecycle',invalid))
+        soak=dict(passed=True,realTwelveHourOff=True,offlineNamespace=True,actualLocalElapsedSeek=True,committedSevenDaySlotsUnchanged=True,automaticNativeReturn=True,normalProfileUsed=False,elapsedOffSeconds=43201,localSearchMatches=3,captures=['guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery'])
+        self.assertTrue(oracle.visual_result_passed('guide-soak',soak))
+        for elapsed in (True,43199,'43201'):
+            self.assertFalse(oracle.visual_result_passed('guide-soak',dict(soak,elapsedOffSeconds=elapsed)))
         emulators=dict(passed=True,freshProfile=True,remoteRuntimeSetup=True,remoteRegistration=True,nativeGameStarted=True,
             returned=True,sourceUnchanged=True,runtime="ppsspp",gameplayVerified=False,physicalControllerVerified=False,
             captures=["emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",

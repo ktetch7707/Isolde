@@ -18,6 +18,18 @@ After reviewing `Status -Storage`, use `./tools/vm-test.ps1 Configure -Configure
 
 ## Commands
 
+### One-action suite and results
+
+Run `pwsh -NoProfile -File tools/test-all.ps1` from the repository root. It runs **all registered CTests**, then Studio and both reference fixture journeys against that same frozen build, and opens `build/vm-oracle/<id>/index.html`. The report includes individual test results/output, diagnostic links and every collected screenshot. It stops on the first failure, writes the report even on failure, and returns failure to the caller. No deployment or retry is performed.
+
+Use `-NativeOnly` for all CTests without graphical acceptance, `-NoOpen` for agent/terminal execution, or `-RunId <id> -ReportOnly` to reopen existing evidence without running anything. Agents should make one invocation with `-NoOpen`, poll only that tool session until completion, then read the report and the named failure log once; no separate Status loop is needed during a healthy invocation.
+
+Additional graphical journeys can be selected with `-Cases studio,desktop,lounge,pastel,pages,guide,guide-surfaces,guide-lifecycle,guide-features,movieart,repairs,apps,clients,vpn,shell,playlists,android,androidapps,store,games,emulators` from PowerShell. These require their existing runtime/account prerequisites; the list is explicit so unavailable provider journeys are never quietly skipped. The twelve-hour `guide-soak` still requires its existing same-run preparation and elapsed-time gate. Automated completion does not replace screenshot review, offline cold boot, physical qualification or full-product acceptance.
+
+Wrapper verification without the VM: `pwsh -NoProfile -File tools/test-test-all.ps1`.
+
+T11 extended cases: `Visual -Cases guide-lifecycle` adds real natural-end/surf/deleted-file repair to the existing Guide surfaces journey; `guide-features` adds remote source/artwork/portability/template/calendar workflows. Their distinct additional scope is bounded to 1,740 guest seconds / 1,800 host seconds, with unchanged 110-second capture reviews. A successful lifecycle run records an off-time fixture receipt. `guide-soak` on the **same run ID** refuses less than 43,200 real off-time seconds, verifies the frozen executable and committed slots, and cold-starts only that disposable profile in a denied network namespace. Never count its preparation or a simulated clock jump as a twelve-hour/offline pass. Existing case budgets and normal-profile preservation remain unchanged.
+
 From the repository root:
 
 ```powershell
@@ -65,6 +77,8 @@ For frequent code/test iterations, use [the focused Studio suite](studio-testing
 6. View **every** captured screenshot and compare both recreation/reset pairs with the fixture references. `captures.json` deliberately says `visualReview: pending`. Automated pixel/blank checks and capture acknowledgements are not design acceptance. T24 still owns genuine user usability/cutover.
 7. Commit only source and concise evidence records. Do not stage `build/`, generated caches, PulseAudio cookies, browser profiles or binary artwork.
 
+For installed native-app checks, verify the guest's graphical login is active (`loginctl show-session` and `/sys/class/tty/tty0/active`). A virtual-terminal switch can leave an old application frame in the VM capture after its process has exited; check process/session evidence before calling it an orphan or restarting repeatedly. Release synthetic modifiers and send chord events separately. Restore only the confirmed graphical VT (this VM's session was tty2 during the 2026-10-22 check), then recheck `Active=yes`. Do not assume a captured frame proves the app is alive, or count an unverified native Home-key return as passing.
+
 ## What the runner does
 
 - Bounded SSH/SCP with BatchMode, ConnectTimeout and keepalive; no host-key bypass. One connection attempt, no automatic retries.
@@ -96,3 +110,9 @@ VM `Isolde-Test`; VirtualBox `C:/Program Files/Oracle/VirtualBox`; guest Ubuntu 
 Keep the normal graphical session logged in. Harnesses import only DISPLAY/XAUTHORITY/XDG_RUNTIME_DIR/DBUS_SESSION_BUS_ADDRESS from the user service manager; do not hard-code a display/UID or export offscreen settings into the service. If stopped, use `tools/start-isolde-vm-visible.ps1`; do not restore snapshots, alter autologin or bypass a lock/password prompt. Physical HDMI/CEC/audio/latency and a disconnected cold-boot Generator Test remain separate gates.
 
 Low-level scripts are implementation details. `run-visual-acceptance.ps1` requires the runner's guardian; direct unguarded launches are retired. Historical evidence remains in [the October 19 record](vm-update-2026-10-19.md) and task execution records; old `/tmp/isolde-*` trees are never a current-source default.
+
+### Reviewed Guide fixture inputs
+
+`Visual -RunId <passing-id> -Cases guide-lifecycle -GuideReplayPlan tools/guide-lifecycle-inputs.json` replays only bounded remote keys for the disposable Guide fixture. Source/authoring uses `guide-features` and `tools/guide-features-inputs.json`. Plans are schema-validated, copied to evidence and limited to 64 phases / 20 remote keys per phase. Captures retain pending review; replay never awards acceptance. Unknown phases remain attended. See `docs/t11-runtime-2026-10-29.md` for current evidence and diagnosed failures.
+
+`guide-reopen` with `tools/guide-reopen-inputs.json` is a distinct bounded actual-cold-start check, using a separately hash-verified helper with the unchanged passing app. It reports no twelve-hour claim and currently inherits normal networking. It cannot satisfy disconnected acceptance. `Status -GuideDiagnostics` adds bounded readonly disposable-fixture slot comparison and native-sandbox probes; normal Status stays small.

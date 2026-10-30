@@ -2,10 +2,12 @@ param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
     [ValidateSet('all','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_selection','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
-    [ValidateSet('studio','desktop','lounge','pastel','pages','guide','guide-surfaces','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
+    [ValidateSet('studio','desktop','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
+    [string]$GuideReplayPlan,
     [switch]$Capture,
     [switch]$Storage,
+    [switch]$GuideDiagnostics,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
     [ValidateSet('native','surfshark','android','android-repair','games','guide','artifacts')][string]$ConfigureTarget = 'native',
@@ -13,6 +15,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
+if ($GuideDiagnostics -and $Action -ne 'Status') { throw 'GuideDiagnostics is Status-only.' }
+if ($GuideReplayPlan -and ($Action -ne 'Visual' -or $Cases.Count -ne 1 -or $Cases[0] -notin @('guide-lifecycle','guide-reopen','guide-features'))) { throw 'GuideReplayPlan requires one supported Guide Visual case.' }
 if ($WaitSeconds -and $Action -notin @('Test','Configure','Visual')) { throw 'Bounded lock waiting is available for Test/Configure/Visual only.' }
 if ($Capture -and $Action -ne 'Status') { throw 'Capture is restricted to Status of an active guest setup guardian.' }
 if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Use PowerShell 7 (pwsh), not Windows PowerShell.' }
@@ -53,20 +57,27 @@ try {
     }
     if ($Action -eq 'Visual') {
         foreach ($case in $Cases) {
+            $reopenDigest = ''
+            if ($case -eq 'guide-reopen') {
+                $helper = Join-Path $PSScriptRoot 'guide-soak-acceptance.py'
+                $reopenDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-reopen-$reopenDigest.py")) -TimeoutSeconds 30 -Log $transport
+            }
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
         }
     } else {
         $remoteAction = $Action.ToLowerInvariant()
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
         if ($Storage) { $command += ' --storage' }
+        if ($GuideDiagnostics) { $command += ' --guide-diagnostics' }
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
         if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'artifacts') {
-            $maintenanceFiles = @('tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tests/tst_home_navigation.cpp','CMakeLists.txt')
+            $maintenanceFiles = @('tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt')
             $maintenanceLines = foreach ($relative in $maintenanceFiles) {
                 $hash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
                 "$hash  $relative"
@@ -75,7 +86,7 @@ try {
             [IO.File]::WriteAllText($maintenanceManifest,($maintenanceLines -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
             $maintenanceHash = (Get-FileHash -LiteralPath $maintenanceManifest -Algorithm SHA256).Hash.ToLowerInvariant()
             $bundle = "$guestHome/isolde-oracle/bin/maintenance-$driverHash-$maintenanceHash"
-            $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "mkdir -p $bundle/tools $bundle/tests") -TimeoutSeconds 25 -Log $transport
+            $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "mkdir -p $bundle/tools $bundle/tests $bundle/qml") -TimeoutSeconds 25 -Log $transport
             foreach ($relative in $maintenanceFiles) {
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @((Join-Path $repo $relative),"isolde-dev@127.0.0.1:$bundle/$relative")) -TimeoutSeconds 30 -Log $transport
             }

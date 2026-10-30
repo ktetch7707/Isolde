@@ -24,6 +24,7 @@ import tempfile
 import time
 import uuid
 import zlib
+import re
 from xml.sax.saxutils import escape
 
 
@@ -55,9 +56,14 @@ def main():
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--pages", action="store_true", help="Create and customize a page through Settings, then exercise its widget against real Kodi")
     parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
+    parser.add_argument("--movie-art", action="store_true", help="Scrape a named synthetic movie using Kodi's TMDB provider; no supplied metadata/art")
     parser.add_argument("--guide", action="store_true", help="Configure an isolated real IPTV Simple channel, then import and tune it through the Guide")
     parser.add_argument("--guide-surfaces", action="store_true", help="Also create two local channels through the UI and review compact/overlay/full return")
+    parser.add_argument("--guide-lifecycle", action="store_true", help="Extend the real Guide journey with natural transitions, D-pad surfing and actual deleted-file repair")
+    parser.add_argument("--guide-features", action="store_true", help="Extend the real Guide journey with native feeds, artwork, portability, templates and calendar controls")
     args = parser.parse_args()
+    if args.guide_lifecycle:args.guide=args.guide_surfaces=True
+    if args.guide_features:args.guide=args.guide_surfaces=True
     if args.guide_surfaces and not args.guide:parser.error("--guide-surfaces requires --guide")
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a"); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     profile = str(uuid.uuid4())
@@ -95,6 +101,14 @@ def main():
         f"<art><poster>{escape(str(poster))}</poster></art>" + "".join(episodes) + "</tvshow><paths/></videodb>")
     exported_art = imported / "tvshows/Isolde_Television_Fixture"
     exported_art.mkdir(parents=True)
+    if args.guide:
+        # Native Kodi XML import, not database writes. Supply both the declared
+        # local movie and Kodi's export-art companion path (Omega ImportFromXML).
+        movie=media/'Fixture Movie.ogv';os.link(clip,movie)
+        guide_movies=imported/'movies';guide_movies.mkdir();os.link(clip,guide_movies/'Fixture_Movie_2026.avi')
+        document=(imported/'videodb.xml').read_text().replace('<tvshow><title>','<tvshow><studio>Cartoon Network</studio><title>',1)
+        document=document.replace('<paths/>',f'<movie><title>Fixture Movie</title><year>2026</year><studio>Cartoon Network</studio><runtime>2</runtime><filenameandpath>{escape(str(movie))}</filenameandpath><path>{escape(str(media))}/</path><file>{movie.name}</file><basepath>{escape(str(media))}/</basepath><art><poster>{escape(str(poster))}</poster></art></movie><paths/>')
+        (imported/'videodb.xml').write_text(document)
     if args.guide:
         # Kodi's native import resolves exported episode entries to these
         # export-relative filenames. Supply actual fixture media there rather
@@ -142,6 +156,36 @@ if ''' + repr(str(imported)) + ''' in selected:
             xbmc.executeJSONRPC(json.dumps({"jsonrpc":"2.0", "id":2, "method":"VideoLibrary.SetTVShowDetails",
                 "params":{"tvshowid":show["tvshowid"], "art":{"poster":''' + repr(str(poster)) + '''}}}))
 ''')
+    if args.movie_art:
+        # Import ONLY source configuration through Kodi's supported export/import
+        # format. All movie identity and artwork must come from the online scraper.
+        movies = media / "movies"
+        folder = movies / "Big Buck Bunny (2008)"; folder.mkdir(parents=True)
+        movie_file = folder / "Big Buck Bunny (2008).ogv"
+        os.link(clip, movie_file)
+        (imported / "videodb.xml").write_text('<videodb><version>1</version><paths><path><url>'
+            + escape(str(movies)) + '/</url><scanrecursive>1</scanrecursive><usefoldernames>true</usefoldernames>'
+            '<content>movies</content><scraperpath>metadata.themoviedb.org.python</scraperpath></path></paths></videodb>')
+        importer = (userdata / "tv-fixture-import.py").read_text()
+        importer = importer[:importer.index('    response = json.loads')]
+        # Kodi can update its bundled provider after first launch. Initialize
+        # the updated provider BEFORE importing source settings, otherwise the
+        # source keeps the old provider's incomplete artwork configuration.
+        provider_setup = '''import xbmc, xbmcaddon, time
+deadline=time.monotonic()+45
+while True:
+    provider=xbmcaddon.Addon("metadata.themoviedb.org.python")
+    if provider.getSetting("fetch_posters") in ("true","false"): break
+    if time.monotonic()>deadline: raise RuntimeError("TMDB provider artwork settings unavailable")
+    xbmc.sleep(500)
+for setting in ("fetch_posters","fanart","landscape","keyart"):
+    if not provider.setSettingBool(setting,True): raise RuntimeError("Cannot configure TMDB "+setting)
+provider.setSettingString("language","en-US")
+provider.setSettingString("searchlanguage","en-US")
+'''
+        importer = provider_setup + importer
+        importer += '\nxbmc.executeJSONRPC(' + repr(json.dumps({"jsonrpc":"2.0","id":1,"method":"VideoLibrary.Scan","params":{"directory":str(movies)+"/"}})) + ')\n'
+        (userdata / "tv-fixture-import.py").write_text(importer)
     if args.guide:
         if not Path("/usr/share/kodi/addons/pvr.iptvsimple/addon.xml").is_file():
             raise RuntimeError("Run the bounded Configure guide action before this PVR acceptance case")
@@ -239,6 +283,7 @@ if ''' + repr(str(imported)) + ''' in selected:
         wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" reviewed input/capture acknowledged",seconds=110)
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
+    soak_ready = False
     try:
         if active: run("systemctl", "--user", "stop", "isolde.service")
         with (evidence / "shell.log").open("w") as log:
@@ -369,10 +414,57 @@ if ''' + repr(str(imported)) + ''' in selected:
                     assert imported_channels()==lineup,'Browsing surfaces changed saved channel definitions'
                     assert cached_slots()==committed_slots,'Browsing surfaces regenerated or changed committed slots'
                     surface_phases=['guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalosd','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn']
+                lifecycle={}
+                features={}
+                if args.guide_lifecycle:
+                    from guide_lifecycle import exercise,PHASES
+                    lifecycle=exercise(evidence,media,database,directory,local,native,rpc,guide_capture,wait,shell_active)
+                    surface_phases+=PHASES
+                    soak_ready=True
+                if args.guide_features:
+                    from guide_features import exercise,PHASES
+                    features=exercise(evidence,media,database,directory,local,poster,rpc,guide_capture,wait,shell_active,lambda name:key(shell,name,delay=0.06))
+                    surface_phases+=PHASES
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest,path
                 result={'passed':True,'freshProfile':True,'normalProfileUsed':False,'pvrAddon':'pvr.iptvsimple','sourceChannels':len(source_channels),'sourceListings':len(source_epg),'remoteImport':True,'actualPvrPlayback':True,'returned':True,'automaticNativeReturn':True,'mediaUnchanged':True,'syntheticSource':True,'providerSubscriptionVerified':False,'captures':['guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn']+surface_phases,'visualReview':'pending','profile':profile}
                 if args.guide_surfaces:result.update(nativeChannelsCreated=2,cachedChannelCount=3,surfaceJourneyInputAcknowledged=True,committedSlotsUnchanged=True,sourceCachePreserved=True,actualLocalElapsedSeek=True,automaticLocalReturn=True)
+                if args.guide_lifecycle:
+                    timings=[int(value) for value in re.findall(r'T11_GUIDE_FIRST_PAINT_MS (\d+) CHANNELS 3\b',(evidence/'shell.log').read_text(errors='replace'))]
+                    assert timings and max(timings)<=1000,('Populated cached Guide first paint exceeded one second',timings)
+                    result.update({key:lifecycle[key] for key in ('continuousTransition','remoteSurf','actualDeletedFile','targetedRepair','unaffectedSlotsPreserved')})
+                    result['cachedFirstPaintMs']=timings
+                if args.guide_features:result.update(features)
                 (evidence/'result.json').write_text(json.dumps(result,indent=2))
+                return
+            if args.movie_art:
+                query = {"properties":["title","year","file","art","uniqueid"],"limits":{"start":0,"end":50}}
+                movies = wait(lambda: rpc(directory,"VideoLibrary.GetMovies",query).get("movies"),
+                              "Kodi TMDB matched named synthetic movie", seconds=150)
+                assert len(movies)==1 and movies[0]["title"]=="Big Buck Bunny" and movies[0]["year"]==2008
+                movie=movies[0]
+                assert movie["file"]==str(movie_file) and str(movie.get("uniqueid",{}).get("tmdb"))=="10378"
+                assert any("image.tmdb.org" in value for value in movie["art"].values()), movie
+                def artwork():
+                    result=rpc(directory,"Isolde.GetArtwork",{"kind":"movie","id":movie["movieid"]})
+                    return result if result.get("data") else None
+                art=wait(artwork,"Real Kodi artwork delivered through Isolde bridge",seconds=60)
+                raw=base64.b64decode(art["data"],validate=True)
+                assert len(raw)>4096 and art.get("mime") in {"image/jpeg","image/png"}
+                from PIL import Image
+                import io
+                image=Image.open(io.BytesIO(raw)); image.verify()
+                (evidence/"movie-artwork.jpg").write_bytes(raw)
+                # Return to the shell's real Movies view, without playing the clip.
+                run("wmctrl","-i","-a",shell,env=env)
+                key(shell,"Home"); key(shell,"m",modifiers=4); time.sleep(1)
+                key(shell,"Return"); time.sleep(2); key(shell,"Down"); time.sleep(2)
+                print("MOVIEART_READY "+str(evidence),flush=True)
+                wait(lambda:(evidence/"movieart-captured").exists(),"Movie artwork frame captured",seconds=110)
+                for path,digest in hashes.items(): assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
+                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"freshProfile":True,
+                    "normalProfileUsed":False,"scrapedByKodi":True,"metadataSupplied":False,"playbackVerified":False,
+                    "movie":movie,"artworkBytes":len(raw),"artworkSha256":hashlib.sha256(raw).hexdigest(),
+                    "artworkMime":art["mime"],"media_unchanged":True},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
@@ -503,6 +595,11 @@ if ''' + repr(str(imported)) + ''' in selected:
             (evidence / "result.json").write_text(json.dumps({"passed": True, "profile": profile, "shows": len(shows), "seasons": len(seasons), "episodes": len(eps), "media_unchanged": True}, indent=2))
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
+        if args.movie_art:
+            try:
+                (evidence/"movie-diagnostic.json").write_text(json.dumps(rpc(userdata/"isolde","VideoLibrary.GetMovies",
+                    {"properties":["title","year","file","art","uniqueid"],"limits":{"start":0,"end":50}}),indent=2))
+            except (OSError,RuntimeError): pass
         kodi_log = userdata.parent / "temp/kodi.log"
         if kodi_log.exists(): print(kodi_log.read_text(errors="replace")[-6000:], flush=True)
         if args.inspect: print("Inspect: " + str(evidence), flush=True); time.sleep(20)
@@ -512,6 +609,15 @@ if ''' + repr(str(imported)) + ''' in selected:
             process.terminate()
             try: process.wait(timeout=12)
             except subprocess.TimeoutExpired: process.kill(); process.wait()
+        if soak_ready:
+            from guide_lifecycle import prepare_soak
+            deadline=time.monotonic()+12
+            while time.monotonic()<deadline:
+                try:rpc(userdata/'isolde','JSONRPC.Version')
+                except (OSError,RuntimeError):break
+                time.sleep(0.2)
+            else:raise RuntimeError('Private Kodi bridge remained active; twelve-hour-off fixture was not prepared')
+            prepare_soak(evidence,database,profile,media,args.executable.resolve())
         x11.XCloseDisplay(display)
         if active: run("systemctl", "--user", "start", "isolde.service")
 
