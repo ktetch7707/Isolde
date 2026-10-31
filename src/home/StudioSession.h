@@ -62,6 +62,7 @@ public:
     QObject *proposalModel() const;
     Q_INVOKABLE bool previewCommand(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
     Q_INVOKABLE bool acceptPreview();
+    Q_INVOKABLE bool acceptColorPreview(const QString &color);
     Q_INVOKABLE void cancelPreview();
     Q_INVOKABLE bool execute(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
     Q_INVOKABLE bool apply(const QString &focusId = {});

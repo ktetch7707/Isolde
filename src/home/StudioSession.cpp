@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QFile>
+#include <QColor>
 #include <QDirIterator>
 #include <QTemporaryDir>
 #include <QSaveFile>
@@ -268,6 +269,23 @@ bool StudioSession::acceptPreview()
     cancelPreview(); return true;
 }
 
+bool StudioSession::acceptColorPreview(const QString &color)
+{
+    const QColor parsed(color);
+    if(!m_active || !m_live || !parsed.isValid() || parsed.alpha()!=255){setError(tr("Choose an opaque color in the active Studio session."));return false;}
+    if(m_proposed.isEmpty())return true;
+    if(m_draft!=m_proposalBaseline){setError(tr("The draft changed. Preview the color again."));return false;}
+    auto candidate=QJsonDocument::fromJson(m_proposed).object();
+    if(candidate!=QJsonDocument::fromJson(m_draft).object()) {
+        auto appearance=candidate["studioAppearance"].toObject();const auto recent=appearance["recentColors"].toArray();
+        QJsonArray next{parsed.name()};
+        for(const auto &entry:recent)if(entry.toString()!=parsed.name() && next.size()<ComponentSchema::MaxRecentStudioColors)next.append(entry);
+        appearance["recentColors"]=next;candidate["studioAppearance"]=appearance;
+    }
+    if(!pushEdit(QJsonDocument(candidate).toJson()))return false;
+    cancelPreview();return true;
+}
+
 void StudioSession::cancelPreview()
 {
     m_proposed.clear();
@@ -405,7 +423,8 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
     }
     if(operation=="studioAppearance") {
         auto document=QJsonDocument::fromJson(m_draft).object();
-        const auto value=a.value("value").toMap();
+        auto value=a.value("value").toMap();
+        if(!value.contains("recentColors") && document["studioAppearance"].toObject().contains("recentColors"))value["recentColors"]=document["studioAppearance"].toObject()["recentColors"].toVariant();
         if(value.isEmpty())document.remove("studioAppearance");else document["studioAppearance"]=QJsonObject::fromVariantMap(value);
         return pushEdit(QJsonDocument(document).toJson());
     }

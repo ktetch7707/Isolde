@@ -326,7 +326,7 @@ Item {
                 pageColor("backgroundStart").choose("#f2ce75")
                 command(inputManager.back)
                 compare(document(),before)
-                compare(findChild(editor,"studioInspector").recentColors.length,1)
+                compare(findChild(editor,"studioInspector").recentColors.length,0)
             })
         }
         function test_page_color_reset_removes_override_and_is_undoable() {

@@ -10,6 +10,7 @@ Item {
     property var recentColors: []
     property var selectionRect: null
     property string roleName: "Color"
+    property bool mixedOriginal: false
     property color original: "white"
     property color sample: original
     property real hue: 0
@@ -108,7 +109,7 @@ Item {
             Row {
                 width:parent.width;spacing:12*root.unit
                 Repeater {
-                    model:[{name:"Before",value:root.original},{name:root.resetChoice?"Theme":"After",value:root.sample}]
+                    model:[{name:root.mixedOriginal?"Before · Mixed":"Before",value:root.original},{name:root.resetChoice?"Theme":"After",value:root.sample}]
                     delegate:Rectangle {
                         required property var modelData
                         width:(body.width-12*root.unit)/2;height:52*root.unit;radius:8*root.unit;color:modelData.value

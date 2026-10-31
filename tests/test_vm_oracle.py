@@ -28,10 +28,10 @@ class OracleTests(unittest.TestCase):
     def test_artwork_view_reuse_requires_original_full_and_refuses_other_runtime_changes(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder).resolve();base=root/'runs/base';current=root/'runs/focused';base.mkdir(parents=True);current.mkdir()
-            values={'qml/StudioImageFraming.qml':b'old','qml/StudioArtworkPicker.qml':b'picker','qml/StudioInspector.qml':b'inspector','qml/PageStudioView.qml':b'editor','qml/ArtworkImage.qml':b'raster','src/home/StudioSession.cpp':b'core','config/studio-defaults.json':b'defaults'}
+            values={'qml/StudioImageFraming.qml':b'old','qml/StudioArtworkPicker.qml':b'picker','qml/StudioInspector.qml':b'inspector','qml/PageStudioView.qml':b'editor','qml/ArtworkImage.qml':b'raster','src/home/StudioSession.cpp':b'core','config/studio-defaults.json':b'defaults','tests/studio/tst_colors.qml':b'old color checks'}
             def write(run,data):
                 (run/'files.sha256').write_text(''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n' for name,value in sorted(data.items())))
-            write(base,values);changed=dict(values,**{'qml/StudioImageFraming.qml':b'actual card','qml/PageStudioView.qml':b'actual geometry'})
+            write(base,values);changed=dict(values,**{'qml/StudioImageFraming.qml':b'actual card','qml/PageStudioView.qml':b'actual geometry','tests/studio/tst_colors.qml':b'color input regression'})
             write(current,changed);(base/'payload/bin').mkdir(parents=True);(base/'payload/bin/isolde').write_bytes(b'full candidate')
             full={'passed':True,'fullSuite':True,'sourceDigest':oracle.digest(base/'files.sha256'),'payload':oracle.payload_hashes(base/'payload')};oracle.atomic_json(base/'test-result.json',full)
             proof=oracle.focused_qml_coverage(root,current,'base','studio_artwork');self.assertEqual(proof['changedStudioArtworkQml'],['qml/PageStudioView.qml','qml/StudioImageFraming.qml'])
@@ -580,7 +580,7 @@ class OracleTests(unittest.TestCase):
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])
-        for name in ("studio_quick", "studio_selection", "studio_artwork", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"):
+        for name in ("studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"):
             self.assertIsNotNone(re.fullmatch(pattern, name))
         self.assertIsNone(re.fullmatch(pattern, "home_component_navigation"))
         self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))
@@ -916,7 +916,12 @@ class OracleTests(unittest.TestCase):
                 del incomplete[field]
                 self.assertFalse(oracle.visual_result_passed(case, incomplete))
             self.assertFalse(oracle.visual_result_passed(case, {"passed": True}))
-        self.assertTrue(oracle.visual_result_passed("studio", {"passed": True}))
+        colors=dict(privateCancel=True,atomicApply=True,recentSaved=True,resetCancel=True,studioChrome=True,reopenPreserved=True,captures=['colorpreview','colorapplied','colorrecent','colorreset','chromepreview','chromeapplied','colorreopened'])
+        self.assertTrue(oracle.visual_result_passed("studio", {"passed":True,"colorPicker":colors}))
+        self.assertFalse(oracle.visual_result_passed("studio", {"passed":True}))
+        for field in colors:
+            missing=dict(colors);del missing[field]
+            self.assertFalse(oracle.visual_result_passed("studio", {"passed":True,"colorPicker":missing}))
         self.assertFalse(oracle.visual_result_passed("studio", reference))
         self.assertFalse(oracle.visual_result_passed("pages", {"passed": False}))
 

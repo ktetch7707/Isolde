@@ -68,6 +68,7 @@ double contrast(const QColor &a,const QColor &b) {
     const double x=luminance(a),y=luminance(b);return (qMax(x,y)+0.05)/(qMin(x,y)+0.05);
 }
 bool readableStudioAppearance(QVariantMap values) {
+    if(values.contains("recentColors") && !ComponentSchema::validRecentStudioColors(values.take("recentColors")))return false;
     if(!normalizeAppearance(values))return false;
     const auto surface=QColor(values.value("surfaceColor").toString()),selected=QColor(values.value("selectedColor").toString());
     for(const auto &key:QStringList{"textColor","mutedColor"}) {
@@ -445,7 +446,7 @@ QVariantMap HomeLayout::studioAppearance() const {
     auto result=appearance();
     const auto defaults=studioOptions().value("appearance").toMap();
     for(auto it=defaults.cbegin();it!=defaults.cend();++it)result[it.key()]=it.value();
-    for(auto it=m_studioAppearance.cbegin();it!=m_studioAppearance.cend();++it)result[it.key()]=it.value();
+    for(auto it=m_studioAppearance.cbegin();it!=m_studioAppearance.cend();++it)if(it.key()!="recentColors")result[it.key()]=it.value();
     return result;
 }
 bool HomeLayout::setGrid(const QVariantMap &value)

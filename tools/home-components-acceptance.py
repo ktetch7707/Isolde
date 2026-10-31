@@ -391,6 +391,7 @@ def main():
                 assert next(item for item in scrolling_document["components"] if item["id"] == "clock")["placement"]["y"] == 15
                 key("Escape", 2); key("Down", 2)  # Close Studio and Settings; runtime navigation reveals the offscreen Clock.
                 capture("scrollinghome")
+                colors = exercise_studio_colors(evidence,layout,key,capture,expect)
                 (evidence / "result.json").write_text(json.dumps({
                     "passed": True, "journey": "studio", "layout": str(layout),
                     "executable": str(executable), "preview_cancel_preserved_bytes": True,
@@ -398,7 +399,7 @@ def main():
                     "remote_collision_cancel_swap_undo": True, "remote_resize_cancel_accept_undo": True,
                     "bounded_repeat_cancel": True, "nested_group_remote_layers_apply": True,
                     "scrolling_checkbox_preview_cancel_apply": True, "three_viewport_page": True,
-                    "eight_slot_layout_only": True, "physical_input_qualification": "not claimed"
+                    "eight_slot_layout_only": True, "physical_input_qualification": "not claimed", "colorPicker": colors
                 }, indent=2))
                 print("Evidence: " + str(evidence), flush=True)
                 return
@@ -662,6 +663,46 @@ def send_client_key(window,name,env):
 
 
 
+
+def exercise_studio_colors(evidence,layout,key,capture,expect):
+    baseline=layout.read_bytes()
+    phases=[]
+    def shot(name):
+        phases.append(name);capture(name)
+    def menu(index):
+        key('Up',30);key('Down');key('Down',index);key('Return')
+    def page_color():
+        menu(3);key('Return');key('Return') # Colors, then Background top / solid.
+    def apply():
+        key('Escape',2);menu(7);key('Return')
+    key('Up',30);key('Right');key('Return') # Permanent Edit Home recovery.
+    page_color();key('Down');key('Right',2);key('Return');shot('colorpreview')
+    assert layout.read_bytes()==baseline
+    key('Escape');assert layout.read_bytes()==baseline
+    key('Return');key('Down');key('Right',2);key('Return');key('Down',10);key('Up',2);key('Return')
+    assert layout.read_bytes()==baseline
+    apply()
+    expect(lambda:json.loads(layout.read_text()).get('theme',{}).get('backgroundStart')=='#e89ab0','Color Apply persisted the authored page background')
+    saved=layout.read_bytes();doc=json.loads(saved)
+    assert doc['studioAppearance']['recentColors']==['#e89ab0']
+    shot('colorapplied')
+    page_color();key('Right');shot('colorrecent') # Recent category; no layout writes.
+    assert layout.read_bytes()==saved
+    key('Escape');key('Return');key('Down',10);key('Up',3);key('Return');shot('colorreset')
+    assert layout.read_bytes()==saved
+    key('Escape');assert layout.read_bytes()==saved
+    key('Escape',2);menu(6);key('Down');key('Return') # Editor settings -> Studio colors.
+    key('Down',2);key('Return');key('Down');key('Return');shot('chromepreview') # Text -> Snow.
+    assert layout.read_bytes()==saved
+    key('Down',10);key('Up',2);key('Return');apply()
+    expect(lambda:json.loads(layout.read_text()).get('studioAppearance',{}).get('textColor')=='#ffffff','Studio color Apply persisted')
+    saved=layout.read_bytes();doc=json.loads(saved)
+    assert doc['studioAppearance']['recentColors']==['#ffffff','#e89ab0']
+    shot('chromeapplied')
+    key('Escape');key('Return') # Reopen at the exact restored Edit Home origin.
+    page_color();key('Right');shot('colorreopened')
+    assert layout.read_bytes()==saved
+    return dict(privateCancel=True,atomicApply=True,recentSaved=True,resetCancel=True,studioChrome=True,reopenPreserved=True,captures=phases)
 
 def prepare_catalog(evidence):
     from PIL import Image, ImageDraw

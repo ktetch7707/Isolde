@@ -1317,8 +1317,30 @@ void ComponentTests::studioChromeRemainsReadableAndProfileLocal()
     QVERIFY(!session->execute("studioAppearance",{{"value",QVariantMap{{"textColor","#202126"}}}}));QCOMPARE(session->draft(),baseline);
     QVERIFY2(session->execute("studioAppearance",{{"value",QVariantMap{{"focusColor","#ffffff"}}}}),qPrintable(session->errorString()));
     QVERIFY(session->apply());QCOMPARE(home.studioAppearance()["focusColor"].toString(),QString("#ffffff"));
+    const auto colorBaseline=session->draft();const auto colorCount=session->changeCount();
+    const auto previewColor=[&](const QString &color){return session->previewCommand("pagePatch",{{"scope","theme"},{"value",QVariantMap{{"backgroundStart",color}}}});};
+    QVERIFY(previewColor("#abcdef"));QCOMPARE(session->draft(),colorBaseline);session->cancelPreview();QCOMPARE(session->draft(),colorBaseline);
+    QVERIFY(previewColor("#abcdef"));QVERIFY(!session->acceptColorPreview("transparent"));QCOMPARE(session->draft(),colorBaseline);
+    QVERIFY(session->acceptColorPreview("#ABCDEF"));QCOMPARE(session->changeCount(),colorCount+1);
+    QCOMPARE(session->document()["studioAppearance"].toMap()["recentColors"].toList(),QVariantList{"#abcdef"});
+    QVERIFY(!home.studioAppearance().contains("recentColors"));
+    QVERIFY(session->undo());QCOMPARE(session->draft(),colorBaseline);QVERIFY(session->redo());
+    for(int i=0;i<10;++i){const auto color=QString("#%1").arg(i,6,16,QChar('0'));QVERIFY(previewColor(color));QVERIFY(session->acceptColorPreview(color));}
+    const auto recent=session->document()["studioAppearance"].toMap()["recentColors"].toList();QCOMPARE(recent.size(),8);QCOMPARE(recent.first().toString(),QString("#000009"));
+    QVERIFY(session->execute("studioAppearance",{{"value",QVariantMap{{"focusColor","#ffffff"}}}}));
+    QCOMPARE(session->document()["studioAppearance"].toMap()["recentColors"].toList(),recent);
+    const auto valid=session->draft();
+    for(const auto &bad:QVariantList{QVariantList{"red"},QVariantList{"#123456","#123456"},QVariantList{"#abcdef00"},QVariantList{12},QVariantList{"#000000","#000001","#000002","#000003","#000004","#000005","#000006","#000007","#000008"}}){
+        QVERIFY(!session->execute("studioAppearance",{{"value",QVariantMap{{"recentColors",bad}}}}));QCOMPARE(session->draft(),valid);
+    }
+    const auto applied=readFile(user);QVERIFY(QFile::rename(user,user+".held"));QVERIFY(QDir().mkpath(user));
+    QVERIFY(!session->apply());QCOMPARE(session->draft(),valid);QCOMPARE(readFile(user+".held"),applied);
+    QVERIFY(QDir().rmdir(user));QVERIFY(QFile::rename(user+".held",user));QVERIFY(session->apply());
+    HomeLayout reopened(&registry);QVERIFY(reopened.load(defaults,user));auto *reopenedSession=qobject_cast<StudioSession *>(reopened.beginStudio());QVERIFY(reopenedSession);
+    QCOMPARE(reopenedSession->document()["studioAppearance"].toMap()["recentColors"].toList(),recent);
     QVERIFY(home.load(defaults,dir.filePath("other.json")));QVERIFY(!session->active());
     QVERIFY(home.studioAppearance()["focusColor"].toString()!=QString("#ffffff"));
+    QVERIFY(!session->acceptColorPreview("#123456"));QVERIFY(!home.committedDocument().contains("recentColors"));
 }
 void ComponentTests::studioHiddenAndLockedStatesAreRecoverable()
 {

@@ -7,6 +7,8 @@ class AppRegistry;
 // Every validator returns true only for documents that satisfy the layout
 // bounds declared in ComponentSchema.cpp; values are never clamped silently.
 namespace ComponentSchema {
+constexpr int MaxRecentStudioColors = 8;
+bool validRecentStudioColors(const QVariant &value);
 // Versioned native-channel definitions and bounded nested rule trees.
 QVariantMap guideChannel(const QVariantMap &value, QString *error = nullptr);
 QVariantMap guideRule(const QVariantMap &value, QString *error = nullptr);

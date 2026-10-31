@@ -36,9 +36,10 @@ Item {
     property var cropDraft:({})
     property var pendingAction:({})
     property string keyboardKind:""
-    property var recentColors:[]
+    readonly property var recentColors:((session?session.document:{}).studioAppearance || {}).recentColors || []
     property var pickerAppearance:({})
     property var pickerThemeColors:[]
+    property bool pickerMixed:false
     readonly property var colorPicker:colorLoader.item
     property bool colorTransactionActive:false
     property bool scalarTransactionActive:false
@@ -53,7 +54,7 @@ Item {
     property var scalarAppearance:({})
     readonly property real scalarUnit:Math.min(width/1280,height/720)*(scalarAppearance.typographyScale || 1)
     readonly property int scalarActionBase:(activeField.presets || []).length?2:1
-    onSessionChanged:{recentColors=[];colorTransactionActive=false;scalarTransactionActive=false;scalarPending=false;if(colorPicker)colorPicker.previewQueued=false;if(colorLoader)colorLoader.active=false}
+    onSessionChanged:{colorTransactionActive=false;scalarTransactionActive=false;scalarPending=false;if(colorPicker)colorPicker.previewQueued=false;if(colorLoader)colorLoader.active=false}
     onVisibleChanged:if(!visible){if(colorTransactionActive)cancelColor();if(scalarTransactionActive)cancelScalar();if(framingTransactionActive)cancelFraming()}
     property string returnView:"fields"
     property int returnSelection:0
@@ -165,7 +166,7 @@ Item {
         }
     }
     function beginColor(){
-        pickerAppearance=Object.assign({},appearance)
+        pickerMixed=mixed(activeField);pickerAppearance=Object.assign({},appearance)
         pickerThemeColors=[{name:"Background",value:page.appearance.backgroundStart},{name:"Surface",value:page.appearance.surfaceColor},{name:"Text",value:page.appearance.textColor},{name:"Focus",value:page.appearance.focusColor},{name:"Selected",value:page.appearance.selectedColor},{name:"Muted",value:page.appearance.mutedColor}].filter(entry=>!!entry.value)
         colorTransactionActive=true;colorLoader.active=true;view="colorWheel";selected=0
         colorPicker.begin(effective(current,activeField) || page.appearance.textColor)
@@ -173,8 +174,7 @@ Item {
     function cancelColor(){if(colorPicker)colorPicker.previewQueued=false;if(session)session.cancelPreview();colorTransactionActive=false;view="fields";selected=returnSelection;message="";colorLoader.active=false}
     function acceptColor(value,reset){
         if(colorPicker.error)return
-        if(session.proposalModel && !session.acceptPreview()){colorPicker.error=session.errorString;return}
-        if(!reset && value!==colorPicker.hex(colorPicker.original))recentColors=[{value:value}].concat(recentColors.filter(c=>c.value!==value)).slice(0,8).map((entry,index)=>({name:"Recent "+(index+1),value:entry.value}))
+        if(session.proposalModel && !(reset?session.acceptPreview():session.acceptColorPreview(value))){colorPicker.error=session.errorString;return}
         colorTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied.";colorLoader.active=false
     }
     function set(f,value,reset){
@@ -371,18 +371,26 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
     }
     function contrast(){
         if(!page)return ""
-        function luminance(value){const c=Qt.darker(value,1);function linear(v){return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)}return .2126*linear(c.r)+.7152*linear(c.g)+.0722*linear(c.b)}
-        const style=!pageMode && current?current.presentation || {}:{},a=luminance(style.labelColor || page.appearance.textColor)
-        const backgrounds=pageMode && (activeField.key==="backgroundStart" || activeField.key==="backgroundEnd" || activeField.key==="textColor")?[page.appearance.backgroundStart,page.appearance.backgroundEnd]:[style.surfaceColor || page.appearance.surfaceColor]
-        const ratio=Math.min(...backgrounds.map(value=>{const b=luminance(value);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)}))
-        return (ratio>=4.5?"Text contrast ":"Low text contrast · ")+ratio.toFixed(1)+":1 · solid-surface estimate"
+        function rgb(value){return Qt.darker(value,1)}
+        function luminance(c){function linear(v){return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)}return .2126*linear(c.r)+.7152*linear(c.g)+.0722*linear(c.b)}
+        const palette=editorMode?appearance:page.appearance
+        const item=current || {},style=item.presentation || {},component=!pageMode && !editorMode && !!current
+        const inkKey=activeField.key==="bodyColor"?"bodyColor":activeField.key==="headingColor"?"headingColor":"labelColor"
+        const ink=rgb(component?effective(item,{scope:"presentation",key:inkKey,fallback:palette.textColor}):palette.textColor)
+        const surfaces=editorMode?[palette.surfaceColor,palette.selectedColor]:component?[effective(item,{scope:"presentation",key:"surfaceColor",fallback:palette.surfaceColor}),(style.fillMode==="gradient"?style.fillEndColor:undefined) || effective(item,{scope:"presentation",key:"surfaceColor",fallback:palette.surfaceColor})]:[palette.backgroundStart,palette.backgroundEnd]
+        const opacity=component?effective(item,{scope:"presentation",key:"surfaceOpacity",fallback:1}):1
+        const backgrounds=[palette.backgroundStart || palette.surfaceColor,palette.backgroundEnd || palette.surfaceColor]
+        const ratios=[]
+        for(const surface of surfaces)for(const background of backgrounds){const fg=rgb(surface),bg=rgb(background),blend=Qt.rgba(fg.r*opacity+bg.r*(1-opacity),fg.g*opacity+bg.g*(1-opacity),fg.b*opacity+bg.b*(1-opacity),1),a=luminance(ink),b=luminance(blend);ratios.push((Math.max(a,b)+.05)/(Math.min(a,b)+.05))}
+        const ratio=Math.min(...ratios)
+        return (ratio>=4.5?"Text contrast ":"Low text contrast · ")+ratio.toFixed(1)+":1 · surface estimate"
     }
     Loader {
         id:colorLoader;anchors.fill:parent;active:false;visible:root.view==="colorWheel";z:10
         sourceComponent:Component { StudioColorPicker {
         appearance:Object.keys(root.pickerAppearance).length?root.pickerAppearance:root.appearance;settings:root.options.colorPicker || ({})
         roleName:root.activeField.label || "Color";selectionRect:root.pageMode?null:root.selectionRect
-        themeColors:root.pickerThemeColors;recentColors:root.recentColors
+        themeColors:root.pickerThemeColors;recentColors:root.recentColors.map((value,index)=>({name:"Recent "+(index+1),value:value}));mixedOriginal:root.pickerMixed
         contrastText:root.contrast()
         onPreview:(value,reset)=>{
             if(root.set(root.activeField,value,reset) && reset)Qt.callLater(()=>{

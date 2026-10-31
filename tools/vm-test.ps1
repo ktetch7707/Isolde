@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
-    [ValidateSet('all','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_selection','studio_artwork','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
+    [ValidateSet('all','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_selection','studio_artwork','studio_colors','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
     [ValidateSet('studio','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [string]$GuideReplayPlan,

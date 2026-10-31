@@ -10,6 +10,18 @@
 #include <QSet>
 #include <QMap>
 
+bool ComponentSchema::validRecentStudioColors(const QVariant &value)
+{
+    if(value.metaType().id()!=QMetaType::QVariantList || value.toList().size()>MaxRecentStudioColors)return false;
+    QSet<QString> seen;
+    for(const auto &entry:value.toList()) {
+        const auto text=entry.toString();
+        if(entry.metaType().id()!=QMetaType::QString || !QRegularExpression(QStringLiteral("^#[0-9a-f]{6}$")).match(text).hasMatch() || seen.contains(text))return false;
+        seen.insert(text);
+    }
+    return true;
+}
+
 namespace {
 QVariantMap reject(QString *error, const QString &message) { if (error) *error = message; return {}; }
 bool versionOne(const QVariantMap &map) {
