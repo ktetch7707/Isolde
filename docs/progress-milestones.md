@@ -66,8 +66,8 @@ These rows are open pending exact evidence reconciliation; code presence and his
 | T21.8.a | open | Registered shape/container/button/text and shared content/name/label semantics round-trip. | Schema/renderer/data contract |
 | T21.8.b | open | Managed linked image/GIF validation, decoding bounds, reduced motion and atomic staged assets. | Native decoder/runtime asset evidence |
 | T21.8.c | open | Remote catalog edit/layers/links/focus/inheritance and all remaining catalog acceptance. | Runtime journey plus failure/cancel |
-| T21.9.a | open | Saved Pastel preset/fixture uses production collections and generic shapes/buttons. | Inspect actual canonical document/semantic regression |
-| T21.9.b | open | Live history/apps overflow, editing and no startup rewrites work generically. | Production-component runtime and no-write evidence |
+| T21.9.a | done | Saved Pastel preset/fixture uses production collections and generic shapes/buttons. | docs/studio-pastel-see-all-2026-10-30.md: VM studio_unit A/B verifies packaged/fixture parity, ten registered editable buttons, one app collection, genuine history source and no load-time write; broader runtime/reference children remain open |
+| T21.9.b | done | Live history/apps overflow, editing and no startup rewrites work generically. | docs/studio-pastel-see-all-2026-10-30.md: G full 41/41, actual Studio/app-gallery/history-source journeys and current J Home/Studio navigation plus 14 reviewed Pastel captures; real production components fed by deterministic boundary providers, exact heading return and unchanged layout bytes; actual external-provider/playback-history acceptance remains T21.7 |
 | T21.9.c | open | Both reviewed recreation/reset pairs and all linked Pastel acceptance pass. | Current applicable clean reference evidence |
 | T21.10.a | open | Shared named swatches/theme/recent choices and actual remote/pointer color wheel agree. | Production picker input/parity |
 | T21.10.b | open | Brightness/opacity/inheritance/reset, private preview and one accepted history entry. | Cancel/write/undo data proofs |

@@ -405,6 +405,17 @@ def main():
                 key("Escape")
                 captured("appsoverflowreturn")
                 assert layout.read_bytes() == original_bytes, "Gallery browsing must not write the layout"
+                recent_section=next(section for section in document["categories"] if section["id"]==history[0]["categoryId"])
+                history_route=recent_section["presentation"]["trailingAction"]
+                history_page=next(page for page in document["pages"] if page["id"]==history_route["pageId"])
+                assert history_page["layout"]["components"][0]["source"]==history[0]["source"], "See All must retain the same history source"
+                key("Home"); key("Up",30); key("Down",5); key("Left",30)
+                captured("historylink")
+                key("Return")
+                captured("historyall")
+                key("Escape")
+                captured("historyreturn")
+                assert layout.read_bytes()==original_bytes, "History browsing must not write the layout"
                 def starter(column):
                     key("Home"); key("Up", 30); key("Down", 3)
                     key("Left", 10)

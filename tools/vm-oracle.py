@@ -511,10 +511,10 @@ def write_soak_receipt(run, evidence, executable):
     atomic_json(run/'guide-soak-receipt.json',{'receipt':str(receipts[0]),'sourceDigest':digest(run/'files.sha256'),'executableSha256':digest(executable)})
 
 
-def guide_qml_coverage(root, run, base_id, suite):
-    """Reuse a real full pass only for a focused, bounded Guide QML correction."""
-    if suite!='guide_remote_ui' or not isinstance(base_id,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',base_id):
-        raise RuntimeError('Guide QML reuse requires guide_remote_ui and an exact base run')
+def qml_coverage(root, run, base_id, suite, expected_suite, qml, harness, label):
+    """Verify original full coverage and an explicit bounded QML delta."""
+    if suite!=expected_suite or not isinstance(base_id,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',base_id):
+        raise RuntimeError(label+' QML reuse requires '+expected_suite+' and an exact base run')
     base=root/'runs'/base_id
     if base==run or base.is_symlink() or base.resolve()!=base:
         raise RuntimeError('Unsafe full-suite base run')
@@ -525,16 +525,27 @@ def guide_qml_coverage(root, run, base_id, suite):
         raise RuntimeError('Full-suite base payload changed')
     before=manifest(base/'files.sha256');after=manifest(run/'files.sha256')
     changed=sorted(name for name in before.keys()|after.keys() if before.get(name)!=after.get(name))
-    qml={'qml/GuideWidget.qml','qml/GuideView.qml'}
-    harness={'tests/guide_ui.cpp','tests/test_vm_oracle.py','tests/test_kodi_bridge.py',
-             'tools/vm-test.ps1','tools/vm-oracle.py','tools/guide-soak-acceptance.py','tools/guide-reopen-inputs.json','tools/tv-library-acceptance.py',
-             'tools/guide-input-plan.ps1','tools/test-guide-input-plan.ps1'}
     if not qml.intersection(changed) or any(name not in qml|harness and not name.startswith('docs/') for name in changed):
-        raise RuntimeError('Source changes exceed the focused Guide QML coverage boundary')
+        raise RuntimeError('Source changes exceed the focused '+label+' QML coverage boundary')
     if any(name not in before or name not in after for name in changed):
         raise RuntimeError('Guide QML reuse cannot add or remove source files')
     return {'baseRunId':base_id,'baseSourceDigest':result['sourceDigest'],
-            'sourceDigest':digest(run/'files.sha256'),'changedPaths':changed,'changedGuideQml':sorted(qml.intersection(changed))}
+            'sourceDigest':digest(run/'files.sha256'),'changedPaths':changed,'changed'+label+'Qml':sorted(qml.intersection(changed))}
+
+
+def guide_qml_coverage(root, run, base_id, suite):
+    return qml_coverage(root,run,base_id,suite,'guide_remote_ui',{'qml/GuideWidget.qml','qml/GuideView.qml'},
+        {'tests/guide_ui.cpp','tests/test_vm_oracle.py','tests/test_kodi_bridge.py',
+         'tools/vm-test.ps1','tools/vm-oracle.py','tools/guide-soak-acceptance.py','tools/guide-reopen-inputs.json','tools/tv-library-acceptance.py',
+         'tools/guide-input-plan.ps1','tools/test-guide-input-plan.ps1'},'Guide')
+
+
+def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='home_component_navigation':
+        return qml_coverage(root,run,base_id,suite,'home_component_navigation',
+            {'qml/ComposedHome.qml','qml/PlacedComponents.qml'},
+            {'tests/tst_home_navigation.cpp','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py'},'Studio')
+    return guide_qml_coverage(root,run,base_id,suite)
 
 
 class Oracle:
@@ -749,7 +760,7 @@ class Oracle:
         self.check()
         service_before, releases_before = self.state["service"], self.state["releases"]
         source, entries = extract_snapshot(self.run)
-        reuse=guide_qml_coverage(self.root,self.run,reuse_full_run,suite) if reuse_full_run else None
+        reuse=focused_qml_coverage(self.root,self.run,reuse_full_run,suite) if reuse_full_run else None
         self.stage("oracle-self-test", ["python3", str(source / "tests/test_vm_oracle.py")], 30)
         work = self.root / "work"
         old = json.loads((work / "manifest.json").read_text()) if (work / "manifest.json").exists() else {}
@@ -821,7 +832,7 @@ class Oracle:
             raise RuntimeError("This run has no passing full-suite payload; run Test -Suite all")
         if not result.get('fullSuite'):
             proof=result['coverageReuse']
-            if proof!=guide_qml_coverage(self.root,self.run,proof.get('baseRunId'),result.get('suite')):
+            if proof!=focused_qml_coverage(self.root,self.run,proof.get('baseRunId'),result.get('suite')):
                 raise RuntimeError('Guide QML coverage proof changed')
         actual=payload_hashes(self.run / "payload")
         if actual != result["payload"]:

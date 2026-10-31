@@ -5,7 +5,7 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 [VM software completion](vm-software-completion.md) is the latest user-approved definition for every task and linked requirement. **100% means reasonable belief that the software is done based entirely on VM-verifiable evidence.** Actual hardware/model/USB/firmware, independent participants, user approval, unavailable paid accounts/entitlement/regions and target-only runtime/performance checks are not T-task prerequisites. Use the prescribed production-boundary fixtures, virtual devices and agent task/guide walkthroughs; retain genuine software errors as blockers. H01–H05 and external-service/usability checks are a separate user-owned post-100% handoff. No formal hardware/release campaign is required by this software backlog. All conflicting historical wording below and in Entry docs is superseded.
 
-Acceptance redesign alone awarded no credit. Current runtime evidence raises the sum to 965; Overall is 36%. The 27 tasks and all original group/child weights are unchanged. Actual installed VM journeys, clean-VM install/recovery, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required at their proper evidence level.
+Acceptance redesign alone awarded no credit. Current runtime evidence raises the sum to 969; Overall is 36%. The 27 tasks and all original group/child weights are unchanged. Actual installed VM journeys, clean-VM install/recovery, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required at their proper evidence level.
 
 ## Continue command — operating plan, 2026-10-29
 
@@ -25,7 +25,7 @@ Sequencing: [implementation-order.md](implementation-order.md). Requirements/ame
 
 - ACTIVE: **T01,T03–T05,T09–T31 = 27 tasks**. T02/T06–T08 stay excluded. H01–H05 are a separate physical qualification ledger, not software credit.
 - Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each original group and task retains its weight. Overall = half-up round(sum of the 27 rounded task percentages / 27). Final acceptance remains separate; all linked requirements remain mandatory. Reproduce with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
-- Sum **965**; Overall **36%**. T11 is **100% verified** (18/18 milestones; 3/3 final groups accepted). T31 is **5%** (inventory child only; 0/7 final groups accepted). Other values retain previous credit. T11 Guide software acceptance is complete on the recorded VM candidates; Studio priority resumes.
+- Sum **969**; Overall **36%**. T11 is **100% verified** (18/18 milestones; 3/3 final groups accepted). T31 is **5%** (inventory child only; 0/7 final groups accepted). Other values retain previous credit. T11 Guide software acceptance is complete on the recorded VM candidates; Studio priority resumes.
 - **S1 = 100% when all redesigned VM software groups and required checks pass, including final T31, with reasonable confidence the declared software is done.** Agent-reviewed runtime/visual evidence is sufficient; hardware, external account/region and participant approval never block S1. Do not round incomplete VM work to 100%.
 - Required documentation: T13.4 delivers an illustrated generic user installation/setup/recovery guide with actual product VM screens; T31.7 is an agent-run clean-VM artifact/guide walkthrough. No independent reader, actual-computer model or real USB/firmware action blocks S1. Developer build commands alone do not satisfy the product guide.
 - Reuse verified foundations with explicit source-applicability checks; T31 tests one final integrated candidate. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
@@ -52,7 +52,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T18 | 4 | Unified Studio workspace and selection | 100% | verified foundation; broad cutover remains T24 |
 | T19 | 5 | Remote movement, resize and collision | 100% | verified reflow foundation; later UX gates retained |
 | T20 | 6 | Desktop parity, layers and nested editing | 80% | input matrices largely covered; Pastel/integrated closure open |
-| T21 | 7 | Inspector, real components, header and controls | 36% | substantial partial slices; nine broad gates open |
+| T21 | 7 | Inspector, real components, header and controls | 40% | structure/runtime prerequisite verified; nine broad gates open |
 | T22 | 8 | Templates, tokens, reuse and portability | 0% | open; existing skins are partial foundation |
 | T23 | 9 | Apply, versions, restore and navigation safety | 0% | open; backend atomicity exists, full UX not accepted |
 | T24 | 10 | Installed Studio usability and cutover | 0% | open; includes deferred T15 review |
@@ -73,9 +73,11 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 0% | new plan mapped; software 0/9; H02/H03 physical |
 | T13 | 26 | Appliance software, distribution and user setup guide | 0% | installer foundation; clean-VM/recovery and beginner guide open |
 | T31 | 27 | Frozen first-product software acceptance | 5% | tool inventory verified; 0/7 final groups accepted |
-| **Overall** | — | **average of 27 ACTIVE software tasks** | **36%** | **965 / 27 rounded; weighted progress, S1 incomplete** |
+| **Overall** | — | **average of 27 ACTIVE software tasks** | **36%** | **969 / 27 rounded; weighted progress, S1 incomplete** |
 
 ## Current checkpoint summary
+
+- 2026-10-30 Studio: S01 prerequisite accepted, T21.9.a/.b verified; See All uses the same bounded production history source and restores a single heading focus. Full G 41/41 plus focused/staged J with strict G coverage, 52 runner tests and 76 reviewed captures. T21 40%, sum 969, Overall 36%; broad T21.9 stays open. [Evidence](studio-pastel-see-all-2026-10-30.md). Next S02/T20.5.
 
 - 2026-10-30: **T11 accepted** from full F (41/41), focused/staged G reusing verified F coverage, actual source/lifecycle/offline journeys, 100-channel cached first-frame checks and agent-reviewed Guide/Studio/reference captures. Evidence and source applicability: [runtime ledger](t11-runtime-2026-10-29.md). Next: Studio S01/T21.9 prerequisite; no other task gains acceptance from these regression journeys.
 

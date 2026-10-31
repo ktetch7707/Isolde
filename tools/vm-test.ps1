@@ -15,7 +15,7 @@ param(
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
-if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -ne 'guide_remote_ui')) { throw 'ReuseFullRun requires Test -Suite guide_remote_ui and supports only bounded Guide QML changes.' }
+if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation'))) { throw 'ReuseFullRun requires Test with a supported bounded QML suite.' }
 if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
 if ($GuideDiagnostics -and $Action -ne 'Status') { throw 'GuideDiagnostics is Status-only.' }
 if ($GuideReplayPlan -and ($Action -ne 'Visual' -or $Cases.Count -ne 1 -or $Cases[0] -notin @('guide-surfaces','guide-lifecycle','guide-reopen','guide-features'))) { throw 'GuideReplayPlan requires one supported Guide Visual case.' }

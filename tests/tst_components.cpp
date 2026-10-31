@@ -378,7 +378,10 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     auto *restoredPage=qobject_cast<PageModel *>(restored.pageModel(movies));QVERIFY(restoredPage);
     QCOMPARE(restoredPage->appearance()["focusColor"].toString(),QString("#123456"));
     const auto snapshot=layout.saveSkin("Whole interface");QVERIFY(!snapshot.isEmpty());
-    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));QCOMPARE(layout.pages().size(),7); // Five starter pages preserve both authored pages.
+    const auto presetPages=QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/skins/pastel.json"))).object()["layout"].toObject()["pages"].toArray();
+    QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));
+    QCOMPARE(layout.pages().size(),presetPages.size()+2); // Preserve both authored pages alongside every packaged page.
+    for(const auto &value:presetPages)QVERIFY(layout.pageModel(value.toObject()["id"].toString()));
     const auto linkedState=layout.committedDocument();
     QVERIFY(!layout.removePage(shows));QCOMPARE(layout.committedDocument(),linkedState);
     QVERIFY(page->setItemAction(button,{{"type","open-page"},{"pageId",movies}})); // Explicitly repair the incoming link.
@@ -413,14 +416,16 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     const auto savedComposition = layout.composition();
     const auto savedItems = layout.components();
     QVERIFY2(layout.applySkin("builtin-pastel"),qPrintable(layout.errorString()));
-    QCOMPARE(layout.pages().size(),5);
+    const auto presetPages=QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/skins/pastel.json"))).object()["layout"].toObject()["pages"].toArray();
+    QCOMPARE(layout.pages().size(),presetPages.size());
+    for(const auto &value:presetPages)QVERIFY(layout.pageModel(value.toObject()["id"].toString()));
     auto *moviePage=qobject_cast<PageModel *>(layout.pageModel("library-movies"));QVERIFY(moviePage);
     QCOMPARE(moviePage->items().first().toMap()["componentType"].toString(),QString("library"));
     const auto moviesLink=layout.components()[6].toMap()["action"].toMap();
     QCOMPARE(moviesLink["type"].toString(),QString("open-page"));
     QCOMPARE(moviesLink["pageId"].toString(),QString("library-movies"));
     QVERIFY(moviePage->setAppearance({{"focusColor","#123456"}}));
-    QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),5);
+    QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),presetPages.size());
     QCOMPARE(moviePage->appearance()["focusColor"].toString(),QString("#123456"));
     QVERIFY(!layout.wallpaperSource().isEmpty());
     QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),4);
@@ -1755,6 +1760,25 @@ void ComponentTests::studioPastelPresetUsesEditableButtons()
         if(item["family"]=="recently-viewed"){++histories;QCOMPARE(item["source"].toObject()["libraryKind"].toString(),QString("history"));}
     }
     QCOMPARE(buttons,10);QCOMPARE(appCollections,1);QCOMPARE(histories,1);
+    const auto categories=layout["categories"].toArray();
+    QJsonObject historyAction;
+    for(const auto &value:categories)if(value.toObject()["id"]=="recent") {
+        const auto style=value.toObject()["presentation"].toObject();
+        QCOMPARE(style["trailingLabel"].toString(),QString("See All"));
+        historyAction=style["trailingAction"].toObject();
+    }
+    QCOMPARE(historyAction["type"].toString(),QString("open-page"));
+    bool foundHistoryPage=false;
+    for(const auto &value:layout["pages"].toArray())if(value.toObject()["id"]==historyAction["pageId"]) {
+        const auto items=value.toObject()["layout"].toObject()["components"].toArray();
+        QCOMPARE(items.size(),1);
+        const auto item=items.first().toObject();
+        QCOMPARE(item["source"],layout["components"].toArray().last().toObject()["source"]);
+        QCOMPARE(item["presentation"].toObject()["libraryLayout"].toString(),QString("grid"));
+        QCOMPARE(item["presentation"].toObject()["libraryLimit"].toInt(),50);
+        foundHistoryPage=true;
+    }
+    QVERIFY(foundHistoryPage);
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
     const auto path=dir.filePath("home.json"),defaults=dir.filePath("pastel-defaults.json");const auto data=QJsonDocument(layout).toJson();
     {QFile output(defaults);QVERIFY(output.open(QIODevice::WriteOnly));QCOMPARE(output.write(data),data.size());}

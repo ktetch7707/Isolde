@@ -229,7 +229,9 @@ Item {
             if (style.variant === "library") entries.push({id:"widget-"+section.id,widget:true,row:g.row*100,x:g.column+g.span/2})
             if(sectionMode && style.variant!=="library") {
                 for(const item of values)if(item.placement && host.focusable(item))entries.push({id:item.id,row:g.row*100+item.placement.y,x:item.placement.x+item.placement.width/2})
-                if(style.trailingAction)entries.push({id:"section-"+section.id,sectionAction:true,row:g.row*100,x:0})
+                // The heading action is a separate row above the collection.
+                // Horizontal input inside a library belongs to its cards.
+                if(style.trailingAction)entries.push({id:"section-"+section.id,sectionAction:true,row:g.row*100-1,x:0})
                 continue
             }
             const sectionWidth = (content.width - gap*(columns-1))*g.span/columns + (g.span-1)*gap
@@ -252,12 +254,18 @@ Item {
         if(scrollingPage)Qt.callLater(revealFocusedPlacement)
         const component=(host.items || []).find(i=>i.id===id);activeGroup=component?component.parentId || "":""
         sectionActionId = id.startsWith("section-") ? id : ""
+        if(sectionActionId)activeWidget=""
         navigationFocused = id.startsWith("tab-")
         if (navigationFocused) { const i = tabs.findIndex(t => "tab-" + t.id === id); if (i >= 0) focusedTab = i }
         else if (!focusEntries().some(e => e.id === id)) {
             const tab = tabs.findIndex(t => !t.action && (!t.sections || host.sections.some(s => t.sections.indexOf(s.id) >= 0 && (s.items || []).some(i => i.id === id))))
             if (tab >= 0) activeTabId = tabs[tab].id
         }
+    }
+    function activateSection(section) {
+        activeWidget="";sectionActionId="section-"+section.id
+        navigationFocused=false;host.recoveryFocused=false
+        host.actionActivated(section.presentation.trailingAction,sectionActionId)
     }
     function activateControl(index) {
         const control = headerControls[index]
@@ -309,7 +317,7 @@ Item {
         }
         if (command === inputManager.confirm) {
             if (current.widget) { activeWidget=current.id; sectionActionId=current.id; return }
-            if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) host.actionActivated(section.presentation.trailingAction,current.id); return }
+            if (current.sectionAction) { const section = visibleSections.find(s => "section-"+s.id === current.id); if (section) root.activateSection(section); return }
             const item = host.items[host.itemIndex(current.id)]
             if(item && (item.componentType==="library" || item.appCollection || item.family==="page-menu" || item.family==="carousel")){const widget=widgets[item.id];if(widget){activeWidget=item.id;widget.engage()}return}
             if(item && item.componentType==="container"){
@@ -452,7 +460,7 @@ Item {
                                     color:root.sectionActionId === "section-"+sectionView.modelData.id ? "#B0FFFFFF" : "#30FFFFFF"
                                     border.width:root.sectionActionId === "section-"+sectionView.modelData.id ? 2 : 0; border.color:host.appearance.focusColor || "white"
                                     Text { anchors.centerIn:parent; text:(sectionView.style.trailingLabel || "")+"  ›"; color:host.appearance.textColor || "#514B67"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:13*root.unit }
-                                    MouseArea { anchors.fill:parent; enabled:!!sectionView.style.trailingAction; onClicked:host.actionActivated(sectionView.style.trailingAction,"section-"+sectionView.modelData.id) }
+                                    MouseArea { anchors.fill:parent; enabled:!!sectionView.style.trailingAction; onClicked:root.activateSection(sectionView.modelData) }
                                 }
                             }
                             Text { id:subtitle; visible:!!sectionView.style.subtitle; height:visible ? 24*root.unit : 0; text:sectionView.style.subtitle || ""; color:host.appearance.mutedColor || "#AAA4B2"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:17*root.unit*host.textScale; width:parent.width; elide:Text.ElideRight }
@@ -493,6 +501,7 @@ Item {
                                 metrics:root.measureGrid(width,height,Object.assign({},root.grid,sectionView.style.grid || {}))
                                 items:visible?(sectionView.modelData.items || []).filter(i=>!!i.placement).map(i=>({item:Object.assign({},i,{presentation:Object.assign({},sectionView.style,i.presentation || {})}),placement:i.placement})):[]
                                 host:root.host;unit:root.unit
+                                runtimeFocusEnabled:!root.sectionActionId && !root.navigationFocused
                                 onActivated:item=>root.activatePlaced(item)
                                 onFocused:card=>root.revealCard(card)
                                 Component.onCompleted:{let surfaces=Object.assign({},root.sectionSurfaces);surfaces[sectionId]=sectionPlacement;root.sectionSurfaces=surfaces}

@@ -143,6 +143,11 @@
             "rows": 3,
             "margin": 0,
             "overlap": false
+          },
+          "trailingLabel": "See All",
+          "trailingAction": {
+            "type": "open-page",
+            "pageId": "viewing-history"
           }
         }
       }
@@ -1023,6 +1028,79 @@
         },
         "name": "TV Guide",
         "id": "live-tv"
+      },
+      {
+        "layout": {
+          "schemaVersion": 2,
+          "components": [
+            {
+              "id": "browse-history",
+              "name": "Recently viewed",
+              "kind": "widget",
+              "widgetType": "library",
+              "componentType": "library",
+              "family": "recently-viewed",
+              "placement": {
+                "height": 3,
+                "y": 0,
+                "width": 4,
+                "x": 0
+              },
+              "presentation": {
+                "radius": 14,
+                "libraryCardStyle": "recent",
+                "artHeight": 84,
+                "labelSize": 14,
+                "libraryLimit": 50,
+                "libraryColumns": 5,
+                "libraryKind": "history",
+                "libraryView": "watched",
+                "libraryChrome": true,
+                "libraryLayout": "grid"
+              },
+              "categoryId": "library",
+              "source": {
+                "libraryView": "watched",
+                "libraryValue": "",
+                "kind": "recently-viewed",
+                "schemaVersion": 1,
+                "provider": "kodi",
+                "libraryKind": "history"
+              }
+            }
+          ],
+          "theme": {},
+          "categories": [
+            {
+              "id": "library",
+              "name": "Recently viewed"
+            }
+          ],
+          "composition": {
+            "pageNavigation": "left",
+            "headerMode": "identity",
+            "grid": {
+              "columns": 4,
+              "mode": "screen",
+              "rows": 3,
+              "overlap": false,
+              "gap": 8,
+              "snap": true,
+              "margin": 16
+            },
+            "headerControls": [
+              "search",
+              "settings",
+              "edit"
+            ],
+            "fit": false,
+            "enabled": true,
+            "identity": "Recently viewed",
+            "schemaVersion": 1
+          }
+        },
+        "name": "Recently viewed",
+        "id": "viewing-history"
       }
     ]
   },

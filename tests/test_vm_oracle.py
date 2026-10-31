@@ -433,6 +433,41 @@ class OracleTests(unittest.TestCase):
             (base/'payload/bin/isolde').write_bytes(b'tampered')
             with self.assertRaises(RuntimeError):runner.tested_payload()
 
+    def test_focused_studio_qml_reuse_refuses_config_cpp_and_unverified_payloads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();base=root/'runs/base';current=root/'runs/focused'
+            base.mkdir(parents=True);current.mkdir()
+            files={'qml/ComposedHome.qml':b'old','qml/PlacedComponents.qml':b'old',
+                   'src/main.cpp':b'core','config/skins/pastel.json':b'config',
+                   'tests/tst_home_navigation.cpp':b'tests','CMakeLists.txt':b'build'}
+            def write_manifest(run,values):
+                source=run/'source';source.mkdir(exist_ok=True)
+                for name,data in values.items():
+                    path=source/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+                (run/'files.sha256').write_text(''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(values.items())))
+            write_manifest(base,files)
+            fresh=dict(files,**{'qml/PlacedComponents.qml':b'focus fix','tests/tst_home_navigation.cpp':b'regression'})
+            write_manifest(current,fresh)
+            for run in (base,current):
+                executable=run/'payload/bin/isolde';executable.parent.mkdir(parents=True);executable.write_bytes(run.name.encode())
+            baseline={'passed':True,'fullSuite':True,'sourceDigest':oracle.digest(base/'files.sha256'),'payload':oracle.payload_hashes(base/'payload')}
+            oracle.atomic_json(base/'test-result.json',baseline)
+            proof=oracle.focused_qml_coverage(root,current,'base','home_component_navigation')
+            self.assertEqual(proof['changedStudioQml'],['qml/PlacedComponents.qml'])
+            runner=oracle.Oracle(root,'focused')
+            oracle.atomic_json(current/'test-result.json',{'passed':True,'fullSuite':False,'suite':'home_component_navigation','coverageReuse':proof,'payload':oracle.payload_hashes(current/'payload')})
+            self.assertEqual(runner.tested_payload(),current/'payload')
+            for name in ('src/main.cpp','config/skins/pastel.json','CMakeLists.txt','qml/GuideWidget.qml','tools/unreviewed.py'):
+                write_manifest(current,dict(fresh,**{name:b'changed'}))
+                with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','home_component_navigation')
+            write_manifest(current,fresh)
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','studio')
+            oracle.atomic_json(base/'test-result.json',dict(baseline,fullSuite=False))
+            with self.assertRaises(RuntimeError):runner.tested_payload()
+            oracle.atomic_json(base/'test-result.json',baseline)
+            (base/'payload/bin/isolde').write_bytes(b'tampered')
+            with self.assertRaises(RuntimeError):runner.tested_payload()
+
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])

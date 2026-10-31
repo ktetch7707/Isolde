@@ -10,6 +10,7 @@ Item {
     // Proposal replicas render real components without becoming live focus,
     // geometry or provider clients in the underlying page.
     property bool previewOverlay:false
+    property bool runtimeFocusEnabled:true
     property string editorSelectionId:host.editSelection || ""
     signal activated(var item)
     signal focused(var card)
@@ -27,7 +28,7 @@ Item {
             readonly property bool pageMenu:modelData.item.family==="page-menu"
             readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu
             readonly property bool library:modelData.item.componentType==="library"
-            readonly property bool selected:surface.host.editMode ? surface.editorSelectionId===modelData.item.id : !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(modelData.item.id)
+            readonly property bool selected:surface.host.editMode ? surface.editorSelectionId===modelData.item.id : surface.runtimeFocusEnabled && !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(modelData.item.id)
             readonly property var baseStyle:modelData.item.presentation || ({})
             readonly property var style:Object.assign({},baseStyle,(baseStyle.states || {}).normal || {},(baseStyle.states || {})[modelData.item.designState || (modelData.item.unavailableReason?"unavailable":node.selected?"focused":"normal")] || {})
             readonly property var layout:style.layout || ({})
@@ -102,7 +103,7 @@ Item {
                 Component.onCompleted:if(node.group)setSource(Qt.resolvedUrl("PlacedComponents.qml"),{
                     items:Qt.binding(()=>node.childEntries),metrics:Qt.binding(()=>node.localMetrics),host:surface.host,
                     unit:Qt.binding(()=>surface.unit),catalog:Qt.binding(()=>surface.catalog),previewOverlay:surface.previewOverlay,
-                    editorSelectionId:Qt.binding(()=>surface.editorSelectionId)
+                    editorSelectionId:Qt.binding(()=>surface.editorSelectionId),runtimeFocusEnabled:Qt.binding(()=>surface.runtimeFocusEnabled)
                 })
                 onLoaded:if(!surface.previewOverlay && surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,false)
                 Component.onDestruction:if(!surface.previewOverlay && node.group && surface.host.registerGroupSurface)surface.host.registerGroupSurface(node.modelData.item.id,contents,true)

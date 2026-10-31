@@ -731,9 +731,30 @@ void HomeNavigationTests::pastelReferenceNavigationAndGeometry()
     QCOMPARE(root->property("focusedItemId").toString(),QString("hdmi1"));
     QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("guide"));
     QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("favorite-apps"));
-    QVERIFY(command(InputManager::NavigateDown)); QCOMPARE(root->property("focusedItemId").toString(),QString("recently-watched"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(composed->property("sectionActionId").toString(),QString("section-recent"));
+    std::function<QQuickItem *(QQuickItem *)> findApps=[&](QQuickItem *item)->QQuickItem *{
+        if(item->objectName()=="placed-favorite-apps")return item;
+        for(auto *child:item->childItems())if(auto *found=findApps(child))return found;
+        return nullptr;
+    };
+    auto *appsNode=findApps(qobject_cast<QQuickItem *>(root.get()));QVERIFY(appsNode);
+    QVERIFY(!appsNode->property("selected").toBool()); // Only the heading action is highlighted.
     QCOMPARE(home.components().last().toMap()["family"].toString(),QString("recently-viewed"));
     QCOMPARE(home.components().last().toMap()["source"].toMap()["kind"].toString(),QString("recently-viewed"));
+    QVERIFY(command(InputManager::Confirm));
+    QCOMPARE(activated.size(),1);
+    QCOMPARE(activated.last()[0].toMap()["pageId"].toString(),QString("viewing-history"));
+    QCOMPARE(activated.last()[1].toString(),QString("section-recent"));
+    composed->setProperty("activeWidget","favorite-apps"); // A pointer route can leave a collection engaged.
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"restoreFocus",Q_ARG(QVariant,QString("section-recent"))));
+    QCOMPARE(composed->property("sectionActionId").toString(),QString("section-recent"));
+    QCOMPARE(composed->property("activeWidget").toString(),QString());
+    QVERIFY(!appsNode->property("selected").toBool());
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(root->property("focusedItemId").toString(),QString("recently-watched"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(composed->property("sectionActionId").toString(),QString("section-recent"));
     QVERIFY(command(InputManager::NavigateUp)); QCOMPARE(root->property("focusedItemId").toString(),QString("favorite-apps"));
     QVERIFY(QMetaObject::invokeMethod(root.get(),"restoreFocus",Q_ARG(QVariant,QString("hdmi1"))));
     QVERIFY(command(InputManager::NavigateUp)); QVERIFY(composed->property("navigationFocused").toBool());
