@@ -77,7 +77,7 @@ Item {
             const id=apps[selected-2].action.appId,next=selectedApps.slice(),index=next.indexOf(id)
             if(index>=0)next.splice(index,1);else if(next.length<128)next.push(id);else{message="Choose up to 128 apps.";return}selectedApps=next;return
         }
-        if(view==="artwork"){if(selected===0){beginKeyboard("import","","artwork");return}importArtwork(assets[selected-1].source);return}
+        if(view==="artwork"){if(selected===0){view="imageBrowser";return}importArtwork(assets[selected-1].source);return}
         if(view==="links"){
             if(selected===0){configuration=Object.assign({},configuration,{action:{}});finish(family);return}
             const entry=actions[selected-1];if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}configuration=Object.assign({},configuration,{action:entry.action})
@@ -87,6 +87,7 @@ Item {
     }
     function beginKeyboard(action,value,origin){keyboardAction=action;keyboardReturn=origin;keyboard.value=value;keyboard.selectedIndex=0;view="keyboard"}
     function handleCommand(command){
+        if(view==="imageBrowser"){if(artworkBrowser.item)artworkBrowser.item.handleCommand(command);return}
         if(view==="links"){if(actionLoader.item)actionLoader.item.handleCommand(command);return}
         if(view==="apps"){if(appPicker)appPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
@@ -100,7 +101,7 @@ Item {
         else if(command===inputManager.navigateLeft)selected=Math.max(0,selected-1)
     }
     Rectangle {
-        visible:root.view!=="apps" && root.view!=="links"
+        visible:root.view!=="imageBrowser" && root.view!=="keyboard" && root.view!=="apps" && root.view!=="links"
         anchors.centerIn:parent;width:Math.min(parent.width-48,900*root.unit);height:Math.min(parent.height-48,630*root.unit)
         color:root.appearance.surfaceColor;radius:20*root.unit;border.width:2;border.color:root.appearance.focusColor
         Column {
@@ -164,6 +165,15 @@ Item {
             onCanceled:{root.view="families";root.selected=Math.max(0,root.families.findIndex(f=>f.id===root.family))}
             onAccepted:(mode,ids)=>{root.configuration={appCollection:{mode:mode,ids:ids}};root.finish("app-bar")}
         }}
+    }
+    Loader {
+        id:artworkBrowser;anchors.fill:parent;active:root.visible && root.view==="imageBrowser";z:12
+        sourceComponent:StudioArtworkPicker {
+            session:root.session;appearance:root.appearance
+            onPicked:source=>root.importArtwork(source)
+            onCanceled:{root.view="artwork";root.selected=0}
+            onAdvancedPath:root.beginKeyboard("import","","imageBrowser")
+        }
     }
     OnScreenKeyboard {
         id:keyboard;anchors.fill:parent;visible:root.view==="keyboard";appearance:root.appearance;hint:root.message

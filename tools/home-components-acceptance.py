@@ -25,6 +25,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--inspect", action="store_true", help="Pause briefly on failure for a VM screenshot")
     parser.add_argument("--studio", action="store_true", help="Exercise draft canvas, remote editing, history, preview and Apply")
+    parser.add_argument("--catalog", action="store_true", help="Exercise real remote image import, framing, GIF Apply and reopen")
     parser.add_argument("--collections", action="store_true", help="Exercise real collection registry/session lifecycle in a private profile")
     parser.add_argument("--desktop", action="store_true", help="Compare actual X11 pointer drag and remote saved output in the Studio fixture")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
@@ -41,6 +42,8 @@ def main():
     original_bytes = json.dumps(original).encode()
     if args.collections:
         original_bytes, collection_fixture = prepare_collections(evidence, executable)
+    if args.catalog:
+        prepare_catalog(evidence)
     layout.write_bytes(original_bytes)
     (config / "device-setup.json").write_text(json.dumps({"version": 1, "step": 6, "complete": True}))
     (config / "Kodi.conf").write_text("[profiles]\ndefault\\kodi\\autoStart=false\n")
@@ -172,6 +175,9 @@ def main():
             run("wmctrl", "-i", "-a", window, env=env)
             focused = focus_window()
             print(f"Acceptance window {window}, keyboard focus {focused:#x}", flush=True)
+            if args.catalog:
+                exercise_catalog(evidence, executable, layout, original_bytes, key, run, env, lambda: process.poll())
+                return
             if args.collections:
                 exercise_collections(evidence, executable, layout, original_bytes, collection_fixture, key, pointer, run, env, lambda: process.poll(), window)
                 return
@@ -654,5 +660,110 @@ def send_client_key(window,name,env):
     finally:display_api.XCloseDisplay(d)
 
 
+
+
+
+def prepare_catalog(evidence):
+    from PIL import Image, ImageDraw
+    directory=evidence/'inputs'/'00-Catalog inputs';directory.mkdir(parents=True)
+    (directory/'00-unreadable.gif').write_bytes(b'GIF89a invalid fixture')
+    frames=[]
+    for color,text in [('#305e9c','FIRST'),('#a64764','SECOND')]:
+        image=Image.new('RGB',(160,96),color);draw=ImageDraw.Draw(image)
+        draw.rectangle((16,16,143,79),outline='white',width=4);draw.text((45,42),text,fill='white');frames.append(image)
+    frames[0].save(directory/'01-animation.gif',save_all=True,append_images=frames[1:],duration=500,loop=0)
+    (evidence/'config/user-dirs.dirs').write_text('XDG_PICTURES_DIR="'+str(directory.parent)+'"\n')
+
+
+def exercise_catalog(evidence,executable,layout,original,key,run,env,poll):
+    import hashlib
+    phases=[]
+    options=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
+    def expect(predicate,message,timeout=20):
+        end=time.monotonic()+timeout
+        while time.monotonic()<end:
+            if poll() is not None:raise RuntimeError('Catalog shell exited')
+            if predicate():return
+            time.sleep(.15)
+        raise RuntimeError(message)
+    def capture(phase):
+        phases.append(phase);print(phase.upper()+'_READY '+str(evidence),flush=True)
+        expect(lambda:(evidence/(phase+'-captured')).exists(),'Capture acknowledgement: '+phase,60)
+    def page_menu(index):
+        key('Up',30);key('Down');key('Down',index);key('Return')
+    def fields(tab,name,advanced=False,start_tabs=False,kind="image"):
+        tabs=['Content','Appearance','Layout','Actions','Accessibility','More']
+        if not start_tabs:key('Escape')
+        key('Up',10);key('Down',tabs.index(tab));key('Return')
+        candidates=[f for f in options['inspector']['fields'] if f['tab']==tab and (advanced or not f.get('advanced')) and (not f.get('types') or kind in f['types']) and kind not in f.get('excludeTypes',[]) and not f.get('families')]
+        index=next(i for i,f in enumerate(candidates) if f['key']==name)
+        key('Down',index);key('Return')
+    assert sorted(p.name for p in (evidence/'inputs/00-Catalog inputs').iterdir())==['00-unreadable.gif','01-animation.gif']
+    key('Return');capture('catalogentry')
+    key('Down',2);key('Return');key('Return');key('Return');key('Return')
+    index=next(i for i,f in enumerate(options['catalog']) if f['id']=='image')
+    key('Down',index//2)
+    if index%2:key('Right')
+    key('Return');capture('imagestyles');key('Return');key('Return');key('Return');capture('imagebrowser')
+    key('Return');capture('imageinvalid');assert layout.read_bytes()==original
+    key('Down');key('Return');capture('imagepreview');key('Return')
+    key('Down');key('Return');key('Return');capture('imageplaced')
+    assert layout.read_bytes()==original
+    key('Return');key('Down');key('Return');capture('imageinspector')
+    # Inspector opens on Content. The ordinary fields are derived from its packaged schema.
+    fields('Content','animateArtwork',start_tabs=True);capture('imagemotiondraft')
+    assert layout.read_bytes()==original
+    fields('Appearance','crop');capture('imageframing')
+    key('Right');key('Return');key('Down',3);key('Right');capture('imageframingdraft')
+    key('Escape');assert layout.read_bytes()==original
+    fields('Appearance','crop');key('Right');key('Return');key('Down',6);key('Return')
+    key('Escape');key('Escape');page_menu(7);key('Return')
+    expect(lambda:layout.read_bytes()!=original,'GIF Apply did not persist the staged draft')
+    saved=layout.read_bytes();doc=json.loads(saved);image=next(i for i in doc['components'] if i['componentType']=='image')
+    assert image['presentation']['animateArtwork'] is True and image['customLogo'].endswith('.gif')
+    assert image['presentation']['artFocalX']==.55
+    managed=layout.parent/image['customLogo'];assert managed.read_bytes()==(evidence/'inputs/00-Catalog inputs/01-animation.gif').read_bytes()
+    capture('imageapplied')
+    def add_family(family,choice=0):
+        page_menu(2)
+        index=next(i for i,f in enumerate(options['catalog']) if f['id']==family)
+        key('Down',index//2)
+        if index%2:key('Right')
+        key('Return')
+        if family=='shape':key('Down',choice);key('Return')
+        elif family in ('text','button'):key('Return')
+        if family=='button':key('Down',3);key('Return') # Named Open Settings, no execution in a draft.
+        key('Return')
+    add_family('shape');capture('catalogshape')
+    add_family('text');capture('catalogtext')
+    key('Return');key('Down');key('Return')
+    fields('Content','bodyText',start_tabs=True,kind='text');capture('textkeyboard')
+    key('Return');key('Down',5);key('Return') # Append 1, then ordinary on-screen Done.
+    fields('Content','visibleLabel',kind='text');key('Return');key('Down',5);key('Return')
+    fields('Appearance','labelPosition',kind='text');key('Return');capture('textindependent')
+    key('Escape');key('Escape')
+    add_family('button');capture('catalogbutton')
+    add_family('shape',5);capture('catalogcontainer')
+    page_menu(4);capture('cataloglayers');key('Down');key('Return') # Select the decorative Image through Layers.
+    key('Return');key('Down');key('Return')
+    fields('Actions','action',start_tabs=True)
+    key('Down',len(options['actions'])+2);key('Return');capture('imagelink')
+    key('Escape');key('Escape');page_menu(7);key('Return')
+    expect(lambda:len(json.loads(layout.read_text())['components'])==6,'Primitive catalog Apply did not persist all six real nodes')
+    saved=layout.read_bytes();doc=json.loads(saved)
+    by_type={i['componentType']:i for i in doc['components']}
+    assert {'shape','container','button','image','text'}.issubset(by_type)
+    text=by_type['text'];assert text['presentation']['bodyText']=='Your text1' and text['presentation']['visibleLabel']=='1' and text['name']=='Text'
+    assert text['presentation']['labelPosition']=='inside'
+    assert by_type['button']['action']['type']=='settings'
+    assert by_type['image']['action']['type']=='root-page'
+    assert by_type['container']['presentation']['layout'] and not by_type['shape'].get('parentId')
+    capture('catalogapplied')
+    key('Escape');key('Escape');key('Escape');capture('imageruntimeone');time.sleep(.55);capture('imageruntimetwo')
+    assert layout.read_bytes()==saved
+    key('Up',12);key('Right');key('Return');capture('imagereopened')
+    assert layout.read_bytes()==saved
+    (evidence/'result.json').write_text(json.dumps(dict(passed=True,journey='catalog',executable=str(executable),freshProfile=True,remoteImport=True,invalidRefused=True,privateDraft=True,framingCancel=True,atomicGifApply=True,reopenPreserved=True,remotePrimitives=True,independentText=True,linkedImage=True,layersSelection=True,managedGifSha256=hashlib.sha256(managed.read_bytes()).hexdigest(),captures=phases),indent=2))
+    print('Evidence: '+str(evidence),flush=True)
 if __name__ == "__main__":
     main()

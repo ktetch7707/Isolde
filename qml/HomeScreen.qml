@@ -187,7 +187,7 @@ Item {
             return "Network needed"
         return ""
     }
-    function focusable(item){return editMode || item && item.componentType!=="shape" && !(item.componentType==="image" && !item.action)}
+    function focusable(item){return editMode || item && item.componentType!=="shape" && item.componentType!=="text" && !(item.componentType==="image" && !item.action)}
     function repairFocus(){if(editMode)return;if(composition.enabled && (sections || []).some(s=>(s.presentation || {}).variant==="library")){recoveryFocused=false;return;}if(items[focusedIndex] && focusable(items[focusedIndex]))return;const first=items.findIndex(i=>focusable(i));if(first<0){recoveryFocused=true;return}focusedIndex=first;focusedItemId=items[first].id;recoveryFocused=false}
 
     function visualEntries() {
@@ -290,6 +290,7 @@ Item {
         if (composition.enabled && originId) composed.restoreFocus(originId)
         if (!originId) return
         const exact = itemIndex(originId)
+        if (exact >= 0 && !focusable(items[exact])) { repairFocus(); return }
         if (exact >= 0) { focusedIndex = exact; focusedItemId = originId; recoveryFocused = false; return }
         for (let i = 0; i < items.length; ++i) {
             if (items[i].appId === originId) {

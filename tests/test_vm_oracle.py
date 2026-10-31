@@ -25,6 +25,75 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_artwork_view_reuse_requires_original_full_and_refuses_other_runtime_changes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder).resolve();base=root/'runs/base';current=root/'runs/focused';base.mkdir(parents=True);current.mkdir()
+            values={'qml/StudioImageFraming.qml':b'old','qml/StudioArtworkPicker.qml':b'picker','qml/StudioInspector.qml':b'inspector','qml/PageStudioView.qml':b'editor','qml/ArtworkImage.qml':b'raster','src/home/StudioSession.cpp':b'core','config/studio-defaults.json':b'defaults'}
+            def write(run,data):
+                (run/'files.sha256').write_text(''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n' for name,value in sorted(data.items())))
+            write(base,values);changed=dict(values,**{'qml/StudioImageFraming.qml':b'actual card','qml/PageStudioView.qml':b'actual geometry'})
+            write(current,changed);(base/'payload/bin').mkdir(parents=True);(base/'payload/bin/isolde').write_bytes(b'full candidate')
+            full={'passed':True,'fullSuite':True,'sourceDigest':oracle.digest(base/'files.sha256'),'payload':oracle.payload_hashes(base/'payload')};oracle.atomic_json(base/'test-result.json',full)
+            proof=oracle.focused_qml_coverage(root,current,'base','studio_artwork');self.assertEqual(proof['changedStudioArtworkQml'],['qml/PageStudioView.qml','qml/StudioImageFraming.qml'])
+            for name in ('src/home/StudioSession.cpp','config/studio-defaults.json','qml/ArtworkImage.qml','qml/Unexpected.qml'):
+                write(current,dict(changed,**{name:b'changed'}))
+                with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','studio_artwork')
+            write(current,changed);oracle.atomic_json(base/'test-result.json',dict(full,fullSuite=False))
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','studio_artwork')
+            oracle.atomic_json(base/'test-result.json',full);(base/'payload/bin/isolde').write_bytes(b'tampered')
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','studio_artwork')
+
+    def test_home_acceptance_helper_compiles_without_launching_a_session(self):
+        path=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
+        compile(path.read_bytes(),str(path),'exec')
+
+    def test_archive_pruning_requires_exact_host_backup_and_preserves_payload_or_source(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);run=root/'runs/old';run.mkdir(parents=True);content=b'archived source';checksum=hashlib.sha256(content).hexdigest()
+            (run/'source.tar.gz').write_bytes(content);(run/'archive.sha256').write_text(checksum+'  source.tar.gz')
+            (run/'status.json').write_text('{"state":"passed"}')
+            receipt=[dict(runId='old',sha256=checksum)]
+            with self.assertRaises(RuntimeError):oracle.remove_backed_up_archives(root,receipt,[run/'source.tar.gz'])
+            (run/'payload').mkdir();self.assertEqual(oracle.remove_backed_up_archives(root,receipt),[]);(run/'payload').rmdir()
+            with self.assertRaises(RuntimeError):oracle.remove_backed_up_archives(root,[dict(runId='old',sha256='0'*64)])
+            self.assertEqual(oracle.remove_backed_up_archives(root,receipt),receipt);self.assertFalse((run/'source.tar.gz').exists());self.assertTrue((run/'archive.sha256').exists())
+
+    def test_catalog_result_requires_import_failure_cancel_apply_and_all_frames(self):
+        fields=('passed','freshProfile','remoteImport','invalidRefused','privateDraft','framingCancel','atomicGifApply','reopenPreserved','remotePrimitives','independentText','linkedImage','layersSelection')
+        result={key:True for key in fields};result['managedGifSha256']='a'*64
+        result['captures']=['catalogentry','imagestyles','imagebrowser','imageinvalid','imagepreview','imageplaced','imageinspector','imagemotiondraft','imageframing','imageframingdraft','imageapplied','catalogshape','catalogtext','textkeyboard','textindependent','catalogbutton','catalogcontainer','cataloglayers','imagelink','catalogapplied','imageruntimeone','imageruntimetwo','imagereopened']
+        self.assertTrue(oracle.visual_result_passed('catalog',result))
+        for key in fields:self.assertFalse(oracle.visual_result_passed('catalog',dict(result,**{key:False})))
+        self.assertFalse(oracle.visual_result_passed('catalog',dict(result,captures=result['captures'][:-1])))
+        command=oracle.studio_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),catalog=True)
+        self.assertEqual(command[-3:],['--studio','--catalog','--inspect'])
+
+    def test_original_source_archive_restoration_requires_matching_saved_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);candidate=root/'run';bins=root/'bin';candidate.mkdir();bins.mkdir()
+            original=b'recoverable original archive';identity=hashlib.sha256(original).hexdigest()
+            (candidate/'archive.sha256').write_text(identity+'  source.tar.gz\n')
+            incoming=bins/('recovery-'+identity+'.tar.gz');incoming.write_bytes(b'wrong')
+            with self.assertRaises(RuntimeError):oracle.restore_source_archive(candidate,bins)
+            self.assertFalse((candidate/'source.tar.gz').exists())
+            incoming.write_bytes(original);self.assertTrue(oracle.restore_source_archive(candidate,bins))
+            self.assertEqual((candidate/'source.tar.gz').read_bytes(),original)
+            self.assertFalse(oracle.restore_source_archive(candidate,bins))
+
+    def test_fixture_cache_cleanup_preserves_data_recent_active_and_mounts(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            for i in range(6):
+                fixture=root/('isolde-tv-acceptance-'+str(i));(fixture/'cache').mkdir(parents=True)
+                (fixture/'cache/file').write_text('reproducible');(fixture/'result.json').write_text('evidence')
+                os.utime(fixture,(i,i))
+            active=root/'isolde-tv-acceptance-1'
+            removed=oracle.remove_fixture_caches(root,[],[active/'cache'],target_free=10**18)
+            self.assertEqual(set(removed),{str(root/'isolde-tv-acceptance-0/cache'),str(root/'isolde-tv-acceptance-2/cache')})
+            self.assertTrue((active/'cache/file').exists())
+            self.assertTrue(all((root/('isolde-tv-acceptance-'+str(i))/'result.json').exists() for i in range(6)))
+            with self.assertRaises(RuntimeError):oracle.remove_fixture_caches(root,[active/'cache'],[],target_free=10**18)
+
     def test_cold_readers_close_every_connection_even_when_queries_fail(self):
         import sqlite3
         from contextlib import closing
@@ -511,7 +580,7 @@ class OracleTests(unittest.TestCase):
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])
-        for name in ("studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"):
+        for name in ("studio_quick", "studio_selection", "studio_artwork", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"):
             self.assertIsNotNone(re.fullmatch(pattern, name))
         self.assertIsNone(re.fullmatch(pattern, "home_component_navigation"))
         self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))

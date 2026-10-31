@@ -33,8 +33,9 @@ Item {
     readonly property real ellipseScaleY:ellipse && surface.height?bodyHeight/surface.height:1
     readonly property real corner:kind==="shape"?(ellipse?Math.max(width,bodyHeight)/2:style.shape==="pill"?Math.min(width,bodyHeight)/2:style.shape==="rounded"?Math.min((style.radius || 0)*unit,width/2,bodyHeight/2):0):Math.min((style.radius === undefined ? 22 : style.radius) * unit, Math.min(width, height) * (appearance.tileRoundness === undefined ? 0.2 : appearance.tileRoundness))
     readonly property color surfaceInk: root.style.surfaceColor || root.appearance.surfaceColor || "#28262F"
+    readonly property bool legacyBody:style.bodySize===undefined && style.bodyAlign===undefined && style.bodyBold===undefined
     readonly property bool customLabel:style.labelPosition!==undefined
-    readonly property bool interactive:item.componentType!=="shape" && (item.componentType!=="image" || !!item.action)
+    readonly property bool interactive:item.componentType!=="shape" && item.componentType!=="text" && (item.componentType!=="image" || !!item.action)
     // Geometry comes from the rendered surface, including the orb's own diameter.
     // Editors can retain this outline when the authored body is transparent.
     readonly property var focusFrame:kind==="orb" ? orb.focusFrame : ({x:(surface.x-3*unit)*ellipseScaleX,y:(surface.y-3*unit)*ellipseScaleY,width:(surface.width+6*unit)*ellipseScaleX,height:(surface.height+6*unit)*ellipseScaleY,radius:surface.radius+3*unit,ellipse:ellipse,color:style.focusColor || selColor,lineWidth:Math.max(2,style.focusWidth===undefined?3:style.focusWidth)*unit})
@@ -97,7 +98,15 @@ Item {
     }
     Text {
         objectName:"componentBodyText"
-        visible:root.kind==="text";anchors.fill:parent;anchors.margins:16;text:root.style.bodyText===undefined?root.style.subtitle || root.style.label || root.item.name || "":root.style.bodyText;textFormat:Text.PlainText;wrapMode:Text.WordWrap;color:root.style.labelColor || root.ink;font.pixelSize:(root.style.labelSize || 22)*root.textScale;font.family:root.appearance.fontFamily || "DejaVu Sans";verticalAlignment:Text.AlignVCenter
+        visible:root.kind==="text";x:(root.style.bodyPadding===undefined?16:root.style.bodyPadding)*root.unit;y:x
+        width:Math.max(0,parent.width-2*x);height:Math.max(0,root.bodyHeight-2*y)
+        text:root.style.bodyText===undefined?root.style.subtitle || root.style.label || root.item.name || "":root.style.bodyText
+        textFormat:Text.PlainText;wrapMode:(root.style.bodyWrap===undefined?root.legacyBody && root.style.labelWrap===false:root.style.bodyWrap===false)?Text.NoWrap:Text.WordWrap
+        maximumLineCount:root.style.bodyLines || (root.legacyBody?root.style.labelLines:0) || 4;elide:Text.ElideRight
+        horizontalAlignment:(root.style.bodyAlign || (root.legacyBody?root.style.textAlign:""))==="center"?Text.AlignHCenter:(root.style.bodyAlign || (root.legacyBody?root.style.textAlign:""))==="right"?Text.AlignRight:Text.AlignLeft
+        color:root.style.bodyColor || (root.legacyBody?root.style.labelColor:"") || root.ink;font.pixelSize:(root.style.bodySize || root.style.labelSize || 22)*root.textScale
+        font.bold:root.style.bodyBold===undefined?!!root.style.labelBold:root.style.bodyBold
+        font.family:root.appearance.fontFamily || "DejaVu Sans";lineHeight:root.style.bodyLineHeight || 1;verticalAlignment:Text.AlignVCenter
     }
     Text {textFormat:Text.PlainText;
         visible: (root.kind === "media" || root.kind === "recent") && !root.customLabel && root.item.showTitle!==false; x: 0; y: surface.height + (root.kind === "recent" ? 5 : 12) * root.unit; width: parent.width

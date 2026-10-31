@@ -1193,7 +1193,11 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel()
     const auto defaults=QFINDTESTDATA("../config/default-home-layout.json"),user=dir.filePath("home.json");QVERIFY(home.load(defaults,user));
     auto doc=QJsonDocument::fromJson(home.committedDocument()).object();doc["categories"]=QJsonArray{};
     doc["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",4},{"rows",3},{"mode","screen"}}}};
-    QJsonArray nodes;for(int i=0;i<12;++i)nodes.append(QJsonObject::fromVariantMap(ComponentSchema::component({{"id",QString("cell-%1").arg(i)},{"kind","widget"},{"widgetType","text"},{"name",QString("Item %1").arg(i)},{"placement",QVariantMap{{"x",i%4},{"y",i/4},{"width",1},{"height",1}}}},true)));
+    QJsonArray nodes;
+    for(int i=0;i<12;++i){
+        const auto node=ComponentSchema::component({{"id",QString("cell-%1").arg(i)},{"kind","widget"},{"componentType","button"},{"widgetType","button"},{"name",QString("Item %1").arg(i)},{"action",QVariantMap{{"type","root-page"}}},{"placement",QVariantMap{{"x",i%4},{"y",i/4},{"width",1},{"height",1}}}},true);
+        QVERIFY(!node.isEmpty());nodes.append(QJsonObject::fromVariantMap(node));
+    }
     doc["components"]=nodes;const auto disk=QJsonDocument(doc).toJson();QFile file(user);QVERIFY(file.open(QIODevice::WriteOnly));file.write(disk);file.close();QVERIFY(home.load(defaults,user));
     QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("homeLayout",&home);engine.rootContext()->setContextProperty("isoldeVersion","test");
     QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(CUSTOMIZE_QML)).dir().filePath("PageStudioView.qml")));QVERIFY2(component.isReady(),qPrintable(component.errorString()));

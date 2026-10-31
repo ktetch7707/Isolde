@@ -23,6 +23,9 @@
 #include <QJsonArray>
 #include <QImage>
 #include <QUrl>
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#endif
 
 static const QByteArray apps = R"([
  {"id":"movies","name":"Movies","type":"mock","section":"Library","accent":"#556677","handledActions":["open-folder","open-file","open-disc"]},
@@ -1542,6 +1545,23 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"presentation",QVariantMap{{"surfaceColor","#123456"}}}}}}));
     QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"presentation",QVariantMap{{"surfaceColor",QVariant()}}}}}}));QVERIFY(!QJsonDocument::fromJson(session->draft()).object()["components"].toArray().first().toObject()["presentation"].toObject().contains("surfaceColor"));
     QImage image(32,24,QImage::Format_RGB32);image.fill(QColor("#56789a"));const auto source=dir.filePath("chosen.png");QVERIFY(image.save(source));
+    const auto browseBaseline=session->draft();
+    const auto listing=session->browseArtwork(dir.path());QVERIFY2(!listing.isEmpty(),qPrintable(session->errorString()));
+    QVERIFY(!listing["entries"].toList().isEmpty());QCOMPARE(session->draft(),browseBaseline);
+    QVERIFY(session->browseArtwork("../unsafe").isEmpty());QVERIFY(session->browseArtwork(dir.path(),8).isEmpty());
+    QVERIFY(session->artworkPreview(source).startsWith("file:"));QCOMPARE(session->draft(),browseBaseline);QVERIFY(!QFile::exists(user));
+    QVERIFY(session->stageArtwork(dir.path()).isEmpty());
+#ifdef Q_OS_UNIX
+    const auto pipe=dir.filePath("input-pipe.gif");QVERIFY(::mkfifo(pipe.toLocal8Bit().constData(),0600)==0);
+    QVERIFY(session->stageArtwork(pipe).isEmpty()); // Refuse before opening a blocking FIFO.
+#endif
+    QVERIFY(QDir().mkpath(dir.filePath("many")));for(int i=0;i<513;++i){QFile f(dir.filePath("many/"+QString::number(i)));QVERIFY(f.open(QIODevice::WriteOnly));}
+    QVERIFY(session->browseArtwork(dir.filePath("many")).isEmpty());QVERIFY(session->errorString().contains("512"));
+    for(const auto &field:QStringList{"bodySize","bodyPadding","bodyLines","bodyLineHeight"}){
+        QVERIFY(!ComponentSchema::validPresentation({{field,"3"}}));QVERIFY(!ComponentSchema::validPresentation({{field,-1}}));QVERIFY(!ComponentSchema::validPresentation({{field,1000}}));
+    }
+    QVERIFY(ComponentSchema::validPresentation({{"bodySize",32},{"bodyBold",true},{"bodyWrap",false},{"bodyAlign","right"},{"bodyLines",6},{"bodyPadding",12},{"bodyLineHeight",1.2},{"bodyColor","#123456"}}));
+    QVERIFY(!ComponentSchema::validPresentation({{"bodyAlign","script"}}));QVERIFY(!ComponentSchema::validPresentation({{"bodyBold","true"}}));
     const auto relative=session->stageArtwork(source);QVERIFY2(relative.startsWith("artwork/studio-"),qPrintable(session->errorString()));QVERIFY(!QFile::exists(dir.filePath("profile/"+relative)));QVERIFY(!QFile::exists(user));
     QVERIFY(session->execute("patch",{{"id","button"},{"value",QVariantMap{{"customLogo",relative}}}}));
     auto *model=qobject_cast<HomeLayout *>(session->model());QVERIFY(model);const auto staged=QUrl(model->items().first().toMap()["logoSource"].toString()).toLocalFile();QVERIFY(QFile::exists(staged));QVERIFY(!staged.startsWith(dir.filePath("profile")));
@@ -1774,6 +1794,29 @@ void ComponentTests::studioGifArtworkIsBoundedStagedAndProfileScoped()
     QVERIFY(home.artworkAnimation(relative,"other-model").contains("error"));
     QVERIFY(draft->resolveArtwork(relative).startsWith("data:image/png;base64,"));session->invalidate();QVERIFY(draft->resolveArtwork(relative).isEmpty());QVERIFY(!QFile::exists(path));
     QVERIFY(ComponentSchema::validPresentation({{"animateArtwork",true}}));QVERIFY(!ComponentSchema::validPresentation({{"animateArtwork","true"}}));
+    // The real GIF must survive Apply, failed persistence, restart and portable saved designs.
+    HomeLayout live(&registry);const auto saved=dir.filePath("saved/home.json");
+    QVERIFY(live.load(QFINDTESTDATA("../config/default-home-layout.json"),saved));
+    auto *editing=qobject_cast<StudioSession *>(live.beginStudio());QVERIFY(editing);
+    auto blank=QJsonDocument::fromJson(editing->draft()).object();blank["components"]=QJsonArray{};blank["categories"]=QJsonArray{};
+    blank["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(live.studioOptions()["defaultGrid"].toMap())}};
+    QVERIFY(editing->pushEdit(QJsonDocument(blank).toJson()));
+    QVERIFY(editing->execute("addResolved",{{"type","image"},{"placement",QVariantMap{{"x",0},{"y",0},{"width",3},{"height",2}}}}));
+    const auto imported=editing->stageArtwork(source);QVERIFY(imported.endsWith(".gif"));
+    QVERIFY(editing->execute("patch",{{"id","image"},{"value",QVariantMap{{"customLogo",imported},{"action",QVariantMap{{"type","root-page"}}},{"presentation",QVariantMap{{"animateArtwork",true},{"visibleLabel","Animation caption"},{"labelPosition","below"}}}}}}));
+    const auto beforeApply=editing->draft();QVERIFY(QDir().mkpath(dir.filePath("saved")));
+    QFile blocked(dir.filePath("saved/artwork"));QVERIFY(blocked.open(QIODevice::WriteOnly));blocked.write("blocked");blocked.close();
+    QVERIFY(!editing->apply("image"));QCOMPARE(editing->draft(),beforeApply);QVERIFY(!QFile::exists(saved));QVERIFY(blocked.remove());
+    QVERIFY2(editing->apply("image"),qPrintable(editing->errorString()));
+    QCOMPARE(readFile(dir.filePath("saved/"+imported)),valid);
+    const auto skin=live.saveSkin("Portable animation");QVERIFY2(!skin.isEmpty(),qPrintable(live.errorString()));
+    editing->invalidate();HomeLayout reloaded(&registry);QVERIFY(reloaded.load(QFINDTESTDATA("../config/default-home-layout.json"),saved));
+    QVERIFY(reloaded.resolveArtwork(imported).startsWith("data:image/png;base64,"));
+    QVERIFY(reloaded.resetToDefaults());QVERIFY(QFile::remove(dir.filePath("saved/"+imported)));
+    QVERIFY2(reloaded.applySkin(skin),qPrintable(reloaded.errorString()));
+    const auto restored=reloaded.items().first().toMap();QVERIFY(restored["customLogo"].toString().endsWith(".gif"));
+    QVERIFY(reloaded.resolveArtwork(restored["customLogo"].toString()).startsWith("data:image/png;base64,"));
+    QVERIFY(reloaded.artworkAnimation(restored["customLogo"].toString(),"restored").contains("frames"));
 }
 void ComponentTests::studioPastelPresetUsesEditableButtons()
 {

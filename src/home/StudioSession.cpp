@@ -15,6 +15,7 @@
 #include <QImageReader>
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QStandardPaths>
 #include <algorithm>
 #include <functional>
 
@@ -44,10 +45,37 @@ QVariantList StudioSession::artworkChoices() const
     for(const auto &path:m_stagedAssets)append(path);
     return result;
 }
+QVariantMap StudioSession::browseArtwork(const QString &directory, int page)
+{
+    if(!m_active || !m_live){setError(tr("Reopen Studio before browsing images."));return {};}
+    if(page<0 || page>7){setError(tr("Choose an image page within 1–8."));return {};}
+    const auto pictures=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    const QString path=directory.isEmpty()?(QFileInfo(pictures).isDir()?pictures:QDir::homePath()):directory;
+    const QFileInfo folder(path);
+    if(!folder.isAbsolute() || !folder.isDir() || !folder.isReadable() || folder.isSymLink() || path.contains(QChar::Null)) {setError(tr("Choose an existing local folder. Linked folders are unavailable."));return {};}
+    const auto canonical=folder.canonicalFilePath();
+    if(canonical!=QDir::cleanPath(folder.absoluteFilePath())){setError(tr("Choose the folder's actual location rather than a linked path."));return {};}
+    QVariantList entries;QDirIterator files(canonical,QDir::Dirs|QDir::Files|QDir::NoDotAndDotDot|QDir::NoSymLinks);int inspected=0;
+    while(files.hasNext()) {
+        files.next();if(++inspected>512){setError(tr("This folder has more than 512 entries. Choose a smaller folder or use Advanced path."));return {};}
+        const auto info=files.fileInfo();if(info.isDir())entries.append(QVariantMap{{"name",info.fileName()},{"path",info.absoluteFilePath()},{"folder",true}});
+        else if(info.isFile() && QStringList{"png","jpg","jpeg","gif"}.contains(info.suffix().toLower()) && info.size()<=20*1024*1024)entries.append(QVariantMap{{"name",info.fileName()},{"path",info.absoluteFilePath()},{"folder",false}});
+    }
+    std::sort(entries.begin(),entries.end(),[](const QVariant &a,const QVariant &b){const auto l=a.toMap(),r=b.toMap();if(l["folder"]!=r["folder"])return l["folder"].toBool();return l["name"].toString()<r["name"].toString();});
+    setError({});const int start=page*64;
+    return {{"directory",canonical},{"parent",QDir::cleanPath(canonical+"/..")},{"home",QDir::homePath()},{"pictures",QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)},{"entries",entries.mid(start,64)},{"page",page},{"pages",qMax(1,int((entries.size()+63)/64))}};
+}
+QString StudioSession::artworkPreview(const QString &source)
+{
+    // Preview passes the very same decoder and private staging boundary as Import.
+    const auto relative=stageArtwork(source);
+    return relative.isEmpty() || !m_model?QString():m_model->resolveArtwork(relative);
+}
 QString StudioSession::stageArtwork(const QString &source)
 {
     if(!m_active || !m_live){setError(tr("Reopen Studio before importing artwork."));return {};}
     const QUrl url(source);const auto path=url.isLocalFile()?url.toLocalFile():url.scheme().isEmpty()?source:QString();
+    if(path.size()>4096 || !QFileInfo(path).isFile()){setError(tr("Choose a regular local image file."));return {};}
     QFile input(path);if(path.isEmpty() || !input.open(QIODevice::ReadOnly) || input.size()<8 || input.size()>20*1024*1024){setError(tr("Choose a local PNG/JPEG of at most 20 MiB, or a bounded GIF of at most 2 MiB."));return {};}
     const auto data=input.readAll();QBuffer buffer;buffer.setData(data);buffer.open(QIODevice::ReadOnly);QImageReader reader(&buffer);const auto format=reader.format();const auto size=reader.size();
     const bool gif=format=="gif";QString gifError;if(gif && ManagedGif::decode(data,true,&gifError).isEmpty()){setError(gifError);return {};}
@@ -197,7 +225,7 @@ QVariantMap StudioSession::replacementProposal(const QString &id,const QString &
     auto presentation=replacement["presentation"].toObject();const auto oldStyle=original["presentation"].toObject();
     for(auto it=oldStyle.begin();it!=oldStyle.end();++it) {
         const auto key=it.key();
-        const bool semantic=key.startsWith("library") || key.startsWith("guide") || (key=="bodyText" && type!="text") || (key=="animateArtwork" && type!="image")
+        const bool semantic=key.startsWith("library") || key.startsWith("guide") || (key.startsWith("body") && type!="text") || (key=="animateArtwork" && type!="image")
             || (key=="shape" && type!="shape" && (type!="container" || it.value()=="ellipse" || it.value()=="divider"));
         if(semantic || !ComponentSchema::validPresentation({{key,it.value().toVariant()}},false,type=="container")){losses.append(key=="layout"?tr("Container layout"):key=="shape"?tr("Shape outline"):key=="bodyText"?tr("Text body"):tr("Presentation: %1").arg(key));continue;}
         presentation[key]=it.value();
@@ -327,7 +355,7 @@ bool StudioSession::apply(const QString &focusId)
         if(!serialized.contains(it.key()))continue;
         QFile source(it.value());if(!source.open(QIODevice::ReadOnly)){cleanup();setError(tr("Staged artwork is missing. Choose it again; the draft is retained."));return false;}
         const auto data=source.readAll(),target=QDir(QFileInfo(m_profilePath).absolutePath()).filePath(it.key()).toUtf8();
-        const auto expected="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex())+(it.key().endsWith(".png")?".png":".jpg");
+        const auto expected="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex())+(ManagedGif::matches(data)?".gif":it.key().endsWith(".png")?".png":".jpg");
         if(data.size()>20*1024*1024 || expected!=it.key()){cleanup();setError(tr("Staged artwork changed. Import it again before applying."));return false;}
         const auto targetPath=QString::fromUtf8(target);
         if(QFile::exists(targetPath)){QFile existing(targetPath);if(!existing.open(QIODevice::ReadOnly) || existing.readAll()!=data){cleanup();setError(tr("Managed artwork conflicts with an existing file."));return false;}continue;}

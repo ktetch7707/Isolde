@@ -100,6 +100,7 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "vpn": "isolde_vpn_tests",
           "studio_quick": "isolde_studio_quick_tests",
           "studio_selection": "isolde_studio_quick_tests",
+          "studio_artwork": "isolde_studio_quick_tests",
           "studio_gestures": "isolde_studio_quick_tests",
           "studio_grid": "isolde_studio_quick_tests",
           "studio_destinations": "isolde_studio_quick_tests",
@@ -115,7 +116,7 @@ def suite_selection(suite):
     """One allowlisted selection authority for build targets and CTest names."""
     targets = SUITES[suite]
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
-    pattern = "^(studio_quick|studio_selection|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    pattern = "^(studio_quick|studio_selection|studio_artwork|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "studio_grid":
         pattern = "^(studio_grid|studio_grid_controls)$"
     if suite == "vpn":
@@ -129,7 +130,8 @@ def suite_selection(suite):
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
-CASES = {"collections": ("home-components-acceptance.py", ["--studio", "--collections", "--inspect"]),
+CASES = {"catalog": ("home-components-acceptance.py", ["--studio", "--catalog", "--inspect"]),
+         "collections": ("home-components-acceptance.py", ["--studio", "--collections", "--inspect"]),
          "history": ("tv-library-acceptance.py", ["--history", "--inspect"]),
          "studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "desktop": ("home-components-acceptance.py", ["--studio", "--desktop", "--inspect"]),
@@ -157,6 +159,10 @@ CASES = {"collections": ("home-components-acceptance.py", ["--studio", "--collec
 
 
 def visual_result_passed(case, result):
+    if case=='catalog':
+        return (all(result.get(k) is True for k in ('passed','freshProfile','remoteImport','invalidRefused','privateDraft','framingCancel','atomicGifApply','reopenPreserved','remotePrimitives','independentText','linkedImage','layersSelection'))
+            and isinstance(result.get('managedGifSha256'),str) and re.fullmatch(r'[a-f0-9]{64}',result['managedGifSha256']) is not None
+            and result.get('captures')==['catalogentry','imagestyles','imagebrowser','imageinvalid','imagepreview','imageplaced','imageinspector','imagemotiondraft','imageframing','imageframingdraft','imageapplied','catalogshape','catalogtext','textkeyboard','textindependent','catalogbutton','catalogcontainer','cataloglayers','imagelink','catalogapplied','imageruntimeone','imageruntimetwo','imagereopened'])
     if case=="history":
         return (all(result.get(key) is True for key in ("passed","freshProfile","realKodiPlayback","kodiOwnedLastplayed","historyCardPlayback","exactHistoryReturn","layoutUnchanged","mediaUnchanged"))
             and result.get("normalProfileUsed") is False
@@ -312,9 +318,9 @@ def verified_studio_helper(root, expected, kind='studio'):
     return path
 
 
-def studio_helper_command(source, helper, executable, desktop=False, collections=False):
+def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False):
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+['--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+['--inspect']
 
 
 def history_helper_command(source, helper, executable):
@@ -456,6 +462,18 @@ def remove_guest_source_snapshot(candidate, runs, mounts):
                 raise RuntimeError("Unrecorded extracted source file; preserve for inspection")
     shutil.rmtree(source)
 
+def restore_source_archive(candidate, bins):
+    record=candidate/'archive.sha256';target=candidate/'source.tar.gz'
+    if target.exists() or target.is_symlink():return False
+    if record.is_symlink() or not record.is_file():return False
+    expected=record.read_text().split()[0]
+    if not re.fullmatch(r'[a-f0-9]{64}',expected):raise RuntimeError('Unsafe saved archive identity')
+    archive=bins/('recovery-'+expected+'.tar.gz')
+    if not archive.exists():return False
+    if archive.resolve()!=archive or archive.stat().st_size>256*1024**2 or digest(archive)!=expected:raise RuntimeError('Recovery archive identity mismatch')
+    archive.rename(target)
+    return True
+
 
 def sync_workspace(source, destination, entries, previous):
     """Keep timestamps on identical files so Ninja can reuse compiled objects."""
@@ -565,6 +583,10 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 
 def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='studio_artwork':
+        return qml_coverage(root,run,base_id,suite,'studio_artwork',
+            {'qml/StudioImageFraming.qml','qml/StudioArtworkPicker.qml','qml/StudioInspector.qml','qml/PageStudioView.qml'},
+            {'tests/studio/tst_artwork.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/home-components-acceptance.py'},'StudioArtwork')
     if suite=='studio_selection':
         return qml_coverage(root,run,base_id,suite,'studio_selection',
             {'qml/StudioInspector.qml','qml/StudioAppPicker.qml','qml/PageLibraryWidget.qml'},
@@ -801,6 +823,7 @@ class Oracle:
         command = ["cmake", "--build", str(build), "--parallel", "2"]
         targets, pattern = suite_selection(suite)
         if reuse:targets=targets+['isolde']
+        if reuse and suite=='studio_artwork':pattern='^(studio_artwork|studio_selection|studio_quick)$'
         if targets:
             command += ["--target"] + targets
         self.stage("build", command, 1200)
@@ -816,7 +839,8 @@ class Oracle:
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":
-            expected = {"studio_quick", "studio_selection", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            expected = {"studio_quick", "studio_selection", "studio_artwork", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick"}
             if suite == "studio_grid":
                 expected = {"studio_grid", "studio_grid_controls"}
             if suite == "home_component_navigation":
@@ -885,7 +909,7 @@ class Oracle:
             if bundle.resolve()!=bundle or hashes.resolve()!=hashes or digest(hashes)!=maintenance_tests_digest:
                 raise RuntimeError("Maintenance self-test bundle checksum mismatch")
             entries=manifest(hashes)
-            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt"} or entries["tools/vm-oracle.py"]!=driver_digest:
+            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tools/home-components-acceptance.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt"} or entries["tools/vm-oracle.py"]!=driver_digest:
                 raise RuntimeError("Unexpected maintenance self-test dependencies")
             if any((bundle/name).resolve()!=bundle/name for name in entries):
                 raise RuntimeError("Redirected maintenance self-test dependency")
@@ -893,6 +917,28 @@ class Oracle:
             self.stage("guest-maintenance-self-tests",[sys.executable,str(tests)],90)
             remove_generated_payload_cache(self.run)
             self.prepare_guest_space(3, prune_sources=True, prune_payloads=True)
+            backups=self.run/'host-source-backups.json'
+            if backups.exists():
+                if backups.resolve()!=backups or backups.stat().st_size>32768:raise RuntimeError('Unsafe archive backup receipt')
+                archive_mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+                removed=remove_backed_up_archives(self.root,json.loads(backups.read_text()),archive_mounts)
+                atomic_json(self.run/'guest-archive-cleanup.json',{'guest':'isolde-test','targets':removed,'hostBackupsVerified':True})
+            if shutil.disk_usage(self.root).free<3*1024**3:
+                for line in Path('/proc/self/mountinfo').read_text().splitlines():
+                    if line.split()[4]=='/tmp' and line.split(' - ',1)[1].split()[0] not in {'tmpfs','ext4','xfs','btrfs'}:raise RuntimeError('Acceptance cache cleanup requires native guest /tmp')
+                mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+                active=[]
+                for process in Path('/proc').iterdir():
+                    if not process.name.isdigit():continue
+                    for name in ('cwd','exe'):
+                        try:active.append((process/name).resolve(strict=True))
+                        except (OSError,RuntimeError):pass
+                    try:
+                        for item in (process/'environ').read_bytes().split(b'\0'):
+                            if item.startswith(b'XDG_CACHE_HOME='):active.append(Path(os.fsdecode(item.split(b'=',1)[1])))
+                    except OSError:pass
+                removed=remove_fixture_caches(Path('/tmp'),mounts,active)
+                atomic_json(self.run/'guest-fixture-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'fixtureDataPreserved':True,'freeGiB':round(shutil.disk_usage(self.root).free/1024**3,2)})
             if shutil.disk_usage(self.root).free<3*1024**3:
                 raise RuntimeError("Verified obsolete artifacts could not recover 3 GiB; inspect storage evidence")
             return
@@ -998,7 +1044,7 @@ class Oracle:
     def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None):
         if history_helper_digest and case!='history':raise RuntimeError('History helper is history-case-only')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
-        if studio_helper_digest and case not in ('studio','desktop','collections'):raise RuntimeError('Studio helper requires a Studio/desktop case')
+        if studio_helper_digest and case not in ('studio','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
@@ -1017,9 +1063,9 @@ class Oracle:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
             command=history_helper_command(source,helper,executable)
             self.update(acceptanceHelperSha256=history_helper_digest)
-        if case in ('studio','desktop','collections') and studio_helper_digest:
+        if case in ('studio','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
-            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections')
+            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog')
             self.update(acceptanceHelperSha256=studio_helper_digest)
         if case=='guide-features' and feature_helper_digest:
             helper=verified_guide_helper(self.root,feature_helper_digest,'features')
@@ -1180,11 +1226,12 @@ class Oracle:
                 state=json.loads(state_path.read_text())
                 if state.get("state") not in {"passed","failed","cancelled"}: continue
                 recovery=[candidate/name for name in ("source.tar.gz","archive.sha256","files.sha256")]
+                restored=restore_source_archive(candidate,self.root/'bin')
                 if any(not path.exists() and not path.is_symlink() for path in recovery):
                     records.append({"target":str(candidate/"source"),"state":"preserved-missing-recovery-evidence"})
                     atomic_json(receipt,{"guest":"isolde-test","targets":records})
                     continue
-                record={"target":str(candidate/"source"),"archive":str(candidate/"source.tar.gz"),"state":"checking"}
+                record={"target":str(candidate/"source"),"archive":str(candidate/"source.tar.gz"),"restoredOriginalArchive":restored,"state":"checking"}
                 records.append(record)
                 atomic_json(receipt,{"guest":"isolde-test","targets":records})
                 remove_guest_source_snapshot(candidate,runs,mounts)
@@ -1250,7 +1297,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|desktop|collections|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -1350,10 +1397,44 @@ def cancel_owned(root, run_id):
     raise RuntimeError("Owned runner has not finished cleanup; preserve evidence and inspect Status")
 
 
+def remove_backed_up_archives(root, backups, mounts=()):
+    if root.resolve()!=root or not isinstance(backups,list) or len(backups)>128:raise RuntimeError('Invalid backed-up archive maintenance')
+    runs=root/'runs';removed=[]
+    for entry in backups:
+        identity=entry.get('runId','');checksum=entry.get('sha256','')
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',identity) or not re.fullmatch(r'[a-f0-9]{64}',checksum):raise RuntimeError('Unsafe backed-up archive identity')
+        run=runs/identity;archive=run/'source.tar.gz';record=run/'archive.sha256'
+        if not archive.exists():continue
+        if run.resolve()!=run or archive.resolve()!=archive or record.resolve()!=record:raise RuntimeError('Redirected archive backup')
+        if any(m==archive or m.is_relative_to(archive) or (m!=Path('/') and archive.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted archive backup refused')
+        if any((run/name).exists() or (run/name).is_symlink() for name in ('source','payload','guide-soak-receipt.json')):continue
+        status=run/'status.json'
+        if status.resolve()!=status or not status.is_file() or json.loads(status.read_text()).get('state') not in {'passed','failed','cancelled'}:continue
+        if record.read_text().split()[0]!=checksum or digest(archive)!=checksum:raise RuntimeError('Backed-up archive checksum mismatch')
+        archive.unlink();removed.append({'runId':identity,'sha256':checksum})
+    return removed
+
+def remove_fixture_caches(root, mounts, active, target_free=3*1024**3):
+    if root.resolve()!=root or root.is_symlink():raise RuntimeError("Redirected fixture cache root")
+    fixtures=sorted((p for p in root.iterdir() if re.fullmatch(r"isolde-(?:tv-acceptance|components-acceptance|reference-config)-[A-Za-z0-9_-]+",p.name) and p.is_dir() and not p.is_symlink()),key=lambda p:p.stat().st_mtime,reverse=True)
+    removed=[]
+    for fixture in fixtures[3:]:
+        if shutil.disk_usage(root).free>=target_free:break
+        cache=fixture/'cache'
+        if not cache.exists():continue
+        if cache.resolve()!=cache or not cache.is_dir() or any(p==fixture or p.is_relative_to(fixture) for p in active):continue
+        if any(m not in {Path('/'),root} and (m==cache or m.is_relative_to(cache) or cache.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted acceptance cache refused: '+str(cache))
+        for index,path in enumerate(cache.rglob('*')):
+            if index>=10000 or path.is_symlink() or path.resolve()!=path:raise RuntimeError('Linked or excessive acceptance cache refused')
+        shutil.rmtree(cache);removed.append(str(cache))
+    return removed
+
 def oracle_storage_inventory(root):
-    payloads=[]
+    payloads=[];recovery=[]
     for run in sorted((root/"runs").iterdir(),key=lambda p:p.stat().st_mtime)[:512]:
         if not run.is_dir() or run.is_symlink():continue
+        if (run/'source').is_dir() and not (run/'source.tar.gz').exists() and len(recovery)<6:
+            recovery.append({'runId':run.name,'files':[p.name for p in run.iterdir() if p.is_file()][:24]})
         payload=run/"payload"
         if payload.is_dir() and not payload.is_symlink():payloads.append(payload)
     sizes={}
@@ -1368,7 +1449,12 @@ def oracle_storage_inventory(root):
         try:state=json.loads(statefile.read_text()) if statefile.is_file() else {}
         except (OSError,ValueError):state={}
         records.append({"runId":payload.parent.name,"payloadBytes":sizes.get(str(payload),0),"modified":payload.stat().st_mtime,"state":state.get("state","unknown")})
-    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"])[:64]}
+    usage=subprocess.run(["du","-xk","--max-depth=2","--",str(root),"/tmp"],capture_output=True,text=True,timeout=30)
+    directories=[]
+    for line in usage.stdout.splitlines():
+        size,sep,path=line.partition("\t")
+        if sep and size.isdigit():directories.append({"path":path,"bytes":int(size)*1024})
+    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"])[:64],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:24]}
 
 
 def main():

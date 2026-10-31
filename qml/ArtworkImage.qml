@@ -90,10 +90,18 @@ Canvas {
             const zw=w/zoom,zh=h/zoom;x+=(w-zw)*focalX;y+=(h-zh)*focalY;w=zw;h=zh
         }
         c.save(); c.beginPath(); c.roundedRect(0,0,width,height,Math.min(radius,width/2),Math.min(radius,height/2)); c.clip()
+        // Qt's raster Canvas rounds a source crop below one pixel to an empty
+        // QImage. Transform the whole image instead, with the same output clip.
+        // The transform avoids preparing an oversized intermediate bitmap.
+        function draw(ox,oy){
+            if(w>=1 && h>=1){c.drawImage(displaySource,x,y,w,h,dx+ox,dy+oy,dw,dh);return}
+            c.save();c.beginPath();c.rect(dx+ox,dy+oy,dw,dh);c.clip()
+            c.translate(dx+ox,dy+oy);c.scale(dw/w,dh/h);c.drawImage(displaySource,-x,-y);c.restore()
+        }
         if(outlineWidth>0){
-            for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++)if(ox || oy)c.drawImage(displaySource,x,y,w,h,dx+ox*outlineWidth,dy+oy*outlineWidth,dw,dh)
+            for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++)if(ox || oy)draw(ox*outlineWidth,oy*outlineWidth)
             c.globalCompositeOperation="source-in";c.fillStyle=outlineColor;c.fillRect(0,0,width,height);c.globalCompositeOperation="source-over"
         }
-        c.drawImage(displaySource,x,y,w,h,dx,dy,dw,dh); c.restore()
+        draw(0,0); c.restore()
     }
 }

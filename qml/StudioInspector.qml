@@ -18,6 +18,7 @@ Item {
     property string structureType:""
     property string structureId:""
     property var selectionRect:null
+    property var framingGeometry:({})
     property string view:"tabs"
     property int tab:0
     property int selected:0
@@ -41,7 +42,8 @@ Item {
     readonly property var colorPicker:colorLoader.item
     property bool colorTransactionActive:false
     property bool scalarTransactionActive:false
-    readonly property bool previewActive:colorTransactionActive || scalarTransactionActive
+    property bool framingTransactionActive:false
+    readonly property bool previewActive:colorTransactionActive || scalarTransactionActive || framingTransactionActive
     property real scalarDraft:0
     property real scalarOriginal:0
     property bool scalarPending:false
@@ -52,7 +54,7 @@ Item {
     readonly property real scalarUnit:Math.min(width/1280,height/720)*(scalarAppearance.typographyScale || 1)
     readonly property int scalarActionBase:(activeField.presets || []).length?2:1
     onSessionChanged:{recentColors=[];colorTransactionActive=false;scalarTransactionActive=false;scalarPending=false;if(colorPicker)colorPicker.previewQueued=false;if(colorLoader)colorLoader.active=false}
-    onVisibleChanged:if(!visible){if(colorTransactionActive)cancelColor();if(scalarTransactionActive)cancelScalar()}
+    onVisibleChanged:if(!visible){if(colorTransactionActive)cancelColor();if(scalarTransactionActive)cancelScalar();if(framingTransactionActive)cancelFraming()}
     property string returnView:"fields"
     property int returnSelection:0
     property int keyboardSelection:0
@@ -93,7 +95,7 @@ Item {
             const section=!item.parentId?(page.categories || []).find(s=>s.id===item.categoryId):null
             if(section && section.presentation && section.presentation[f.key]!==undefined)return section.presentation[f.key]
             if(f.key==="fillEndColor")return effective(item,{scope:"presentation",key:"surfaceColor",fallback:page.appearance.surfaceColor})
-            const key=f.key==="labelColor"?"textColor":f.key==="iconColor"?"textColor":f.key
+            const key=f.key==="labelColor" || f.key==="bodyColor"?"textColor":f.key==="iconColor"?"textColor":f.key
             if(page.appearance[key]!==undefined)return page.appearance[key]
         }
         if(f.fallback!==undefined)return f.fallback
@@ -217,6 +219,12 @@ Item {
     }
     function openChoices(entries){choices=entries;view="choices";selected=0;if(!entries.length)message="No configured choices are available. Add the corresponding page, tab or source first. Back returns without changes."}
     function beginKeyboard(kind,value){keyboardKind=kind;returnView=view;keyboardSelection=selected;keyboard.value=String(value===undefined?"":value);keyboard.selectedIndex=0;view="keyboard"}
+    function cancelFraming(){session.cancelPreview();framingTransactionActive=false;view="fields";selected=returnSelection;message=""}
+    function framingPreview(value){
+        if(pageMode){const background=Object.assign({},options.backgroundDefaults || {},page.composition.background || {},value);run("pagePatch",{scope:"composition",value:{background:background}})}
+        else run("patch",{ids:selectedIds,value:{presentation:value}})
+    }
+    function acceptFraming(){if(message && message!=="Draft updated · nothing applied.")return;if(session.proposalModel && !session.acceptPreview()){message=session.errorString;return}framingTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied."}
     function pickArtwork(source){const relative=session.stageArtwork(source);if(!relative){message=session.errorString;return}if(set(activeField,relative,false)){view="fields";selected=returnSelection;message="Artwork staged privately. Apply publishes it; cancel/discard leaves the applied profile unchanged."}}
     function activateField(f){
         if(targets.length>1 && ["geometry","layout","children","apps","order","grid","replaceComponent"].indexOf(f.type)>=0){message="Choose one component for this structural operation. Shared appearance and links can edit all selected items.";return}
@@ -230,7 +238,7 @@ Item {
         if(f.type==="action"){view="actionPicker";return}
         if(f.type==="typography"){openChoices((options.inspector.typePresets || []).map(p=>({name:p.name,value:p.value,kind:"typography"})));return}
         if(f.type==="artwork"){assets=session.artworkChoices();view="artwork";selected=0;return}
-        if(f.type==="crop"){view="crop";selected=0;return}
+        if(f.type==="crop"){message="";framingTransactionActive=true;view="framing";return}
         if(f.type==="repair"){openChoices(session.sourceChoices(current.id,pageId).map(c=>({name:c.name || c.label || c.id,value:c.id,kind:"repair"})));return}
         if(f.type==="section"){openChoices([{name:"Uncategorized",value:""}].concat((page.categories || []).map(c=>({name:c.name,value:c.id}))));return}
         if(f.type==="source"){
@@ -303,7 +311,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             if(entry.needsTarget){pendingAction=entry.value;beginKeyboard("target","");return}
             if(set(activeField,entry.value,false)){view="fields";selected=returnSelection}return
         }
-        if(view==="artwork"){if(selected===0)beginKeyboard("import","");else if(selected===1){if(set(activeField,null,true)){view="fields";selected=returnSelection}}else pickArtwork(assets[selected-2].source);return}
+        if(view==="artwork"){if(selected===0)view="imageBrowser";else if(selected===1){if(set(activeField,null,true)){view="fields";selected=returnSelection}}else pickArtwork(assets[selected-2].source);return}
         if(view==="crop"){
             if(selected<4){const f=cropField(selected);if(selected===0)set(f,effective(current,f)==="cover"?"contain":"cover",false);else beginKeyboard("cropNumber",effective(current,f));return}
             if(selected===4){if(assetProbe.status!==Image.Ready){message="Choose a readable image before cropping.";return}cropDraft=Object.assign({x:0,y:0,width:assetProbe.sourceSize.width,height:assetProbe.sourceSize.height},effective(current,{scope:pageMode?"background":"presentation",key:"imageCrop"}) || {});view="pixelCrop";selected=0;return}
@@ -339,6 +347,8 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(set(activeField,entry.action || {},false)){view="fields";selected=returnSelection}
     }
     function handleCommand(command){
+        if(view==="framing"){if(framingLoader.item)framingLoader.item.handleCommand(command);return}
+        if(view==="imageBrowser"){if(artworkBrowser.item)artworkBrowser.item.handleCommand(command);return}
         if(view==="actionPicker"){if(actionLoader.item)actionLoader.item.handleCommand(command);return}
         if(view==="apps" || view==="historyApps"){if(appPicker)appPicker.handleCommand(command);return}
         if(view==="scalar"){scalarCommand(command);return}
@@ -471,7 +481,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         MouseArea {anchors.fill:parent;onClicked:{root.controlsShown=true;root.hiddenControls=false}}
     }
     Rectangle {
-        id:panel;visible:!root.collapsed && root.view!=="actionPicker" && root.view!=="apps" && root.view!=="historyApps" && root.view!=="keyboard" && root.view!=="colorWheel" && root.view!=="scalar";width:root.panelWidth;height:root.panelHeight
+        id:panel;visible:!root.collapsed && root.view!=="actionPicker" && root.view!=="apps" && root.view!=="historyApps" && root.view!=="framing" && root.view!=="imageBrowser" && root.view!=="keyboard" && root.view!=="colorWheel" && root.view!=="scalar";width:root.panelWidth;height:root.panelHeight
         x:root.roomRight?root.selectionRect.x+root.selectionRect.width+24*root.unit:root.roomLeft?root.selectionRect.x-width-24*root.unit:(parent.width-width)/2
         y:Math.max(24*root.unit,Math.min(parent.height-height-24*root.unit,root.selectionRect?root.selectionRect.y:(parent.height-height)/2))
         radius:18*root.unit;color:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor
@@ -531,6 +541,25 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             onCanceled:{root.view="fields";root.selected=root.returnSelection}
             onPicked:entry=>root.chooseAction(entry)
         }}
+    }
+    Loader {
+        id:framingLoader;anchors.fill:parent;active:root.view==="framing";z:12
+        sourceComponent:StudioImageFraming {
+            appearance:root.appearance;source:assetProbe.source;componentItem:root.pageMode?null:root.current;componentAppearance:root.page?root.page.appearance:root.appearance;targetGeometry:root.framingGeometry;artworkResolver:root.session.model
+            original:root.pageMode?root.page.composition.background || {}:root.current.presentation || {}
+            onPreviewed:value=>root.framingPreview(value)
+            onAccepted:root.acceptFraming()
+            onCanceled:root.cancelFraming()
+        }
+    }
+    Loader {
+        id:artworkBrowser;anchors.fill:parent;active:root.view==="imageBrowser";z:12
+        sourceComponent:StudioArtworkPicker {
+            session:root.session;appearance:root.appearance;stillOnly:root.pageMode
+            onPicked:source=>root.pickArtwork(source)
+            onCanceled:{root.view="artwork";root.selected=0}
+            onAdvancedPath:root.beginKeyboard("import","")
+        }
     }
     StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="actionPicker";onPicked:action=>{if(root.set(root.activeField,action,false)){root.view="fields";root.selected=root.returnSelection}}}
     Loader {

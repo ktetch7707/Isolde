@@ -30,6 +30,13 @@ public:
         display=std::make_unique<DisplaySettings>();
     }
     QString artifacts() const { return qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS"); }
+    Q_INVOKABLE QString artworkFixture() const {
+        const auto path=temp.filePath("artwork-input");QDir().mkpath(path);
+        QFile file(path+"/animation.gif");if(!file.open(QIODevice::WriteOnly))return {};
+        auto bytes=QByteArray::fromHex("47494638396101000100800000ff00000000ff");
+        for(int i=0;i<2;++i){bytes+=QByteArray::fromHex("21f90400640000002c0000000001000100000202");bytes+=QByteArray::fromHex(i?"4c0100":"440100");}
+        bytes+=char(0x3b);file.write(bytes);return file.fileName();
+    }
     Q_INVOKABLE bool reset(bool full = false, bool scrolling = false, bool flow = false, bool arrangement = false) {
         if (!temp.isValid()) return false;
         display->reset();

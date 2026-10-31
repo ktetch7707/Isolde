@@ -176,6 +176,8 @@ qt_add_qml_module(isolde
         qml/StudioInspector.qml
         qml/StudioActionPicker.qml
         qml/StudioAppPicker.qml
+        qml/StudioArtworkPicker.qml
+        qml/StudioImageFraming.qml
         qml/StudioColorPicker.qml
         qml/StudioMediaPicker.qml
     qml/StudioCatalog.qml
@@ -347,6 +349,7 @@ if(BUILD_TESTING)
     set_tests_properties(studio_quick PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_selection COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_selection.qml)
+    add_test(NAME studio_artwork COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_artwork.qml)
     add_test(NAME store_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_store.qml)
     set_tests_properties(store_remote_ui PROPERTIES TIMEOUT 30 LABELS "store;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
@@ -369,7 +372,7 @@ if(BUILD_TESTING)
     add_test(NAME studio_overlays COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_overlays.qml)
     set_tests_properties(studio_overlays PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
-    set_tests_properties(studio_selection PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+    set_tests_properties(studio_selection studio_artwork PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_tests
         tests/tst_isolde.cpp

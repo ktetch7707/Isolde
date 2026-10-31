@@ -146,7 +146,15 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
         } else if(key=="artFit" || key=="labelPosition" || key=="textAlign" || key=="logoMode") {
             const auto choices=key=="logoMode"?QStringList{"cutout","original","tile"}:key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
             if(it.value().metaType().id()!=QMetaType::QString || !choices.contains(it.value().toString()))return false;
-        } else if(key=="labelBold" || key=="labelWrap" || key=="focusEnabled" || key=="animateArtwork") {
+        } else if(key=="bodyAlign") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"left","center","right"}.contains(it.value().toString()))return false;
+        } else if(key=="bodyColor") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QColor(it.value().toString()).isValid() || QColor(it.value().toString()).alpha()!=255)return false;
+        } else if(key=="bodySize" || key=="bodyPadding" || key=="bodyLines" || key=="bodyLineHeight") {
+            const double low=key=="bodySize"?8:key=="bodyPadding"?0:1,high=key=="bodySize"?160:key=="bodyPadding"?100:key=="bodyLines"?40:3;
+            bool ok=false;const auto n=it.value().toDouble(&ok);
+            if(!ok || it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool || !std::isfinite(n) || n<low || n>high || (key=="bodyLines" && std::floor(n)!=n))return false;
+        } else if(key=="labelBold" || key=="labelWrap" || key=="artAspectLocked" || key=="bodyBold" || key=="bodyWrap" || key=="focusEnabled" || key=="animateArtwork") {
             if(key=="animateArtwork" && (section || container))return false;
             if(it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if(key=="artFocalX" || key=="artFocalY" || key=="artZoom" || key=="focusWidth" || key=="borderWidth" || key=="labelLines" || key=="libraryLimit") {
@@ -278,7 +286,7 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
     }
     if(value.contains("background")) {
         const auto background=value["background"].toMap();
-        for(auto it=background.cbegin();it!=background.cend();++it)if(!QStringList{"mode","dim","artFit","artFocalX","artFocalY","artZoom","imageCrop","tintColor"}.contains(it.key()))return false;
+        for(auto it=background.cbegin();it!=background.cend();++it)if(!QStringList{"mode","dim","artFit","artFocalX","artFocalY","artZoom","artAspectLocked","imageCrop","tintColor"}.contains(it.key()))return false;
         if(value["background"].metaType().id()!=QMetaType::QVariantMap || !QStringList{"solid","gradient","image"}.contains(background.value("mode").toString()))return false;
         auto art=background;art.remove("mode");const auto dim=art.take("dim");const auto tint=art.take("tintColor");if(tint.isValid() && (tint.metaType().id()!=QMetaType::QString || !QColor(tint.toString()).isValid() || QColor(tint.toString()).alpha()!=255))return false;
         if(dim.isValid() && (dim.metaType().id()==QMetaType::QString || dim.metaType().id()==QMetaType::Bool || !std::isfinite(dim.toDouble()) || dim.toDouble()<0 || dim.toDouble()>1))return false;

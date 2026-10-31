@@ -463,7 +463,7 @@ Item {
         if(!prototype.root){message=session.errorString;return}
         gestureViewport=preview.editorViewport();originScopeId=scopeId;originParentId=parentScopeId;originScopeOverview=scopeOverview
         candidate=Object.assign({},prototype.root.placement,{x:0,y:0});origin=Object.assign({},candidate)
-        gestureMode="move";toolbarFocus=false;mode="move";message=""
+        gestureMode="move";headerSelection="";toolbarFocus=false;mode="move";message=""
         suggestAdditionPosition()
     }
     function suggestAdditionPosition() {
@@ -1443,6 +1443,11 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             const r=preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || "")
             const p=preview.mapToItem(studio,r.x,r.y)
             return {x:p.x,y:p.y,width:r.width*camera.scale,height:r.height*camera.scale}
+        }
+        framingGeometry:{
+            if(inspector.pageMode)return {width:preview.width,height:preview.height,unit:preview.componentUnit}
+            const r=studio.current && studio.current.placement?preview.placementRectFor(studio.current.placement,studio.scopeId,studio.current.parentId || ""):studio.current?preview.editorRectFor(studio.current.id):null
+            return r?{width:r.width,height:r.height,unit:preview.componentUnit}:{}
         }
         onClosed:{studio.mode="canvas";studio.toolbarFocus=false}
         onOperation:name=>studio.inspectorOperation(name)
