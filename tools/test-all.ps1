@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId = ((Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,6)),
-    [ValidateSet('studio','desktop','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')]
+    [ValidateSet('studio','desktop','collections','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')]
     [string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$NativeOnly,
     [switch]$ReportOnly,

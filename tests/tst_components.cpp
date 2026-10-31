@@ -86,6 +86,7 @@ private slots:
     void studioPageDefaultsAreDraftOnlyAndScoped();
     void studioShapesLabelsAndReplacementAreAtomic();
     void studioButtonCollectionsAreBoundedAndAtomic();
+    void studioCollectionInstallDoesNotAuthorPlacements();
     void studioGifArtworkIsBoundedStagedAndProfileScoped();
     void studioPastelPresetUsesEditableButtons();
     void studioStartingStylesAreValidatedDraftData();
@@ -1711,6 +1712,33 @@ void ComponentTests::studioButtonCollectionsAreBoundedAndAtomic()
     QVERIFY(!session->execute("setApps",{{"id",appId},{"mode","selected"},{"apps",QVariantList{"new-missing-app"}}}));QCOMPARE(session->draft(),missingBaseline);
     QVERIFY(session->execute("setApps",{{"id",appId},{"mode","selected"},{"apps",QVariantList{}}}));
     QVERIFY(session->undo());QCOMPARE(session->draft(),missingBaseline);QVERIFY(!QFile::exists(path));
+}
+void ComponentTests::studioCollectionInstallDoesNotAuthorPlacements()
+{
+    QCoreApplication::setApplicationVersion("0.0.1.2");
+    for (const auto &mode : QStringList{"all", "selected"}) {
+        QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+        AppCatalog catalog(&registry);
+        QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"), dir.filePath("installed.json"), dir.filePath("packages")));
+        HomeLayout home(&registry); const auto path=dir.filePath("home.json");
+        QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), path));
+        auto *session=qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+        auto root=session->componentPrototype("app-bar")["root"].toMap();
+        root["appCollection"]=QVariantMap{{"mode",mode},{"ids",QVariantList{}}};
+        auto document=QJsonDocument::fromJson(home.committedDocument()).object();
+        document["components"]=QJsonArray{QJsonObject::fromVariantMap(root)}; document["categories"]=QJsonArray{};
+        document["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",8},{"rows",5},{"mode","screen"}}}};
+        QVERIFY2(home.applyStudioDraft(QJsonDocument(document).toJson()),qPrintable(home.errorString()));
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto saved=file.readAll(); file.close();
+        const auto canonical=home.committedDocument(); QSignalSpy changes(&home,&HomeLayout::layoutChanged);
+        connect(&catalog,&AppCatalog::packageInstalled,&home,&HomeLayout::addAppTile);
+        QVERIFY2(catalog.install("freetube"),qPrintable(catalog.errorString())); QVERIFY(registry.find("freetube"));
+        QCOMPARE(home.committedDocument(),canonical); QCOMPARE(changes.count(),0);
+        QVERIFY(catalog.uninstall("freetube")); QVERIFY(!registry.find("freetube"));
+        QVERIFY(catalog.install("freetube")); QVERIFY(registry.find("freetube"));
+        QCOMPARE(home.committedDocument(),canonical); QCOMPARE(changes.count(),0);
+        QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(),saved);
+    }
 }
 void ComponentTests::studioGifArtworkIsBoundedStagedAndProfileScoped()
 {

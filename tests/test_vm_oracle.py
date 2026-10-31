@@ -394,6 +394,9 @@ class OracleTests(unittest.TestCase):
             command=oracle.studio_helper_command(source,helper,executable,desktop=True);command[0]=sys.executable
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(frozen),'args':[str(frozen),str(executable),'--studio','--desktop','--inspect'],'dependency':'frozen dependency'})
+            command=oracle.studio_helper_command(source,helper,executable,collections=True);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'file':str(frozen),'args':[str(frozen),str(executable),'--studio','--collections','--inspect'],'dependency':'frozen dependency'})
             self.assertIn('must remain untouched',frozen.read_text())
             helper.write_bytes(b'changed')
             with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected)
@@ -654,10 +657,11 @@ class OracleTests(unittest.TestCase):
         (run / "personal-photo.png").write_bytes(b"excluded")
         (run / "source.tar.gz").write_bytes(b"not evidence")
         (run / "evidence-desktop-1.tar.gz").write_bytes(b"bounded desktop result")
+        (run / "evidence-collections-1.tar.gz").write_bytes(b"bounded collection result")
         (run / "evidence-unknown-1.tar.gz").write_bytes(b"not allowlisted")
         oracle.write_report(run)
         with tarfile.open(run / "report.tar.gz") as archive:
-            self.assertEqual(set(archive.getnames()), {"status.json", "build.log", "studio-test-move-cancel.png", "evidence-desktop-1.tar.gz"})
+            self.assertEqual(set(archive.getnames()), {"status.json", "build.log", "studio-test-move-cancel.png", "evidence-desktop-1.tar.gz", "evidence-collections-1.tar.gz"})
 
     @unittest.skipUnless(os.name == "posix", "Linux /tmp evidence paths")
     def test_visual_evidence_is_allowlisted(self):
@@ -694,6 +698,14 @@ class OracleTests(unittest.TestCase):
         (evidence/"guide-surfaces-cache.json").write_text("{}")
         oracle.collect_evidence(self.root,"studio",{evidence})
         with tarfile.open(next(self.root.glob("evidence-studio-*.tar.gz"))) as archive:self.assertEqual({Path(name).name for name in archive.getnames()},{"shell.log"})
+
+    def test_collection_result_requires_real_lifecycle_and_complete_captures(self):
+        result=dict.fromkeys(("passed","freshProfile","actualNativeInput","normalExit","exactGalleryReturn","buttonReturn","storeRemoveReinstall","layoutUnchanged"),True)
+        result.update(physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=["collectionhome","selectedgallery","collectionclient","selectedreturn","collectionrepeat","buttongallery","buttonclient","buttonreturn","buttonrepeat","storeclient","collectionuninstall","allremoved","selectedmissing","missingrefused","allrestored","reinstalledclient","reinstalledreturn"])
+        self.assertTrue(oracle.visual_result_passed("collections",result))
+        for key in ("actualNativeInput","normalExit","exactGalleryReturn","buttonReturn","storeRemoveReinstall","layoutUnchanged"):
+            self.assertFalse(oracle.visual_result_passed("collections",dict(result,**{key:False})))
+        self.assertFalse(oracle.visual_result_passed("collections",dict(result,captures=result['captures'][:-1])))
 
     def test_visual_results_use_each_harness_contract(self):
         guide=dict(passed=True,freshProfile=True,normalProfileUsed=False,pvrAddon="pvr.iptvsimple",sourceChannels=1,sourceListings=50,

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','desktop','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','desktop','collections','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -45,11 +45,11 @@ if ($GuestRunner) {
         $command += " --feature-helper-digest $FeatureHelperDigest"
     }
     if ($StudioHelperDigest) {
-        if ($Case -notin @('studio','desktop') -or $StudioHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Studio helper identity.' }
+        if ($Case -notin @('studio','desktop','collections') -or $StudioHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Studio helper identity.' }
         $command += " --studio-helper-digest $StudioHelperDigest"
     }
-} elseif ($Case -in @('studio','desktop')) {
-    $desktopFlag = if ($Case -eq 'desktop') { ' --desktop' } else { '' }
+} elseif ($Case -in @('studio','desktop','collections')) {
+    $desktopFlag = if ($Case -eq 'desktop') { ' --desktop' } elseif ($Case -eq 'collections') { ' --collections' } else { '' }
     $command = "python3 $SourceRoot/tools/home-components-acceptance.py $Executable --studio --inspect$desktopFlag"
 } elseif ($Case -eq 'pages') {
     $command = "python3 $SourceRoot/tools/tv-library-acceptance.py $Executable --pages --inspect"

@@ -59,7 +59,7 @@ These rows are open pending exact evidence reconciliation; code presence and his
 | --- | --- | --- | --- |
 | T21.6.a | done | All-installed/selected App and Button collection membership with stable validated identities. | [Collection reconciliation](studio-collections-2026-10-30.md): unchanged G schema/native atomic bounds and focused A selection. |
 | T21.6.b | done | Remote ordering, visible capacity and registry updates preserve canonical data. | [Collection reconciliation](studio-collections-2026-10-30.md): focused A real remote/pointer reorder and open-gallery registry changes. |
-| T21.6.c | open | Scoped More galleries, launch/return, no truncation and remaining collection acceptance. | Real overflow/runtime/focus journey |
+| T21.6.c | done | Scoped More galleries, launch/return, no truncation and remaining collection acceptance. | [Installed collection acceptance](studio-collections-2026-10-30.md): full E 41/41, six native cycles, Store removal/reinstall, 17 collection frames and both reference/reset pairs. |
 | T21.7.a | open | Real bounded Kodi viewing history with independent count/capacity. | Actual viewing history and request bounds |
 | T21.7.b | open | Explicit supported app providers merge deterministically; OFF/auth/offline/teardown isolation. | Provider contract and zero-disabled-request evidence |
 | T21.7.c | open | Multiple instances/profiles and actual history updates meet runtime and remaining acceptance. | Real playback/history, not sample/recently-added art |

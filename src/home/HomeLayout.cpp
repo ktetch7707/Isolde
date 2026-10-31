@@ -807,6 +807,10 @@ bool HomeLayout::addAppTile(const QString &appId)
 {
     const auto *definition=m_registry->find(appId);
     if (!definition) return false;
+    // Collection membership follows the registry. Installation must not author
+    // an additional page placement or change an explicit Selected collection.
+    for (const auto &value : m_items)
+        if (value.toObject().contains("appCollection")) return true;
     // Managed file adapters have no standalone launch. Installing one must
     // preserve the current page transaction and its remote focus.
     if(!definition->launchConfiguration.value("emulatorRuntime").toString().isEmpty())return true;
