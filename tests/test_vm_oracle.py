@@ -391,6 +391,9 @@ class OracleTests(unittest.TestCase):
             command=oracle.studio_helper_command(source,helper,executable);command[0]=sys.executable
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(frozen),'args':[str(frozen),str(executable),'--studio','--inspect'],'dependency':'frozen dependency'})
+            command=oracle.studio_helper_command(source,helper,executable,desktop=True);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'file':str(frozen),'args':[str(frozen),str(executable),'--studio','--desktop','--inspect'],'dependency':'frozen dependency'})
             self.assertIn('must remain untouched',frozen.read_text())
             helper.write_bytes(b'changed')
             with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected)
@@ -650,9 +653,11 @@ class OracleTests(unittest.TestCase):
         (run / "studio-test-move-cancel.png").write_bytes(b"test fixture")
         (run / "personal-photo.png").write_bytes(b"excluded")
         (run / "source.tar.gz").write_bytes(b"not evidence")
+        (run / "evidence-desktop-1.tar.gz").write_bytes(b"bounded desktop result")
+        (run / "evidence-unknown-1.tar.gz").write_bytes(b"not allowlisted")
         oracle.write_report(run)
         with tarfile.open(run / "report.tar.gz") as archive:
-            self.assertEqual(set(archive.getnames()), {"status.json", "build.log", "studio-test-move-cancel.png"})
+            self.assertEqual(set(archive.getnames()), {"status.json", "build.log", "studio-test-move-cancel.png", "evidence-desktop-1.tar.gz"})
 
     @unittest.skipUnless(os.name == "posix", "Linux /tmp evidence paths")
     def test_visual_evidence_is_allowlisted(self):

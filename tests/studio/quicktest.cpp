@@ -1,6 +1,7 @@
 #include "home/ComponentSchema.h"
 #include "home/HomeLayout.h"
 #include "input/InputManager.h"
+#include "settings/DisplaySettings.h"
 #include <QtQuickTest>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -8,6 +9,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
+#include <QSettings>
+#include <QCoreApplication>
+#include <memory>
 
 // No service, network client or normal-profile path is supplied to the editor.
 // Each scenario owns a new saved document under this process's temporary root.
@@ -15,10 +19,20 @@ class StudioTestSetup : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString artifacts READ artifacts CONSTANT)
 public:
-    StudioTestSetup() : home(&registry) {}
+    StudioTestSetup() : home(&registry) {
+        if(!temp.isValid())return;
+        // Exercise the real global display binding without reading or writing
+        // the guest's normal display preferences.
+        QCoreApplication::setOrganizationName("IsoldeStudioTests");
+        QCoreApplication::setApplicationName("StudioInput");
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,temp.path());
+        display=std::make_unique<DisplaySettings>();
+    }
     QString artifacts() const { return qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS"); }
     Q_INVOKABLE bool reset(bool full = false, bool scrolling = false, bool flow = false, bool arrangement = false) {
         if (!temp.isValid()) return false;
+        display->reset();
         saved = temp.filePath(QString("scenario-%1.json").arg(++sequence));
         if (!home.load(QStringLiteral(STUDIO_DEFAULTS), saved)) return false;
         auto doc = QJsonDocument::fromJson(home.committedDocument()).object();
@@ -56,6 +70,7 @@ public slots:
         engine->rootContext()->setContextProperty("studioFixture", this);
         engine->rootContext()->setContextProperty("homeLayout", &home);
         engine->rootContext()->setContextProperty("inputManager", &input);
+        engine->rootContext()->setContextProperty("displaySettings", display.get());
         engine->rootContext()->setContextProperty("isoldeVersion", "test");
     }
 private:
@@ -65,6 +80,7 @@ private:
     InputManager input;
     QString saved;
     int sequence = 0;
+    std::unique_ptr<DisplaySettings> display;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(studio, StudioTestSetup)

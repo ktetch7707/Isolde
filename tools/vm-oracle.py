@@ -293,9 +293,9 @@ def verified_studio_helper(root, expected):
     return path
 
 
-def studio_helper_command(source, helper, executable):
+def studio_helper_command(source, helper, executable, desktop=False):
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio','--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+['--inspect']
 
 
 def guide_backend_diagnostics(run):
@@ -969,7 +969,7 @@ class Oracle:
 
     def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None):
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
-        if studio_helper_digest and case!='studio':raise RuntimeError('Studio helper is studio-only')
+        if studio_helper_digest and case not in ('studio','desktop'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
@@ -984,9 +984,9 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
-        if case=='studio' and studio_helper_digest:
+        if case in ('studio','desktop') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
-            command=studio_helper_command(source,helper,executable)
+            command=studio_helper_command(source,helper,executable,desktop=case=='desktop')
             self.update(acceptanceHelperSha256=studio_helper_digest)
         if case=='guide-features' and feature_helper_digest:
             helper=verified_guide_helper(self.root,feature_helper_digest,'features')
@@ -1207,7 +1207,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|desktop|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

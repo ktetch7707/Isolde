@@ -62,7 +62,7 @@ try {
             $reopenDigest = ''
             $featureDigest = ''
             $studioDigest = ''
-            if ($case -eq 'studio') {
+            if ($case -in @('studio','desktop')) {
                 $helper = Join-Path $PSScriptRoot 'home-components-acceptance.py'
                 $studioDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/studio-helper-$studioDigest.py")) -TimeoutSeconds 30 -Log $transport

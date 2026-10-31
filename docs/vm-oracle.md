@@ -75,6 +75,8 @@ The `pages` case is opt-in (`-Cases pages`): it exercises real Kodi in a fresh U
 
 For frequent code/test iterations, use [the focused Studio suite](studio-testing.md). These offscreen tests reuse the cached build without installing a release or restarting the normal app. Run full native/graphical acceptance at integration checkpoints; deployment remains explicit and occasional. No host toolchain installation is needed.
 
+Studio and desktop graphical cases upload the current SHA-addressed `home-components-acceptance.py` helper while preserving the passing candidate's frozen source/dependency paths. Desktop retains its explicit `--studio --desktop --inspect` route. The runner records the helper hash; changed helpers never change the tested application/payload or earn a new application full-suite claim.
+
 ## Agent execution rules
 
 1. Finish a meaningful edit batch before Test. Do not cancel a healthy build to add optional polish. If a tool returns a running session, poll **that session**; do not launch another SSH build.

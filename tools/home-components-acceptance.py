@@ -192,9 +192,13 @@ def main():
                 assert layout.read_bytes() == original_bytes
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
 
+                def page_menu(index):
+                    # The named history row sits above the first page-menu item.
+                    key("Up", 30); key("Down"); key("Down", index); key("Return")
+
                 if args.desktop:
                     def apply_at(column):
-                        key("Escape"); key("Up", 30); key("Down", 5); key("Return"); key("Return")
+                        key("Escape"); page_menu(7); key("Return")
                         expect(lambda: next(item for item in json.loads(layout.read_text())["components"]
                                             if item["id"] == "clock")["placement"]["x"] == column,
                                "Desktop fixture Apply at column " + str(column))
@@ -202,16 +206,16 @@ def main():
 
                     def reopen_clock():
                         key("Escape"); key("Return")  # Close/reopen the actual editor.
-                        key("Down", 4); key("Return"); key("Down", 2); key("Return")  # More -> Layers.
+                        page_menu(4)  # Named Layers.
                         key("Up", 30); key("Down"); key("Return")  # Explicit Clock, not runtime focus's source.
 
                     key("Return"); key("Return"); key("Right"); key("Return")
                     remote = apply_at(2)
                     reopen_clock()
-                    capture("baseline")
                     key("Return"); key("Return"); key("Left"); key("Return")
                     baseline = apply_at(1)
                     reopen_clock()
+                    capture("baseline")
                     # Fixture-relative centers: the selected Clock's full card,
                     # then one free cell right. No tiny resize handle is used.
                     start, end = (0.225, 0.246), (0.335, 0.246)
@@ -225,14 +229,15 @@ def main():
                     assert layout.read_bytes() == baseline
                     pointer_saved = apply_at(2)
                     assert pointer_saved == remote, "Pointer and remote saved documents differ"
+                    reopen_clock()
                     capture("pointerapplied")
 
                     # Author the ordinary packaged 4x2 input group, then move
                     # one of its children through the actual nested canvas.
-                    key("Up", 30); key("Down", 2); key("Return")
+                    key("Escape"); page_menu(2)
                     key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")
                     key("Left", 20); key("Down"); key("Return")
-                    key("Escape"); key("Up", 30); key("Down", 5); key("Return"); key("Return")
+                    key("Escape"); page_menu(7); key("Return")
                     expect(lambda: len(json.loads(layout.read_text())["components"]) == 11,
                            "Desktop nested group saved")
                     nested_baseline = layout.read_bytes()
@@ -243,13 +248,13 @@ def main():
                                  and item["placement"]["y"] == 0)
 
                     def select_child():
-                        key("Up", 30); key("Down", 4); key("Return"); key("Down", 2); key("Return")
+                        page_menu(4)
                         key("Up", 30); key("Down", 2); key("Right"); key("Down"); key("Return")
 
                     def save_child(column, leave_child=True):
                         if leave_child:
                             key("Escape", 2)  # Child -> parent -> page menu.
-                        key("Up", 30); key("Down", 5); key("Return"); key("Return")
+                        page_menu(7); key("Return")
                         expect(lambda: next(item for item in json.loads(layout.read_text())["components"]
                                             if item["id"] == child["id"])["placement"]["x"] == column,
                                "Nested child saved at column " + str(column))
@@ -270,11 +275,12 @@ def main():
                     capture("nestedcancel")
                     assert layout.read_bytes() == nested_baseline
                     pointer(4, *nested_start); pointer(6, *nested_end, held=True); pointer(5, *nested_end, held=True)
-                    key("Escape", 2); key("Up", 30); key("Down", 4); key("Return"); key("Return")  # More -> Undo.
+                    key("Escape", 2); key("Up", 30); key("Left"); key("Return"); key("Down")  # Named Undo.
                     assert save_child(0, False) == nested_baseline, "Pointer Undo did not restore the complete group"
                     select_child()
                     pointer(4, *nested_start); pointer(6, *nested_end, held=True); pointer(5, *nested_end, held=True)
                     assert save_child(1) == nested_remote, "Nested pointer and remote saved documents differ"
+                    select_child()
                     capture("nestedapplied")
                     (evidence / "result.json").write_text(json.dumps({
                         "passed": True, "journey": "desktop", "executable": str(executable),
@@ -289,11 +295,6 @@ def main():
                     key("Escape"); key("Up", 30); key("Left"); key("Return")  # Named Undo above the page menu.
                     key("Down"); key("Down", 2); key("Right")  # Add menu origin; same selected canvas item.
                     assert layout.read_bytes() == original_bytes
-
-                def page_menu(index):
-                    # Called with the page menu already owning focus. Up reaches
-                    # its named history row; Down restores the first menu item.
-                    key("Up", 30); key("Down"); key("Down", index); key("Return")
 
                 key("Return"); key("Return"); key("Left")  # Moving into occupied space previews neighbors making room.
                 capture("reflow")

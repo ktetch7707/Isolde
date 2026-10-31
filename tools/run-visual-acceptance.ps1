@@ -45,7 +45,7 @@ if ($GuestRunner) {
         $command += " --feature-helper-digest $FeatureHelperDigest"
     }
     if ($StudioHelperDigest) {
-        if ($Case -ne 'studio' -or $StudioHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Studio helper identity.' }
+        if ($Case -notin @('studio','desktop') -or $StudioHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Studio helper identity.' }
         $command += " --studio-helper-digest $StudioHelperDigest"
     }
 } elseif ($Case -in @('studio','desktop')) {

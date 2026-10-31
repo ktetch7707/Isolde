@@ -46,10 +46,10 @@ Each of the six children within a group is one sixth of that group's weight. The
 
 | Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
 | --- | --- | --- | --- |
-| T20.5.a | open | Selected-item pointer threshold and complete neighbor/insertion previews match remote movement. | Audit existing gesture/parity evidence before changes |
-| T20.5.b | open | Explicit cross-container targeting, mixed/full/locked layouts and decorative overlap refuse invalid operations. | Audit existing grid/policy/overlay evidence |
-| T20.5.c | open | Remote/pointer/Undo/Back produce byte-identical complete transactions with reduced-motion feedback. | Audit canonical replay and cancellation evidence |
-| T20.5.d | open | Actual desktop/TV movement, clean references and all linked movement acceptance requirements pass. | Installed/runtime and final review |
+| T20.5.a | done | Selected-item pointer threshold and complete neighbor/insertion previews match remote movement. | docs/studio-movement-acceptance-2026-10-30.md: full G actual-input gesture/ordered suites; full/half zoom, refusal/recovery, insertion/reflow, complete cancel/one-Undo; unchanged movement/test bytes reconciled to J |
+| T20.5.b | done | Explicit cross-container targeting, mixed/full/locked layouts and decorative overlap refuse invalid operations. | docs/studio-movement-acceptance-2026-10-30.md: full G destination/policy/overlay/grid/component suites, named targets and complete validated/refused results; current production matches J |
+| T20.5.c | done | Remote/pointer/Undo/Back produce byte-identical complete transactions with reduced-motion feedback. | docs/studio-movement-acceptance-2026-10-30.md: full G canonical/bounded-edge proofs plus focused A global DisplaySettings policy matrix (7 functions, no skip), actual stationary origin/invalid-target outlines and mid-proposal no-write toggle; gesture fixture regression B passes; four new native frames reviewed |
+| T20.5.d | done | Actual desktop/TV movement, clean references and all linked movement acceptance requirements pass. | docs/studio-movement-acceptance-2026-10-30.md: installed J release 0da0692cbb6b2354bed31852 desktop/Studio/Lounge/Pastel pass, all 43 installed + 10 staged + 4 focused frames reviewed and both reference/reset pairs compared; exact root/nested bytes/Undo/Back/focus, profiles and service preserved; all T20.5 linked requirements mapped |
 
 ## T21 — open inspector/catalog groups (each retains one fourteenth of T21)
 
