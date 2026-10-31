@@ -420,6 +420,37 @@ Item {
             compare(studioFixture.disk(),diskBaseline)
             appPickerSpy.target=null
         }
+        function test_open_gallery_registry_changes_preserve_scope_and_recover_focus() {
+            fakeRegistry.apps=[{id:"one",name:"One",type:"desktop"},{id:"two",name:"Two",type:"android"},{id:"three",name:"Three",type:"web"}]
+            const carousel=createTemporaryObject(carouselComponent,tests.parent,{collection:{mode:"all",ids:[],showStore:false}})
+            verify(carousel!==null);launchSpy.target=carousel;launchSpy.clear()
+            carousel.selectedId="__more__";carousel.handleCommand(inputManager.confirm)
+            const gallery=findChild(carousel,"appCarouselGallery")
+            tryCompare(gallery,"opened",true)
+            carousel.handleCommand(inputManager.navigateRight);compare(carousel.galleryId,"two")
+            // A registry refresh changes live membership without authoring nodes.
+            fakeRegistry.apps=[fakeRegistry.apps[2],fakeRegistry.apps[1],fakeRegistry.apps[0],{id:"four",name:"Four",type:"desktop"},{id:"internal",name:"Internal",type:"navigation"}]
+            compare(carousel.galleryApps.map(a=>a.id).join(","),"three,two,one,four")
+            compare(carousel.galleryId,"two");verify(gallery.opened)
+            fakeRegistry.apps=fakeRegistry.apps.filter(a=>a.id!=="two")
+            verify(carousel.galleryApps.some(a=>a.id===carousel.galleryId));verify(gallery.opened)
+            carousel.handleCommand(inputManager.back);compare(carousel.selectedId,"__more__")
+            // Selected mode keeps authored order and a repairable missing member.
+            const membership={mode:"selected",ids:["two","one"],showStore:false}
+            carousel.collection=membership;carousel.style={layout:{visibleColumns:1}}
+            carousel.activate("__more__");tryCompare(gallery,"opened",true)
+            compare(carousel.galleryApps.map(a=>a.id).join(","),"two,one")
+            carousel.handleCommand(inputManager.confirm);compare(launchSpy.count,0);verify(carousel.message.length>0)
+            fakeRegistry.apps=fakeRegistry.apps.concat([{id:"two",name:"Two restored",type:"android"}])
+            compare(carousel.galleryId,"two");verify(!carousel.galleryApps[0].unavailableReason)
+            carousel.handleCommand(inputManager.confirm);compare(launchSpy.count,1)
+            compare(launchSpy.signalArguments[0][0].appId,"two")
+            const returned=carousel.focusState();verify(returned.galleryOpen)
+            carousel.restoreFocusState(returned);tryCompare(gallery,"opened",true);compare(carousel.galleryId,"two")
+            carousel.handleCommand(inputManager.back);compare(carousel.selectedId,"__more__")
+            compare(JSON.stringify(carousel.collection),JSON.stringify(membership))
+            compare(studioFixture.disk(),diskBaseline);launchSpy.target=null
+        }
         function test_app_collection_registry_membership_overflow_and_return() {
             fakeRegistry.apps=[{id:"one",name:"One",type:"desktop",section:"Games"},{id:"mock",name:"Fake",type:"mock"},{id:"two",name:"Two",type:"web",section:"Music"},{id:"three",name:"Three",type:"desktop",section:"Games"}]
             const carousel=createTemporaryObject(carouselComponent,tests.parent)

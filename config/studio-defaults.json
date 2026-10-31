@@ -419,7 +419,7 @@
     },
     "app-bar": {
       "id": "app-bar",
-      "name": "App bar",
+      "name": "App carousel",
       "kind": "widget",
       "widgetType": "container",
       "componentType": "container",
@@ -485,7 +485,7 @@
     },
     {
       "id": "app-bar",
-      "name": "App bar",
+      "name": "App carousel",
       "description": "Choose and arrange installed apps",
       "icon": "grid"
     },
