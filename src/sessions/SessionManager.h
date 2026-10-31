@@ -50,6 +50,7 @@ public:
 signals:
     void launchDeferred(const QString &reason);
     void launching(const QString &appId);
+    void appOpened(const QString &appId);
     void activeChanged();
     void currentAppChanged();
     void previousFocusIdChanged();

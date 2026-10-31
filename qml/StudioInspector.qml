@@ -104,6 +104,7 @@ Item {
     function summary(f){
         if(mixed(f))return "Mixed"
         const value=effective(current,f)
+        if(f.type==="historyApps")return value && value.length?"Local media + "+value.length+" selected app openings":"Local media only"
         if(f.type==="visibility")return current && current.hidden?"Hidden":"Visible"
         if(f.type==="lock")return current && current.locked?"Locked":"Unlocked"
         if(f.type==="action"){if(!value || !value.type)return "None";const named=actions.find(a=>Object.keys(a.action).every(k=>a.action[k]===value[k]));return named?named.name:"Unavailable link · choose a replacement"}
@@ -112,7 +113,7 @@ Item {
         if(f.type==="toggle" || f.type==="scrolling")return value?"On":"Off"
         if(f.type==="choice"){const named=(f.choices || []).find(entry=>entry && typeof entry==="object" && JSON.stringify(entry.value)===JSON.stringify(value));if(named)return named.name}
         if(f.type==="color")return local(current || {},f)===undefined?"Theme":"Custom"
-        if(f.control==="slider")return Number((Number(value)*(f.displayScale || 1)).toFixed(2))+String(f.displayUnit || "")+(local(current || {},f)===undefined?" · Theme":"")
+        if(f.control==="slider" || f.control==="stepper")return Number((Number(value)*(f.displayScale || 1)).toFixed(2))+String(f.displayUnit || "")+(local(current || {},f)===undefined?" · Theme":"")
         const members=pageMode?[{}]:targets,overridden=members.filter(i=>local(i,f)!==undefined).length
         return String(value===undefined?"":value)+(overridden===0?" · Inherited":overridden===members.length?" · Override":" · Mixed overrides")
     }
@@ -221,7 +222,7 @@ Item {
         if(targets.length>1 && ["geometry","layout","children","apps","order","grid","replaceComponent"].indexOf(f.type)>=0){message="Choose one component for this structural operation. Shared appearance and links can edit all selected items.";return}
         activeField=f;returnSelection=selected
         if(f.type==="replaceComponent"){openChoices((options.replacementChoices || []).map(entry=>({name:entry.name,value:entry.type,kind:"replacement"})));return}
-        if(f.type==="number" && f.control==="slider"){beginScalar();return}
+        if(f.type==="number" && (f.control==="slider" || f.control==="stepper")){beginScalar();return}
         if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
         if(f.type==="toggle"){adjust(f,1);return}
         if(f.type==="choice"){openChoices(f.choices.map(value=>value && typeof value==="object"?value:({name:value,value:value})));return}
@@ -245,6 +246,7 @@ Item {
         }
         if(f.type==="tab"){openChoices((page.composition.navigation || []).map(t=>({name:t.name,value:t.id})));return}
         if(f.type==="layout"){operation("groupLayout");return}
+        if(f.type==="historyApps"){appSelection=(effective(current,f) || []).slice();view="historyApps";selected=0;message="Opt in to managed app openings from this session. No service viewing history, account data or browser history is read. Clear selects local media only.";return}
         if(f.type==="apps"){const ids=new Set(selectedIds);appSelection=current.appCollection?(current.appCollection.ids || []).slice():(page.items || []).filter(i=>ids.has(i.parentId) && i.appId).map(i=>i.appId);view="apps";selected=0;message="Choosing apps replaces this bar's contents as one undoable change.";return}
         if(f.type==="visibility"){run("batch",{commands:targets.map(i=>({operation:"state",arguments:{id:i.id,key:"hidden",value:!current.hidden},pageId:pageId}))});return}
         if(f.type==="lock"){run("batch",{commands:targets.map(i=>({operation:"state",arguments:{id:i.id,key:"locked",value:!current.locked},pageId:pageId}))});return}
@@ -338,7 +340,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
     }
     function handleCommand(command){
         if(view==="actionPicker"){if(actionLoader.item)actionLoader.item.handleCommand(command);return}
-        if(view==="apps"){if(appPicker)appPicker.handleCommand(command);return}
+        if(view==="apps" || view==="historyApps"){if(appPicker)appPicker.handleCommand(command);return}
         if(view==="scalar"){scalarCommand(command);return}
         if(view==="colorWheel"){colorPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
@@ -349,7 +351,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(command===inputManager.menu && view==="fields" && fields[selected]){reset(fields[selected]);return}
         if(command===inputManager.confirm){activate();return}
         const direction=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
-        if(direction && view==="fields" && fields[selected] && fields[selected].control==="slider"){activeField=fields[selected];returnSelection=selected;beginScalar();scalarCommand(command);return}
+        if(direction && view==="fields" && fields[selected] && (fields[selected].control==="slider" || fields[selected].control==="stepper")){activeField=fields[selected];returnSelection=selected;beginScalar();scalarCommand(command);return}
         if(direction && view==="fields" && fields[selected] && ["number","toggle"].indexOf(fields[selected].type)>=0){adjust(fields[selected],direction);return}
         if(direction && view==="crop" && selected>0 && selected<4){adjust(cropField(selected),direction);return}
         if(direction && view==="layout" && selected<7){adjustLayout(direction);return}
@@ -400,11 +402,26 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                 Text {text:"Before "+root.scalarText(root.scalarOriginal)+"   →   "+(root.scalarResetChoice?"Theme · ":"")+root.scalarText(root.scalarDraft);color:root.scalarAppearance.textColor;font.pixelSize:22*root.scalarUnit}
                 Slider {
                     id:scalarSlider;objectName:"studioScalarSlider";width:parent.width;height:38*root.scalarUnit
+                    visible:root.activeField.control!=="stepper"
                     from:root.activeField.min || 0;to:root.activeField.max || 1;stepSize:root.activeField.step || 1;snapMode:Slider.SnapAlways;value:root.scalarDraft
                     Accessible.name:root.activeField.label
                     onMoved:{root.scalarControl=0;root.changeScalar(Number(value.toFixed(4)),false)}
                     background:Rectangle {x:scalarSlider.leftPadding;y:(scalarSlider.height-height)/2;width:scalarSlider.availableWidth;height:6*root.scalarUnit;radius:height/2;color:root.scalarAppearance.mutedColor;Rectangle {width:parent.width*scalarSlider.visualPosition;height:parent.height;radius:parent.radius;color:root.scalarAppearance.focusColor}}
                     handle:Rectangle {x:scalarSlider.leftPadding+scalarSlider.visualPosition*(scalarSlider.availableWidth-width);y:(scalarSlider.height-height)/2;width:22*root.scalarUnit;height:width;radius:width/2;color:root.scalarAppearance.focusColor;border.width:root.scalarControl===0?3:1;border.color:root.scalarAppearance.textColor}
+                }
+                Row {
+                    objectName:"studioScalarStepper";visible:root.activeField.control==="stepper";width:parent.width;spacing:8*root.scalarUnit
+                    Repeater {model:3;delegate:Rectangle {
+                        required property int index
+                        objectName:"studioScalarStep-"+index;width:(scalarBody.width-16*root.scalarUnit)/3;height:44*root.scalarUnit
+                        readonly property bool available:index===1 || (index===0?root.scalarDraft>root.activeField.min:root.scalarDraft<root.activeField.max)
+                        radius:7*root.scalarUnit;color:root.scalarAppearance.selectedColor;opacity:available?1:.45
+                        border.width:root.scalarControl===0?2:0;border.color:root.scalarAppearance.focusColor
+                        Text {anchors.centerIn:parent;text:parent.index===0?"−":parent.index===2?"+":root.scalarText(root.scalarDraft);color:root.scalarAppearance.textColor;font.pixelSize:22*root.scalarUnit}
+                        Accessible.role:index===1?Accessible.StaticText:Accessible.Button
+                        Accessible.name:(index===0?"Decrease ":index===2?"Increase ":"")+root.activeField.label+(index===1?" "+root.scalarText(root.scalarDraft):"")
+                        MouseArea {anchors.fill:parent;enabled:parent.index!==1 && parent.available;onClicked:{root.scalarControl=0;root.changeScalar(root.scalarDraft+(parent.index===0?-1:1)*root.activeField.step,false)}}
+                    }}
                 }
                 Row {
                     width:parent.width
@@ -448,13 +465,13 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         } } }
     }
     Rectangle {
-        visible:root.collapsed && !root.previewActive && root.view!=="apps" && root.view!=="actionPicker";anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:24*root.unit
+        visible:root.collapsed && !root.previewActive && root.view!=="apps" && root.view!=="historyApps" && root.view!=="actionPicker";anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:24*root.unit
         width:Math.min(parent.width-48,440*root.unit);height:64*root.unit;radius:12*root.unit;color:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor
         Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:12*root.unit;text:"Show controls · selection stays full size";color:root.appearance.textColor;font.pixelSize:19*root.unit;wrapMode:Text.Wrap}
         MouseArea {anchors.fill:parent;onClicked:{root.controlsShown=true;root.hiddenControls=false}}
     }
     Rectangle {
-        id:panel;visible:!root.collapsed && root.view!=="actionPicker" && root.view!=="apps" && root.view!=="keyboard" && root.view!=="colorWheel" && root.view!=="scalar";width:root.panelWidth;height:root.panelHeight
+        id:panel;visible:!root.collapsed && root.view!=="actionPicker" && root.view!=="apps" && root.view!=="historyApps" && root.view!=="keyboard" && root.view!=="colorWheel" && root.view!=="scalar";width:root.panelWidth;height:root.panelHeight
         x:root.roomRight?root.selectionRect.x+root.selectionRect.width+24*root.unit:root.roomLeft?root.selectionRect.x-width-24*root.unit:(parent.width-width)/2
         y:Math.max(24*root.unit,Math.min(parent.height-height-24*root.unit,root.selectionRect?root.selectionRect.y:(parent.height-height)/2))
         radius:18*root.unit;color:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor
@@ -517,12 +534,15 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
     }
     StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="actionPicker";onPicked:action=>{if(root.set(root.activeField,action,false)){root.view="fields";root.selected=root.returnSelection}}}
     Loader {
-        id:appPickerLoader;anchors.fill:parent;active:root.visible && root.view==="apps"
-        onLoaded:item.begin(root.appSelection,root.current && root.current.appCollection?root.current.appCollection.mode || "selected":"selected")
+        id:appPickerLoader;anchors.fill:parent;active:root.visible && (root.view==="apps" || root.view==="historyApps")
+        onLoaded:item.begin(root.appSelection,root.view==="historyApps"?"selected":root.current && root.current.appCollection?root.current.appCollection.mode || "selected":"selected")
         sourceComponent:Component {StudioAppPicker {
             anchors.fill:parent;apps:root.apps;settings:root.options.appPicker || ({});appearance:root.appearance
+            selectionLimit:root.view==="historyApps"?50:128
+            heading:root.view==="historyApps"?"App opening sources":""
+            description:root.view==="historyApps"?"Openings after opt-in, this session only. Service viewing history is unavailable; no accounts or browser history are read. Clear keeps local media only.":""
             onCanceled:{root.view="fields";root.selected=root.returnSelection}
-            onAccepted:(mode,ids)=>{if(root.run("setApps",{id:root.current.id,mode:mode,apps:ids})){root.appSelection=ids.slice();root.view="fields";root.selected=root.returnSelection}else message=root.message}
+            onAccepted:(mode,ids)=>{const chosen=root.view==="historyApps" && mode==="all"?root.apps.map(a=>a.action.appId):ids;const success=root.view==="historyApps"?root.set(root.activeField,chosen,false):root.run("setApps",{id:root.current.id,mode:mode,apps:chosen});if(success){root.appSelection=chosen.slice();root.view="fields";root.selected=root.returnSelection}else message=root.message}
         }}
     }
     OnScreenKeyboard {

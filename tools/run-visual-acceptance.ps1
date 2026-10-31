@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','desktop','collections','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','desktop','collections','history','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -10,6 +10,7 @@ param(
     [string]$ReopenHelperDigest,
     [string]$FeatureHelperDigest,
     [string]$StudioHelperDigest,
+    [string]$HistoryHelperDigest,
     [ValidateRange(30,1800)][int]$TimeoutSeconds = 1000,
     [ValidateRange(0,900)][int]$WaitSeconds = 0,
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation',
@@ -47,6 +48,10 @@ if ($GuestRunner) {
     if ($StudioHelperDigest) {
         if ($Case -notin @('studio','desktop','collections') -or $StudioHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Studio helper identity.' }
         $command += " --studio-helper-digest $StudioHelperDigest"
+    }
+    if ($HistoryHelperDigest) {
+        if ($Case -ne 'history' -or $HistoryHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid history helper identity.' }
+        $command += " --history-helper-digest $HistoryHelperDigest"
     }
 } elseif ($Case -in @('studio','desktop','collections')) {
     $desktopFlag = if ($Case -eq 'desktop') { ' --desktop' } elseif ($Case -eq 'collections') { ' --collections' } else { '' }

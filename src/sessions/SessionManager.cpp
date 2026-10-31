@@ -93,7 +93,11 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     auto *session = m_session.get();
     const auto appName = definition.name;
     const auto appId = definition.id;
-    connect(session, &AppSession::stateChanged, this, [this, session, appName, appId](AppSession::State state) {
+    connect(session, &AppSession::stateChanged, this, [this, session, appName, appId, opened=false](AppSession::State state) mutable {
+        if(state==AppSession::State::Running && m_session.get()==session && !opened) {
+            opened=true;
+            if(QStringList{"web","desktop","android"}.contains(session->definition().type))emit appOpened(appId);
+        }
         if (state != AppSession::State::Exited || m_session.get() != session)
             return;
         const bool intentionalExit = m_intentionalExit;

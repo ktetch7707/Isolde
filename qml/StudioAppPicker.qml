@@ -7,6 +7,9 @@ Item {
     required property var apps
     required property var appearance
     required property var settings
+    property int selectionLimit:128
+    property string heading:""
+    property string description:""
     property var selection:[]
     property string contentMode:"selected"
     property bool selectedView:false
@@ -20,20 +23,20 @@ Item {
     readonly property real unit:Math.min(width/1280,height/720)*(appearance.typographyScale || 1)
     readonly property var controls:["Use all installed","Select all","Clear","Order selected","Remove focused","Done","Cancel"]
     readonly property var entries:selectedView?selection.map(id=>apps.find(a=>a.action.appId===id) || {name:"Unavailable app",missing:true,action:{appId:id}}):apps
-    onAppsChanged:if(contentMode==="all" && !movingId)selection=apps.length<=128?apps.map(a=>a.action.appId):[]
+    onAppsChanged:if(contentMode==="all" && !movingId)selection=apps.length<=selectionLimit?apps.map(a=>a.action.appId):[]
     onIndexChanged:if(entries[index])focusedId=entries[index].action.appId
     onEntriesChanged:{const retained=entries.findIndex(a=>a.action.appId===focusedId);index=retained>=0?retained:Math.max(0,Math.min(index,entries.length-1))}
     signal accepted(string mode,var ids)
     signal canceled()
-    function begin(ids,mode){contentMode=mode || "selected";selection=contentMode==="all" && apps.length<=128?apps.map(a=>a.action.appId):(ids || []).slice();selectedView=false;toolsFocused=true;control=5;index=0;focusedId="";movingId="";orderBaseline=[];message=""}
-    function toggle(id){const next=selection.slice(),at=next.indexOf(id);if(at>=0)next.splice(at,1);else if(next.length<128)next.push(id);else{message="Choose up to 128 apps.";return}contentMode="selected";selection=next;message=""}
+    function begin(ids,mode){contentMode=mode || "selected";selection=contentMode==="all" && apps.length<=selectionLimit?apps.map(a=>a.action.appId):(ids || []).slice();selectedView=false;toolsFocused=true;control=5;index=0;focusedId="";movingId="";orderBaseline=[];message=""}
+    function toggle(id){const next=selection.slice(),at=next.indexOf(id);if(at>=0)next.splice(at,1);else if(next.length<selectionLimit)next.push(id);else{message="Choose up to "+selectionLimit+" apps.";return}contentMode="selected";selection=next;message=""}
     function activateTool(){
-        if(control===0){if(apps.length>128){message="More than 128 apps are available. Choose a smaller selection.";return}accepted("all",[]);return}
-        if(control===1){if(apps.length>128){message="More than 128 apps are available. Choose a smaller selection.";return}contentMode="selected";selection=apps.map(a=>a.action.appId);message=""}
+        if(control===0){if(apps.length>selectionLimit){message="Choose up to "+selectionLimit+" apps.";return}accepted("all",[]);return}
+        if(control===1){if(apps.length>selectionLimit){message="Choose up to "+selectionLimit+" apps.";return}contentMode="selected";selection=apps.map(a=>a.action.appId);message=""}
         else if(control===2){contentMode="selected";selection=[];movingId="";message=""}
         else if(control===3){contentMode="selected";selectedView=!selectedView;toolsFocused=entries.length===0;index=0;message=selectedView?"Select an app to move it in this order.":""}
         else if(control===4){const id=focusedId;if(selection.indexOf(id)>=0){contentMode="selected";selection=selection.filter(value=>value!==id);message="Removed from this collection."}else message="Focus an app in the selected order first."}
-        else if(control===5){if(contentMode==="all" && apps.length>128){message="Choose up to 128 apps.";return}accepted(contentMode,contentMode==="all"?[]:selection.slice())}
+        else if(control===5){if(contentMode==="all" && apps.length>selectionLimit){message="Choose up to "+selectionLimit+" apps.";return}accepted(contentMode,contentMode==="all"?[]:selection.slice())}
         else canceled()
     }
     function activateItem(){
@@ -72,7 +75,7 @@ Item {
         color:root.appearance.surfaceColor;radius:root.settings.radius*root.unit;border.width:2;border.color:root.appearance.focusColor
         Column {
             anchors.fill:parent;anchors.margins:root.settings.margin*root.unit;spacing:root.settings.gap*root.unit
-            Text {width:parent.width;text:root.contentMode==="all"?"All installed apps":(root.selectedView?"Selected order":"Choose apps")+" · "+root.selection.length+" selected";textFormat:Text.PlainText;color:root.appearance.textColor;font.family:root.appearance.fontFamily || "DejaVu Sans";font.pixelSize:root.settings.labelSize*root.unit*1.3}
+            Text {width:parent.width;text:(root.heading || (root.contentMode==="all"?"All installed apps":root.selectedView?"Selected order":"Choose apps"))+" · "+root.selection.length+" selected";textFormat:Text.PlainText;color:root.appearance.textColor;font.family:root.appearance.fontFamily || "DejaVu Sans";font.pixelSize:root.settings.labelSize*root.unit*1.3}
             Row {
                 width:parent.width;spacing:root.settings.gap*root.unit/2
                 Repeater {model:root.controls;delegate:Rectangle {
@@ -86,7 +89,8 @@ Item {
                     MouseArea {anchors.fill:parent;enabled:!root.movingId;onClicked:{root.toolsFocused=true;root.control=index;root.activateTool()}}
                 }}
             }
-            Text {width:parent.width;text:root.message || (root.entries.length?"":"No apps in this selection.");textFormat:Text.PlainText;color:root.appearance.mutedColor;font.pixelSize:root.settings.labelSize*root.unit;elide:Text.ElideRight}
+            Text {width:parent.width;text:root.description;visible:!!text;textFormat:Text.PlainText;color:root.appearance.mutedColor;font.pixelSize:root.settings.labelSize*root.unit;wrapMode:Text.Wrap}
+            Text {width:parent.width;text:root.message || (root.entries.length?"":"No apps in this selection.");visible:!!text;textFormat:Text.PlainText;color:root.appearance.mutedColor;font.pixelSize:root.settings.labelSize*root.unit;elide:Text.ElideRight}
             GridView {
                 id:grid;objectName:"studioAppPickerGrid";width:parent.width;height:parent.height-y;clip:true
                 cellWidth:width/root.settings.columns;cellHeight:root.settings.cardHeight*root.unit

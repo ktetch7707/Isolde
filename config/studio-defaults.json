@@ -384,7 +384,7 @@
       "family": "recently-viewed",
       "placement": {"x": 0, "y": 0, "width": 6, "height": 3},
       "presentation": {
-        "libraryKind": "history", "libraryView": "watched", "libraryLimit": 20,
+        "libraryKind": "history", "libraryView": "watched", "libraryLimit": 20, "historyApps": [], "historySourceBadges": true,
         "libraryColumns": 5, "libraryLayout": "row", "libraryCardStyle": "recent",
         "libraryChrome": false, "artHeight": 180, "radius": 16
       }
@@ -619,7 +619,7 @@
       {"tab":"Appearance","scope":"component","key":"crop","label":"Crop / focal point","type":"crop","excludeTypes":["section","navigation"]},
       {"tab":"Layout","scope":"component","key":"position","label":"Position and size","type":"geometry","excludeTypes":["section","navigation"]},
       {"tab":"Layout","scope":"component","key":"layout","label":"Internal layout","type":"layout","types":["container"],"excludeTypes":["section","navigation"]},
-      {"tab":"Layout","scope":"presentation","key":"libraryColumns","control":"slider","label":"Visible cards","type":"number","types":["library","section"],"min":1,"max":12,"step":1,"fallback":4},
+      {"tab":"Layout","scope":"presentation","key":"libraryColumns","control":"stepper","label":"Visible cards","type":"number","types":["library","section"],"min":1,"max":12,"step":1,"fallback":4},
       {"tab":"Layout","scope":"presentation","key":"guideRows","control":"slider","label":"Guide visible rows","type":"number","types":["library"],"families":["tv-guide"],"min":3,"max":12,"step":1,"fallback":5},
       {"tab":"Layout","scope":"presentation","key":"guideVariant","label":"Channel widget","type":"choice","types":["library"],"families":["tv-guide"],"choices":["mini","now-playing","on-now","favorites","preview","upcoming","guide"],"fallback":"mini"},
       {"tab":"Content","scope":"presentation","key":"guideFilter","label":"Channel source filter","type":"choice","types":["library"],"families":["tv-guide"],"choices":["all","local","connected","favorites"],"fallback":"all"},
@@ -641,7 +641,10 @@
       {"tab":"Accessibility","scope":"component","key":"hidden","label":"Runtime visibility","type":"visibility","excludeTypes":["section","navigation"]},
       {"tab":"Accessibility","scope":"component","key":"locked","label":"Lock / unlock","type":"lock","excludeTypes":["section","navigation"]},
       {"tab":"Accessibility","scope":"component","key":"order","label":"Reading / directional focus","type":"order","excludeTypes":["section","navigation"]},
-      {"tab":"Content","scope":"presentation","key":"libraryLimit","control":"slider","label":"Result count","type":"number","types":["library","section"],"min":1,"max":50,"step":1,"fallback":50},
+      {"tab":"Content","scope":"presentation","key":"libraryLimit","control":"stepper","label":"Result count","type":"number","types":["library","section"],"excludeFamilies":["recently-viewed"],"min":1,"max":50,"step":1,"fallback":50},
+      {"tab":"Content","scope":"presentation","key":"libraryLimit","control":"stepper","label":"History count","type":"number","families":["recently-viewed"],"min":1,"max":50,"step":1,"fallback":50},
+      {"tab":"Content","scope":"presentation","key":"historyApps","label":"App openings · choose sources","type":"historyApps","families":["recently-viewed"],"fallback":[]},
+      {"tab":"Appearance","scope":"presentation","key":"historySourceBadges","label":"History source labels","type":"toggle","families":["recently-viewed"],"fallback":true},
       {"tab":"Content","scope":"component","key":"action","label":"On select","type":"action","excludeTypes":["library","container","clock","text","section"]},
       {"tab":"Appearance","scope":"component","key":"typePreset","label":"Typography preset","type":"typography","excludeTypes":["container"]},
       {"tab":"Appearance","scope":"presentation","key":"variant","label":"Section / card style","type":"choice","types":["section"],"choices":["source","summary","banner","orb","media","recent","library"],"excludeTypes":["container"]},

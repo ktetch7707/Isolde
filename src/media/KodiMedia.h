@@ -32,7 +32,7 @@ class KodiMedia final : public QObject {
 public:
     explicit KodiMedia(const QString &profile, QObject *parent = nullptr, const QString &testDirectory = {});
     ~KodiMedia() override;
-    QString status() const { return m_status; }
+    QString status() const { return m_status + (m_mediaKind=="history"?m_historyNotice:QString()); }
     QVariantList movies() const { return m_movies; }
     QVariantList items() const { return m_movies; }
     QString mediaKind() const { return m_mediaKind; }
@@ -46,6 +46,11 @@ public:
     void openPlaylists();
     static bool validPlaylistName(const QString &name);
     Q_INVOKABLE void openView(const QString &kind, const QString &view, const QString &value = {});
+    void openHistory(int count);
+    void setAppOpenings(const QVariantList &items);
+    void setHistoryNotice(const QString &notice) { if(m_retired || m_historyNotice==notice)return;m_historyNotice=notice;emit changed(); }
+    // Permanent profile teardown; unlike an unavailable bridge, this cannot retry.
+    void retire(const QString &reason);
     Q_INVOKABLE void openShowResult(const QString &query, int tvShowId, int pageStart = 0);
     Q_INVOKABLE void playMedia(const QString &kind, int id, bool resume = true);
     // Guide coordinator only: explicit broadcast offset, never saved resume.
@@ -124,6 +129,12 @@ private:
     QByteArray m_received, m_request;
     QVariantList m_movies;
     QVariantList m_recentResults;
+    QVariantList m_appOpenings;
+    QString m_historyNotice;
+    QString m_historySelection;
+    void restoreHistorySelection();
+    int m_historyLimit = 50;
+    bool m_retired = false;
     bool m_recentEpisodes = false;
     int m_descriptor = -1, m_id = 0, m_stage = 0;
     quint64 m_generation = 0;

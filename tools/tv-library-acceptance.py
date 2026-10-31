@@ -56,6 +56,7 @@ def main():
     parser.add_argument("--inspect", action="store_true")
     parser.add_argument("--pages", action="store_true", help="Create and customize a page through Settings, then exercise its widget against real Kodi")
     parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
+    parser.add_argument("--history", action="store_true", help="Verify actual Kodi playback updates independent production Recently viewed carousels")
     parser.add_argument("--movie-art", action="store_true", help="Scrape a named synthetic movie using Kodi's TMDB provider; no supplied metadata/art")
     parser.add_argument("--guide", action="store_true", help="Configure an isolated real IPTV Simple channel, then import and tune it through the Guide")
     parser.add_argument("--guide-surfaces", action="store_true", help="Also create two local channels through the UI and review compact/overlay/full return")
@@ -109,12 +110,15 @@ def main():
         document=(imported/'videodb.xml').read_text().replace('<tvshow><title>','<tvshow><studio>Cartoon Network</studio><title>',1)
         document=document.replace('<paths/>',f'<movie><title>Fixture Movie</title><year>2026</year><studio>Cartoon Network</studio><runtime>2</runtime><filenameandpath>{escape(str(movie))}</filenameandpath><path>{escape(str(media))}/</path><file>{movie.name}</file><basepath>{escape(str(media))}/</basepath><art><poster>{escape(str(poster))}</poster></art></movie><paths/>')
         (imported/'videodb.xml').write_text(document)
-    if args.guide:
+    if args.guide or args.history:
         # Kodi's native import resolves exported episode entries to these
         # export-relative filenames. Supply actual fixture media there rather
         # than relying on an ignored filenameandpath override in the XML.
         for season, number in ((0,1),(1,1),(1,2)):
             os.link(clip,exported_art/f"s{season:02}e{number:02}.avi")
+        if args.history:
+            assert all((exported_art/f"s{season:02}e{number:02}.avi").is_file() for season,number in ((0,1),(1,1),(1,2)))
+            print('History export-relative media fixture validated',flush=True)
     (exported_art / "poster.png").write_bytes(poster.read_bytes())
     (exported_art.parent / "Isolde_Television_Fixture-poster.png").write_bytes(poster.read_bytes())
     (userdata / "keymaps").mkdir()
@@ -206,6 +210,20 @@ provider.setSettingString("searchlanguage","en-US")
     config = evidence / "config/Isolde"; config.mkdir(parents=True)
     (config / "profiles.json").write_text(json.dumps({"active": profile, "profiles": [{"id": profile, "name": "TV acceptance"}]}))
     (config / "device-setup.json").write_text('{"version":1,"step":6,"complete":true}')
+    if args.history:
+        import copy
+        defaults=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
+        items=[]
+        for identity,y,height,count,capacity in [('history-wide',0,3,5,3),('history-single',3,2,1,1)]:
+            item=copy.deepcopy(defaults['componentPresets']['recently-viewed'])
+            item.update(schemaVersion=1,id=identity,name=identity,placement=dict(x=0,y=y,width=8,height=height),
+                source=dict(schemaVersion=1,provider='kodi',kind='recently-viewed',libraryKind='history',libraryView='watched',libraryValue=''))
+            item['presentation'].update(libraryLimit=count,libraryColumns=capacity,libraryChrome=False)
+            items.append(item)
+        document=dict(schemaVersion=2,rootPage=dict(name='Home',visible=True,position=0),categories=[],components=items,
+            composition=dict(schemaVersion=1,enabled=True,grid=dict(columns=8,rows=6,mode='screen'),headerControls=['settings'],showClock=False,navigation=[dict(id='home',name='Home')],initialTab='home'))
+        history_layout=config/'profiles'/profile/'home-layout.json';history_layout.parent.mkdir(parents=True)
+        history_layout.write_text(json.dumps(document));history_bytes=history_layout.read_bytes()
     if args.guide:
         guide_profile=config/'profiles'/profile;guide_profile.mkdir(parents=True)
         guide_home={'schemaVersion':1,'categories':[{'id':'apps','name':'Apps'}],'items':[{'kind':'action','id':'guide-entry','name':'TV Guide','symbol':'TV','size':'standard','categoryId':'apps','action':{'schemaVersion':1,'type':'open-guide'}}]}
@@ -474,6 +492,46 @@ provider.setSettingString("searchlanguage","en-US")
             assert {s["season"] for s in seasons} == {0, 1}
             eps = rpc(directory, "VideoLibrary.GetEpisodes", {"tvshowid": show_id, "properties": ["season", "episode", "resume"]})["episodes"]
             assert len(eps) == 3
+            if args.history:
+                phases=[]
+                def history_capture(phase):
+                    phases.append(phase);print(phase.upper()+"_READY "+str(evidence),flush=True)
+                    wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" captured",seconds=110)
+                def press(name,count=1):
+                    for _ in range(count):key(shell,name,.06)
+                    time.sleep(.4)
+                def viewed():
+                    return rpc(directory,'VideoLibrary.GetEpisodes',{'properties':['title','lastplayed'],
+                        'filter':{'field':'lastplayed','operator':'after','value':'1970-01-01'},
+                        'sort':{'method':'lastplayed','order':'descending'},'limits':{'start':0,'end':50}}).get('episodes',[])
+                assert not viewed(),'Fresh imported fixtures must not masquerade as viewed media'
+                run('wmctrl','-i','-a',shell,env=env)
+                history_capture('historylibrary')
+                # Use the ordinary Isolde library, not a history/date setter.
+                press('Up');press('Left',30);press('Right',30);press('Return');time.sleep(1)
+                press('Down');press('Return');time.sleep(1);press('Return');time.sleep(1);press('Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Initial real episode playback')
+                time.sleep(3);history_capture('historyplaying')
+                key('kodi','Escape');wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Actual episode stop')
+                watched=wait(viewed,'Kodi-owned lastplayed updated after actual playback')
+                assert len(watched)==1 and watched[0].get('lastplayed')
+                time.sleep(2);run('wmctrl','-i','-a',shell,env=env);press('Home');press('Up',12);press('Down',2)
+                history_capture('historyupdated')
+                press('Menu');history_capture('historyfocused');press('Escape');press('Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Production history card reopens episode')
+                history_capture('historyreplaying')
+                key('kodi','Escape');wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','History playback return')
+                time.sleep(2);run('wmctrl','-i','-a',shell,env=env);history_capture('historyreturned')
+                press('Return');wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Exact history origin reopens without navigation')
+                key('kodi','Escape');wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Repeated history playback return')
+                time.sleep(2);run('wmctrl','-i','-a',shell,env=env);history_capture('historyrepeatreturn')
+                assert history_layout.read_bytes()==history_bytes,'Playback/history must not rewrite the saved layout'
+                for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                (evidence/'result.json').write_text(json.dumps(dict(passed=True,journey='history',freshProfile=True,normalProfileUsed=False,
+                    realKodiPlayback=True,kodiOwnedLastplayed=True,historyCardPlayback=True,exactHistoryReturn=True,
+                    independentInstances=[dict(count=5,capacity=3),dict(count=1,capacity=1)],layoutUnchanged=True,mediaUnchanged=True,
+                    watched=watched,captures=phases),indent=2))
+                print('Evidence: '+str(evidence),flush=True);return
             if args.playlists:
                 def playlist_capture(phase):
                     print(phase.upper()+"_READY "+str(evidence),flush=True)

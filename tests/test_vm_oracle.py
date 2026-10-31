@@ -314,7 +314,11 @@ class OracleTests(unittest.TestCase):
             os.utime(old,(i,i))
         profile=home/"profile.json";profile.write_text("preserve user data")
         (runner.root/'runs/1/guide-soak-receipt.json').write_text('{}');os.utime(runner.root/'runs/1',(1,1))
-        with patch.object(runner,"command",return_value="isolde-test"),patch.object(runner,"stage") as stage,patch.object(oracle.Path,"home",return_value=home),patch.object(oracle.shutil,"disk_usage",return_value=SimpleNamespace(free=7*1024**3)):
+        original_read=oracle.Path.read_text
+        def read_text(path,*args,**kwargs):
+            if path==Path('/proc/self/mountinfo'):return '1 0 0:1 / / rw - ext4 /dev/unit-test rw\n'
+            return original_read(path,*args,**kwargs)
+        with patch.object(runner,"command",return_value="isolde-test"),patch.object(runner,"stage") as stage,patch.object(oracle.Path,"home",return_value=home),patch.object(oracle.Path,"read_text",read_text),patch.object(oracle.shutil,"disk_usage",return_value=SimpleNamespace(free=7*1024**3)):
             runner.prepare_guest_space(8)
         stage.assert_called_once_with("guest-apt-cache-clean",["sudo","-n","apt-get","clean"],60)
         receipt=json.loads((runner.run/"guest-package-cache-cleanup.json").read_text())
@@ -397,6 +401,14 @@ class OracleTests(unittest.TestCase):
             command=oracle.studio_helper_command(source,helper,executable,collections=True);command[0]=sys.executable
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(frozen),'args':[str(frozen),str(executable),'--studio','--collections','--inspect'],'dependency':'frozen dependency'})
+            history_frozen=folder/'tv-library-acceptance.py';history_frozen.write_text("raise RuntimeError('frozen history helper untouched')")
+            history_helper=root/'bin'/('history-helper-'+expected+'.py');history_helper.write_bytes(code.encode())
+            self.assertEqual(oracle.verified_studio_helper(root,expected,'history'),history_helper)
+            command=oracle.history_helper_command(source,history_helper,executable);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'file':str(history_frozen),'args':[str(history_frozen),str(executable),'--history','--inspect'],'dependency':'frozen dependency'})
+            self.assertIn('untouched',history_frozen.read_text())
+            with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected,'unreviewed')
             self.assertIn('must remain untouched',frozen.read_text())
             helper.write_bytes(b'changed')
             with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected)
@@ -473,6 +485,28 @@ class OracleTests(unittest.TestCase):
             oracle.atomic_json(base/'test-result.json',baseline)
             (base/'payload/bin/isolde').write_bytes(b'tampered')
             with self.assertRaises(RuntimeError):runner.tested_payload()
+
+    def test_studio_inspector_qml_reuse_is_bounded_to_picker_ui(self):
+        root=self.root; base=root/'runs/inspector-base';current=root/'runs/inspector-focused'
+        base.mkdir(parents=True);current.mkdir()
+        files={'qml/StudioInspector.qml':b'old','qml/StudioAppPicker.qml':b'picker','qml/PageLibraryWidget.qml':b'library','tests/studio/tst_selection.qml':b'tests','src/main.cpp':b'core','config/studio-defaults.json':b'config','qml/PlacedComponents.qml':b'placed'}
+        def write_manifest(run,values):
+            (run/'files.sha256').write_text(''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n' for name,value in sorted(values.items())))
+        write_manifest(base,files);fresh=dict(files,**{'qml/StudioInspector.qml':b'caption fix','tests/studio/tst_selection.qml':b'actual input regression'});write_manifest(current,fresh)
+        (base/'payload/bin').mkdir(parents=True);(base/'payload/bin/isolde').write_bytes(b'full-tested')
+        result=dict(passed=True,fullSuite=True,sourceDigest=oracle.digest(base/'files.sha256'),payload=oracle.payload_hashes(base/'payload'));oracle.atomic_json(base/'test-result.json',result)
+        proof=oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
+        self.assertEqual(proof['changedStudioInspectorQml'],['qml/StudioInspector.qml'])
+        write_manifest(current,dict(fresh,**{'qml/PageLibraryWidget.qml':b'empty-update focus'}))
+        renderer_proof=oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
+        self.assertEqual(renderer_proof['changedStudioInspectorQml'],['qml/PageLibraryWidget.qml','qml/StudioInspector.qml'])
+        for name in ('src/main.cpp','config/studio-defaults.json','qml/PlacedComponents.qml','qml/Unreviewed.qml'):
+            write_manifest(current,dict(fresh,**{name:b'changed'}))
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
+        write_manifest(current,fresh);oracle.atomic_json(base/'test-result.json',dict(result,fullSuite=False))
+        with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
+        oracle.atomic_json(base/'test-result.json',result);(base/'payload/bin/isolde').write_bytes(b'modified')
+        with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
 
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
@@ -579,6 +613,29 @@ class OracleTests(unittest.TestCase):
         self.assertEqual((payload/"payload/isolde").read_text(),"last passing payload")
         records=json.loads((runner.run/"guest-source-cleanup.json").read_text())["targets"]
         self.assertEqual({r["target"]:r["state"] for r in records},{str(missing/"source"):"preserved-missing-recovery-evidence",str(valid/"source"):"removed"})
+
+    @unittest.skipUnless(sys.platform=="linux","Guest-only payload maintenance")
+    def test_explicit_artifact_cleanup_preserves_newest_payloads_despite_source_mtimes(self):
+        home=self.root/'home';home.mkdir();runner=oracle.Oracle(home/'isolde-oracle','current')
+        runs=runner.root/'runs';old=[]
+        for i in range(1,6):
+            run=runs/str(i);(run/'payload/bin').mkdir(parents=True);(run/'payload/bin/isolde').write_text('tested '+str(i))
+            (run/'test-result.json').write_text(json.dumps(dict(passed=True,fullSuite=True,payload=oracle.payload_hashes(run/'payload'))))
+            (run/'source.log').write_text('retain evidence');os.utime(run/'payload',(i,i));os.utime(run,(20-i,20-i));old.append(run)
+        for i,name in enumerate(('recent-a','recent-b'),40):
+            recent=runs/name;recent.mkdir();os.utime(recent,(i,i))
+        original=oracle.Path.read_text
+        def read_text(path,*args,**kwargs):
+            if path==Path('/proc/self/mountinfo'):return '1 0 0:1 / / rw - ext4 /dev/unit-test rw\n'
+            return original(path,*args,**kwargs)
+        # All generated trees are old by directory mtime, while payload 3–5 are
+        # the latest actual staged candidates. Directory cleanup must not unpin them.
+        with patch.object(runner,'command',return_value='isolde-test'),patch.object(runner,'stage'),patch.object(oracle.Path,'home',return_value=home),patch.object(oracle.Path,'read_text',read_text),patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=2*1024**3)):
+            runner.prepare_guest_space(3,prune_payloads=True)
+        for run in old[2:]:self.assertTrue((run/'payload/bin/isolde').is_file())
+        for run in old:self.assertEqual((run/'source.log').read_text(),'retain evidence')
+        for run in old[:2]:
+            self.assertFalse((run/'payload').exists());self.assertTrue((run/'test-result.json').is_file())
 
     def test_source_cleanup_refuses_corruption_unknown_files_and_mounts(self):
         for change in ("source","archive","manifest","extra","unowned-pyc","mount","submount","ancestor-mount"):
@@ -706,8 +763,18 @@ class OracleTests(unittest.TestCase):
         for key in ("actualNativeInput","normalExit","exactGalleryReturn","buttonReturn","storeRemoveReinstall","layoutUnchanged"):
             self.assertFalse(oracle.visual_result_passed("collections",dict(result,**{key:False})))
         self.assertFalse(oracle.visual_result_passed("collections",dict(result,captures=result['captures'][:-1])))
+        history=dict(result,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,captures=result['captures']+["historyapp","historyclient","historyreturned","historyrepeat","historyrepeatreturn"])
+        self.assertTrue(oracle.visual_result_passed("collections",history))
+        self.assertFalse(oracle.visual_result_passed("collections",dict(history,appHistoryReopenCycles=1)))
+        self.assertFalse(oracle.visual_result_passed("collections",dict(history,appHistorySessionOnly=False)))
 
     def test_visual_results_use_each_harness_contract(self):
+        history=dict.fromkeys(("passed","freshProfile","realKodiPlayback","kodiOwnedLastplayed","historyCardPlayback","exactHistoryReturn","layoutUnchanged","mediaUnchanged"),True)
+        history.update(normalProfileUsed=False,independentInstances=[dict(count=5,capacity=3),dict(count=1,capacity=1)],captures=["historylibrary","historyplaying","historyupdated","historyfocused","historyreplaying","historyreturned","historyrepeatreturn"])
+        self.assertTrue(oracle.visual_result_passed("history",history))
+        for key in ("realKodiPlayback","kodiOwnedLastplayed","historyCardPlayback","exactHistoryReturn","layoutUnchanged"):
+            self.assertFalse(oracle.visual_result_passed("history",dict(history,**{key:False})))
+        self.assertFalse(oracle.visual_result_passed("history",dict(history,captures=history['captures'][:-1])))
         guide=dict(passed=True,freshProfile=True,normalProfileUsed=False,pvrAddon="pvr.iptvsimple",sourceChannels=1,sourceListings=50,
                    remoteImport=True,actualPvrPlayback=True,returned=True,automaticNativeReturn=True,mediaUnchanged=True,syntheticSource=True,providerSubscriptionVerified=False,
                    captures=["guidestartup","guideorigin","guidehome","guideempty","guidesource","guidepvr","guidevideo","guidereturn"])

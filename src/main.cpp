@@ -104,11 +104,12 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("actionDispatcher"), &actions);
     engine.rootContext()->setContextProperty(QStringLiteral("pageData"), &pageData);
     actions.setLayout(&homeLayout);
+    pageData.setApplications(&registry,&sessions,&actions);
     games=std::make_unique<GameLibrary>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("games.sqlite"), &registry);
     actions.setGames(games.get());
     games->setCatalog(&catalog);
     engine.rootContext()->setContextProperty(QStringLiteral("gameLibrary"), games.get());
-    QObject::connect(&kodiService,&KodiService::unavailable,&pageData,&PageData::invalidate);
+    QObject::connect(&kodiService,&KodiService::unavailable,&pageData,&PageData::unavailable);
     homeLayout.setCollections(kodi.collections());
     QObject::connect(&kodi, &KodiMedia::collectionsChanged, &homeLayout, [this] { homeLayout.setCollections(kodi.collections()); });
     homeLayout.setCaptureInputsReady(captureController.canSwitchInput(1));
@@ -281,6 +282,7 @@ struct ProfileRuntime {
     }
     }
     ~ProfileRuntime() {
+        pageData.invalidate("This profile is no longer active.");
         guide->invalidate();
         games->invalidate();
         appVpn.cancel();

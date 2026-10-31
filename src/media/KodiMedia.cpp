@@ -13,6 +13,26 @@
 #include <unistd.h>
 #endif
 
+static QVariantList sortedHistory(QVariantList items,int limit) {
+    std::sort(items.begin(),items.end(),[](const QVariant &a,const QVariant &b){
+        const auto left=a.toMap(),right=b.toMap();
+        const int date=QString::compare(left["viewedAt"].toString(),right["viewedAt"].toString());
+        if(date)return date>0;
+        if(left["providerId"]!=right["providerId"])return left["providerId"].toString()<right["providerId"].toString();
+        if(left["mediaType"]!=right["mediaType"])return left["mediaType"].toString()<right["mediaType"].toString();
+        if(left["mediaType"]=="app")return left["appId"].toString()<right["appId"].toString();
+        return left["mediaId"].toInt()<right["mediaId"].toInt();
+    });
+    while(items.size()>limit)items.removeLast();
+    return items;
+}
+static QString historyIdentity(const QVariantMap &item) {
+    return item.value("providerId").toString()+"/"+item.value("mediaType").toString()+"/"+item.value("mediaId").toString();
+}
+void KodiMedia::restoreHistorySelection() {
+    if(m_mediaKind!="history" || m_historySelection.isEmpty())return;
+    for(int index=0;index<m_movies.size();++index)if(historyIdentity(m_movies[index].toMap())==m_historySelection){m_selectedIndex=index;return;}
+}
 KodiMedia::KodiMedia(const QString &profile, QObject *parent, const QString &testDirectory) : QObject(parent)
 {
     m_profile = profile;
@@ -64,6 +84,12 @@ void KodiMedia::fail(const QString &message)
     m_movies.clear();
     m_recentResults.clear();
     m_pageStart = m_totalMovies = 0;
+    if(!m_retired && m_mediaKind=="history") {
+        m_movies=sortedHistory(m_appOpenings,m_historyLimit);
+        m_totalMovies=m_pageCount=m_movies.size();
+        restoreHistorySelection();
+        m_selectedIndex=qBound(-1,m_selectedIndex,qMax(-1,int(m_movies.size())-1));
+    }
     m_status = message;
     emit changed();
     if (wasPlaying) emit playbackReturned(false);
@@ -81,6 +107,13 @@ void KodiMedia::invalidate(const QString &reason)
 {
     fail(reason);
 }
+void KodiMedia::retire(const QString &reason)
+{
+    m_retired = true;
+    m_appOpenings.clear();
+    m_historySelection.clear();
+    fail(reason);
+}
 void KodiMedia::refresh()
 {
     if (m_busy || m_playbackActive) return;
@@ -88,6 +121,9 @@ void KodiMedia::refresh()
 }
 void KodiMedia::beginRead(int start)
 {
+    if (m_retired) return;
+    if(m_mediaKind!="history")m_historySelection.clear();
+    else if(m_selectedIndex>=0 && m_selectedIndex<m_movies.size())m_historySelection=historyIdentity(m_movies[m_selectedIndex].toMap());
     m_recentResults.clear(); m_recentEpisodes = false;
     ++m_generation;
     m_busy = false; releaseSocket();
@@ -100,7 +136,7 @@ void KodiMedia::beginRead(int start)
     emit changed();
     request("JSONRPC.Version");
 }
-bool KodiMedia::canNavigate() const { return !m_playbackActive && (!m_busy || m_stage == 0 || m_stage == 1); }
+bool KodiMedia::canNavigate() const { return !m_retired && !m_playbackActive && (!m_busy || m_stage == 0 || m_stage == 1); }
 QString KodiMedia::browseTitle() const
 {
     if (m_mediaKind == "playlists") return "Kodi video playlists";
@@ -162,6 +198,27 @@ void KodiMedia::savePlaylist(const QString &name) {
     ++m_generation;m_busy=true;m_stage=9;m_playlistStatus="Saving playlist in this Kodi profile…";emit changed();
     request("Isolde.CreatePlaylist",{{"name",name.trimmed()},{"kind",m_mediaKind},{"view",m_viewKind},{"value",m_viewValue}});
 }
+void KodiMedia::openHistory(int count) {
+    if(count < 1 || count > 50 || !canNavigate()) return;
+    const int selected=m_mediaKind=="history"?m_selectedIndex:0;
+    m_historyLimit = count;
+    m_history.clear();m_pendingMovie=0;m_pendingDirectKind.clear();m_pendingDirectId=0;
+    restoreBrowse({"history","watched",{},{},-1,-1,0,selected});
+}
+void KodiMedia::setAppOpenings(const QVariantList &items) {
+    if(m_retired || items.size()>50)return;
+    QVariantList accepted;QSet<QString> identities;
+    for(const auto &value:items) {
+        const auto item=value.toMap();const auto id=item.value("appId").toString();
+        const auto date=item.value("viewedAt").toString();
+        const auto parsed=QDateTime::fromString(date,"yyyy-MM-dd HH:mm:ss");
+        if(!QRegularExpression("^[a-z0-9][a-z0-9.-]{0,79}$").match(id).hasMatch() || identities.contains(id)
+            || item.value("providerId")!="isolde-app-openings" || item.value("mediaType")!="app"
+            || !parsed.isValid() || parsed.toString("yyyy-MM-dd HH:mm:ss")!=date || item.value("title").toString().size()>160)return;
+        identities.insert(id);accepted.append(item);
+    }
+    m_appOpenings=accepted;
+}
 void KodiMedia::openView(const QString &kind,const QString &view,const QString &value) {
     if(!canNavigate() || !QStringList{"movies","shows","episodes","history","albums","channels"}.contains(kind) || !QStringList{"all","recent","watched","continue","search","tag","genre","playlist"}.contains(view)
         || (view=="playlist" && (!QStringList{"movies","shows"}.contains(kind) || !validPlaylistName(value)))
@@ -186,7 +243,7 @@ void KodiMedia::openShowResult(const QString &query, int tvShowId, int pageStart
     beginRead(pageStart);
 }
 void KodiMedia::playMedia(const QString &kind,int id,bool resume) {
-    if(!QStringList{"movie","episode","song","channel"}.contains(kind)||id<1||m_playbackActive)return;
+    if(m_retired || !QStringList{"movie","episode","song","channel"}.contains(kind)||id<1||m_playbackActive)return;
     if (m_busy) {
         if (m_stage != 0 && m_stage != 1) {
             m_playbackStatus = "Kodi is busy. Wait for the current library operation to finish.";
@@ -272,7 +329,7 @@ void KodiMedia::loadPage(int start)
     QJsonObject params{{"properties", fields},
         {"sort", QJsonObject{{"method", sort},
             {"order", (m_viewKind == "continue" || m_viewKind == "recent" || m_viewKind == "watched") ? "descending" : "ascending"}, {"ignorearticle", true}}},
-        {"limits", QJsonObject{{"start", start}, {"end", start + 50}}}};
+        {"limits", QJsonObject{{"start", start}, {"end", start + (m_mediaKind == "history" ? m_historyLimit : 50)}}}};
     if (m_viewKind == "continue") params.insert("filter", QJsonObject{{"field", "inprogress"}, {"operator", "true"}, {"value", ""}});
     else if (m_viewKind == "watched") params.insert("filter", QJsonObject{{"field", "lastplayed"}, {"operator", "after"}, {"value", "1970-01-01"}});
     else if (m_viewKind != "all" && m_viewKind != "recent") params.insert("filter", QJsonObject{{"field", m_viewKind == "search" ? "title" : m_viewKind},
@@ -375,6 +432,7 @@ void KodiMedia::setView(const QString &kind, const QString &value)
 }
 QVariantList KodiMedia::collections() const
 {
+    if(m_retired)return {};
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Collections");
     const auto doc = QJsonDocument::fromJson(settings.value("profiles/" + m_profile + "/v1").toByteArray());
     // Treat persisted definitions as input, not executable query instructions.
@@ -419,6 +477,7 @@ QVariantList KodiMedia::collections() const
 }
 bool KodiMedia::storeCollections(const QVariantList &entries)
 {
+    if(m_retired)return false;
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Collections");
     settings.setValue("profiles/" + m_profile + "/v1", QJsonDocument(QJsonArray::fromVariantList(entries)).toJson(QJsonDocument::Compact));
     settings.sync();
@@ -667,6 +726,7 @@ void KodiMedia::playbackControl(const QString &action)
 }
 void KodiMedia::request(const QString &method, const QJsonObject &params)
 {
+    if (m_retired) { fail("This profile is no longer active."); return; }
     releaseSocket();
     m_received.clear();
     m_request = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", ++m_id}, {"method", method}, {"params", params}}).toJson(QJsonDocument::Compact) + '\n';
@@ -838,7 +898,7 @@ void KodiMedia::consume()
         QTimer::singleShot(0, this, [this, generation] { if (m_busy && generation == m_generation) loadPage(0); });
         return;
     }
-    if (entries.size() > (m_mediaKind=="playlists"?128:50) || total < 0 || limits.value("start").toInt(-1) != m_requestedStart
+    if (entries.size() > (m_mediaKind=="playlists"?128:m_mediaKind=="history"?m_historyLimit:50) || total < 0 || limits.value("start").toInt(-1) != m_requestedStart
         || limits.value("end").toInt(-1) != m_requestedStart + entries.size()
         || total < m_requestedStart + entries.size() || (entries.isEmpty() && total > m_requestedStart)) {
         fail("Kodi returned invalid library paging information. Refresh to retry."); return;
@@ -886,18 +946,12 @@ void KodiMedia::consume()
             QTimer::singleShot(0, this, [this, generation] { if (m_busy && generation == m_generation) loadPage(0); });
             return;
         }
-        std::sort(m_recentResults.begin(), m_recentResults.end(), [](const QVariant &a, const QVariant &b) {
-            const auto left=a.toMap(),right=b.toMap();
-            const auto date=QString::compare(left["viewedAt"].toString(),right["viewedAt"].toString());
-            if(date) return date>0;
-            if(left["mediaType"]!=right["mediaType"])return left["mediaType"].toString()<right["mediaType"].toString();
-            return left["mediaId"].toInt()<right["mediaId"].toInt();
-        });
-        while(m_recentResults.size()>50)m_recentResults.removeLast();
-        normalized=m_recentResults; m_recentResults.clear();
+        m_recentResults.append(m_appOpenings);
+        normalized=sortedHistory(m_recentResults,m_historyLimit); m_recentResults.clear();
         m_pageStart=0; m_pageCount=normalized.size(); m_totalMovies=normalized.size();
     }
     m_movies = normalized;
+    restoreHistorySelection();
     m_selectedIndex = qBound(-1, m_selectedIndex, qMax(-1, int(m_movies.size()) - 1));
     m_status = m_movies.isEmpty() ? (m_mediaKind == "channels" ? "No TV channels in this profile. Configure a PVR TV source in Kodi, then refresh." : m_mediaKind == "albums" ? "No albums in this profile's Kodi music library. Add music sources in Kodi, then refresh." : m_mediaKind == "history" ? "Nothing viewed in this profile yet. Kodi viewing history appears here." : m_viewKind == "all" ? "No items in this Kodi library view. Configure sources in Kodi or refresh to retry."
         : m_viewKind == "continue" ? "No items with saved progress in this profile." : "Not found in your Kodi library.")

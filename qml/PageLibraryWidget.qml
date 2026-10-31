@@ -18,25 +18,28 @@ Item {
     readonly property bool unifiedGuide:style.libraryKind==="channels" && typeof guideController!=="undefined" && !!guideController
     property var heldClient:null
     property var frozenItems:[]
+    property int frozenIndex:-1
     readonly property var client:games || unifiedGuide?null:frozen?heldClient:provider ? provider.client(widgetKey,style) : null
     onClientChanged:if(!frozen)heldClient=client
-    onFrozenChanged:{if(frozen)frozenItems=heldClient?heldClient.items.slice():[];else frozenItems=[]}
+    onFrozenChanged:{if(frozen){frozenItems=heldClient?heldClient.items.slice():[];frozenIndex=heldClient?heldClient.selectedIndex:-1}else frozenItems=[]}
     readonly property var liveItems:frozen?frozenItems:client?client.items:[]
     readonly property bool usingSamples:readOnly && samplePreview && !liveItems.length
     readonly property var displayedItems:usingSamples?sampleItems:liveItems.slice(0,style.libraryLimit || 50)
     onDisplayedItemsChanged:Qt.callLater(function(){
-        if(!root.frozen && root.client && !root.client.busy && root.displayedItems.length>0 && root.client.selectedIndex>=root.displayedItems.length)
-            root.client.selectIndex(root.displayedItems.length-1)
+        if(!root.frozen && root.client && !root.client.busy && root.displayedItems.length>0
+            && (root.client.selectedIndex>=root.displayedItems.length || !root.chrome && root.client.selectedIndex<0))
+            root.client.selectIndex(root.client.selectedIndex<0?0:root.displayedItems.length-1)
     })
     property int toolbarIndex:0
     property var details:null
     property string returnMediaKey:""
-    function rememberSelection(){const item=client?client.items[client.selectedIndex]:null;if(item)returnMediaKey=item.mediaType+":"+item.mediaId}
+    function mediaKey(item){return (item.providerId || "kodi")+":"+item.mediaType+":"+item.mediaId}
+    function rememberSelection(){const item=client?client.items[client.selectedIndex]:null;if(item)returnMediaKey=mediaKey(item)}
     Connections {
         target:root.client
         function onChanged(){
-            if(!root.client || root.client.busy || !root.returnMediaKey)return
-            const index=root.displayedItems.findIndex(i=>i.mediaType+":"+i.mediaId===root.returnMediaKey)
+            if(root.frozen || !root.client || root.client.busy || !root.returnMediaKey)return
+            const index=root.displayedItems.findIndex(i=>root.mediaKey(i)===root.returnMediaKey)
             if(index>=0 && root.client.selectedIndex!==index)root.client.selectIndex(index)
         }
     }
@@ -44,7 +47,7 @@ Item {
     readonly property bool music:style.libraryKind==="albums"
     readonly property bool guide:style.libraryKind==="channels"
     readonly property var actions:history?["Refresh"]:music || guide?["Refresh","Previous","Next"]:["Refresh","Previous","Next","All","Recent","Continue"]
-    function subtitleFor(item){return guide?item.subtitle || style.subtitle || "":music?(Array.isArray(item.artist)?item.artist.join(", "):String(item.artist || "")):item.year?String(item.year):item.showtitle || ""}
+    function subtitleFor(item){if(history && style.historySourceBadges!==false)return item.mediaType==="app"?item.subtitle:"Kodi · "+(item.year || item.showtitle || "Viewed");return guide?item.subtitle || style.subtitle || "":music?(Array.isArray(item.artist)?item.artist.join(", "):String(item.artist || "")):item.year?String(item.year):item.showtitle || ""}
     readonly property bool listMode:style.libraryLayout === "list"
     readonly property bool rowMode:style.libraryLayout === "row"
     readonly property bool chrome:style.libraryChrome!==false
@@ -64,7 +67,7 @@ Item {
         if(!client)return command !== inputManager.back && command !== inputManager.navigateUp
         const index=client.selectedIndex, step=columns
         if(command===inputManager.back){if(details){details=null;return true}if(client.goBack())return true;return false}
-        if(details){if(command===inputManager.confirm || !guide && !music && command===inputManager.navigateRight){rememberSelection();provider.activate(client,index,command!==inputManager.navigateRight);details=null}return true}
+        if(details){if(command===inputManager.confirm || !guide && !music && command===inputManager.navigateRight){rememberSelection();provider.activate(client,index,command!==inputManager.navigateRight,originId);details=null}return true}
         if(command===inputManager.menu && index>=0){details=client.items[index];return true}
         if(index<0){
             if(command===inputManager.navigateUp || command===inputManager.navigateLeft && toolbarIndex===0)return false
@@ -74,7 +77,7 @@ Item {
             else if(command===inputManager.confirm)invoke(toolbarIndex)
             return true
         }
-        if(command===inputManager.confirm){rememberSelection();provider.activate(client,index);return true}
+        if(command===inputManager.confirm){rememberSelection();provider.activate(client,index,true,originId);return true}
         if(command===inputManager.navigateUp){if(!chrome && (rowMode || index<step))return false;returnMediaKey="";client.selectIndex(index<step?-1:index-step);return true}
         if(command===inputManager.navigateDown){if(rowMode||index+step>=root.displayedItems.length)return false;returnMediaKey="";client.selectIndex(index+step);return true}
         if(command===inputManager.navigateLeft){if(index===0)return false;returnMediaKey="";client.selectIndex(index-1);return true}
@@ -101,7 +104,7 @@ Item {
             id:grid; objectName:"pageLibraryGrid";width:parent.width;height:Math.max(50,parent.height-(root.chrome?84:0));clip:true
             flow:root.rowMode?GridView.FlowTopToBottom:GridView.FlowLeftToRight
             cellWidth:width/root.columns;cellHeight:root.listMode?78:root.rowMode?height:Math.max(140,root.style.artHeight || 230)
-            model:root.displayedItems;currentIndex:root.client?root.client.selectedIndex:-1;highlightRangeMode:GridView.ApplyRange;highlightMoveDuration:0
+            model:root.displayedItems;currentIndex:root.frozen?root.frozenIndex:root.client?root.client.selectedIndex:-1;highlightRangeMode:GridView.ApplyRange;highlightMoveDuration:0
             delegate:Item {
                 required property int index;required property var modelData
                 width:grid.cellWidth;height:grid.cellHeight
@@ -113,9 +116,9 @@ Item {
                     anchors.rightMargin:anchors.leftMargin
                     anchors.topMargin:root.rowMode?0:anchors.leftMargin
                     anchors.bottomMargin:anchors.topMargin
-                    item:({name:modelData.title || modelData.label || "Untitled",logoSource:parent.art?parent.art.source:"",presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || (root.listMode?"summary":"media"),subtitle:root.subtitleFor(modelData),progress:modelData.resume && modelData.resume.total>0?modelData.resume.position/modelData.resume.total:undefined})})
-                    appearance:root.appearance;selected:root.engaged && root.client && root.client.selectedIndex===index
-                    onActivated:{root.engage();if(root.client && !root.readOnly && !root.frozen){root.returnMediaKey="";root.client.selectIndex(index);root.rememberSelection();root.provider.activate(root.client,index)}}
+                    item:({name:modelData.title || modelData.label || "Untitled",logoSource:modelData.mediaType==="app"?modelData.logoSource || "":parent.art?parent.art.source:"",presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || (root.listMode?"summary":"media"),subtitle:root.subtitleFor(modelData),progress:modelData.resume && modelData.resume.total>0?modelData.resume.position/modelData.resume.total:undefined})})
+                    appearance:root.appearance;selected:root.engaged && (root.frozen?root.frozenIndex:root.client?root.client.selectedIndex:-1)===index
+                    onActivated:{root.engage();if(root.client && !root.readOnly && !root.frozen){root.returnMediaKey="";root.client.selectIndex(index);root.rememberSelection();root.provider.activate(root.client,index,true,root.originId)}}
                 }
             }
             Text {textFormat:Text.PlainText; anchors.centerIn:parent;width:parent.width-20;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;visible:!grid.count;text:root.client?root.client.status:"Choose a valid Kodi source in Design Home. Back returns to the page.";color:root.appearance.mutedColor || "#AAA5AF";font.pixelSize:17 }

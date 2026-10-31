@@ -130,6 +130,7 @@ def suite_selection(suite):
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
 CASES = {"collections": ("home-components-acceptance.py", ["--studio", "--collections", "--inspect"]),
+         "history": ("tv-library-acceptance.py", ["--history", "--inspect"]),
          "studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
          "desktop": ("home-components-acceptance.py", ["--studio", "--desktop", "--inspect"]),
          "lounge": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
@@ -156,12 +157,21 @@ CASES = {"collections": ("home-components-acceptance.py", ["--studio", "--collec
 
 
 def visual_result_passed(case, result):
+    if case=="history":
+        return (all(result.get(key) is True for key in ("passed","freshProfile","realKodiPlayback","kodiOwnedLastplayed","historyCardPlayback","exactHistoryReturn","layoutUnchanged","mediaUnchanged"))
+            and result.get("normalProfileUsed") is False
+            and result.get("independentInstances")==[dict(count=5,capacity=3),dict(count=1,capacity=1)]
+            and result.get("captures")==["historylibrary","historyplaying","historyupdated","historyfocused","historyreplaying","historyreturned","historyrepeatreturn"])
     if case == "collections":
         required=("passed","freshProfile","actualNativeInput","normalExit","exactGalleryReturn","buttonReturn","storeRemoveReinstall","layoutUnchanged")
+        phases=["collectionhome","selectedgallery","collectionclient","selectedreturn","collectionrepeat","buttongallery","buttonclient","buttonreturn","buttonrepeat","storeclient","collectionuninstall","allremoved","selectedmissing","missingrefused","allrestored","reinstalledclient","reinstalledreturn"]
+        if result.get("appHistoryVerified") is True:
+            if result.get("appHistorySessionOnly") is not True or result.get("appHistoryReopenCycles")!=2:return False
+            phases += ["historyapp","historyclient","historyreturned","historyrepeat","historyrepeatreturn"]
         return (all(result.get(k) is True for k in required)
                 and result.get("physicalHardwareVerified") is False
                 and result.get("thirdPartyClientVerified") is False
-                and result.get("captures")==["collectionhome","selectedgallery","collectionclient","selectedreturn","collectionrepeat","buttongallery","buttonclient","buttonreturn","buttonrepeat","storeclient","collectionuninstall","allremoved","selectedmissing","missingrefused","allrestored","reinstalledclient","reinstalledreturn"])
+                and result.get("captures")==phases)
 
     if case in {"guide-soak","guide-reopen"}:
         network=result.get('network',{})
@@ -294,9 +304,10 @@ def feature_helper_command(source, helper, executable, flags):
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/'tv-library-acceptance.py'),str(executable)]+flags
 
 
-def verified_studio_helper(root, expected):
+def verified_studio_helper(root, expected, kind='studio'):
+    if kind not in {'studio','history'}:raise RuntimeError('Unsupported bounded helper kind')
     if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):raise RuntimeError('Studio requires an exact helper digest')
-    path=root/'bin'/('studio-helper-'+expected+'.py')
+    path=root/'bin'/(kind+'-helper-'+expected+'.py')
     if path.is_symlink() or path.resolve()!=path or not path.is_file() or digest(path)!=expected:raise RuntimeError('Studio helper identity mismatch')
     return path
 
@@ -304,6 +315,11 @@ def verified_studio_helper(root, expected):
 def studio_helper_command(source, helper, executable, desktop=False, collections=False):
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+['--inspect']
+
+
+def history_helper_command(source, helper, executable):
+    bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/tv-library-acceptance.py'),str(executable),'--history','--inspect']
 
 
 def guide_backend_diagnostics(run):
@@ -549,6 +565,10 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 
 def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='studio_selection':
+        return qml_coverage(root,run,base_id,suite,'studio_selection',
+            {'qml/StudioInspector.qml','qml/StudioAppPicker.qml','qml/PageLibraryWidget.qml'},
+            {'tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/tv-library-acceptance.py','tools/home-components-acceptance.py'},'StudioInspector')
     if suite=='home_component_navigation':
         return qml_coverage(root,run,base_id,suite,'home_component_navigation',
             {'qml/ComposedHome.qml','qml/PlacedComponents.qml'},
@@ -872,7 +892,7 @@ class Oracle:
             verify_tree(bundle,entries)
             self.stage("guest-maintenance-self-tests",[sys.executable,str(tests)],90)
             remove_generated_payload_cache(self.run)
-            self.prepare_guest_space(3, prune_sources=True)
+            self.prepare_guest_space(3, prune_sources=True, prune_payloads=True)
             if shutil.disk_usage(self.root).free<3*1024**3:
                 raise RuntimeError("Verified obsolete artifacts could not recover 3 GiB; inspect storage evidence")
             return
@@ -975,7 +995,8 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None):
+    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None):
+        if history_helper_digest and case!='history':raise RuntimeError('History helper is history-case-only')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
         if studio_helper_digest and case not in ('studio','desktop','collections'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
@@ -992,6 +1013,10 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
+        if case=='history' and history_helper_digest:
+            helper=verified_studio_helper(self.root,history_helper_digest,'history')
+            command=history_helper_command(source,helper,executable)
+            self.update(acceptanceHelperSha256=history_helper_digest)
         if case in ('studio','desktop','collections') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
             command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections')
@@ -1022,7 +1047,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("pages","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -1074,7 +1099,7 @@ class Oracle:
             time.sleep(0.5)
         raise RuntimeError("Selected release failed to start; inspect restart.log and journal. No automatic rollback.")
 
-    def prepare_guest_space(self, target_gib=5, prune_sources=False):
+    def prepare_guest_space(self, target_gib=5, prune_sources=False, prune_payloads=False):
         if self.command("hostname") != "isolde-test":
             raise RuntimeError("Guest provisioning is restricted to Isolde-Test")
         if self.root != Path.home()/"isolde-oracle" or self.root.resolve() != self.root:
@@ -1084,10 +1109,13 @@ class Oracle:
         runs = self.root / "runs"
         candidates = sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p:p.stat().st_mtime, reverse=True)
         protected = {self.run, *candidates[:3]}
+        if prune_payloads:
+            payloads=sorted((p for p in candidates if (p/'payload').is_dir()),key=lambda p:(p/'payload').stat().st_mtime,reverse=True)
+            protected.update(payloads[:3])
         # A stopped-profile acceptance receipt still needs its exact executable.
         # Never discard that payload while reclaiming older generated runs.
         protected.update(p for p in candidates if (p/'guide-soak-receipt.json').exists() or (p/'guide-soak-receipt.json').is_symlink())
-        if prune_sources:
+        if prune_sources and not prune_payloads:
             # Explicit source-copy maintenance retains every staged acceptance
             # payload, including the last passing candidate used for captures.
             protected.update(p for p in candidates if (p/"payload").exists() or (p/"payload").is_symlink())
@@ -1099,7 +1127,14 @@ class Oracle:
             target = candidate / "payload"
             if candidate in protected or not target.is_dir() or target.is_symlink(): continue
             if target.resolve() != target or not target.resolve().is_relative_to(runs.resolve()): raise RuntimeError("Unsafe guest artifact path")
-            if any(m == target or m.is_relative_to(target) for m in mounts): raise RuntimeError("Refusing mounted guest artifact")
+            if any(m == target or m.is_relative_to(target) or (m!=Path('/') and target.is_relative_to(m)) for m in mounts): raise RuntimeError("Refusing mounted guest artifact")
+            if prune_payloads:
+                record=candidate/'test-result.json'
+                if not record.is_file() or record.is_symlink():continue
+                tested=json.loads(record.read_text())
+                if tested.get('passed') is not True or tested.get('fullSuite') is not True:continue
+                remove_generated_payload_cache(candidate)
+                if payload_hashes(target)!=tested.get('payload'):raise RuntimeError('Obsolete payload identity mismatch; preserve for inspection')
             removed.append(str(target))
             atomic_json(self.run / "guest-payload-cleanup.json", {"guest": "isolde-test", "targets": removed})
             shutil.rmtree(target)
@@ -1215,7 +1250,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|desktop|collections|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|desktop|collections|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -1353,6 +1388,7 @@ def main():
     parser.add_argument("--reopen-helper-digest")
     parser.add_argument("--feature-helper-digest")
     parser.add_argument('--studio-helper-digest')
+    parser.add_argument('--history-helper-digest')
     args = parser.parse_args()
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
@@ -1432,7 +1468,7 @@ def main():
             elif args.action == "test":
                 oracle.test(args.suite,args.reuse_full_run)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":

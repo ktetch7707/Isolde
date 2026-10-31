@@ -483,9 +483,14 @@ def prepare_collections(evidence, executable):
         if action:item["action"]=action
         items.append(item)
     items.append(dict(id="store",name="App Store",kind="widget",widgetType="button",componentType="button",placement=dict(x=0,y=3,width=2,height=1),action=dict(type="launch-app",appId="app-store")))
+    history=copy.deepcopy(presets["recently-viewed"])
+    history.update(id="app-openings",name="App openings",placement=dict(x=0,y=4,width=8,height=1),
+        source=dict(schemaVersion=1,provider='kodi',kind='recently-viewed',libraryKind='history',libraryView='watched',libraryValue=''))
+    history["presentation"].update(historyApps=["freetube"],libraryLimit=4,libraryColumns=2,libraryChrome=False,historySourceBadges=True)
+    items.append(history)
     for item in items:
         item["schemaVersion"]=1
-        item["source"]=dict(schemaVersion=1,provider="shell",kind=item["componentType"])
+        if item["id"]!="app-openings":item["source"]=dict(schemaVersion=1,provider="shell",kind=item["componentType"])
     document=dict(schemaVersion=2,rootPage=dict(name="Home",visible=True,position=0),theme=dict(backgroundStart="#19191E",backgroundEnd="#101014",textColor="#FFFFFF",focusColor="#FFD166",surfaceColor="#28262F",motionEnabled=False),categories=[],components=items,
         composition=dict(schemaVersion=1,enabled=True,grid=dict(columns=8,rows=5,mode="screen"),headerControls=["settings"],showClock=False,navigation=[dict(id="home",name="Home")],initialTab="home"))
     package=repository/"config/packages/freetube/manifest.json"
@@ -621,7 +626,10 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     assert layout.read_bytes()==original,"Registry installation authored unexpected page placements"
     key("Up");key("Return");key("Right");key("Return");native_cycle(6,"reinstalledclient")
     capture("reinstalledreturn")
-    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state()),indent=2))
+    key("Escape",2);top();key("Down",4);capture("historyapp")
+    key("Return");native_cycle(7,"historyclient");capture("historyreturned")
+    key("Return");native_cycle(8,"historyrepeat");capture("historyrepeatreturn")
+    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state()),indent=2))
     print("Evidence: "+str(evidence),flush=True)
 
 

@@ -1505,6 +1505,11 @@ void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
     const auto historyRoot=historyPrototype["root"].toMap();
     QCOMPARE(historyRoot["family"].toString(),QString("recently-viewed"));
     QCOMPARE(historyRoot["source"].toMap()["kind"].toString(),QString("recently-viewed"));
+    auto selectedHistory=historyRoot;auto selectedStyle=historyRoot["presentation"].toMap();
+    selectedStyle["historyApps"]=QVariantList{"freetube","plex"};selectedHistory["presentation"]=selectedStyle;
+    QVERIFY(!ComponentSchema::component(selectedHistory,true).isEmpty());
+    selectedStyle["historyApps"]=QVariantList{"plex","plex"};selectedHistory["presentation"]=selectedStyle;QVERIFY(ComponentSchema::component(selectedHistory,true).isEmpty());
+    selectedStyle["historyApps"]=QVariantList{"../private"};selectedHistory["presentation"]=selectedStyle;QVERIFY(ComponentSchema::component(selectedHistory,true).isEmpty());
     const auto musicRoot=session->componentPrototype("music-library")["root"].toMap();
     QCOMPARE(musicRoot["source"].toMap()["kind"].toString(),QString("music"));
     auto wrongMusic=musicRoot;auto musicStyle=musicRoot["presentation"].toMap();musicStyle["libraryView"]="continue";wrongMusic["presentation"]=musicStyle;

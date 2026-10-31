@@ -71,6 +71,34 @@ Item {
         QtObject {id:fakeRegistry;property var apps:[]}
         Component {id:carouselComponent;App.PageAppCarousel {width:900;height:160;registry:fakeRegistry;appearance:({textColor:"#514b67",surfaceColor:"#f7edff",focusColor:"#bd8198"});style:({variant:"orb",layout:{visibleColumns:2}})}}
         SignalSpy {id:launchSpy;signalName:"launch"}
+        QtObject {
+            id:historyClientFixture
+            property var items:[]
+            property int selectedIndex:-1
+            property bool busy:false
+            property string status:"Nothing viewed yet"
+            signal changed()
+            function selectIndex(value){selectedIndex=Math.max(-1,Math.min(value,items.length-1))}
+        }
+        QtObject {
+            id:historyProviderFixture
+            property int revision:0
+            function client(key,style){return historyClientFixture}
+            function artwork(kind,id){return null}
+        }
+        Component {id:historyWidgetComponent;App.PageLibraryWidget {width:900;height:220;provider:historyProviderFixture;widgetKey:"history-empty-update";style:({libraryKind:"history",libraryView:"watched",libraryChrome:false,libraryLayout:"row",libraryColumns:3});appearance:homeLayout.studioAppearance}}
+        function test_headless_history_selects_first_card_after_empty_update(){
+            historyClientFixture.items=[];historyClientFixture.selectedIndex=-1
+            const widget=createTemporaryObject(historyWidgetComponent,tests.parent);verify(widget!==null)
+            compare(widget.displayedItems.length,0)
+            historyClientFixture.items=[{providerId:"kodi",mediaType:"episode",mediaId:7,title:"Actually viewed episode"}]
+            tryCompare(historyClientFixture,"selectedIndex",0)
+            widget.engaged=true
+            widget.frozen=true;const selected=historyClientFixture.selectedIndex
+            historyClientFixture.items=[];historyClientFixture.selectedIndex=-1
+            compare(widget.frozenIndex,selected);compare(widget.displayedItems.length,1)
+            widget.frozen=false
+        }
         function test_button_carousel_scoped_overflow_and_focus(){
             const items=[];for(let i=0;i<20;i++)items.push({id:"button-"+i,name:"Button "+i,action:{type:"switch-input",input:i%8+1}})
             const carousel=createTemporaryObject(carouselComponent,tests.parent,{buttonItems:items,style:{layout:{mode:"row",columns:20,rows:1,visibleColumns:4,gap:12},moreLabel:"More buttons",galleryTitle:"Input shortcuts"}});verify(carousel!==null)
@@ -520,7 +548,15 @@ Item {
             const index=inspector.fields.findIndex(f=>f.key==="libraryLimit");verify(index>=0)
             for(let i=0;i<index;++i)command(inputManager.navigateDown)
             command(inputManager.confirm);compare(inspector.view,"scalar");command(inputManager.navigateRight)
+            compare(inspector.activeField.control,"stepper");verify(findChild(inspector,"studioScalarStepper").visible)
             settle();if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-history-count.png")
+            const increase=findChild(inspector,"studioScalarStep-2"),decrease=findChild(inspector,"studioScalarStep-0")
+            verify(increase!==null && decrease!==null);mouseClick(increase,increase.width/2,increase.height/2);compare(inspector.scalarDraft,22)
+            mouseClick(decrease,decrease.width/2,decrease.height/2);compare(inspector.scalarDraft,21)
+            for(let i=0;i<35;++i)command(inputManager.navigateRight)
+            compare(inspector.scalarDraft,50);command(inputManager.navigateRight);compare(inspector.scalarDraft,50)
+            for(let i=0;i<55;++i)command(inputManager.navigateLeft)
+            compare(inspector.scalarDraft,1);command(inputManager.navigateLeft);compare(inspector.scalarDraft,1)
             compare(JSON.stringify(editor.session.document),added)
             command(inputManager.back);compare(JSON.stringify(editor.session.document),added)
             command(inputManager.confirm);command(inputManager.navigateRight);command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
@@ -534,6 +570,26 @@ Item {
             compare(editor.current.presentation.libraryColumns,4);compare(editor.current.presentation.libraryLimit,21)
             verify(editor.session.undo());compare(editor.current.presentation.libraryColumns,5)
             verify(editor.session.undo());compare(JSON.stringify(editor.session.document),added)
+            // Explicit app-opening opt-in is private until Done; Back retains the source list.
+            const nativeSession=editor.session
+            inspector.session={availableActions:[{name:"Native app",appType:"desktop",action:{type:"launch-app",appId:"native-app"}},{name:"Web app",appType:"web",action:{type:"launch-app",appId:"web-app"}},{name:"Android app",appType:"android",action:{type:"launch-app",appId:"android-app"}}],execute:(op,args,pageId)=>nativeSession.execute(op,args,pageId),document:nativeSession.document,errorString:""}
+            inspector.tab=0;inspector.view="fields";settle()
+            inspector.selected=inspector.fields.findIndex(f=>f.key==="historyApps");verify(inspector.selected>=0)
+            command(inputManager.confirm);compare(inspector.view,"historyApps");settle()
+            verify(inspector.appPicker!==null);compare(inspector.appPicker.selectionLimit,50)
+            compare(inspector.appPicker.apps.length,3);compare(inspector.appPicker.heading,"App opening sources");verify(inspector.appPicker.description.indexOf("Service viewing history")>=0)
+            if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-history-sources.png")
+            command(inputManager.navigateDown);command(inputManager.confirm)
+            command(inputManager.back);compare(JSON.stringify(editor.session.document),added)
+            command(inputManager.confirm);settle()
+            {
+                const appId=inspector.appPicker.apps[0].action.appId
+                command(inputManager.navigateDown);command(inputManager.confirm);command(inputManager.menu)
+                command(inputManager.navigateRight);command(inputManager.navigateRight);command(inputManager.confirm)
+                compare(editor.current.presentation.historyApps.length,1);compare(editor.current.presentation.historyApps[0],appId)
+                verify(editor.session.undo());compare(JSON.stringify(editor.session.document),added)
+            }
+            inspector.session=nativeSession
             verify(editor.session.undo());compare(JSON.stringify(editor.session.document),before)
             compare(studioFixture.disk(),diskBaseline)
         }

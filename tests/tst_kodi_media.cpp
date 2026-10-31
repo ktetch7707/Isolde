@@ -23,6 +23,8 @@ private slots:
     void readsLibraryThroughTwoRequests();
     void savedKodiPlaylistCatalogAndShelf();
     void recentlyViewedMergesKodiHistoryAndStaysBounded();
+    void historyCountAndRetirement();
+    void selectedAppHistoryMergeAndOffline();
     void musicAlbumsTracksAndKodiPlayback();
     void tvGuideReadsChannelsAndKeepsUnavailableStateHonest();
     void pagesLibraryAndResets();
@@ -201,7 +203,7 @@ static void serve(QLocalServer &server, int version)
                     QJsonArray movies;
                     const auto listKey = method == "VideoLibrary.GetTVShows" ? "tvshows" : method == "VideoLibrary.GetSeasons" ? "seasons" : method == "VideoLibrary.GetEpisodes" ? "episodes" : "movies";
                     const auto idKey = method == "VideoLibrary.GetTVShows" ? "tvshowid" : method == "VideoLibrary.GetSeasons" ? "seasonid" : method == "VideoLibrary.GetEpisodes" ? "episodeid" : "movieid";
-                    for (int i = start; i < qMin(start + 50, total); ++i) {
+                    for (int i = start; i < qMin(params.value("limits").toObject().value("end").toInt(), total); ++i) {
                         QJsonObject entry{{idKey, i + 1}, {"title", "Fixture movie"}};
                         if(server.property("historyFixture").toBool()) {
                             entry["dateadded"]="2026-10-24 00:00:00";
@@ -265,6 +267,57 @@ void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
     server.setProperty("total",60);media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QCOMPARE(media.items().size(),50);QVERIFY(!media.hasNextPage());
     server.setProperty("total",0);media.refresh();QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QVERIFY(media.items().isEmpty());QVERIFY(media.status().contains("Nothing viewed"));
     media.refresh();media.invalidate("Profile closed");QTest::qWait(30);QVERIFY(!media.connected());QVERIFY(media.items().isEmpty());QCOMPARE(media.status(),QString("Profile closed"));
+}
+void KodiMediaTests::historyCountAndRetirement()
+{
+    QTemporaryDir dir; QLocalServer server; QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    serve(server,13);server.setProperty("historyFixture",true);server.setProperty("total",60);
+    KodiMedia one("one",nullptr,dir.path()),many("one",nullptr,dir.path());
+    one.openHistory(1);many.openHistory(7);
+    QTRY_VERIFY(one.connected());QTRY_VERIFY(many.connected());
+    QCOMPARE(one.items().size(),1);QCOMPARE(many.items().size(),7);
+    QCOMPARE(one.items()[0].toMap()["mediaType"].toString(),QString("episode"));
+    for(const auto &call:server.property("historyRequests").toList()) {
+        const auto params=call.toMap()["params"].toMap();
+        QVERIFY((QList<int>{1,7}.contains(params["limits"].toMap()["end"].toInt())));
+    }
+    const int reads=server.property("libraryRequests").toInt();
+    one.openHistory(0);one.openHistory(51);QTest::qWait(30);
+    QCOMPARE(server.property("libraryRequests").toInt(),reads);QCOMPARE(one.items().size(),1);
+    one.invalidate("Bridge offline");one.refresh();QTRY_VERIFY(one.connected());
+    one.retire("Profile closed");const int retiredReads=server.property("libraryRequests").toInt();
+    one.refresh();one.openHistory(5);one.openView("movies","all");one.playMedia("movie",1);
+    QTest::qWait(100);QVERIFY(one.items().isEmpty());QVERIFY(!one.connected());
+    QCOMPARE(server.property("libraryRequests").toInt(),retiredReads);
+    // A request already in flight must not publish after teardown either.
+    many.refresh();many.retire("Profile closed");QTest::qWait(100);
+    QVERIFY(many.items().isEmpty());QVERIFY(!many.connected());QVERIFY(!many.busy());
+}
+void KodiMediaTests::selectedAppHistoryMergeAndOffline()
+{
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    serve(server,13);server.setProperty("historyFixture",true);server.setProperty("total",3);
+    const QVariantMap app{{"providerId","isolde-app-openings"},{"mediaType","app"},{"mediaId","fixture"},{"appId","fixture"},
+        {"title","Fixture movie"},{"viewedAt","2026-10-23 12:00:00"}};
+    KodiMedia history("merged",nullptr,dir.path());history.setAppOpenings({app});history.openHistory(5);
+    QTRY_VERIFY(history.connected());QCOMPARE(history.items().size(),5);
+    QCOMPARE(history.items()[0].toMap()["providerId"].toString(),QString("isolde-app-openings"));
+    QCOMPARE(history.items()[1].toMap()["providerId"].toString(),QString("kodi"));
+    history.selectIndex(2);const auto selected=history.items()[2].toMap();
+    auto another=app;another["appId"]="another";another["mediaId"]="another";
+    history.setAppOpenings({app,another});history.refresh();QTRY_VERIFY(!history.busy());
+    QCOMPARE(history.selectedIndex(),3);QCOMPARE(history.items()[history.selectedIndex()].toMap()["mediaId"],selected["mediaId"]);
+    QCOMPARE(history.items()[history.selectedIndex()].toMap()["mediaType"],selected["mediaType"]);
+    history.setAppOpenings({app});history.refresh();QTRY_VERIFY(!history.busy());
+    // Equal titles and equal timestamps from different providers remain distinct.
+    history.setAppOpenings({app,app});history.refresh();QTRY_VERIFY(!history.busy());QCOMPARE(history.items().size(),5);
+    auto invalid=app;invalid["viewedAt"]="no date";history.setAppOpenings({invalid});
+    history.refresh();QTRY_VERIFY(!history.busy());QCOMPARE(history.items().size(),5);
+    history.setAppOpenings({});history.refresh();QTRY_VERIFY(!history.busy());QCOMPARE(history.items().size(),4);
+    history.setAppOpenings({app});server.setProperty("badPaging",true);history.refresh();QTRY_VERIFY(!history.busy());
+    QVERIFY(!history.connected());QCOMPARE(history.items().size(),1);QVERIFY(history.status().contains("invalid"));
+    server.setProperty("badPaging",false);history.refresh();QTRY_VERIFY(history.connected());QCOMPARE(history.items().size(),5);
+    history.retire("Profile closed");QVERIFY(history.items().isEmpty());
 }
 void KodiMediaTests::musicAlbumsTracksAndKodiPlayback()
 {

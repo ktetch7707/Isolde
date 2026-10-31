@@ -4,6 +4,7 @@
 #include "media/KodiArtwork.h"
 #include "media/KodiService.h"
 #include "home/PageData.h"
+#include "home/ActionDispatcher.h"
 #include "home/PageModel.h"
 #include "home/StudioSession.h"
 #include "home/ComponentSchema.h"
@@ -116,8 +117,10 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
             else if(method=="Isolde.PlayMovie"||method=="Isolde.PlayEpisode"){++plays;played=request["params"].toObject();result={{"state","playing"},{"home",false}};}
             else if(method.startsWith("Isolde.Playback"))result={{"state",method=="Isolde.PlaybackControl"?"ended":"playing"},{"home",false}};
             else {++reads;if(rejectedReads>0){--rejectedReads;socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Kodi starting"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;}const auto key=method=="VideoLibrary.GetTVShows"?"tvshows":method=="VideoLibrary.GetEpisodes"?"episodes":"movies";QJsonArray items;
-                for(int i=1;i<=8;++i)items.append(QJsonObject{{key==QString("movies")?"movieid":key==QString("episodes")?"episodeid":"tvshowid",i},{"title",QString("Kodi title %1").arg(i)},{"year",2020+i},{"lastplayed",QString("2026-10-%1 12:00:00").arg(i,2,10,QChar('0'))},{"resume",QJsonObject{{"position",i*10},{"total",120}}}});
-                result={{key,items},{"limits",QJsonObject{{"start",0},{"end",8},{"total",8}}}};}
+                const int end=qMin(8,request["params"].toObject()["limits"].toObject()["end"].toInt(8));
+                const bool newest=request["params"].toObject()["sort"].toObject()["method"]=="lastplayed";
+                for(int offset=0;offset<end;++offset){const int i=newest?8-offset:offset+1;items.append(QJsonObject{{key==QString("movies")?"movieid":key==QString("episodes")?"episodeid":"tvshowid",i},{"title",QString("Kodi title %1").arg(i)},{"year",2020+i},{"lastplayed",QString("2026-10-%1 12:00:00").arg(i,2,10,QChar('0'))},{"resume",QJsonObject{{"position",i*10},{"total",120}}}});}
+                result={{key,items},{"limits",QJsonObject{{"start",0},{"end",end},{"total",8}}}};}
             socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
         });}});
     AppRegistry registry;HomeLayout home(&registry);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
@@ -182,9 +185,39 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     const auto historyActions=history->property("actions");
     QCOMPARE((historyActions.metaType().id()==qMetaTypeId<QJSValue>()?historyActions.value<QJSValue>().toVariant():historyActions).toStringList(),QStringList{"Refresh"});
     historyClient->selectIndex(12);auto reduced=historyStyle;reduced["libraryLimit"]=2;history->setProperty("style",reduced);
-    QTRY_COMPARE(historyClient->selectedIndex(),1);QCOMPARE(historyClient->items().size(),16);
+    QTRY_VERIFY(historyClient->connected());QTRY_COMPARE(historyClient->selectedIndex(),1);QCOMPARE(historyClient->items().size(),2);
+    const int countReads=reads;auto appearanceOnly=reduced;appearanceOnly["libraryColumns"]=1;appearanceOnly["radius"]=22;
+    history->setProperty("style",appearanceOnly);QTest::qWait(50);QCOMPARE(reads,countReads);QCOMPARE(historyClient->items().size(),2);
     auto *otherHistory=qobject_cast<KodiMedia *>(startingData.client("independent-history",historyStyle));QVERIFY(otherHistory);QVERIFY(otherHistory!=historyClient);QTRY_VERIFY(otherHistory->connected());QCOMPARE(otherHistory->selectedIndex(),0);
+    AppDefinition historyApp;historyApp.id="history-fixture";historyApp.name="History fixture";historyApp.type="web";
+    QVERIFY(registry.addApp(historyApp));SessionManager historySessions(&registry);KodiService historyService("starting-profile");
+    ActionDispatcher historyActionsDispatcher(&registry,&historySessions,&startingPlayer,&historyService);
+    QSignalSpy historyFocus(&historyActionsDispatcher,&ActionDispatcher::restoreFocusRequested);
+    startingData.setApplications(&registry,&historySessions,&historyActionsDispatcher);
+    QVERIFY(historySessions.launch(historyApp.id));historySessions.goHome(); // Not selected: nothing is observed.
+    auto appStyle=historyStyle;appStyle["historyApps"]=QVariantList{historyApp.id};
+    auto *appHistory=qobject_cast<KodiMedia *>(startingData.client("app-history",appStyle));QVERIFY(appHistory);QTRY_VERIFY(appHistory->connected());
+    const auto disabledHistory=appHistory->items();QVERIFY(std::none_of(disabledHistory.cbegin(),disabledHistory.cend(),[](const QVariant &item){return item.toMap()["mediaType"]=="app";}));
+    QVERIFY(historySessions.launch(historyApp.id));QTRY_VERIFY(!appHistory->busy());historySessions.goHome();QTRY_VERIFY(!appHistory->busy());
+    QCOMPARE(appHistory->items()[0].toMap()["appId"].toString(),historyApp.id);
+    QCOMPARE(historyClient->items().size(),2);QCOMPARE(otherHistory->items().size(),16);
+    startingData.activate(appHistory,0,true,"history-origin");QCOMPARE(historySessions.currentAppId(),historyApp.id);historySessions.goHome();QTRY_VERIFY(!appHistory->busy());
+    QCOMPARE(historyFocus.last()[0].toString(),QString("history-origin"));
+    startingData.activate(appHistory,0,true,"../unsafe-origin");QVERIFY(!historySessions.hasActiveSession());
+    QVERIFY(registry.removeApp(historyApp.id));QTRY_VERIFY(!appHistory->busy());
+    const auto withoutApp=appHistory->items();QVERIFY(std::none_of(withoutApp.cbegin(),withoutApp.cend(),[](const QVariant &item){return item.toMap()["mediaType"]=="app";}));
+    QVERIFY(registry.addApp(historyApp));QTRY_VERIFY(!appHistory->busy());
+    QCOMPARE(appHistory->items()[0].toMap()["appId"].toString(),historyApp.id);
+    // A backend that fails after entering Running must roll back its opening reference.
+    const auto priorOpening=appHistory->items()[0].toMap()["viewedAt"];
+    QTest::qWait(1100); // Make rollback observable even with Kodi-compatible second-resolution dates.
+    QVERIFY(historySessions.launch(historyApp.id));historySessions.sessionFailed(historyApp.id,"Fixture backend failed after start");
+    historySessions.goHome();QTRY_VERIFY(!appHistory->busy());QCOMPARE(appHistory->items()[0].toMap()["viewedAt"],priorOpening);
+    startingData.unavailable("Bridge offline");QVERIFY(historyClient->items().isEmpty());
+    historyClient->refresh();QTRY_VERIFY(historyClient->connected());QCOMPARE(historyClient->items().size(),2);
     startingData.invalidate("Profile closed");QVERIFY(!startingData.client("history-widget",historyStyle));QVERIFY(historyClient->items().isEmpty());
+    const int closedReads=reads;historyClient->refresh();historyClient->openHistory(10);QTest::qWait(50);QCOMPARE(reads,closedReads);
+    QVERIFY(historySessions.launch(historyApp.id));historySessions.goHome();QTest::qWait(50);QCOMPARE(reads,closedReads);QVERIFY(appHistory->items().isEmpty());
     QVERIFY(!data.client("still-closed",{})); // Bridge readiness cannot revive a torn-down profile.
     QVERIFY(home.addWidget("text"));
     QCOMPARE(home.items().last().toMap()["presentation"].toMap()["subtitle"].toString(),QString("Your message"));

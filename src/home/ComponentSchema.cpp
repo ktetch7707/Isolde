@@ -112,6 +112,16 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
 {
     for (auto it = value.cbegin(); it != value.cend(); ++it) {
         const auto key = it.key();
+        if(key=="historyApps") {
+            if(!section || it.value().metaType().id()!=QMetaType::QVariantList || it.value().toList().size()>50)return false;
+            QSet<QString> seen;
+            for(const auto &app:it.value().toList()) {
+                if(app.metaType().id()!=QMetaType::QString || !safeId(app.toString()) || seen.contains(app.toString()))return false;
+                seen.insert(app.toString());
+            }
+            continue;
+        }
+        if(key=="historySourceBadges") {if(!section || it.value().metaType().id()!=QMetaType::Bool)return false;continue;}
         if(key=="states") {
             if(it.value().metaType().id()!=QMetaType::QVariantMap)return false;
             const auto states=it.value().toMap();
@@ -568,6 +578,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(!music && style.value("libraryKind")=="albums")return reject(error,"Choose a Music library component for albums and tracks.");
             if(history && (style.value("libraryKind")!="history" || style.value("libraryView")!="watched" || !style.value("libraryValue").toString().isEmpty()))return reject(error,"Recently viewed uses local Kodi viewing history, not a library or recently added view.");
             if(!history && style.value("libraryKind")=="history")return reject(error,"Choose a Recently viewed carousel for viewing history.");
+            if(!history && (style.contains("historyApps") || style.contains("historySourceBadges")))return reject(error,"App opening sources belong to Recently viewed.");
             if(!style.contains("libraryKind") || !style.contains("libraryView"))return reject(error,"Choose a supported Kodi view.");
             if(QStringList{"collection","genre","tag"}.contains(style.value("libraryView").toString()) && style.value("libraryValue").toString().trimmed().isEmpty())return reject(error,"Choose a named Kodi source.");
             if(style.value("libraryKind")=="shows" && QStringList{"genre","tag"}.contains(style.value("libraryView").toString()))return reject(error,"This Kodi view is available for movies only.");
