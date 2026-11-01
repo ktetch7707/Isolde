@@ -18,6 +18,7 @@ public:
     [[nodiscard]] QString errorString() const;
     [[nodiscard]] const AppDefinition *find(const QString &id) const;
     bool addApp(const AppDefinition &app);
+    bool replaceApp(const AppDefinition &app);
     bool removeApp(const QString &id);
 
     Q_INVOKABLE bool load(const QString &path = {});

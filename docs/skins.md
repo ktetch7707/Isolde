@@ -1,5 +1,7 @@
 # Home skins
 
+Planned replacement, 2026-10-19: [Page Studio](page-studio-redesign.md) will consolidate page/layer/template/appearance tools into one visual draft workspace. Existing workflows/storage below describe the current implementation, not the target UX. T15-T24 own the replacement; retain current compatibility until T24 cutover acceptance.
+
 Open **Settings → Home → Home skins**. Use Up/Down to choose a design, Left/Right to choose an action, and OK to continue. Mouse selection is also supported.
 
 - **Isolde default** restores the original Home.

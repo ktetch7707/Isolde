@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtime": "waydroid",
+  "runtimeVersion": "1.6.3",
+  "repository": {
+    "url": "https://repo.waydro.id/",
+    "suite": "resolute",
+    "keyUrl": "https://repo.waydro.id/waydroid.gpg",
+    "keySha256": "71fe05d735c812e15fe229bf10106b02b62561be8aa5280d63a58e25a5c0c5e2"
+  },
+  "systemType": "VANILLA",
+  "apps": {
+    "smarttube": {
+      "packageName": "org.smarttube.stable",
+      "version": "32.68",
+      "abi": "x86",
+      "url": "https://github.com/yuliskov/SmartTube/releases/download/32.68s/SmartTube_stable_32.68_x86.apk",
+      "sha256": "67d7d9b9e4dd629331e751e47f5e1e23dd0d8fa5e34c6d901ba0b97eaa002781"
+    }
+  }
+}

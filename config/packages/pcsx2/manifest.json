@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "packageId": "pcsx2",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "PCSX2 · PlayStation 2",
+  "description": "Managed console runtime. Add your game files in Games and use Emulator setup for private settings and firmware. Compatibility and controller acceptance are tracked separately.",
+  "category": "Games",
+  "publisher": "pcsx2",
+  "provenance": "Pinned runtime; no commercial games or firmware included",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "pcsx2",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-pcsx2",
+    "emulatorRuntime": "pcsx2",
+    "windowClass": "pcsx2-qt",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "PlayStation 2",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "iso",
+      "chd",
+      "cso",
+      "bin",
+      "elf"
+    ]
+  }
+}

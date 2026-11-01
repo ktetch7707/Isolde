@@ -11,6 +11,19 @@ spec.loader.exec_module(module)
 
 
 class ArtworkTests(unittest.TestCase):
+    def test_music_art_uses_audio_library_identity_without_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            calls = []
+            def execute(raw):
+                request = json.loads(raw); calls.append(request)
+                kind = "album" if request["method"] == "AudioLibrary.GetAlbumDetails" else "song"
+                return json.dumps({"result": {kind+"details": {"art": {}}}})
+            art = module.Artwork(execute, directory)
+            for kind in ("album", "song"):
+                self.assertEqual(art.get({"kind":kind,"id":41}), {"mime":"","data":""})
+            self.assertEqual([call["method"] for call in calls], ["AudioLibrary.GetAlbumDetails","AudioLibrary.GetSongDetails"])
+            self.assertEqual(calls[0]["params"], {"albumid":41,"properties":["art"]})
+
     def test_cached_art_uses_kodi_api_without_downloading(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

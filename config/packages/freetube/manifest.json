@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "packageId": "freetube",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "FreeTube",
+  "description": "Private YouTube client with local data, optional Invidious API and user-controlled SponsorBlock.",
+  "category": "Photo & Video",
+  "publisher": "FreeTube Community",
+  "provenance": "Official FreeTube release",
+  "capabilities": [
+    "network",
+    "audio.output",
+    "video.output",
+    "desktop.external"
+  ],
+  "app": {
+    "id": "freetube",
+    "type": "desktop",
+    "presentationMode": "desktop-bridge",
+    "networkRequirement": "internet",
+    "section": "Apps",
+    "accent": "#1E88E5",
+    "symbol": "F",
+    "desktopId": "freetube",
+    "windowClass": "FreeTube",
+    "containment": "fullscreen"
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-26",
+  "task": "T30",
+  "implementationCommit": "d19e225",
+  "runId": "emulators-20261026-full-p",
+  "testedSourceDigest": "b48941dbf1333ffc13825090a7098d127aee995a5e29072e8d2100266a1f75eb",
+  "fullSuite": {
+    "failed": 0,
+    "passed": 35
+  },
+  "runtime": "PPSSPP 1.20.4-1",
+  "fixture": "Webfest 1.2",
+  "fixtureArchiveSha256": "cde1525771bed0413e6de0dd197884be4971b9e127a40b02ad817b8eac7ec595",
+  "reviewer": "Codex",
+  "reviewedCaptureCount": 13,
+  "remoteSetupRegistrationLaunchReturnObserved": true,
+  "keyboardGameplayObserved": true,
+  "inputSource": "D-pad/Confirm through X11 for Isolde; reviewed VirtualBox guest keyboard keys for game input and Home",
+  "gameplayObservations": {
+    "shipMovedLeft": true,
+    "movementInput": "Left",
+    "fireInput": "Z",
+    "beforeScore": 0,
+    "harnessGameplayVerified": false,
+    "physicalXboxControllerVerified": false,
+    "afterScore": 1000
+  },
+  "sourceFilesUnchanged": true,
+  "normalLayoutsUnchanged": true,
+  "serviceRestored": true,
+  "serviceRestarts": 0,
+  "limitations": [
+    "No physical TV remote/Xbox-controller pass",
+    "No save/relaunch, crash, offline cold-boot, or other emulator gameplay pass",
+    "Return frame still outlines Settings as well as the selected game; Confirm reopens the correct game details",
+    "This is a staged isolated-profile journey; no appliance deployment or full visual/reference acceptance",
+    "T30 remains 0/9; expanded Sony/Microsoft/Nintendo generations remain open"
+  ],
+  "captures": [
+    {
+      "sha256": "f9d3f70261399da13a082a3987b3aa29006adfc66898cad1198ba5ba1071391c",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsaction.png"
+    },
+    {
+      "sha256": "be58dbef3aa3332512e5c6ba8295136abb4e50393847d13362f764268a3fcff5",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsadd.png"
+    },
+    {
+      "sha256": "17db43db2336f3abbe750e54c9b374873b23404be2b3c4a5d3bb4acea2ff7fcc",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsdetails.png"
+    },
+    {
+      "sha256": "207f8fbc8622ad65b391f61473c0e53cea14ae3c3bfb22016a356cc3313f79e0",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsempty.png"
+    },
+    {
+      "sha256": "4386477c348efa500a36f8961d0ed5d22376faf8248369a056d9314d6ba17779",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsinstallreview.png"
+    },
+    {
+      "sha256": "24ec7e45063d28f405cbbecfe1024a4ab8b65bf29db15ddb32345a175ae1473c",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsmenu.png"
+    },
+    {
+      "sha256": "e6813e89994cc11819b0407059069a89de9b8562b4c08f236b9883a51c502c04",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorspermission.png"
+    },
+    {
+      "sha256": "b8622b7ee90d4b4cab28f951c51cb2bc163b265ee4ea63c95814dac3687237a9",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsplay.png"
+    },
+    {
+      "sha256": "dd5eeff059b3ec8fba91097ad0a291c8f57ce7f4fb1007f54579a7be6020967d",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsready.png"
+    },
+    {
+      "sha256": "d5f0539467c2c5bb31b7ed558c4c32e0c3130191d52f893fa4c24ae48a51d1be",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsrestored.png"
+    },
+    {
+      "sha256": "fa82895a8f2fb50f268a4d02a63301a29a470aaca5d3d9eed01422a706dedd4f",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsreturn.png"
+    },
+    {
+      "sha256": "69cae63d9bcc2b34a7fffcd2653488409b379248d76a05bd6dfe299eb0aa37b0",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorsreview.png"
+    },
+    {
+      "sha256": "543cd00b7a14c169fafe64e1fef98ab0e7539264a4d43c3af8679a37028e1b9b",
+      "file": "build/emulator-verification/build/vm-oracle/emulators-20261026-full-p/visual/emulators/attempt-20261026-133056-545/emulators-emulatorssetup.png"
+    }
+  ]
+}

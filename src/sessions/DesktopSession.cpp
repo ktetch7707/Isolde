@@ -12,6 +12,7 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QJsonDocument>
 
 namespace {
 
@@ -334,18 +335,25 @@ void DesktopSession::launch()
         return;
     }
     auto resolvedLaunch = launch;
+    const auto steamGame=definition().launchConfiguration.value("steamGameId").toString();
+    if(!steamGame.isEmpty()){
+        resolvedLaunch.program="/usr/bin/python3";
+        resolvedLaunch.arguments={"/run/steam-games.py","--launch",steamGame};
+    }
     const auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(), definition().id,
-        resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString());
+        resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString(), {},
+        definition().launchConfiguration.value("emulatorRuntime").toString(),
+        definition().launchConfiguration.value("gameSourceRoot").toString(),steamGame);
     if (!sandbox.error.isEmpty()) {
         setError(sandbox.error);
         setState(State::Exited);
         return;
     }
     auto configuration = definition().launchConfiguration;
-    if (definition().id == "kodi") {
+    if (definition().id == "kodi" || definition().id=="steam") {
         m_kodiLock = std::make_unique<QLockFile>(sandbox.homeDirectory + "/.isolde-managed.lock");
         if (!m_kodiLock->tryLock()) {
-            setError("Kodi is already using this profile. Exit it normally before opening another instance.");
+            setError(definition().name+" is already using this profile. Exit it normally before opening another instance.");
             setState(State::Exited);
             return;
         }
@@ -359,10 +367,19 @@ void DesktopSession::launch()
         return;
     }
 
+    const auto emulator=configuration.value("emulatorRuntime").toString();
+    if(!emulator.isEmpty())resolvedLaunch.arguments={"/run/emulator-session.py","--runtime",emulator,sandbox.actionTarget};
     qInfo() << "Isolated native session launching" << definition().id << "profile" << qApp->property("isoldeProfile");
     m_launcher.setProcessEnvironment(sandbox.environment);
     m_launcher.setProgram(sandbox.program);
-    m_launcher.setArguments(sandbox.arguments + resolvedLaunch.arguments);
+    auto launchArguments=sandbox.arguments;
+    if(definition().presentationMode=="web-kiosk"){
+        const auto appearance=qApp->property("isoldeRemoteAppearance").toMap();
+        if(!appearance.contains("focusColor")){setError("The app's remote appearance is unavailable. Return Home and retry.");setState(State::Exited);return;}
+        const auto index=launchArguments.lastIndexOf("--");
+        launchArguments.insert(index,"--web-remote");launchArguments.insert(index+1,QString::fromLatin1(QJsonDocument::fromVariant(appearance).toJson(QJsonDocument::Compact).toBase64()));
+    }
+    m_launcher.setArguments(launchArguments + resolvedLaunch.arguments);
     connect(&m_launcher, &QProcess::readyReadStandardError, this, [this] {
         m_diagnostics = (m_diagnostics + m_launcher.readAllStandardError()).right(8192);
     });
@@ -376,7 +393,13 @@ void DesktopSession::launch()
                 qInfo() << "Isolated native session finished" << definition().id << exitCode << exitStatus;
                 m_kodiLock.reset();
                 if (m_stopping) return;
-                if (exitStatus != QProcess::NormalExit || exitCode != 0)
+                if((exitStatus!=QProcess::NormalExit || exitCode!=0) && definition().launchConfiguration.contains("steamGameId") && m_diagnostics.contains("Steam game: ")){
+                    setError(QString::fromUtf8(m_diagnostics).section("Steam game: ",-1).section('\n',0,0).left(400));
+                } else
+                if ((exitStatus != QProcess::NormalExit || exitCode != 0) && definition().launchConfiguration.contains("emulatorRuntime") && m_diagnostics.contains("Emulator setup: ")) {
+                    const auto reason=QString::fromUtf8(m_diagnostics).section("Emulator setup: ",-1).section('\n',0,0).left(320);
+                    setError(reason);
+                } else if (exitStatus != QProcess::NormalExit || exitCode != 0)
                     setError(QStringLiteral("%1 could not continue in its private profile (exit %2). No shared-account fallback was used.").arg(definition().name).arg(exitCode));
                 // Defer teardown until QProcess has finished delivering its signal.
                 QTimer::singleShot(0, this, [this] { setState(State::Exited); });

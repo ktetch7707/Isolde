@@ -1,5 +1,6 @@
 #include "sessions/NativeSandbox.h"
 #include "media/MediaGrants.h"
+#include "games/GameEmulators.h"
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -34,7 +35,8 @@ bool privateDirectory(const QString &path)
 
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
-                                        const QString &target, const QString &storageRoot)
+                                        const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
+                                        const QString &gameSourceRoot, const QString &steamGameId)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -48,6 +50,23 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         return plan;
     }
     plan.program = QStandardPaths::findExecutable("bwrap");
+    const QFileInfo applianceWrapper("/usr/lib/isolde-native/bwrap");
+    if(applianceWrapper.exists() || applianceWrapper.isSymLink()){
+        auto path=applianceWrapper;
+        while(true){
+            if(path.isSymLink() || path.ownerId()!=0 || (path.permissions() & (QFile::WriteGroup|QFile::WriteOther))){
+                plan.error="Repair the root-owned Isolde native sandbox installation. Shared-account launch is disabled.";
+                return plan;
+            }
+            if(path.absoluteFilePath()=="/")break;
+            path=QFileInfo(path.absolutePath());
+        }
+        if(!applianceWrapper.isFile() || !applianceWrapper.isExecutable()){
+            plan.error="The Isolde native sandbox executable is unavailable.";
+            return plan;
+        }
+        plan.program=applianceWrapper.absoluteFilePath();
+    }
     const auto dbus = QStandardPaths::findExecutable("dbus-run-session");
     const auto supervisor = QCoreApplication::applicationDirPath() + "/isolde-native-host";
     const auto busConfig = QCoreApplication::applicationDirPath() + "/config/native-session-bus.conf";
@@ -98,6 +117,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     args << "--chdir" << userHome;
     const auto setenv = [&](const QString &key, const QString &value) { args << "--setenv" << key << value; };
     setenv("HOME", userHome);
+    setenv("ISOLDE_NATIVE_NAMESPACE", "1");
     setenv("PATH", "/usr/local/bin:/usr/bin:/bin");
     setenv("USER", host.value("USER", "isolde"));
     setenv("LOGNAME", host.value("USER", "isolde"));
@@ -133,6 +153,23 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     }
     if (QFileInfo::exists(hostRuntime + "/pipewire-0")) bind(hostRuntime + "/pipewire-0", runtime + "/pipewire-0");
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
+    if(!emulatorRuntime.isEmpty() || !steamGameId.isEmpty()){
+        // Give managed emulators gamepad nodes only. Do not expose keyboard,
+        // mouse or the entire host input directory to a native game session.
+        const auto nodes=QDir("/sys/class/input").entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot);
+        int granted=0;
+        for(const auto &node:nodes){
+            if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(node).hasMatch())continue;
+            QFile capabilities("/sys/class/input/"+node+"/device/capabilities/key");
+            if(!capabilities.open(QIODevice::ReadOnly))continue;
+            const auto bitmap=QString::fromLatin1(capabilities.read(4096)).trimmed().split(' ',Qt::SkipEmptyParts);
+            bool gamepad=false;
+            for(int code=0x120;code<0x140;++code){const auto word=bitmap.size()-1-code/64;
+                if(word>=0){bool ok=false;const auto bits=bitmap.at(word).toULongLong(&ok,16);gamepad|=ok && (bits&(quint64(1)<<(code%64)));}}
+            const auto device="/dev/input/"+node;
+            if(gamepad && QFileInfo::exists(device)){if(++granted>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}bind(device,device,"--dev-bind");}
+        }
+    }
     if (QFileInfo::exists("/sys")) bind("/sys", "/sys");
     // resolv.conf is often a symlink into /run, which otherwise stays private.
     const auto resolver = QFileInfo("/etc/resolv.conf").canonicalFilePath();
@@ -180,16 +217,50 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                 plan.error = QStringLiteral("Choose a media file or folder, not a profile, account, or system folder.");
                 return plan;
             }
-            plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
-            bind(canonical, plan.actionTarget);
+            if(!gameSourceRoot.isEmpty()){
+                const auto error=MediaGrants::validate(gameSourceRoot);
+                if(!error.isEmpty() || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
+                    || inside(base,gameSourceRoot) || inside(gameSourceRoot,base)){
+                    plan.error="The reviewed game folder is unavailable or redirected. Review it in Games and retry.";return plan;
+                }
+                plan.actionTarget="/media/games/"+QDir(gameSourceRoot).relativeFilePath(canonical);
+                bind(gameSourceRoot,"/media/games");
+            } else {
+                plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
+                bind(canonical, plan.actionTarget);
+            }
         } else if (!QStringList{"https", "http", "smb", "nfs"}.contains(url.scheme())) {
             plan.error = QStringLiteral("This media address is not supported by isolated native apps.");
             return plan;
         }
     }
     // Start a new bus inside the sandbox. Host service activation is never used.
+    if(!steamGameId.isEmpty()){
+        bool valid=false;const auto number=steamGameId.toULongLong(&valid);
+        auto helperRoot=QCoreApplication::applicationDirPath()+"/share/isolde";
+        if(!QFileInfo(helperRoot+"/steam-games.py").isReadable())helperRoot=QCoreApplication::applicationDirPath()+"/../share/isolde";
+        const auto helper=helperRoot+"/steam-games.py";
+        if(appId!="steam" || !QRegularExpression("^[1-9][0-9]{0,9}$").match(steamGameId).hasMatch() || !valid || number>4294967295ULL || QString::number(number)!=steamGameId
+            || binary!=QFileInfo("/usr/bin/python3").canonicalFilePath() || !target.isEmpty() || !QFileInfo(helper).isReadable()){
+            plan.error="Repair the private Steam game adapter or import this game again.";return plan;
+        }
+        bind(helper,"/run/steam-games.py");
+    }
     bind(supervisor, "/run/isolde-native-host");
     bind(busConfig, "/run/isolde-session-bus.conf");
+    if(!emulatorRuntime.isEmpty()){
+        const auto runtimeDefinition=GameEmulators::definition(emulatorRuntime);
+        auto helperRoot=QCoreApplication::applicationDirPath()+"/share/isolde";
+        if(!QFileInfo(helperRoot+"/emulator-session.py").isReadable())helperRoot=QCoreApplication::applicationDirPath()+"/../share/isolde";
+        const auto helper=helperRoot+"/emulator-session.py";
+        const auto manifest=helperRoot+"/game-runtimes.json";
+        if(runtimeDefinition.isEmpty() || emulatorRuntime!=appId || binary!=QFileInfo("/usr/bin/python3").canonicalFilePath()
+            || !QFileInfo(helper).isReadable() || !QFileInfo(manifest).isReadable() || target.isEmpty()){
+            plan.error="Repair the managed emulator adapter or choose a game from Games.";return plan;
+        }
+        bind(helper,"/run/emulator-session.py");bind(manifest,"/run/game-runtimes.json");
+        // The packaged script accepts identities, never commands from a game.
+    }
     args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--" << executable;
     plan.environment.insert("PATH", "/usr/bin:/bin");
     plan.environment.insert("LANG", host.value("LANG", "C.UTF-8"));

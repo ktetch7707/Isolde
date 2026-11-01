@@ -1,5 +1,7 @@
 # Configurable Home composition
 
+Planned editor replacement: [Page Studio](page-studio-redesign.md), backlog T15-T24, supersedes the immediate-save editing workflow described below once accepted. This document describes the existing composition contract; Studio extends it through validated data and a shared draft/geometry model, preserving legacy layouts and both visual fixtures. No editor replacement is implemented by this documentation change.
+
 Home supports an optional composed layout alongside existing grid layouts. Existing profiles are not rewritten or switched on startup. [The reference fixture](../tests/visual/home-reference/recreation-config.json) demonstrates a complete configuration. Its artwork and media/progress values are visual test data, not the user's library.
 
 ## Layout data
@@ -23,7 +25,7 @@ Composition fields:
 
 ## Universal grid (Studio M1, October 17)
 
-An optional `grid` map inside `composition` declares the universal screen grid, and an optional `placement` rectangle on any component assigns it cells. Both are validated data contracts; no renderer consumes them yet, and layouts without them keep the established flow behavior.
+An optional `grid` map inside `composition` declares the universal screen grid, and an optional `placement` rectangle on any component assigns it cells. The renderer now contains placement handling, but placement-specific geometry/scale acceptance remains open in T05 and is assigned to T17. Layouts without placements keep their established flow behavior.
 
 | Field | Behavior |
 | --- | --- |
@@ -34,6 +36,14 @@ An optional `grid` map inside `composition` declares the universal screen grid, 
 | `grid.overlap` | Boolean, default false; while false, placements may not share cells and grid changes may not create overlap. |
 
 `placement` stores `x` (start column), `y` (start row), `width` and `height` (spans) as whole cells that must fit inside the declared grid — overflow is refused, never clamped. `HomeLayout` exposes `grid()`, `setGrid()`, `setItemPlacement()`, `clearItemPlacement()` and `gridCollisions(itemId, placement)` (which returns the `{id, name}` of each occupier, feeding the future shift/swap/cancel dialog). `setGrid` refuses changes that would strand or newly overlap placed widgets. Stored documents whose placements fall outside their grid are rejected on read and the packaged defaults are used; the stored file is never rewritten. Invalid edits fail with `errorString()` and roll back atomically, matching the composition contract. Legacy version-1 layouts load with default grid data and no migration write on read.
+
+### Optional long-page policy (October 21, 2026)
+
+For an enabled screen-grid page, `composition.verticalScrolling` is an optional boolean, default false when absent. Page appearance → Layout exposes **Allow vertical scrolling**, with a draft preview and Done/Cancel. Existing automatic/section layouts retain their behavior and use their explicit conversion workflow; stored documents are never converted on read.
+
+When true, `grid.rows` still means **visible viewport density**, not document length. Root placements may extend downward within a separate 10,240-row bound; component spans remain at most ten rows high and nested grids retain their existing bounds. Content extent is derived from validated placements, with no stored empty-row count. The generic renderer keeps the same cell dimensions, renders a bounded viewport neighborhood and reveals spatial focus by placement. The earlier fixed-root containment rule continues to apply when this policy is false; overlap, locking and document/component limits are unchanged.
+
+Studio's `scrolling` command validates an enabled boolean and previews safely. Turning it off refuses authored content below the first screen. Add suggests a vacant position, and its optional provisional `enableScrolling` flag accepts the policy plus the configured new component atomically; cancel/undo leave the previous fixed page intact. See [implementation and verification](studio-scrolling-2026-10-21.md) for source identities, evidence and remaining scope. This does not make a viewport grid with `rows > 10` valid.
 
 Category `presentation` defines a section independently of its content:
 

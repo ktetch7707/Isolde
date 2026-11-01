@@ -31,7 +31,6 @@ Rectangle {
         if (scope === 0) return [toggle("enabled","Composed Home",false), number("columns","Dashboard columns",1,2,1,1),
             number("margin","Outer margin",0,100,2,40),number("gap","Section gap",0,100,1,20),toggle("fit","Fit sections on screen",true),
             number("designHeight","Design height",480,1440,10,800),toggle("showProfile","Profile label",false),
-            enumeration("pageNavigation","Page navigation",["left","top","none"]),number("sidebarWidth","Sidebar width",120,400,5,200),
             enumeration("headerMode","Header style",["navigation","identity"]),text("identity","Header name"),toggle("showClock","Header clock",false),
             enumeration("headerControls","Header buttons",["search,settings","settings,edit","search,settings,edit","settings","edit"]),
             enumeration("initialTab","Starting tab",(config.navigation || []).map(t => t.id)),

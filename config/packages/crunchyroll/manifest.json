@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "packageId": "crunchyroll",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Crunchyroll",
+  "description": "Provider web app in a private browser profile. Requires an account, supported region and any applicable subscription.",
+  "category": "Photo & Video",
+  "publisher": "Crunchyroll",
+  "provenance": "Official provider website with Google Chrome runtime",
+  "capabilities": [
+    "network",
+    "audio.output",
+    "video.output",
+    "desktop.external"
+  ],
+  "app": {
+    "id": "crunchyroll",
+    "type": "desktop",
+    "presentationMode": "web-kiosk",
+    "networkRequirement": "internet",
+    "section": "Apps",
+    "accent": "#F47521",
+    "symbol": "C",
+    "desktopId": "isolde-crunchyroll",
+    "windowClass": "isolde-crunchyroll",
+    "containment": "fullscreen"
+  }
+}

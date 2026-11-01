@@ -4,6 +4,65 @@ import QtQuick.Layouts
 Item {
     id: root
     required property var items
+    // Profile-authored components are distinct from transient provider notices.
+    property var authoredItems: items
+    property var authoredSections: sections
+    property bool editMode:false
+    property bool artworkMotionAllowed:true
+    property var artworkResolver:typeof homeLayout!=="undefined"?homeLayout:null
+    property var headerDefaults:typeof homeLayout!=="undefined" && homeLayout?homeLayout.studioOptions.headerDefaults || {}:({})
+    property string editHeaderSelection:""
+    signal editHeaderSelected(string part)
+    property var suppressedComponentIds:[]
+    property string editSelection:""
+    property var editTargets:({})
+    property var groupSurfaces:({})
+    function registerGroupSurface(id,surface,remove) {
+        let groups=Object.assign({},groupSurfaces),entries=(groups[id] || []).filter(item=>item!==surface)
+        if(!remove)entries.push(surface)
+        if(entries.length)groups[id]=entries;else delete groups[id]
+        groupSurfaces=groups
+    }
+    function groupSurface(id){return (groupSurfaces[id || ""] || []).find(surface=>surface && editorVisible(surface) && surface.item) || null}
+    function scopeViewport(id){const surface=groupSurface(id);return surface && surface.viewportRect?surface.viewportRect():null}
+    function clippedPlacement(p,scope,parentId){
+        const r=placementRectFor(p,scope,parentId),viewport=scopeViewport(parentId)
+        if(!viewport)return r
+        const x=Math.max(r.x,viewport.x),y=Math.max(r.y,viewport.y),right=Math.min(r.x+r.width,viewport.x+viewport.width),bottom=Math.min(r.y+r.height,viewport.y+viewport.height)
+        return {x:x,y:y,width:Math.max(0,right-x),height:Math.max(0,bottom-y)}
+    }
+    signal editSelected(string componentId)
+    function registerEditTarget(id,target,remove) {
+        let targets=Object.assign({},editTargets),entries=(targets[id] || []).filter(t=>t!==target)
+        if(!remove)entries.push(target)
+        if(entries.length)targets[id]=entries;else delete targets[id]
+        editTargets=targets
+    }
+    function editorVisible(target) {
+        while(target && target!==root){if(!target.visible)return false;target=target.parent}
+        return target===root
+    }
+    readonly property var editTarget:(editTargets[editSelection] || []).find(t=>t && editorVisible(t) && t.width>0 && t.height>0) || null
+    readonly property var editRect: editorRectFor(editSelection)
+    function editorRectFor(id) {
+        const target=(editTargets[id] || []).find(t=>t && editorVisible(t) && t.width>0 && t.height>0),scroll=sectionFlick.contentY+composed.scrollOffset
+        if(!target)return null
+        const geometry=target.x+target.y+target.width+target.height+scroll
+        // mapToItem alone does not subscribe to ancestor layout changes.
+        let ancestor=target
+        while(ancestor && ancestor!==root){const transform=ancestor.x+ancestor.y+ancestor.width+ancestor.height+ancestor.scale+ancestor.rotation;ancestor=ancestor.parent}
+        const point=target.mapToItem(root,0,0)
+        return {x:point.x,y:point.y,width:target.width,height:target.height}
+    }
+    function revealEditorSelection() {
+        if(!editMode || !editTarget)return
+        if(composition.enabled)composed.revealCard(editTarget,true)
+        else reveal(editTarget)
+    }
+    onEditSelectionChanged:Qt.callLater(()=>{if(editMode){restoreFocus(editSelection);revealEditorSelection()}})
+    onEditTargetChanged:if(editMode)Qt.callLater(revealEditorSelection)
+    property bool scopeView:false
+    property string editScopeId:""
     required property var sections
     required property bool brandVisible
     required property color backgroundStart
@@ -13,18 +72,78 @@ Item {
     property var composition: ({})
     property var grid: ({})
     property var placements: []
+    property int previewExtentRows:0
+    readonly property int firstVisibleGridRow:composed.firstVisibleGridRow
+    readonly property var pageViewport:composed.viewportRect()
+    readonly property bool editorGeometryReady:composed.editorGeometryReady
+    readonly property var gridMetrics: composed.placementCell
+    readonly property real componentUnit:composed.unit
+    readonly property string layoutError: {
+        if(composed.layoutError)return composed.layoutError
+        for(const id of Object.keys(groupSurfaces)){const surface=groupSurface(id);if(surface && surface.item.metrics.valid===false)return "A group's spacing leaves no room for its children. Edit its internal layout or increase its size."}
+        return ""
+    }
+    function placementRect(p) { return composed.placementRect(p,"") }
+    function placementRectFor(p,scope,parentId) {
+        const surface=groupSurface(parentId)
+        if(!surface || !surface.item)return composed.placementRect(p,scope)
+        const c=surface.item.metrics,scroll=composed.scrollOffset
+        let ancestor=surface;while(ancestor && ancestor!==root){const geometry=ancestor.x+ancestor.y+ancestor.width+ancestor.height+ancestor.scale;ancestor=ancestor.parent}
+        const origin=surface.mapToItem(root,0,0)
+        return {x:origin.x+p.x*(c.cellW+c.gap),y:origin.y+p.y*(c.cellH+c.gap),width:p.width*c.cellW+(p.width-1)*c.gap,height:p.height*c.cellH+(p.height-1)*c.gap}
+    }
+    function gridMetricsFor(scope,parentId) { const surface=groupSurface(parentId);return surface && surface.item?surface.item.metrics:composed.gridMetricsFor(scope) }
+    function revealScope(scope) { composed.revealScope(scope) }
+    function revealPlacement(p,scope,parentId) {
+        const surface=groupSurface(parentId)
+        if(surface && surface.revealPlacement)surface.revealPlacement(p)
+        else if(composition.verticalScrolling && grid.mode==="screen"){
+            // Candidate growth changes contentHeight in the same input event.
+            // Reveal after that binding settles, including the final step.
+            const placement=Object.assign({},p)
+            Qt.callLater(()=>composed.revealPlacement(placement,scope))
+        }else composed.revealPlacement(p,scope)
+    }
+    function editorViewport() {
+        const groups={}
+        for(const id of Object.keys(groupSurfaces)){const surface=groupSurface(id);if(surface && surface.editorViewport)groups[id]=surface.editorViewport()}
+        return {legacyY:sectionFlick.contentY,composed:composed.editorViewport(),groups:groups}
+    }
+    function restoreEditorViewport(state) {
+        if(!state || state.legacyY===undefined)return
+        sectionFlick.cancelFlick();sectionFlick.contentY=state.legacyY
+        composed.restoreEditorViewport(state.composed)
+        for(const id of Object.keys(state.groups || {})){const surface=groupSurface(id);if(surface && surface.restoreEditorViewport)surface.restoreEditorViewport(state.groups[id])}
+    }
+    function registerMediaWidget(id,widget,remove){composed.registerWidget(id,widget,remove)}
+    property var appCollectionFocus:({})
+    function rememberAppFocus(id,state){let saved=Object.assign({},appCollectionFocus);saved[id]=state;appCollectionFocus=saved}
+    function engageMediaWidget(id){focusedIndex=itemIndex(id);recoveryFocused=false;composed.activeWidget=id}
+    property var setItemPlacement: null
+    property var gridCollisions: null
     property var libraryProvider: null
+    property var appProvider:typeof appRegistry!=="undefined"?appRegistry:null
+    property var collectionDefaults:typeof homeLayout!=="undefined"?homeLayout.studioOptions.componentPresets || ({}):({})
+    property bool previewOnly:false
+    property bool freezeData:false
+    property bool samplePreview:false
+    property var sampleItems:[]
     property string pageKey: "home"
+    property var menuPages:typeof homeLayout!=="undefined"?homeLayout.studioPages:[]
+    property string menuActiveId:""
     property string editLabel: "Edit Home"
     property string selectMode: "single"
     property string selectTrigger: "click"
     property string selectAction: "navigate"
-    property color selectionColor: ""
+    property string selectionColor: ""
     readonly property bool widgetActive: composed.activeWidget !== ""
+    readonly property string activeMediaWidgetId:composed.activeWidget
+    readonly property bool groupActive: composed.activeGroup !== ""
     property string wallpaperSource: ""
     property var wallpaperItem: null
     readonly property var backdropItem: wallpaperItem || localWallpaper
     readonly property bool hasWallpaper: wallpaperItem ? wallpaperItem.status === Image.Ready : localWallpaper.status === Image.Ready
+    readonly property bool customImageBackground:(composition.background || {}).mode==="image"
     readonly property real textScale: appearance.typographyScale || 1
     required property bool internetAvailable
     required property bool localNetworkAvailable
@@ -43,8 +162,10 @@ Item {
         const retained = itemIndex(focusedItemId)
         focusedIndex = retained >= 0 ? retained : Math.max(0, Math.min(focusedIndex, items.length - 1))
         focusedItemId = items[focusedIndex] ? items[focusedIndex].id : ""
+        repairFocus()
     }
-    Component.onCompleted: if (items[focusedIndex]) focusedItemId = items[focusedIndex].id
+    Component.onCompleted:{if (items[focusedIndex])focusedItemId=items[focusedIndex].id;repairFocus()}
+    onEditModeChanged:repairFocus()
     readonly property int columns: Math.min(appearance.homeColumns || 3, (width < 1000 ? 2 : Math.floor(width / 200)))
     readonly property int gridUnits: columns * 2
 
@@ -66,6 +187,8 @@ Item {
             return "Network needed"
         return ""
     }
+    function focusable(item){return editMode || item && item.componentType!=="shape" && item.componentType!=="text" && !(item.componentType==="image" && !item.action)}
+    function repairFocus(){if(editMode)return;if(composition.enabled && (sections || []).some(s=>(s.presentation || {}).variant==="library")){recoveryFocused=false;return;}if(items[focusedIndex] && focusable(items[focusedIndex]))return;const first=items.findIndex(i=>focusable(i));if(first<0){recoveryFocused=true;return}focusedIndex=first;focusedItemId=items[first].id;recoveryFocused=false}
 
     function visualEntries() {
         let result = []
@@ -80,7 +203,7 @@ Item {
                     row++
                     col = 0
                 }
-                result.push({ index: itemIndex(item.id), row: row, col: col, span: span, center: col + span / 2 })
+                if(focusable(item))result.push({ index: itemIndex(item.id), row: row, col: col, span: span, center: col + span / 2 })
                 col += span
                 if (col >= gridUnits) {
                     row++
@@ -140,7 +263,7 @@ Item {
             recoveryFocused = true
             if (command === inputManager.navigateLeft) recoveryIndex = 0
             else if (command === inputManager.navigateRight) recoveryIndex = 1
-            else if (command === inputManager.navigateDown && items.length) recoveryFocused = false
+            else if (command === inputManager.navigateDown && items.some(i=>focusable(i))) recoveryFocused = false
             else if (command === inputManager.confirm) settingsRequested(recoveryIndex === 0 ? -1 : 1)
             return
         }
@@ -167,6 +290,7 @@ Item {
         if (composition.enabled && originId) composed.restoreFocus(originId)
         if (!originId) return
         const exact = itemIndex(originId)
+        if (exact >= 0 && !focusable(items[exact])) { repairFocus(); return }
         if (exact >= 0) { focusedIndex = exact; focusedItemId = originId; recoveryFocused = false; return }
         for (let i = 0; i < items.length; ++i) {
             if (items[i].appId === originId) {
@@ -210,14 +334,14 @@ Item {
     }
 
     Rectangle {
-        visible: !root.composition.enabled || !root.hasWallpaper
+        visible: root.customImageBackground?!root.hasWallpaper:!root.composition.enabled || !root.hasWallpaper
         anchors.fill: parent
         gradient: Gradient {
             GradientStop { position: 0.0; color: root.backgroundStart }
-            GradientStop { position: 1.0; color: root.backgroundEnd }
+            GradientStop { position: 1.0; color: (root.composition.background || {}).mode==="solid"?root.backgroundStart:root.backgroundEnd }
         }
     }
-    Image { id: localWallpaper; anchors.fill: parent; source: root.wallpaperSource; fillMode: Image.PreserveAspectCrop; visible: !!root.composition.enabled && !!source.toString() && !root.wallpaperItem }
+    PageBackdrop {id:localWallpaper;anchors.fill:parent;source:root.wallpaperItem?"":root.wallpaperSource;config:root.composition.background || {};startColor:root.backgroundStart;endColor:root.backgroundEnd;visible:(!!root.composition.enabled || !!root.composition.background) && !root.wallpaperItem}
 
     Column {
         visible: !root.composition.enabled
@@ -232,7 +356,7 @@ Item {
                 delegate: Rectangle {
                     required property int index; required property string modelData
                     width: 150; height: 42; radius: 12; color: root.appearance.surfaceColor || "#202126"
-                    border.width: (root.recoveryFocused || !root.items.length) && root.recoveryIndex === index ? 3 : 0
+                    border.width: !root.editMode && (root.recoveryFocused || !root.items.length) && root.recoveryIndex === index ? 3 : 0
                     border.color: root.appearance.focusColor || "#C994A5"
                     Text { anchors.centerIn: parent; text: modelData; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 19 * root.textScale }
                     MouseArea { anchors.fill: parent; onClicked: { root.recoveryFocused = true; root.recoveryIndex = index; root.settingsRequested(index === 0 ? -1 : 1) } }
@@ -299,12 +423,14 @@ Item {
                                 delegate: Item {
                                     id: tileHost
                                     required property var modelData
+                                    Component.onCompleted:root.registerEditTarget(modelData.id,tileHost,false)
+                                    Component.onDestruction:root.registerEditTarget(modelData.id,tileHost,true)
                                     readonly property int globalIndex: root.itemIndex(modelData.id)
-                                    readonly property bool selected: !root.recoveryFocused && globalIndex === root.focusedIndex
+                                    readonly property bool selected: root.editMode ? root.editSelection===modelData.id : !root.recoveryFocused && globalIndex === root.focusedIndex
                                     Layout.columnSpan: Math.min(root.gridUnits, modelData.size === "compact" ? 1 : modelData.size === "wide" ? 4 : 2)
                                     Layout.fillWidth: true
                                     height: 150
-                                    onSelectedChanged: if (selected) root.reveal(tileHost)
+                                    onSelectedChanged: if (selected && !root.editMode) root.reveal(tileHost)
                                     Loader {
                                         anchors.fill: parent
                                         opacity: (modelData.opacity === undefined ? 1.0 : modelData.opacity) * (root.unavailableReason(modelData) === "" ? 1.0 : 0.42)
@@ -378,6 +504,7 @@ Item {
                                     }
                                     Component { id: clockComponent; ClockWidget { selected: tileHost.selected; roundness: root.tileRoundness; appearance: root.appearance } }
                                     Component { id:textComponent; HomeCard { objectName:"legacyTextWidget-"+modelData.id; item:modelData; appearance:root.appearance; selected:tileHost.selected; onActivated:{root.focusedIndex=tileHost.globalIndex;root.recoveryFocused=false} } }
+                                    MouseArea {anchors.fill:parent;enabled:root.editMode;onClicked:root.editSelected(tileHost.modelData.id)}
                                 }
                             }
                         }

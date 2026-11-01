@@ -79,7 +79,7 @@ Rectangle {
     Rectangle {anchors.fill:parent;visible:root.deleting;color:"#101014";Text {anchors.centerIn:parent;width:parent.width-140;wrapMode:Text.WordWrap;text:"Delete “"+(root.choice.name || "")+"”? Saved skins keep their snapshots.\nOK deletes · Back cancels";color:"white";font.pixelSize:26}}
     Rectangle {anchors.fill:parent;visible:root.naming!=="";color:"#101014";OnScreenKeyboard {id:keyboard;objectName:"pageNameKeyboard";anchors.fill:parent;anchors.margins:45;onAccepted:text=>root.acceptName(text);onCanceled:root.naming=""} Text {anchors.bottom:parent.bottom;anchors.bottomMargin:12;x:45;text:root.message;color:"#FFB4B4";font.pixelSize:17}}
     onEditModelChanged: {
-        if(editModel) pageEditor.setSource("CustomizeHomeView.qml", {layoutModel:editModel,items:Qt.binding(()=>root.editModel ? root.editModel.items:[]),availableApps:availableApps,artwork:artwork,themes:themes})
+        if(editModel) pageEditor.setSource("LegacyCustomizeHomeView.qml", {layoutModel:editModel,items:Qt.binding(()=>root.editModel ? root.editModel.items:[]),availableApps:availableApps,artwork:artwork,themes:themes})
         else pageEditor.source=""
     }
     Loader { id:pageEditor; anchors.fill:parent; onLoaded:item.pageRequested.connect(id=>root.pageRequested(id)) }

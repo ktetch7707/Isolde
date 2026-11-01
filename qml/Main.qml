@@ -12,11 +12,26 @@ Window {
     readonly property real uiScaleFactor: displaySettings.uiScale / 100
     readonly property int safeAreaPixels: Math.round(Math.min(width, height) * displaySettings.safeArea / 100)
     property bool ambientActive: false
+    readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
     property string launchErrorText: ""
     property string launchErrorAppId: ""
-    Image {
+    property bool launchErrorVpn: false
+    property bool desktopHidden:false
+    property int desktopRestoreVisibility:Window.FullScreen
+    DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
+    Connections {
+        target:desktopMode
+        function onChanged(){
+            if(desktopMode.active && !desktopMode.nativeMode && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
+            else if(!desktopMode.active && window.desktopHidden){window.desktopHidden=false;window.visibility=window.desktopRestoreVisibility;window.raise();window.requestActivate()}
+            if(desktopMode.active || desktopMode.busy)idleTimer.stop();else idleTimer.restart()
+            if(desktopMode.errorString){window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
+        }
+        function onReturned(origin){window.raise();window.requestActivate();if(!desktopMode.nativeMode)Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
+    }
+    PageBackdrop {
         id: windowWallpaper; anchors.fill: parent; source: homeLayout.wallpaperSource
-        fillMode: Image.PreserveAspectCrop; visible: !sessionManager.active && !pageSurface.open && !window.ambientActive && !!source.toString() && homeLayout.composition.enabled
+        config:homeLayout.composition.background || {};startColor:homeLayout.backgroundStart;endColor:homeLayout.backgroundEnd; visible: (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android")) && !pageSurface.open && !window.ambientActive && !!source.toString() && (homeLayout.composition.enabled || !!homeLayout.composition.background)
     }
 
     function launchAppFromShell(appId, originId) {
@@ -32,8 +47,30 @@ Window {
         commandCenter.open = true
     }
 
+    function showDesignatedHome() {
+        guideSearchReturn=null
+        kodiLibrary.open=false
+        commandCenter.open=false
+        if(tvGuide.open){guideController.cancel();tvGuide.open=false}
+        sessionManager.goHome()
+        if(homeLayout.homePageId)pageSurface.showPage(homeLayout.homePageId,"",true)
+        else if(pageSurface.open)pageSurface.closeAll()
+    }
+    Component.onCompleted:Qt.callLater(()=>{if(setupState.complete && homeLayout.homePageId)window.showDesignatedHome()})
+
     function handleCommand(command) {
+        if(appVpn.busy && appVpn.pendingApp){
+            if(command===inputManager.back || command===inputManager.home)appVpn.cancel()
+            return
+        }
+        if(desktopMode.busy || desktopMode.active && !desktopMode.nativeMode){if(command===inputManager.back || command===inputManager.home || desktopMode.active && command===inputManager.confirm)desktopMode.cancel();return}
+        if(desktopMode.active && desktopMode.nativeMode && (command===inputManager.home || command===inputManager.back)){desktopMode.cancel();return}
         idleTimer.restart()
+        if(actionDispatcher.guideTransitionPending){
+            if(command===inputManager.home){actionDispatcher.cancelGuidePlayback();window.showDesignatedHome()}
+            else if(command===inputManager.back){actionDispatcher.cancelGuidePlayback();guideController.refresh()}
+            if(command!==inputManager.volumeUp && command!==inputManager.volumeDown && command!==inputManager.mute)return
+        }
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
@@ -72,18 +109,28 @@ Window {
             return
         }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
-        if (kodiLibrary.open) { kodiLibrary.handleCommand(command); return }
+        if(command===inputManager.home){window.showDesignatedHome();return}
+        if(tvGuide.open && !sessionManager.active && !launchErrorOverlay.visible){tvGuide.handleCommand(command);return}
+        if (kodiLibrary.open && !sessionManager.active) { kodiLibrary.handleCommand(command); return }
         if (launchErrorOverlay.visible) {
             launchErrorOverlay.handleCommand(command)
         } else if (!sessionManager.active && pageSurface.open) {
             pageSurface.handleCommand(command)
+        } else if (!sessionManager.active && command===inputManager.menu && (home.widgetActive || home.groupActive)) {
+            home.handleCommand(command)
         } else if (!sessionManager.active && (command === inputManager.menu || command === inputManager.search)) {
             window.openSearchFromPage()
         } else if (command === inputManager.back && sessionManager.active && sessionManager.currentAppType === "settings" && settings.inPage) {
             settings.handleCommand(command)
+        } else if (command === inputManager.back && sessionManager.active && sessionManager.currentAppType === "store") {
+            if(!store.handleCommand(command))sessionManager.exitCurrent()
+        } else if(command===inputManager.back && sessionManager.active && sessionManager.currentAppType==="web"){
+            webKiosk.handleCommand(command)
         } else if (command === inputManager.back) {
             if (sessionManager.active)
                 sessionManager.exitCurrent()
+            else if(home.groupActive || home.widgetActive)
+                home.handleCommand(command)
         } else if (command === inputManager.home) {
             sessionManager.goHome()
         } else if (sessionManager.active && sessionManager.currentAppType === "store") {
@@ -130,6 +177,17 @@ Window {
     Item {
         anchors.fill: parent
         anchors.margins: window.safeAreaPixels
+        Rectangle {
+            anchors.fill:parent;z:1200;visible:desktopMode.busy;color:homeLayout.homeAppearance.surfaceColor
+            Column {anchors.centerIn:parent;spacing:24
+                Text {text:"Allow the desktop return shortcut in the system dialog.";color:homeLayout.homeAppearance.textColor;font.pixelSize:24}
+                Text {text:"Isolde stays open until a return shortcut is granted.";color:homeLayout.homeAppearance.mutedColor;font.pixelSize:18}
+                Rectangle {width:parent.width;height:56;radius:12;color:homeLayout.homeAppearance.selectedColor
+                    Text {anchors.centerIn:parent;text:"Cancel · Back";color:homeLayout.homeAppearance.textColor;font.pixelSize:20}
+                    MouseArea {anchors.fill:parent;onClicked:desktopMode.cancel()}
+                }
+            }
+        }
 
         Item {
             id: shellSurface
@@ -148,16 +206,23 @@ Window {
 
             HomeScreen {
                 id: home
+                artworkMotionAllowed:window.homeArtworkMotionActive
                 anchors.fill: parent
-                visible: !sessionManager.active && !pageSurface.open
+                visible: (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android")) && !pageSurface.open
                 items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
+                authoredItems: homeLayout.components
                 sections: sourceManager.sections.concat(homeLayout.sections).concat(kodiShelves.sections)
+                authoredSections: homeLayout.sections
                 brandVisible: homeLayout.brandVisible
                 backgroundStart: homeLayout.backgroundStart
                 backgroundEnd: homeLayout.backgroundEnd
                 tileRoundness: homeLayout.tileRoundness
                 appearance: homeLayout.appearance
                 composition: homeLayout.composition
+                grid: homeLayout.grid
+                placements: homeLayout.placements
+                setItemPlacement: homeLayout.setItemPlacement
+                gridCollisions: homeLayout.gridCollisions
                 libraryProvider: pageData
                 wallpaperSource: homeLayout.wallpaperSource
                 wallpaperItem: windowWallpaper
@@ -188,7 +253,7 @@ Window {
 
             MockSessionView {
                 anchors.fill: parent
-                visible: sessionManager.active && sessionManager.currentAppType !== "store" && sessionManager.currentAppType !== "settings" && sessionManager.currentAppType !== "web"
+                visible: sessionManager.active && sessionManager.currentAppType !== "desktop" && sessionManager.currentAppType !== "android" && sessionManager.currentAppType !== "store" && sessionManager.currentAppType !== "settings" && sessionManager.currentAppType !== "web"
                 appName: sessionManager.currentAppName
                 accent: sessionManager.currentAppAccent
                 presentationMode: sessionManager.currentPresentationMode
@@ -202,13 +267,18 @@ Window {
                 accent: sessionManager.currentAppAccent
                 url: sessionManager.currentLaunchUrl
                 allowedOrigins: sessionManager.currentAllowedOrigins
+                appearance:homeLayout.homeAppearance
+                onExitRequested:sessionManager.exitCurrent()
             }
 
             AppStoreView {
                 id: store
                 anchors.fill: parent
                 visible: sessionManager.active && sessionManager.currentAppType === "store"
-                entries: appCatalog.entries
+                entries: appCatalog.allEntries
+                appearance: homeLayout.homeAppearance
+                onOperationSettled: { if(visible){window.raise();window.requestActivate();shellSurface.forceActiveFocus()} }
+                onOpenRequested: appId => { sessionManager.exitCurrent(); Qt.callLater(()=>sessionManager.launch(appId)) }
             }
 
             SettingsView {
@@ -219,23 +289,24 @@ Window {
                 availableApps: appRegistry.apps
                 artwork: artPacks.artwork
                 themes: artPacks.themes
-                appearance: homeLayout.appearance
+                appearance: homeLayout.homeAppearance
                 onPreviewAmbientRequested: window.ambientActive = true
                 onPageRequested:id=>{ sessionManager.goHome(); actionDispatcher.dispatch({type:"open-page",pageId:id},"") }
             }
 
             PageSurface {
-                id:pageSurface;anchors.fill:parent;visible:open && !sessionManager.active
+                id:pageSurface;anchors.fill:parent;visible:open && (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android"))
+                artworkMotionAllowed:window.homeArtworkMotionActive
                 layoutModel:homeLayout;provider:pageData;availableApps:appRegistry.apps;artwork:artPacks.artwork;themes:artPacks.themes
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
-                onClosed:origin=>home.restoreFocus(origin)
+                onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}
                 onSearchRequested:window.openSearchFromPage()
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
             }
 
-            AmbientScreen {
+            AmbientOverlay {
                 id: ambientScreen
-                anchors.fill: parent
+                scaleFactor: window.uiScaleFactor
                 active: window.ambientActive
                 onDismissRequested: window.ambientActive = false
             }
@@ -259,8 +330,9 @@ Window {
                     } else if (command === inputManager.navigateRight) {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
-                        sessionManager.launch("app-store")
-                    } else if (command === inputManager.navigateLeft && window.launchErrorAppId.length && appCatalog.isInstalled(window.launchErrorAppId)) {
+                        sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")
+                        if(window.launchErrorVpn)settings.openSection(6)
+                    } else if (!window.launchErrorVpn && command === inputManager.navigateLeft && window.launchErrorAppId.length && appCatalog.isInstalled(window.launchErrorAppId)) {
                         appCatalog.uninstall(window.launchErrorAppId)
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
@@ -303,7 +375,7 @@ Window {
                         }
                         Rectangle { width: parent.width; height: 1; color: "#2B3853" }
                         Text {
-                            text: window.launchErrorAppId.length ? "Enter Retry    → App Store    ← Uninstall    Esc Close" : "Esc Close"
+                            text: window.launchErrorVpn ? "Enter Retry    → VPN settings    Esc Close" : window.launchErrorAppId.length ? "Enter Retry    → App Store    ← Uninstall    Esc Close" : "Esc Close"
                             color: "#D5B083"
                             font.pixelSize: 18
                             font.weight: Font.DemiBold
@@ -332,7 +404,26 @@ Window {
         }
     }
 
-    KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; appearance: homeLayout.appearance }
+    KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; provider:pageData;appearance: homeLayout.homeAppearance }
+    property var pendingGuideSearchReturn:null
+    property var guideSearchReturn:null
+    GuideView {
+        id:tvGuide
+        readonly property real availableWidth:Math.max(1,(parent.width-2*window.safeAreaPixels)/window.uiScaleFactor)
+        readonly property real availableHeight:Math.max(1,(parent.height-2*window.safeAreaPixels)/window.uiScaleFactor)
+        x:window.safeAreaPixels+(availableWidth-width)*window.uiScaleFactor*overlayHorizontal
+        y:window.safeAreaPixels+(availableHeight-height)*window.uiScaleFactor*overlayVertical
+        width:availableWidth*(inOverlay?overlayWidthFraction:1)
+        height:availableHeight*(inOverlay?overlayHeightFraction:1)
+        scale:window.uiScaleFactor;transformOrigin:Item.TopLeft;z:950
+        controller:guideController;dispatcher:actionDispatcher;options:homeLayout.studioOptions.guide;appearance:homeLayout.homeAppearance
+        suppressed:sessionManager.active || kodiMedia.playbackActive || actionDispatcher.guideTransitionPending || launchErrorOverlay.visible
+        onClosed:origin=>{
+            const state=window.guideSearchReturn;window.guideSearchReturn=null
+            if(state){commandCenter.open=true;Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})}
+            else if(!kodiLibrary.open){if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)}
+        }
+    }
     CommandCenter {
         id: commandCenter
         x: window.safeAreaPixels
@@ -345,10 +436,17 @@ Window {
         apps: appRegistry.apps
         packages: appCatalog.entries
         searchSettings: searchPreferences
+        appearance:homeLayout.homeAppearance
         movieSearchClient: searchMovies
         showSearchClient: searchShows
         episodeSearchClient: searchEpisodes
         mediaCollections: kodiMedia.collections
+        shellActions:homeLayout.studioOptions.actions || []
+        onShellActionRequested:action=>{
+            window.pendingGuideSearchReturn={index:commandCenter.selectedIndex,area:commandCenter.focusArea,header:commandCenter.lastHeader}
+            actionDispatcher.dispatch(action,"")
+            window.pendingGuideSearchReturn=null
+        }
         onCloseRequested: open = false
         onLaunchApp: appId => { kodiLibrary.open = false; window.launchAppFromShell(appId) }
         onInstallPackage: packageId => {
@@ -385,16 +483,36 @@ Window {
     }
 
     Connections {
+        target: appVpn
+        function onFailed(appId,message){window.launchErrorVpn=true;window.launchErrorAppId=appId;window.launchErrorText=message}
+    }
+    Rectangle {
+        anchors.fill:parent;z:1200
+        visible:appVpn.busy && !!appVpn.pendingApp
+        color:homeLayout.homeAppearance.surfaceColor
+        Column {
+            anchors.centerIn:parent;width:parent.width*0.7;spacing:24
+            Text {width:parent.width;wrapMode:Text.WordWrap;text:"Connecting to your app’s VPN location…";color:homeLayout.homeAppearance.textColor;font.pixelSize:28}
+            Text {width:parent.width;wrapMode:Text.WordWrap;text:"Checking the country before opening the app. Back cancels and restores the previous connection.";color:homeLayout.homeAppearance.textColor;font.pixelSize:20}
+        }
+    }
+    Connections {
         target: sessionManager
+        function onReturnedHome(appId) {
+            if(appId && store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
+        }
         function onSessionRejected(reason) {
+            window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onLaunchDeferred(reason) {
+            window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onSessionFailed(appId, reason) {
+            window.launchErrorVpn=false
             if (appCatalog.isInstalled(appId))
                 appCatalog.markFailed(appId, reason)
             window.launchErrorAppId = appId
@@ -403,16 +521,22 @@ Window {
     }
     Connections {
         target:kodiMedia
-        function onPlaybackReturned(home){if(home && pageSurface.open && !kodiLibrary.returnToSearchAfterPlayback)pageSurface.closeAll()}
+        function onPlaybackReturned(home){
+            if(tvGuide.open){if(home){tvGuide.open=false;window.showDesignatedHome()}else guideController.refresh()}
+            if(home && pageSurface.open && !kodiLibrary.returnToSearchAfterPlayback)pageSurface.closeAll()
+            if(!sessionManager.active && !desktopMode.active){window.raise();window.requestActivate()}
+        }
     }
     Connections {
         target: actionDispatcher
         function onDrawerRequested() { commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
+        function onGuideRequested(origin,presentation,focusChannelId){window.guideSearchReturn=window.pendingGuideSearchReturn;commandCenter.open=false;if((presentation.guideSurface || homeLayout.studioOptions.guide.surface)!=="overlay")kodiLibrary.open=false;tvGuide.showFocused(origin,presentation,focusChannelId)}
         function onRestoreFocusRequested(originId) {
+            if(tvGuide.open)return
             if (kodiLibrary.returnToSearchAfterPlayback) return
             if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
         }
-        function onPageRequested(id,originId) {commandCenter.open=false;pageSurface.showPage(id,originId,false)}
+        function onPageRequested(id,originId) {commandCenter.open=false;if(id)pageSurface.showPage(id,originId,false);else{sessionManager.goHome();pageSurface.closeAll();home.restoreFocus(originId)}}
         function onRejected(reason) { window.launchErrorAppId = ""; window.launchErrorText = reason }
         function onLibraryRequested(returnHome) {
             commandCenter.open = false

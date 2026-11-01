@@ -1,15 +1,20 @@
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
+#include "app/FdroidProvider.h"
 #include "input/InputManager.h"
 #include "home/HomeLayout.h"
 #include "home/ActionDispatcher.h"
 #include "home/PageData.h"
+#include "games/GameLibrary.h"
 #include "settings/DisplaySettings.h"
 #include "settings/AudioSettings.h"
 #include "settings/RemoteSettings.h"
 #include "settings/AmbientSettings.h"
 #include "settings/NetworkSettings.h"
+#include "settings/VpnSettings.h"
+#include "settings/AppVpn.h"
 #include "settings/SearchSettings.h"
+#include "sessions/DesktopMode.h"
 #include "settings/ProfileManager.h"
 #include "settings/SetupState.h"
 #include "settings/ComponentHealth.h"
@@ -18,6 +23,8 @@
 #include "media/CaptureController.h"
 #include "media/KodiArtwork.h"
 #include "media/KodiService.h"
+#include "media/KodiImporter.h"
+#include "media/GuideController.h"
 #include "sessions/SessionManager.h"
 #include "sources/SourceManager.h"
 #include "theme/ArtPackCatalog.h"
@@ -41,6 +48,7 @@
 struct ProfileRuntime {
     AppRegistry registry;
     SessionManager sessions{&registry};
+    FdroidProvider storeProvider;
     AppCatalog catalog{&registry};
     HomeLayout homeLayout{&registry};
     DisplaySettings displaySettings;
@@ -49,7 +57,13 @@ struct ProfileRuntime {
     RemoteSettings remoteSettings;
     AmbientSettings ambientSettings;
     NetworkSettings networkSettings;
+    VpnSettings vpnSettings{qApp->property("isoldeProfile").toString()};
+    AppVpn appVpn;
     SearchSettings searchSettings;
+    DesktopMode desktopMode;
+    AppDefinition pendingNativeDefinition;
+    bool pendingNativeLaunch=false;
+    bool pendingLaunch=false,pendingVpnReady=false;
     SourceManager sourceManager{&registry};
     ArtPackCatalog artPacks;
     InputManager input;
@@ -60,20 +74,26 @@ struct ProfileRuntime {
     KodiMedia searchShows{qApp->property("isoldeProfile").toString()};
     KodiMedia searchEpisodes{qApp->property("isoldeProfile").toString()};
     KodiService kodiService{qApp->property("isoldeProfile").toString()};
+    KodiImporter kodiImporter{qApp->property("isoldeProfile").toString()};
     KodiShelves kodiShelves{qApp->property("isoldeProfile").toString(), &kodi};
     KodiArtwork kodiArtwork{qApp->property("isoldeProfile").toString()};
     PageData pageData{qApp->property("isoldeProfile").toString(), &kodi};
+    std::unique_ptr<GameLibrary> games;
+    std::unique_ptr<GuideController> guide;
     ActionDispatcher actions{&registry, &sessions, &kodi, &kodiService, &catalog, &captureController};
     QQmlApplicationEngine engine;
 
     explicit ProfileRuntime(ProfileManager &profiles, bool initialLaunch, AudioSettings &audio, CaptureController &capture)
-        : audioSettings(audio), captureController(capture) {
+        : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()) {
+    catalog.setStoreProvider(&storeProvider);
     if (initialLaunch && QCoreApplication::arguments().contains("--setup")) setup.restart();
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
     engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("desktopMode"), &desktopMode);
     engine.rootContext()->setContextProperty(QStringLiteral("captureController"), &captureController);
     engine.rootContext()->setContextProperty(QStringLiteral("kodiMedia"), &kodi);
+    engine.rootContext()->setContextProperty(QStringLiteral("kodiImporter"), &kodiImporter);
     engine.rootContext()->setContextProperty(QStringLiteral("searchMovies"), &searchMovies);
     engine.rootContext()->setContextProperty(QStringLiteral("searchShows"), &searchShows);
     engine.rootContext()->setContextProperty(QStringLiteral("searchEpisodes"), &searchEpisodes);
@@ -84,7 +104,12 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("actionDispatcher"), &actions);
     engine.rootContext()->setContextProperty(QStringLiteral("pageData"), &pageData);
     actions.setLayout(&homeLayout);
-    QObject::connect(&kodiService,&KodiService::unavailable,&pageData,&PageData::invalidate);
+    pageData.setApplications(&registry,&sessions,&actions);
+    games=std::make_unique<GameLibrary>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("games.sqlite"), &registry);
+    actions.setGames(games.get());
+    games->setCatalog(&catalog);
+    engine.rootContext()->setContextProperty(QStringLiteral("gameLibrary"), games.get());
+    QObject::connect(&kodiService,&KodiService::unavailable,&pageData,&PageData::unavailable);
     homeLayout.setCollections(kodi.collections());
     QObject::connect(&kodi, &KodiMedia::collectionsChanged, &homeLayout, [this] { homeLayout.setCollections(kodi.collections()); });
     homeLayout.setCaptureInputsReady(captureController.canSwitchInput(1));
@@ -97,6 +122,9 @@ struct ProfileRuntime {
         QTimer::singleShot(1500, &kodiShelves, [this] { kodiShelves.refresh(); });
     });
     sessions.setLaunchGuard([this](const QString &id) -> QString {
+        const auto *app=registry.find(id);
+        if(vpnSettings.busy() && app && app->type!="settings" && app->type!="store" && app->type!="customize")
+            return "Finish the current VPN setup operation before opening another app.";
         if (id == "kodi" && !kodiService.canOpenApplication())
             return "Switch to Kodi application mode in Settings → System → Media Library first. This lets Kodi save your setup before opening its interface.";
         return {};
@@ -107,6 +135,7 @@ struct ProfileRuntime {
         if (kodi.connected()) kodiService.markReady();
     });
     QObject::connect(&sessions, &SessionManager::launching, &kodiService, [this](const QString &id) {
+        qApp->setProperty("isoldeRemoteAppearance",homeLayout.homeAppearance());
         if (id == "kodi") kodiService.suspend(true);
     });
     QObject::connect(&sessions, &SessionManager::returnedHome, &kodiService, [this](const QString &id) {
@@ -118,6 +147,56 @@ struct ProfileRuntime {
         qWarning("%s", qPrintable(catalog.errorString()));
     if (!homeLayout.load({}, profiles.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
+    desktopMode.setPresentation(homeLayout.studioOptions().value("desktop").toMap());
+    guide=std::make_unique<GuideController>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("guide.sqlite"),profiles.activeId());
+    actions.setGuide(guide.get());
+    engine.rootContext()->setContextProperty(QStringLiteral("guideController"),guide.get());
+    sessions.setLaunchPreparation([this](const AppDefinition &definition){
+        if(definition.type!="settings" && definition.type!="store" && definition.type!="customize"){
+            if(pendingLaunch && pendingNativeDefinition.id!=definition.id)return false;
+            if(!pendingLaunch){pendingNativeDefinition=definition;pendingLaunch=true;pendingVpnReady=false;}
+            if(!pendingVpnReady){
+                if(!appVpn.prepare(definition.id))return false;
+                pendingVpnReady=true;
+            }
+        }
+        if((definition.type!="desktop" && definition.type!="android") || (desktopMode.active() && desktopMode.nativeMode())){pendingLaunch=false;pendingVpnReady=false;return true;}
+        pendingNativeDefinition=definition;pendingNativeLaunch=true;
+        desktopMode.prepareNative(definition.id);
+        return false;
+    });
+    QObject::connect(&appVpn,&AppVpn::ready,&sessions,[this](const QString &id){
+        if(pendingLaunch && pendingNativeDefinition.id==id)sessions.resumePreparedLaunch(pendingNativeDefinition);
+    });
+    QObject::connect(&appVpn,&AppVpn::failed,&sessions,[this](const QString &id,const QString &message){
+        pendingLaunch=false;pendingNativeLaunch=false;pendingVpnReady=false;
+        Q_UNUSED(id);Q_UNUSED(message);sessions.goHome();
+    });
+    QObject::connect(&vpnSettings,&VpnSettings::refreshed,&appVpn,[this]{appVpn.refresh();});
+    QObject::connect(&vpnSettings,&VpnSettings::externalOpening,&desktopMode,[this]{
+        desktopMode.start("settings-vpn");
+        if(desktopMode.active() && !desktopMode.nativeMode())vpnSettings.resumeExternal();
+    });
+    QObject::connect(&desktopMode,&DesktopMode::changed,&sessions,[this]{
+        if(vpnSettings.waitingExternal()){
+            if(desktopMode.active() && !desktopMode.nativeMode())vpnSettings.resumeExternal();
+            else if(!desktopMode.busy() && !desktopMode.active() && !desktopMode.errorString().isEmpty())vpnSettings.cancelExternal();
+        }
+        if(!pendingNativeLaunch || !desktopMode.active() || !desktopMode.nativeMode())return;
+        const auto definition=pendingNativeDefinition;pendingNativeLaunch=false;
+        pendingVpnReady=false;
+        sessions.resumePreparedLaunch(definition);
+    });
+    QObject::connect(&desktopMode,&DesktopMode::returned,&sessions,[this](const QString &){
+        vpnSettings.cancelExternal();
+        pendingNativeLaunch=false;
+        pendingLaunch=false;pendingVpnReady=false;
+        if(desktopMode.nativeMode())sessions.goHome();
+    });
+    QObject::connect(&sessions,&SessionManager::currentAppChanged,&desktopMode,[this]{
+        if(!sessions.hasActiveSession() && desktopMode.active() && desktopMode.nativeMode())desktopMode.cancel();
+    });
+    QObject::connect(&actions,&ActionDispatcher::desktopRequested,&desktopMode,&DesktopMode::start);
     QObject::connect(&catalog, &AppCatalog::packageInstalled, &homeLayout, &HomeLayout::addAppTile);
     // Keep user launchers repairable when a package disappears. Registry changes
     // update availability; reinstalling reconnects the same stable binding.
@@ -135,6 +214,8 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("remoteSettings"), &remoteSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("ambientSettings"), &ambientSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("networkSettings"), &networkSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("vpnSettings"), &vpnSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("appVpn"), &appVpn);
     engine.rootContext()->setContextProperty(QStringLiteral("sourceManager"), &sourceManager);
     engine.rootContext()->setContextProperty(QStringLiteral("artPacks"), &artPacks);
     engine.rootContext()->setContextProperty(QStringLiteral("inputManager"), &input);
@@ -201,6 +282,10 @@ struct ProfileRuntime {
     }
     }
     ~ProfileRuntime() {
+        pageData.invalidate("This profile is no longer active.");
+        guide->invalidate();
+        games->invalidate();
+        appVpn.cancel();
         QObject::disconnect(&sessions, nullptr, &kodiService, nullptr);
         kodiService.stop();
         sessions.exitCurrent();
@@ -213,6 +298,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("Isolde"));
     QCoreApplication::setApplicationVersion(QStringLiteral(ISOLDE_VERSION));
+    QGuiApplication::setDesktopFileName(QString::fromLatin1(DesktopMode::ApplicationId));
     app.setQuitOnLastWindowClosed(false);
     bool switching = false;
     QQuickWindow switchCover;

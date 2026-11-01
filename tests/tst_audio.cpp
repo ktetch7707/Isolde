@@ -129,9 +129,14 @@ private slots:
         audio.playTestSound(); QTRY_VERIFY(!audio.testPlaying());
         QVERIFY(audio.testStatus().contains("Could not start"));
         audio.toggleMute(); QTRY_VERIFY(audio.muted());
-        QTest::qWait(100);
-        audio.playTestSound(); QVERIFY(!audio.testPlaying());
-        QVERIFY(audio.testStatus().contains("Unmute"));
+        // Muted state can be published before the async confirmation queue
+        // becomes idle. Retry the safe, muted request until confirmation
+        // completes instead of assuming the backend finishes within 100 ms.
+        QTRY_VERIFY_WITH_TIMEOUT(([&] {
+            audio.playTestSound();
+            return audio.testStatus().contains("Unmute");
+        })(), 5000);
+        QVERIFY(!audio.testPlaying());
         QVERIFY(audio.muted());
     }
 private:

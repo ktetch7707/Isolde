@@ -9,21 +9,34 @@ Item {
     property color accent: "#64748B"
     property bool failed: false
     property string errorText: ""
+    property var appearance:({})
+    signal exitRequested()
+
+    function remoteCommand(name) {
+        web.runJavaScript("Boolean(globalThis.__isoldeRemote && globalThis.__isoldeRemote.handle("+JSON.stringify(name)+"))",WebEngineScript.ApplicationWorld,handled=>{
+            if(!root.visible)return
+            if(name==="back" && !handled){if(web.canGoBack)web.goBack();else root.exitRequested()}
+        })
+    }
+    onVisibleChanged:if(visible)Qt.callLater(()=>{if(root.visible)web.forceActiveFocus()})
 
     function handleCommand(command) {
         if (failed && command === inputManager.confirm) {
             failed = false
             web.reload()
         } else if (command === inputManager.navigateUp)
-            web.runJavaScript("window.scrollBy({top: -Math.max(120, window.innerHeight * 0.65), behavior: 'smooth'})")
+            remoteCommand("up")
         else if (command === inputManager.navigateDown)
-            web.runJavaScript("window.scrollBy({top: Math.max(120, window.innerHeight * 0.65), behavior: 'smooth'})")
-        else if (command === inputManager.navigateLeft && web.canGoBack)
-            web.goBack()
-        else if (command === inputManager.navigateRight && web.canGoForward)
-            web.goForward()
+            remoteCommand("down")
+        else if (command === inputManager.navigateLeft)
+            remoteCommand("left")
+        else if (command === inputManager.navigateRight)
+            remoteCommand("right")
         else if (command === inputManager.confirm)
-            web.forceActiveFocus()
+            remoteCommand("confirm")
+        else if(command===inputManager.back)remoteCommand("back")
+        else if(command===inputManager.menu)remoteCommand("menu")
+        else if(command===inputManager.search)remoteCommand("search")
     }
 
     function originFor(candidate) {
@@ -50,7 +63,8 @@ Item {
     WebEngineView {
         id: web
         anchors.fill: parent
-        url: root.url
+        url: root.visible && root.url.length ? root.url : "about:blank"
+        userScripts.collection:[{name:"isolde-remote",injectionPoint:WebEngineScript.DocumentReady,worldId:WebEngineScript.ApplicationWorld,runsOnSubFrames:true,sourceCode:inputManager.webRemoteScript(root.appearance)}]
         settings.javascriptCanOpenWindows: false
         settings.localContentCanAccessFileUrls: false
         settings.localContentCanAccessRemoteUrls: false
@@ -58,6 +72,7 @@ Item {
             storageName: browserStorageName
         }
         onNavigationRequested: request => {
+            if(String(request.url)==="about:blank")return
             if (!root.isAllowed(request.url)) {
                 request.action = WebEngineNavigationRequest.IgnoreRequest
                 root.failed = true
@@ -71,6 +86,8 @@ Item {
             } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                 root.failed = true
                 root.errorText = loadRequest.errorString
+            } else if(loadRequest.status===WebEngineView.LoadSucceededStatus && root.visible){
+                web.forceActiveFocus()
             }
         }
     }
@@ -150,6 +167,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        visible: web.loading || root.failed
         height: 52
         color: "#CC050812"
         Row {

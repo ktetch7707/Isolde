@@ -2,9 +2,13 @@
 
 #include "sessions/MockSession.h"
 #include "sessions/DesktopSession.h"
+#include "sessions/AndroidSession.h"
 #include "home/ComponentSchema.h"
+#include "media/MediaGrants.h"
+#include <QFileInfo>
 
 #include <QUrl>
+#include <QScopedValueRollback>
 
 SessionManager::SessionManager(AppRegistry *registry, QObject *parent)
     : QObject(parent), m_registry(registry) {}
@@ -38,6 +42,11 @@ QStringList SessionManager::currentAllowedOrigins() const
     return QStringList{origin};
 }
 QString SessionManager::previousFocusId() const { return m_previousFocusId; }
+bool SessionManager::resumePreparedLaunch(const AppDefinition &definition)
+{
+    QScopedValueRollback<bool> resuming(m_resumingPrepared,true);
+    return launchDefinition(definition);
+}
 
 bool SessionManager::launch(const QString &appId)
 {
@@ -65,27 +74,35 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     }
     if (definition.type != QStringLiteral("mock") && definition.type != QStringLiteral("store")
         && definition.type != QStringLiteral("customize") && definition.type != QStringLiteral("settings")
-        && definition.type != QStringLiteral("desktop") && definition.type != QStringLiteral("web")) {
+        && definition.type != QStringLiteral("desktop") && definition.type != QStringLiteral("web") && definition.type != "android") {
         const auto reason = tr("Unsupported session type: %1").arg(definition.type);
         emit sessionRejected(reason);
         emit sessionFailed(definition.id, reason);
         return false;
     }
 
+    if(m_launchPreparation && !m_launchPreparation(definition)){
+        return true;
+    }
     m_previousFocusId = definition.id;
     emit launching(definition.id);
     emit previousFocusIdChanged();
     if (definition.type == QStringLiteral("desktop")) m_session = std::make_unique<DesktopSession>(definition);
+    else if (definition.type == "android") m_session = std::make_unique<AndroidSession>(definition);
     else m_session = std::make_unique<MockSession>(definition);
     auto *session = m_session.get();
     const auto appName = definition.name;
     const auto appId = definition.id;
-    connect(session, &AppSession::stateChanged, this, [this, session, appName, appId](AppSession::State state) {
+    connect(session, &AppSession::stateChanged, this, [this, session, appName, appId, opened=false](AppSession::State state) mutable {
+        if(state==AppSession::State::Running && m_session.get()==session && !opened) {
+            opened=true;
+            if(QStringList{"web","desktop","android"}.contains(session->definition().type))emit appOpened(appId);
+        }
         if (state != AppSession::State::Exited || m_session.get() != session)
             return;
         const bool intentionalExit = m_intentionalExit;
         const auto failure = session->errorString();
-        const bool normalDesktopExit = session->definition().type == "desktop" && failure.isEmpty();
+        const bool normalDesktopExit = (session->definition().type == "desktop" || session->definition().type == "android") && failure.isEmpty();
         m_intentionalExit = false;
         m_session.reset();
         emit currentAppChanged();
@@ -116,6 +133,33 @@ bool SessionManager::launchDefinition(AppDefinition definition)
 
 bool SessionManager::launchAction(const QVariantMap &input)
 {
+    return launchFileAction(input,{});
+}
+bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sourceRoot)
+{
+    const auto target=input.value("target").toString();
+    const auto *runtime=m_registry->find(input.value("openWith").toString());
+    const auto error=MediaGrants::validate(sourceRoot);
+    if(!error.isEmpty() || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
+        || !QStringList{"game","game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot+'/')
+        || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target){
+        emit sessionRejected(tr("The reviewed game folder is missing, redirected or incompatible. Review its source and retry."));return false;
+    }
+    return launchFileAction(input,sourceRoot);
+}
+bool SessionManager::launchSteamGame(const QString &identity)
+{
+    const auto *steam=m_registry->find("steam");bool valid=false;const auto number=identity.toULongLong(&valid);
+    if(!steam || steam->type!="desktop" || steam->presentationMode!="game-hub" || steam->launchConfiguration.value("desktopId")!="isolde-steam"
+        || !QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch() || !valid || number>4294967295ULL || QString::number(number)!=identity){
+        emit sessionRejected(tr("This Steam game or its client is unavailable. Repair Steam and import the game again."));return false;
+    }
+    auto definition=*steam;definition.launchConfiguration.insert("steamGameId",identity);
+    definition.launchConfiguration.remove("containment"); // Never fullscreen the Steam client instead of its game.
+    return launchDefinition(definition);
+}
+bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot)
+{
     QString error;
     const auto action = ComponentSchema::action(input, &error);
     if (action.isEmpty()) { emit sessionRejected(error); return false; }
@@ -145,6 +189,7 @@ bool SessionManager::launchAction(const QVariantMap &input)
     AppDefinition actionDefinition = *definition;
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionType"), type);
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionTarget"), target);
+    if(!sourceRoot.isEmpty())actionDefinition.launchConfiguration.insert("gameSourceRoot",sourceRoot);
     qInfo() << "Launching action tile" << type << "target" << target << "with" << openWith;
     return launchDefinition(actionDefinition);
 }

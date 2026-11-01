@@ -16,10 +16,11 @@ import tempfile
 DEPENDENCIES = [
     "build-essential", "cmake", "ninja-build", "qt6-base-dev", "qt6-multimedia-dev", "qt6-serialport-dev",
     "qt6-declarative-dev", "qt6-webengine-dev", "qt6-webchannel-dev",
+    "libqt6sql6-sqlite",
     "qml6-module-qtquick", "qml6-module-qtquick-window", "qml6-module-qtquick-controls",
     "qml6-module-qtquick-layouts", "qml6-module-qtquick-templates", "qml6-module-qtqml-workerscript",
     "qml6-module-qtwebengine", "qml6-module-qtwebchannel", "qml6-module-qtquick-dialogs", "qml6-module-qtmultimedia",
-    "bubblewrap", "dbus-daemon", "libglib2.0-bin", "python3",
+    "bubblewrap", "dbus-daemon", "libglib2.0-bin", "python3", "pkexec",
     "network-manager", "pulseaudio-utils", "wireplumber", "pipewire-pulse", "wmctrl",
     "kodi", "gstreamer1.0-tools", "gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good",
     "gstreamer1.0-plugins-bad", "gstreamer1.0-libav", "gstreamer1.0-gl",
@@ -91,11 +92,19 @@ def install_payload(payload, prefix):
             staged = Path(scratch) / "payload"
             shutil.copytree(payload, staged)
             staged.rename(release)
+    install_desktop_identity(prefix)
     if current != release:
         if current:
             set_link(prefix / "previous", current)
         set_link(prefix / "current", release)
     return release
+
+
+def install_desktop_identity(prefix):
+    executable = str(prefix / "current/bin/isolde").replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`").replace("$", "\\$").replace("%", "%%")
+    entry = f'[Desktop Entry]\nType=Application\nName=Isolde\nExec="{executable}"\nTerminal=false\n'
+    atomic_text(prefix.parent / "applications/org.isolde.Isolde.desktop", entry)
+    atomic_text(prefix.parent / "applications/isolde.desktop", entry+"NoDisplay=true\n")
 
 
 def rollback(prefix):
@@ -162,13 +171,17 @@ systemctl --user reset-failed isolde.service
 exec systemctl --user start isolde.service
 ''', 0o700)
     desktop_path = str(launcher).replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`").replace("$", "\\$").replace("%", "%%")
-    atomic_text(config / "autostart/isolde.desktop", f'''[Desktop Entry]
+    desktop_entry = f'''[Desktop Entry]
 Type=Application
 Name=Isolde
 Exec="{desktop_path}"
 Terminal=false
 X-GNOME-Autostart-enabled=true
-''')
+'''
+    atomic_text(config / "autostart/isolde.desktop", desktop_entry)
+    # A stable desktop identity is required by the compositor's global-shortcut
+    # permission portal. This is an Isolde launcher, not an OS shortcut change.
+    install_desktop_identity(prefix)
 
 
 def enable_startup():
@@ -186,12 +199,18 @@ def main():
     parser.add_argument("--prefix", type=Path, default=Path.home() / ".local/share/isolde-appliance")
     parser.add_argument("--startup", action="store_true", help="Start at graphical login and recover from crashes")
     parser.add_argument("--build-dir", type=Path, help="Reuse a CMake build directory (default: build-appliance)")
+    parser.add_argument("--without-default-apps", action="store_true", help="Explicitly omit native default-app downloads and first-install activation")
+    parser.add_argument("--android", action="store_true", help="Provision the Android runtime and verified SmartTube package during dependencies setup")
+    parser.add_argument("--android-software-rendering", action="store_true", help="Use the Android software renderer for a VM; requires --android")
     args = parser.parse_args()
+    if args.android_software_rendering and not args.android:
+        parser.error("--android-software-rendering requires --android")
     if args.action == "plan":
         print("Target: Ubuntu 26.04; existing desktop and user preserved.")
         print("Dependencies: " + " ".join(DEPENDENCIES))
         print(f"Build, test, stage release, atomically activate under {args.prefix}.")
         print("Optional --startup: user service + graphical autostart. No automatic login, disk erase or reboot.")
+        if args.android: print("Android: signed Waydroid repository, Vanilla images and verified SmartTube APK; profile installation and launch are separate gates.")
         return
     if sys.platform != "linux" or not ubuntu_supported():
         raise RuntimeError("This installer currently supports Ubuntu 26.04 only.")
@@ -203,6 +222,11 @@ def main():
             raise RuntimeError("Run only the dependencies action with sudo.")
         run("apt-get", "update")
         run("apt-get", "install", "-y", *DEPENDENCIES)
+        if not args.without_default_apps:
+            run(sys.executable, str(args.source.resolve()/"tools/provision-default-apps.py"), "system", "--source", str(args.source.resolve()))
+        if args.android:
+            run(sys.executable, str(args.source.resolve()/"tools/provision-android.py"), "--source", str(args.source.resolve()),
+                *(["--software-rendering"] if args.android_software_rendering else []))
         return
     if os.geteuid() == 0:
         raise RuntimeError("Build/install as the regular Isolde user, not root.")
@@ -235,6 +259,11 @@ def main():
         config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
         install_startup(prefix, config)
         enable_startup()
+    if not args.without_default_apps:
+        config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home()/".config"))) / "Isolde"
+        if not (config / "default-apps-completed.json").exists():
+            run(sys.executable, str(source/"tools/provision-default-apps.py"), "activate", "--source", str(source))
+    run(sys.executable, str(source/"tools/provision-android.py"), "--source", str(source), "--activate-if-configured")
     print(f"Installed and tested: {release}. Existing running app was not interrupted.")
     print(f"Launch: {prefix / 'current/bin/isolde'}")
 

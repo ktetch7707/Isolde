@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1, "packageId": "supertux", "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2", "name": "SuperTux",
+  "description": "A local platform game supplied by the signed Ubuntu SuperTux package. Works independently of Steam.",
+  "category": "Games", "publisher": "SuperTux Team",
+  "provenance": "Pinned Ubuntu SuperTux 0.6.3-5 and redistributable game data",
+  "capabilities": ["desktop.external", "input.gamepad", "audio.output"],
+  "app": {"id": "supertux", "type": "desktop", "presentationMode": "game",
+    "networkRequirement": "none", "desktopId": "isolde-supertux", "windowClass": "supertux2",
+    "containment": "fullscreen", "section": "Games", "accent": "#5796CB", "symbol": "TUX"}
+}

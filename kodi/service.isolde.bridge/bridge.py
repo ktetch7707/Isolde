@@ -10,19 +10,144 @@ import socket
 import stat
 import struct
 
+def playlist_name(value):
+    return (isinstance(value, str) and 1 <= len(value) <= 128
+            and value not in (".", "..") and not any(c in value for c in '/\\:%\x00')
+            and not any(ord(c) < 32 for c in value)
+            and value.lower().endswith((".xsp", ".m3u", ".m3u8")))
+
+def read_playlist(method, params, execute):
+    """Read only Kodi's active profile video playlists; never accept a path."""
+    root = "special://profile/playlists/video/"
+    def query(directory, start, end, properties):
+        reply = json.loads(execute(json.dumps({"jsonrpc":"2.0", "id":1, "method":"Files.GetDirectory",
+            "params":{"directory":directory,"media":"video" if properties else "files",
+                      "properties":properties,"limits":{"start":start,"end":end}}})))
+        result = reply.get("result", {})
+        files = result.get("files")
+        limits = result.get("limits", {})
+        if (not isinstance(files,list) or len(files)>50 or limits.get("start")!=start
+            or limits.get("end")!=start+len(files) or type(limits.get("total")) is not int
+            or limits["total"]<start+len(files) or (not files and limits["total"]>start)):
+            raise ValueError("Invalid Kodi playlist response")
+        return files, limits
+    if method == "Isolde.GetPlaylists":
+        if params: raise ValueError("Playlist catalog accepts no parameters")
+        result=[]; start=0
+        for _ in range(3):
+            files, limits=query(root,start,start+50,[])
+            if limits["total"]>128: raise ValueError("Playlist catalog exceeds 128 entries")
+            for item in files:
+                path=item.get("file", "")
+                name=path[len(root):] if isinstance(path,str) and path.startswith(root) else ""
+                if playlist_name(name):
+                    result.append({"title":str(item.get("label") or name)[:160],"playlistName":name,
+                                   "playlistid":len(result)+1})
+            start=limits["end"]
+            if start>=limits["total"]:break
+        return {"playlists":result,"limits":{"start":0,"end":len(result),"total":len(result)}}
+    if (set(params)!={"name","kind","start","end"} or not playlist_name(params.get("name"))
+        or params.get("kind") not in ("movies","shows")
+        or type(params.get("start")) is not int or type(params.get("end")) is not int
+        or not 0<=params["start"]<=10000000 or not 0<params["end"]-params["start"]<=50):
+        raise ValueError("Choose a Kodi video playlist and a page of at most 50 items")
+    fields=["title","year","plot","runtime","resume","playcount","art","season","episode","showtitle","tvshowid"]
+    files,limits=query(root+params["name"],params["start"],params["end"],fields)
+    entries=[]
+    for item in files:
+        kind=item.get("type")
+        if kind not in (("movie",) if params["kind"]=="movies" else ("tvshow","episode")):
+            raise ValueError("Playlist must contain library movies or shows/episodes of the selected kind")
+        identity=item.get("id")
+        if type(identity) is not int or identity<1:raise ValueError("Playlist item has no Kodi library identity")
+        entry={key:value for key,value in item.items() if key in fields}
+        entry.update({kind+"id":identity,"playlistMediaType":kind})
+        entries.append(entry)
+    return {params["kind"] if params["kind"]=="movies" else "tvshows":entries,"limits":limits}
+
 MAX_REQUEST = 32768
 MAX_RESPONSE = 4 * 1024 * 1024
 READ_METHODS = {
     "JSONRPC.Ping", "JSONRPC.Version", "Application.GetProperties",
     "VideoLibrary.GetMovies", "VideoLibrary.GetTVShows", "VideoLibrary.GetSeasons", "VideoLibrary.GetEpisodes",
     "VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails",
-    "Player.GetActivePlayers", "Player.GetProperties",
+    "AudioLibrary.GetAlbums", "AudioLibrary.GetSongs",
+    "PVR.GetChannels", "PVR.GetBroadcasts",
+    "Player.GetActivePlayers", "Player.GetProperties", "Player.GetItem",
 }
 MOVIE_DETAIL_PROPERTIES = {"title", "year", "plot", "runtime", "resume", "playcount", "art", "genre", "tag"}
 TVSHOW_DETAIL_PROPERTIES = {"title", "year", "plot", "episode", "watchedepisodes", "art", "genre", "tag"}
 
 
-def dispatch(raw, execute, playback=None, artwork=None):
+def guide_candidates(params, execute):
+    """Bounded metadata snapshots for Isolde rules, never a second media scan.
+
+    Show-level studio/genre/tag are joined using supported Kodi detail calls.
+    No filesystem walk, playback, path lookup supplied by a caller or writes.
+    """
+    if (set(params)!={"kind","start","end"} or params.get("kind") not in {"movie","episode","musicvideo","song"}
+        or type(params.get("start")) is not int or type(params.get("end")) is not int
+        or not 0<=params["start"]<100000 or not 1<=params["end"]-params["start"]<=50):
+        raise ValueError("Choose a known media kind and a page of at most 50 items")
+    kind=params["kind"]
+    fields={
+        "movie":["title","runtime","studio","genre","tag","year","rating","playcount","director","cast","file","streamdetails"],
+        "episode":["title","runtime","showtitle","season","episode","tvshowid","firstaired","rating","playcount","director","cast","file","streamdetails"],
+        "musicvideo":["title","runtime","studio","genre","tag","year","playcount","director","file","streamdetails"],
+        "song":["title","duration","genre","year","playcount","file"]}[kind]
+    def query(method,arguments):
+        reply=json.loads(execute(json.dumps({"jsonrpc":"2.0","id":1,"method":method,"params":arguments})))
+        if not isinstance(reply,dict) or "error" in reply or not isinstance(reply.get("result"),dict):
+            raise ValueError("Kodi metadata unavailable")
+        return reply["result"]
+    method={"movie":"VideoLibrary.GetMovies","episode":"VideoLibrary.GetEpisodes","musicvideo":"VideoLibrary.GetMusicVideos","song":"AudioLibrary.GetSongs"}[kind]
+    page=query(method,{"properties":fields,"limits":{"start":params["start"],"end":params["end"]},"sort":{"method":"label","order":"ascending"}})
+    rows=page.get({"movie":"movies","episode":"episodes","musicvideo":"musicvideos","song":"songs"}[kind]);limits=page.get("limits",{})
+    if (not isinstance(rows,list) or len(rows)>50 or not isinstance(limits,dict)
+        or type(limits.get("start")) is not int or type(limits.get("end")) is not int
+        or limits.get("start")!=params["start"] or limits.get("end")!=params["start"]+len(rows)
+        or type(limits.get("total")) is not int or not limits["end"]<=limits["total"]<=100000
+        or not rows and limits["total"]>params["start"]):
+        raise ValueError("Invalid or oversized Kodi metadata page")
+    shows={};items=[];skipped=0
+    for raw in rows:
+        if not isinstance(raw,dict):raise ValueError("Invalid Kodi metadata item")
+        identity=raw.get(kind+"id");duration=raw.get("duration" if kind=="song" else "runtime")
+        path=raw.get("file","");title=raw.get("title") or raw.get("label")
+        if type(identity) is not int or not 1<=identity<=2147483647:raise ValueError("Missing Kodi media identity")
+        if (type(duration) is not int or not 1<=duration<=86400 or not isinstance(path,str) or not os.path.isabs(path)):
+            skipped+=1;continue
+        if not isinstance(title,str) or not title.strip() or len(title)>512:raise ValueError("Invalid guide title")
+        parent={}
+        if kind=="episode" and type(raw.get("tvshowid")) is int and raw["tvshowid"]>0:
+            show=raw["tvshowid"]
+            if show not in shows:
+                shows[show]=query("VideoLibrary.GetTVShowDetails",{"tvshowid":show,"properties":["studio","genre","tag","year"]}).get("tvshowdetails",{})
+            parent=shows[show]
+            if not isinstance(parent,dict):raise ValueError("Invalid parent show metadata")
+        item={"mediaType":kind,"mediaId":identity,"title":title,"duration":duration,"source":"kodi","path":path}
+        for field in ("showtitle","season","episode","year","rating","playcount","studio","genre","tag","director"):
+            value=raw.get(field,parent.get(field))
+            if value is not None:item[field]=value
+        for field in ("studio","genre","tag"):
+            inherited=parent.get(field,[]);own=raw.get(field,[])
+            if isinstance(inherited,list) and isinstance(own,list) and (inherited or own):item[field]=list(dict.fromkeys(inherited+own))
+        if kind=="episode" and isinstance(raw.get("firstaired"),str) and raw["firstaired"][:4].isdigit():item["year"]=int(raw["firstaired"][:4])
+        cast=raw.get("cast",[])
+        if not isinstance(cast,list) or len(cast)>128:raise ValueError("Oversized guide cast")
+        if cast:item["actor"]=[person["name"] for person in cast if isinstance(person,dict) and isinstance(person.get("name"),str)]
+        streams=raw.get("streamdetails",{})
+        if isinstance(streams,dict):
+            audio=streams.get("audio",[])
+            if not isinstance(audio,list) or len(audio)>128:raise ValueError("Oversized guide audio metadata")
+            languages=sorted({entry["language"] for entry in audio if isinstance(entry,dict) and isinstance(entry.get("language"),str) and entry["language"]})
+            if languages:item["language"]=languages
+        if len(json.dumps(item).encode())>16384:raise ValueError("Guide item exceeds its metadata budget")
+        items.append(item)
+    return {"items":items,"limits":limits,"skipped":skipped}
+
+
+def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
     try:
         request = json.loads(raw)
     except (ValueError, UnicodeDecodeError):
@@ -32,12 +157,28 @@ def dispatch(raw, execute, playback=None, artwork=None):
         return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0" or type(request_id) is not int:
         return error(-32600, "Invalid request")
-    playback_methods = {"Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
-    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetArtwork", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
+    playback_methods = {"Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
+    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GuideCandidates", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
     if not isinstance(params, dict):
         return error(-32602, "Parameters must be an object")
+    if request["method"]=="Isolde.GuideCandidates":
+        try:
+            return {"jsonrpc":"2.0","id":request_id,"result":guide_candidates(params,execute)}
+        except Exception:
+            return error(-32000,"Guide media preview unavailable. Check local Kodi metadata, duration and library size; no channel was saved.")
+    if request["method"]=="Isolde.CreatePlaylist":
+        try:
+            if playlists is None:raise ValueError("Managed playlists unavailable")
+            return {"jsonrpc":"2.0","id":request_id,"result":playlists.create(params)}
+        except Exception:
+            return error(-32000,"Could not save this Kodi playlist. Check the name, view and profile storage; previous playlists are unchanged.")
+    if request["method"] in ("Isolde.GetPlaylists", "Isolde.GetPlaylistItems"):
+        try:
+            return {"jsonrpc":"2.0","id":request_id,"result":read_playlist(request["method"],params,execute)}
+        except Exception:
+            return error(-32000,"Kodi playlist unavailable. Choose a video library playlist of the selected kind, with at most 128 saved playlists; refresh to retry.")
     if request["method"] == "Isolde.GetArtwork":
         try:
             if artwork is None:
@@ -53,6 +194,10 @@ def dispatch(raw, execute, playback=None, artwork=None):
             or len(params["properties"]) > len(allowed_properties)
             or any(not isinstance(value, str) or value not in allowed_properties for value in params["properties"])):
             return error(-32602, "Library details require a valid ID and supported properties")
+    if request["method"] == "Player.GetItem":
+        if (set(params) != {"playerid", "properties"} or type(params.get("playerid")) is not int
+            or params["playerid"] not in (0, 1) or not isinstance(params.get("properties"), list) or params["properties"]):
+            return error(-32602, "Player identity requires an audio/video player and no extra properties")
     if request["method"] in playback_methods:
         try:
             if playback is None:
@@ -81,7 +226,48 @@ def dispatch(raw, execute, playback=None, artwork=None):
             return {"jsonrpc": "2.0", "id": request_id, "result": query("Application.Quit", {})}
         except Exception:
             return error(-32603, "Cannot confirm Kodi is idle; mode was not changed")
-    if request["method"] == "VideoLibrary.Scan":
+    if request["method"] == "PVR.GetChannels":
+        if set(params) - {"channelgroupid", "properties", "limits"} or params.get("channelgroupid") != "alltv":
+            return error(-32602, "Choose the configured Kodi TV channel group")
+        fields = params.get("properties", [])
+        allowed = {"channelnumber", "broadcastnow", "broadcastnext", "locked", "hidden", "clientid", "uniqueid"}
+        if not isinstance(fields, list) or len(fields) > len(allowed) or any(not isinstance(field, str) or field not in allowed for field in fields):
+            return error(-32602, "Unsupported TV guide fields")
+        limits = params.get("limits", {"start":0,"end":50})
+        if (not isinstance(limits, dict) or set(limits) != {"start","end"} or type(limits["start"]) is not int
+            or type(limits["end"]) is not int or not 0 <= limits["start"] <= 10000000 or not 0 < limits["end"]-limits["start"] <= 50):
+            return error(-32602, "TV guide requests require pages of 1 to 50 channels")
+        params = dict(params, limits=limits)
+    elif request["method"] == "PVR.GetBroadcasts":
+        allowed={"title","starttime","endtime"}
+        fields=params.get("properties",[]); limits=params.get("limits",{"start":0,"end":50})
+        if (set(params)-{"channelid","properties","limits"} or type(params.get("channelid")) is not int or not 1<=params["channelid"]<=2147483647
+                or not isinstance(fields,list) or len(fields)>len(allowed) or any(not isinstance(f,str) or f not in allowed for f in fields)
+                or not isinstance(limits,dict) or set(limits)!={"start","end"} or type(limits["start"]) is not int or type(limits["end"]) is not int
+                or not 0<=limits["start"]<=100000 or not 0<limits["end"]-limits["start"]<=50):
+            return error(-32602,"Choose a configured PVR channel and pages of at most 50 broadcast listings")
+        params=dict(params,limits=limits)
+    elif request["method"].startswith("AudioLibrary."):
+        allowed = {"title", "artist", "year", "art"} if request["method"] == "AudioLibrary.GetAlbums" else {"title", "artist", "album", "albumid", "track", "duration", "art"}
+        if set(params) - {"properties", "limits", "sort", "filter"}:
+            return error(-32602, "Unsupported music query")
+        fields = params.get("properties", [])
+        if not isinstance(fields, list) or len(fields) > len(allowed) or any(not isinstance(field, str) or field not in allowed for field in fields):
+            return error(-32602, "Unsupported music fields")
+        rule = params.get("filter")
+        if rule is not None and (request["method"] != "AudioLibrary.GetSongs" or not isinstance(rule, dict)
+                                 or set(rule) != {"albumid"} or type(rule["albumid"]) is not int or not 1 <= rule["albumid"] <= 2147483647):
+            return error(-32602, "Choose a local Kodi album")
+        limits = params.get("limits", {"start": 0, "end": 50})
+        if (not isinstance(limits, dict) or set(limits) != {"start", "end"}
+            or type(limits["start"]) is not int or type(limits["end"]) is not int
+            or not 0 <= limits["start"] <= 10000000 or not 0 < limits["end"]-limits["start"] <= 50):
+            return error(-32602, "Music requests require pages of 1 to 50 items")
+        order = params.get("sort", {})
+        if not isinstance(order, dict) or set(order) - {"method", "order", "ignorearticle"} or order.get("method", "title") not in {"title", "track"} or order.get("order", "ascending") != "ascending" or ("ignorearticle" in order and type(order["ignorearticle"]) is not bool):
+            return error(-32602, "Unsupported music order")
+        params = dict(params, limits=limits)
+    elif request["method"] == "VideoLibrary.Scan":
         if params:
             return error(-32602, "Scan uses only this profile's configured sources")
         params = {"showdialogs": False}
@@ -99,10 +285,17 @@ def dispatch(raw, execute, playback=None, artwork=None):
         if "filter" in params:
             rule = params["filter"]
             if not isinstance(rule, dict) or set(rule) != {"field", "operator", "value"}:
-                return error(-32602, "Only local title, tag, genre and progress filters are supported")
-            valid = ((rule["field"], rule["operator"]) in (("title", "contains"), ("tag", "is"), ("genre", "is"), ("inprogress", "true")))
+                return error(-32602, "Only local title, tag, genre, progress and viewing-date filters are supported")
+            valid = ((rule["field"], rule["operator"]) in (("title", "contains"), ("tag", "is"), ("genre", "is"), ("inprogress", "true"), ("lastplayed", "after")))
             if not valid or not isinstance(rule["value"], str) or len(rule["value"]) > 160:
                 return error(-32602, "Invalid local library filter")
+            if rule["field"] == "lastplayed":
+                import datetime
+                try:
+                    if datetime.date.fromisoformat(rule["value"]).isoformat() != rule["value"]:
+                        raise ValueError("Noncanonical date")
+                except ValueError:
+                    return error(-32602, "Viewing history requires an ISO calendar date")
             if request["method"] == "VideoLibrary.GetSeasons" or (request["method"] == "VideoLibrary.GetTVShows" and rule["field"] != "title"):
                 return error(-32602, "This filter is not supported for this view")
         limits = params.get("limits", {"start": 0, "end": 50})
@@ -120,11 +313,12 @@ def dispatch(raw, execute, playback=None, artwork=None):
 
 
 class LocalBridge:
-    def __init__(self, directory, execute, playback=None, artwork=None):
+    def __init__(self, directory, execute, playback=None, artwork=None, playlists=None):
         self.directory = Path(directory)
         self.execute = execute
         self.playback = playback
         self.artwork = artwork
+        self.playlists = playlists
         self.listener = None
         self.socket_path = self.directory / "rpc.sock"
         self.identity = None
@@ -175,7 +369,7 @@ class LocalBridge:
                     raw += part
                 if len(raw) > MAX_REQUEST or not raw.endswith(b"\n"):
                     return
-                response = json.dumps(dispatch(raw, self.execute, self.playback, self.artwork)).encode() + b"\n"
+                response = json.dumps(dispatch(raw, self.execute, self.playback, self.artwork, self.playlists)).encode() + b"\n"
                 if len(response) <= MAX_RESPONSE:
                     client.sendall(response)
             except (OSError, ValueError):

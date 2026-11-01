@@ -2,10 +2,11 @@ import QtQuick
 
 Item {
     id: root
+    property var settings: ambientSettings
     property bool active: false
     property int slideIndex: 0
     property date now: new Date()
-    readonly property int photoCount: ambientSettings.photoUrls.length
+    readonly property int photoCount: root.settings.photoUrls.length
     readonly property int effectiveSlideCount: Math.max(1, photoCount > 0 ? photoCount : slides.length)
     readonly property var slides: [
         { start: "#07111F", end: "#1B3358", label: "Midnight Harbor" },
@@ -25,10 +26,10 @@ Item {
     z: 90
 
     Timer {
-        running: root.active && ambientSettings.mode === "slideshow"
+        running: root.active && root.settings.mode === "slideshow"
         repeat: true
-        interval: ambientSettings.slideshowSeconds * 1000
-        onTriggered: root.slideIndex = ambientSettings.shuffle
+        interval: root.settings.slideshowSeconds * 1000
+        onTriggered: root.slideIndex = root.settings.shuffle
             ? Math.floor(Math.random() * root.effectiveSlideCount)
             : (root.slideIndex + 1) % root.effectiveSlideCount
     }
@@ -43,23 +44,23 @@ Item {
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0; color: ambientSettings.mode === "dim" ? "#02040A" : ambientSettings.mode === "gradient" ? "#101A32" : root.slides[root.slideIndex % root.slides.length].start }
-            GradientStop { position: 1; color: ambientSettings.mode === "dim" ? "#02040A" : ambientSettings.mode === "gradient" ? "#050812" : root.slides[root.slideIndex % root.slides.length].end }
+            GradientStop { position: 0; color: root.settings.mode === "dim" ? "#02040A" : root.settings.mode === "gradient" ? "#101A32" : root.slides[root.slideIndex % root.slides.length].start }
+            GradientStop { position: 1; color: root.settings.mode === "dim" ? "#02040A" : root.settings.mode === "gradient" ? "#050812" : root.slides[root.slideIndex % root.slides.length].end }
         }
     }
 
     Image {
-        visible: ambientSettings.mode === "slideshow" && root.photoCount > 0
+        visible: root.settings.mode === "slideshow" && root.photoCount > 0
         anchors.fill: parent
-        source: root.photoCount > 0 ? ambientSettings.photoUrls[root.slideIndex % root.photoCount] : ""
-        fillMode: ambientSettings.imageFit === "fit" ? Image.PreserveAspectFit : ambientSettings.imageFit === "stretch" ? Image.Stretch : Image.PreserveAspectCrop
+        source: root.photoCount > 0 ? root.settings.photoUrls[root.slideIndex % root.photoCount] : ""
+        fillMode: root.settings.imageFit === "fit" ? Image.PreserveAspectFit : root.settings.imageFit === "stretch" ? Image.Stretch : Image.PreserveAspectCrop
         asynchronous: true
         cache: false
         opacity: 0.96
     }
 
     Rectangle {
-        visible: ambientSettings.mode === "slideshow" && root.photoCount > 0
+        visible: root.settings.mode === "slideshow" && root.photoCount > 0
         anchors.fill: parent
         gradient: Gradient {
             GradientStop { position: 0; color: "#22000000" }
@@ -69,7 +70,7 @@ Item {
     }
 
     Rectangle {
-        visible: ambientSettings.mode === "slideshow" && root.photoCount === 0
+        visible: root.settings.mode === "slideshow" && root.photoCount === 0
         anchors.centerIn: parent
         width: Math.min(parent.width * 0.72, 860)
         height: Math.min(parent.height * 0.58, 430)
@@ -89,7 +90,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 26
-            text: "Add PNG/JPG/WebP files to " + ambientSettings.photoDirectory
+            text: "Add PNG/JPG/WebP files to " + root.settings.photoDirectory
             color: "#91A0BC"
             font.pixelSize: 15
         }
@@ -102,21 +103,21 @@ Item {
         anchors.bottomMargin: 54
         spacing: 4
         Text {
-            visible: ambientSettings.showClock
+            visible: root.settings.showClock
             text: Qt.formatTime(root.now, "h:mm")
             color: "#F8FAFC"
             font.pixelSize: 76
             font.weight: Font.Light
         }
         Text {
-            visible: ambientSettings.showDate
+            visible: root.settings.showDate
             text: Qt.formatDate(root.now, "dddd, MMMM d")
             color: "#B9C7DE"
             font.pixelSize: 22
         }
         Text {
-            visible: ambientSettings.showSystemHint
-            text: ambientSettings.mode.toUpperCase() + " · " + (root.photoCount > 0 ? root.photoCount + " photos · " + ambientSettings.imageFit : "built-in placeholders") + " · changes every " + ambientSettings.slideshowSeconds + "s · any key wakes"
+            visible: root.settings.showSystemHint
+            text: root.settings.mode.toUpperCase() + " · " + (root.photoCount > 0 ? root.photoCount + " photos · " + root.settings.imageFit : "built-in placeholders") + " · changes every " + root.settings.slideshowSeconds + "s · any key wakes"
             color: "#71809F"
             font.pixelSize: 15
             font.letterSpacing: 2

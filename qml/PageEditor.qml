@@ -128,7 +128,8 @@ Item {
                 id: editGrid
                 width: parent.width
                 columns: root.columns
-                spacing: root.unit * 0.5
+                columnSpacing: root.unit * 0.5
+                rowSpacing: root.unit * 0.5
 
                 Repeater {
                     model: root.items
@@ -136,24 +137,24 @@ Item {
                         required property int index
                         required property var modelData
                         readonly property var placement: root.placementFor(modelData.id)
-                        readonly property int x: placement.x || placement.col || 0
-                        readonly property int y: placement.y || placement.row || 0
+                        readonly property int cellX: placement.x || placement.col || 0
+                        readonly property int cellY: placement.y || placement.row || 0
                         readonly property int w: placement.width || placement.cols || 1
                         readonly property int h: placement.height || placement.rows || 1
-                        readonly property real cellW: ((parent.width - (parent.columns - 1) * parent.spacing) / parent.columns)
+                        readonly property real cellW: ((parent.width - (parent.columns - 1) * parent.columnSpacing) / parent.columns)
                         readonly property real cellH: 140 * root.unit
 
-                        Layout.row: y
-                        Layout.column: x
+                        Layout.row: cellY
+                        Layout.column: cellX
                         Layout.rowSpan: h
                         Layout.columnSpan: w
-                        Layout.preferredWidth: cellW * w - parent.spacing
+                        Layout.preferredWidth: cellW * w - parent.columnSpacing
                         Layout.preferredHeight: cellH * h
 
                         DragHandler {
                             id: dragHandler
                             target: card
-                            threshold: 8 * root.unit
+                            dragThreshold: 8 * root.unit
                             onActiveChanged: {
                                 if (!active) {
                                     const nx = Math.round(card.x / cellW)
@@ -194,7 +195,7 @@ Item {
                             anchors.bottom: parent.bottom
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottomMargin: 6
-                            text: "(" + x + "," + y + ") " + w + "x" + h
+                            text: "(" + cellX + "," + cellY + ") " + w + "x" + h
                             color: "#AAA4B2"
                             font.pixelSize: 11
                         }
@@ -230,17 +231,18 @@ Item {
                             radius: 4
                             visible: root.selectedItem === index
                             DragHandler {
-                                target: resizeHandle
-                                onDragChanged: {
-                                    const dw = Math.round(drag.x / cellW)
-                                    const dh = Math.round(drag.y / cellH)
+                                target: null
+                                onActiveChanged: {
+                                    if (active) return
+                                    const dw = Math.round(persistentTranslation.x / cellW)
+                                    const dh = Math.round(persistentTranslation.y / cellH)
                                     root.setPlacement(modelData.id, {
-                                        x: x, y: y,
+                                        x: cellX, y: cellY,
                                         width: Math.max(1, w + dw),
                                         height: Math.max(1, h + dh)
                                     })
+                                    persistentTranslation = Qt.vector2d(0, 0)
                                 }
-                                onEnded: { resizeHandle.x = 0; resizeHandle.y = 0 }
                             }
                         }
 

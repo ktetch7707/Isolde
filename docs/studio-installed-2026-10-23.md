@@ -1,0 +1,16 @@
+# T20 installed checkpoint — 2026-10-23
+
+`tools/vm-test.ps1 Deploy -RunId t20-section-targets-20261023-full-d` activated release `d87a5f1475b036da6b5e55a8` in Isolde-Test. The runner verifies the installed executable matches the fully tested staged payload; the previous release is retained as `fc815f2341cb375a0b809118`. Deployment passes with the service active/running, PID 1979124, zero automatic restarts.
+
+Application evidence remains full-d: 25/25 native registrations in 276.05 seconds, including actual remote/drag/menu-started pointer movement matrices, cross-section cancellation and canonical parity. The subsequent reference-report tooling change does not change the installed application bytes. This installed run uses the frozen full-d graphical scripts; it cannot establish end-to-end verification of the newer report writer.
+
+`Visual -RunId t20-section-targets-20261023-full-d -Installed` passes all three functional graphical journeys. Durable host output is retained in `build/t20-section-targets-full-d-installed.log`/`.err`. Every one of the 23 installed captures was opened and reviewed.
+
+This is VM-only deployment and isolated functional acceptance, not physical TV/hardware or genuine user usability acceptance. The existing graphical Studio harness uses X11 remote keys; it does not prove installed pointer-drag parity. That specific desktop evidence and Pastel's populated reference remain open. T20 80%; Overall round(866/24) = 36% across 24 active tasks. No checkbox credit until the whole required gate is proven.
+## Installed captures and isolation
+
+- Studio attempt `20261023-110014-347`, `/tmp/isolde-components-acceptance-m0f6bc98`: fifteen captures. Actual remote add, reflow/cancel/undo, size preview, history, Try interaction interception, Apply/reopen, nested 4x2 input layout, Layers and long-page checkbox/movement pass. This synthetic windowed journey does not qualify TV-distance usability. The duplicate preview banner and verbose Inspector remain visible quality gaps.
+- Lounge attempt `20261023-110203-280`, `/tmp/isolde-reference-config-xd6bqiwa`: four captures. Populated composition, skin save/reapply and scoped reset retained. Reset default remains visually basic; no broad professional default acceptance is claimed.
+- Pastel attempt `20261023-110259-786`, `/tmp/isolde-reference-config-n_ai_tp_`: four captures. Save/reapply/reset passes; populated recreation remains **incomplete**, with one initial-based app and unavailable history. The known T21.9 collection/fixture dependency remains.
+
+All captures reside under `build/vm-oracle/t20-section-targets-20261023-full-d/visual/` with these attempt IDs; earlier staged attempts remain separate. Final installed report records the expected executable, passed/finished state and active/running service PID 1981840, zero automatic restarts. Both normal layout hashes are byte-identical before/after: Household `87aedaa1a40f7857ac54d06398aade1e2b41e18182aad698b248058c21d6fa6e`; Studio Demo `895804ffc1eb2167f5b723047116564742f70701a6d07eaf705b9928c59efdac`. No host settings/toolchains/services, normal profile edits or guest cleanup were performed.

@@ -1,4 +1,5 @@
 #include "app/AppRegistry.h"
+#include "app/AppArtwork.h"
 
 #include <QFile>
 #include <QCoreApplication>
@@ -8,9 +9,97 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QUrl>
+#include <QGuiApplication>
+#include <QIcon>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QSaveFile>
+#include <QBuffer>
+#include <QCryptographicHash>
+#include <QRegularExpression>
 #include <utility>
 
 AppRegistry::AppRegistry(QObject *parent) : QObject(parent) {}
+
+static bool validIconName(const AppDefinition &app)
+{
+    const auto value=app.launchConfiguration.value("icon");
+    static const QRegularExpression name("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
+    return !value.isValid() || (value.metaType().id()==QMetaType::QString && name.match(value.toString()).hasMatch());
+}
+
+static QString appIcon(const AppDefinition &app, bool cutout=false)
+{
+    if((app.type!="web" && app.type!="desktop" && app.type!="android") || !qobject_cast<QGuiApplication *>(QCoreApplication::instance()))return {};
+    auto name=app.launchConfiguration.value("icon",app.id).toString();
+    const auto roots=QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    const auto safeFile=[&](const QString &path){
+        const QFileInfo info(path);
+        if(!info.isFile() || info.size()<1 || info.size()>1024*1024)return false;
+        const auto canonical=info.canonicalFilePath();
+        for(const auto &root:roots){const auto base=QFileInfo(root).canonicalFilePath();if(!base.isEmpty() && canonical.startsWith(base+"/"))return true;}
+        return false;
+    };
+    // Desktop entries are app-supplied metadata. Never execute their Exec line
+    // while resolving artwork and never accept a remote Icon URL.
+    auto desktopId=app.launchConfiguration.value("desktopId").toString();
+    static const QRegularExpression desktopName("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$");
+    QStringList desktopIds{desktopId};if(app.id!=desktopId)desktopIds.append(app.id);
+    bool suppliedIcon=false;
+    for(auto candidateId:desktopIds)if(desktopName.match(candidateId).hasMatch()){
+        if(!candidateId.endsWith(".desktop"))candidateId+=".desktop";
+        for(const auto &root:roots){
+            const auto entry=QDir(root).filePath("applications/"+candidateId);
+            if(!safeFile(entry))continue;
+            QSettings settings(entry,QSettings::IniFormat);
+            const auto supplied=settings.value("Desktop Entry/Icon").toString().trimmed();
+            if(!supplied.isEmpty()){name=supplied;suppliedIcon=true;break;}
+        }
+        if(suppliedIcon)break;
+    }
+    QIcon icon;
+    const auto packaged=":/config/app-icons/"+app.launchConfiguration.value("icon",app.id).toString()+".svg";
+    if(QFile::exists(packaged))icon=QIcon(packaged);
+    else if(QDir::isAbsolutePath(name)){
+        if(!safeFile(name))return {};
+        QImageReader reader(name);const auto size=reader.size();
+        if(!reader.canRead() || size.width()<1 || size.height()<1 || size.width()>4096 || size.height()>4096)return {};
+        icon=QIcon(name);
+    } else {
+        if(!desktopName.match(name).hasMatch())return {};
+        icon=QIcon::fromTheme(name);
+        if(icon.isNull())for(const auto &root:roots){
+            for(const auto &folder:QStringList{"icons/hicolor/256x256/apps/","icons/hicolor/128x128/apps/","icons/hicolor/64x64/apps/","icons/hicolor/48x48/apps/","icons/hicolor/scalable/apps/","pixmaps/"}){
+                for(const auto &extension:QStringList{".png",".svg",".xpm"}){
+                    const auto path=QDir(root).filePath(folder+name+extension);
+                    if(safeFile(path)){icon=QIcon(path);break;}
+                }
+                if(!icon.isNull())break;
+            }
+            if(!icon.isNull())break;
+        }
+    }
+    if(icon.isNull())return {};
+    auto image=icon.pixmap(512,512).toImage();if(image.isNull())return {};
+    if(cutout)image=AppArtwork::cutout(image);
+    QByteArray bytes;QBuffer buffer(&bytes);buffer.open(QIODevice::WriteOnly);
+    if(!image.save(&buffer,"PNG") || bytes.size()>1024*1024)return {};
+    auto profile=QCoreApplication::instance()->property("isoldeProfile").toString();
+    if(profile.isEmpty())profile="default";
+    if(!desktopName.match(profile).hasMatch())return {};
+    const auto directory=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/profiles/"+profile+"/app-icons";
+    if(!QDir().mkpath(directory))return {};
+    const auto path=QDir(directory).filePath(QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex())+".png");
+    if(QFileInfo(path).isSymLink())return {};
+    QFile existing(path);
+    if(!existing.open(QIODevice::ReadOnly) || existing.read(1024*1024+1)!=bytes){
+        existing.close();QSaveFile file(path);
+        if(!file.open(QIODevice::WriteOnly) || file.write(bytes)!=bytes.size() || !file.commit())return {};
+    }
+    return QUrl::fromLocalFile(path).toString();
+}
 
 static QStringList readStringArray(const QJsonArray &array)
 {
@@ -45,7 +134,7 @@ QVariantList AppRegistry::apps() const
                                   {"networkRequirement", app.networkRequirement},
                                   {"handledActions", app.handledActions},
                                   {"section", app.section}, {"symbol", app.symbol},
-                                  {"accent", app.accent.name()}});
+                                  {"accent", app.accent.name()},{"logoSource",app.iconSource},{"cutoutLogoSource",app.cutoutIconSource}});
     }
     return result;
 }
@@ -57,16 +146,29 @@ const AppDefinition *AppRegistry::find(const QString &id) const
     for (const auto &app : m_apps)
         if (app.id == id)
             return &app;
+    for(const auto &app:m_apps)if(app.legacyIds().contains(id))return &app;
     return nullptr;
 }
 
 bool AppRegistry::addApp(const AppDefinition &app)
 {
-    if (!app.isValid() || find(app.id))
+    if (!app.isValid() || find(app.id) || !validIconName(app))
         return false;
-    m_apps.append(app);
+    for(const auto &alias:app.legacyIds())if(find(alias))return false;
+    auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,true);m_apps.append(resolved);
     emit appsChanged();
     return true;
+}
+
+bool AppRegistry::replaceApp(const AppDefinition &app)
+{
+    if(!app.isValid() || !validIconName(app))return false;
+    for(auto &existing:m_apps)if(existing.id==app.id){
+        if(existing.type!=app.type || existing.legacyIds()!=app.legacyIds())return false;
+        auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,true);
+        existing=resolved;emit appsChanged();return true;
+    }
+    return false;
 }
 
 bool AppRegistry::removeApp(const QString &id)
@@ -155,7 +257,14 @@ bool AppRegistry::loadFromData(const QByteArray &data)
                 return false;
             }
         }
+        if(!validIconName(app)){setError(tr("Choose a local registered app icon name."));return false;}
+        app.iconSource=appIcon(app);
+        app.cutoutIconSource=appIcon(app,true);
         ids.insert(app.id);
+        for(const auto &alias:app.legacyIds()){
+            if(ids.contains(alias)){setError(tr("App compatibility IDs must be unique."));return false;}
+            ids.insert(alias);
+        }
         loaded.append(app);
     }
     if (loaded.isEmpty()) {

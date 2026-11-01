@@ -24,6 +24,9 @@ class SessionManager final : public QObject {
 public:
     explicit SessionManager(AppRegistry *registry, QObject *parent = nullptr);
     void setLaunchGuard(std::function<QString(const QString &)> guard) { m_launchGuard = std::move(guard); }
+    void setLaunchPreparation(std::function<bool(const AppDefinition &)> prepare) { m_launchPreparation=std::move(prepare); }
+    bool resumePreparedLaunch(const AppDefinition &definition);
+    bool resumingPreparedLaunch() const { return m_resumingPrepared; }
 
     [[nodiscard]] bool hasActiveSession() const;
     [[nodiscard]] QString currentAppId() const;
@@ -37,12 +40,17 @@ public:
 
     Q_INVOKABLE bool launch(const QString &appId);
     Q_INVOKABLE bool launchAction(const QVariantMap &action);
+    // Only the identity-resolving Games dispatcher supplies this grant. It is
+    // deliberately not a QML/layout action argument.
+    bool launchGameFile(const QVariantMap &action, const QString &sourceRoot);
+    bool launchSteamGame(const QString &steamAppId);
     Q_INVOKABLE void exitCurrent();
     Q_INVOKABLE void goHome();
 
 signals:
     void launchDeferred(const QString &reason);
     void launching(const QString &appId);
+    void appOpened(const QString &appId);
     void activeChanged();
     void currentAppChanged();
     void previousFocusIdChanged();
@@ -51,11 +59,14 @@ signals:
     void returnedHome(const QString &focusId);
 
 private:
+    bool launchFileAction(const QVariantMap &action, const QString &sourceRoot);
     bool launchDefinition(AppDefinition definition);
 
     AppRegistry *m_registry;
     std::unique_ptr<AppSession> m_session;
     QString m_previousFocusId;
     bool m_intentionalExit = false;
+    bool m_resumingPrepared=false;
     std::function<QString(const QString &)> m_launchGuard;
+    std::function<bool(const AppDefinition &)> m_launchPreparation;
 };

@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "scope": "Packaged/fixture semantic-data parity only; no native or visual acceptance",
+  "convertedButtons": 10,
+  "unchanged": "Stable IDs, action links, placement, categories, all presentation values, app/history collection settings, pages and artwork",
+  "hashes": {
+    "config/skins/pastel.json": "11652e696e0765cdd6029584521cca3f9cb660b322f36e1b8a03473bc5e11bdf",
+    "tests/visual/home-pastel-reference/recreation-config.json": "1f7904a59d6e5080c85b20bdf7ba19ed169915028d4321d33a26c353d284412d"
+  }
+}

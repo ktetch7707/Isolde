@@ -1,0 +1,29 @@
+# Home feedback implementation — 2026-10-24
+
+User-directed related shell/T21 slice: delayed Home background, app-logo quality and silhouette treatment, editable Movies/TV menus, and Surfshark automatic switching. This does not complete the broader Studio header or release gates.
+
+## Implemented
+
+- Ordinary page wallpapers use a cached asynchronous scene-graph Image rather than the two-decoder Canvas path. Custom crop/focal/zoom keeps the existing renderer. An externally supplied wallpaper no longer causes a second hidden wallpaper load. Native launches retain the Home wallpaper, and custom artwork repaints when shown again.
+- App-supplied icons resolve at up to 512px. Original and conservative background-removed variants are content-addressed in the active profile cache. Removal affects only a uniform opaque background connected to an edge; enclosed details, existing alpha, ambiguous corners and nearly blank images are retained. No original file is overwritten.
+- App carousels default to the cutout variant. Appearance → App logo treatment offers cutout/original/tile. Orb logo surfaces become transparent, with a configurable alpha-following focus outline; absent artwork retains the existing recovery symbol. Every registry app uses the same pipeline, without app-ID-specific processing.
+- Explicit default-app provisioning checks provider HTML icon/touch-icon metadata and actual raster dimensions before selecting artwork; a functioning tiny favicon no longer ends discovery. HTTPS, candidate/byte/dimension/time bounds remain enforced. No startup artwork network fetch is introduced. This acquisition currently belongs to default provisioning; arbitrary third-party web packages still need supplied artwork metadata. It is not a universal third-party installer or browser scraper.
+- A registered Page menu component renders the profile's real ordered page list, including Home, through shared actions. It supports shared layout/presentation controls, remote selection, canvas Move, duplicate/delete and Undo. Page appearance → Layout → Edit page menu as a component starts placement or selects an existing menu. Explicit placement on a named page replaces fixed navigation with `pageNavigation: none` in the same transaction; the content area expands. Back before placement writes nothing; Undo restores both. Stored documents are never migrated on read. Existing fixed menus require that explicit conversion.
+
+## Verification
+
+- `build/vm-oracle/home-background-20261024-a/report/ctest.log`: all 28 registrations passed, including repeated hidden/shown wallpaper readiness and custom crop fallback.
+- `build/vm-oracle/home-artwork-20261024-b/report/ctest.log`: all 28 passed, including background preservation, cutout connectivity/interior details, logo treatment/focus and provider image selection/offline fallback/bounds.
+- Menu run C correctly refused an untracked new source before upload; the file was then tracked. Run D exposed a missing Studio preset allowlist entry; corrected. Run E passed 27/28; the remaining native catalog check still expected nine entries instead of ten. Its expectation was updated for the added component.
+- Run F caught missing required properties in the new production-renderer test fixture; corrected in G (focused pass). H passed 28/28. I adds a passing vertical-menu dispatch/boundary check.
+- Final application `build/vm-oracle/home-feedback-20261024-j/report/ctest.log`: **28/28 passed**, 140.68 seconds. Source digest `150f1c869dd7b2cb4ce2bca1747d51e8779c0b6c1a7e6dd7276bd831ad629490`. All 20 native PNGs are SHA-identical to the previously reviewed `native-return-20261024-full-c` images.
+- Deployed release `943b344f27dfd6fe4e993246`, previous `e2ca6970d5732c8fe3f739e2`. Explicit Provision refreshes all eleven apps with `iconsUnavailable: {}`; this is acquisition evidence, not a visual-quality verdict. Both normal layout hashes remain unchanged. The bounded provisioner records obsolete guest-payload/build cleanup in `report/guest-payload-cleanup.json`, retaining source/logs/current acceptance and increasing guest free space to 8.39 GiB.
+- Installed Studio/dark attempts finish their functional harnesses (15/4 captures), but the reviewed first Studio capture shows GNOME's app overview rather than the foreground product. **Reject this graphical attempt.** Pastel is cancelled after three captures. No standing visual acceptance or sharpness acceptance is claimed. The corrected bounded Cancel restores Isolde active/running, zero restarts, both layouts byte-identical; see [runner cancellation repair](vm-cancellation-2026-10-24.md). Graphical verification awaits a free VM and correct foreground state.
+
+## Surfshark dependency and remaining work
+
+The user selected Surfshark, confirmed it is not configured, and explicitly requested installation of its app in Isolde-Test. [The guest installation record](surfshark-install-2026-10-24.md) owns verified installation/launch evidence, the administrator flow and the post-install locked-keyring issue. Surfshark 3.14.0-7904 is installed and observed running. The native-app route supersedes asking the user to perform manual setup first. Login remains private and unverified.
+
+No host VPN changes have been made. No automatic VPN routing backend, per-app policy UI, tunnel connection or regional playback success is claimed by this slice. Those remain implementation/verification work after private guest connection setup; native-app installation is not evidence of permitted streaming access. CBC Gem's previously reviewed error required Canada, not the US.
+
+T20 80%, T21 36%; 24 active task percentages sum to 866, round(866/24) = Overall 36%. No broader checkbox is completed by this slice. Full editable header, universal Store onboarding, VPN switching, offline cold boot and physical hardware gates remain open.

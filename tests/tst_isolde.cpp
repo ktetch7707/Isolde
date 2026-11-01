@@ -1,5 +1,7 @@
 #include "app/AppRegistry.h"
+#include "app/AppArtwork.h"
 #include "app/AppCatalog.h"
+#include "app/FdroidProvider.h"
 #include "input/InputManager.h"
 #include "sessions/SessionManager.h"
 #include "home/HomeLayout.h"
@@ -13,6 +15,10 @@
 #include "theme/ArtPackCatalog.h"
 
 #include <QSignalSpy>
+#include <QCryptographicHash>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QFile>
 #include <QDir>
 #include <QTemporaryDir>
@@ -20,14 +26,206 @@
 #include <QSettings>
 #include <QUrl>
 #include <QtTest>
+#include <QScopeGuard>
+#include <QStandardPaths>
+
+class CountingStoreProvider final : public StoreProvider {
+public:
+    QString identity="fdroid";int searches=0;int pages=0;int cancellations=0;mutable int artifacts=0;QString lastQuery;
+    QStringList requestedUpdates;int updateChecks=0;QVariantList updates;
+    QString providerId() const override{return identity;}
+    QString providerName() const override{return "Test repository";}
+    bool isOnline() const override{return true;}
+    QVariantList search(const QString &query) override{lastQuery=query;++searches;return {QVariantMap{{"id","test-app"},{"storeId","test-app"},{"type","android"},{"storeType","android"},{"name","Test app"}}};}
+    void requestPage(int direction) override{pages+=direction;}
+    void cancel() override{++cancellations;}
+    bool hasNextPage() const override{return true;}
+    void publishLate(){emit resultsChanged();}
+    void requestUpdates(const QStringList &packages) override{requestedUpdates=packages;++updateChecks;}
+    QVariantList updateResults() const override{return updates;}
+    void publishUpdates(){emit updatesChanged();}
+    QUrl artifactUrl(const QString &) const override{++artifacts;return QUrl("https://example.invalid/app.apk");}
+    QByteArray artifactHash(const QString &) const override{return {};}
+    QString provenanceText(const QString &) const override{return "test";}
+};
 
 class IsoldeTests final : public QObject {
     Q_OBJECT
 
 private slots:
+    void fdroidBrowsingStaysOfflineUntilOptInAndDropsLateResults() {
+        FdroidProvider live;
+        QVERIFY(live.results().isEmpty());QVERIFY(live.status().isEmpty());
+        QVERIFY(!live.hasNextPage());QVERIFY(live.artifactUrl("unknown").isEmpty());
+        AppRegistry registry;AppCatalog catalog(&registry);CountingStoreProvider provider;
+        catalog.setStoreProvider(&provider);
+        catalog.searchStore("newpipe");catalog.changeStorePage(1);
+        QCOMPARE(provider.searches,0);QCOMPARE(provider.pages,0);
+        QVERIFY(!catalog.hasNextStorePage());
+        catalog.setOnlineStoreSearch(true);
+        QCOMPARE(provider.searches,1);QCOMPARE(provider.lastQuery,QString("newpipe"));
+        QVERIFY(catalog.hasNextStorePage());catalog.changeStorePage(1);QCOMPARE(provider.pages,1);
+        QCOMPARE(catalog.allEntries().size(),1);
+        catalog.setOnlineStoreSearch(false);QCOMPARE(provider.cancellations,1);
+        provider.publishLate();catalog.changeStorePage(1);
+        QVERIFY(catalog.providerResults().isEmpty());QVERIFY(catalog.allEntries().isEmpty());
+        QCOMPARE(provider.pages,1);QVERIFY(!catalog.hasNextStorePage());
+    }
+    void downloadedAndroidManifestPersistsAndRejectsTampering() {
+        QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir temp;
+        AppRegistry registry;AppCatalog catalog(&registry);
+        const auto state=temp.filePath("state.json"),packages=temp.filePath("packages");
+        QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"),state,packages));
+        const QString package="org.example.demo";
+        const auto id="fdroid-"+QString::fromLatin1(QCryptographicHash::hash(package.toUtf8(),QCryptographicHash::Sha256).toHex().left(24));
+        QJsonObject manifest{{"schemaVersion",1},{"kind","fdroid"},{"id",id},{"packageName",package},
+            {"name","Demo"},{"version","1234567890"},{"sha256",QString(64,'a')},{"provenance","Verified test repository"}};
+        AppCatalog::Entry entry;QVERIFY(catalog.customEntry(manifest,&entry));
+        QCOMPARE(entry.app.launchConfiguration.value("storeVersion").toString(),QString("1234567890"));
+        for(const auto &key:QStringList{"id","packageName","version","sha256"}) {
+            auto invalid=manifest;invalid[key]="../unsafe";QVERIFY(!catalog.customEntry(invalid,&entry));
+        }
+        const auto directory=packages+"/"+id+"/1234567890";QVERIFY(QDir().mkpath(directory));
+        QFile file(directory+"/manifest.json");QVERIFY(file.open(QIODevice::WriteOnly));file.write(QJsonDocument(manifest).toJson());file.close();
+        QFile activation(state);QVERIFY(activation.open(QIODevice::WriteOnly));
+        activation.write(QJsonDocument(QJsonObject{{"installed",QJsonArray{id}},
+            {"customPackages",QJsonObject{{id,"1234567890"}}}}).toJson());activation.close();
+        AppRegistry restoredRegistry;AppCatalog restored(&restoredRegistry);
+        QVERIFY2(restored.load(QFINDTESTDATA("../config/catalog.json"),state,packages),qPrintable(restored.errorString()));
+        QVERIFY(restored.isInstalled(id));QVERIFY(restoredRegistry.find(id));
+        QCOMPARE(restoredRegistry.find(id)->type,QString("android"));
+        // Subscription changes are profile-local, atomic, and suppress late offers.
+        CountingStoreProvider provider;restored.setStoreProvider(&provider);
+        QVERIFY(!restored.checkForUpdates());QCOMPARE(provider.updateChecks,0);
+        QVERIFY(restored.setUpdatesEnabled(id,false));
+        AppRegistry preferencesRegistry;AppCatalog preferences(&preferencesRegistry);
+        QVERIFY(preferences.load(QFINDTESTDATA("../config/catalog.json"),state,packages));
+        QVERIFY(preferences.m_updatesDisabled.contains(id));
+        QFile before(state);QVERIFY(before.open(QIODevice::ReadOnly));const auto original=before.readAll();before.close();
+        const auto blocked=temp.filePath("state-is-a-directory");QVERIFY(QDir().mkpath(blocked));
+        preferences.m_statePath=blocked;
+        QVERIFY(!preferences.setUpdatesEnabled(id,true));QVERIFY(preferences.m_updatesDisabled.contains(id));
+        QVERIFY(before.open(QIODevice::ReadOnly));QCOMPARE(before.readAll(),original);before.close();
+        preferences.m_statePath=state;
+        QVERIFY(restored.setUpdatesEnabled(id,true));restored.setOnlineStoreSearch(true);
+        QVERIFY(restored.checkForUpdates());QCOMPARE(provider.requestedUpdates,QStringList{package});
+        provider.updates={QVariantMap{{"packageName",package},{"versionCode","1234567891"},{"version","new"},{"compatible",true},{"metadataVerified",true}}};
+        provider.publishUpdates();QVERIFY(restored.m_availableUpdates.contains(id));
+        QVERIFY(restored.setUpdatesEnabled(id,false));provider.publishUpdates();
+        QVERIFY(!restored.m_availableUpdates.contains(id));
+        QVERIFY(!restored.checkForUpdates());QCOMPARE(provider.updateChecks,1);
+        // Failed update activation preserves the exact prior version and registry identity.
+        auto newer=manifest;newer["version"]="1234567891";AppCatalog::Entry update;
+        QVERIFY(restored.customEntry(newer,&update));restored.m_statePath=blocked;
+        QSignalSpy registryChanges(&restoredRegistry,&AppRegistry::appsChanged);
+        QVERIFY(!restored.commitUpdate(update));
+        QCOMPARE(restored.findEntry(id)->version,QString("1234567890"));
+        QCOMPARE(restoredRegistry.find(id)->launchConfiguration.value("storeVersion").toString(),QString("1234567890"));
+        QCOMPARE(restoredRegistry.apps().size(),1);QVERIFY(registryChanges.size()>=2);
+    }
+    void customWebAppsPersistAndRejectUnsafeInput() {
+        QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir temp;
+        const auto state=temp.filePath("state.json"),packages=temp.filePath("packages");
+        AppRegistry registry;AppCatalog catalog(&registry);QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"),state,packages));
+        for(const auto &url:QStringList{"javascript:alert(1)","file:///etc/passwd","http://example.org","https://user:secret@example.org"})QVERIFY(catalog.addWebApp("Example",url,"embedded").isEmpty());
+        QVERIFY(catalog.addWebApp("Example","https://example.org","shell").isEmpty());
+        const auto id=catalog.addWebApp("Example","https://example.org/","embedded");QVERIFY(!id.isEmpty());QVERIFY(catalog.isInstalled(id));
+        QCOMPARE(catalog.addWebApp("Example","https://example.org/","embedded"),id);
+        QCOMPARE(registry.find(id)->type,QString("web"));
+        AppRegistry restoredRegistry;AppCatalog restored(&restoredRegistry);QVERIFY2(restored.load(QFINDTESTDATA("../config/catalog.json"),state,packages),qPrintable(restored.errorString()));
+        QVERIFY(restored.isInstalled(id));QCOMPARE(restoredRegistry.find(id)->launchConfiguration.value("url").toString(),QString("https://example.org/"));
+        QVERIFY(restored.uninstall(id));AppRegistry removedRegistry;AppCatalog removed(&removedRegistry);
+        QVERIFY(removed.load(QFINDTESTDATA("../config/catalog.json"),state,packages));QVERIFY(!removed.isInstalled(id));
+        const auto chrome=catalog.addWebApp("Remote site","https://example.net/","chromium");QVERIFY(!chrome.isEmpty());
+        QCOMPARE(registry.find(chrome)->type,QString("desktop"));QCOMPARE(registry.find(chrome)->launchConfiguration.value("desktopId").toString(),QString("google-chrome"));
+        const auto blocked=temp.filePath("not-a-state-file");QDir().mkpath(blocked);AppRegistry failedRegistry;AppCatalog failed(&failedRegistry);
+        QVERIFY(failed.load(QFINDTESTDATA("../config/catalog.json"),blocked,temp.filePath("failed-packages")));
+        QVERIFY(failed.addWebApp("Failure","https://example.edu/","embedded").isEmpty());QVERIFY(failedRegistry.apps().isEmpty());
+    }
+    void onlineStoreRefusesUnknownSourcesAndRequiresOptInAndHash() {
+        AppRegistry registry;AppCatalog catalog(&registry);CountingStoreProvider provider;
+        provider.identity="unknown";catalog.setStoreProvider(&provider);QVERIFY(!catalog.storeProvider());
+        QVERIFY(catalog.errorString().contains("Unknown"));
+        provider.identity="fdroid";catalog.setStoreProvider(&provider);
+        catalog.searchStore("test");QCOMPARE(provider.searches,0);
+        QVERIFY(!catalog.downloadAndInstall("test-app"));QCOMPARE(provider.artifacts,0);
+        catalog.setOnlineStoreSearch(true);QCOMPARE(provider.searches,1);
+        QCOMPARE(catalog.providerResults().size(),1);
+        QVERIFY(!catalog.downloadAndInstall("test-app"));QVERIFY(catalog.errorString().contains("SHA-256"));
+        QVERIFY(!catalog.isInstalled("test-app"));QVERIFY(registry.find("test-app")==nullptr);
+        catalog.setOnlineStoreSearch(false);catalog.searchStore("again");QCOMPARE(provider.searches,1);
+        QVERIFY(catalog.providerResults().isEmpty());
+    }
+    void storeChangesOnlyTheActiveProfile() {
+        QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir directory;
+        const auto previous=qApp->property("isoldeProfile");const auto oldConfig=qgetenv("XDG_CONFIG_HOME"),oldData=qgetenv("XDG_DATA_HOME");
+        const auto restore=qScopeGuard([&]{qApp->setProperty("isoldeProfile",previous);if(oldConfig.isNull())qunsetenv("XDG_CONFIG_HOME");else qputenv("XDG_CONFIG_HOME",oldConfig);if(oldData.isNull())qunsetenv("XDG_DATA_HOME");else qputenv("XDG_DATA_HOME",oldData);});
+        qputenv("XDG_CONFIG_HOME",directory.filePath("config").toUtf8());qputenv("XDG_DATA_HOME",directory.filePath("data").toUtf8());
+        const auto config=QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),data=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QVERIFY(config.startsWith(directory.path()+"/"));QVERIFY(data.startsWith(directory.path()+"/"));
+        QDir().mkpath(config);QDir().mkpath(data+"/packages/plex/1.0.0");
+        QFile global(config+"/installed-apps.json");QVERIFY(global.open(QIODevice::WriteOnly));global.write(R"({"installed":["plex"]})");global.close();
+        QVERIFY(QFile::copy(QFINDTESTDATA("../config/packages/plex/manifest.json"),data+"/packages/plex/1.0.0/manifest.json"));
+        qApp->setProperty("isoldeProfile","3b86fe9a-8904-4dc2-bdb5-cfd8bb139c53");
+        AppRegistry one;AppCatalog first(&one);QVERIFY(first.load(QFINDTESTDATA("../config/catalog.json")));QVERIFY(first.isInstalled("plex"));QVERIFY(first.uninstall("plex"));
+        const auto website=first.addWebApp("Private website","https://example.org/private","embedded");QVERIFY(!website.isEmpty());
+        qApp->setProperty("isoldeProfile","2ec32a48-e38d-4986-af69-a04cc4dd09e7");
+        AppRegistry two;AppCatalog second(&two);QVERIFY(second.load(QFINDTESTDATA("../config/catalog.json")));QVERIFY(second.isInstalled("plex"));
+        QVERIFY(!second.isInstalled(website));QVERIFY(two.find(website)==nullptr);
+        qApp->setProperty("isoldeProfile","3b86fe9a-8904-4dc2-bdb5-cfd8bb139c53");
+        AppRegistry again;AppCatalog reloaded(&again);QVERIFY(reloaded.load(QFINDTESTDATA("../config/catalog.json")));QVERIFY(!reloaded.isInstalled("plex"));
+        QVERIFY(reloaded.isInstalled(website));
+        QVERIFY(global.open(QIODevice::ReadOnly));QCOMPARE(global.readAll(),QByteArray(R"({"installed":["plex"]})"));
+        QVERIFY(QFile::exists(data+"/packages/plex/1.0.0/manifest.json"));
+        global.close();qApp->setProperty("isoldeProfile","default");
+        AppRegistry householdRegistry;AppCatalog household(&householdRegistry);QVERIFY(household.load(QFINDTESTDATA("../config/catalog.json")));QVERIFY(household.uninstall("plex"));
+        QVERIFY(global.open(QIODevice::ReadOnly));QCOMPARE(global.readAll(),QByteArray(R"({"installed":["plex"]})"));
+        QVERIFY(second.isInstalled("plex"));
+    }
+    void androidDefinitionsRejectExecutableRecipes() {
+        AppRegistry registry;
+        const QByteArray valid=R"([{"id":"smarttube","name":"SmartTube","type":"android","runtimeApp":"smarttube","presentationMode":"desktop-bridge","section":"Apps"}])";
+        QVERIFY(registry.loadFromData(valid));
+        QCOMPARE(registry.find("smarttube")->type,QString("android"));
+        auto bad=*registry.find("smarttube");bad.id="bad";
+        bad.launchConfiguration["runtimeApp"]="../account";
+        QVERIFY(!registry.addApp(bad));
+        bad.launchConfiguration["runtimeApp"]="smarttube";
+        bad.launchConfiguration["executable"]="/bin/sh";
+        QVERIFY(!registry.addApp(bad));
+        QVERIFY(!registry.loadFromData(QByteArray(valid).replace("smarttube\",\"presentationMode", "../bad\",\"presentationMode")));
+        QVERIFY(registry.find("smarttube"));
+        QCoreApplication::setApplicationVersion("0.0.1.2");
+        QTemporaryDir directory;
+        AppCatalog catalog(&registry);
+        QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),directory.filePath("state.json"),directory.filePath("packages")),qPrintable(catalog.errorString()));
+        // Use a clean registry: publication must come from the normal catalog.
+        QVERIFY(registry.removeApp("smarttube"));
+        bool found=false;
+        for(const auto &entry:catalog.entries())if(entry.toMap().value("id")=="smarttube"){
+            QCOMPARE(entry.toMap().value("type").toString(),QString("android"));found=true;
+        }
+        QVERIFY(found); // Actual Android installation is verified in the VM Store journey.
+    }
+    void appArtworkRemovesOnlyConnectedBackground() {
+        QImage logo(20,20,QImage::Format_ARGB32);logo.fill(Qt::white);
+        for(int y=4;y<16;++y)for(int x=4;x<16;++x)logo.setPixelColor(x,y,Qt::red);
+        logo.setPixelColor(10,10,Qt::white);
+        const auto result=AppArtwork::cutout(logo);
+        QCOMPARE(result.pixelColor(0,0).alpha(),0);
+        QCOMPARE(result.pixelColor(4,4),QColor(Qt::red));
+        QCOMPARE(result.pixelColor(10,10),QColor(Qt::white));
+        QCOMPARE(logo.pixelColor(0,0),QColor(Qt::white));
+        logo.setPixelColor(0,0,Qt::transparent);
+        QCOMPARE(AppArtwork::cutout(logo),logo);
+        logo.fill(Qt::blue);QCOMPARE(AppArtwork::cutout(logo),logo);
+        logo.fill(Qt::white);logo.setPixelColor(19,0,Qt::black);
+        QCOMPARE(AppArtwork::cutout(logo),logo);
+    }
     void setupProgressPersistsAndHandlesFailure();
     void profilesPersistAndIsolatePersonalSettings();
     void registryLoadsConfig();
+    void registryCompatibilityIdsPreserveLayoutsWithoutDuplicateApps();
     void inputManagerMapsRemoteAndMediaKeys();
     void registryAcceptsLivingRoomPresentationModes();
     void registryAndHomeExposeNetworkRequirements();
@@ -65,7 +263,7 @@ void IsoldeTests::setupProgressPersistsAndHandlesFailure()
     QVERIFY(state.advance());
     SetupState resumed(path);
     QCOMPARE(resumed.step(), 1);
-    for (int i = 1; i < 6; ++i) QVERIFY(resumed.advance());
+    for (int i = 1; i < 7; ++i) QVERIFY(resumed.advance());
     QVERIFY(!resumed.complete());
     QVERIFY(resumed.advance());
     QVERIFY(SetupState(path).complete());
@@ -81,6 +279,16 @@ void IsoldeTests::setupProgressPersistsAndHandlesFailure()
     SetupState invalid(path);
     QVERIFY(!invalid.complete());
     QVERIFY(!invalid.error().isEmpty());
+    QVERIFY(malformed.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    const QByteArray legacy = "{\"version\":1,\"step\":6,\"complete\":true}";
+    QCOMPARE(malformed.write(legacy), legacy.size());
+    malformed.close();
+    SetupState legacyCompleted(path);
+    QVERIFY(legacyCompleted.complete());
+    QCOMPARE(legacyCompleted.step(), 7);
+    QVERIFY(malformed.open(QIODevice::ReadOnly));
+    QCOMPARE(malformed.readAll(), legacy); // Compatibility load must not rewrite.
+    malformed.close();
     SetupState blocked(path + "/not-a-directory.json");
     QVERIFY(!blocked.advance());
     QCOMPARE(blocked.step(), 0);
@@ -99,6 +307,21 @@ void IsoldeTests::registryLoadsConfig()
     QVERIFY(registry.loadFromData(config));
     QCOMPARE(registry.apps().size(), 3);
     QCOMPARE(registry.find("switch")->name, QString("Switch"));
+}
+void IsoldeTests::registryCompatibilityIdsPreserveLayoutsWithoutDuplicateApps()
+{
+    AppRegistry registry;
+    const auto valid=QByteArray(R"([{"id":"reader","name":"Reader","type":"mock","legacyIds":["old-reader"]}])");
+    QVERIFY(registry.loadFromData(valid));QCOMPARE(registry.apps().size(),1);QCOMPARE(registry.find("old-reader"),registry.find("reader"));
+    QTemporaryDir dir;const auto defaults=dir.filePath("default.json"),saved=dir.filePath("home.json");
+    const QByteArray layout=R"({"schemaVersion":1,"items":[{"id":"saved-tile","kind":"app","appId":"old-reader"}]})";
+    QFile file(defaults);QVERIFY(file.open(QIODevice::WriteOnly));file.write(layout);file.close();
+    HomeLayout home(&registry);QVERIFY(home.load(defaults,saved));QVERIFY(!QFile::exists(saved));QCOMPARE(home.items().first().toMap()["name"].toString(),QString("Reader"));
+    QVERIFY(!registry.loadFromData(R"([{"id":"reader","name":"Reader","type":"mock","legacyIds":["other"]},{"id":"other","name":"Other","type":"mock"}])"));
+    QCOMPARE(registry.find("old-reader"),registry.find("reader"));QCOMPARE(registry.apps().size(),1);
+    AppDefinition conflict;conflict.id="other";conflict.name="Other";conflict.type="mock";conflict.launchConfiguration={{"legacyIds",QVariantList{"old-reader"}}};QVERIFY(!registry.addApp(conflict));
+    conflict.launchConfiguration={{"legacyIds",QVariantList{"../unsafe"}}};QVERIFY(!registry.addApp(conflict));
+    QVERIFY(registry.removeApp("reader"));QVERIFY(!registry.find("old-reader"));QVERIFY(!QFile::exists(saved));
 }
 
 void IsoldeTests::inputManagerMapsRemoteAndMediaKeys()

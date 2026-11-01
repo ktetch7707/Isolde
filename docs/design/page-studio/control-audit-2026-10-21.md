@@ -1,0 +1,49 @@
+# Page Studio control audit
+
+Source review requested by the user, 2026-10-21. This is an audit and implementation contract, not an installed usability test or completed UI work. Read alongside the existing usability audit and approved expansion. It adds no declined contrast assistant, focus-route editor, remote test mode, destination previews or asset-management library.
+
+## Finding
+
+`qml/StudioInspector.qml:120–142` sends all number fields to the keyboard on Confirm and routes choices to generic lists. Its `labels()` flattens crop, layout, app selection and appearance states into strings. The delegate at lines 256–264 renders the same text/button row for every kind of value. Left/Right already adjusts some values; this is useful behavior to retain, but it does not make their affordance visible. `qml/PageStudioView.qml` has genuine size sliders; its child layout, grid conversion, alignment and view controls remain textual lists. `qml/StudioCatalog.qml` uses textual app checklists and artwork names/dimensions after its visual family selector.
+
+Functional defect: `StudioInspector.qml:267` paints a hue ring, but its MouseArea writes the literal `#ff0000` for every click. The view's labels contain only Back, with no remote color adjustment. This is not a functioning color picker and must not count toward T21.10. Replace it through that existing gate and test actual hue/saturation/brightness/opacity values, accepted/canceled edits and remote/pointer parity. Do not add another decorative picker over a hard-coded handler.
+
+## Control replacements, in implementation priority
+
+All requirements below extend existing unchecked gates; they are not new weighted tasks. Reuse validated schema limits and shared appearance/session commands. Proposed controls must reflect the actual available capability and stored state.
+
+| Priority | Control / current friction | Required primary interaction | Owner |
+|---|---|---|---|
+| First | Color: nonfunctional wheel and code-oriented values | Working theme swatches/presets/wheel, brightness and opacity sliders, before/after swatches; Advanced accepts exact codes. Follow existing T21.10 contract. | T21.10 |
+| First | Opacity, background dimming, blur: numeric values obscure the visible effect | Labeled horizontal sliders with live page feedback; opacity/dimming show percentages mapped to existing schema values. Blur uses a meaningful strength label and exact value secondarily. | T21.10–T21.11 |
+| First | Corners and border/focus thickness: isolated numbers | Preview chips for supported corner treatments plus a Custom radius slider; border thickness slider beside a real edge sample. Respect shape/size bounds; do not invent unsupported circle/pill semantics. | T21.11–T21.12 |
+| First | Image framing: Fit plus Focal X/Y/Zoom and pixel crop rows | Fit/Fill segmented choice, a directly movable focal target and crop rectangle over the image, zoom slider and aspect-lock control. Remote adjustment uses the same image-space transaction. Pixels remain Advanced. | T21.8, T21.11 |
+| First | Apps: textual checkbox prefixes in a long list | Icon/name selection tiles with a real check state, count and an explicit Done action; selected items strip provides ordering. All installed/Selected is a segmented choice. Never truncate membership to fit the screen. | T21.6 |
+| First | Collection count/capacity: easy to confuse with component size | Bounded minus/value/plus stepper for Visible cards and History count, separate from outer Width/Height sliders. Show actual resulting density and overflow behavior; changing visible capacity does not remove items. | T21.6–T21.7, T21.11 |
+| Next | Spacing/padding: rows of integers | Spacing slider plus a small diagram distinguishing outside margin, inside padding and item gap. Offer linked sides by default; separate sides only where supported by schema. Use live runtime geometry, not a detached approximation. | T20.5, T21.11 |
+| Next | Container/grid setup: Mode/Columns/Rows/Gap/Padding string rows | Visual layout choice cards, a bounded row/column selector with a live cell diagram, then gap/padding controls. Show the proposed child arrangement before acceptance; no implicit conversion or collision overwrite. | T20.5, T21.11 |
+| Next | Typography: size numbers and boolean style settings | Typeface choices shown in their own typeface, size slider and short role presets, Bold switch, supported alignment segments and line-count stepper. Preserve custom values; do not silently snap an existing value to a preset. | T21.11 |
+| Next | Icon size and art/card proportions: opaque measurement values | Live size sliders and supported aspect-ratio chips (with visual rectangle samples); linked-proportions switch where meaningful. Keep outer component size separate from internal art/icon/card size. | T21.8, T21.11 |
+| Next | Binary properties shown as On/Off text or toggle-like commands | Real labeled switches for supported boolean settings; eye and lock controls with readable labels for visibility/locking. Show the resulting state, not an ambiguous action word. Restore focus after unlock. | T21.8, T21.11 |
+| Next | Small finite choices presented as another full-screen list | Use labeled segmented controls for short mutually exclusive sets such as horizontal/vertical, Fit/Fill and text alignment. Use a list for longer sets; never squeeze labels or rely on icons alone. | T21.11 |
+| Next | Appearance states: technical state names in a generic list | Clearly named state tabs/chips, such as Default, Focused and Pressed, with an editor-only render of the selected state and explicit return to Default. Distinguish actual editor focus from simulated component state. | T21.11–T21.12 |
+| Next | Inherited values append explanatory strings to every property | Compact Theme/Custom control beside the value, with a visible Reset to theme action. Mixed selection is explicit; choosing Theme removes the override rather than copying its current value. Keep source detail available without a paragraph on every row. | T21.11; T22.2 for linked styles |
+| Next | Alignment/distribution: eight similar textual operations | A labeled visual alignment pad and horizontal/vertical distribution buttons. Enable only valid selection/scope operations; preview all affected components and accept one undoable result. | T20.5 |
+| Next | Background design: properties scattered across fields | Image/Solid/Gradient choice cards; gradient preview with selectable stops and supported direction presets; dimming overlay slider. Only expose stops/directions supported by validated data, extending schema/defaults explicitly when in scope. | T21.10–T21.11 |
+| Later | Canvas navigation: separate Zoom in/Zoom out/Pan commands | Zoom slider with Fit and 100% buttons, direct pointer pan and an equivalent remote pan mode. A small navigator is appropriate only if zoom makes the viewport difficult to locate. No layout changes from camera movement. | T21.14 |
+| Later | Action selection and local image import: flat action list and typed file path | None/Page/App/Action chooser followed by relevant searchable options; local image selection via a bounded remote-accessible file browser with thumbnails and explicit import. Keep path entry as Advanced. This is a selection dialog, not the declined asset-management feature. | T21.8, T21.11; action search expansion |
+
+## Consistent interaction rules
+
+- Four short, relevant groups: Content, Appearance, Size & layout, Action; accessibility remains reachable. Hide unsupported controls rather than filling the inspector with inactive fields. Keep Advanced attached to its property/group, not a second mixed tool bucket.
+- Up/Down moves between controls. Left/Right changes a focused scalar, stepper or segmented value; controls whose adjustment requires both axes enter an explicit adjustment state on Confirm. Back leaves that state before closing the editor. Pointer and remote call the same semantic operation.
+- Sliders have a visible track, thumb, useful endpoints and readable current value, including unit. Avoid giant ranges for tiny discrete sets: use a stepper or segments instead. No hover-only affordances or unlabelled icon puzzles.
+- A continuous slider/crop gesture previews without accumulating undo records. Done accepts the complete valid result once; Cancel/Back restores the entry values and affected neighbors. Avoid turning key repeat into dozens of undo steps. Persist only through Apply.
+- Keep exact input available for genuinely precise work via an explicit value/Advanced action. Keyboard is primary for names, labels, body text and search queries; it is not the default for choosing size, color, spacing or a known destination.
+- Keep the authored item visible, retain shared Home focus styling, and scroll focused controls fully into view. State is communicated through labels/checks/shape as well as color. Do not add persistent instructional prose to compensate for unclear controls.
+
+## Verification and completion
+
+Before an owning gate closes, verify the corresponding controls through actual QML input, not string-presence tests: endpoints/steps, inherited/mixed values, meaningful non-default choices, invalid candidates, cancel, one-step undo, profile teardown and remote/pointer canonical parity. For colors specifically, clicking distinct wheel positions must produce distinct expected colors; remote can reach equivalent values and cancel preserves the prior color.
+
+T24 installed acceptance must exercise image framing, choose/reorder apps, change spacing/type/corners and configure a collection without opening a numeric keyboard. Record observed confusion rather than claiming usability from screenshots. Run the owning task's native/QML suites and both standing fixtures for visual changes. This static review runs no application/VM tests and adds no implementation credit.

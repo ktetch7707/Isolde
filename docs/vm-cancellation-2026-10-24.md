@@ -1,0 +1,9 @@
+# VM graphical cancellation repair — 2026-10-24
+
+The Home feedback visual attempt exposed a real cancellation defect. The first reviewed capture showed GNOME's app overview, so the attempt was rejected. Cancel verified the guardian PID/start identity and sent SIGTERM, but its `InterruptedError` handler was swallowed by Python selectors as a retryable interrupted system call. The stage continued and Cancel timed out. These captures are not accepted product evidence.
+
+The handler now raises `RuntimeError`, which exits the selector and reaches the owned-child/service cleanup. SIGINT uses the same handler for new guardians. Cancel uses identity-checked SIGINT so older guardians also unwind their `finally` blocks; if an older guardian exits without writing final status, Cancel records that verified exit as a failed/cancelled run. It never signals an unverified owner.
+
+Actual corrected cancellation: `home-feedback-20261024-j/cancel.log`, driver `911e8df8d92f96a347d120511be0d7a578a410866c70e4133a689eef77057598`; `cancelled: true`, the normal Isolde service active/running, PID 55772, zero restarts. Household hash `87aedaa1a40f7857ac54d06398aade1e2b41e18182aad698b248058c21d6fa6e` and Studio Demo hash `85865ee3f03c6301cb2b3153bacc1bde8fba01b2c005279f7cd86263311cb4cf` remain unchanged.
+
+`build/vm-oracle/home-feedback-20261024-k/report/oracle-self-test.log`: **23/23 pass** in 0.749 seconds. The new regression delivers a real signal while a selector waits on an owned sleeping child and requires bounded unwind/cleanup. Foreign-owner refusal and unknown-run checks still pass. The same run's `studio_unit` registration passes (0.43 seconds); it is a targeted verification, not a new deployment payload. The application itself passed the complete 28-registration suite in J and remains deployed. No Windows service, networking, security or account settings changed.

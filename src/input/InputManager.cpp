@@ -1,8 +1,10 @@
 #include "input/InputManager.h"
+#include "input/WebRemoteScript.h"
 
 #include <Qt>
 
 InputManager::InputManager(QObject *parent) : QObject(parent) {}
+QString InputManager::webRemoteScript(const QVariantMap &appearance) const { return ::webRemoteScript(appearance); }
 
 InputManager::Command InputManager::commandForKey(int key) const
 {

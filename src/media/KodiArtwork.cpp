@@ -62,7 +62,7 @@ void KodiArtwork::clear()
 void KodiArtwork::load(const QString &kind, int id)
 {
     cancel(); m_kind = kind; m_item = id; m_source.clear();
-    if (id < 1 || !QStringList{"movie", "tvshow", "season", "episode"}.contains(kind)) { m_status = "No artwork selected"; emit changed(); return; }
+    if (id < 1 || !QStringList{"movie", "tvshow", "season", "episode", "album", "song", "channel"}.contains(kind)) { m_status = "No artwork selected"; emit changed(); return; }
     m_status = "Loading Kodi artwork…"; m_debounce.start(); emit changed();
 }
 void KodiArtwork::finish(const QString &status) { cancel(); m_source.clear(); m_status = status; emit changed(); }

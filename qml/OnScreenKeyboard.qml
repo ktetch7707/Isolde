@@ -3,6 +3,8 @@ import QtQuick
 Item {
     id: root
     property bool passwordMode: false
+    property var appearance: ({})
+    property string hint: "D-pad choose    Enter type/select    Esc cancel"
     property string value: ""
     property int selectedIndex: 0
     property bool shift: false
@@ -50,9 +52,9 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 12
-        color: "#182238"
+        color: root.appearance.surfaceColor || "#182238"
         border.width: 2
-        border.color: "#4D7ED8"
+        border.color: root.appearance.focusColor || "#4D7ED8"
 
         Column {
             anchors.fill: parent
@@ -63,7 +65,7 @@ Item {
                 width: parent.width
                 height: 50
                 radius: 8
-                color: "#0E1628"
+                color: root.appearance.selectedColor || "#0E1628"
                 border.width: 1
                 border.color: "#354462"
                 Text {
@@ -73,7 +75,7 @@ Item {
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
                     text: root.passwordMode && root.value.length > 0 ? "•".repeat(root.value.length) : root.value
-                    color: "#F8FAFC"
+                    color: root.appearance.textColor || "#F8FAFC"
                     font.pixelSize: 20
                     elide: Text.ElideRight
                 }
@@ -92,13 +94,13 @@ Item {
                         width: (parent.width - parent.columnSpacing * (root.columns - 1)) / root.columns
                         height: 40
                         radius: 8
-                        color: root.selectedIndex === index ? "#E8EEF8" : (modelData === "Done" ? "#2B6B4B" : "#111A2A")
+                        color: root.selectedIndex === index ? root.appearance.selectedColor || "#E8EEF8" : root.appearance.surfaceColor || (modelData === "Done" ? "#2B6B4B" : "#111A2A")
                         border.width: root.selectedIndex === index ? 3 : 1
-                        border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                        border.color: root.selectedIndex === index ? root.appearance.focusColor || "#F8FAFC" : root.appearance.mutedColor || "#2B3853"
                         Text {
                             anchors.centerIn: parent
                             text: modelData
-                            color: root.selectedIndex === index ? "#07111F" : "#F8FAFC"
+                            color: root.appearance.textColor || (root.selectedIndex === index ? "#07111F" : "#F8FAFC")
                             font.pixelSize: modelData.length > 1 ? 13 : 18
                             font.weight: Font.DemiBold
                         }
@@ -107,8 +109,9 @@ Item {
             }
 
             Text {
-                text: "D-pad choose    Enter type/select    Esc cancel"
-                color: "#91A0BC"
+                width:parent.width;wrapMode:Text.Wrap
+                text: root.hint
+                color: root.appearance.mutedColor || "#91A0BC"
                 font.pixelSize: 15
             }
         }

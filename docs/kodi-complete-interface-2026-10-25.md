@@ -1,0 +1,39 @@
+# Complete Kodi interface through Isolde
+
+User requirement, 2026-10-25: every ordinary media workflow completes inside Isolde. Kodi is the backend; opening its menus, settings, playlist editor, poster picker or library screens must never be a required step. This explicitly supersedes the October 19 restriction that curation must be performed in Kodi. It extends the current twelve acceptance repairs rather than canceling them or the unfinished VPN work.
+
+## Ownership and implementation
+
+Kodi remains authoritative for media metadata, library organization, playlists, artwork, playback, watched state and resume positions. Isolde supplies the complete remote-operable interface using the existing profile-scoped Kodi service/client/private bridge and validated dispatcher. Do not introduce another media database, scraper or player. Use supported Kodi APIs and the managed profile's supported configuration/playlist interfaces; do not write Kodi's database. No writes to another profile or an unmanaged Kodi installation.
+
+Required workflows:
+
+- Create, name, edit, reorder and delete playlists; choose library members or validated smart rules; preview contents, save atomically and recover on failure. Playlists must be selectable by shelves and retained by Kodi. Existing Isolde-only manual collections are legacy compatibility, not the new playlist backend.
+- Browse movies, series, seasons, episodes, music and configured channels; search, filter and browse genres; view details and progress. Actual library data, loading, empty, missing-source and retry states must remain clear.
+- View and control playback within the Isolde experience: play/resume/restart, pause, seek, stop, next/previous, audio/subtitle tracks and appropriate viewing settings. Preserve Kodi progress and exact originating shelf/card. Subscription-provider playback remains separately scoped.
+- Manage library folders/sources, content type and relevant scanner/metadata settings; trigger refresh/scans, show progress/results/errors, and recover without a Kodi dialog. Make destructive operations explicit and preserve import/backup/rollback guarantees.
+- Change a title's poster/artwork from Isolde using Kodi-owned metadata/artwork handling, including preview, cancel, apply, unavailable files and refresh. Do not confuse changing a page component's decoration with changing the library title's poster.
+- Expose the remaining relevant Kodi capabilities/settings through comprehensible themed Isolde controls. Keep this capability inventory explicit; a generic raw setting form or an Open Kodi button does not constitute completion.
+- Start the backend automatically, keep Kodi navigation/settings invisible, recover backend failures inside Isolde, and provide a consistent remote exit from playback. A separate Kodi menu/window requiring user interaction fails acceptance.
+
+All workflows use the shared appearance model, readable TV sizing and D-pad/Confirm/Back/Menu/Search. Controls have visible focus and exact return; cancel does not write; changes are profile isolated and validated. Report errors with retry and preserve previous working data on failure. Bounded requests and offline behavior remain standing requirements.
+
+## Sequence and acceptance
+
+Finish verification of the current saved-playlist source slice, then extend it into real Kodi-owned playlist authoring. Continue library/source management, scanning and title artwork editing; complete playback controls and automatic background lifecycle. Integrate these with the reported genre shelves and Settings/theme repairs. Existing editor, app-return, Steam, artwork, header/component and screensaver-page requirements remain open.
+
+Maintain native/unit coverage plus real-Kodi tests in fresh disposable profiles. Tests must exercise the actual Isolde UI and verify resulting Kodi data, playback/progress and rollback. An API response, registration, mocked picker, hidden Kodi menu, or a fixture operated through Kodi's UI does not prove the complete user workflow. Both standing visual fixtures and normal-profile preservation remain required. Existing fixtures that use Kodi dialogs may bootstrap synthetic test data, but cannot be counted as evidence that Isolde's setup/management UI is complete.
+
+No implementation-complete claim or new checkbox credit is made by this requirements record.
+
+## Playlist authoring checkpoint in progress
+
+The current slice adds Save playlist and Saved playlists to Isolde's movie/show browser. It creates Kodi-owned smart playlists from the current supported view, with a remote name keyboard, cancel without a write, status/retry and catalog browsing. The managed backend validates inputs and creates a new bounded `.xsp` using descriptor-relative no-follow paths, XML escaping, private temporary files, fsync and no-overwrite publication. Existing playlists are preserved on injected publication failure. Rename, member editing/reordering and deletion remain open.
+
+Focused `media-controls-20261025-a` navigation passes. B exposes a missing new-module stub in the playback service test, corrected before C. C passes the playlist tests but fails browser cookie persistence. Diagnosis exposes the browser test's Qt.exit ending the process before profile teardown, and its supposed four-phase cycle exiting early. D/E/F are retained diagnostic failures; G uses an explicit test completion signal, tears down profiles before shutdown and refuses incomplete cycles, passing the focused browser test. H then passes **30/30** native registrations in 277.56 seconds. This changes the test harness, not the product cookie policy.
+
+H's real-Kodi graphical attempt stops at initial `wmctrl -lp` window discovery, before exercising playlist creation. Normal profile hashes remain unchanged and the service restores active with zero restarts. The discovery helper now retains errors and waits within the existing deadline for compositor client-list readiness; I is the next verification run. No actual playlist-creation UI, deployment or task-completion claim is made yet. Evidence: `build/vm-oracle/media-controls-20261025-{b,c,h}/report/`, `build/vm-oracle/media-profile-20261025-{d,e,f,g}/report/`, H guest fixture `/tmp/isolde-tv-acceptance-z863_yv8`.
+
+I supersedes that pending checkpoint: **31/31** native registrations pass in 272.73 seconds. Its fresh real-Kodi profile verifies the actual Isolde name keyboard, Back cancel with no file, saved smart-playlist XML, saved catalog selection and playlist members. All **seven** playlist captures are reviewed under `build/vm-oracle/media-controls-20261025-i/visual/playlists/attempt-20261025-164652-721/`; guest `/tmp/isolde-tv-acceptance-2hhqms2w`. Playback state RPCs pass play/pause/stop, but those three captures remain on the library rather than showing video: this is backend state evidence, not complete playback presentation acceptance. The opened playlist heading exposes its generated filename; friendly presentation remains open.
+
+All three standing graphical journeys pass. All **28** captures are reviewed, including both recreation/reset pairs compared with their reference images: Studio `attempt-20261025-164840-239`, lounge `attempt-20261025-165025-690`, Pastel `attempt-20261025-165124-158`. Existing Pastel content/artwork/proportion and broader design gaps remain open. All **20** native screenshots match reviewed K. Normal profile layout hashes are unchanged; service active, zero restarts. Tested source digest `3bce44c72c22d8d6ee60ade50273998ee697c2824a228459519a38352485655b`; deployed release `cc26b6a6530d1a508e0b3c15`. Guest standing evidence: `/tmp/isolde-components-acceptance-k795shh0`, `/tmp/isolde-reference-config-957dvkby`, `/tmp/isolde-reference-config-pitx_rm4`. This is a narrow playlist-creation checkpoint; Studio shelf-picker acceptance, full playlist management, Kodi-free setup and full playback remain open. No weighted checkbox credit; T04 14%, Overall 35%.

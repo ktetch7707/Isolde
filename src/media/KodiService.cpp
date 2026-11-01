@@ -214,7 +214,7 @@ void KodiService::start()
     }
     const auto destination = addonsOverlay + '/' + runtimeId;
     if (!QDir().mkpath(destination)) { fail("Cannot create Kodi startup files."); return; }
-    for (const auto &name : QStringList{"addon.xml", "service.py", "bridge.py", "playback.py", "artwork.py"}) {
+    for (const auto &name : QStringList{"addon.xml", "service.py", "bridge.py", "playback.py", "artwork.py", "playlists.py"}) {
         QFile source(addon + '/' + name), target(destination + '/' + name);
         if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly)) { fail("The Isolde Kodi bridge is missing. Reinstall Isolde."); return; }
         auto data = source.readAll();

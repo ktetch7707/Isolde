@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QSet>
 #include <QUuid>
 #include <QUrl>
 #include <QtMath>
@@ -24,7 +25,7 @@ QVariantMap normalizedActionForItem(const QJsonObject &object)
     if (kind == QStringLiteral("app")) {
         return QJsonObject{{"type", "launch-app"}, {"appId", object.value("appId")}}.toVariantMap();
     }
-    if (kind == QStringLiteral("action") && object.contains("action")) {
+    if ((kind == QStringLiteral("action") || object["componentType"]=="button" || object["componentType"]=="image") && object.contains("action")) {
         return object.value("action").toObject().toVariantMap();
     }
     return QVariantMap{};
@@ -65,9 +66,37 @@ bool PageModel::loadDocument(const QByteArray &data, bool /*userDocument*/)
 bool PageModel::storePage()
 {
     if (!m_owner) return false;
-    const bool ok = m_owner->storePage(m_pageId, m_pageDocument);
+    auto document = m_pageDocument;
+    QJsonArray components;
+    for (const auto &entry : document.value("components").toArray()) {
+        QString error;
+        const auto normalized = ComponentSchema::component(entry.toObject().toVariantMap(), true, &error);
+        if (normalized.isEmpty()) { m_owner->setError(error); return false; }
+        components.append(QJsonObject::fromVariantMap(normalized));
+    }
+    document["components"] = components;
+    document["schemaVersion"] = 2;
+    const bool ok = m_owner->storePage(m_pageId, document);
     if (!ok) m_owner->setError(m_owner->errorString());
     return ok;
+}
+
+bool PageModel::setSectionPresentation(const QString &id, const QVariantMap &value)
+{
+    if (!ComponentSchema::validPresentation(value, true)) return false;
+    const auto previous = m_pageDocument;
+    auto categories = m_pageDocument.value("categories").toArray();
+    for (qsizetype i = 0; i < categories.size(); ++i) {
+        auto category = categories[i].toObject();
+        if (category.value("id").toString() != id) continue;
+        category["presentation"] = QJsonObject::fromVariantMap(value);
+        categories[i] = category;
+        m_pageDocument["categories"] = categories;
+        if (!storePage()) { m_pageDocument = previous; return false; }
+        emit placementsChanged();
+        return true;
+    }
+    return false;
 }
 
 QVariantMap PageModel::document() const
@@ -92,12 +121,12 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
         const auto action = normalizedActionForItem(object);
         if (!action.isEmpty()) {
             item.insert("actionType", action.value(QStringLiteral("type")).toString());
-            item.insert("action", action.toVariantMap());
+            item.insert("action", action);
         }
         if (item.value("kind") == QStringLiteral("app")) {
             const auto appId = item.value("appId").toString();
             const auto *app = registry ? registry->find(appId) : nullptr;
-            item.insert("name", app ? app->name : item.value("name", appId));
+            item.insert("name", !item.value("name").toString().isEmpty()?item.value("name"):app ? app->name : appId);
             item.insert("section", app ? app->section : QStringLiteral("Missing app"));
             const auto tileSymbol = item.value("symbol").toString();
             const auto tileAccent = item.value("accent").toString();
@@ -116,12 +145,12 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
             item.insert("networkRequirement", networkRequirement.isEmpty() ? QStringLiteral("none") : networkRequirement);
         }
         const auto logoFile = item.value("customLogo").toString();
-        item.insert("logoSource", logoFile.isEmpty() ? QString()
-            : QUrl::fromLocalFile(QDir(QFileInfo(QString()).absolutePath()).filePath(logoFile)).toString());
-        auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), registry, QVariantList{});
-        if (unavailable.isEmpty() && action.value("type").toString() == QStringLiteral("switch-input")) {
+        item.insert("logoSource", m_owner?m_owner->resolveArtwork(logoFile):QString());
+        auto unavailable = ComponentSchema::unavailable(action, registry, m_owner?m_owner->m_collections:QVariantList{});
+        if (unavailable.isEmpty() && action.value("type").toString() == QStringLiteral("switch-input") && (!m_owner || !m_owner->m_captureInputsReady)) {
             unavailable = QCoreApplication::translate("PageModel", "Configure Settings → System → HDMI Inputs");
         }
+        if(object.value("requiredCapability")=="capture-inputs" && (!m_owner || !m_owner->m_captureInputsReady))unavailable=QCoreApplication::translate("PageModel","HDMI capture unavailable · configure inputs in Settings");
         item.insert("unavailableReason", unavailable);
         result.append(ComponentSchema::component(item, true));
     }
@@ -147,7 +176,7 @@ bool PageModel::setComposition(const QVariantMap &value)
     const auto components = m_pageDocument.value("components").toArray();
     QJsonArray itemsForFit;
     for (const auto &v : components) itemsForFit.append(v);
-    if (!ComponentSchema::placementsFit(itemsForFit, grid)) {
+    if (!ComponentSchema::layoutPlacementsFit(itemsForFit,value,m_pageDocument["categories"].toArray())) {
         m_owner->setError(tr("Placed widgets do not fit this page composition's grid."));
         return false;
     }
@@ -184,7 +213,8 @@ bool PageModel::setGrid(const QVariantMap &value)
     const auto components = m_pageDocument.value("components").toArray();
     QJsonArray itemsForFit;
     for (const auto &v : components) itemsForFit.append(v);
-    if (!ComponentSchema::placementsFit(itemsForFit, updated)) {
+    auto proposed=composition();proposed["grid"]=updated;
+    if (!ComponentSchema::layoutPlacementsFit(itemsForFit, proposed,m_pageDocument["categories"].toArray())) {
         m_owner->setError(tr("This grid would move placed widgets outside its bounds."));
         return false;
     }
@@ -233,6 +263,11 @@ QVariantList PageModel::items() const
     QJsonArray components;
     if (m_pageDocument.contains("components"))
         components = m_pageDocument.value("components").toArray();
+    if(m_owner && !m_owner->m_draftOnly){
+        QSet<QString> hidden;for(const auto &entry:components)if(entry.toObject().value("hidden").toBool())hidden.insert(entry.toObject()["id"].toString());
+        for(int depth=0;depth<4;++depth)for(const auto &entry:components){const auto item=entry.toObject();if(hidden.contains(item.value("parentId").toString()))hidden.insert(item["id"].toString());}
+        QJsonArray visible;for(const auto &entry:components)if(!hidden.contains(entry.toObject()["id"].toString()))visible.append(entry);components=visible;
+    }
     return resolveItems(components);
 }
 
@@ -248,9 +283,9 @@ QVariantList PageModel::sections() const
         const auto category = categoryValue.toObject();
         QVariantList categoryItems;
         for (const auto &itemValue : resolved)
-            if (itemValue.toMap().value("categoryId").toString() == category.value("id").toString())
+            if (itemValue.toMap().value("parentId").toString().isEmpty() && itemValue.toMap().value("categoryId").toString() == category.value("id").toString())
                 categoryItems.append(itemValue);
-        if (!categoryItems.isEmpty() || category.value("presentation").toObject().value("variant").toString() == QStringLiteral("library")) {
+        if (!categoryItems.isEmpty() || category.value("presentation").toObject().value("variant").toString() == QStringLiteral("library") || grid().value("mode")=="sections") {
             auto section = category.toVariantMap();
             section["items"] = categoryItems;
             result.append(section);
@@ -258,8 +293,8 @@ QVariantList PageModel::sections() const
     }
     QVariantList uncategorized;
     for (const auto &itemValue : resolved)
-        if (itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
-    if (!uncategorized.isEmpty())
+        if (itemValue.toMap().value("parentId").toString().isEmpty() && itemValue.toMap().value("categoryId").toString().isEmpty()) uncategorized.append(itemValue);
+    if (!uncategorized.isEmpty() || grid().value("mode")=="sections")
         result.append(QVariantMap{{"id", ""}, {"name", QCoreApplication::translate("PageModel", "Uncategorized")}, {"items", uncategorized}});
     return result;
 }
@@ -271,7 +306,7 @@ QString PageModel::backgroundStart() const
         if (theme.contains("backgroundStart")) return theme.value("backgroundStart").toString();
     }
     if (!m_owner) return QString();
-    return m_owner->backgroundStart();
+    return m_owner->homeAppearance().value("backgroundStart",m_owner->backgroundStart()).toString();
 }
 
 QString PageModel::backgroundEnd() const
@@ -281,12 +316,12 @@ QString PageModel::backgroundEnd() const
         if (theme.contains("backgroundEnd")) return theme.value("backgroundEnd").toString();
     }
     if (!m_owner) return QString();
-    return m_owner->backgroundEnd();
+    return m_owner->homeAppearance().value("backgroundEnd",m_owner->backgroundEnd()).toString();
 }
 
 QVariantMap PageModel::appearance() const
 {
-    QVariantMap result = themeDefaults();
+    QVariantMap result = m_owner?m_owner->homeAppearance():themeDefaults();
     if (m_documentLoaded && m_pageDocument.contains("theme")) {
         const auto theme = m_pageDocument.value("theme").toObject();
         for (const auto &key : theme.keys())
@@ -370,6 +405,8 @@ bool PageModel::setAppearance(const QVariantMap &changes)
 
 QString PageModel::wallpaperSource() const
 {
+    if(m_documentLoaded && m_pageDocument.contains("composition") && m_owner)
+        return m_owner->resolveArtwork(m_pageDocument["composition"].toObject()["wallpaper"].toString());
     if (m_documentLoaded && m_pageDocument.contains("composition")) {
         const auto comp = m_pageDocument.value("composition").toObject();
         if (comp.contains("wallpaperSource")) return comp.value("wallpaperSource").toString();
@@ -496,15 +533,12 @@ QString PageModel::addLibraryWidget(const QString &name, const QString &kind)
         m_pageDocument["composition"] = comp;
     }
     const auto id = QStringLiteral("library-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QJsonObject item{{"id", id}, {"name", name.trimmed().left(60)}, {"kind", "widget"}, {"widgetType", "media-shelf"},
-                     {"size", "standard"},
-                     {"presentation", QJsonObject{{"variant", "library"}, {"height", 500}, {"libraryKind", kind},
-                                                  {"libraryView", "all"}, {"libraryLayout", "grid"}, {"libraryColumns", 4}}}};
     const auto previous = m_pageDocument;
-    QJsonArray components;
-    if (m_pageDocument.contains("components")) components = m_pageDocument.value("components").toArray();
-    components.append(item);
-    m_pageDocument["components"] = components;
+    auto categories = m_pageDocument.value("categories").toArray();
+    categories.append(QJsonObject{{"id", id}, {"name", name.trimmed().left(60)},
+        {"presentation", QJsonObject{{"variant", "library"}, {"height", 500}, {"libraryKind", kind},
+                                    {"libraryView", "all"}, {"libraryLayout", "grid"}, {"libraryColumns", 4}}}});
+    m_pageDocument["categories"] = categories;
     if (!storePage()) { m_pageDocument = previous; return QString(); }
     m_documentLoaded = true;
     emit placementsChanged();
@@ -514,21 +548,11 @@ QString PageModel::addLibraryWidget(const QString &name, const QString &kind)
 bool PageModel::setItemPlacement(const QString &id, const QVariantMap &placement)
 {
     if (!m_owner) return false;
-    const auto configured = grid();
-    if (!ComponentSchema::validPlacement(placement, configured.value("columns").toInt(), configured.value("rows").toInt())) {
-        m_owner->setError(tr("This placement does not fit inside the grid."));
-        return false;
-    }
-    if (!configured.value("overlap").toBool()) {
-        const auto placed = m_pageDocument.value("components").toArray();
-        for (const auto &entry : placed) {
-            const auto item = entry.toObject();
-            if (item.value("id").toString() == id || !item.contains("placement")) continue;
-            if (ComponentSchema::placementsOverlap(placement, item.value("placement").toObject().toVariantMap())) {
-                m_owner->setError(tr("Another widget already occupies those cells."));
-                return false;
-            }
-        }
+    auto proposed=m_pageDocument["components"].toArray();bool found=false;
+    for(int i=0;i<proposed.size();++i){auto item=proposed[i].toObject();if(item["id"]!=id)continue;item["placement"]=QJsonObject::fromVariantMap(placement);proposed[i]=item;found=true;}
+    if(!found)return false;
+    if(!ComponentSchema::layoutPlacementsFit(proposed,composition(),m_pageDocument["categories"].toArray())) {
+        m_owner->setError(tr("The placement exceeds its grid or overlaps another component in that section."));return false;
     }
     return setItemField(id, [placement](QJsonObject &item) {
         item.insert("placement", QJsonObject::fromVariantMap(placement));
@@ -538,6 +562,7 @@ bool PageModel::setItemPlacement(const QString &id, const QVariantMap &placement
 bool PageModel::clearItemPlacement(const QString &id)
 {
     if (!m_owner) return false;
+    const auto previous = m_pageDocument;
     bool found = false;
     if (m_pageDocument.contains("components")) {
         QJsonArray components;
@@ -552,7 +577,6 @@ bool PageModel::clearItemPlacement(const QString &id)
         m_pageDocument["components"] = components;
     }
     if (!found) return false;
-    const auto previous = m_pageDocument;
     if (!storePage()) { m_pageDocument = previous; return false; }
     emit placementsChanged();
     return true;
@@ -586,6 +610,7 @@ QVariantList PageModel::pageSearchSources() const
 bool PageModel::setItemField(const QString &id, std::function<void(QJsonObject &)> mutate)
 {
     if (!m_owner) return false;
+    const auto previousDoc = m_pageDocument;
     bool found = false;
     if (m_pageDocument.contains("components")) {
         QJsonArray components;
@@ -606,7 +631,6 @@ bool PageModel::setItemField(const QString &id, std::function<void(QJsonObject &
     } else {
         return false;
     }
-    const auto previousDoc = m_pageDocument;
     if (!storePage()) { m_pageDocument = previousDoc; return false; }
     emit placementsChanged();
     return true;

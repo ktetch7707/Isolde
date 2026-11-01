@@ -5,7 +5,7 @@ Rectangle {
     color: "#080C18"
     property bool adjusting: false
     property int selectedButton: 2
-    readonly property var titles: ["Welcome to Isolde", "Connect to your network", "Fit your TV", "Set your sound", "Set up your remote", "Make it yours", "Ready for your living room"]
+    readonly property var titles: ["Welcome to Isolde", "Connect to your network", "Fit your TV", "Set your sound", "Set up your remote", "Make it yours", "Set up your first library", "Ready for your living room"]
     readonly property var descriptions: [
         "Your dedicated media center. Set up the essentials with your remote or keyboard. Your progress is saved after each step.",
         "Connect for streaming and the App Store. You can continue offline; local media remains available.",
@@ -13,9 +13,10 @@ Rectangle {
         "Set your TV to a comfortable reference volume, then let Isolde control everyday volume.",
         "Plug in your USB receiver and test the buttons. TV power through HDMI-CEC depends on your hardware.",
         "Rename Household or add people. Profiles keep personal layouts and separate supported app sign-ins.",
+        "Point Kodi at your existing media folders so movies and shows appear in Isolde. Files stay where they are; nothing is moved or renamed.",
         "Select Start Isolde to finish. You can change these choices later in Settings. No streaming account is required to finish setup."
     ]
-    function page() { return setupState.step === 1 ? network : setupState.step === 2 ? display : setupState.step === 3 ? audio : setupState.step === 4 ? remote : profiles }
+    function page() { return setupState.step === 1 ? network : setupState.step === 2 ? display : setupState.step === 3 ? audio : setupState.step === 4 ? remote : setupState.step === 5 ? profiles : librarySetup }
     function activate(index) {
         if (index === 0) setupState.back()
         else if (index === 1 && setupState.step > 0 && setupState.step < 6) adjusting = true
@@ -58,6 +59,15 @@ Rectangle {
         AudioSettingsView { id: audio; anchors.fill: parent; visible: setupState.step === 3 }
         RemoteSettingsView { id: remote; anchors.fill: parent; visible: setupState.step === 4 }
         ProfileSettingsView { id: profiles; anchors.fill: parent; visible: setupState.step === 5 }
+        Item { id: librarySetup; anchors.fill: parent; visible: setupState.step === 6
+            Rectangle { anchors.fill: parent; color: "#080C18" }
+            Column { anchors.centerIn: parent; spacing: 20; width: parent.width - 80
+                Text { text: "SET UP YOUR FIRST LIBRARY"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter }
+                Text { width: parent.width; wrapMode: Text.WordWrap; text: "Point Kodi at your existing media folders so movies and shows appear in Isolde. Your files stay where they are — nothing is moved, renamed, or cleaned up."; color: "#B9C5D9"; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter }
+                Text { width: parent.width; wrapMode: Text.WordWrap; text: "1. Open Kodi → Videos → Files → Add videos\n2. Select your media folder at its original path\n3. Choose Movies or TV shows and enable recursive scanning\n4. Return to Isolde and scan for new movies"; color: "#91A0BC"; font.pixelSize: 17; horizontalAlignment: Text.AlignHCenter }
+                Text { width: parent.width; wrapMode: Text.WordWrap; text: kodiService.status; color: "#C994A5"; font.pixelSize: 18; visible: kodiService.status.length > 0 }
+            }
+        }
     }
     Column {
         id: footer
@@ -68,7 +78,7 @@ Rectangle {
         Row {
             spacing: 16
             Repeater {
-                model: ["Back", "Adjust settings", setupState.step === 6 ? "Start Isolde" : "Continue"]
+                model: ["Back", "Adjust settings", setupState.step === 7 ? "Start Isolde" : "Continue"]
                 delegate: Rectangle {
                     required property int index
                     required property string modelData

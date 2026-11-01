@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "packageId": "dolphin",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Dolphin · GameCube / Wii",
+  "description": "Managed console runtime. Add your game files in Games and use Emulator setup for private settings and firmware. Compatibility and controller acceptance are tracked separately.",
+  "category": "Games",
+  "publisher": "dolphin",
+  "provenance": "Pinned runtime; no commercial games or firmware included",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "dolphin",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-dolphin",
+    "emulatorRuntime": "dolphin",
+    "windowClass": "dolphin-emu",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "GameCube",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "iso",
+      "gcm",
+      "rvz",
+      "gcz",
+      "wbfs",
+      "dol",
+      "elf"
+    ]
+  }
+}

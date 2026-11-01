@@ -22,14 +22,17 @@ class KodiMedia final : public QObject {
     Q_PROPERTY(bool hasNextPage READ hasNextPage NOTIFY changed)
     Q_PROPERTY(bool playbackActive READ playbackActive NOTIFY changed)
     Q_PROPERTY(QString playbackStatus READ playbackStatus NOTIFY changed)
+    Q_PROPERTY(bool playbackCanPause READ playbackCanPause NOTIFY changed)
+    Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
     Q_PROPERTY(QString viewValue READ viewValue NOTIFY changed)
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
     Q_PROPERTY(QString collectionStatus READ collectionStatus NOTIFY changed)
+    Q_PROPERTY(QString playlistStatus READ playlistStatus NOTIFY changed)
 public:
     explicit KodiMedia(const QString &profile, QObject *parent = nullptr, const QString &testDirectory = {});
     ~KodiMedia() override;
-    QString status() const { return m_status; }
+    QString status() const { return m_status + (m_mediaKind=="history"?m_historyNotice:QString()); }
     QVariantList movies() const { return m_movies; }
     QVariantList items() const { return m_movies; }
     QString mediaKind() const { return m_mediaKind; }
@@ -38,9 +41,21 @@ public:
     bool canGoBack() const { return !m_history.isEmpty(); }
     Q_INVOKABLE void selectIndex(int index);
     Q_INVOKABLE void openLibrary(const QString &kind);
+    Q_INVOKABLE void savePlaylist(const QString &name);
+    QString playlistStatus() const { return m_playlistStatus; }
+    void openPlaylists();
+    static bool validPlaylistName(const QString &name);
     Q_INVOKABLE void openView(const QString &kind, const QString &view, const QString &value = {});
+    void openHistory(int count);
+    void setAppOpenings(const QVariantList &items);
+    void setHistoryNotice(const QString &notice) { if(m_retired || m_historyNotice==notice)return;m_historyNotice=notice;emit changed(); }
+    // Permanent profile teardown; unlike an unavailable bridge, this cannot retry.
+    void retire(const QString &reason);
     Q_INVOKABLE void openShowResult(const QString &query, int tvShowId, int pageStart = 0);
     Q_INVOKABLE void playMedia(const QString &kind, int id, bool resume = true);
+    // Guide coordinator only: explicit broadcast offset, never saved resume.
+    bool playScheduled(const QString &kind, int id, int offsetSeconds);
+    bool playPvr(int id,int clientId,int uniqueId);
     Q_INVOKABLE void activate(int index);
     Q_INVOKABLE bool goBack();
     Q_INVOKABLE void playSelected(bool resume = true);
@@ -54,6 +69,9 @@ public:
     Q_INVOKABLE void previousPage();
     bool playbackActive() const { return m_playbackActive; }
     QString playbackStatus() const { return m_playbackStatus; }
+    bool playbackCanPause() const { return m_playbackActive && m_playbackCanPause; }
+    bool playbackCanSeek() const { return m_playbackActive && m_playbackCanSeek; }
+    bool lastPlaybackNaturalEnd() const { return m_lastPlaybackNaturalEnd; }
     QString viewKind() const { return m_viewKind; }
     QString viewValue() const { return m_viewValue; }
     QVariantList collections() const;
@@ -86,6 +104,8 @@ signals:
     void quitReply(bool accepted);
     void playbackStarted();
     void playbackReturned(bool home);
+    void scheduledMediaUnavailable(const QString &kind,int id);
+    void playlistSaved(const QString &filename);
 private:
     void request(const QString &method, const QJsonObject &params = {});
     void consume();
@@ -102,11 +122,20 @@ private:
     void restoreBrowse(const BrowseState &state);
     bool storeCollections(const QVariantList &entries);
     QString m_profile, m_viewKind = "all", m_viewValue, m_collectionStatus;
+    QString m_playlistStatus;
     QString m_directory, m_status = "Open Kodi with the Isolde bridge enabled to browse this profile's library.";
     QLocalSocket m_socket;
     QTimer m_timeout;
     QByteArray m_received, m_request;
     QVariantList m_movies;
+    QVariantList m_recentResults;
+    QVariantList m_appOpenings;
+    QString m_historyNotice;
+    QString m_historySelection;
+    void restoreHistorySelection();
+    int m_historyLimit = 50;
+    bool m_retired = false;
+    bool m_recentEpisodes = false;
     int m_descriptor = -1, m_id = 0, m_stage = 0;
     quint64 m_generation = 0;
     bool m_busy = false, m_connected = false;
@@ -115,6 +144,11 @@ private:
     int m_scanPolls = 0;
     int m_pageStart = 0, m_requestedStart = 0, m_totalMovies = 0, m_pageCount = 0;
     bool m_playbackActive = false, m_playbackVisible = false;
+    bool m_playbackCanPause = false, m_playbackCanSeek = false;
+    bool m_lastPlaybackNaturalEnd = false;
+    bool m_scheduledPlayback = false;
+    QString m_scheduledKind;
+    int m_scheduledId = 0;
     QString m_playbackStatus;
     QString m_pendingControl;
     QString m_presentationError;
