@@ -25,7 +25,12 @@ ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, 
     connect(media,&KodiMedia::scheduledMediaUnavailable,this,[this](const QString &kind,int id){
         if(m_guide && !m_guideChannel.isEmpty())m_guide->markUnavailable(kind,id);
     });
+    connect(media,&KodiMedia::playbackFailed,this,[this](const QString &reason){if(!m_guideChannel.isEmpty())emit rejected(reason);});
     connect(media, &KodiMedia::playbackReturned, this, [this](bool home) {
+        if(!home && !m_surfChannel.isEmpty() && m_guide) {
+            const auto next=m_surfChannel;m_surfChannel.clear();m_guideTransition=true;emit guidePlaybackChanged();
+            if(!m_guide->tune(next,m_origin)){clearGuidePlayback();emit restoreFocusRequested(m_origin);}return;
+        }
         if(!home && m_guide && !m_guideChannel.isEmpty() && m_media->lastPlaybackNaturalEnd()) {
             const auto now=QDateTime::currentSecsSinceEpoch();
             if(m_guideEnd<1 || m_guideEnd>now+3) {
@@ -40,9 +45,16 @@ ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, 
         }
         clearGuidePlayback();emit restoreFocusRequested(m_origin);
     });
+    connect(media,&KodiMedia::guideSurfRequested,this,&ActionDispatcher::surfGuide);
+}
+bool ActionDispatcher::surfGuide(int direction) {
+    if(!m_guide || !m_media->playbackActive() || m_guideChannel.isEmpty() || !m_surfChannel.isEmpty() || (direction!=1 && direction!=-1))return false;
+    QStringList ids;for(const auto &v:m_guide->channels()){const auto channel=v.toMap();if(!channel.value("hidden").toBool() && (!channel.contains("owner") || (channel.value("sourceAvailable").toBool() && channel.value("sourceEnabled",true).toBool())))ids.append(channel.value("id").toString());}
+    const int current=ids.indexOf(m_guideChannel);if(current<0 || ids.size()<2)return false;
+    m_surfChannel=ids[(current+direction+ids.size())%ids.size()];m_media->playbackControl("stop");return true;
 }
 void ActionDispatcher::clearGuidePlayback() {
-    ++m_guideGeneration;m_guideChannel.clear();m_guideSlot.clear();m_guideEnd=0;
+    ++m_guideGeneration;m_guideChannel.clear();m_surfChannel.clear();m_guideSlot.clear();m_guideEnd=0;
     if(m_guideTransition){m_guideTransition=false;emit guidePlaybackChanged();}
 }
 void ActionDispatcher::cancelGuidePlayback() {
@@ -90,12 +102,13 @@ void ActionDispatcher::setGuide(GuideController *guide) {
         const auto source=target.value("source").toMap();
         const bool started=target.value("launchKind")=="kodi_pvr"
             ?m_media->playPvr(target.value("mediaId").toInt(),source.value("clientId").toInt(),source.value("uniqueId").toInt())
+            :target.value("launchKind")=="guide_stream"?m_media->playGuideStream(source.value("url").toString())
             :m_media->playScheduled(target.value("mediaType").toString(),target.value("mediaId").toInt(),target.value("offsetSeconds").toInt());
         if(!started){clearGuidePlayback();emit rejected("This channel could not start. Return to the guide and retry.");}
-        else if(target.value("launchKind")!="kodi_pvr") {
+        else if(target.value("launchKind")=="kodi_media") {
             m_guideChannel=target.value("channelId").toString();m_guideSlot=target.value("id").toString();m_guideEnd=target.value("displayEndUtc").toLongLong();
             if(m_guideTransition){m_guideTransition=false;emit guidePlaybackChanged();}
-        }else clearGuidePlayback();
+        }else {m_guideChannel=target.value("channelId").toString();m_guideSlot.clear();m_guideEnd=0;if(m_guideTransition){m_guideTransition=false;emit guidePlaybackChanged();}}
     });
 }
 bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originId)

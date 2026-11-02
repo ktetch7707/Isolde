@@ -221,6 +221,7 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("inputManager"), &input);
     engine.rootContext()->setContextProperty(QStringLiteral("isoldeVersion"), QCoreApplication::applicationVersion());
     engine.loadFromModule(QStringLiteral("Isolde"), QStringLiteral("Main"));
+    if(auto *window=qobject_cast<QQuickWindow *>(engine.rootObjects().value(0)))QObject::connect(window,&QQuickWindow::frameSwapped,guide.get(),&GuideController::recordGuidePaint,Qt::QueuedConnection);
     if (engine.rootObjects().isEmpty())
         qFatal("Could not load the Isolde interface");
     const auto presentKodi = [this](bool show) {

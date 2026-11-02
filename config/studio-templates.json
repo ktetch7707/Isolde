@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "id": "compact",
+      "name": "Compact launcher",
+      "description": "Shortcuts and installed apps on one screen.",
+      "layout": {
+        "schemaVersion": 2,
+        "theme": {
+          "brandVisible": false,
+          "backgroundStart": "#19191E",
+          "backgroundEnd": "#101014",
+          "tileRoundness": 0.18
+        },
+        "composition": {
+          "schemaVersion": 1,
+          "enabled": true,
+          "fit": false,
+          "headerMode": "identity",
+          "identity": "Compact launcher",
+          "headerControls": [
+            "settings",
+            "edit"
+          ],
+          "showClock": true,
+          "grid": {
+            "columns": 8,
+            "rows": 5,
+            "gap": 16,
+            "margin": 24,
+            "snap": true,
+            "overlap": false,
+            "mode": "screen"
+          }
+        },
+        "categories": [],
+        "components": [
+          {
+            "id": "shortcuts",
+            "name": "Main shortcuts",
+            "kind": "widget",
+            "widgetType": "container",
+            "componentType": "container",
+            "placement": {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 2
+            },
+            "presentation": {
+              "showHeading": true,
+              "surfaceOpacity": 0.35,
+              "radius": 18,
+              "layout": {
+                "schemaVersion": 1,
+                "mode": "row",
+                "columns": 16,
+                "rows": 1,
+                "gap": 14,
+                "padding": 12,
+                "visibleColumns": 4,
+                "wrap": false
+              },
+              "headingSize": 24,
+              "moreLabel": "More buttons",
+              "galleryTitle": "Buttons"
+            },
+            "family": "carousel",
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "shortcuts",
+              "label": "Main shortcuts",
+              "kind": "buttons"
+            }
+          },
+          {
+            "id": "apps",
+            "name": "Apps",
+            "kind": "widget",
+            "widgetType": "container",
+            "componentType": "container",
+            "placement": {
+              "x": 0,
+              "y": 2,
+              "width": 8,
+              "height": 2
+            },
+            "presentation": {
+              "showHeading": true,
+              "icon": "grid",
+              "surfaceOpacity": 0.35,
+              "radius": 18,
+              "layout": {
+                "schemaVersion": 1,
+                "mode": "row",
+                "columns": 16,
+                "rows": 1,
+                "gap": 14,
+                "padding": 12,
+                "visibleColumns": 6,
+                "wrap": false
+              },
+              "headingSize": 24
+            },
+            "appCollection": {
+              "mode": "all",
+              "ids": [],
+              "showStore": true
+            },
+            "family": "app-bar",
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "apps",
+              "label": "Apps",
+              "kind": "apps"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "dashboard",
+      "name": "Scrolling dashboard",
+      "description": "A scrolling page with real Kodi history and installed apps.",
+      "layout": {
+        "schemaVersion": 2,
+        "theme": {
+          "brandVisible": false,
+          "backgroundStart": "#19191E",
+          "backgroundEnd": "#101014",
+          "tileRoundness": 0.18
+        },
+        "composition": {
+          "schemaVersion": 1,
+          "enabled": true,
+          "fit": false,
+          "headerMode": "identity",
+          "identity": "Scrolling dashboard",
+          "headerControls": [
+            "settings",
+            "edit"
+          ],
+          "showClock": true,
+          "grid": {
+            "columns": 8,
+            "rows": 5,
+            "gap": 16,
+            "margin": 24,
+            "snap": true,
+            "overlap": false,
+            "mode": "screen"
+          },
+          "verticalScrolling": true
+        },
+        "categories": [],
+        "components": [
+          {
+            "id": "shortcuts",
+            "name": "Main shortcuts",
+            "kind": "widget",
+            "widgetType": "container",
+            "componentType": "container",
+            "placement": {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 2
+            },
+            "presentation": {
+              "showHeading": true,
+              "surfaceOpacity": 0.35,
+              "radius": 18,
+              "layout": {
+                "schemaVersion": 1,
+                "mode": "row",
+                "columns": 16,
+                "rows": 1,
+                "gap": 14,
+                "padding": 12,
+                "visibleColumns": 4,
+                "wrap": false
+              },
+              "headingSize": 24,
+              "moreLabel": "More buttons",
+              "galleryTitle": "Buttons"
+            },
+            "family": "carousel",
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "shortcuts",
+              "label": "Main shortcuts",
+              "kind": "buttons"
+            }
+          },
+          {
+            "id": "viewed",
+            "name": "Recently viewed",
+            "kind": "widget",
+            "widgetType": "library",
+            "componentType": "library",
+            "family": "recently-viewed",
+            "placement": {
+              "x": 0,
+              "y": 2,
+              "width": 8,
+              "height": 2
+            },
+            "presentation": {
+              "libraryKind": "history",
+              "libraryView": "watched",
+              "libraryLimit": 20,
+              "libraryColumns": 5,
+              "libraryLayout": "row",
+              "libraryCardStyle": "recent",
+              "libraryChrome": false,
+              "artHeight": 180,
+              "radius": 16
+            },
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "featured",
+              "label": "Featured content",
+              "kind": "media"
+            }
+          },
+          {
+            "id": "apps",
+            "name": "Apps",
+            "kind": "widget",
+            "widgetType": "container",
+            "componentType": "container",
+            "placement": {
+              "x": 0,
+              "y": 4,
+              "width": 8,
+              "height": 2
+            },
+            "presentation": {
+              "showHeading": true,
+              "icon": "grid",
+              "surfaceOpacity": 0.35,
+              "radius": 18,
+              "layout": {
+                "schemaVersion": 1,
+                "mode": "row",
+                "columns": 16,
+                "rows": 1,
+                "gap": 14,
+                "padding": 12,
+                "visibleColumns": 6,
+                "wrap": false
+              },
+              "headingSize": 24
+            },
+            "appCollection": {
+              "mode": "all",
+              "ids": [],
+              "showStore": true
+            },
+            "family": "app-bar",
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "apps",
+              "label": "Apps",
+              "kind": "apps"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "library",
+      "name": "Poster library",
+      "description": "A poster grid with explicit page navigation in a sidebar.",
+      "layout": {
+        "schemaVersion": 2,
+        "theme": {
+          "brandVisible": false,
+          "backgroundStart": "#19191E",
+          "backgroundEnd": "#101014",
+          "tileRoundness": 0.18
+        },
+        "composition": {
+          "schemaVersion": 1,
+          "enabled": true,
+          "fit": false,
+          "headerMode": "identity",
+          "identity": "Poster library",
+          "headerControls": [
+            "settings",
+            "edit"
+          ],
+          "showClock": true,
+          "grid": {
+            "columns": 8,
+            "rows": 5,
+            "gap": 16,
+            "margin": 24,
+            "snap": true,
+            "overlap": false,
+            "mode": "screen"
+          },
+          "pageNavigation": "sidebar",
+          "sidebarWidth": 200
+        },
+        "categories": [],
+        "components": [
+          {
+            "id": "library",
+            "name": "Movies",
+            "kind": "widget",
+            "widgetType": "library",
+            "componentType": "library",
+            "placement": {
+              "x": 0,
+              "y": 0,
+              "width": 8,
+              "height": 5
+            },
+            "presentation": {
+              "libraryKind": "movies",
+              "libraryView": "all",
+              "libraryLayout": "grid",
+              "libraryColumns": 4,
+              "libraryCardStyle": "media",
+              "artHeight": 180,
+              "radius": 16
+            },
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "library",
+              "label": "Library content",
+              "kind": "media"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "minimal",
+      "name": "Minimal pastel",
+      "description": "A quiet pastel launcher with editable apps and shortcuts.",
+      "layout": {
+        "schemaVersion": 2,
+        "theme": {
+          "selectedColor": "#edd7ef",
+          "backgroundStart": "#e9c7da",
+          "brandVisible": false,
+          "textColor": "#514b67",
+          "typographyScale": 1,
+          "mutedColor": "#625b73",
+          "homeColumns": 5,
+          "focusColor": "#ffffff",
+          "spacing": 16,
+          "motionEnabled": false,
+          "tileRoundness": 0.18,
+          "backgroundEnd": "#bbc5df",
+          "fontFamily": "DejaVu Sans",
+          "surfaceColor": "#f5e7f4"
+        },
+        "composition": {
+          "schemaVersion": 1,
+          "enabled": true,
+          "fit": false,
+          "headerMode": "identity",
+          "identity": "Minimal pastel",
+          "headerControls": [
+            "settings",
+            "edit"
+          ],
+          "showClock": true,
+          "grid": {
+            "columns": 8,
+            "rows": 5,
+            "gap": 16,
+            "margin": 24,
+            "snap": true,
+            "overlap": false,
+            "mode": "screen"
+          }
+        },
+        "categories": [],
+        "components": [
+          {
+            "id": "apps",
+            "name": "Apps",
+            "kind": "widget",
+            "widgetType": "container",
+            "componentType": "container",
+            "placement": {
+              "x": 0,
+              "y": 1,
+              "width": 8,
+              "height": 2
+            },
+            "presentation": {
+              "showHeading": true,
+              "icon": "grid",
+              "surfaceOpacity": 0.35,
+              "radius": 18,
+              "layout": {
+                "schemaVersion": 1,
+                "mode": "row",
+                "columns": 16,
+                "rows": 1,
+                "gap": 14,
+                "padding": 12,
+                "visibleColumns": 6,
+                "wrap": false
+              },
+              "headingSize": 24
+            },
+            "appCollection": {
+              "mode": "all",
+              "ids": [],
+              "showStore": true
+            },
+            "family": "app-bar",
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "apps",
+              "label": "Apps",
+              "kind": "apps"
+            }
+          },
+          {
+            "id": "shortcuts",
+            "name": "Shortcuts",
+            "kind": "widget",
+            "widgetType": "container",
+            "componentType": "container",
+            "placement": {
+              "x": 0,
+              "y": 3,
+              "width": 8,
+              "height": 1
+            },
+            "presentation": {
+              "showHeading": true,
+              "surfaceOpacity": 0.35,
+              "radius": 18,
+              "layout": {
+                "schemaVersion": 1,
+                "mode": "row",
+                "columns": 16,
+                "rows": 1,
+                "gap": 14,
+                "padding": 12,
+                "visibleColumns": 4,
+                "wrap": false
+              },
+              "headingSize": 24,
+              "moreLabel": "More buttons",
+              "galleryTitle": "Buttons"
+            },
+            "family": "carousel",
+            "contentSlot": {
+              "schemaVersion": 1,
+              "id": "shortcuts",
+              "label": "Main shortcuts",
+              "kind": "buttons"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

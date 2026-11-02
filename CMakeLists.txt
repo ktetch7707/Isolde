@@ -350,6 +350,7 @@ if(BUILD_TESTING)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_selection COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_selection.qml)
     add_test(NAME studio_artwork COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_artwork.qml)
+    add_test(NAME studio_workflows COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_workflows.qml)
     add_test(NAME studio_colors COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_colors.qml)
     add_test(NAME store_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_store.qml)
     set_tests_properties(store_remote_ui PROPERTIES TIMEOUT 30 LABELS "store;quick;qml"
@@ -373,7 +374,7 @@ if(BUILD_TESTING)
     add_test(NAME studio_overlays COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_overlays.qml)
     set_tests_properties(studio_overlays PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
-    set_tests_properties(studio_selection studio_artwork studio_colors PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+    set_tests_properties(studio_selection studio_artwork studio_colors studio_workflows PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_tests
         tests/tst_isolde.cpp
@@ -446,7 +447,8 @@ if(BUILD_TESTING)
         studioScrollingAddMoveAndCancel studioNestedGroupCanvasAndRemoteScope studioCatalogAndContextualInspector)
     add_test(NAME home_component_navigation COMMAND isolde_home_navigation_tests ${ISOLDE_RUNTIME_NAVIGATION_CASES})
     add_test(NAME studio_navigation COMMAND isolde_home_navigation_tests ${ISOLDE_STUDIO_NAVIGATION_CASES})
-    # Aggregate suite budget; per-operation QTRY deadlines remain unchanged.
+    # This aggregates remote workflows; per-operation QTRY deadlines still
+    # detect stranded focus while the suite budget tolerates full-run load.
     set_tests_properties(studio_navigation PROPERTIES TIMEOUT 90 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_behavior COMMAND isolde_home_navigation_tests
         studioRemoteDraftApplyAndCancel studioRemoteGesturesCollisionsAndAnchors
@@ -477,6 +479,8 @@ if(BUILD_TESTING)
         add_test(NAME appliance_recovery COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_recovery.py)
         add_test(NAME kodi_local_bridge COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_bridge.py)
         add_test(NAME kodi_playback COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_playback.py)
+        add_test(NAME guide_offline_sandbox COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/guide_offline.py --self-test)
+        set_tests_properties(guide_offline_sandbox PROPERTIES TIMEOUT 15 LABELS "guide;integration")
         add_test(NAME kodi_cached_artwork COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_kodi_artwork.py)
         add_test(NAME component_health COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_component_health.py)
         qt_add_executable(isolde_kodi_media_tests tests/tst_kodi_media.cpp)
@@ -506,3 +510,4 @@ if(BUILD_TESTING)
     add_test(NAME profile_browser_isolation COMMAND isolde_profile_browser_tests)
     set_tests_properties(profile_browser_isolation PROPERTIES TIMEOUT 180 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()
+qt_add_executable(isolde_home_layout_tests tests/tst_home_layout.cpp) target_link_libraries(isolde_home_layout_tests PRIVATE isolde_core Qt6::Test) add_test(NAME home_layout COMMAND isolde_home_layout_tests)

@@ -1663,14 +1663,14 @@ void ComponentTests::studioHeaderValidationAndDraftRollback()
 {
     const QVariantMap style{{"schemaVersion",1},{"height",72},{"titleSize",40},{"padding",4},{"opacity",0.4},
         {"showDate",true},{"controlDisplay","both"},{"timeFormat","HH:mm"},{"dateFormat","yyyy-MM-dd"},
-        {"order",QVariantList{"clock","title","controls"}}};
+        {"order",QVariantList{"clock","title","controls"}},{"position","bottom"}};
     QVariantMap composition{{"schemaVersion",1},{"headerMode","identity"},{"showClock",true},{"header",style}};
     QVERIFY(ComponentSchema::validComposition(composition));
     const QVariantList malformed{QVariantMap{{"schemaVersion",2}},QVariantMap{{"height","72"}},
         QVariantMap{{"opacity",1.1}},QVariantMap{{"height",42},{"titleSize",96}},
         QVariantMap{{"order",QVariantList{"clock","clock","controls"}}},
         QVariantMap{{"customLogo","../private.png"}},QVariantMap{{"customLogo","https://example.invalid/logo.png"}},
-        QVariantMap{{"timeFormat","arbitrary"}},QVariantMap{{"backgroundColor","transparent"}},QVariantMap{{"script","anything"}}};
+        QVariantMap{{"timeFormat","arbitrary"}},QVariantMap{{"position","outside"}},QVariantMap{{"backgroundColor","transparent"}},QVariantMap{{"script","anything"}}};
     for(const auto &entry:malformed){auto invalid=composition;invalid["header"]=entry;QVERIFY(!ComponentSchema::validComposition(invalid));}
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
     const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
@@ -1684,6 +1684,14 @@ void ComponentTests::studioHeaderValidationAndDraftRollback()
     QVERIFY(!session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"header",QVariantMap{{"schemaVersion",2}}}}}}));
     QCOMPARE(session->draft(),valid);QCOMPARE(session->changeCount(),1);QVERIFY(!QFile::exists(path));
     QVERIFY(session->undo());QCOMPARE(session->draft(),before);
+    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    QVERIFY(session->apply(QString()));
+    HomeLayout reopened(&registry);QVERIFY(reopened.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    QCOMPARE(reopened.composition().value("header").toMap(),style);
+    const auto skin=reopened.saveSkin("Bottom header");QVERIFY(!skin.isEmpty());
+    auto changed=reopened.composition();changed["header"]=QVariantMap{{"schemaVersion",1},{"position","top"}};
+    QVERIFY(reopened.setComposition(changed));QVERIFY(reopened.applySkin(skin));
+    QCOMPARE(reopened.composition().value("header").toMap(),style);
 }
 void ComponentTests::studioPageDefaultsAreDraftOnlyAndScoped()
 {
@@ -1705,6 +1713,8 @@ void ComponentTests::studioPageDefaultsAreDraftOnlyAndScoped()
 }
 void ComponentTests::studioShapesLabelsAndReplacementAreAtomic()
 {
+    QVERIFY(ComponentSchema::validPresentation({{"sizeAspectLocked",true}}));
+    QVERIFY(!ComponentSchema::validPresentation({{"sizeAspectLocked",QString("true")}}));
     QVariantMap shape{{"id","decoration"},{"kind","widget"},{"widgetType","shape"},{"componentType","shape"},{"name","Decorative background"},{"source",QVariantMap{{"schemaVersion",1},{"provider","shell"},{"kind","shape"}}},
         {"presentation",QVariantMap{{"shape","ellipse"},{"visibleLabel","Caption"},{"fillMode","gradient"},{"fillEndColor","#123456"},{"fillDirection","horizontal"}}}};
     QVERIFY(!ComponentSchema::component(shape,false).isEmpty());

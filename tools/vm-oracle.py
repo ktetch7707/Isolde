@@ -102,6 +102,7 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "studio_selection": "isolde_studio_quick_tests",
           "studio_artwork": "isolde_studio_quick_tests",
           "studio_colors": "isolde_studio_quick_tests",
+          "studio_workflows": "isolde_studio_quick_tests",
           "studio_gestures": "isolde_studio_quick_tests",
           "studio_grid": "isolde_studio_quick_tests",
           "studio_destinations": "isolde_studio_quick_tests",
@@ -117,7 +118,7 @@ def suite_selection(suite):
     """One allowlisted selection authority for build targets and CTest names."""
     targets = SUITES[suite]
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
-    pattern = "^(studio_quick|studio_selection|studio_artwork|studio_colors|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    pattern = "^(studio_quick|studio_selection|studio_artwork|studio_colors|studio_workflows|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "studio_grid":
         pattern = "^(studio_grid|studio_grid_controls)$"
     if suite == "vpn":
@@ -162,8 +163,11 @@ CASES = {"catalog": ("home-components-acceptance.py", ["--studio", "--catalog", 
 def visual_result_passed(case, result):
     if case=='studio':
         colors=result.get('colorPicker',{})
+        workflows=result.get('workflows',{})
         return (result.get('passed') is True and all(colors.get(k) is True for k in ('privateCancel','atomicApply','recentSaved','resetCancel','studioChrome','reopenPreserved'))
-            and colors.get('captures')==['colorpreview','colorapplied','colorrecent','colorreset','chromepreview','chromeapplied','colorreopened'])
+            and colors.get('captures')==['colorpreview','colorapplied','colorrecent','colorreset','chromepreview','chromeapplied','colorreopened']
+            and all(workflows.get(k) is True for k in ('proportionalSize','sizeCancel','headerApply','headerRecovery','cameraNoWrite','resetCancel'))
+            and workflows.get('captures')==['sizepreview','sizeapplied','headerpreview','headerorder','headerapplied','headerreopened','canvaszoom','resetcancel'])
     if case=='catalog':
         return (all(result.get(k) is True for k in ('passed','freshProfile','remoteImport','invalidRefused','privateDraft','framingCancel','atomicGifApply','reopenPreserved','remotePrimitives','independentText','linkedImage','layersSelection'))
             and isinstance(result.get('managedGifSha256'),str) and re.fullmatch(r'[a-f0-9]{64}',result['managedGifSha256']) is not None
@@ -844,7 +848,7 @@ class Oracle:
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":
-            expected = {"studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            expected = {"studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_workflows", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
             if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors"}
             if suite == "studio_grid":
                 expected = {"studio_grid", "studio_grid_controls"}

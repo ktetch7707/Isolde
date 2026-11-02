@@ -77,6 +77,8 @@ Window {
             else if (command === inputManager.playPause || command === inputManager.confirm) kodiMedia.playbackControl("pause")
             else if (command === inputManager.navigateLeft) kodiMedia.playbackControl("backward")
             else if (command === inputManager.navigateRight) kodiMedia.playbackControl("forward")
+            else if (command === inputManager.navigateUp) actionDispatcher.surfGuide(-1)
+            else if (command === inputManager.navigateDown) actionDispatcher.surfGuide(1)
             if (command !== inputManager.volumeUp && command !== inputManager.volumeDown && command !== inputManager.mute) return
         }
         if (command !== inputManager.none && remoteSettings.setupMode)
@@ -417,6 +419,7 @@ Window {
         height:availableHeight*(inOverlay?overlayHeightFraction:1)
         scale:window.uiScaleFactor;transformOrigin:Item.TopLeft;z:950
         controller:guideController;dispatcher:actionDispatcher;options:homeLayout.studioOptions.guide;appearance:homeLayout.homeAppearance
+        colorSettings:homeLayout.studioOptions.colorPicker
         suppressed:sessionManager.active || kodiMedia.playbackActive || actionDispatcher.guideTransitionPending || launchErrorOverlay.visible
         onClosed:origin=>{
             const state=window.guideSearchReturn;window.guideSearchReturn=null

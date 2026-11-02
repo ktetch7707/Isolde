@@ -51,6 +51,7 @@ class PlaybackTests(unittest.TestCase):
         self.path.write_bytes(b"fixture")
         self.active = False
         self.item = 7
+        self.stream_file = ""
         self.kind = "movie"
         self.channel_locked = False
         self.omit_pvr_uniqueid = False
@@ -64,6 +65,8 @@ class PlaybackTests(unittest.TestCase):
         self.now = 0
         self.calls, self.builtins = [], []
         self.player = module.Playback(self.execute, self.builtins.append, True, lambda: self.now)
+        probe = patch.object(self.player, "probe_stream", return_value=None)
+        probe.start(); self.addCleanup(probe.stop)
 
     def execute(self, raw):
         request = json.loads(raw)
@@ -80,7 +83,7 @@ class PlaybackTests(unittest.TestCase):
             for key,value in (("clientid",9),("uniqueid",101)):
                 if key in params["properties"] and not (key=="uniqueid" and self.omit_pvr_uniqueid):details[key]=value
             result={"channeldetails":details}
-        elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item}}
+        elif method == "Player.GetItem": result = {"item": {"type": self.kind, "id": self.item, **({"file":self.stream_file} if "file" in params.get("properties",[]) else {})}}
         elif method == "Player.GetProperties":
             values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
                     "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
@@ -93,6 +96,50 @@ class PlaybackTests(unittest.TestCase):
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
         elif method == "Player.Stop": self.active = False
         return json.dumps({"result": result})
+
+    def test_reviewed_stream_owns_only_the_exact_opened_url(self):
+        url = "https://example.test/live.m3u8"
+        for unsafe in ("file:///etc/passwd", "https://user:secret@example.test/a", url+"|Header=x", url+"\n", "plugin://addon/a",url+"?token=secret",url+"?Access%5FToken=secret",url+"?X-Amz-Signature=secret"):
+            with self.assertRaises(ValueError): self.player.handle("Isolde.PlayGuideStream", {"url":unsafe})
+        self.assertFalse(any(method == "Player.Open" for method, _ in self.calls))
+        self.assertEqual(self.player.handle("Isolde.PlayGuideStream", {"url":url})["state"], "starting")
+        self.active=True; self.stream_file=url
+        self.assertEqual(self.player.status()["state"], "playing")
+        self.assertIn(("Player.Open", {"item":{"file":url}}),self.calls)
+        self.stream_file="https://example.test/different.m3u8"
+        self.assertEqual(self.player.control("stop")["state"], "replaced")
+        self.assertFalse(any(method == "Player.Stop" for method, _ in self.calls))
+
+    def test_channel_requests_survive_observers_and_have_stable_sequence(self):
+        self.player.handle("Isolde.PlayMovie", {"movieid":7,"resume":False})
+        self.active=True;self.player.status()
+        self.player.control("channel-next")
+        first=self.player.handle("Isolde.PlaybackStatus", {})
+        self.assertEqual(first["channelDelta"],1)
+        self.assertEqual(self.player.status()["channelRequest"],first["channelRequest"])
+        self.assertEqual(self.player.handle("Isolde.PlaybackStatus", {})["channelRequest"],first["channelRequest"])
+        self.player.control("channel-previous")
+        second=self.player.status()
+        self.assertEqual(second["channelDelta"],-1)
+        self.assertEqual(second["channelRequest"],first["channelRequest"]+1)
+
+    def test_stream_authentication_failure_is_distinct_and_does_not_open_a_player(self):
+        self.player.probe_stream.return_value={"sourceState":"authentication-required","reason":"Authentication required"}
+        result=self.player.handle("Isolde.PlayGuideStream",{"url":"https://example.test/auth"})
+        self.assertEqual(result["state"],"failed")
+        self.assertEqual(result["sourceState"],"authentication-required")
+        self.assertEqual(self.player.status()["reason"],"Authentication required")
+        self.assertFalse(any(method=="Player.Open" for method,_ in self.calls))
+
+    def test_http_probe_bounds_classification_and_never_reads_a_body(self):
+        for code, expected in ((401,"authentication-required"),(403,"authentication-required"),(404,"unavailable"),(503,"connection-failed"),(405,None),(302,None)):
+            class Opener:
+                def open(inner, request, timeout):
+                    self.assertEqual(request.get_method(),"HEAD");self.assertEqual(timeout,2)
+                    raise module.HTTPError(request.full_url,code,"fixture",{},None)
+            with patch.object(module,"build_opener",return_value=Opener()):
+                result=module.Playback.probe_stream(self.player,"https://example.test/live")
+            self.assertEqual(result.get("sourceState") if result else None,expected)
 
     def test_live_tv_uses_configured_channel_identity_and_refuses_locks(self):
         self.kind="channel";self.channel_locked=True

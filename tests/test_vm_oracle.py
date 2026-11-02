@@ -580,7 +580,7 @@ class OracleTests(unittest.TestCase):
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests"])
-        for name in ("studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"):
+        for name in ("studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_workflows", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"):
             self.assertIsNotNone(re.fullmatch(pattern, name))
         self.assertIsNone(re.fullmatch(pattern, "home_component_navigation"))
         self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))
@@ -917,7 +917,11 @@ class OracleTests(unittest.TestCase):
                 self.assertFalse(oracle.visual_result_passed(case, incomplete))
             self.assertFalse(oracle.visual_result_passed(case, {"passed": True}))
         colors=dict(privateCancel=True,atomicApply=True,recentSaved=True,resetCancel=True,studioChrome=True,reopenPreserved=True,captures=['colorpreview','colorapplied','colorrecent','colorreset','chromepreview','chromeapplied','colorreopened'])
-        self.assertTrue(oracle.visual_result_passed("studio", {"passed":True,"colorPicker":colors}))
+        workflows=dict(proportionalSize=True,sizeCancel=True,headerApply=True,headerRecovery=True,cameraNoWrite=True,resetCancel=True,captures=["sizepreview","sizeapplied","headerpreview","headerorder","headerapplied","headerreopened","canvaszoom","resetcancel"])
+        self.assertTrue(oracle.visual_result_passed("studio", {"passed":True,"colorPicker":colors,"workflows":workflows}))
+        for field in workflows:
+            missing=dict(workflows);del missing[field]
+            self.assertFalse(oracle.visual_result_passed("studio", {"passed":True,"colorPicker":colors,"workflows":missing}))
         self.assertFalse(oracle.visual_result_passed("studio", {"passed":True}))
         for field in colors:
             missing=dict(colors);del missing[field]

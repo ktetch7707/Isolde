@@ -392,6 +392,7 @@ def main():
                 key("Escape", 2); key("Down", 2)  # Close Studio and Settings; runtime navigation reveals the offscreen Clock.
                 capture("scrollinghome")
                 colors = exercise_studio_colors(evidence,layout,key,capture,expect)
+                workflows = exercise_studio_workflows(evidence,layout,key,capture,expect)
                 (evidence / "result.json").write_text(json.dumps({
                     "passed": True, "journey": "studio", "layout": str(layout),
                     "executable": str(executable), "preview_cancel_preserved_bytes": True,
@@ -399,7 +400,7 @@ def main():
                     "remote_collision_cancel_swap_undo": True, "remote_resize_cancel_accept_undo": True,
                     "bounded_repeat_cancel": True, "nested_group_remote_layers_apply": True,
                     "scrolling_checkbox_preview_cancel_apply": True, "three_viewport_page": True,
-                    "eight_slot_layout_only": True, "physical_input_qualification": "not claimed", "colorPicker": colors
+                    "eight_slot_layout_only": True, "physical_input_qualification": "not claimed", "colorPicker": colors, "workflows": workflows
                 }, indent=2))
                 print("Evidence: " + str(evidence), flush=True)
                 return
@@ -703,6 +704,39 @@ def exercise_studio_colors(evidence,layout,key,capture,expect):
     page_color();key('Right');shot('colorreopened')
     assert layout.read_bytes()==saved
     return dict(privateCancel=True,atomicApply=True,recentSaved=True,resetCancel=True,studioChrome=True,reopenPreserved=True,captures=phases)
+
+def exercise_studio_workflows(evidence,layout,key,capture,expect):
+    saved=layout.read_bytes();phases=[]
+    def shot(name):
+        phases.append(name);capture(name)
+    def menu(index):
+        key('Up',30);key('Down');key('Down',index);key('Return')
+    def apply():
+        key('Escape',2);menu(7);key('Return')
+    key('Escape',3);menu(4);key('Up',30);key('Return') # Layers -> first authored shortcut.
+    key('Return');key('Down');key('Return');key('Down',2);key('Return');key('Return') # Edit -> Size & layout -> Outer size.
+    key('Down',6);key('Return');key('Up',6);key('Right');shot('sizepreview')
+    assert layout.read_bytes()==saved
+    key('Escape');assert layout.read_bytes()==saved
+    key('Return');key('Down',6);key('Return');key('Up',6);key('Right');key('Down',2);key('Return');apply()
+    def sized():
+        item=next(i for i in json.loads(layout.read_text())['components'] if i['id']=='personal-source')
+        return item['placement']['width']==2 and item['placement']['height']==2 and item['presentation']['sizeAspectLocked'] is True
+    expect(sized,'Proportional outer size applied atomically');saved=layout.read_bytes();shot('sizeapplied')
+    menu(3);key('Down',4);key('Return') # Page appearance -> Header.
+    fields=[f for f in json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['inspector']['pageFields'] if f['tab']=='Header' and not f.get('advanced')]
+    def field(name):
+        key('Up',30);key('Down',next(i for i,f in enumerate(fields) if f['key']==name));key('Return')
+    field('headerMode');key('Up',30);key('Down');key('Return')
+    field('showClock');shot('headerpreview');assert layout.read_bytes()==saved
+    field('order');key('Up',30);key('Down',3);key('Return');field('position');key('Up',30);key('Down');key('Return');shot('headerorder');assert layout.read_bytes()==saved
+    apply()
+    expect(lambda:json.loads(layout.read_text())['composition'].get('headerMode')=='identity' and json.loads(layout.read_text())['composition'].get('showClock') is True and json.loads(layout.read_text())['composition']['header']['order']==['clock','title','controls'] and json.loads(layout.read_text())['composition']['header']['position']=='bottom','Authored header applied through shared model')
+    saved=layout.read_bytes();shot('headerapplied')
+    menu(4);key('Down',30);key('Return');shot('headerreopened');assert layout.read_bytes()==saved
+    key('Escape',2);menu(6);key('Return');key('Right');shot('canvaszoom');assert layout.read_bytes()==saved
+    key('Escape');key('Down',2);key('Return');shot('resetcancel');key('Escape');assert layout.read_bytes()==saved
+    return dict(proportionalSize=True,sizeCancel=True,headerApply=True,headerRecovery=True,cameraNoWrite=True,resetCancel=True,captures=phases)
 
 def prepare_catalog(evidence):
     from PIL import Image, ImageDraw

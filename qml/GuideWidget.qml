@@ -32,8 +32,8 @@ Item {
     function activate(index){if(readOnly || !dispatcher)return;select(index);if(rows[index].future)openGuide();else dispatcher.dispatch({type:"tune-channel",channelId:rows[index].id},originId)}
     onRowsChanged:if(selectedChannelId){const at=rows.findIndex(c=>c.id===selectedChannelId);selectedIndex=at>=0?at:-1;if(at<0)selectedChannelId=""}
     function select(index){selectedIndex=index;selectedChannelId=rows[index]?rows[index].id:""}
-    function progressFor(current){const duration=current.endUtc-current.startUtc;const elapsed=current.clockUtc===undefined?current.offsetSeconds:current.clockUtc-current.startUtc;return duration>0?Math.max(0,Math.min(1,elapsed/duration)):0}
-    function programLabel(current){return current.title?(current.title+(current.status==="unavailable"?" · Unavailable":"")):(current.launchKind==="kodi_pvr"?"No listings · Watch live":"No available scheduled program")}
+    function progressFor(current){const duration=current.endUtc-current.startUtc;const elapsed=current.clockUtc===undefined?current.offsetSeconds:current.clockUtc-current.startUtc;return Number.isFinite(duration) && duration>0 && Number.isFinite(elapsed)?Math.max(0,Math.min(1,elapsed/duration)):0}
+    function programLabel(current){return current.title?(current.title+(current.status==="unavailable"?" · Unavailable":"")):((current.launchKind==="kodi_pvr" || current.launchKind==="guide_stream")?"No listings · Watch live":"No available scheduled program")}
     function openGuide(surface){
         if(readOnly || !dispatcher)return
         const action={type:"open-guide",presentation:Object.assign({},style,surface?{guideSurface:surface}:{})}
@@ -70,6 +70,9 @@ Item {
             model:root.rows
             delegate:Rectangle {
                 required property var modelData;required property int index
+                readonly property var station:modelData.presentation || ({})
+                readonly property var cardStyle:Object.assign({},root.style,station)
+                readonly property real stationText:cardStyle.labelSize || root.labelSize
                 objectName:"guideWidgetChannel-"+modelData.id
                 width:root.horizontal?(parent.width-root.labelSize/3*(root.rows.length-1))/Math.max(1,root.rows.length):parent.width;height:Math.max(root.labelSize*2.2,(root.height-root.labelSize*3.5)/Math.max(1,root.horizontal?1:root.rows.length)-root.labelSize/3)
                 Accessible.role:Accessible.Button
@@ -78,23 +81,25 @@ Item {
                 Accessible.focusable:!root.readOnly
                 Accessible.focused:root.visible && root.engaged && root.selectedIndex===index
                 Accessible.onPressAction:{root.engage();root.activate(index)}
-                color:root.appearance.surfaceColor;radius:root.roundness;border.color:root.appearance.focusColor;border.width:root.engaged && root.selectedIndex===index?(root.style.focusWidth || 2):0
-                readonly property var art:root.provider && !root.readOnly && root.style.artHeight!==0 && (root.variant==="preview" || root.horizontal) && ["movie","episode","musicvideo","song"].indexOf(modelData.current.mediaType)>=0?root.provider.artwork(modelData.current.mediaType,modelData.current.mediaId):null
-                Image {anchors.fill:parent;source:parent.art?parent.art.source:"";fillMode:root.style.artFit==="contain"?Image.PreserveAspectFit:Image.PreserveAspectCrop;opacity:root.style.surfaceOpacity===undefined?1:root.style.surfaceOpacity;asynchronous:true}
+                color:"transparent";radius:cardStyle.radius===undefined?root.roundness:cardStyle.radius;border.color:cardStyle.focusColor || root.appearance.focusColor;border.width:root.engaged && root.selectedIndex===index?(cardStyle.focusWidth || 2):0
+                Rectangle {z:-1;anchors.fill:parent;color:parent.cardStyle.surfaceColor || root.appearance.surfaceColor;opacity:parent.cardStyle.surfaceOpacity===undefined?1:parent.cardStyle.surfaceOpacity;radius:parent.radius}
+                readonly property var art:root.style.guideArtSource==="station" && modelData.logo?{source:root.controller.stationLogo(modelData.logo)}:root.style.guideArtSource!=="none" && root.style.guideArtSource!=="station" && root.provider && !root.readOnly && root.style.artHeight!==0 && (root.variant==="preview" || root.horizontal) && ["movie","episode","musicvideo","song"].indexOf(modelData.current.mediaType)>=0?root.provider.artwork(modelData.current.mediaType,modelData.current.mediaId):null
+                Image {objectName:"guideWidgetArt-"+modelData.id;anchors.fill:parent;source:parent.art?parent.art.source:"";fillMode:parent.cardStyle.artFit==="contain"?Image.PreserveAspectFit:Image.PreserveAspectCrop;opacity:parent.cardStyle.surfaceOpacity===undefined?1:parent.cardStyle.surfaceOpacity;asynchronous:true}
                 Rectangle {anchors.bottom:parent.bottom;width:parent.width;height:Math.min(parent.height,channelLabel.height+channelLabel.anchors.margins*2);visible:!!parent.art;color:root.style.labelSurfaceColor || root.appearance.surfaceColor;opacity:root.style.panelOpacity===undefined?1:root.style.panelOpacity;radius:root.roundness}
                 Item {
                     id:channelLabel;objectName:"guideWidgetLabel-"+modelData.id
                     readonly property var lines:[modelData.number+" · "+modelData.name+(root.sourceBadges && modelData.sourceName?" · "+modelData.sourceName:""),root.programLabel(modelData.current)].concat(root.variant==="guide" && (modelData.upcoming || []).length?["Next: "+modelData.upcoming[0].title]:[])
                     readonly property string text:lines.join("\n")
-                    anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:root.labelSize/3
-                    width:Math.max(0,parent.width-anchors.margins*2);height:Math.max(0,Math.min(parent.height-anchors.margins*2,labelLines.implicitHeight));clip:true;visible:root.style.labelPosition!=="hidden"
+                    anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:parent.cardStyle.cardGap===undefined?root.labelSize/3:parent.cardStyle.cardGap
+                    width:Math.max(0,parent.width-anchors.margins*2);height:Math.max(0,Math.min(parent.height-anchors.margins*2,labelLines.implicitHeight));clip:true;visible:parent.cardStyle.labelPosition!=="hidden"
                     Column {id:labelLines;width:parent.width
                         Repeater {model:channelLabel.lines
-                            Text {required property string modelData;required property int index;objectName:"guideWidgetLabelLine-"+channelLabel.parent.modelData.id+"-"+index;width:labelLines.width;textFormat:Text.PlainText;color:root.appearance.textColor;font.pixelSize:root.labelSize;elide:Text.ElideRight;text:modelData}
+                            Text {required property string modelData;required property int index;objectName:"guideWidgetLabelLine-"+channelLabel.parent.modelData.id+"-"+index;width:labelLines.width;textFormat:Text.PlainText;color:channelLabel.parent.cardStyle.labelColor || root.appearance.textColor;font.pixelSize:channelLabel.parent.stationText;elide:Text.ElideRight;text:modelData}
                         }
                     }
                 }
                 Rectangle {anchors.left:parent.left;anchors.bottom:parent.bottom;height:Math.max(2,root.labelSize/7);width:parent.width*root.progressFor(modelData.current);color:root.appearance.focusColor}
+                Rectangle {objectName:"guideWidgetFocus-"+modelData.id;z:2;anchors.fill:parent;color:"transparent";radius:parent.radius;border.color:parent.border.color;border.width:parent.border.width}
                 MouseArea {anchors.fill:parent;onClicked:{root.engage();root.activate(index)}}
             }
         }

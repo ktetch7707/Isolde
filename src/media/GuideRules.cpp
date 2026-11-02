@@ -1,4 +1,5 @@
 #include "GuideRules.h"
+#include "GuideFeeds.h"
 #include "home/ComponentSchema.h"
 #include <QJsonDocument>
 #include <QSet>
@@ -96,10 +97,10 @@ QVariantMap ComponentSchema::guideOptions(const QVariantMap &value, QString *err
     seen.clear();const auto sources=value.value("sources").toList();if(sources.size()>32)return reject(error,"Too many guide service destinations.");
     for(const auto &v:sources) {
         const auto item=v.toMap();const auto id=item.value("id").toString();const auto launch=action(item.value("action").toMap());
-        const bool pvr=item.value("kind")=="kodi-pvr";
+        const bool pvr=QStringList{"kodi-pvr","guide-feed"}.contains(item.value("kind").toString());
         if(!keys(item,{"id","name","description","action","kind"}) || !safeId(id) || seen.contains(id)
             || !text(item.value("name"),80) || !text(item.value("description"),256)
-            || (pvr?item.contains("action"):(!QStringList{"launch-app","open-url"}.contains(launch.value("type").toString()) || item.contains("kind"))))return reject(error,"Invalid guide service destination.");
+            || (pvr?item.contains("action"):(!QStringList{"launch-app","open-url","settings"}.contains(launch.value("type").toString()) || item.contains("kind"))))return reject(error,"Invalid guide service destination.");
         seen.insert(id);
     }
     if(error)error->clear();return value;
@@ -154,6 +155,9 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
         }
     }
     if(v.contains("description") && !text(v.value("description"),512,true))return reject(error,"Use a plain-text channel description of at most 512 characters.");
+    if(v.contains("logo") && (v.value("logo").metaType().id()!=QMetaType::QString || !QRegularExpression("^artwork/logo-[0-9a-f]{64}\\.(png|jpg)$").match(v.value("logo").toString()).hasMatch()))return reject(error,"Choose managed content-addressed station artwork.");
+    if(v.contains("presentation") && (v.value("presentation").metaType().id()!=QMetaType::QVariantMap || !validPresentation(v.value("presentation").toMap())))return reject(error,"Invalid shared station presentation.");
+    if(v.contains("sourceEnabled") && v.value("sourceEnabled").metaType().id()!=QMetaType::Bool)return reject(error,"Source enablement must be an explicit boolean.");
     if(v.contains("groups")) {
         if(v.value("groups").metaType().id()!=QMetaType::QVariantList || v.value("groups").toList().size()>32)return reject(error,"Choose at most 32 channel groups.");
         QSet<QString> groups;
@@ -162,9 +166,21 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
             groups.insert(group.toString().toCaseFolded());
         }
     }
+    if(v.value("owner")=="guide-feed") {
+        const auto source=v.value("source").toMap();
+        if(!keys(v,{"schemaVersion","id","name","number","description","groups","logo","presentation","owner","source","sourceAvailable","sourceEnabled","refreshedUtc"})
+            || !integer(v.value("schemaVersion"),1,1) || !safeId(v.value("id").toString()) || !text(v.value("name"),160)
+            || !integer(v.value("number"),1,99999) || !keys(source,{"instance","stationId","epgId","url","number"})
+            || !safeId(source.value("instance").toString()) || !text(source.value("stationId"),160) || !text(source.value("epgId"),160,true)
+            || !GuideFeeds::streamUrl(source.value("url").toString()) || !integer(source.value("number"),1,99999)
+            || v.value("id")!=GuideFeeds::identity(source.value("instance").toString(),source.value("stationId").toString())
+            || v.value("sourceAvailable").metaType().id()!=QMetaType::Bool || !integer(v.value("refreshedUtc"),0,253402214400LL))
+            return reject(error,"Invalid stream station identity or URL. Credentials and player options are refused.");
+        if(error)error->clear();return v;
+    }
     if(v.value("owner")=="kodi-pvr") {
         const auto source=v.value("source").toMap();
-        if(!keys(v,{"schemaVersion","id","name","number","description","groups","owner","source","sourceAvailable","refreshedUtc"})
+        if(!keys(v,{"schemaVersion","id","name","number","description","groups","logo","presentation","owner","source","sourceAvailable","sourceEnabled","refreshedUtc"})
             || !integer(v.value("schemaVersion"),1,1) || !safeId(v.value("id").toString()) || !text(v.value("name"),160)
             || !integer(v.value("number"),1,99999) || !keys(source,{"instance","channelId","clientId","uniqueId","number"})
             || !safeId(source.value("instance").toString()) || !integer(source.value("channelId"),1,2147483647)
@@ -177,7 +193,7 @@ QVariantMap ComponentSchema::guideChannel(const QVariantMap &v, QString *error) 
     if((v.contains("horizonDays") && !integer(v.value("horizonDays"),1,31)) || (v.contains("retentionDays") && !integer(v.value("retentionDays"),0,7)))return reject(error,"Choose a 1–31 day schedule horizon and 0–7 days of retained history.");
     if(v.contains("clockOffsetSeconds") && (!integer(v.value("clockOffsetSeconds"),-31*86400,31*86400)
         || (v.value("clock")!="real-time" && v.value("clockOffsetSeconds").toLongLong()!=0)))return reject(error,"Only real-time local channels support a broadcast offset, bounded to 31 days.");
-    if (!keys(v,{"schemaVersion","id","name","number","description","groups","clock","sequence","seed","timezone","rule","mediaKinds","horizonDays","retentionDays","clockOffsetSeconds","schedule"})
+    if (!keys(v,{"schemaVersion","id","name","number","description","groups","logo","presentation","clock","sequence","seed","timezone","rule","mediaKinds","horizonDays","retentionDays","clockOffsetSeconds","schedule"})
         || !integer(v.value("schemaVersion"),1,1) || !text(v.value("id"),160) || !safeId(v.value("id").toString())
         || !text(v.value("name"),160) || !integer(v.value("number"),1,99999)
         || !QStringList{"real-time","pause-when-off"}.contains(v.value("clock").toString())

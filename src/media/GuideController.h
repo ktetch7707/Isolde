@@ -5,6 +5,7 @@
 #include <QLocalSocket>
 #include <QVariantList>
 #include <QSet>
+#include <QElapsedTimer>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -34,6 +35,11 @@ class GuideController final : public QObject {
     Q_PROPERTY(QVariantMap regenerationReview READ regenerationReview NOTIFY changed)
     Q_PROPERTY(QVariantMap repairReview READ repairReview NOTIFY changed)
     Q_PROPERTY(QVariantMap clockReview READ clockReview NOTIFY changed)
+    Q_PROPERTY(QVariantList importReview READ importReview NOTIFY changed)
+    Q_PROPERTY(QVariantList ruleTemplates READ ruleTemplates NOTIFY changed)
+    Q_PROPERTY(QString clockWarning READ clockWarning NOTIFY changed)
+    Q_PROPERTY(QVariantMap guideDiagnostics READ guideDiagnostics NOTIFY changed)
+    Q_PROPERTY(qint64 firstPaintMs READ firstPaintMs NOTIFY changed)
 public:
     GuideController(const QString &databasePath,const QString &profile,QObject *parent=nullptr,const QString &bridgeDirectory={});
     ~GuideController() override;
@@ -56,6 +62,21 @@ public:
     QVariantMap regenerationReview() const { return m_regenerationReview; }
     QVariantMap repairReview() const { return m_repairReview; }
     QVariantMap clockReview() const { return m_clockReview; }
+    QVariantList importReview() const;
+    QVariantList ruleTemplates() const { return m_ruleTemplates; }
+    QString clockWarning() const { return m_clockWarning; }
+    QVariantMap guideDiagnostics() const { return m_diagnostics; }
+    qint64 firstPaintMs() const { return m_firstPaintMs; }
+    Q_INVOKABLE void beginGuidePaint() { m_paintTimer.start();m_paintPending=true; }
+    void recordGuidePaint();
+    Q_INVOKABLE bool readDiagnostics();
+    Q_INVOKABLE bool setSourceEnabled(const QString &instance,const QVariant &enabled);
+    Q_INVOKABLE bool acceptDeviceClock();
+    Q_INVOKABLE bool refreshRuleTemplates();
+    Q_INVOKABLE bool saveRuleTemplate(const QString &name,const QVariantMap &definition);
+    Q_INVOKABLE bool useRuleTemplate(int index);
+    Q_INVOKABLE QVariantList importChoices(int item,int first=0) const;
+    Q_INVOKABLE bool mapImportedItem(int item,int candidate);
     static qint64 pvrUtc(const QVariant &value);
     Q_INVOKABLE QVariantMap editableDefinition(const QString &id) const;
     Q_INVOKABLE bool updateLocal(const QVariantMap &definition,int revision);
@@ -67,6 +88,8 @@ public:
     Q_INVOKABLE bool repair(const QVariant &choice);
     Q_INVOKABLE bool previewDuplicate(const QString &id,int revision);
     Q_INVOKABLE bool previewPvr();
+    Q_INVOKABLE bool previewFeed(const QString &instance,const QString &playlistPath,const QString &xmltvPath,const QString &directUrl=QString(),const QString &directName=QString());
+    Q_INVOKABLE bool setSourceEpg(int index,const QString &epgId);
     Q_INVOKABLE bool importPvr();
     Q_INVOKABLE bool setSourceNumber(int index,const QVariant &number);
     Q_INVOKABLE void refresh();
@@ -80,6 +103,8 @@ public:
     Q_INVOKABLE void cancel();
     Q_INVOKABLE bool setPreferences(const QString &id,const QVariantMap &preferences,int revision);
     Q_INVOKABLE bool setMetadata(const QString &id,const QVariantMap &metadata,int revision);
+    Q_INVOKABLE bool setStationLogo(const QString &id,const QString &path,int revision);
+    Q_INVOKABLE QString stationLogo(const QString &relative) const;
     Q_INVOKABLE bool swapNumbers(const QString &id,const QString &otherId,const QVariantMap &revisions);
     Q_INVOKABLE bool reorder(const QStringList &ids,const QVariantMap &revisions);
     Q_INVOKABLE bool remove(const QString &id,int revision);
@@ -114,15 +139,25 @@ private:
     QLocalSocket m_socket;
     QByteArray m_input,m_request;
     QString m_directory,m_error,m_status,m_scheduleStatus;
+    QString m_profileDirectory;
+    QString m_clockWarning;
+    QVariantMap m_diagnostics;
+    QElapsedTimer m_paintTimer;
+    qint64 m_firstPaintMs=-1;
+    bool m_paintPending=false;
     QSet<QString> m_maintenanceAttempted;
     QVariantList m_channels,m_rows,m_compactRows,m_candidates;
     QVariantMap m_previewDefinition;
     QVariantList m_sourcePreview;
     QVariantMap m_sourceRevisions;
+    QVariantMap m_feedListings;
+    QString m_sourceInstance="kodi-pvr";
     QVariantMap m_regenerationReview;
     QVariantMap m_repairReview;
     QVariantMap m_clockReview;
     QVariantMap m_importPackage;
+    QVariantMap m_importRemapping;
+    QVariantList m_ruleTemplates;
     qint64 m_sourceRefreshed=0;
     int m_sourceIndex=-1;
     bool m_pvrReading=false,m_sourcePreviewReady=false;

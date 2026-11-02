@@ -241,6 +241,7 @@ void KodiService::start()
         "<FullscreenVideo><keyboard><escape>NotifyAll(Isolde,stop)</escape><backspace>NotifyAll(Isolde,stop)</backspace>"
         "<return>NotifyAll(Isolde,pause)</return><space>NotifyAll(Isolde,pause)</space>"
         "<left>NotifyAll(Isolde,backward)</left><right>NotifyAll(Isolde,forward)</right>"
+        "<up>NotifyAll(Isolde,channel-previous)</up><down>NotifyAll(Isolde,channel-next)</down>"
         "</keyboard></FullscreenVideo></keymap>";
     if (!keys.open(QIODevice::WriteOnly) || keys.write(keyData) != keyData.size()) { fail("Cannot prepare managed playback keys."); return; }
     keys.close();
