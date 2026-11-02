@@ -2,6 +2,9 @@
 import json
 import os
 import time
+from urllib.parse import urlsplit, parse_qsl
+from urllib.request import build_opener, ProxyHandler, HTTPRedirectHandler, Request
+from urllib.error import HTTPError, URLError
 
 
 class Playback:
@@ -23,6 +26,41 @@ class Playback:
         self.stop_requested = False
         self.missing_since = None
         self.generation = 0
+        self.stream_url = None
+        self.channel_delta = 0
+        self.channel_request = 0
+
+    def owned_item(self, item):
+        if self.stream_url is not None:
+            return item.get("file") == self.stream_url
+        return item.get("type") == self.media_type and item.get("id") == self.movie
+
+    def player_item(self, player):
+        params = {"playerid": player}
+        if self.stream_url is not None:
+            params["properties"] = ["file"]
+        return self.rpc("Player.GetItem", params).get("item", {})
+
+    def probe_stream(self, url):
+        if urlsplit(url).scheme not in {"http", "https"}:
+            return None
+        class NoRedirect(HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs): return None
+        try:
+            # Only an explicit Tune probes the enabled source. No environment
+            # proxies, response body, automatic refresh or redirect chain.
+            with build_opener(ProxyHandler({}), NoRedirect()).open(Request(url, method="HEAD"), timeout=2): pass
+        except HTTPError as error:
+            error.close()
+            if error.code in (401,403):
+                return {"sourceState":"authentication-required", "reason":"This live source requires authentication or entitlement. Open its supported provider app or choose an accessible stream. Cached listings are unchanged."}
+            if error.code in (404,410):
+                return {"sourceState":"unavailable", "reason":"The live source no longer provides this stream. Review its URL and retry; cached listings are unchanged."}
+            if error.code in (301,302,303,307,308,405,501): return None
+            return {"sourceState":"connection-failed", "reason":"The live source reported a connection or server failure. Retry later; cached listings are unchanged."}
+        except (URLError, OSError, TimeoutError):
+            return {"sourceState":"connection-failed", "reason":"Cannot connect to this live source. Check the connection and retry; cached listings are unchanged."}
+        return None
 
     def rpc(self, method, params=None):
         reply = json.loads(self.execute(json.dumps({"jsonrpc": "2.0", "id": 1,
@@ -44,6 +82,38 @@ class Playback:
             raise ValueError("Playback requires Isolde frontend mode")
         scheduled = method == "Isolde.PlayScheduled"
         offset = None
+        if method == "Isolde.PlayGuideStream":
+            url = params.get("url")
+            if set(params) != {"url"} or not isinstance(url, str) or not 1 <= len(url) <= 4096:
+                raise ValueError("A reviewed compatible stream URL is required")
+            parsed = urlsplit(url)
+            if (parsed.scheme not in {"http", "https", "rtsp", "rtp", "udp"} or not parsed.hostname
+                or parsed.username not in (None, "") or parsed.password is not None or parsed.fragment
+                or (parsed.port is not None and not 1 <= parsed.port <= 65535)
+                or "|" in url or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in url)):
+                raise ValueError("Stream credentials, player options and unsupported protocols are refused")
+            for key, _ in parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=256):
+                key = key.casefold().replace("-", "").replace("_", "")
+                if key in {"key","auth","user","username","pass","sig","jwt","ticket"} or any(part in key for part in ("password","secret","token","signature","credential","authorization","apikey","session","bearer")):
+                    raise ValueError("Credential-bearing stream URLs require a configured PVR backend or provider app")
+            if self.movie is not None or self.rpc("Player.GetActivePlayers"):
+                raise ValueError("Another playback session is active")
+            failure = self.probe_stream(url)
+            if failure:
+                self.state, self.home, self.failure_reason = "failed", False, failure["reason"]
+                return {"state":"failed", "home":False, **failure}
+            if self.rpc("Player.Open", {"item": {"file": url}}) != "OK":
+                raise ValueError("Kodi did not accept the live stream")
+            self.stream_url, self.movie, self.media_type = url, 1, "stream"
+            self.channel_delta = 0
+            self.state, self.seen, self.home = "starting", False, False
+            self.generation += 1
+            self.pending_stop = self.scheduled_offset = self.missing_since = None
+            self.failure_reason = self.control_error = ""
+            self.can_pause = self.can_seek = self.natural_end = self.stop_requested = False
+            self.opened_at = self.clock()
+            self.deadline = self.clock() + 20
+            return self.status()
         if scheduled:
             if (set(params) != {"mediaType", "mediaId", "offsetSeconds"}
                 or params.get("mediaType") not in {"movie", "episode", "musicvideo", "song"}
@@ -92,6 +162,8 @@ class Playback:
             if self.rpc("Player.Open", {"item": {key: params[key]}, "options": {"resume": resume}}) != "OK":
                 raise ValueError("Kodi did not accept playback")
             self.movie, self.state, self.seen, self.home = params[key], "starting", False, False
+            self.stream_url = None
+            self.channel_delta = 0
             self.generation += 1
             self.media_type = media_type
             self.pending_stop = None
@@ -132,8 +204,8 @@ class Playback:
             if videos:
                 self.missing_since = None
                 player = videos[0]["playerid"]
-                item = self.rpc("Player.GetItem", {"playerid": player}).get("item", {})
-                if item.get("type") != self.media_type or item.get("id") != self.movie:
+                item = self.player_item(player)
+                if not self.owned_item(item):
                     if not self.seen and self.clock() < self.deadline:
                         return {"state": "starting", "home": self.home}
                     # Never stop a different player/item that we do not own.
@@ -180,9 +252,13 @@ class Playback:
                     if self.missing_since is None: self.missing_since = self.clock()
                     if self.clock()-self.missing_since < 0.5:
                         return {"state":self.state,"home":self.home,"canPause":False,"canSeek":False}
+                if not self.seen and self.stream_url is not None:
+                    self.failure_reason = "The live stream could not start. Check its connection, sign-in requirements and supported format, then retry. Cached listings are unchanged."
                 self.movie, self.state = None, "ended" if self.seen else "failed"
                 self.builtin("Minimize")
         result = {"state": self.state, "home": self.home}
+        if self.channel_delta:
+            result.update(channelDelta=self.channel_delta, channelRequest=self.channel_request)
         result["canPause"] = self.movie is not None and self.can_pause
         result["canSeek"] = self.movie is not None and self.can_seek
         if self.state == "ended": result["naturalEnd"] = self.natural_end and not self.stop_requested
@@ -191,6 +267,12 @@ class Playback:
         return result
 
     def control(self, action):
+        if action in ("channel-next", "channel-previous"):
+            self.status()
+            if self.movie is not None and self.seen:
+                self.channel_delta = 1 if action == "channel-next" else -1
+                self.channel_request = self.channel_request % 2147483647 + 1
+            return self.status()
         if action not in ("pause", "stop", "home", "forward", "backward"):
             raise ValueError("Unsupported playback control")
         if action in ("stop", "home"):
@@ -210,8 +292,8 @@ class Playback:
             if player.get("type") != ("audio" if self.media_type == "song" else "video"):
                 continue
             pid = player["playerid"]
-            item = self.rpc("Player.GetItem", {"playerid": pid}).get("item", {})
-            if item.get("id") != self.movie or item.get("type") != self.media_type:
+            item = self.player_item(pid)
+            if not self.owned_item(item):
                 raise ValueError("Playback ownership changed")
             if action in ("stop", "home"):
                 self.home = action == "home"

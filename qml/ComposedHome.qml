@@ -343,10 +343,11 @@ Item {
         if(!candidates.length && activeGroup && (command===inputManager.navigateLeft || command===inputManager.navigateRight)){const group=host.items.find(i=>i.id===activeGroup);if(group && (group.presentation.layout || {}).wrap)candidates=entries.slice().sort((a,b)=>command===inputManager.navigateRight?a.x-b.x:b.x-a.x)}
         next = candidates[0]; if(next)focusEntry(next)
     }
-    Column {
-        anchors.fill: parent; anchors.margins: root.margin; spacing: root.gap
+    Item {
+        anchors.fill: parent; anchors.margins: root.margin
         Item {
             id: header;objectName:"pageHeader"; width: parent.width; height: (root.headerStyle.height || (root.identityHeader ? 58 : 42))*root.unit
+            y:root.headerStyle.position==="bottom"?parent.height-height:0
             readonly property real innerHeight:height-2*(root.headerStyle.padding || 0)*root.unit
             Rectangle {anchors.fill:parent;radius:(root.headerStyle.radius || 0)*root.unit;color:root.headerStyle.backgroundColor || host.appearance.surfaceColor || "transparent";opacity:root.headerStyle.opacity || 0}
             Rectangle {anchors.fill:parent;color:"transparent";radius:(root.headerStyle.radius || 0)*root.unit;border.width:host.editMode && !!host.editHeaderSelection?(root.headerStyle.focusWidth || 2)*root.unit:0;border.color:root.headerStyle.focusColor || host.appearance.focusColor || root.headerInk}
@@ -413,6 +414,7 @@ Item {
         }
         Flickable {
             id:content; objectName:"composedContent"; width:parent.width; height:parent.height-header.height-root.gap; contentHeight:root.placementMode && !root.sectionMode ? root.pageContentHeight : grid.implicitHeight; clip:true
+            y:root.headerStyle.position==="bottom"?0:header.height+root.gap
             boundsBehavior:Flickable.StopAtBounds
             onYChanged:root.settleRuntimeFocus()
             onHeightChanged:root.settleRuntimeFocus()

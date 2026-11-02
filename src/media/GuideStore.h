@@ -23,7 +23,7 @@ public:
     // Candidates are bounded Kodi metadata snapshots; they are never scanned
     // from the filesystem or hydrated independently of Kodi's catalog.
     // -1 selects the validated channel policy, or its legacy seven-day default.
-    bool createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 nowUtc, int horizonDays=-1,const QVariantMap &snapshot={});
+    bool createLocal(const QVariantMap &definition, const QVariantList &candidates, qint64 nowUtc, int horizonDays=-1,const QVariantMap &snapshot={},const QVariantMap &remapping={});
     QVariantMap portableChannel(const QString &id,bool includeSchedule);
     static QVariantMap portableDefinition(const QVariantMap &package,QString *error=nullptr);
     bool extend(const QString &id, qint64 untilUtc, int expectedRevision);
@@ -32,7 +32,9 @@ public:
     // -1 uses channel policy; legacy definitions retain seven/two day defaults.
     bool maintain(const QString &id,qint64 nowUtc,int expectedRevision,int horizonDays=-1,int retentionDays=-1);
     bool importPvr(const QString &instance,const QVariantList &channels,qint64 refreshedUtc,const QVariantMap &expectedRevisions);
-    bool updateRules(const QVariantMap &definition, const QVariantList &candidates, int expectedRevision);
+    bool setSourceEnabled(const QString &instance,bool enabled,const QVariantMap &expectedRevisions);
+    QVariantMap diagnostics() const;
+    bool updateRules(const QVariantMap &definition, const QVariantList &candidates, int expectedRevision,qint64 nowUtc=-1);
     QVariantMap definition(const QString &id) const;
     QVariantList candidateSnapshot(const QString &id) const;
     QVariantMap regenerationPreview(const QString &id,qint64 nowUtc) const;
@@ -49,6 +51,7 @@ public:
     QVariantMap clockAdjustmentPreview(const QString &id,qint64 deltaSeconds,int expectedRevision,qint64 nowUtc) const;
     bool adjustClock(const QVariantMap &review,qint64 nowUtc);
     void setCancellationCheck(std::function<bool()> check) { m_cancelled=std::move(check); }
+    bool cancellationRequested() const { return m_cancelled && m_cancelled(); }
     bool remove(const QString &id, int expectedRevision);
     // Only affected slots change; an unavailable slate retains the interval.
     bool markUnavailable(const QString &kind, int mediaId);

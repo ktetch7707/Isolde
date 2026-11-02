@@ -1,4 +1,5 @@
 #include "KodiMedia.h"
+#include "GuideFeeds.h"
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -7,6 +8,7 @@
 #include <QSet>
 #include <QRegularExpression>
 #include <QDateTime>
+#include <QUrl>
 #include <algorithm>
 #ifdef Q_OS_LINUX
 #include <fcntl.h>
@@ -701,6 +703,13 @@ bool KodiMedia::playScheduled(const QString &kind, int id, int offsetSeconds)
     request("Isolde.PlayScheduled",{{"mediaType",kind},{"mediaId",id},{"offsetSeconds",offsetSeconds}});
     return m_playbackActive;
 }
+bool KodiMedia::playGuideStream(const QString &url)
+{
+    if(m_busy || m_playbackActive || !GuideFeeds::streamUrl(url))return false;
+    ++m_generation;m_scheduledPlayback=false;m_playbackActive=true;m_playbackVisible=false;m_busy=true;m_stage=5;
+    m_presentationError.clear();m_playbackStatus="Connecting to the reviewed live stream…";emit changed();
+    request("Isolde.PlayGuideStream",{{"url",url}});return m_playbackActive;
+}
 bool KodiMedia::playPvr(int id,int clientId,int uniqueId)
 {
     if(m_busy || m_playbackActive || id<1)return false;
@@ -798,6 +807,7 @@ void KodiMedia::consume()
             // invalidate local schedules or candidate snapshots.
             if(m_stage==5 && m_scheduledPlayback && state=="failed" && !result.value("home").toBool() && result.value("availability")=="unavailable")
                 emit scheduledMediaUnavailable(m_scheduledKind,m_scheduledId);
+            if(state=="failed")emit playbackFailed(m_playbackStatus);
             emit playbackReturned(result.value("home").toBool());
             if (state == "ended" && !m_scheduledPlayback) {
                 // Kodi persists progress on stop; update the current shelf after
@@ -809,6 +819,12 @@ void KodiMedia::consume()
             }
         }
         emit changed();
+        const auto surfRequest=result.value("channelRequest");
+        if(m_playbackActive && surfRequest.isDouble() && surfRequest.toDouble()==surfRequest.toInt() && surfRequest.toInt()>0 && surfRequest.toInt()!=m_lastGuideSurfRequest && result.value("channelDelta").isDouble() && (result.value("channelDelta").toDouble()==1 || result.value("channelDelta").toDouble()==-1)) {
+            m_lastGuideSurfRequest=surfRequest.toInt();
+            const int direction=result.value("channelDelta").toInt();const auto generation=m_generation;
+            QTimer::singleShot(0,this,[this,direction,generation]{if(generation==m_generation && m_playbackActive)emit guideSurfRequested(direction);});
+        }
         if (!m_pendingControl.isEmpty()) {
             const auto action = m_pendingControl;
             m_pendingControl.clear();

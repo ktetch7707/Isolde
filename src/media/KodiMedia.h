@@ -56,6 +56,7 @@ public:
     // Guide coordinator only: explicit broadcast offset, never saved resume.
     bool playScheduled(const QString &kind, int id, int offsetSeconds);
     bool playPvr(int id,int clientId,int uniqueId);
+    bool playGuideStream(const QString &url);
     Q_INVOKABLE void activate(int index);
     Q_INVOKABLE bool goBack();
     Q_INVOKABLE void playSelected(bool resume = true);
@@ -105,6 +106,8 @@ signals:
     void playbackStarted();
     void playbackReturned(bool home);
     void scheduledMediaUnavailable(const QString &kind,int id);
+    void guideSurfRequested(int direction);
+    void playbackFailed(const QString &reason);
     void playlistSaved(const QString &filename);
 private:
     void request(const QString &method, const QJsonObject &params = {});
@@ -123,6 +126,7 @@ private:
     bool storeCollections(const QVariantList &entries);
     QString m_profile, m_viewKind = "all", m_viewValue, m_collectionStatus;
     QString m_playlistStatus;
+    int m_lastGuideSurfRequest=0;
     QString m_directory, m_status = "Open Kodi with the Isolde bridge enabled to browse this profile's library.";
     QLocalSocket m_socket;
     QTimer m_timeout;

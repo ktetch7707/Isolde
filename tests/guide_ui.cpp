@@ -30,6 +30,12 @@ public:
     QVariantMap last;
     Q_INVOKABLE bool dispatch(const QVariantMap &action,const QString &){last=ComponentSchema::action(action);return !last.isEmpty();}
 };
+class GuideArtworkProbe final:public QObject {
+    Q_OBJECT
+public:
+    QString source;
+    Q_INVOKABLE QVariantMap artwork(const QString &,int) const {return {{"source",source}};}
+};
 class GuideUiTests final:public QObject {
     Q_OBJECT
 private slots:
@@ -55,6 +61,10 @@ private slots:
     void pvrPreviewMappingImportAndFailedRefreshPreserveCache();
     void pvrUtcParsingAndCacheIgnoreCivilDstGaps();
     void remoteRuleEditDuplicateAndRegenerationAreReviewedTransactions();
+    void feedRemotePreviewMappingCancelImportAndTemplateIsolation();
+    void widgetVariantsFilterBeyondFirstFiveAndKeepFutureSelectionSafe();
+    void cachedHundredChannelGuideFirstFrame();
+    void previewArtworkCannotCoverRemoteFocus();
 };
 namespace {
 void serve(QLocalServer &server) {
@@ -76,6 +86,74 @@ void command(QObject *object,int value) {QVERIFY(QMetaObject::invokeMethod(objec
 QQuickItem *visualItem(QQuickItem *root,const QString &name) {if(root->objectName()==name)return root;for(auto *child:root->childItems())if(auto *found=visualItem(child,name))return found;return nullptr;}
 QVariantMap options() {QFile file(GUIDE_DEFAULTS);if(!file.open(QIODevice::ReadOnly))return {};return QJsonDocument::fromJson(file.readAll()).object().value("guide").toObject().toVariantMap();}
 QVariantMap appearance() {return {{"surfaceColor","#202126"},{"selectedColor","#353039"},{"textColor","#f5f1f3"},{"mutedColor","#aaa5af"},{"focusColor","#c994a5"}};}
+}
+void GuideUiTests::feedRemotePreviewMappingCancelImportAndTemplateIsolation() {
+    QTemporaryDir dir;const auto playlist=dir.filePath("channels.m3u"),xmlPath=dir.filePath("listings.xml");
+    {QFile file(playlist);QVERIFY(file.open(QIODevice::WriteOnly));file.write("#EXTM3U\n#EXTINF:-1 tvg-id=\"station\",Remote Station\nhttps://example.test/live\n");}
+    const auto now=QDateTime::currentSecsSinceEpoch();const auto stamp=[](qint64 utc){return QDateTime::fromSecsSinceEpoch(utc,QTimeZone::utc()).toString("yyyyMMddHHmmss +0000").toUtf8();};
+    {QFile file(xmlPath);QVERIFY(file.open(QIODevice::WriteOnly));file.write("<tv><channel id=\"alternate\"/><programme channel=\"alternate\" start=\""+stamp(now-600)+"\" stop=\""+stamp(now+1200)+"\"><title>Mapped Show</title></programme></tv>");}
+    GuideController controller(dir.filePath("profile/guide.sqlite"),"feed",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));
+    QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("guide-origin")),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!controller.busy());
+    view->setProperty("mode","feed");view->setProperty("feedSource",true);view->setProperty("feedDraft",QVariantMap{{"instance","remote-feed"},{"playlist",playlist},{"xmltv",xmlPath},{"url",""},{"name",""}});view->setProperty("menuIndex",5);
+    command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QVERIFY2(controller.sourcePreviewReady(),qPrintable(controller.errorString()));QVERIFY(controller.channels().isEmpty());
+    QCOMPARE(view->property("mode").toString(),QString("sourcePreview"));command(view.data(),InputManager::Confirm);QCOMPARE(view->property("mode").toString(),QString("sourceMapping"));
+    QVERIFY(controller.setSourceEpg(0,"alternate"));QCOMPARE(controller.sourcePreview().first().toMap().value("programs").toList().size(),1);
+    command(view.data(),InputManager::Back);command(view.data(),InputManager::Back);QTRY_VERIFY(!controller.busy());QVERIFY(controller.channels().isEmpty());QVERIFY(!controller.sourcePreviewReady());
+    QVERIFY(controller.previewFeed("remote-feed",playlist,xmlPath));QTRY_VERIFY(!controller.busy());QVERIFY(controller.setSourceEpg(0,"alternate"));view->setProperty("mode","sourcePreview");view->setProperty("menuIndex",1);command(view.data(),InputManager::Confirm);QTRY_VERIFY(!controller.busy());QCOMPARE(controller.channels().size(),1);
+    const auto before=controller.rows();{QFile file(xmlPath);QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate));file.write("<tv><programme");}
+    QVERIFY(controller.previewFeed("remote-feed",playlist,xmlPath));QTRY_VERIFY(!controller.busy());QVERIFY(!controller.sourcePreviewReady());QVERIFY(!controller.errorString().isEmpty());QCOMPARE(controller.channels().size(),1);QCOMPARE(controller.rows().first().toMap().value("programs"),before.first().toMap().value("programs"));
+    const auto feedError=controller.errorString();
+    controller.refresh();QTRY_VERIFY(!controller.busy());QCOMPARE(controller.errorString(),feedError);
+    controller.setWindow(now-1800,now+5400,0);QTRY_VERIFY(!controller.busy());QCOMPARE(controller.errorString(),feedError);
+    const auto draft=controller.newDefinition();QVERIFY(controller.saveRuleTemplate("Saved cartoons",draft));QTRY_VERIFY(!controller.busy() && controller.ruleTemplates().size()==1);QSignalSpy prepared(&controller,&GuideController::duplicatePrepared);QVERIFY(controller.useRuleTemplate(0));QCOMPARE(prepared.size(),1);QVERIFY(prepared.first().first().toMap().value("id")!=draft.value("id"));QVERIFY(!controller.previewReady());
+    GuideController other(dir.filePath("other/guide.sqlite"),"other",nullptr,dir.path());QTRY_VERIFY(other.ready()&&!other.busy());QVERIFY(other.refreshRuleTemplates());QTRY_VERIFY(!other.busy());QVERIFY(other.ruleTemplates().isEmpty());
+    controller.invalidate();QVERIFY(controller.ruleTemplates().isEmpty());QVERIFY(controller.importReview().isEmpty());QVERIFY(!controller.useRuleTemplate(0));
+    view->setProperty("packagePath","/private/previous-profile.json");view->setProperty("mode","feed");view->setProperty("controller",QVariant::fromValue(&other));QVERIFY(!view->property("open").toBool());QCOMPARE(view->property("mode").toString(),QString());QCOMPARE(view->property("packagePath").toString(),QString());
+    QQmlExpression emptyDraft(QQmlEngine::contextForObject(view.data()),view.data(),"feedDraft.playlist === '' && feedDraft.xmltv === '' && feedDraft.url === '' && Object.keys(draft).length === 0");QVERIFY(emptyDraft.evaluate().toBool());QVERIFY(!emptyDraft.hasError());
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("setup-origin")),Q_ARG(QVariant,QVariantMap())));QTRY_VERIFY(!other.busy());
+    const auto sources=options().value("sources").toList();int setup=-1;for(int i=0;i<sources.size();++i)if(sources[i].toMap().value("id")=="configure-pvr")setup=i;QVERIFY(setup>=0);view->setProperty("mode","sources");view->setProperty("menuIndex",setup);command(view.data(),InputManager::Confirm);QCOMPARE(dispatch.last.value("type").toString(),QString("settings"));QCOMPARE(dispatch.last.value("section").toInt(),4);QVERIFY(!view->property("open").toBool());
+}
+void GuideUiTests::widgetVariantsFilterBeyondFirstFiveAndKeepFutureSelectionSafe() {
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);QVariantList channels;
+    for(int i=0;i<9;++i){QVariantMap channel{{"id",QString("station-%1").arg(i)},{"number",i+1},{"name",QString("Station %1").arg(i)},{"sourceName",i%2?"Local":"Stream"},{"favorite",i==8},{"groups",QVariantList{i==8?"Last group":"Other"}},{"current",QVariantMap{{"mediaType","episode"},{"mediaId",i+1},{"title","Current"},{"startUtc",1000},{"endUtc",2000},{"clockUtc",1250}}},{"upcoming",QVariantList{QVariantMap{{"mediaType","episode"},{"mediaId",i+101},{"title","Future program"},{"startUtc",2000},{"endUtc",3000}}}}};if(!(i%2))channel["owner"]="guide-feed";channels.append(channel);}
+    const auto url=QUrl::fromLocalFile(QFileInfo(GUIDE_VIEW_QML).dir().filePath("GuideWidget.qml"));
+    for(const auto &variant:QStringList{"mini","now-playing","on-now","favorites","preview","upcoming","guide"}) {
+        QQmlComponent component(&engine,url);QScopedPointer<QObject> widget(component.createWithInitialProperties({{"controller",QVariantMap{{"compactRows",channels}}},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"style",QVariantMap{{"guideVariant",variant},{"guideArtSource","none"}}},{"originId","widget-origin"},{"engaged",true},{"width",960},{"height",540}}));QVERIFY2(widget,qPrintable(component.errorString()));
+        QQmlExpression count(QQmlEngine::contextForObject(widget.data()),widget.data(),"rows.length");QCOMPARE(count.evaluate().toInt(),variant=="favorites" || variant=="preview"?1:5);
+        if(variant=="favorites"){QQmlExpression last(QQmlEngine::contextForObject(widget.data()),widget.data(),"rows[0].id");QCOMPARE(last.evaluate().toString(),QString("station-8"));}
+        if(variant=="upcoming"){QQmlExpression futureProgress(QQmlEngine::contextForObject(widget.data()),widget.data(),"progressFor(rows[0].current)");QCOMPARE(futureProgress.evaluate().toDouble(),0.0);}
+        command(widget.data(),InputManager::NavigateDown);dispatch.last.clear();command(widget.data(),InputManager::Confirm);
+        QCOMPARE(dispatch.last.value("type").toString(),variant=="upcoming"?QString("open-guide"):QString("tune-channel"));
+        widget->setProperty("style",QVariantMap{{"guideVariant",variant},{"guideFilter","connected"},{"guideGroup","Last group"},{"guideChannels","station-8"},{"guideArtSource","none"}});QCOMPARE(count.evaluate().toInt(),1);
+        command(widget.data(),InputManager::Menu);QCOMPARE(dispatch.last.value("type").toString(),QString("open-guide"));QCOMPARE(dispatch.last.value("presentation").toMap().value("guideSurface").toString(),QString("overlay"));
+    }
+}
+void GuideUiTests::cachedHundredChannelGuideFirstFrame() {
+    QTemporaryDir dir;const auto path=dir.filePath("scale.sqlite");const auto now=QDateTime::currentSecsSinceEpoch();
+    {GuideStore store(path);for(int channel=0;channel<100;++channel){QVariantList items;for(int i=0;i<200;++i)items.append(QVariantMap{{"mediaType","episode"},{"mediaId",channel*200+i+1},{"title",QString("Program %1").arg(channel*200+i+1)},{"duration",1800},{"source","kodi"}});
+        const QVariantMap def{{"schemaVersion",1},{"id",QString("scale-%1").arg(channel)},{"number",channel+1},{"name",QString("Channel %1").arg(channel)},{"clock","real-time"},{"timezone","UTC"},{"sequence","seeded-shuffle"},{"seed",channel},{"horizonDays",1},{"mediaKinds",QVariantList{"episode"}},{"rule",QVariantMap{{"field","source"},{"op","is"},{"value","kodi"}}}};QVERIFY(store.createLocal(def,items,now,1));}}
+    GuideController controller(path,"scale",nullptr,dir.path());QTRY_VERIFY(controller.ready()&&!controller.busy());QCOMPARE(controller.channels().size(),100);
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);QQuickWindow window;window.resize(1280,720);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GUIDE_VIEW_QML));QScopedPointer<QObject> view(component.createWithInitialProperties({{"controller",QVariant::fromValue(&controller)},{"dispatcher",QVariant::fromValue(&dispatch)},{"options",options()},{"appearance",appearance()},{"width",1280},{"height",720}}));QVERIFY2(view,qPrintable(component.errorString()));auto *item=qobject_cast<QQuickItem *>(view.data());QVERIFY(item);item->setParentItem(window.contentItem());
+    QObject::connect(&window,&QQuickWindow::frameSwapped,&controller,&GuideController::recordGuidePaint,Qt::QueuedConnection);
+    QVERIFY(QMetaObject::invokeMethod(view.data(),"show",Q_ARG(QVariant,QString("scale-origin")),Q_ARG(QVariant,QVariantMap())));window.show();QTRY_VERIFY(controller.firstPaintMs()>=0);qInfo()<<"T11 VM software-rendered cached Guide first frame, 100 channels / 20,000 Kodi identities, ms:"<<controller.firstPaintMs();QVERIFY2(controller.firstPaintMs()<=1000,"Cached Guide exceeded the one-second first-frame target in the VM software-rendered fixture");
+}
+void GuideUiTests::previewArtworkCannotCoverRemoteFocus() {
+    QTemporaryDir dir;QImage poster(80,80,QImage::Format_RGB32);poster.fill(Qt::black);const auto path=dir.filePath("poster.png");QVERIFY(poster.save(path));GuideArtworkProbe provider;provider.source=QUrl::fromLocalFile(path).toString();
+    InputManager input;GuideDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);QQuickWindow window;window.resize(640,360);
+    const QVariantMap row{{"id","art-station"},{"number",1},{"name","Artwork station"},{"current",QVariantMap{{"mediaType","episode"},{"mediaId",1},{"title","Current"},{"startUtc",1000},{"endUtc",2000},{"clockUtc",1250}}}};
+    QQmlComponent component(&engine,QUrl::fromLocalFile(QFileInfo(GUIDE_VIEW_QML).dir().filePath("GuideWidget.qml")));QScopedPointer<QObject> widget(component.createWithInitialProperties({{"controller",QVariantMap{{"compactRows",QVariantList{row}}}},{"dispatcher",QVariant::fromValue(&dispatch)},{"provider",QVariant::fromValue(&provider)},{"options",options()},{"appearance",appearance()},{"style",QVariantMap{{"guideVariant","preview"},{"surfaceOpacity",0.5}}},{"originId","art-origin"},{"engaged",true},{"width",640},{"height",360}}));QVERIFY2(widget,qPrintable(component.errorString()));auto *root=qobject_cast<QQuickItem*>(widget.data());QVERIFY(root);root->setParentItem(window.contentItem());window.show();command(widget.data(),InputManager::NavigateDown);
+    QQuickItem *art=nullptr,*channel=nullptr;QTRY_VERIFY((art=visualItem(root,"guideWidgetArt-art-station")) && (channel=visualItem(root,"guideWidgetChannel-art-station")));QTRY_COMPARE(art->property("status").toInt(),1);
+    const auto expected=QColor(appearance().value("focusColor").toString());
+    const auto focusVisible=[&]{const auto frame=window.grabWindow();if(frame.isNull())return false;const auto point=channel->mapToScene(QPointF(1,channel->height()/2));const auto scale=double(frame.width())/window.width();const QPoint pixel(qRound(point.x()*scale),qRound(point.y()*scale));return frame.rect().contains(pixel) && frame.pixelColor(pixel)==expected;};
+    QTRY_VERIFY2(focusVisible(),"The actual poster frame obscured the remote focus outline");
+    QQuickItem *program=nullptr,*label=nullptr;
+    QTRY_VERIFY((program=visualItem(root,"guideWidgetLabelLine-art-station-1")) && (label=visualItem(root,"guideWidgetLabel-art-station")));
+    QCOMPARE(program->property("text").toString(),QString("Current"));QVERIFY(program->isVisible());QVERIFY(!program->property("truncated").toBool());
+    const auto programBottom=program->mapToItem(label,QPointF(0,program->height())).y();
+    QVERIFY2(programBottom<=label->height(),"The actual preview artwork label clips the current program title");
 }
 void GuideUiTests::asyncPreviewCreateCancelAndProfileTeardown() {
     QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server);

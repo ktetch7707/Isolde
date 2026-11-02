@@ -7,6 +7,8 @@ Item {
     required property var dispatcher
     required property var options
     required property var appearance
+    property var colorSettings:({})
+    property var stationStyle:({})
     property bool open:false
     property bool suppressed:false
     property string originId:""
@@ -32,6 +34,13 @@ Item {
     property int blockIndex:0
     property var blockDraft:({})
     property string packagePath:""
+    property var feedDraft:({instance:"",playlist:"",xmltv:"",url:"",name:""})
+    property int sourceMappingIndex:0
+    property int remapItem:0
+    property int remapPage:0
+    property bool feedSource:false
+    property string sourceManagedId:""
+    readonly property var importedSources:controller.channels.filter(c=>c.owner).reduce((rows,c)=>{const id=c.source.instance;if(!rows.some(s=>s.id===id))rows.push({id:id,enabled:c.sourceEnabled!==false,refreshedUtc:c.refreshedUtc,available:c.sourceAvailable});return rows},[])
     property bool packageSchedule:false
     property var metadataDraft:({})
     property string numberConflictId:""
@@ -78,16 +87,19 @@ Item {
     readonly property var managedChannel:controller?controller.channels.find(c=>c.id===managedId):null
     readonly property var conflictingChannel:controller?controller.channels.find(c=>c.id===numberConflictId):null
     readonly property bool previewCurrent:controller && controller.previewReady && JSON.stringify(controller.previewDefinition)===JSON.stringify(draft)
-    readonly property var createFields:["Name: "+(draft.name || ""),"Channel number: "+(draft.number || ""),"Media: "+mediaKind,"Edit matching rules","Sequence: "+(draft.sequence || ""),"Clock: "+(draft.clock || "")+(draft.clockOffsetSeconds?" · Offset "+draft.clockOffsetSeconds/60+" minutes":""),"Preview matches",previewCurrent?(editRevision?"Save rules for unscheduled future slots":"Save channel"):"Preview these settings before saving","Schedule horizon, history and timezone","Cancel"]
+    readonly property var createFields:["Name: "+(draft.name || ""),"Channel number: "+(draft.number || ""),"Media: "+mediaKind,"Edit matching rules","Sequence: "+(draft.sequence || ""),"Clock: "+(draft.clock || "")+(draft.clockOffsetSeconds?" · Offset "+draft.clockOffsetSeconds/60+" minutes":""),"Preview matches",previewCurrent?(editRevision?"Save rules for unscheduled future slots":"Save channel"):"Preview these settings before saving","Schedule horizon, history and timezone","Cancel"].concat(controller.importReview.length?["Review imported media mappings"]:[]).concat(["Choose saved rule template…","Save draft as rule template…"])
     readonly property var menuRows:buildMenu()
     readonly property var repairItems:buildRepairItems()
     visible:open && !suppressed
     signal closed(string origin)
+    onControllerChanged:{open=false;mode="";draft={};blockDraft={};stationStyle={};feedDraft={instance:"",playlist:"",xmltv:"",url:"",name:""};packagePath="";packageSchedule=false;metadataDraft={};managedId="";sourceManagedId="";selectedChannelId="";pendingFocusChannelId="";originId="";selectedIndex=0;menuIndex=0;fieldIndex=0;editRevision=0;channelQuery="";sourceFilter="all";groupFilter="";favoritesOnly=false;moveIds=[];moveRevisions={};sourceSaving=false;metadataSaving=false;clockSaving=false;repairSaving=false;regenerationSaving=false;moveSaving=false;navigationError=""}
     function show(origin,style){showFocused(origin,style,"")}
     function showFocused(origin,style,focusChannelId){
+        controller.beginGuidePaint()
         originId=origin || "";presentation=style || {};open=true;mode="";headerFocused=true;headerIndex=0
         nowUtc=Date.now()/1000;anchorUtc=nowUtc;fromUtc=Math.floor(nowUtc/1800)*1800;navigationError=""
         pendingFocusChannelId=focusChannelId || "";applyPendingFocus()
+        if(controller.clockWarning){mode="deviceClock";menuIndex=0}
         loadWindow()
     }
     function applyPendingFocus(){
@@ -104,7 +116,7 @@ Item {
     }
     function close(){open=false;mode="";pendingFocusChannelId="";closed(originId)}
     function toggleSurface(){presentation=Object.assign({},presentation,{guideSurface:overlay?"full":"overlay"})}
-    function matchesChannel(c){return !c.hidden && (!favoritesOnly || c.favorite) && (!groupFilter || (c.groups || []).indexOf(groupFilter)>=0) && (sourceFilter==="all" || (sourceFilter==="pvr")===(c.owner==="kodi-pvr")) && (!channelQuery || (String(c.number)+" "+c.name).toLocaleLowerCase().indexOf(channelQuery.toLocaleLowerCase())>=0)}
+    function matchesChannel(c){return !c.hidden && (!favoritesOnly || c.favorite) && (!groupFilter || (c.groups || []).indexOf(groupFilter)>=0) && (sourceFilter==="all" || (sourceFilter==="pvr")===(!!c.owner)) && (!channelQuery || (String(c.number)+" "+c.name).toLocaleLowerCase().indexOf(channelQuery.toLocaleLowerCase())>=0)}
     function collectGroups(){let names=[];if(controller)for(const c of controller.channels)for(const group of c.groups || [])if(names.indexOf(group)<0)names.push(group);return names.sort()}
     function loadWindow(){if(controller){const all=controller.channels.filter(c=>!c.hidden);const index=selectedChannel?all.findIndex(c=>c.id===selectedChannel.id):0;controller.setWindow(Math.floor(fromUtc),Math.floor(fromUtc+minutes*60),Math.floor(Math.max(0,index)/50)*50)}}
     function applyFilter(){selectedIndex=0;selectedChannelId=selectedChannel?selectedChannel.id:"";headerFocused=!channels.length;loadWindow()}
@@ -116,20 +128,31 @@ Item {
     }
     function timeLabel(value){return new Date(value*1000).toLocaleTimeString(Qt.locale(),"hh:mm")}
     function buildMenu(){
+        if(mode==="deviceClock")return ["Keep browsing cached listings","Use the reviewed current device clock for tuning"]
         if(mode==="add")return ["Create local channel","Add source","Back"]
         if(mode==="schedule")return ["Future horizon: "+(draft.horizonDays===undefined?7:draft.horizonDays)+" days","Retained history: "+(draft.retentionDays===undefined?2:draft.retentionDays)+" days","Timezone: "+draft.timezone,"Back to channel draft","Calendar blocks, cooldown, filler and bumpers"]
         if(mode==="policy")return ["Repetition cooldown: "+((draft.schedule || {}).cooldownSeconds || 0)/60+" minutes","Filler rules"+((draft.schedule || {}).fillerRule?" · Set":" · Off"),"Bumper rules"+((draft.schedule || {}).bumperRule?" · Set":" · Off"),"Remove filler rules","Remove bumper rules"].concat(((draft.schedule || {}).blocks || []).map(b=>"Edit block: "+b.name)).concat(["Add calendar block","Back to schedule"])
-        if(mode==="block")return ["Name: "+blockDraft.name,"Weekdays (Monday 1–Sunday 7): "+blockDraft.days.join(","),"Start minute of day: "+blockDraft.startMinute,"End minute of day: "+blockDraft.endMinute,"First date: "+(blockDraft.fromDate || "Any"),"Last date: "+(blockDraft.toDate || "Any"),"Edit block matching rules","Use block in draft","Remove block","Cancel block changes"]
+        if(mode==="block")return ["Name: "+blockDraft.name,"Weekdays: "+blockDraft.days.map(d=>["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"][d-1]).join(", "),"Start time: "+civilTime(blockDraft.startMinute),"End time: "+civilTime(blockDraft.endMinute),"First date: "+(blockDraft.fromDate || "Any"),"Last date: "+(blockDraft.toDate || "Any"),"Edit block matching rules","Use block in draft","Remove block","Cancel block changes"]
+        if(mode==="blockDays")return ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"].map((name,index)=>(blockDraft.days.indexOf(index+1)>=0?"✓ ":"○ ")+name).concat(["Back to block"])
         if(mode==="clock")return ["Earlier by 15 minutes","Later by 15 minutes","Enter adjustment: "+clockDeltaSeconds/60+" minutes","Return to wall-clock position","Review adjustment: "+clockDeltaSeconds/60+" minutes","Cancel"]
         if(mode==="clockReview")return ["Cancel",controller.clockReview.channelId?"Apply reviewed clock adjustment":"No valid clock adjustment"]
         if(mode==="browse")return ["Find channel: "+(channelQuery || "All"),"Favorites: "+(favoritesOnly?"Only favorites":"All channels"),"Source: "+sourceFilter,"Jump to local date and time…","Previous day","Next day","Clear filters","Group: "+(groupFilter || "All groups"),"Back"]
         if(mode==="groupFilter")return ["All groups"].concat(groupNames).concat(["Back"])
-        if(mode==="sources")return options.sources.map(s=>s.name+(s.kind==="kodi-pvr"?" · Preview channel import":" · App destination")).concat(["Back"])
+        if(mode==="sources")return options.sources.map(s=>s.name+(s.kind?" · Preview channel import":s.action.type==="settings"?" · Setup destination":" · App destination")).concat(["Manage imported sources","Back"])
+        if(mode==="sourceManage")return importedSources.map(s=>s.id+" · "+(s.enabled?"Enabled":"OFF")+" · "+(s.available?"Cached source available":"Source missing")+" · "+new Date(s.refreshedUtc*1000).toLocaleString()).concat(["Back"])
+        if(mode==="sourceEnable")return ["Cancel", "Enable source · Tuning connects only on request", "Disable source · Keep cached listings; refuse tuning"]
+        if(mode==="diagnostics"){const d=controller.guideDiagnostics;return ["Cached channels: "+(d.channelCount || 0),"Cached programs: "+(d.slotCount || 0),"Unavailable programs: "+(d.unavailableCount || 0),"Last guide first paint: "+(controller.firstPaintMs<0?"Not measured":controller.firstPaintMs+" ms"),controller.scheduleStatus || "No schedule maintenance result this session"].concat((d.unavailable || []).map(i=>i.channelId+" · "+i.title+" · "+new Date(i.startUtc*1000).toLocaleString())).concat(["Back"])}
+        if(mode==="feed")return ["Source ID: "+(feedDraft.instance || "Choose a stable unique name"),"M3U file: "+(feedDraft.playlist || "Absolute local path"),"XMLTV file: "+(feedDraft.xmltv || "Optional · no listings"),"Direct stream URL: "+(feedDraft.url || "Optional · replaces M3U file"),"Direct station name: "+(feedDraft.name || "Required with direct URL"),"Preview complete source · No changes until Import","Cancel"]
+        if(mode==="sourceMapping")return ["Station number: "+controller.sourcePreview[sourceMappingIndex].definition.number,"XMLTV channel ID: "+(controller.sourcePreview[sourceMappingIndex].definition.source.epgId || "No listings"),"Back to lineup review"]
         if(mode==="sourcePreview")return controller.sourcePreviewReady?controller.sourcePreview.map(e=>"Source "+e.definition.source.number+" → "+e.definition.number+" · "+e.definition.name+" · "+e.programs.length+" listings").concat(["Import reviewed lineup","Cancel"]):[controller.busy?"Reading channels and listings…":"Retry source preview","Cancel"]
-        if(mode==="manage")return (controller?controller.channels:[]).map(c=>c.number+" · "+c.name+(c.hidden?" · Hidden":"")+(c.favorite?" · Favorite":"")).concat(["Import local channel package","Back"])
-        if(mode==="import" || mode==="export")return ["Package file: "+(packagePath || "Choose an absolute .json path"),(mode==="export"?"Include":"Restore")+" cached schedule snapshot: "+(packageSchedule?"Yes":"No"),mode==="export"?"Save new package · Existing files are preserved":"Open as unsaved channel · Preview current Kodi matches before Save","Cancel"]
+        if(mode==="manage")return (controller?controller.channels:[]).map(c=>c.number+" · "+c.name+(c.hidden?" · Hidden":"")+(c.favorite?" · Favorite":"")).concat(["Import local channel package","Guide diagnostics / missing programs","Back"])
+        if(mode==="import" || mode==="export")return ["Package file: "+(packagePath || "Absolute .json package or .xsp playlist path"),(mode==="export"?"Include":"Restore")+" cached schedule snapshot: "+(packageSchedule?"Yes":"No"),packagePath.toLowerCase().endsWith(".xsp")?(mode==="export"?"Export matching rules only · Use JSON to preserve the complete channel":"Import matching rules into a new channel draft"):(mode==="export"?"Save new package · Existing files are preserved":"Open as unsaved channel · Preview current Kodi matches before Save"),"Cancel"]
         if(mode==="move")return moveIds.map(id=>{const c=controller.channels.find(c=>c.id===id);return c?c.number+" · "+c.name:"Removed channel"})
-        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && managedChannel.owner!=="kodi-pvr";return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…","Adjust broadcast clock…","Export local channel…"]:[]).concat(["Back"])}
+        if(mode==="context"){const base=[managedChannel && managedChannel.favorite?"Remove favorite":"Favorite",managedChannel && managedChannel.hidden?"Show channel":"Hide channel","Move up","Move down","Rename","Channel number","Delete channel…"];const local=managedChannel && !managedChannel.owner;return base.concat(local?["Edit rules and sequencing","Regenerate future schedule…","Duplicate local channel"]:[]).concat(["Description","Channel groups"]).concat(local?["Repair selected program…","Adjust broadcast clock…","Export local channel…"]:[]).concat(["Station logo…","Station appearance…","Remove station logo","Back"])}
+        if(mode==="stationStyle")return ["Station color…","Text color…","Art fit: "+(stationStyle.artFit || "Inherit"),"Text size: "+(stationStyle.labelSize===undefined?"Inherit":stationStyle.labelSize),"Opacity: "+(stationStyle.surfaceOpacity===undefined?"Inherit":stationStyle.surfaceOpacity),"Corners: "+(stationStyle.radius===undefined?"Inherit":stationStyle.radius),"Spacing: "+(stationStyle.cardGap===undefined?"Inherit":stationStyle.cardGap),"Focus width: "+(stationStyle.focusWidth===undefined?"Inherit":stationStyle.focusWidth),"Label position: "+(stationStyle.labelPosition || "Inherit"),"Save appearance","Reset draft to inherited appearance","Cancel"]
+        if(mode==="remap")return controller.importReview.slice(remapPage,remapPage+50).map(i=>i.title+" · "+i.mappingLabel).concat(["Previous page","Next page","Back to draft"])
+        if(mode==="templates")return controller.ruleTemplates.map(t=>t.name).concat(["Back to unsaved draft"])
+        if(mode==="remapChoices")return controller.importChoices(remapItem,remapPage).map(i=>i.title+" · "+i.duration+" seconds"+(i.fits?"":" · Duration differs")).concat(["Previous page","Next page","Cancel replacement"])
         if(mode==="repair")return repairItems.map(item=>item.label)
         if(mode==="repairConfirm")return ["Cancel",repairChoice<0?"Mark only this slot unavailable":"Apply reviewed replacement"]
         if(mode==="regenerate")return ["Cancel",controller.regenerationReview.slotCount?"Replace reviewed future schedule":"No reviewed replacement boundary available"]
@@ -143,7 +166,7 @@ Item {
     function invokeHeader(){
         if(controller.busy && !controller.backgroundBusy)return
         const id=options.toolbar[headerIndex].id
-        if(id==="now"){nowUtc=Date.now()/1000;anchorUtc=nowUtc;fromUtc=Math.floor(nowUtc/1800)*1800;loadWindow()}
+        if(id==="now"){if(controller.clockWarning){mode="deviceClock";menuIndex=0;return}nowUtc=Date.now()/1000;anchorUtc=nowUtc;fromUtc=Math.floor(nowUtc/1800)*1800;loadWindow()}
         else if(id==="add"){mode="add";menuIndex=0}
         else if(id==="manage"){mode="manage";menuIndex=0}
         else if(id==="sources"){mode="sources";menuIndex=0}
@@ -183,6 +206,9 @@ Item {
         else if(fieldIndex===6)controller.previewLocal(draft,mediaKind)
         else if(fieldIndex===7){if(editRevision)controller.updateLocal(draft,editRevision);else controller.createLocal(draft)}
         else if(fieldIndex===8){navigationError="";mode="schedule";menuIndex=0}
+        else if(fieldIndex===10 && controller.importReview.length){remapPage=0;mode="remap";menuIndex=0}
+        else if(fieldIndex===(controller.importReview.length?11:10)){controller.refreshRuleTemplates();mode="templates";menuIndex=0}
+        else if(fieldIndex===(controller.importReview.length?12:11)){keyboard.value=draft.name || "";keyboard.selectedIndex=0;keyboardReturn="templateName";mode="keyboard"}
         else {mode="discard";menuIndex=0}
     }
     function editSchedule(delta){
@@ -208,10 +234,18 @@ Item {
     }
     function editBlock(){
         const keys=["name","days","startMinute","endMinute","fromDate","toDate"]
-        if(menuIndex<6){const key=keys[menuIndex];policyKeyboard(key,key==="days"?blockDraft.days.join(","):(blockDraft[key]===undefined?"":blockDraft[key]),"block");return}
+        if(menuIndex===1){mode="blockDays";menuIndex=0;return}
+        if(menuIndex<6){const key=keys[menuIndex];policyKeyboard(key,key==="startMinute" || key==="endMinute"?civilTime(blockDraft[key]):(blockDraft[key]===undefined?"":blockDraft[key]),"block");return}
         if(menuIndex===6){ruleReturn="block";rules.begin(blockDraft.rule);mode="rules";return}
         if(menuIndex===7 || menuIndex===8){let value=policyCopy();value.schedule.blocks=value.schedule.blocks || [];if(menuIndex===7)value.schedule.blocks[blockIndex]=JSON.parse(JSON.stringify(blockDraft));else if(blockIndex<value.schedule.blocks.length)value.schedule.blocks.splice(blockIndex,1);draft=value}
         mode="policy";menuIndex=0
+    }
+    function civilTime(minute){return String(Math.floor(minute/60)).padStart(2,"0")+":"+String(minute%60).padStart(2,"0")}
+    function stationContrast(){
+        if(!appearance || !appearance.textColor || !appearance.surfaceColor)return ""
+        function luminance(value){const c=Qt.darker(value,1);function linear(v){return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4)}return .2126*linear(c.r)+.7152*linear(c.g)+.0722*linear(c.b)}
+        const a=luminance(editField==="labelColor"?stationColor.sample:stationStyle.labelColor || appearance.textColor),b=luminance(editField==="surfaceColor"?stationColor.sample:stationStyle.surfaceColor || appearance.surfaceColor),ratio=(Math.max(a,b)+.05)/(Math.min(a,b)+.05)
+        return (ratio>=4.5?"Text contrast ":"Low text contrast · ")+ratio.toFixed(1)+":1 · solid-surface estimate"
     }
     function acceptPolicyText(text){
         navigationError=""
@@ -223,7 +257,7 @@ Item {
         if(editField==="days"){
             const parts=text.split(",").map(s=>Number(s.trim()));if(!/^[1-7](\s*,\s*[1-7])*$/.test(text.trim()) || new Set(parts).size!==parts.length){navigationError="Enter unique weekdays 1–7 separated by commas.";return}block.days=parts
         }else if(editField==="startMinute" || editField==="endMinute"){
-            const n=Number(text),maximum=editField==="endMinute"?1440:1439;if(!/^\d{1,4}$/.test(text.trim()) || !Number.isInteger(n) || n<0 || n>maximum || (editField==="endMinute" && n===0)){navigationError="Choose a valid minute of day.";return}block[editField]=n
+            const parts=text.trim().match(/^(\d{2}):(\d{2})$/),maximum=editField==="endMinute"?1440:1439;const n=parts?Number(parts[1])*60+Number(parts[2]):-1;if(!parts || Number(parts[2])>59 || n<0 || n>maximum || (editField==="endMinute" && n===0)){navigationError="Enter HH:MM in 24-hour time; 24:00 is allowed only for an end time.";return}block[editField]=n
         }else if(editField==="fromDate" || editField==="toDate"){
             if(text.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(text.trim())){navigationError="Enter YYYY-MM-DD or leave empty for any date.";return}if(text.trim())block[editField]=text.trim();else delete block[editField]
         }else block[editField]=text.trim()
@@ -240,6 +274,8 @@ Item {
         return "Current policy: "+(c && c.clock==="real-time"?"Real time · Offset "+(c.clockOffsetSeconds || 0)/60+" minutes":"Pause when off")+".\nChoose earlier/later or enter signed minutes, then review before applying. The target must be inside the cached schedule."
     }
     function invokeMenu(){
+        if(mode==="blockDays"){if(menuIndex<7){let copy=JSON.parse(JSON.stringify(blockDraft)),day=menuIndex+1,index=copy.days.indexOf(day);if(index<0)copy.days.push(day);else copy.days.splice(index,1);copy.days.sort((a,b)=>a-b);blockDraft=copy}else{mode="block";menuIndex=1}return}
+        if(mode==="deviceClock"){if(menuIndex===1)controller.acceptDeviceClock();mode="";return}
         if(controller.busy && !controller.backgroundBusy)return
         if(mode==="import" || mode==="export"){
             if(menuIndex===0)policyKeyboard("packagePath",packagePath,mode)
@@ -275,19 +311,38 @@ Item {
             if(menuIndex===0){editRevision=0;draft=controller.newDefinition();mediaKind="episode";fieldIndex=0;mode="create"}
             else if(menuIndex===1){mode="sources";menuIndex=0}else mode=""
         }else if(mode==="sources"){
-            if(menuIndex<options.sources.length){const source=options.sources[menuIndex];if(source.kind==="kodi-pvr"){sourceOriginIndex=menuIndex;if(controller.previewPvr()){mode="sourcePreview";menuIndex=0}}else dispatcher.dispatch(source.action,originId)}
+            if(menuIndex<options.sources.length){const source=options.sources[menuIndex];sourceOriginIndex=menuIndex;feedSource=source.kind==="guide-feed";if(feedSource){mode="feed";menuIndex=0}else if(source.kind==="kodi-pvr"){if(controller.previewPvr()){mode="sourcePreview";menuIndex=0}}else if(dispatcher.dispatch(source.action,originId) && source.action.type==="settings")close()}
+            else if(menuIndex===options.sources.length){mode="sourceManage";menuIndex=0}
             else mode=""
+        }else if(mode==="feed"){
+            if(menuIndex<5){editField=["instance","playlist","xmltv","url","name"][menuIndex];keyboard.value=feedDraft[editField];keyboard.selectedIndex=0;keyboardReturn="feed";mode="keyboard"}
+            else if(menuIndex===5){if(controller.previewFeed(feedDraft.instance,feedDraft.playlist,feedDraft.xmltv,feedDraft.url,feedDraft.name)){mode="sourcePreview";menuIndex=0}}
+            else{mode="sources";menuIndex=sourceOriginIndex}
+        }else if(mode==="sourceMapping"){
+            if(menuIndex<2){editField=menuIndex===0?"sourceNumber":"sourceEpg";const entry=controller.sourcePreview[sourceMappingIndex];keyboard.value=String(menuIndex===0?entry.definition.number:entry.definition.source.epgId);keyboard.selectedIndex=0;keyboardReturn="sourceMapping";mode="keyboard"}
+            else{mode="sourcePreview";menuIndex=sourceMappingIndex}
         }else if(mode==="sourcePreview"){
-            if(!controller.sourcePreviewReady){if(menuIndex===0 && !controller.busy)controller.previewPvr();else{controller.cancel();mode="sources";menuIndex=sourceOriginIndex}}
-            else if(menuIndex<controller.sourcePreview.length){editField="sourceNumber";keyboard.value=String(controller.sourcePreview[menuIndex].definition.number);keyboard.selectedIndex=0;keyboardReturn="sourcePreview";mode="keyboard"}
+            if(!controller.sourcePreviewReady){if(menuIndex===0 && !controller.busy){if(feedSource){mode="feed";menuIndex=5}else controller.previewPvr()}else{controller.cancel();mode="sources";menuIndex=sourceOriginIndex}}
+            else if(menuIndex<controller.sourcePreview.length){if(feedSource){sourceMappingIndex=menuIndex;mode="sourceMapping";menuIndex=0}else{editField="sourceNumber";keyboard.value=String(controller.sourcePreview[menuIndex].definition.number);keyboard.selectedIndex=0;keyboardReturn="sourcePreview";mode="keyboard"}}
             else if(menuIndex===controller.sourcePreview.length)sourceSaving=controller.importPvr()
             else{controller.cancel();mode="sources";menuIndex=sourceOriginIndex}
+        }else if(mode==="sourceManage"){
+            if(menuIndex<importedSources.length){sourceManagedId=importedSources[menuIndex].id;mode="sourceEnable";menuIndex=0}else{mode="sources";menuIndex=options.sources.length}
+        }else if(mode==="sourceEnable"){
+            if(menuIndex>0)controller.setSourceEnabled(sourceManagedId,menuIndex===1);mode="sourceManage";menuIndex=0
+        }else if(mode==="diagnostics"){
+            mode="manage";menuIndex=controller.channels.length+1
         }else if(mode==="manage"){
             if(menuIndex<controller.channels.length){managedId=controller.channels[menuIndex].id;mode="context";menuIndex=0}
             else if(menuIndex===controller.channels.length){packagePath="";packageSchedule=false;mode="import";menuIndex=0}
+            else if(menuIndex===controller.channels.length+1){controller.readDiagnostics();mode="diagnostics";menuIndex=0}
             else mode=""
         }else if(mode==="context"){
             const c=managedChannel;if(!c){mode="manage";menuIndex=0;return}
+            const extra=c.owner?9:15
+            if(menuIndex===extra){editField="stationLogo";keyboard.value="";keyboard.selectedIndex=0;keyboardReturn="stationLogo";mode="keyboard";return}
+            if(menuIndex===extra+1){stationStyle=Object.assign({},c.presentation || {});mode="stationStyle";menuIndex=0;return}
+            if(menuIndex===extra+2){metadataSaving=controller.setStationLogo(c.id,"",c.revision);return}
             if(menuIndex===0)controller.setPreferences(c.id,{favorite:!c.favorite},c.revision)
             else if(menuIndex===1)controller.setPreferences(c.id,{hidden:!c.hidden},c.revision)
             else if(menuIndex===2 || menuIndex===3){
@@ -296,18 +351,34 @@ Item {
                 moveRevisions=revisions;mode="move";previewMove(direction)
             }else if(menuIndex===4 || menuIndex===5){editField=menuIndex===4?"name":"number";keyboard.value=String(c[editField]);keyboard.selectedIndex=0;keyboardReturn="metadataReview";mode="keyboard"}
             else if(menuIndex===6){mode="delete";menuIndex=0}
-            else if(menuIndex===7 && c.owner!=="kodi-pvr"){editRevision=c.revision;draft=controller.editableDefinition(c.id);mediaKind=kindFor(draft);fieldIndex=3;mode="create"}
-            else if(menuIndex===8 && c.owner!=="kodi-pvr"){if(controller.previewRegeneration(c.id)){mode="regenerate";menuIndex=0}}
-            else if(menuIndex===9 && c.owner!=="kodi-pvr")controller.previewDuplicate(c.id,c.revision)
-            else if(menuIndex===13 && c.owner!=="kodi-pvr"){clockDeltaSeconds=0;navigationError="";mode="clock";menuIndex=0}
-            else if(menuIndex===14 && c.owner!=="kodi-pvr"){packagePath="";packageSchedule=false;mode="export";menuIndex=0}
-            else if(menuIndex===(c.owner==="kodi-pvr"?7:10) || menuIndex===(c.owner==="kodi-pvr"?8:11)){editField=menuIndex===(c.owner==="kodi-pvr"?7:10)?"description":"groups";keyboard.value=editField==="groups"?(c.groups || []).join(", "):(c.description || "");keyboard.selectedIndex=0;keyboardReturn="metadataReview";mode="keyboard"}
-            else if(menuIndex===12 && c.owner!=="kodi-pvr"){
+            else if(menuIndex===7 && !c.owner){editRevision=c.revision;draft=controller.editableDefinition(c.id);mediaKind=kindFor(draft);fieldIndex=3;mode="create"}
+            else if(menuIndex===8 && !c.owner){if(controller.previewRegeneration(c.id)){mode="regenerate";menuIndex=0}}
+            else if(menuIndex===9 && !c.owner)controller.previewDuplicate(c.id,c.revision)
+            else if(menuIndex===13 && !c.owner){clockDeltaSeconds=0;navigationError="";mode="clock";menuIndex=0}
+            else if(menuIndex===14 && !c.owner){packagePath="";packageSchedule=false;mode="export";menuIndex=0}
+            else if(menuIndex===(!!c.owner?7:10) || menuIndex===(!!c.owner?8:11)){editField=menuIndex===(!!c.owner?7:10)?"description":"groups";keyboard.value=editField==="groups"?(c.groups || []).join(", "):(c.description || "");keyboard.selectedIndex=0;keyboardReturn="metadataReview";mode="keyboard"}
+            else if(menuIndex===12 && !c.owner){
                 navigationError=""
                 if(!selectedProgram || selectedProgram.channelId!==managedId){navigationError="Select a program on this channel in the guide, then open Menu to repair it.";return}
                 if(controller.previewRepair(managedId,selectedProgram.id,c.revision)){mode="repair";menuIndex=0}
             }
             else{mode="manage";menuIndex=0}
+        }else if(mode==="templates"){
+            if(menuIndex<controller.ruleTemplates.length)controller.useRuleTemplate(menuIndex)
+            else mode="create"
+        }else if(mode==="remap" || mode==="remapChoices"){
+            const choices=mode==="remapChoices"?controller.importChoices(remapItem,remapPage):controller.importReview.slice(remapPage,remapPage+50)
+            if(menuIndex<choices.length){if(mode==="remap"){remapItem=remapPage+menuIndex;remapPage=0;mode="remapChoices";menuIndex=0}else if(controller.mapImportedItem(remapItem,choices[menuIndex].choice)){remapPage=Math.floor(remapItem/50)*50;mode="remap";menuIndex=remapItem-remapPage}}
+            else if(menuIndex===choices.length){remapPage=Math.max(0,remapPage-50);menuIndex=0}
+            else if(menuIndex===choices.length+1){const total=mode==="remap"?controller.importReview.length:controller.previewCount;if(remapPage+50<total){remapPage+=50;menuIndex=0}}
+            else if(mode==="remapChoices"){remapPage=Math.floor(remapItem/50)*50;mode="remap";menuIndex=remapItem-remapPage}else{mode="create";fieldIndex=10}
+        }else if(mode==="stationStyle"){
+            let copy=Object.assign({},stationStyle)
+            if(menuIndex<2){editField=menuIndex===0?"surfaceColor":"labelColor";stationColor.begin(copy[editField] || (menuIndex===0?appearance.surfaceColor:appearance.textColor));mode="stationColor"}
+            else if(menuIndex===9)metadataSaving=controller.setMetadata(managedId,{presentation:stationStyle},managedChannel.revision)
+            else if(menuIndex===10)stationStyle={}
+            else if(menuIndex===11){mode="context";menuIndex=managedChannel.owner?10:16}
+            else{const keys=["artFit","labelSize","surfaceOpacity","radius","cardGap","focusWidth","labelPosition"],values=[["contain","cover"],[16,20,24,28,32,40],[0,0.25,0.5,0.75,1],[0,4,8,16,24,40],[0,4,8,12,16,24],[1,2,3,4,6,8],["inside","hidden"]];const key=keys[menuIndex-2],choices=values[menuIndex-2];copy[key]=choices[(choices.indexOf(copy[key])+1)%choices.length];stationStyle=copy}
         }else if(mode==="repair"){
             const choice=repairItems[menuIndex];if(!choice)return
             if(choice.action==="choose" || choice.action==="unavailable"){repairChoice=choice.action==="unavailable"?-1:choice.choice;mode="repairConfirm";menuIndex=0}
@@ -358,6 +429,7 @@ Item {
         navigationError=""
     }
     function handleCommand(command){
+        if(mode==="stationColor"){stationColor.handleCommand(command);return}
         if(mode==="keyboard"){keyboard.handleCommand(command);return}
         if(mode==="rules"){rules.handleCommand(command);return}
         if(command===inputManager.back){
@@ -366,9 +438,19 @@ Item {
             else if(mode==="clockReview"){controller.cancel();mode="clock";menuIndex=4}
             else if(mode==="clock"){controller.cancel();mode="context";menuIndex=13}
             else if(mode==="sourcePreview"){controller.cancel();mode="sources";menuIndex=sourceOriginIndex}
+            else if(mode==="feed"){mode="sources";menuIndex=sourceOriginIndex}
+            else if(mode==="sourceMapping"){mode="sourcePreview";menuIndex=sourceMappingIndex}
+            else if(mode==="sourceEnable"){mode="sourceManage";menuIndex=0}
+            else if(mode==="sourceManage"){mode="sources";menuIndex=options.sources.length}
+            else if(mode==="diagnostics"){mode="manage";menuIndex=controller.channels.length+1}
+            else if(mode==="stationStyle"){mode="context";menuIndex=managedChannel.owner?10:16}
+            else if(mode==="remapChoices"){remapPage=Math.floor(remapItem/50)*50;mode="remap";menuIndex=remapItem-remapPage}
+            else if(mode==="remap"){mode="create";fieldIndex=10}
+            else if(mode==="templates"){mode="create";fieldIndex=controller.importReview.length?11:10}
             else if(mode==="repairConfirm"){mode="repair";menuIndex=0}
             else if(mode==="repair"){mode="context";menuIndex=12}
             else if(mode==="block"){mode="policy";menuIndex=0}
+            else if(mode==="blockDays"){mode="block";menuIndex=1}
             else if(mode==="policy"){mode="schedule";menuIndex=4}
             else if(mode==="schedule"){mode="create";fieldIndex=8}
             else if(mode==="create"){mode="discard";menuIndex=0}else if(mode==="context" || mode==="delete" || mode==="metadataReview"){mode="manage";menuIndex=0}else if(mode)mode="";else close()
@@ -417,7 +499,7 @@ Item {
             if(root.repairSaving && !root.controller.busy){root.repairSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=12}}
             if(root.regenerationSaving && !root.controller.busy){root.regenerationSaving=false;if(!root.controller.errorString){root.mode="context";root.menuIndex=8}}
             if(root.sourceSaving && !root.controller.busy){root.sourceSaving=false;if(!root.controller.errorString){root.mode="";root.loadWindow()}}
-            if(root.metadataSaving && !root.controller.busy){root.metadataSaving=false;if(!root.controller.errorString)root.mode="manage"}
+            if(root.metadataSaving && !root.controller.busy){root.metadataSaving=false;if(!root.controller.errorString){root.mode="manage";root.menuIndex=Math.max(0,root.controller.channels.findIndex(c=>c.id===root.managedId))}}
             if(root.moveSaving && !root.controller.busy){root.moveSaving=false;if(!root.controller.errorString){root.moveIds=[];root.mode="context";root.menuIndex=2}}
             if(root.selectedChannelId){const index=root.channels.findIndex(c=>c.id===root.selectedChannelId);if(index>=0)root.selectedIndex=index;else if(root.selectedIndex>=root.channels.length)root.selectedIndex=Math.max(0,root.channels.length-1)}
             if(root.applyPendingFocus())root.loadWindow()
@@ -448,9 +530,11 @@ Item {
                 objectName:"guideChannel-"+modelData.id
                 Accessible.role:Accessible.Button;Accessible.name:modelData.number+" · "+modelData.name;Accessible.description:modelData.sourceName+" · "+(modelData.current.title || "No current listings");Accessible.focusable:true;Accessible.focused:root.visible && !root.mode && !root.headerFocused && !root.selectedProgram && root.selectedChannel && root.selectedChannel.id===modelData.id
                 Accessible.onPressAction:{root.headerFocused=false;root.pickChannel(root.channels.findIndex(c=>c.id===modelData.id));root.handleCommand(inputManager.confirm)}
-                Rectangle {anchors.fill:parent;anchors.bottomMargin:root.gap;color:"transparent";radius:root.radius;border.width:!root.headerFocused && !root.mode && root.selectedChannel && root.selectedChannel.id===modelData.id?2:0;border.color:root.appearance.focusColor}
-                Column {x:root.gap;y:root.gap;width:root.channelWidth-root.gap*2
-                    Text {width:parent.width;textFormat:Text.PlainText;text:modelData.number+" · "+modelData.name;color:root.appearance.textColor;font.pixelSize:root.fontSize;elide:Text.ElideRight}
+                Rectangle {z:1;anchors.fill:parent;anchors.bottomMargin:root.gap;color:"transparent";radius:root.radius;border.width:!root.headerFocused && !root.mode && root.selectedChannel && root.selectedChannel.id===modelData.id?((modelData.presentation || {}).focusWidth || 2):0;border.color:(modelData.presentation || {}).focusColor || root.appearance.focusColor}
+                Rectangle {x:0;y:0;width:root.channelWidth;height:parent.height-root.gap;color:(modelData.presentation || {}).surfaceColor || "transparent";opacity:(modelData.presentation || {}).surfaceOpacity===undefined?1:modelData.presentation.surfaceOpacity;radius:(modelData.presentation || {}).radius===undefined?root.radius:modelData.presentation.radius}
+                Column {x:(modelData.presentation || {}).cardGap===undefined?root.gap:modelData.presentation.cardGap;y:x;width:root.channelWidth-x*2
+                    Image {width:parent.width;height:modelData.logo?Math.min(root.fontSize*1.5,parent.parent.height/3):0;source:modelData.logo?root.controller.stationLogo(modelData.logo):"";fillMode:(modelData.presentation || {}).artFit==="cover"?Image.PreserveAspectCrop:Image.PreserveAspectFit;asynchronous:true}
+                    Text {width:parent.width;textFormat:Text.PlainText;text:modelData.number+" · "+modelData.name;color:(modelData.presentation || {}).labelColor || root.appearance.textColor;font.pixelSize:(modelData.presentation || {}).labelSize || root.fontSize;elide:Text.ElideRight;visible:(modelData.presentation || {}).labelPosition!=="hidden"}
                     Text {objectName:"guideSource-"+modelData.id;width:parent.width;visible:root.sourceBadges;textFormat:Text.PlainText;text:modelData.sourceName;color:root.appearance.textColor;font.pixelSize:root.fontSize*.85;elide:Text.ElideRight}
                 }
                 Item {x:root.channelWidth;width:parent.width-root.channelWidth;height:parent.height;clip:true
@@ -494,7 +578,7 @@ Item {
                     MouseArea {anchors.fill:parent;onClicked:root.chooseMenu(index)}
                 }
             }
-            Text {id:feedback;width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;text:root.navigationError || root.controller.errorString || (root.controller.busy?"Working · Back cancels safely":root.mode==="clock" || root.mode==="clockReview"?root.clockDescription():root.mode==="schedule"?"Left/Right adjusts days; Confirm enters a value. Use a named timezone, such as America/Los_Angeles. Save keeps committed future slots; regeneration is separate.":root.mode==="sources" && root.menuIndex<root.options.sources.length?root.options.sources[root.menuIndex].description:root.controller.status+(root.mode==="create" && root.controller.previewReady?"\n"+(root.previewCurrent?"Current preview: ":"Settings changed — preview again: ")+root.controller.previewItems.map(i=>i.title).join(" · "):""));color:root.appearance.mutedColor;font.pixelSize:root.fontSize*.85}
+            Text {id:feedback;width:parent.width;textFormat:Text.PlainText;wrapMode:Text.WordWrap;maximumLineCount:3;elide:Text.ElideRight;text:root.navigationError || root.controller.errorString || (root.mode==="deviceClock"?root.controller.clockWarning:"") || (root.controller.busy?"Working · Back cancels safely":root.mode==="clock" || root.mode==="clockReview"?root.clockDescription():root.mode==="schedule"?"Left/Right adjusts days; Confirm enters a value. Use a named timezone, such as America/Los_Angeles. Save keeps committed future slots; regeneration is separate.":root.mode==="sources" && root.menuIndex<root.options.sources.length?root.options.sources[root.menuIndex].description:root.controller.status+(root.mode==="create" && root.controller.previewReady?"\n"+(root.previewCurrent?"Current preview: ":"Settings changed — preview again: ")+root.controller.previewItems.map(i=>i.title).join(" · "):""));color:root.appearance.mutedColor;font.pixelSize:root.fontSize*.85}
         }
     }
     GuideRuleEditor {id:rules;anchors.fill:parent;anchors.margins:root.gap*2;visible:root.mode==="rules";appearance:root.appearance;options:root.options
@@ -505,10 +589,20 @@ Item {
         }
     }
     OnScreenKeyboard {id:keyboard;anchors.centerIn:parent;width:Math.min(parent.width-root.gap*4,850);height:Math.min(parent.height,440);visible:root.mode==="keyboard";appearance:root.appearance
-        onCanceled:root.mode=(["policy","block","import","export"].indexOf(root.keyboardReturn)>=0)?root.keyboardReturn:root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":root.keyboardReturn==="schedule"?"schedule":root.keyboardReturn==="clock"?"clock":"context"
+        onCanceled:root.mode=(["feed","sourceMapping","policy","block","import","export"].indexOf(root.keyboardReturn)>=0)?root.keyboardReturn:root.keyboardReturn==="create"?"create":root.keyboardReturn==="sourcePreview"?"sourcePreview":root.keyboardReturn==="browse"?"browse":root.keyboardReturn==="schedule"?"schedule":root.keyboardReturn==="clock"?"clock":"context"
         onAccepted:text=>{
             const value=root.editField==="number" || root.editField==="sourceNumber"?Number(text):text
-            if(root.keyboardReturn==="import" || root.keyboardReturn==="export"){
+            if(root.keyboardReturn==="templateName"){
+                root.controller.saveRuleTemplate(text.trim(),root.draft);root.mode="create"
+            }else if(root.keyboardReturn==="stationLogo"){
+                if(root.managedChannel)root.metadataSaving=root.controller.setStationLogo(root.managedId,text.trim(),root.managedChannel.revision);root.mode="context"
+            }else if(root.keyboardReturn==="feed"){
+                root.feedDraft=Object.assign({},root.feedDraft,{[root.editField]:text.trim()});root.mode="feed"
+            }else if(root.keyboardReturn==="sourceMapping"){
+                if(root.editField==="sourceNumber")root.controller.setSourceNumber(root.sourceMappingIndex,Number(text))
+                else root.controller.setSourceEpg(root.sourceMappingIndex,text.trim())
+                root.mode="sourceMapping"
+            }else if(root.keyboardReturn==="import" || root.keyboardReturn==="export"){
                 root.packagePath=text.trim();root.mode=root.keyboardReturn
             }else if(root.keyboardReturn==="policy" || root.keyboardReturn==="block"){
                 root.acceptPolicyText(text);root.mode=root.keyboardReturn
@@ -527,5 +621,11 @@ Item {
             else if(root.keyboardReturn==="sourcePreview"){root.controller.setSourceNumber(root.menuIndex,value);root.mode="sourcePreview"}
             else{let copy={};copy[root.editField]=root.editField==="groups"?(text.trim()?text.split(",").map(s=>s.trim()):[]):value;root.metadataDraft=copy;root.mode="metadataReview";root.menuIndex=0}
         }
+    }
+    StudioColorPicker {id:stationColor;anchors.fill:parent;visible:root.mode==="stationColor";appearance:root.appearance;settings:root.colorSettings
+        contrastText:root.stationContrast()
+        themeColors:Object.keys(root.appearance).filter(k=>k.endsWith("Color")).map(k=>({name:k.replace("Color",""),value:root.appearance[k]}))
+        onAccepted:(value,reset)=>{let copy=Object.assign({},root.stationStyle);if(reset)delete copy[root.editField];else copy[root.editField]=value;root.stationStyle=copy;root.mode="stationStyle"}
+        onCanceled:root.mode="stationStyle"
     }
 }

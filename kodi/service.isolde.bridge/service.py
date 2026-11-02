@@ -19,7 +19,7 @@ class Monitor(xbmc.Monitor):
             except (ValueError,TypeError,queue.Full): pass
         if sender.casefold() == "isolde" and method.casefold().startswith("other."):
             action = method[6:].casefold()
-            if action in ("pause", "stop", "home", "forward", "backward"):
+            if action in ("pause", "stop", "home", "forward", "backward", "channel-next", "channel-previous"):
                 try: commands.put_nowait(action)
                 except queue.Full: pass
 

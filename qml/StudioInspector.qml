@@ -261,7 +261,7 @@ Item {
         operation(f.type)
     }
     function labels(){
-        if(view==="tabs")return tabs
+        if(view==="tabs")return tabs.map(t=>!pageMode && t==="Layout"?"Size & layout":!pageMode && t==="Actions"?"Action":t)
         if(view==="fields"){
             if(tabs[tab]==="More")return pageMode?["Navigation tabs","Sections","Movies destination","Shows destination","Close controls"]:structureType?["Move earlier","Move later","Remove…",...(structureType==="navigation"?["Visible sections…"]:[]),"Close controls"]:["Duplicate","Remove…","Move before…","Move after…","Move to section…","Move to group…","Select / deselect for grouping","Edit group contents","Show design samples for empty media","Close controls"]
             return fields.map(f=>f.label+": "+summary(f)).concat([advanced?"Hide advanced controls":"Show advanced controls",...(tabs[tab]==="Appearance"?["Appearance state: "+editingState]:[]),"Back to property groups"])
@@ -274,7 +274,7 @@ if(view==="colorWheel")return ["Back"]
         if(view==="pixelCrop")return ["Left: "+cropDraft.x,"Top: "+cropDraft.y,"Width: "+cropDraft.width,"Height: "+cropDraft.height,"Use this crop","Cancel"]
         if(view==="layout")return ["Layout: "+layoutDraft.mode,"Columns: "+layoutDraft.columns,"Rows: "+layoutDraft.rows,"Gap: "+layoutDraft.gap,"Padding: "+layoutDraft.padding,"Visible columns: "+(layoutDraft.visibleColumns || layoutDraft.columns),"Wrap navigation: "+(layoutDraft.wrap?"On":"Off"),"Use this arrangement","Cancel"]
         if(view==="apps")return ["All installed apps","Use "+appSelection.length+" selected apps"].concat(apps.map(a=>(appSelection.indexOf(a.action.appId)>=0?"✓ ":"□ ")+a.name))
-        if(view==="states")return ["base","normal","focused","selected","pressed","disabled","unavailable"]
+        if(view==="states")return ["Default","Normal","Focused","Selected","Pressed","Disabled","Unavailable"]
         return []
     }
     function activate(){
@@ -297,7 +297,7 @@ if(view==="colorWheel")return ["Back"]
             if(selected>=fields.length){view="tabs";selected=tab;return}
             activateField(fields[selected]);return
         }
-        if(view==="states"){editingState=labels()[selected];view="fields";selected=0;return}
+        if(view==="states"){editingState=["base","normal","focused","selected","pressed","disabled","unavailable"][selected];view="fields";selected=0;return}
 if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(view==="choices"){
             const entry=choices[selected];if(!entry)return
@@ -498,7 +498,22 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:titleText;width:parent.width;text:root.pageMode?"Page appearance":root.targets.length>1?root.targets.length+" selected components":root.current?root.current.name || "Component":"Component";color:root.appearance.textColor;font.pixelSize:26*root.unit;elide:Text.ElideRight}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:detailText;width:parent.width;text:root.view==="fields"?root.tabs[root.tab]+" · "+root.contrast():root.view==="tabs"?"Choose what to edit":root.view;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:statusText;width:parent.width;text:root.view==="playlistSource"?(root.playlistClient?root.playlistClient.status:"Kodi unavailable · Back returns without changes"):root.current && root.current.unavailableReason?root.current.unavailableReason+" · Change its source or On select link.":root.message;color:root.appearance.mutedColor;font.pixelSize:16*root.unit;wrapMode:Text.Wrap;maximumLineCount:3;elide:Text.ElideRight}
+            Row {
+                visible:root.view==="choices" && root.choices.length>0 && root.choices.length<=3;width:parent.width;spacing:8*root.unit
+                Repeater {
+                    model:root.view==="choices" && root.choices.length<=3?root.choices:[]
+                    delegate:Button {
+                        required property var modelData;required property int index
+                        width:(panel.width-64*root.unit)/Math.max(1,root.choices.length);height:64*root.unit
+                        text:modelData.name;Accessible.name:text
+                        background:Rectangle {radius:8*root.unit;color:root.selected===index?root.appearance.selectedColor:root.appearance.surfaceColor;border.width:root.selected===index?3:1;border.color:root.appearance.focusColor}
+                        contentItem:Text {text:parent.text;color:root.appearance.textColor;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter;wrapMode:Text.Wrap;font.pixelSize:18*root.unit}
+                        onClicked:{root.selected=index;root.activate()}
+                    }
+                }
+            }
             ListView {
+                visible:root.view!=="choices" || root.choices.length>3
                 id:list;objectName:"studioInspectorFields";width:parent.width;height:Math.max(48*root.unit,parent.height-titleText.height-detailText.height-statusText.height-footerText.height-4*parent.spacing);clip:true;spacing:5*root.unit;currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
                 model:root.labels()
                 // A model reset can reset ListView currentIndex to zero; restore the remote field origin.

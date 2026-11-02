@@ -112,3 +112,22 @@ profile), atomic save with backup and rollback, and profile isolation stay in C+
 Everything in sections 1-3 must have a reachable Studio home before the old editor is retired
 (T24 cutover); anything intentionally dropped requires an explicit backlog decision, not silence.
 
+
+
+## T21 implementation destinations
+
+This supplements the historical inventory above; final cutover/usability remains T24. Source contracts are `StudioSession`, `StudioCatalog.qml`, `StudioInspector.qml` and `studio-defaults.json`.
+
+| Historical operations | Implemented Studio destination |
+| --- | --- |
+| Item order, size, duplicate/remove (0–3, 30) | Context Move/Width/Height; Layout numeric geometry; More reading order, duplicate/remove; shared collision proposals/history from T19/T20 |
+| Title/type/logo/fill, symbol/accent/custom art, opacity (4–10, 15) | Appearance basic/advanced and Content artwork; Menu resets individual overrides; imports stage until Apply |
+| Brand, roundness, appearance/composition (11, 16, 21–22, 24) | Page Colors/Background/Layout; component/section Appearance; More Navigation/Sections; crop, card/label styling, typography and state controls |
+| Categories (13–14) | Page More → Sections add/rename/reorder/remove; Layout → Section for legacy category assignment; grid Move to section uses collision-safe placement |
+| Clock/action/library/text/button creation (17–18, 26–29) | Six-family Add catalog; Widgets includes clock/text/group/input slots; source/content precedes placement |
+| Source repair (20) | Content → Repair source, compatible named choices; action links can be replaced/cleared; unavailable reason shown in inspector |
+| Pages and destinations (25; PageManager) | Existing Pages menu create/duplicate/rename/reorder/designate Home/delete with route redirection; named On select page picker; Page More Movies/Shows destination and Navigation tabs with named visible sections |
+| Templates/themes/saved skins (12, 23; PageManager presets) | T22 owns Studio template/skin management; legacy entry remains until T24 cutover |
+| Restore defaults (19) | T23 owns scoped restore/recovery UI; existing legacy restore stays available until cutover |
+
+Movie/show action selection uses the existing collection membership boundary and real named Kodi items. Explicit decorative progress on authored non-library cards preserves the old presentation control without overriding Kodi history. Hardware, source-notice containment, dedicated All Apps and complete shell theme adoption retain their own backlog tasks. No additional curation, scraper, player or device backend is implied.

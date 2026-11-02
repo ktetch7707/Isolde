@@ -94,7 +94,7 @@ Item {
             width: bannerLabel.implicitWidth + 24 * root.unit; height: 38 * root.unit; radius: 14 * root.unit; color: "#D5222521"
             Text {textFormat:Text.PlainText; id: bannerLabel; anchors.centerIn: parent; text: root.style.label || ""; color: root.ink; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: (root.style.labelSize || (root.kind === "recent" ? 12 : 18)) * root.textScale }
         }
-        Rectangle { anchors.fill: parent; anchors.margins: -3 * root.unit; color: "transparent"; radius: parent.radius + 3 * root.unit; border.width: root.selected ? Math.max(2,root.style.focusEnabled===false?2:(root.style.focusWidth===undefined?3:root.style.focusWidth))*root.unit : 0; border.color: root.style.focusColor || root.selColor }
+        Rectangle { objectName:"cardFocus"; anchors.fill: parent; anchors.margins: -3 * root.unit; color: "transparent"; radius: parent.radius + 3 * root.unit; border.width: root.selected ? Math.max(2,root.style.focusEnabled===false?2:(root.style.focusWidth===undefined?3:root.style.focusWidth))*root.unit : 0; border.color: root.style.focusColor || root.selColor }
     }
     Text {
         objectName:"componentBodyText"

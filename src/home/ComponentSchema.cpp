@@ -166,7 +166,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             const double low=key=="bodySize"?8:key=="bodyPadding"?0:1,high=key=="bodySize"?160:key=="bodyPadding"?100:key=="bodyLines"?40:3;
             bool ok=false;const auto n=it.value().toDouble(&ok);
             if(!ok || it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool || !std::isfinite(n) || n<low || n>high || (key=="bodyLines" && std::floor(n)!=n))return false;
-        } else if(key=="labelBold" || key=="labelWrap" || key=="artAspectLocked" || key=="bodyBold" || key=="bodyWrap" || key=="focusEnabled" || key=="animateArtwork") {
+        } else if(key=="labelBold" || key=="labelWrap" || key=="artAspectLocked" || key=="sizeAspectLocked" || key=="bodyBold" || key=="bodyWrap" || key=="focusEnabled" || key=="animateArtwork") {
             if(key=="animateArtwork" && (section || container))return false;
             if(it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if(key=="artFocalX" || key=="artFocalY" || key=="artZoom" || key=="focusWidth" || key=="borderWidth" || key=="labelLines" || key=="libraryLimit") {
@@ -187,6 +187,8 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().size() > 160) return false;
         } else if (QStringList{"surfaceColor", "fillEndColor", "panelColor", "headingColor", "iconColor", "labelColor", "selectedLabelColor"}.contains(key)) {
             const QColor color(it.value().toString()); if (!color.isValid() || color.alpha() != 255) return false;
+        } else if(key=="guideArtSource") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"program","station","none"}.contains(it.value().toString()))return false;
         } else if(key=="guideVariant") {
             if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"mini","now-playing","on-now","favorites","preview","upcoming","guide"}.contains(it.value().toString()))return false;
         } else if(key=="guideFilter") {
@@ -265,6 +267,8 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
             if(numbers.contains(key)) {
                 bool ok=false;const double n=entry.toDouble(&ok);const auto bounds=numbers.value(key);
                 if(!ok || entry.metaType().id()==QMetaType::QString || entry.metaType().id()==QMetaType::Bool || !std::isfinite(n) || n<bounds.first || n>bounds.second)return false;
+            } else if(key=="position") {
+                if(entry.metaType().id()!=QMetaType::QString || !QStringList{"top","bottom"}.contains(entry.toString()))return false;
             } else if(key=="showTitle" || key=="showDate") {
                 if(entry.metaType().id()!=QMetaType::Bool)return false;
             } else if(key=="textColor" || key=="backgroundColor" || key=="focusColor") {

@@ -1,4 +1,5 @@
 import importlib.util
+import ast
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,32 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    def test_guide_acceptance_observations_respect_bridge_boundary(self):
+        root=Path(__file__).resolve().parents[1]
+        for name in ('guide_lifecycle.py','guide_features.py','guide-soak-acceptance.py'):
+            tree=ast.parse((root/'tools'/name).read_text())
+            for call in ast.walk(tree):
+                if not isinstance(call,ast.Call) or not isinstance(call.func,ast.Name) or call.func.id!='rpc' or len(call.args)<2 or not isinstance(call.args[1],ast.Constant):continue
+                method=call.args[1].value
+                self.assertIn(method,bridge.READ_METHODS|{'Isolde.PlaybackStatus','Isolde.GetArtwork'},(name,method))
+                if method=='Player.GetItem':
+                    params=call.args[2];self.assertIsInstance(params,ast.Dict)
+                    properties=next(value for key,value in zip(params.keys,params.values) if ast.literal_eval(key)=='properties')
+                    self.assertEqual(ast.literal_eval(properties),[],name)
+        helper_spec=importlib.util.spec_from_file_location('guide_fixture_identity',root/'tools/guide_lifecycle.py')
+        helper=importlib.util.module_from_spec(helper_spec);helper_spec.loader.exec_module(helper)
+        observed=[]
+        def rpc(directory,method,params):
+            def execute(raw):
+                observed.append(json.loads(raw));return json.dumps({'result':{'episodes':[{'episodeid':7,'season':1,'episode':2}]}})
+            response=bridge.dispatch(self.request(method,params),execute)
+            self.assertNotIn('error',response);return response['result']
+        media=Path('/known-fixture')
+        with patch.object(helper,'fixture_file',side_effect=lambda root,path:path):
+            self.assertEqual(helper.episode_fixture(media,7,rpc,None),media/'Isolde Television Fixture/Fixture S01E02.ogv')
+            with self.assertRaises(RuntimeError):helper.episode_fixture(media,8,rpc,None)
+        self.assertEqual(observed[0]['params'],{'properties':['season','episode'],'limits':{'start':0,'end':50}})
+
     def test_player_identity_read_is_strict_and_path_free(self):
         calls=[]
         def execute(raw):

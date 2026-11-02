@@ -10,6 +10,9 @@ Verified foundations T16, T17, T18 and T19 are not new work packages. Reopen onl
 
 All task outcomes below use [vm-software-completion.md](vm-software-completion.md). No representative/account/hardware/model/target-only check blocks S1; use the defined VM substitute and user handoff. A twelve-hour real-time wait is optional; required proof is production-clock invariants plus actual VM cold reopen. This changes criteria, not milestone states or weights.
 
+## Current combined checkpoint — 2026-10-31 S07–S08/T21.11–.14
+
+User requested a larger slice: complete T21.11–.14 together. [Boundary/evidence](studio-workflow-completion-2026-10-31.md). **T21 81%, sum1030, Overall38%**; .11.a/.b and .13.a/.b credited. G full passes44/44; H focused passes nine cases including corrected unobscured contexts, actual light/pastel, hidden recovery and new Top/Bottom header placement. Header region placement was genuinely absent, so its new shared schema/runtime geometry requires the documented replacement full integration run. Do not count G as final placement proof. I stopped at its space guard; verified J archive cleanup met3GiB. Final K `studio-workflows-final-20261101-k` active in session7749. Resume it, then a test-only named-page palette supplement, deploy/installed expanded Studio/Lounge/Pastel/desktop and review all captures. Preserve unrelated work and separate `build/workflows-test.index`. C verified host archive backups and pruned obsolete guest copies, recovered2.29GiB but honestly missed3GiB; no host cleanup.
 ## Current checkpoint — 2026-10-31 S07/T21.10 accepted
 
 - **T21 71%, sum1020, Overall38%, 27 active tasks.** Color .10.a–c and parent accepted. [Color completion and matrix](studio-color-completion-2026-10-31.md). Next S07/T21.11 type-specific size/layout; preserve existing evidence before implementing its missing requirements. No T22 work.

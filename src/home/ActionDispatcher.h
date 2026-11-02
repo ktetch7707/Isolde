@@ -23,6 +23,7 @@ public:
     void setGuide(GuideController *guide);
     bool guideTransitionPending() const { return m_guideTransition; }
     Q_INVOKABLE void cancelGuidePlayback();
+    Q_INVOKABLE bool surfGuide(int direction);
 signals:
     void guidePlaybackChanged();
     void drawerRequested();
@@ -48,6 +49,7 @@ private:
     GuideController *m_guide = nullptr;
     QString m_origin;
     QString m_guideChannel,m_guideSlot;
+    QString m_surfChannel;
     qint64 m_guideEnd=0;
     quint64 m_guideGeneration=0;
     bool m_guideTransition=false;
