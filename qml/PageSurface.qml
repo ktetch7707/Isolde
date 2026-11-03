@@ -15,26 +15,34 @@ Item {
     readonly property var grid:model?model.grid:({})
     readonly property var placements:model?model.placements:([])
     property var history:[]
+    // Runtime history is transient, with the same 64-page ceiling as authored
+    // pages. Refuse growth explicitly rather than dropping the oldest origin.
+    readonly property int historyLimit:64
     property string homeOrigin:""
     readonly property var pageEntries:layoutModel.studioPages
     property bool editing:false
     readonly property string focusedComponentId: content.focusedItemId
     property string editOrigin: ""
     property var editViewport: ({})
+    property var editNavigationState: ({})
     property bool artworkMotionAllowed:true
     property bool internetAvailable:true
     property bool localNetworkAvailable:true
     signal closed(string origin)
     signal searchRequested()
     signal settingsRequested(int section)
+    signal navigationRejected(string reason)
     function showPage(id,origin,replace){
+        if(editing){navigationRejected("Finish or discard the Studio draft before opening another page.");return false}
         if(!layoutModel.pageModel(id))return
+        if(activeId && !replace && id!==activeId && history.length>=historyLimit){navigationRejected("Page history is full. Use Back or Home before opening another page.");return false}
         if(!activeId)homeOrigin=origin || ""
-        else if(!replace && id!==activeId)history=history.concat([{id:activeId,focus:origin || content.focusedItemId}])
+        else if(!replace && id!==activeId)history=history.concat([{id:activeId,state:content.navigationState(origin)}])
         activeId=id;editing=false
-        content.recoveryFocused=false;content.focusedIndex=0
+        content.resetNavigationState()
+        return true
     }
-    function closeAll(){const origin=homeOrigin;activeId="";history=[];editing=false;closed(origin)}
+    function closeAll(){const origin=homeOrigin;content.resetNavigationState();activeId="";history=[];editing=false;closed(origin)}
     function restoreOrigin(origin){
         if(!content.widgetActive || Object.prototype.hasOwnProperty.call(content.appCollectionFocus,origin))content.restoreFocus(origin)
     }
@@ -42,6 +50,7 @@ Item {
         if (editing || !model) return
         editOrigin = content.focusedItemId
         editViewport = content.editorViewport()
+        editNavigationState = content.navigationState()
         editing = true
     }
     function finishEditing() {
@@ -49,16 +58,21 @@ Item {
         if (!model) { closeAll(); return }
         // Restore the stable origin before restoring its scroll position;
         // HomeScreen chooses a reachable fallback if Apply removed that item.
-        const origin = editOrigin, viewport = editViewport, pageId = activeId
-        Qt.callLater(() => {
-            if (editing || activeId !== pageId) return
-            content.restoreFocus(origin)
-            content.restoreEditorViewport(viewport)
-        })
+        content.resetNavigationState(editNavigationState)
     }
     function back(){
-        if(history.length){let stack=history.slice();const previous=stack.pop();history=stack;showPage(previous.id,"",true);Qt.callLater(()=>content.restoreFocus(previous.focus))}
-        else closeAll()
+        if(editing)return
+        while(history.length){
+            let stack=history.slice();const previous=stack.pop();history=stack
+            // A page removed by Apply or restricted since navigation must not
+            // strand Back or open an unrelated Settings page.
+            const allowed=typeof layoutModel.pageAllowed!=="function" || layoutModel.pageAllowed(previous.id)
+            if(!layoutModel.pageModel(previous.id) || !allowed)continue
+            showPage(previous.id,"",true)
+            content.resetNavigationState(previous.state)
+            return
+        }
+        closeAll()
     }
     function handleCommand(command){
         if(editing){editor.handleCommand(command);return}

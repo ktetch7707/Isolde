@@ -1,6 +1,7 @@
 // PageStudioView.qml — remote-first page editor: canvas, context menu, dialogs, preview/apply.
 import QtQuick
 import QtQuick.Controls
+import "StudioTree.js" as StudioTree
 
 Item {
     id: studio
@@ -118,11 +119,7 @@ Item {
         const model=pageId?session.model.pageModel(pageId):session.model
         return model?model.items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId)):[]
     }
-    readonly property var layerRows: {
-        const rows=[]
-        function append(parent,depth){for(const item of items.filter(i=>(i.parentId || "")===parent)){rows.push({item:item,depth:depth});if(item.componentType==="container" && expandedGroups[item.id])append(item.id,depth+1)}}
-        append("",0);return rows
-    }
+    readonly property var layerRows: StudioTree.layerRows(items, expandedGroups)
     readonly property var gridModes:layoutModel && layoutModel.studioOptions?layoutModel.studioOptions.gridModes || []:[]
     readonly property bool gridMode: {
         if(!page || !page.composition.enabled || !page.composition.grid)return false
@@ -930,7 +927,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             Column {
                 anchors.fill:parent;anchors.margins:studio.spacing;spacing:studio.spacing/2
                 Text {text:"Page Studio";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
-                Text {id:menuStatus;width:parent.width;text:session && session.errorString?"Edit refused: "+session.errorString:session && session.dirty?"Draft · "+session.changeCount+" changes":"Your interface";wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+                Text {textFormat:Text.PlainText;id:menuStatus;width:parent.width;text:session && session.errorString?"Edit refused: "+session.errorString:session && session.dirty?"Draft · "+session.changeCount+" changes":"Your interface";wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
                 Row {
                     width:parent.width;spacing:studio.spacing/2
                     Repeater {model:2;delegate:Rectangle {
@@ -954,7 +951,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         width:ListView.view.width;height:48*studio.textScale;radius:studio.spacing/3
                         color:studio.menuIndex===index?studio.palette.selectedColor:"transparent"
                         border.width:studio.menuIndex===index?2:0;border.color:studio.palette.focusColor
-                        Text {anchors.fill:parent;anchors.margins:studio.spacing/2;verticalAlignment:Text.AlignVCenter;text:modelData.label;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+                        Text {textFormat:Text.PlainText;anchors.fill:parent;anchors.margins:studio.spacing/2;verticalAlignment:Text.AlignVCenter;text:modelData.label;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
                         MouseArea {anchors.fill:parent;onClicked:studio.activateMenu(index)}
                     }
                 }
@@ -1014,7 +1011,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         x:preview.editRect?preview.editRect.x:0;y:preview.editRect?preview.editRect.y:0
                         width:preview.editRect?preview.editRect.width:0;height:preview.editRect?preview.editRect.height:0
                         color:"transparent"
-                        Text {anchors.bottom:parent.top;width:parent.width;text:studio.current?studio.current.name || studio.current.widgetType || studio.current.id:"";color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;elide:Text.ElideRight;font.pixelSize:16*studio.textScale}
+                        Text {textFormat:Text.PlainText;anchors.bottom:parent.top;width:parent.width;text:studio.current?studio.current.name || studio.current.widgetType || studio.current.id:"";color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;elide:Text.ElideRight;font.pixelSize:16*studio.textScale}
                     }
                     Repeater {
                         model:studio.gridMode && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry") ? studio.grid.columns*(studio.grid.rows+(studio.scrollingEnabled && !studio.parentScopeId?2:0)) : 0
@@ -1053,7 +1050,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                             readonly property var rect:studio.gridMode?preview.clippedPlacement(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || ""):preview.editorRectFor(modelData.id) || ({x:0,y:0,width:0,height:0})
                             objectName:"studioSelectionTarget-"+modelData.id
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:0
-                            Text {objectName:"studioSelectionName-"+modelData.id;visible:!modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
+                            Text {textFormat:Text.PlainText;objectName:"studioSelectionName-"+modelData.id;visible:!modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
                             MouseArea {
                                 id:pointerDrag
                                 objectName:"studioHit-"+modelData.id
@@ -1170,7 +1167,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                             metrics:({valid:true,margin:0,gap:0,cellW:width,cellH:height});host:preview;unit:preview.componentUnit
                             catalog:studio.addingType?studio.addPrototype.viewItems:studio.items
                         }
-                        Text {anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));x:Math.max(studio.spacing-preview.x-parent.x,Math.min(0,studio.width-preview.x-parent.x-width-studio.spacing));text:(studio.mode==="resize"?"Sizing "+studio.resizeAxis:"Moving")+" · "+studio.componentName(studio.addingType?null:studio.current);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight;Accessible.role:Accessible.StaticText;Accessible.name:studio.operationSummary}
+                        Text {textFormat:Text.PlainText;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));x:Math.max(studio.spacing-preview.x-parent.x,Math.min(0,studio.width-preview.x-parent.x-width-studio.spacing));text:(studio.mode==="resize"?"Sizing "+studio.resizeAxis:"Moving")+" · "+studio.componentName(studio.addingType?null:studio.current);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight;Accessible.role:Accessible.StaticText;Accessible.name:studio.operationSummary}
                     }
                     Repeater {
                         model:studio.collisionPreview.valid ? studio.collisionPreview.placements : []
@@ -1190,7 +1187,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                 metrics:({valid:true,margin:0,gap:0,cellW:width,cellH:height})
                                 host:preview;unit:preview.componentUnit;catalog:studio.addingType?studio.items.concat(studio.addPrototype.viewItems || []):studio.items
                             }
-                            Text {anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:7;text:(index+1)+" · "+studio.componentName(parent.previewItem);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:15*studio.textScale;elide:Text.ElideRight}
+                            Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:7;text:(index+1)+" · "+studio.componentName(parent.previewItem);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:15*studio.textScale;elide:Text.ElideRight}
                         }
                     }
                 }
@@ -1198,7 +1195,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             }
             Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode==="canvas";text:"Empty page · Confirm to add a component";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
         }
-        Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview" && studio.mode!=="catalog";text:studio.footerText;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
+        Text {textFormat:Text.PlainText;parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview" && studio.mode!=="catalog";text:studio.footerText;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
     }
     Rectangle {
         objectName:"studioScrollingPanel";visible:studio.mode==="scrolling";z:6
@@ -1215,7 +1212,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 contentItem:Text {leftPadding:40*studio.textScale;text:"Allow vertical scrolling";verticalAlignment:Text.AlignVCenter;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;wrapMode:Text.Wrap}
                 onClicked:studio.previewScrolling(!studio.scrollingDraft)
             }
-            Text {visible:!!studio.message;width:parent.width;text:studio.message;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;wrapMode:Text.Wrap}
+            Text {textFormat:Text.PlainText;visible:!!studio.message;width:parent.width;text:studio.message;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;wrapMode:Text.Wrap}
             Repeater {
                 model:["Done","Cancel"]
                 delegate:Rectangle {
@@ -1239,7 +1236,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         y:studio.spacing;color:studio.palette.surfaceColor;border.width:1;border.color:studio.palette.mutedColor;radius:studio.spacing/2
         Column {
             id:moveActionColumn;width:parent.width-2*studio.spacing;x:studio.spacing;y:studio.spacing;spacing:studio.spacing/2
-            Text {width:parent.width;text:studio.mode==="flowMove"?"Position "+(studio.flowTargetIndex+1)+" of "+studio.flowIds.length:studio.parentScopeId?"Move into "+studio.componentName(studio.parentGroup):studio.sectionMode?"Move to "+(studio.selectedSection?studio.selectedSection.name:"Uncategorized"):"Move on page";color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+            Text {textFormat:Text.PlainText;width:parent.width;text:studio.mode==="flowMove"?"Position "+(studio.flowTargetIndex+1)+" of "+studio.flowIds.length:studio.parentScopeId?"Move into "+studio.componentName(studio.parentGroup):studio.sectionMode?"Move to "+(studio.selectedSection?studio.selectedSection.name:"Uncategorized"):"Move on page";color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
             Row {
                 width:parent.width;spacing:studio.spacing/2
                 Repeater {
@@ -1273,7 +1270,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         color:studio.palette.surfaceColor;radius:studio.spacing/2;border.width:2;border.color:studio.palette.focusColor
         Column {
             id:sizeColumn;anchors.left:parent.left;anchors.right:parent.right;anchors.margins:studio.spacing;y:studio.spacing;spacing:studio.spacing/2
-            Text {text:"Size · "+studio.componentName(studio.addingType?null:studio.current);width:parent.width;elide:Text.ElideRight;color:studio.palette.textColor;font.pixelSize:22*studio.textScale}
+            Text {textFormat:Text.PlainText;text:"Size · "+studio.componentName(studio.addingType?null:studio.current);width:parent.width;elide:Text.ElideRight;color:studio.palette.textColor;font.pixelSize:22*studio.textScale}
             Repeater {
                 model:studio.mode==="size" && studio.sizeControlsVisible?["width","height"]:[]
                 delegate:Column {
@@ -1297,7 +1294,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     }
                 }
             }
-            Text {visible:studio.sizeControlsVisible && (!!studio.sizeError || !studio.collisionPreview.valid);text:studio.sizeError || studio.collisionPreview.reason || studio.message;width:parent.width;wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+            Text {textFormat:Text.PlainText;visible:studio.sizeControlsVisible && (!!studio.sizeError || !studio.collisionPreview.valid);text:studio.sizeError || studio.collisionPreview.reason || studio.message;width:parent.width;wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
             Repeater {
                 model:studio.sizeControlsVisible?["Done","Hide controls","Advanced…","Cancel"].concat(studio.proportionalSize?[(studio.sizeAspectLocked?"✓ ":"")+(studio.sizeSettings.proportionsLabel || "Keep proportions")]:[]):["Show size controls"]
                 delegate:Rectangle {
@@ -1328,17 +1325,18 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         color:studio.palette.surfaceColor;border.width:3;border.color:studio.palette.focusColor;radius:studio.spacing
         Column {
             id:dialogColumn;visible:!contextDialog.compact;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:studio.spacing;spacing:studio.spacing/2
-            Text {id:dialogHeading;width:parent.width;text:studio.operationTitle?studio.operationTitle:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="more"?"More tools":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
-            Text {id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.componentName(studio.current)+" and its children? This is one undoable draft change; Apply saves it." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
+            Text {textFormat:Text.PlainText;id:dialogHeading;width:parent.width;text:studio.operationTitle?studio.operationTitle:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="more"?"More tools":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
+            Text {textFormat:Text.PlainText;id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.componentName(studio.current)+" and its children? This is one undoable draft change; Apply saves it." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
             ListView {
-                width:parent.width;height:Math.min(studio.dialogLabels().length*42*studio.textScale,Math.max(42*studio.textScale,studio.height-dialogHeading.implicitHeight-dialogMessage.implicitHeight-6*studio.spacing))
+                objectName:"studioDialogList"
+                width:parent.width;height:Math.min(Math.max(42*studio.textScale,contentHeight),Math.max(42*studio.textScale,studio.height-dialogHeading.implicitHeight-dialogMessage.implicitHeight-6*studio.spacing))
                 clip:true;currentIndex:studio.choice;highlightRangeMode:ListView.ApplyRange
                 model:studio.mode==="keyboard" ? []:studio.dialogLabels()
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     objectName:"studioDialogChoice-"+index
                     readonly property bool available:studio.mode==="conversionPreview" && index===0?studio.gridPreviewValid && !studio.gridGeometryPending && !preview.layoutError:studio.mode!=="collision" || index>1 || (index===0?!!studio.shiftPreview.valid:!!studio.swapPreview.valid)
-                    width:dialogColumn.width;height:42*studio.textScale;color:studio.choice===index?studio.palette.selectedColor:"transparent";border.width:studio.choice===index?2:0;border.color:studio.palette.focusColor
+                    width:dialogColumn.width;height:Math.max(42*studio.textScale,choiceText.visible?choiceText.implicitHeight+16:0);color:studio.choice===index?studio.palette.selectedColor:"transparent";border.width:studio.choice===index?2:0;border.color:studio.palette.focusColor
                     Text {visible:studio.mode!=="view" || index!==0;anchors.fill:parent;anchors.margins:8;text:modelData;color:parent.available?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
                     Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.description:available?"":"Unavailable. Choose another proposal or Cancel."
                     MouseArea {anchors.fill:parent;enabled:studio.mode!=="view" || index!==0;onClicked:{studio.choice=index;studio.activateChoice()}}
@@ -1421,7 +1419,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     }
                 }
             }
-            Text {width:parent.width;visible:text.length>0;text:studio.message;wrapMode:Text.Wrap;color:studio.arrangementValid?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
+            Text {textFormat:Text.PlainText;width:parent.width;visible:text.length>0;text:studio.message;wrapMode:Text.Wrap;color:studio.arrangementValid?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
             Row {
                 width:parent.width;spacing:studio.spacing/2
                 Repeater {

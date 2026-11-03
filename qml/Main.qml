@@ -111,6 +111,7 @@ Window {
             return
         }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
+        if(launchErrorOverlay.visible){launchErrorOverlay.handleCommand(command);return}
         // Editor cancellation must run before the global Home route tears down
         // its session; a dirty draft always gets the ordinary exit choice.
         if(sessionManager.active && sessionManager.currentAppType === "settings" && settings.homeEditing){settings.handleCommand(command);return}
@@ -118,9 +119,7 @@ Window {
         if(command===inputManager.home){window.showDesignatedHome();return}
         if(tvGuide.open && !sessionManager.active && !launchErrorOverlay.visible){tvGuide.handleCommand(command);return}
         if (kodiLibrary.open && !sessionManager.active) { kodiLibrary.handleCommand(command); return }
-        if (launchErrorOverlay.visible) {
-            launchErrorOverlay.handleCommand(command)
-        } else if (!sessionManager.active && pageSurface.open) {
+        if (!sessionManager.active && pageSurface.open) {
             pageSurface.handleCommand(command)
         } else if (!sessionManager.active && command===inputManager.menu && (home.widgetActive || home.groupActive)) {
             home.handleCommand(command)
@@ -310,6 +309,7 @@ Window {
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}
                 onSearchRequested:window.openSearchFromPage()
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
+                onNavigationRejected:reason=>{window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
             }
 
             AmbientOverlay {
@@ -335,7 +335,7 @@ Window {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
                         sessionManager.launch(retryId)
-                    } else if (command === inputManager.navigateRight) {
+                    } else if (command === inputManager.navigateRight && (window.launchErrorAppId.length || window.launchErrorVpn)) {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
                         sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")

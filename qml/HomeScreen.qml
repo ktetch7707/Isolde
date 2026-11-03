@@ -109,6 +109,31 @@ Item {
         for(const id of Object.keys(groupSurfaces)){const surface=groupSurface(id);if(surface && surface.editorViewport)groups[id]=surface.editorViewport()}
         return {legacyY:sectionFlick.contentY,composed:composed.editorViewport(),groups:groups}
     }
+    property int navigationGeneration: 0
+    function navigationState(origin) {
+        return {focus:origin || focusedItemId, viewport:editorViewport(),
+            collections:JSON.parse(JSON.stringify(appCollectionFocus)),
+            recoveryFocused:recoveryFocused, recoveryIndex:recoveryIndex,
+            composition:composed.navigationState()}
+    }
+    function resetNavigationState(state) {
+        const saved=state || {}, generation=++navigationGeneration
+        appCollectionFocus=saved.collections || ({})
+        composed.resetNavigationState(saved.composition)
+        sectionFlick.cancelFlick();sectionFlick.contentY=0
+        recoveryFocused=false
+        focusedIndex=0;focusedItemId=items[0]?items[0].id:""
+        repairFocus()
+        if(saved.focus || focusedItemId)restoreFocus(saved.focus || focusedItemId)
+        if(saved.recoveryFocused)recoveryFocused=true
+        recoveryIndex=saved.recoveryIndex===1?1:0
+        // Focus restoration can queue its own reveal. Restore authored scroll
+        // last, without letting an old page's callback affect a newer route.
+        const originAvailable=!saved.focus || saved.recoveryFocused || items.some(item=>item.id===saved.focus && focusable(item)) || saved.focus.startsWith("tab-") || saved.focus.startsWith("section-")
+        if(saved.viewport && originAvailable)Qt.callLater(()=>Qt.callLater(()=>{
+            if(root && generation===root.navigationGeneration)root.restoreEditorViewport(saved.viewport)
+        }))
+    }
     function restoreEditorViewport(state) {
         if(!state || state.legacyY===undefined)return
         sectionFlick.cancelFlick();sectionFlick.contentY=state.legacyY

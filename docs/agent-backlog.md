@@ -77,6 +77,8 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 
 ## Current checkpoint summary
 
+- 2026-11-03: **T24 coding continued; VM verification still deferred.** Complete per-page navigation snapshots/generation cancellation, dirty-editor route refusal, bounded history/recovery, modal error input, linear Layers indexing and literal wrapped labels address additional software gaps. Local production-JavaScript contracts pass 11/11; expanded QML navigation/1024-node/long-label checks are prepared but unrun. No acceptance credit: T24 **0%**, Overall **42%**, sum **1147**. [Follow-up implementation and pending checks](studio-t24-followup-2026-11-03.md).
+
 - 2026-11-02: **User-authorized T24 coding-only exception; VM verification deferred.** Studio origin/viewport entry-return and Home-key draft safety are wired; legacy editor QML resources are retired from the application list; focused cutover tests and a 34-task source-tied evidence auditor are prepared. Local auditor contracts pass 17/17; Qt/installed/performance acceptance is unrun. T24 stays **0%**, T15.4 remains open, and normal T22/T23 sequencing/dependencies remain. [Coding record and deferred checks](studio-t24-coding-2026-11-02.md).
 
 - 2026-10-31: **S06/T21.9 accepted**. Packaged/fixture/saved structure and completed S03–S05 dependencies reconciled against full AB/current focused AF and both installed reference/reset pairs. All 217 production files match AF; existing 56 reviewed captures remain applicable. No new application change or VM run. T21 **64%**, sum **1013**, Overall **38%**. [Evidence](studio-pastel-closure-2026-10-31.md). Next S07/T21.10.

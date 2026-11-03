@@ -37,21 +37,22 @@ public:
         for(int i=0;i<2;++i){bytes+=QByteArray::fromHex("21f90400640000002c0000000001000100000202");bytes+=QByteArray::fromHex(i?"4c0100":"440100");}
         bytes+=char(0x3b);file.write(bytes);return file.fileName();
     }
-    Q_INVOKABLE bool reset(bool full = false, bool scrolling = false, bool flow = false, bool arrangement = false) {
-        if (!temp.isValid()) return false;
+    Q_INVOKABLE bool reset(bool full = false, bool scrolling = false, bool flow = false, bool arrangement = false, int scaleCount = 0) {
+        if (!temp.isValid() || scaleCount < 0 || scaleCount > 1024) return false;
+        const int columns = scaleCount ? 16 : 4;
         display->reset();
         saved = temp.filePath(QString("scenario-%1.json").arg(++sequence));
         if (!home.load(QStringLiteral(STUDIO_DEFAULTS), saved)) return false;
         auto doc = QJsonDocument::fromJson(home.committedDocument()).object();
         doc["categories"] = QJsonArray{};
         doc["composition"] = QJsonObject{{"schemaVersion", 1}, {"enabled", true},
-            {"verticalScrolling", scrolling}, {"showClock", false},
-            {"grid", QJsonObject{{"columns", 4}, {"rows", 3}, {"mode", "screen"}}}};
+            {"verticalScrolling", scrolling || scaleCount > 160}, {"showClock", false},
+            {"grid", QJsonObject{{"columns", columns}, {"rows", scaleCount ? 10 : 3}, {"mode", "screen"}}}};
         QJsonArray nodes;
-        for (int i = 0; i < (arrangement ? 3 : full ? 12 : 1); ++i) {
+        for (int i = 0; i < (scaleCount ? scaleCount : arrangement ? 3 : full ? 12 : 1); ++i) {
             const auto node = ComponentSchema::component({{"id", QString("cell-%1").arg(i)},
                 {"kind", "widget"}, {"widgetType", "text"}, {"name", QString("Item %1").arg(i)},
-                {"placement", QVariantMap{{"x", arrangement ? i : i % 4}, {"y", arrangement ? i : i / 4}, {"width", 1}, {"height", 1}}}}, true);
+                {"placement", QVariantMap{{"x", arrangement ? i : i % columns}, {"y", arrangement ? i : i / columns}, {"width", 1}, {"height", 1}}}}, true);
             if (node.isEmpty()) return false;
             nodes.append(QJsonObject::fromVariantMap(node));
         }

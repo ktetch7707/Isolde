@@ -164,6 +164,7 @@ qt_add_qml_module(isolde
         qml/PageNavigation.qml
         qml/PageSurface.qml
         qml/PageStudioView.qml
+        qml/StudioTree.js
         qml/StudioLayoutEditor.qml
         qml/StudioGridEditor.qml
         qml/PageBackdrop.qml

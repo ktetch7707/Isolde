@@ -18,6 +18,20 @@ Item {
             navigationStrip.contentX = Math.max(0,item.x + item.width - navigationStrip.width)
     })
     property bool navigationFocused: false
+    property int navigationGeneration: 0
+    function navigationState() {
+        return {activeTabId:activeTabId, focusedTab:focusedTab, navigationFocused:navigationFocused}
+    }
+    function resetNavigationState(state) {
+        ++navigationGeneration
+        activeWidget="";activeGroup="";sectionActionId=""
+        const saved=state || {}, initial=config.initialTab || (tabs[0] ? tabs[0].id : "")
+        activeTabId=tabs.some(tab=>tab.id===saved.activeTabId)?saved.activeTabId:initial
+        focusedTab=Number.isInteger(saved.focusedTab) && saved.focusedTab>=0 && saved.focusedTab<tabs.length?saved.focusedTab:activeTab
+        navigationFocused=!!saved.navigationFocused
+        content.cancelFlick();content.contentY=0
+        navigationStrip.cancelFlick();navigationStrip.contentX=0
+    }
     property string selectMode: host.selectMode || "single"
     property string selectTrigger: host.selectTrigger || "click"
     property string selectAction: host.selectAction || "navigate"
@@ -80,7 +94,7 @@ Item {
         for(let depth=0;item && item.parentId && depth<4;++depth)item=(host.items || []).find(i=>i.id===item.parentId)
         if(item && item.placement)revealPlacement(item.placement,item.categoryId || "")
     }
-    function settleRuntimeFocus(){if(scrollingPage && !host.editMode)Qt.callLater(revealFocusedPlacement)}
+    function settleRuntimeFocus(){const generation=navigationGeneration;if(scrollingPage && !host.editMode)Qt.callLater(()=>{if(root && generation===root.navigationGeneration)revealFocusedPlacement()})}
     function editorViewport(){return {y:content.contentY,navigationX:navigationStrip.contentX}}
     function restoreEditorViewport(state){if(!state)return;content.cancelFlick();content.contentY=state.y;navigationStrip.cancelFlick();navigationStrip.contentX=state.navigationX}
     readonly property bool placementMode: {
@@ -250,8 +264,9 @@ Item {
         else { activeTabId = tab.id; const first = focusEntries()[0]; if (first) host.focusedIndex = host.itemIndex(first.id) }
     }
     function restoreFocus(id) {
-        Qt.callLater(()=>{if(!root || !root.host || !root.widgets)return;const widget=root.widgets[id];const saved=(root.host.appCollectionFocus || {})[id];if(widget && saved && widget.restoreFocusState){root.activeWidget=id;widget.restoreFocusState(saved)}})
-        if(scrollingPage)Qt.callLater(revealFocusedPlacement)
+        const generation=navigationGeneration
+        Qt.callLater(()=>{if(!root || generation!==root.navigationGeneration || !root.host || !root.widgets)return;const widget=root.widgets[id];const saved=(root.host.appCollectionFocus || {})[id];if(widget && saved && widget.restoreFocusState){root.activeWidget=id;widget.restoreFocusState(saved)}})
+        if(scrollingPage)Qt.callLater(()=>{if(root && generation===root.navigationGeneration)revealFocusedPlacement()})
         const component=(host.items || []).find(i=>i.id===id);activeGroup=component?component.parentId || "":""
         sectionActionId = id.startsWith("section-") ? id : ""
         if(sectionActionId)activeWidget=""

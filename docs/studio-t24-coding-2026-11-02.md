@@ -1,5 +1,9 @@
 # T24 coding and deferred VM acceptance
 
+November 3 continuation: [navigation, large-layout and literal-label repairs](studio-t24-followup-2026-11-03.md)
+records additional software fixes and 11 passing local JavaScript contracts. The
+original coding batch below was not a complete T24 implementation declaration.
+
 User direction on November 2, 2026: implement T24 coding while VM verification
 is stalled. No VM command, deployment or application acceptance run was authorized
 by this slice. T24 and T15.4 remain open; this document records implementation and
