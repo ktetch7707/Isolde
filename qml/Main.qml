@@ -111,6 +111,10 @@ Window {
             return
         }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
+        // Editor cancellation must run before the global Home route tears down
+        // its session; a dirty draft always gets the ordinary exit choice.
+        if(sessionManager.active && sessionManager.currentAppType === "settings" && settings.homeEditing){settings.handleCommand(command);return}
+        if(!sessionManager.active && pageSurface.editing){pageSurface.handleCommand(command);return}
         if(command===inputManager.home){window.showDesignatedHome();return}
         if(tvGuide.open && !sessionManager.active && !launchErrorOverlay.visible){tvGuide.handleCommand(command);return}
         if (kodiLibrary.open && !sessionManager.active) { kodiLibrary.handleCommand(command); return }
@@ -292,6 +296,8 @@ Window {
                 artwork: artPacks.artwork
                 themes: artPacks.themes
                 appearance: homeLayout.homeAppearance
+                editPageId: pageSurface.open ? pageSurface.activeId : ""
+                editComponentId: pageSurface.open ? pageSurface.focusedComponentId : home.focusedItemId
                 onPreviewAmbientRequested: window.ambientActive = true
                 onPageRequested:id=>{ sessionManager.goHome(); actionDispatcher.dispatch({type:"open-page",pageId:id},"") }
             }

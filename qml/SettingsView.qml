@@ -9,6 +9,9 @@ Item {
     property var appearance: ({})
     property int selectedSection: 0
     property bool inPage: false
+    property string editPageId: ""
+    property string editComponentId: ""
+    readonly property bool homeEditing: inPage && selectedSection === 1 && homePage.editing
     signal previewAmbientRequested()
     signal pageRequested(string id)
     readonly property var sections: [
@@ -87,6 +90,8 @@ Item {
         id: homePage
         anchors.fill: parent
         visible: root.inPage && root.selectedSection === 1
+        initialPageId: root.editPageId
+        initialComponentId: root.editComponentId
         items: root.homeItems
         availableApps: root.availableApps
         artwork: root.artwork

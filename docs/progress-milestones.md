@@ -1,5 +1,26 @@
 # Weighted, independently verifiable milestones
 
+## T24 — installed cutover (five original groups, weights unchanged)
+
+Coding-only exception authorized November 2, 2026 while VM verification is stalled.
+Existing evidence has not been reconciled to this changed candidate; no T24 credit
+is awarded for source presence or the local auditor unit tests. Final children
+retain every inherited requirement, including T22/T23 dependencies.
+
+| Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
+| --- | --- | --- | --- |
+| T24.1.a | open | Core blank/existing/multiple/nested, collision/full-grid, remote/pointer and scrolling matrix passes on the candidate. | docs/studio-t24-coding-2026-11-02.md; installed tasks pending. |
+| T24.1.b | open | History/profile/invalid-doc/repair/atomic-failure/recovery and all inherited T24.1 requirements pass. | docs/studio-t24-coding-2026-11-02.md; source-matched native and installed evidence pending. |
+| T24.2.a | open | Both exact-source installed recreation/reset pairs and 720p/1080p/4K scaling are explicitly reviewed. | docs/studio-t24-coding-2026-11-02.md; new candidate capture/review pending. |
+| T24.2.b | open | Legacy preservation/conversion, isolated real-Kodi sources and all inherited T24.2 requirements pass. | docs/studio-t24-coding-2026-11-02.md; installed evidence pending. |
+| T24.3.a | open | Named color/move/size/delete-Undo/control/header/discovery tasks pass with observed input, focus and consequences. | docs/studio-t24-coding-2026-11-02.md; agent-run installed tasks pending. |
+| T24.3.b | open | Declared VM performance, accessibility, disconnected Generator/network denial and all inherited T24.3 requirements pass. | docs/studio-t24-coding-2026-11-02.md; actual measurements and installed evidence pending. |
+| T24.4.a | open | Production entry, Home/Back/dirty exit, named-page origin and removed-page recovery pass native/QML regression tests. | docs/studio-t24-coding-2026-11-02.md; coding prepared, Qt tests not run. |
+| T24.4.b | open | Complete legacy parity map and normal shipped cutover/recovery, including all inherited T24.4 requirements, pass installed review. | docs/studio-t24-coding-2026-11-02.md; installed parity/recovery review pending. |
+| T24.5.a | open | Source/release hashes, complete logs/captures, actual usability/performance results and service/profile restoration are published. | docs/studio-t24-coding-2026-11-02.md; pending evidence inventory prepared. |
+| T24.5.b | open | Remaining software/hardware boundaries and dependent T15.4/T24 acceptance are reconciled against the final candidate and all inherited requirements. | docs/studio-t24-coding-2026-11-02.md; no acceptance or completion claimed. |
+
+
 Latest user authority: [vm-software-completion.md](vm-software-completion.md). Every child is judged by VM-only software pass conditions; non-VM hardware, account/region, participant/approval and actual-computer checks move to the user's post-100% handoff. Existing weights and done/open states are preserved; new VM replacements must pass before earning credit. References below to installed mean installed in the guest, and visual review means agent review.
 
 Current progress authority, adopted at user request 2026-10-29. Original backlog Scope IDs remain requirement groups and preserve their original equal weight within each task. A split group's children divide only that group's existing weight equally. All 27 tasks still have equal weight in Overall. Adding rows cannot increase a group's weight.

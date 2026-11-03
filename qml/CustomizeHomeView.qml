@@ -6,6 +6,7 @@ Item {
     property var layoutModel: homeLayout
     property var provider: typeof pageData !== "undefined" ? pageData : null
     property string initialPageId: ""
+    property string initialComponentId: ""
     property var items: []
     property var availableApps: []
     property var artwork: []
@@ -14,8 +15,10 @@ Item {
     readonly property bool editing: studio.open || skins.open
     signal closed()
     signal pageRequested(string id)
-    function start() { if (ready && visible && !editing) studio.show(initialPageId, "") }
+    function start() { if (ready && visible && !editing) studio.show(initialPageId, initialComponentId) }
     function handleCommand(command) {
+        // Home has the same cancel/dirty-draft contract as Back in the editor.
+        if (command === inputManager.home) command = inputManager.back
         if (skins.open) skins.handleCommand(command)
         else studio.handleCommand(command)
     }

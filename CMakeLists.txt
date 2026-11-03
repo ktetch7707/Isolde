@@ -157,17 +157,12 @@ qt_add_qml_module(isolde
         qml/ClockWidget.qml
         qml/CommandCenter.qml
         qml/CustomizeHomeView.qml
-        qml/AppearanceEditor.qml
         qml/ComposedHome.qml
         qml/HomeCard.qml
         qml/LineIcon.qml
-        qml/ComponentLayoutEditor.qml
         qml/SkinLibrary.qml
-        qml/HomeDesignEditor.qml
-        qml/PageManager.qml
         qml/PageNavigation.qml
         qml/PageSurface.qml
-        qml/PageEditor.qml
         qml/PageStudioView.qml
         qml/StudioLayoutEditor.qml
         qml/StudioGridEditor.qml
@@ -356,6 +351,9 @@ if(BUILD_TESTING)
     add_test(NAME studio_selection COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_selection.qml)
     add_test(NAME studio_artwork COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_artwork.qml)
     add_test(NAME studio_workflows COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_workflows.qml)
+    add_test(NAME studio_cutover COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_cutover.qml)
+    set_tests_properties(studio_cutover PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_colors COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_colors.qml)
     add_test(NAME store_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_store.qml)
     set_tests_properties(store_remote_ui PROPERTIES TIMEOUT 30 LABELS "store;quick;qml"
@@ -463,6 +461,7 @@ if(BUILD_TESTING)
     set_tests_properties(home_component_navigation PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME studio_cutover_report COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_studio_cutover_report.py)
         qt_add_executable(isolde_audio_tests tests/tst_audio.cpp)
         target_link_libraries(isolde_audio_tests PRIVATE isolde_core Qt6::Test)
         target_compile_definitions(isolde_audio_tests PRIVATE AUDIO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fake-mixer.py")

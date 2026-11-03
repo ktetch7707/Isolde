@@ -103,6 +103,7 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "studio_artwork": "isolde_studio_quick_tests",
           "studio_colors": "isolde_studio_quick_tests",
           "studio_workflows": "isolde_studio_quick_tests",
+          "studio_cutover": "isolde_studio_quick_tests",
           "studio_gestures": "isolde_studio_quick_tests",
           "studio_grid": "isolde_studio_quick_tests",
           "studio_destinations": "isolde_studio_quick_tests",
@@ -118,7 +119,7 @@ def suite_selection(suite):
     """One allowlisted selection authority for build targets and CTest names."""
     targets = SUITES[suite]
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
-    pattern = "^(studio_quick|studio_selection|studio_artwork|studio_colors|studio_workflows|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    pattern = "^(studio_quick|studio_selection|studio_artwork|studio_colors|studio_workflows|studio_cutover|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "studio_grid":
         pattern = "^(studio_grid|studio_grid_controls)$"
     if suite == "vpn":
@@ -848,7 +849,7 @@ class Oracle:
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":
-            expected = {"studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_workflows", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            expected = {"studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_workflows", "studio_cutover", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
             if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors"}
             if suite == "studio_grid":
                 expected = {"studio_grid", "studio_grid_controls"}

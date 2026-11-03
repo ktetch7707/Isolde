@@ -8,6 +8,13 @@ Verified foundations T16, T17, T18 and T19 are not new work packages. Reopen onl
 
 ## VM-only acceptance authority
 
+November 2 user exception: implement T24 coding while VM verification is stalled.
+[T24 coding record](studio-t24-coding-2026-11-02.md) records the prepared entry,
+recovery, regression and acceptance-audit work. No VM work or acceptance credit is
+claimed. Resume T24 verification only on a frozen candidate with T22/T23 applicable
+evidence; the ordinary next feature checkpoint remains T22 below.
+
+
 All task outcomes below use [vm-software-completion.md](vm-software-completion.md). No representative/account/hardware/model/target-only check blocks S1; use the defined VM substitute and user handoff. A twelve-hour real-time wait is optional; required proof is production-clock invariants plus actual VM cold reopen. This changes criteria, not milestone states or weights.
 
 ## Current combined checkpoint — 2026-10-31 S07–S08/T21.11–.14

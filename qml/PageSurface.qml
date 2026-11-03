@@ -18,6 +18,9 @@ Item {
     property string homeOrigin:""
     readonly property var pageEntries:layoutModel.studioPages
     property bool editing:false
+    readonly property string focusedComponentId: content.focusedItemId
+    property string editOrigin: ""
+    property var editViewport: ({})
     property bool artworkMotionAllowed:true
     property bool internetAvailable:true
     property bool localNetworkAvailable:true
@@ -35,6 +38,24 @@ Item {
     function restoreOrigin(origin){
         if(!content.widgetActive || Object.prototype.hasOwnProperty.call(content.appCollectionFocus,origin))content.restoreFocus(origin)
     }
+    function beginEditing() {
+        if (editing || !model) return
+        editOrigin = content.focusedItemId
+        editViewport = content.editorViewport()
+        editing = true
+    }
+    function finishEditing() {
+        editing = false
+        if (!model) { closeAll(); return }
+        // Restore the stable origin before restoring its scroll position;
+        // HomeScreen chooses a reachable fallback if Apply removed that item.
+        const origin = editOrigin, viewport = editViewport, pageId = activeId
+        Qt.callLater(() => {
+            if (editing || activeId !== pageId) return
+            content.restoreFocus(origin)
+            content.restoreEditorViewport(viewport)
+        })
+    }
     function back(){
         if(history.length){let stack=history.slice();const previous=stack.pop();history=stack;showPage(previous.id,"",true);Qt.callLater(()=>content.restoreFocus(previous.focus))}
         else closeAll()
@@ -46,7 +67,9 @@ Item {
         if(command===inputManager.search){searchRequested();return}
         content.handleCommand(command)
     }
-    Connections { target:root.layoutModel;function onLayoutChanged(){if(root.activeId && !root.model)root.closeAll()} }
+    // An atomic Apply may remove the page being edited. Keep Studio alive to
+    // show its result, then use the normal designated-Home recovery on close.
+    Connections { target:root.layoutModel;function onLayoutChanged(){if(root.activeId && !root.model && !root.editing)root.closeAll()} }
     Rectangle {anchors.fill:parent;color:root.model?root.model.backgroundEnd:"#101014"}
     PageBackdrop {id:wallpaper;anchors.fill:parent;source:root.model?root.model.wallpaperSource:"";config:root.config.background || {};startColor:root.model?root.model.backgroundStart:"transparent";endColor:root.model?root.model.backgroundEnd:"transparent"}
     HomeScreen {
@@ -63,12 +86,13 @@ Item {
         internetAvailable:root.internetAvailable;localNetworkAvailable:root.localNetworkAvailable;hasContextualSources:false
         onActionActivated:(action,origin)=>actionDispatcher.dispatch(action,origin)
         onSearchRequested:root.searchRequested()
-        onSettingsRequested:section=>{if(section===1)root.editing=true;else root.settingsRequested(section)}
+        onSettingsRequested:section=>{if(section===1)root.beginEditing();else root.settingsRequested(section)}
     }
     CustomizeHomeView {
         id:editor;anchors.fill:parent;visible:root.editing;layoutModel:root.layoutModel;provider:root.provider;initialPageId:root.activeId
+        initialComponentId:root.editOrigin
         availableApps:root.availableApps;artwork:root.artwork;themes:root.themes
         onPageRequested:id=>root.showPage(id,"",false)
-        onClosed: {root.editing=false;content.restoreFocus(content.focusedItemId)}
+        onClosed: root.finishEditing()
     }
 }
