@@ -257,7 +257,7 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
     QVERIFY(command(InputManager::Confirm)); QCOMPARE(home.composition()["headerMode"].toString(),QString("identity"));
     QVERIFY(command(InputManager::NavigateRight)); QVERIFY(command(InputManager::Confirm));
     auto *keyboard = skins->findChild<QObject *>("skinNameKeyboard"); QVERIFY(keyboard);
-    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("My clouds")))); QCOMPARE(home.skins().size(),4);
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("My clouds")))); QCOMPARE(home.skins().size(),8);
     const auto id = home.skins().last().toMap()["id"].toString();
     QVERIFY(command(InputManager::Back)); QVERIFY(!root->property("editing").toBool());
     root->setProperty("actionIndex",24); QVERIFY(command(InputManager::Confirm));

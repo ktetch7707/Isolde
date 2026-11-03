@@ -1,0 +1,25 @@
+{
+  "templates": [
+    {
+      "description": "Installed apps in a compact editable launcher",
+      "id": "compact-launcher",
+      "name": "Compact launcher"
+    },
+    {
+      "description": "Apps and Kodi shelves in editable scrolling sections",
+      "id": "scrolling-dashboard",
+      "name": "Scrolling dashboard"
+    },
+    {
+      "description": "Kodi movie posters with persistent left page navigation",
+      "id": "poster-sidebar",
+      "name": "Poster library"
+    },
+    {
+      "description": "A quiet pastel launcher with editable installed apps",
+      "id": "minimal-pastel",
+      "name": "Minimal pastel"
+    }
+  ],
+  "schemaVersion": 1
+}

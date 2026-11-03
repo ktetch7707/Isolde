@@ -1,0 +1,89 @@
+{
+  "assets": {},
+  "layout": {
+    "components": [
+      {
+        "componentType": "library",
+        "source": {
+          "kind": "library",
+          "libraryKind": "movies",
+          "provider": "kodi",
+          "libraryView": "all",
+          "schemaVersion": 1,
+          "libraryValue": ""
+        },
+        "widgetType": "library",
+        "schemaVersion": 1,
+        "kind": "widget",
+        "placement": {
+          "x": 0,
+          "height": 3,
+          "width": 4,
+          "y": 0
+        },
+        "id": "featured-movies",
+        "name": "Movies",
+        "presentation": {
+          "libraryKind": "movies",
+          "libraryColumns": 6,
+          "libraryLayout": "grid",
+          "libraryView": "all",
+          "libraryLimit": 50,
+          "libraryChrome": true,
+          "libraryCardStyle": "media"
+        },
+        "categoryId": "library"
+      }
+    ],
+    "theme": {
+      "selectedColor": "#344c70",
+      "backgroundStart": "#101725",
+      "brandVisible": false,
+      "textColor": "#f3f5fa",
+      "typographyScale": 1,
+      "mutedColor": "#b7c4d8",
+      "homeColumns": 5,
+      "focusColor": "#8dc8ff",
+      "spacing": 16,
+      "motionEnabled": false,
+      "tileRoundness": 0.18,
+      "backgroundEnd": "#182338",
+      "fontFamily": "DejaVu Sans",
+      "surfaceColor": "#243249"
+    },
+    "schemaVersion": 2,
+    "categories": [
+      {
+        "id": "library",
+        "name": "Movies"
+      }
+    ],
+    "composition": {
+      "enabled": true,
+      "pageNavigation": "left",
+      "identity": "Poster library",
+      "grid": {
+        "overlap": false,
+        "snap": true,
+        "rows": 3,
+        "mode": "screen",
+        "gap": 16,
+        "margin": 16,
+        "columns": 4
+      },
+      "columns": 1,
+      "headerMode": "identity",
+      "headerControls": [
+        "search",
+        "settings",
+        "edit"
+      ],
+      "gap": 24,
+      "margin": 32,
+      "schemaVersion": 1,
+      "fit": false
+    }
+  },
+  "schemaVersion": 1,
+  "name": "Poster library"
+}

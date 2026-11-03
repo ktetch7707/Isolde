@@ -212,6 +212,11 @@ qt_add_resources(isolde "isolde_config"
         config/studio-defaults.json
         config/skins/lounge.json
         config/skins/pastel.json
+        config/skins/templates.json
+        config/skins/compact-launcher.json
+        config/skins/scrolling-dashboard.json
+        config/skins/poster-sidebar.json
+        config/skins/minimal-pastel.json
         config/packages/ambient-weather/manifest.json
         config/packages/living-room-radio/manifest.json
         config/packages/photo-gallery/manifest.json

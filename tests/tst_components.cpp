@@ -64,6 +64,8 @@ private slots:
     void dispatchesValidatedActionsAndOrigins();
     void failedEditRetainsProfileLayout();
     void skinSnapshotsSurviveResetAndArtworkChanges();
+    void starterTemplatesAreEditableAndPreservePages();
+    void starterTemplateRolesRemainEditableWithoutProviders();
     void skinsRejectInvalidAndFailedApplications();
     void starterPageUpdatesPreserveDesignAndRollback();
     void pagesPersistAndRouteAndTravelWithSkins();
@@ -412,7 +414,7 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     HomeLayout layout(&registry);
     const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
     QVERIFY(layout.load(defaults,dir.filePath("home.json")));
-    QCOMPARE(layout.skins().size(),3);
+    QCOMPARE(layout.skins().size(),7);
     QVERIFY(layout.applySkin("builtin-lounge"));
     QCOMPARE(layout.categories().size(),4);
     QVERIFY(layout.setAppearance({{"fontFamily","Serif"},{"focusColor","#123456"}}));
@@ -432,7 +434,7 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),presetPages.size());
     QCOMPARE(moviePage->appearance()["focusColor"].toString(),QString("#123456"));
     QVERIFY(!layout.wallpaperSource().isEmpty());
-    QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),4);
+    QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),8);
     // The snapshot is independent of the live artwork store, and survives a process reload.
     QDir(dir.filePath("artwork")).removeRecursively();
     HomeLayout restored(&registry); QVERIFY(restored.load(defaults,dir.filePath("home.json")));
@@ -447,7 +449,83 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     QVERIFY(restored.deleteSkin(id)); QCOMPARE(readFile(dir.filePath("home.json")),live);
     QVERIFY(!restored.deleteSkin("builtin-default"));
     QVERIFY(restored.applySkin("builtin-default")); QVERIFY(restored.composition().isEmpty());
-    HomeLayout other(&registry); QVERIFY(other.load(defaults,dir.filePath("other/home.json"))); QCOMPARE(other.skins().size(),3);
+    HomeLayout other(&registry); QVERIFY(other.load(defaults,dir.filePath("other/home.json"))); QCOMPARE(other.skins().size(),7);
+}
+void ComponentTests::starterTemplatesAreEditableAndPreservePages()
+{
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    HomeLayout layout(&registry);
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    QVERIFY(layout.load(defaults, dir.filePath("home.json")));
+    const auto pageId = layout.createPage("Keep my page", "movies");
+    QVERIFY(!pageId.isEmpty());
+    const auto pages = layout.pages();
+    for (const auto &id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"}) {
+        QVERIFY2(layout.applySkin("builtin-" + QString::fromLatin1(id)), qPrintable(layout.errorString()));
+        QCOMPARE(layout.pages(), pages);
+        QVERIFY(!layout.components().isEmpty());
+        const auto componentId = layout.components().first().toMap()["id"].toString();
+        QVERIFY(layout.setItemName(componentId, "My edited role"));
+        HomeLayout reopened(&registry);
+        QVERIFY(reopened.load(defaults, dir.filePath("home.json")));
+        QCOMPARE(reopened.pages(), pages);
+        QCOMPARE(reopened.components().first().toMap()["name"].toString(), QString("My edited role"));
+    }
+    const auto previous = layout.committedDocument();
+    QVERIFY(!layout.applySkin("builtin-../compact-launcher"));
+    QCOMPARE(layout.committedDocument(), previous);
+    HomeLayout other(&registry);
+    QVERIFY(other.load(defaults, dir.filePath("other/home.json")));
+    QVERIFY(other.pages().isEmpty());
+    // Reject a fractional catalog version rather than truncating it to version 1.
+    QVERIFY(QDir().mkpath(dir.filePath("config/skins")));
+    writeFile(dir.filePath("config/default.json"), readFile(defaults));
+    auto catalog = QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/skins/templates.json"))).object();
+    catalog["schemaVersion"] = 1.5;
+    writeFile(dir.filePath("config/skins/templates.json"), QJsonDocument(catalog).toJson());
+    HomeLayout invalidCatalog(&registry);
+    QVERIFY(invalidCatalog.load(dir.filePath("config/default.json"), dir.filePath("invalid/home.json")));
+    QCOMPARE(invalidCatalog.skins().size(), 3);
+    const auto unchanged = invalidCatalog.committedDocument();
+    QVERIFY(!invalidCatalog.applySkin("builtin-compact-launcher"));
+    QCOMPARE(invalidCatalog.committedDocument(), unchanged);
+}
+void ComponentTests::starterTemplateRolesRemainEditableWithoutProviders()
+{
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    HomeLayout layout(&registry);
+    QVERIFY(layout.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("home.json")));
+    for (const auto &id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"}) {
+        QVERIFY(layout.applySkin("builtin-" + QString::fromLatin1(id)));
+        const auto before = layout.committedDocument();
+        const auto disk = readFile(dir.filePath("home.json"));
+        auto *session = qobject_cast<StudioSession *>(layout.beginStudio());
+        QVERIFY(session);
+        const auto nodes = session->document()["components"].toList();
+        for (const auto &value : nodes) {
+            const auto node = value.toMap();
+            const auto componentId = node["id"].toString();
+            QVERIFY(!node["name"].toString().isEmpty());
+            QVERIFY(session->execute("rename", {{"id", componentId}, {"name", "My content role"}}));
+            if (node.contains("appCollection")) {
+                QVERIFY(session->execute("setApps", {{"id", componentId}, {"mode", "selected"}, {"apps", QVariantList{}}}));
+            } else {
+                QCOMPARE(node["source"].toMap()["provider"].toString(), QString("kodi"));
+                auto presentation = node["presentation"].toMap();
+                presentation["libraryColumns"] = 3;
+                QVERIFY2(session->execute("presentation", {{"id", componentId}, {"value", presentation}}), qPrintable(session->errorString()));
+            }
+        }
+        QCOMPARE(layout.committedDocument(), before);
+        QCOMPARE(readFile(dir.filePath("home.json")), disk);
+        session->revert();
+        QCOMPARE(session->draft(), before);
+        session->invalidate();
+    }
 }
 void ComponentTests::starterPageUpdatesPreserveDesignAndRollback()
 {
