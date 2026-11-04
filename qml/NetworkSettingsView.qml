@@ -126,6 +126,8 @@ Item {
         tvKeyboard.value = target === "ssid" ? wifiSsid.text : wifiPassword.text
         tvKeyboard.selectedIndex = 0
         keyboardOpen = true
+        // Remote keys belong to the TV keyboard, not the underlying TextField.
+        root.forceActiveFocus()
     }
 
     function closePasswordPrompts() {
@@ -148,14 +150,14 @@ Item {
             radius: shell.radius
             color: shell.elevated
             border.width: 2
-            border.color: root.selectedConnectionAction === 1 ? shell.error : shell.focus
+            border.color: root.selectedConnectionAction === 1 ? shell.elevatedError : shell.elevatedFocus
             Column {
                 anchors.fill: parent
                 anchors.margins: 28
                 spacing: 18 * shell.gapScale
                 Text { font.family: shell.fontFamily; text: "SAVED NETWORK"; color: shell.elevatedText; font.pixelSize: 28 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                Text { font.family: shell.fontFamily; text: root.selectedConnectionName; color: shell.muted; font.pixelSize: 19 * shell.textScale; elide: Text.ElideRight; width: parent.width }
-                Text { font.family: shell.fontFamily; text: "Connect brings this saved profile online. Forget removes its saved credentials and settings."; color: shell.muted; font.pixelSize: 16 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
+                Text { font.family: shell.fontFamily; text: root.selectedConnectionName; color: shell.elevatedMuted; font.pixelSize: 19 * shell.textScale; elide: Text.ElideRight; width: parent.width }
+                Text { font.family: shell.fontFamily; text: "Connect brings this saved profile online. Forget removes its saved credentials and settings."; color: shell.elevatedMuted; font.pixelSize: 16 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
                 Row {
                     spacing: 12 * shell.gapScale
                     Repeater {
@@ -163,11 +165,12 @@ Item {
                         delegate: Rectangle {
                             required property int index
                             required property string modelData
+                            objectName: "networkConnectionAction-" + index
                             width: 170; height: 52; radius: shell.radius
-                            color: root.selectedConnectionAction === index ? (index === 1 ? shell.selected : shell.selected) : shell.surface
+                            color: root.selectedConnectionAction === index ? shell.selected : shell.surface
                             border.width: root.selectedConnectionAction === index ? 3 : 1
-                            border.color: root.selectedConnectionAction === index ? shell.text : shell.outline
-                            Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: modelData; color: shell.elevatedText; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
+                            border.color: root.selectedConnectionAction === index ? shell.selectedFocus : shell.focus
+                            Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: modelData; color: root.selectedConnectionAction === index ? shell.selectedText : shell.text; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
                         }
                     }
                 }
@@ -187,49 +190,49 @@ Item {
             radius: shell.radius
             color: shell.elevated
             border.width: 2
-            border.color: shell.focus
+            border.color: shell.elevatedFocus
             Column {
                 anchors.fill: parent
                 anchors.margins: 28
                 spacing: 16 * shell.gapScale
                 Text { font.family: shell.fontFamily; text: "JOIN WI-FI"; color: shell.elevatedText; font.pixelSize: 28 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                Text { font.family: shell.fontFamily; visible: !root.hiddenNetworkPrompt; text: root.selectedSsid; color: shell.muted; font.pixelSize: 18 * shell.textScale; elide: Text.ElideRight; width: parent.width }
+                Text { font.family: shell.fontFamily; visible: !root.hiddenNetworkPrompt; text: root.selectedSsid; color: shell.elevatedMuted; font.pixelSize: 18 * shell.textScale; elide: Text.ElideRight; width: parent.width }
                 TextField {
-                    id: wifiSsid
+                    id: wifiSsid; objectName: "networkSsidField"
                     visible: root.hiddenNetworkPrompt
                     width: parent.width
                     height: 54
-                    color: shell.elevatedText
+                    color: shell.inputText
                     font.pixelSize: 19 * shell.textScale
                     placeholderText: "Network name"
-                    placeholderTextColor: shell.unavailable
-                    background: Rectangle { radius: shell.radius; color: shell.input; border.width: 2; border.color: wifiSsid.activeFocus ? shell.text : shell.outline }
+                    placeholderTextColor: shell.inputMuted
+                    background: Rectangle { radius: shell.radius; color: shell.input; border.width: 2; border.color: shell.inputFocus }
                     onActiveFocusChanged: if (activeFocus && root.hiddenNetworkPrompt) root.openKeyboard("ssid")
                     onAccepted: wifiPassword.forceActiveFocus()
                 }
                 TextField {
-                    id: wifiPassword
+                    id: wifiPassword; objectName: "networkPasswordField"
                     width: parent.width
                     height: 54
                     echoMode: TextInput.Password
-                    color: shell.elevatedText
+                    color: shell.inputText
                     font.pixelSize: 19 * shell.textScale
                     placeholderText: "Wi-Fi password"
-                    placeholderTextColor: shell.unavailable
-                    background: Rectangle { radius: shell.radius; color: shell.input; border.width: 2; border.color: wifiPassword.activeFocus ? shell.text : shell.outline }
+                    placeholderTextColor: shell.inputMuted
+                    background: Rectangle { radius: shell.radius; color: shell.input; border.width: 2; border.color: shell.inputFocus }
                     onActiveFocusChanged: if (activeFocus && (root.passwordPrompt || root.hiddenNetworkPrompt)) root.openKeyboard("password")
                     onAccepted: {
                         networkSettings.connectToWifi(root.hiddenNetworkPrompt ? wifiSsid.text : root.selectedSsid, text)
                         root.closePasswordPrompts()
                     }
                 }
-                Text { font.family: shell.fontFamily; text: "Enter connect    Esc cancel    Text fields open TV keyboard"; color: shell.muted; font.pixelSize: 16 * shell.textScale }
+                Text { font.family: shell.fontFamily; text: "Enter connect    Esc cancel    Text fields open TV keyboard"; color: shell.elevatedMuted; font.pixelSize: 16 * shell.textScale }
             }
         }
     }
 
     OnScreenKeyboard { appearance: root.appearance;
-        id: tvKeyboard
+        id: tvKeyboard; objectName: "networkTvKeyboard"
         visible: root.keyboardOpen
         z: 20
         anchors.left: parent.left
@@ -249,11 +252,8 @@ Item {
             }
         }
         onCanceled: {
-            root.keyboardOpen = false
-            if (root.keyboardTarget === "ssid")
-                wifiSsid.forceActiveFocus()
-            else
-                wifiPassword.forceActiveFocus()
+            root.closePasswordPrompts()
+            root.forceActiveFocus()
         }
     }
 
@@ -282,7 +282,7 @@ Item {
                     width: 220; height: 54; radius: shell.radius
                     color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 3 : 1
-                    border.color: root.selectedIndex === index ? shell.text : shell.outline
+                    border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
                     Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: modelData; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
                 }
             }
@@ -338,7 +338,7 @@ Item {
                 width: parent.width; height: 54; radius: shell.radius
                 color: root.selectedIndex === index + root.firstSavedIndex ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index + root.firstSavedIndex ? 2 : 1
-                border.color: root.selectedIndex === index + root.firstSavedIndex ? shell.text : shell.outline
+                border.color: root.selectedIndex === index + root.firstSavedIndex ? shell.selectedFocus : shell.outline
                 Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: (root.selectedIndex === index + root.firstSavedIndex) ? shell.selectedText : shell.text; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
                 Text { font.family: shell.fontFamily; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.type + (modelData.device && modelData.device !== "--" ? "  |  " + modelData.device : ""); color: (root.selectedIndex === index + root.firstSavedIndex) ? shell.selectedText : shell.muted; font.pixelSize: 15 * shell.textScale }
             }

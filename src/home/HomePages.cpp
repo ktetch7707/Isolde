@@ -31,6 +31,15 @@ QVariantMap HomeLayout::homeAppearance() const {
     return appearance();
 }
 
+QVariantMap HomeLayout::resolvedSurfacePalette(const QVariantMap &appearance) const
+{
+    // Derived roles identify a resolved context. Preserve it verbatim so panel
+    // opacity is not composited a second time by nested shell consumers.
+    if (appearance.contains("selectedTextColor") && appearance.contains("inputTextColor")
+        && appearance.contains("backgroundTextColor")) return appearance;
+    return ComponentSchema::surfacePalette(appearance);
+}
+
 QVariantMap HomeLayout::surfaceAppearance(const QString &surface, const QString &originId) const
 {
     if (m_owner) return m_owner->surfaceAppearance(surface, originId);

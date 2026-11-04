@@ -8,9 +8,15 @@ Verified foundations T15–T24 are accepted as recorded in the backlog. Reopen o
 
 ## VM-only acceptance authority
 
-The November2 coding-only exception is historical. [Final installed acceptance](studio-batch-acceptance-2026-11-04.md) closes T22/T23/T24 and T15.4; T27 is next. Earlier coding/diagnosis records below retain their original evidence limitations.
+The November2 coding-only exception is historical. [Final installed acceptance](studio-batch-acceptance-2026-11-04.md) closes T22/T23/T24 and T15.4; [T27 acceptance](studio-t27-acceptance-2026-11-04.md) is also complete; T25 is next. Earlier coding/diagnosis records below retain their original evidence limitations.
 
 All task outcomes below use [vm-software-completion.md](vm-software-completion.md). No representative/account/hardware/model/target-only check blocks S1; use the defined VM substitute and user handoff. A twelve-hour real-time wait is optional; required proof is production-clock invariants plus actual VM cold reopen. This changes criteria, not milestone states or weights.
+
+## Current checkpoint — T27 accepted, November4,2026
+
+**T27100%, Overall57%, sum1548 across27 ACTIVE tasks.** [Final acceptance](studio-t27-acceptance-2026-11-04.md) records15/15 milestones, original N55/55 plus strict final AE4/4 reuse, reviewed installed3-palette routes/faults/private discard and both generic recreation/reset pairs. Final AE release96a7f77c8f4f68b66dda23e7; sourceDigest4c1ddf0911f6ff94044705a5376c86bb0e957962dad1df902e93e56d68781388. Native captures have no unreviewed hashes. Installed ledger144 artifacts/135 accepted/9 excluded; no partial/failed attempt disguised as a pass. No runner active; normal service running/zero restarts, root/Household layout hashes and native sentinel state unchanged.
+
+Next authorized item is **T25 contained configurable detected sources**, thenT26/T28. Read only T25 Entry docs/files and full owning gate; split broad outcomes under original weights and reconcile existing evidence before edits. Reuse applicable T27/Studio passes, with focused checks after a meaningful batch and no full solely for a new task ID. T25 still owns discovery/policy/notice-slot containment and source-string diagnostics; T26 owns dedicated gallery, T04 missing episode metadata, T12 remaining system/legacy geometry. Preserve unrelated staged Guide/Android/quality work. Sole VM owner remains this chat. H01–H05 are post-software handoff.
 
 ## Current checkpoint — T22/T23/T24 complete, November4,2026
 

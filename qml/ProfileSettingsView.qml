@@ -52,7 +52,7 @@ Item {
                 required property var modelData
                 width: ListView.view.width; height: 56; radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
-                border.color: root.selectedIndex === index ? shell.text : shell.outline
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
                 border.width: root.selectedIndex === index ? 3 : 1
                 Text { font.family: shell.fontFamily;
                     anchors.fill: parent; anchors.margins: 14; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * shell.textScale

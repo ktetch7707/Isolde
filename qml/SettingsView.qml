@@ -126,7 +126,7 @@ Item {
                     width: ListView.view.width; height: 76 * shell.textScale; radius: shell.radius
                     color: root.selectedSection === index ? shell.selected : shell.surface
                     border.width: root.selectedSection === index ? 3 : 1
-                    border.color: root.selectedSection === index ? shell.text : shell.outline
+                    border.color: root.selectedSection === index ? shell.selectedFocus : shell.outline
                     Column {
                         anchors.fill: parent; anchors.margins: 14; spacing: 6 * shell.gapScale
                         Text { font.family: shell.fontFamily; text: modelData.name; color: (root.selectedSection === index) ? shell.selectedText : shell.text; font.pixelSize: 22 * shell.textScale; font.weight: Font.DemiBold }
@@ -153,7 +153,7 @@ Item {
                     anchors.centerIn: parent
                     spacing: 10 * shell.gapScale
                     Text { font.family: shell.fontFamily; text: "HOME"; color: shell.elevatedText; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                    Text { font.family: shell.fontFamily; text: "Open to edit tiles, artwork, categories, and background"; color: shell.muted; font.pixelSize: 18 * shell.textScale }
+                    Text { font.family: shell.fontFamily; text: "Open to edit tiles, artwork, categories, and background"; color: shell.elevatedMuted; font.pixelSize: 18 * shell.textScale }
                 }
                 SourceSettingsView { appearance: root.appearance; id: sourcePage; anchors.fill: parent; visible: root.selectedSection === 2 }
                 ProfileSettingsView { appearance: root.appearance; id: profilePage; anchors.fill: parent; visible: root.selectedSection === 5 }

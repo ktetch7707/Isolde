@@ -164,6 +164,12 @@ Item {
     property string pageKey: "home"
     property var menuPages:typeof homeLayout!=="undefined"?homeLayout.studioPages:[]
     property string menuActiveId:""
+    readonly property var shellAppsAppearance: {
+        const model = artworkResolver
+        const revision = appearance
+        const inherited = model ? model.homeAppearance : null
+        return model && typeof model.surfaceAppearance === "function" ? model.surfaceAppearance("apps", menuActiveId) : appearance
+    }
     property bool legacyMenuFocused:false
     readonly property bool legacyMenuEnabled:!!composition.enabled && !!menuActiveId && ["left","top"].indexOf(composition.pageNavigation)>=0 && !items.some(item=>item.family==="page-menu")
     onLegacyMenuEnabledChanged:if(!legacyMenuEnabled)legacyMenuFocused=false

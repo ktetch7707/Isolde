@@ -143,7 +143,7 @@ Item {
                 radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? shell.text : shell.outline
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
 
                 Column {
                     anchors.left: parent.left

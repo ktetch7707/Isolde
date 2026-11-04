@@ -9,6 +9,8 @@ Item {
     property var collection:({mode:"all",ids:[]})
     property var style:({})
     property var appearance:({})
+    property var galleryAppearance:appearance
+    SurfacePalette {id:galleryTheme;appearance:root.galleryAppearance}
     property real unit:1
     property bool readOnly:false
     property bool engaged:false
@@ -36,7 +38,7 @@ Item {
     signal engage()
     signal launch(var action)
     function logoSource(app){return (style.logoMode || "cutout")==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
-    function cardStyle(gallery){const result=Object.assign({},style);delete result.visibleLabel;delete result.showHeading;delete result.headingSize;if(result.cardGap===undefined)result.cardGap=(style.layout || {}).gap || 0;return Object.assign(result,gallery?{variant:"orb",diameter:style.diameter || 78}:{},{icon:style.icon || "grid",logoMode:style.logoMode || "cutout",artFit:style.artFit || "contain"})}
+    function cardStyle(gallery){const result=Object.assign({},style);delete result.visibleLabel;delete result.showHeading;delete result.headingSize;if(result.cardGap===undefined)result.cardGap=(style.layout || {}).gap || 0;if(gallery){if(result.labelSurfaceColor===undefined)result.labelSurfaceColor=galleryTheme.surface;if(result.labelColor===undefined)result.labelColor=galleryTheme.text;}return Object.assign(result,gallery?{variant:"orb",diameter:style.diameter || 78}:{},{icon:style.icon || "grid",logoMode:style.logoMode || "cutout",artFit:style.artFit || "contain"})}
     function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened || pendingGalleryRestore}}
     function restoreFocusState(state){
         if(!state)return
@@ -99,10 +101,10 @@ Item {
         width:Math.min(parent?parent.width-48:900,900);height:Math.min(parent?parent.height-48:500,500)
         x:parent?(parent.width-width)/2:0;y:parent?(parent.height-height)/2:0
         closePolicy:Popup.NoAutoClose;padding:24
-        background:Rectangle {color:root.appearance.surfaceColor || "#28262f";radius:20;border.width:2;border.color:root.appearance.focusColor || "white"}
+        background:Rectangle {color:galleryTheme.surface;radius:galleryTheme.radius;border.width:2;border.color:galleryTheme.focus}
         Column {
             anchors.fill:parent;spacing:16
-            Text {width:parent.width;text:root.message || root.style.galleryTitle || "Apps";wrapMode:Text.Wrap;color:root.appearance.textColor;font.pixelSize:root.message?18:28}
+            Text {width:parent.width;text:root.message || root.style.galleryTitle || "Apps";wrapMode:Text.Wrap;color:galleryTheme.text;font.family:galleryTheme.fontFamily;font.pixelSize:(root.message?18:28)*galleryTheme.textScale}
             GridView {
                 id:galleryGrid;objectName:"appCarouselGalleryGrid";width:parent.width;height:parent.height-50;clip:true
                 cellWidth:width/4;cellHeight:130;model:root.galleryApps;currentIndex:root.galleryApps.findIndex(a=>a.id===root.galleryId)
@@ -111,7 +113,7 @@ Item {
                     required property var modelData
                     width:galleryGrid.cellWidth;height:galleryGrid.cellHeight
                     item:({name:modelData.name,unavailableReason:modelData.unavailableReason || "",logoSource:root.logoSource(modelData),appSymbol:modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.cardStyle(true),modelData.presentation || {})})
-                    appearance:root.appearance;selected:root.galleryId===modelData.id
+                    appearance:root.galleryAppearance;selected:root.galleryId===modelData.id
                     onActivated:{root.galleryId=modelData.id;root.activate(modelData.id)}
                 }
             }

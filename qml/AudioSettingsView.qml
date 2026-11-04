@@ -91,7 +91,9 @@ Item {
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
+                objectName: "audioVolumeBar"
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 24
                 anchors.leftMargin: 28
                 anchors.rightMargin: 28
                 height: 18
@@ -101,14 +103,18 @@ Item {
                     width: parent.width * audioSettings.volume / 100
                     height: parent.height
                     radius: parent.radius
-                    color: audioSettings.muted ? shell.unavailable : shell.focus
+                    objectName: "audioVolumeFill"
+                    color: shell.inputText
                 }
             }
 
             Text { font.family: shell.fontFamily;
-                anchors.centerIn: parent
+                objectName: "audioVolumeValue"
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top
+                anchors.topMargin: 18
                 text: !audioSettings.mixerAvailable ? "UNCONFIRMED" : audioSettings.muted ? "MUTED" : audioSettings.volume + "%"
-                color: shell.text
+                color: shell.backgroundText
                 font.pixelSize: 32 * shell.textScale
                 font.weight: Font.DemiBold
                 font.letterSpacing: 3
@@ -126,7 +132,7 @@ Item {
                 radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? shell.text : shell.outline
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
 
                 Column {
                     anchors.left: parent.left

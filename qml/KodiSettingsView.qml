@@ -40,7 +40,7 @@ Item {
             else kodiMedia.refresh()
         }
     }
-    Rectangle { anchors.fill: parent; color: shell.background }
+    Rectangle { anchors.fill: parent; color: shell.surface }
     Flickable {
     id: scroll
     visible: !root.editingFolders && !root.showingImport
@@ -64,7 +64,7 @@ Item {
                 width: parent.width; height: 80; radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 2 : 0
-                border.color: shell.focus
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
                 opacity: kodiService.switching || (index === 5 && kodiService.frontend !== "kodi") || (index === 2 && (!kodiMedia.connected || kodiMedia.busy)) || (index === 3 && kodiMedia.busy) ? 0.45 : 1
                 Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 18; text: modelData; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * shell.textScale; wrapMode: Text.WordWrap }
                 MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }

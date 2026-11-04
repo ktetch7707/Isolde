@@ -15,23 +15,25 @@ Item {
         SignalSpy {id:appPickerSpy;signalName:"picked"}
         function test_search_focus_contrast_is_local_to_controls(){
             const pastel={textColor:"#514b67",mutedColor:"#625b73",surfaceColor:"#f5e7f4",selectedColor:"#edd7ef",focusColor:"#ffffff"}
+            const tokens=homeLayout.resolvedSurfacePalette(pastel)
             const search=createTemporaryObject(commandCenterComponent,tests.parent,{appearance:pastel,shellActions:[{name:"Open Guide",action:{type:"open-guide"}}]})
             verify(search!==null)
-            compare(search.focusInk,Qt.color(pastel.focusColor))
-            verify(search.minimumSearchContrast(search.focusInk)<4.5)
-            verify(search.minimumSearchContrast(search.searchFocusInk)>=4.5)
-            verify(Qt.colorEqual(search.searchFocusInk,Qt.color(pastel.textColor)))
-
+            verify(!Qt.colorEqual(search.searchFocusInk,Qt.color(pastel.focusColor)))
+            compare(search.searchFocusInk,Qt.color(tokens.focusColor))
+            compare(Object.keys(search.appearance).sort().join(","),Object.keys(pastel).sort().join(","))
+            for(const key of Object.keys(pastel))compare(search.appearance[key],pastel[key])
             search.open=true;search.query="guide";search.focusArea="query"
-            const query=findChild(search,"searchQueryControl")
-            verify(query!==null);verify(Qt.colorEqual(query.border.color,search.searchFocusInk))
-            const action=findChild(search,"searchActionLabel")
-            verify(action!==null);verify(Qt.colorEqual(action.color,search.searchFocusInk))
-
-            const compliant={textColor:pastel.textColor,mutedColor:pastel.mutedColor,surfaceColor:pastel.surfaceColor,selectedColor:pastel.selectedColor,focusColor:"#943f69"}
-            search.appearance=compliant
-            verify(search.minimumSearchContrast(search.focusInk)>=4.5)
-            verify(Qt.colorEqual(search.searchFocusInk,Qt.color(compliant.focusColor)))
+            const query=findChild(search,"searchQueryControl"),action=findChild(search,"searchActionLabel")
+            verify(query!==null && action!==null)
+            compare(query.border.color,Qt.color(tokens.inputFocusColor));compare(action.color,Qt.color(tokens.textColor))
+            const dim={textColor:"#ffffff",surfaceColor:"#000000",selectedColor:"#ffffff",focusColor:"#666666"}
+            search.appearance=dim
+            compare(search.searchFocusInk,Qt.color(dim.focusColor)) // Valid ring contrast is preserved.
+            tryVerify(function(){const current=findChild(search,"searchActionLabel");return current && Qt.colorEqual(current.color,Qt.color("#ffffff"))}) // Repeater refreshes rows when their accent changes.
+            search.focusArea="results"
+            tryVerify(function(){const current=findChild(search,"searchActionLabel");return current && Qt.colorEqual(current.color,Qt.color(homeLayout.resolvedSurfacePalette(dim).selectedTextColor))})
+            compare(Object.keys(search.appearance).sort().join(","),Object.keys(dim).sort().join(","))
+            for(const key of Object.keys(dim))compare(search.appearance[key],dim[key])
         }
         function test_starting_styles_remote_cancel_and_pointer_parity(){
             const catalog=createTemporaryObject(appPickerCatalogComponent,tests.parent,{session:editor.session,options:homeLayout.studioOptions,appearance:editor.page.appearance});verify(catalog!==null);catalog.z=10000

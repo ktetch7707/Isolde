@@ -81,6 +81,7 @@ public:
     QVariantList studioPages() const;
     QVariantMap studioAppearance() const;
     QVariantMap homeAppearance() const;
+    Q_INVOKABLE QVariantMap resolvedSurfacePalette(const QVariantMap &appearance) const;
     Q_INVOKABLE QVariantMap surfaceAppearance(const QString &surface, const QString &originId = {}) const;
     bool load(const QString &defaultPath = {}, const QString &userPath = {});
     Q_INVOKABLE bool addAppTile(const QString &appId);

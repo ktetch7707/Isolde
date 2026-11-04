@@ -15,16 +15,12 @@ Item {
     property var shellActions: []
     property var appearance: ({})
     SurfacePalette {id:shell;appearance:root.appearance}
-    SystemPalette {id:systemPalette}
-    readonly property color ink:appearance.textColor || systemPalette.text
-    readonly property color muted:appearance.mutedColor || systemPalette.mid
-    readonly property color surface:appearance.surfaceColor || systemPalette.window
-    readonly property color focusInk:appearance.focusColor || systemPalette.highlight
-    readonly property color searchFocusInk: {
-        const configured = root.focusInk
-        return root.minimumSearchContrast(configured) >= 4.5 ? configured : root.bestSearchFocusInk()
-    }
-    readonly property color selectedSurface:appearance.selectedColor || systemPalette.highlight
+    readonly property color ink:shell.text
+    readonly property color muted:shell.muted
+    readonly property color surface:shell.surface
+    readonly property color focusInk:shell.focus
+    readonly property color searchFocusInk:shell.focus
+    readonly property color selectedSurface:shell.selected
     readonly property bool webSearchEnabled: searchSettings ? searchSettings.webEnabled : false
     property bool open: false
     property bool keyboardOpen: false
@@ -40,38 +36,6 @@ Item {
     signal pageSourceRequested(string pageId, string sourceId, string kind, string view, string value)
     signal closeRequested()
     signal shellActionRequested(var action)
-
-    function searchLuminance(value) {
-        const color = Qt.darker(value, 1)
-        function linear(channel) { return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4) }
-        return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b)
-    }
-
-    function searchContrast(foreground, background) {
-        const a = searchLuminance(foreground)
-        const b = searchLuminance(background)
-        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
-    }
-
-    function minimumSearchContrast(value) {
-        return Math.min(searchContrast(value, root.surface), searchContrast(value, root.selectedSurface))
-    }
-
-    function bestSearchFocusInk() {
-        if (minimumSearchContrast(root.ink) >= 4.5)
-            return root.ink
-        const candidates = ["#000000", "#ffffff"]
-        let best = candidates[0]
-        let bestContrast = minimumSearchContrast(best)
-        for (let i = 1; i < candidates.length; ++i) {
-            const contrast = minimumSearchContrast(candidates[i])
-            if (contrast > bestContrast) {
-                best = candidates[i]
-                bestContrast = contrast
-            }
-        }
-        return best
-    }
 
     readonly property var settingsTargets: [
         { kind: "setting", id: "settings-network", name: "Network", description: "Wi-Fi, saved networks, connection details", action: "Open Settings", section: 0, accent: shell.accent, symbol: "N" },
@@ -327,14 +291,14 @@ Item {
                 id:searchHeader
                 width: parent.width
                 height:56
-                Text {anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter; text: "Search"; color: root.ink; font.pixelSize: 34*(root.appearance.typographyScale || 1); font.weight: Font.DemiBold}
+                Text {font.family:shell.fontFamily;anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter; text: "Search"; color: root.ink; font.pixelSize: 34*(root.appearance.typographyScale || 1); font.weight: Font.DemiBold}
                 Switch {
                     id:webSwitch;objectName:"searchWebToggle";anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
                     visible:!!root.searchSettings;checked:root.webSearchEnabled
                     text:"Web search · "+(checked?"On":"Off")
                     Accessible.name:"Web search";Accessible.description:checked?"On. No web provider configured; local results only.":"Off. Local results only."
                     onClicked:{root.focusArea="web";root.lastHeader="web";root.searchSettings.toggleWebEnabled();checked=Qt.binding(()=>root.webSearchEnabled)}
-                    contentItem:Text {text:webSwitch.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter;rightPadding:webSwitch.indicator.width+12}
+                    contentItem:Text {font.family:shell.fontFamily;text:webSwitch.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter;rightPadding:webSwitch.indicator.width+12}
                     indicator:Rectangle {x:webSwitch.width-width;y:(webSwitch.height-height)/2;width:54;height:30;radius:height/2;color:webSwitch.checked?root.searchFocusInk:root.muted
                         Rectangle {width:24;height:24;radius:12;x:webSwitch.checked?parent.width-width-3:3;y:3;color:root.surface}
                     }
@@ -349,27 +313,27 @@ Item {
                 radius: 999
                 color: shell.input
                 border.width: root.keyboardOpen || root.focusArea==="query" ? 3 : 1
-                border.color: root.focusArea==="query" ? root.searchFocusInk : root.muted
-                Text {
+                border.color: shell.inputFocus
+                Text {font.family:shell.fontFamily;
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 24
                     text: root.query.length ? root.query : "Search your library, apps and settings"
-                    color: root.query.length ? shell.inputText : root.muted
-                    font.pixelSize: 22
+                    color: root.query.length ? shell.inputText : shell.inputMuted
+                    font.pixelSize: 22*shell.textScale
                 }
                 MouseArea {anchors.fill:parent;onClicked:{root.focusArea="query";root.lastHeader="query";root.keyboardOpen=true;searchKeyboard.value=root.query;searchKeyboard.selectedIndex=0}}
             }
 
-            Text {
+            Text {font.family:shell.fontFamily;
                 id:resultCount
                 text: root.results.length + " result" + (root.results.length === 1 ? "" : "s")
                 color: root.muted
-                font.pixelSize: 15
+                font.pixelSize: 15*shell.textScale
                 font.weight: Font.DemiBold
                 font.letterSpacing: 3
             }
-            Text {id:searchStatus;objectName:"searchWebStatus";width:parent.width;wrapMode:Text.WordWrap;text:root.searchSettings && root.searchSettings.errorString?root.searchSettings.errorString:root.webSearchEnabled?"No web provider configured — local results only":root.query.trim().length===1?"Type at least 2 characters to search your Kodi library":"Local results only";color:root.muted;font.pixelSize:14}
+            Text {font.family:shell.fontFamily;id:searchStatus;objectName:"searchWebStatus";width:parent.width;wrapMode:Text.WordWrap;text:root.searchSettings && root.searchSettings.errorString?root.searchSettings.errorString:root.webSearchEnabled?"No web provider configured — local results only":root.query.trim().length===1?"Type at least 2 characters to search your Kodi library":"Local results only";color:root.muted;font.pixelSize:14}
 
             Flickable {
                 id: resultScroller
@@ -394,20 +358,20 @@ Item {
                             radius: 12
                             color: root.selectedIndex === index && root.focusArea==="results" ? root.selectedSurface : root.surface
                             border.width: root.selectedIndex === index && root.focusArea==="results" ? 3 : 1
-                            border.color: root.selectedIndex===index && root.focusArea==="results" ? root.searchFocusInk : root.muted
+                            border.color: root.selectedIndex===index && root.focusArea==="results" ? shell.selectedFocus : shell.outline
                             Rectangle {
                                 objectName: "searchResultIcon-"+index
                                 width: 48; height: 48; radius: 12; clip: true
                                 anchors.left: parent.left; anchors.leftMargin: 14; anchors.verticalCenter: parent.verticalCenter
                                 color: modelData.logoSource ? "transparent" : shell.elevated
                                 Image { anchors.fill:parent; source:modelData.logoSource || ""; fillMode:Image.PreserveAspectFit; visible:!!modelData.logoSource }
-                                Text {
+                                Text {font.family:shell.fontFamily;
                                     objectName: "searchResultSymbol-"+index
                                     anchors.fill: parent; anchors.margins: 4
                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                                     visible:!modelData.logoSource; text: modelData.symbol; textFormat: Text.PlainText
                                     elide: Text.ElideRight; maximumLineCount: 1
-                                    color: shell.elevatedText; font.pixelSize: 20; font.weight: Font.DemiBold
+                                    color: shell.elevatedText; font.pixelSize: 20*shell.textScale; font.weight: Font.DemiBold
                                 }
                             }
                             Column {
@@ -415,25 +379,25 @@ Item {
                                 anchors.right: actionLabel.left; anchors.rightMargin: 18
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: 3
-                                Text { objectName:"searchResultTitle-"+index; text: modelData.name; textFormat:Text.PlainText; color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : root.ink; font.pixelSize: 21; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                                Text { text: modelData.description; textFormat:Text.PlainText; color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : root.muted; font.pixelSize: 14; elide: Text.ElideRight; width: parent.width }
+                                Text {font.family:shell.fontFamily; objectName:"searchResultTitle-"+index; text: modelData.name; textFormat:Text.PlainText; color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : root.ink; font.pixelSize: 21*shell.textScale; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
+                                Text {font.family:shell.fontFamily; text: modelData.description; textFormat:Text.PlainText; color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : root.muted; font.pixelSize: 14*shell.textScale; elide: Text.ElideRight; width: parent.width }
                             }
-                            Text {
+                            Text {font.family:shell.fontFamily;
                                 id: actionLabel
                                 objectName: "searchActionLabel"
                                 anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.action
-                                color: root.searchFocusInk
-                                font.pixelSize: 15
+                                color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : shell.text
+                                font.pixelSize: 15*shell.textScale
                                 font.weight: Font.DemiBold
                             }
                         }
                     }
-                    Text {
+                    Text {font.family:shell.fontFamily;
                         visible: root.results.length === 0
                         text: "No matches. Select the search field to edit."
                         color: root.muted
-                        font.pixelSize: 22
+                        font.pixelSize: 22*shell.textScale
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         topPadding: 70
@@ -441,11 +405,11 @@ Item {
                 }
             }
 
-            Text {
+            Text {font.family:shell.fontFamily;
                 id:searchFooter
                 text: root.keyboardOpen ? "D-pad type · Confirm selects · Back closes keyboard" : "D-pad navigate · Confirm selects · Back closes Search"
                 color: root.muted
-                font.pixelSize: 15
+                font.pixelSize: 15*shell.textScale
             }
         }
     }

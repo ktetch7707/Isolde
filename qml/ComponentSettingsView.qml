@@ -43,14 +43,14 @@ Item {
                 }
             }
             Rectangle {
-                width: parent.width; height: 60; radius: shell.radius; color: shell.selected; border.color: shell.text
-                Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: componentHealth.busy ? "Checking…" : "Check again · Enter"; color: shell.text; font.pixelSize: 20 * shell.textScale }
+                width: parent.width; height: 60; radius: shell.radius; color: shell.selected; border.color: shell.selectedFocus
+                Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: componentHealth.busy ? "Checking…" : "Check again · Enter"; color: shell.selectedText; font.pixelSize: 20 * shell.textScale }
                 MouseArea { anchors.fill: parent; onClicked: componentHealth.refresh() }
             }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Capture setup is available under System → HDMI Inputs. Device presence and installed runtimes do not certify signal, switch routing, or hardware compatibility."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
             Rectangle {
                 width: parent.width; height: 60; radius: shell.radius; color: shell.surface
-                border.width: root.captureSetupFocused ? 3 : 1; border.color: root.captureSetupFocused ? shell.text : shell.focus
+                border.width: root.captureSetupFocused ? 3 : 1; border.color: root.captureSetupFocused ? shell.focus : shell.outline
                 Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: "Open HDMI Inputs"; color: shell.text; font.pixelSize: 19 * shell.textScale; font.weight: Font.DemiBold }
                 MouseArea { anchors.fill: parent; onClicked: root.captureSetupRequested() }
             }

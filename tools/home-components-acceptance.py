@@ -40,6 +40,38 @@ def studio_legacy_menu(layout, key, index):
     studio_page_menu(layout, key, actions[index])
 
 
+def capture_x11_window(x11, display, window, path):
+    """Capture the owned installed window; XWayland's root drawable is not readable."""
+    from PIL import Image
+    class Frame(ctypes.Structure):
+        _fields_=[("width",ctypes.c_int),("height",ctypes.c_int),("xoffset",ctypes.c_int),("format",ctypes.c_int),
+            ("data",ctypes.c_void_p),("byte_order",ctypes.c_int),("bitmap_unit",ctypes.c_int),
+            ("bitmap_bit_order",ctypes.c_int),("bitmap_pad",ctypes.c_int),("depth",ctypes.c_int),
+            ("bytes_per_line",ctypes.c_int),("bits_per_pixel",ctypes.c_int),
+            ("red_mask",ctypes.c_ulong),("green_mask",ctypes.c_ulong),("blue_mask",ctypes.c_ulong)]
+    x11.XGetGeometry.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.POINTER(ctypes.c_ulong),ctypes.POINTER(ctypes.c_int),ctypes.POINTER(ctypes.c_int),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint),ctypes.POINTER(ctypes.c_uint)]
+    x11.XGetGeometry.restype=ctypes.c_int
+    owner=ctypes.c_ulong();left=ctypes.c_int();top=ctypes.c_int()
+    width=ctypes.c_uint();height=ctypes.c_uint();border=ctypes.c_uint();depth=ctypes.c_uint()
+    if not x11.XGetGeometry(display,window,ctypes.byref(owner),ctypes.byref(left),ctypes.byref(top),ctypes.byref(width),ctypes.byref(height),ctypes.byref(border),ctypes.byref(depth)):
+        raise RuntimeError("Cannot measure owned X11 acceptance window")
+    if not (0<width.value<=3840 and 0<height.value<=2160):raise RuntimeError("Unsupported acceptance window bounds")
+    x11.XGetImage.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctypes.c_int,ctypes.c_uint,ctypes.c_uint,ctypes.c_ulong,ctypes.c_int]
+    x11.XGetImage.restype=ctypes.POINTER(Frame)
+    x11.XDestroyImage.argtypes=[ctypes.POINTER(Frame)];x11.XDestroyImage.restype=ctypes.c_int
+    frame=x11.XGetImage(display,window,0,0,width.value,height.value,ctypes.c_ulong(-1).value,2)
+    if not frame:raise RuntimeError("Cannot read owned X11 acceptance window")
+    try:
+        data=frame.contents
+        if data.byte_order!=0 or data.bits_per_pixel not in (24,32) or (data.red_mask,data.green_mask,data.blue_mask)!=(0xff0000,0xff00,0xff):
+            raise RuntimeError("Unsupported X11 acceptance pixel format")
+        if data.width!=width.value or data.height!=height.value or not (data.width*data.bits_per_pixel//8<=data.bytes_per_line<=data.width*4+64):
+            raise RuntimeError("Invalid X11 acceptance image geometry")
+        raw=ctypes.string_at(data.data,data.bytes_per_line*data.height)
+        Image.frombytes("RGB",(data.width,data.height),raw,"raw","BGRX" if data.bits_per_pixel==32 else "BGR",data.bytes_per_line,1).save(path)
+    finally:x11.XDestroyImage(frame)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
@@ -47,11 +79,16 @@ def main():
     parser.add_argument("--studio", action="store_true", help="Exercise draft canvas, remote editing, history, preview and Apply")
     parser.add_argument("--catalog", action="store_true", help="Exercise real remote image import, framing, GIF Apply and reopen")
     parser.add_argument("--collections", action="store_true", help="Exercise real collection registry/session lifecycle in a private profile")
+    parser.add_argument("--themes-controls-only", action="store_true", help="Review Audio/Ambient values and explicit private draft discard")
+    parser.add_argument("--themes-custom-only", action="store_true", help="Complete only the custom palette and private policy controls")
+    parser.add_argument("--themes-faults-only", action="store_true", help="Review installed loading, RPC error and retry under three palettes")
+    parser.add_argument("--themes-only", action="store_true", help="Review shared shell surfaces under three private Home/origin palettes")
     parser.add_argument("--search-only", action="store_true", help="Verify denied-network local Search and exact recovery without replaying Studio design workflows")
     parser.add_argument("--designs-only", action="store_true", help="Exercise templates, reuse, portability, reference imagery and restore in a separate bounded journey")
     parser.add_argument("--desktop", action="store_true", help="Compare actual X11 pointer drag and remote saved output in the Studio fixture")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
     args = parser.parse_args()
+    if args.themes_faults_only or args.themes_custom_only or args.themes_controls_only: args.themes_only = True
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     executable = args.executable.resolve(strict=True)
@@ -69,6 +106,10 @@ def main():
         original_bytes, collection_fixture = prepare_collections(evidence, executable)
     if args.catalog:
         prepare_catalog(evidence)
+    theme_provider = prepare_theme_provider(evidence) if args.themes_only else None
+    if args.themes_only:
+        original = theme_document(2 if args.themes_custom_only else 0)
+        original_bytes = json.dumps(original).encode()
     layout.write_bytes(original_bytes)
     (config / "device-setup.json").write_text(json.dumps({"version": 1, "step": 6, "complete": True}))
     (config / "Kodi.conf").write_text("[profiles]\ndefault\\kodi\\autoStart=false\n")
@@ -208,7 +249,15 @@ def main():
                 try:
                     child_window = None
                     for _ in range(80):
-                        for line in run("wmctrl", "-lp", env=env).splitlines():
+                        try:
+                            listing=run("wmctrl", "-lp", env=env)
+                        except subprocess.CalledProcessError as error:
+                            diagnostic=(error.stdout or "")+(error.stderr or "")
+                            if error.returncode!=1 or (diagnostic.strip() and "Cannot get client list properties" not in diagnostic):
+                                print("WMCTRL_DISCOVERY_ERROR "+repr({"code":error.returncode,"stdout":error.stdout,"stderr":error.stderr}),flush=True)
+                                raise
+                            listing=""  # No client list during bounded private-window startup.
+                        for line in listing.splitlines():
                             fields = line.split(None, 4)
                             if len(fields) >= 3 and fields[2] == str(child.pid):
                                 child_window = fields[0]
@@ -253,6 +302,93 @@ def main():
                             raise RuntimeError("Studio exited during capture")
                         time.sleep(0.1)
 
+                if args.themes_only:
+                    native_directory = evidence / "data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
+                    native_before = {str(f.relative_to(native_directory)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
+                    phases = []
+                    def snap(tag, name):
+                        phase=tag+name;time.sleep(.35);capture(phase);phases.append(phase)
+                        assert layout.read_bytes()==original_bytes,"Theme route rewrote fixture layout"
+                    def origin():
+                        key("Home");key("Up",6);key("Down");key("Left",4);key("Return");key("Up",6);key("Down");key("Left",4)
+                    def settings_section(index):
+                        origin();key("Up",6);key("Return");key("Up",8);key("Down",index);key("Return")
+                    for sequence,case in enumerate((2,) if args.themes_custom_only else range(3)):
+                        tag=("dark","pastel","custom")[case]
+                        if sequence:
+                            process.terminate();process.wait(timeout=10)
+                            original_bytes=json.dumps(theme_document(case)).encode();layout.write_bytes(original_bytes)
+                            process,window,focused=start_shell()
+                        if args.themes_controls_only:
+                            for row,name in ((1,"audio"),(2,"ambient")):
+                                settings_section(4);key("Up",12);key("Down",row);key("Return");snap(tag,name);key("Escape")
+                            key("Home");snap(tag,"return")
+                            continue
+                        if args.themes_faults_only:
+                            origin();key("Down");key("Right");key("Return");snap(tag,"gallery");key("Escape")
+                            origin();key("Return")
+                            expect(lambda:theme_provider.completed_movies>0,"Installed movie boundary ready")
+                            key("Up",20);key("Right",20)
+                            theme_provider.mode="loading";theme_provider.release.clear()
+                            previous=theme_provider.completed_movies;key("Return")
+                            # Capture the real installed X11 frame before host transport
+                            # acknowledgement can outlast the production RPC deadline.
+                            capture_x11_window(x11,display,int(window,16),evidence/(tag+"loading-frame.png"))
+                            theme_provider.release.set()
+                            expect(lambda:theme_provider.completed_movies>previous,"Loading request completed")
+                            snap(tag,"loading")
+                            theme_provider.mode="error";previous=theme_provider.expected_errors
+                            key("Return");expect(lambda:theme_provider.expected_errors>previous,"Controlled RPC outage returned")
+                            snap(tag,"error")
+                            theme_provider.mode="normal";previous=theme_provider.completed_movies
+                            key("Return");expect(lambda:theme_provider.completed_movies>previous,"Installed retry recovered")
+                            snap(tag,"retry");key("Home");snap(tag,"return")
+                            continue
+                        snap(tag,"home")
+                        origin();snap(tag,"origin")
+                        key("XF86Search");snap(tag,"search")
+                        key("Return");snap(tag,"searchkeyboard");key("Escape");key("Escape")
+                        snap(tag,"searchreturn")
+                        origin();key("Down");key("Right");key("Return");snap(tag,"gallery");key("Escape");snap(tag,"galleryreturn")
+                        origin();key("Return")
+                        expect(lambda:any(r["method"]=="VideoLibrary.GetMovies" for r in theme_provider.requests),"Theme Movies uses production Kodi client")
+                        snap(tag,"movies");key("Menu");snap(tag,"details");key("Escape")
+                        key("Up",20);key("Right");key("Return");snap(tag,"shows")
+                        key("Return");snap(tag,"seasons");key("Return");snap(tag,"episodes")
+                        settings_section(0);snap(tag,"network")
+                        key("Up",12);key("Down",2);key("Return");snap(tag,"networkkeyboard");key("Escape");key("Escape")
+                        for section,name in ((2,"sources"),(3,"remotes"),(5,"profiles"),(6,"vpn"),(7,"storepreferences")):
+                            settings_section(section);snap(tag,name)
+                        settings_section(4);snap(tag,"system")
+                        for row,name in ((0,"display"),(1,"audio"),(2,"ambient"),(6,"media"),(7,"components"),(8,"inputs")):
+                            settings_section(4);key("Up",12);key("Down",row);key("Return");snap(tag,name)
+                            if row==6:
+                                key("Up",12);key("Down",6);key("Return");snap(tag,"folders")
+                                key("Escape");key("Down",2);key("Return");snap(tag,"import");key("Escape")
+                            key("Escape")
+                        origin();key("Right",2);key("Return");snap(tag,"apps")
+                        key("Menu");snap(tag,"appdialog");key("Escape")
+                        key("Up");key("Left",12);key("Return");snap(tag,"appkeyboard")
+                        key("Escape");key("Home");snap(tag,"return")
+                    if args.themes_faults_only:
+                        native_after={str(f.relative_to(native_directory)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
+                        assert native_before==native_after and native_before
+                        assert not theme_provider.errors,theme_provider.errors
+                        (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="themefaults",freshProfile=True,normalProfileUsed=False,palettes=["dark","pastel","custom"],phases=phases,layoutBytesUnchanged=True,nativeKodiBefore=native_before,nativeKodiAfter=native_after,controlledFaults=3,loadingFrames={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in evidence.glob("*loading-frame.png")}),indent=2))
+                        return
+                    key("Home");key("Up",20);key("Right");key("Return")
+                    studio_page_menu(layout,key,"appearance")
+                    key("Down",5);key("Return");key("Return");key("Down",2);key("Return")
+                    key("Down");key("Return");key("Down");key("Return");snap("custom","policy")
+                    key("Menu");snap("custom","reset")
+                    key("Return");key("Down");key("Return")  # Keep an explicit dirty custom draft to discard.
+                    key("Escape",4);key("Down");key("Return");key("Down");key("Return");snap("custom","cancel")
+                    native_after={str(f.relative_to(native_directory)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
+                    assert native_before==native_after and native_before,"Appearance changed native Kodi fixture settings"
+                    assert not theme_provider.errors,theme_provider.errors
+                    (evidence/"result.json").write_text(json.dumps({"passed":True,"journey":"themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes","executable":str(executable),"freshProfile":True,"normalProfileUsed":False,"palettes":["custom"] if args.themes_custom_only else ["dark","pastel","custom"],"phases":phases,"fixtureOnly":True,"nativeKodiBefore":native_before,"nativeKodiAfter":native_after,"layoutBytesUnchanged":True},indent=2))
+                    print("Evidence: "+str(evidence),flush=True)
+                    return
                 if args.search_only:
                     key("Up",30); capture("searchhome")
                     key("Menu"); key("Return"); offline_module.remote_text(key,"settings")
@@ -570,6 +706,8 @@ def main():
                 process.wait(timeout=8)
             except subprocess.TimeoutExpired:
                 process.kill(); process.wait()
+        if theme_provider:
+            theme_provider.close()
         x11.XCloseDisplay(display)
         if active:
             run("systemctl", "--user", "start", "isolde.service")
@@ -581,6 +719,89 @@ def main():
             result["actualInputActions"] = len(input_trace)
             result["journeyElapsedSeconds"] = time.monotonic()-journey_started
             result_path.write_text(json.dumps(result,indent=2))
+
+
+def theme_palettes():
+    return [
+        dict(backgroundStart="#19191e",backgroundEnd="#101014",surfaceColor="#202126",selectedColor="#353039",textColor="#f5f1f3",mutedColor="#ccc6cf",focusColor="#c994a5",motionEnabled=True,highContrast=False),
+        dict(backgroundStart="#f5edf3",backgroundEnd="#e9d8e3",surfaceColor="#f5edf3",selectedColor="#e9d8e3",textColor="#241d2b",mutedColor="#514b67",focusColor="#6d3b69",motionEnabled=True,highContrast=False),
+        dict(backgroundStart="#0c3935",backgroundEnd="#081f2d",surfaceColor="#0c3935",selectedColor="#f4e8ce",elevatedColor="#f4e8ce",inputColor="#f4e8ce",textColor="#f4e8ce",mutedColor="#f4e8ce",focusColor="#ffdf78",motionEnabled=False,highContrast=True),
+    ]
+
+
+def theme_document(index):
+    palettes=theme_palettes()
+    composition=dict(schemaVersion=1,enabled=True,grid=dict(columns=4,rows=3,mode="screen"),pageNavigation="none")
+    def item(identity,kind,x,**values):
+        if kind=="app":
+            values["action"]=dict(schemaVersion=1,type="launch-app",appId=values["appId"])
+            values["source"]=dict(schemaVersion=1,provider="apps",kind="app",id=values["appId"])
+        else:values["source"]=dict(schemaVersion=1,provider="shell",kind="page",id=values["action"]["pageId"])
+        return dict(schemaVersion=1,componentType="launcher",id=identity.lower().replace(" ","-"),kind=kind,name=identity,placement=dict(x=x,y=0,width=1,height=1),**values)
+    origin=dict(schemaVersion=2,theme=palettes[(index+1)%3],composition=composition,categories=[],components=[
+        item("Movies","app",0,appId="movies"),item("Shows","app",1,appId="shows"),item("Apps","app",2,appId="app-store")])
+    preset=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["componentPresets"]["app-bar"]
+    preset.update(schemaVersion=1,id="theme-apps",name="Apps",source=dict(schemaVersion=1,provider="shell",kind="container"),placement=dict(x=0,y=1,width=4,height=1))
+    preset["appCollection"]=dict(mode="all",ids=[],showStore=False)
+    preset["presentation"]["layout"]["visibleColumns"]=2
+    origin["components"].append(preset)
+    designated=dict(schemaVersion=2,theme=palettes[index],composition=composition,categories=[],components=[
+        item("Open themed page","action",0,action=dict(schemaVersion=1,type="open-page",pageId="theme-origin"))])
+    return dict(schemaVersion=2,theme=palettes[(index+2)%3],composition=composition,categories=[],components=designated["components"],
+        homePageId="theme-home",pages=[dict(id="theme-home",name="Palette Home",layout=designated),
+                                     dict(id="theme-origin",name="Theme origin",layout=origin)])
+
+
+def prepare_theme_provider(evidence):
+    from reference_collections import ReferenceCollections
+    repository=Path(__file__).resolve().parents[1]
+    fixture=json.loads((repository/"tests/visual/home-pastel-reference/collections.json").read_text())
+    class ThemeProvider(ReferenceCollections):
+        mode="normal"
+        completed_movies=0
+        expected_errors=0
+        def __init__(self,*args):
+            import threading
+            self.release=threading.Event();self.release.set()
+            super().__init__(*args)
+        def serve(self):
+            import socket
+            while not self.stopped.is_set():
+                try:connection,_=self.socket.accept()
+                except socket.timeout:continue
+                except OSError:return
+                with connection:
+                    connection.settimeout(2)
+                    try:
+                        message=b""
+                        while not message.endswith(b"\n") and len(message)<=65536:
+                            chunk=connection.recv(65536)
+                            if not chunk:raise ValueError("Incomplete theme fixture request")
+                            message+=chunk
+                        request=json.loads(message);self.requests.append(request)
+                        movies=request["method"]=="VideoLibrary.GetMovies"
+                        response={"jsonrpc":"2.0","id":request["id"]}
+                        if movies and self.mode=="loading":
+                            if not self.release.wait(15):raise ValueError("Theme loading gate not released")
+                        if movies and self.mode=="error":
+                            response["error"]={"code":-32000,"message":"Isolated theme outage"};self.expected_errors+=1
+                        else:
+                            response["result"]=self.reply(request)
+                            if movies:self.completed_movies+=1
+                        connection.sendall(json.dumps(response).encode()+b"\n")
+                    except (OSError,ValueError,KeyError) as error:self.errors.append(str(error))
+        def reply(self,request):
+            method=request["method"]
+            if method in {"VideoLibrary.GetTVShows","VideoLibrary.GetSeasons"}:
+                key="tvshows" if method.endswith("TVShows") else "seasons"
+                identity="tvshowid" if key=="tvshows" else "seasonid"
+                return {key:[{identity:7,"tvshowid":7,"title":"Isolated theme television", "season":1,"episode":1,"watchedepisodes":0}],"limits":{"start":0,"end":1,"total":1}}
+            return super().reply(request)
+    provider=ThemeProvider(evidence,fixture,repository)
+    native=evidence/"data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
+    for name in ("guisettings.xml","sources.xml"):
+        (native/name).write_text("<isolated-theme-fixture>keep native Kodi owned data</isolated-theme-fixture>")
+    return provider
 
 
 # Collection acceptance stays in this helper so the SHA-addressed overlay

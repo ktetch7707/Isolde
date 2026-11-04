@@ -95,6 +95,7 @@ public:
         file.close();
         return home.load(QStringLiteral(STUDIO_DEFAULTS), saved);
     }
+    Q_INVOKABLE QVariantMap surfacePalette(const QVariantMap &appearance) const { return ComponentSchema::surfacePalette(appearance); }
     Q_INVOKABLE QString disk() const {
         QFile file(saved);
         return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();

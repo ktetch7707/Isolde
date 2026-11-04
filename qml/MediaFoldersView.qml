@@ -57,7 +57,7 @@ Item {
                     width: parent.width; height: label.implicitHeight + 32; radius: shell.radius
                     color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 2 : 0
-                    border.color: shell.focus
+                    border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
                     Text { font.family: shell.fontFamily; id: label; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 16
                         text: root.pendingRemoval === modelData ? "Remove permission? Press OK again: " + modelData : modelData
                         wrapMode: Text.WrapAnywhere; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 19 * shell.textScale }

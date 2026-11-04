@@ -140,6 +140,7 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "studio_safety": "isolde_studio_quick_tests",
           "studio_selection": "isolde_studio_quick_tests",
           "studio_artwork": "isolde_studio_quick_tests",
+          "shell_appearance": ("isolde_studio_quick_tests", "isolde_home_navigation_tests", "isolde_surface_appearance_tests"),
           "studio_visuals": ("isolde_studio_quick_tests", "isolde_home_navigation_tests"),
           "studio_colors": "isolde_studio_quick_tests",
           "studio_workflows": "isolde_studio_quick_tests",
@@ -168,6 +169,8 @@ def suite_selection(suite):
     pattern = "^(studio_quick|studio_safety|studio_selection|studio_artwork|studio_colors|studio_color_interactions|studio_workflows|studio_cutover|studio_performance|studio_reuse|studio_designs|studio_design_contracts|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "studio_closure_regressions":
         pattern="^(studio_quick|studio_colors|studio_color_interactions|home_component_navigation|studio_design_contracts|studio_performance)$"
+    if suite == "shell_appearance":
+        pattern = "^(studio_selection|studio_shell|surface_appearance_contracts|home_component_navigation)$"
     if suite == "studio_visuals":
         pattern = "^(studio_quick|studio_artwork|studio_shell|home_component_navigation|studio_navigation)$"
     if suite == "studio_remaining":
@@ -193,7 +196,8 @@ def suite_selection(suite):
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
-CASES = {"catalog": ("home-components-acceptance.py", ["--studio", "--catalog", "--inspect"]),
+CASES = {"themecontrols": ("home-components-acceptance.py", ["--studio", "--themes-controls-only", "--inspect"]), "themecustom": ("home-components-acceptance.py", ["--studio", "--themes-custom-only", "--inspect"]), "themefaults": ("home-components-acceptance.py", ["--studio", "--themes-faults-only", "--inspect"]), "themes": ("home-components-acceptance.py", ["--studio", "--themes-only", "--inspect"]),
+         "catalog": ("home-components-acceptance.py", ["--studio", "--catalog", "--inspect"]),
          "collections": ("home-components-acceptance.py", ["--studio", "--collections", "--inspect"]),
          "history": ("tv-library-acceptance.py", ["--history", "--inspect"]),
          "studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
@@ -345,6 +349,32 @@ def visual_result_passed(case, result):
                 and result.get("reset_verified") is True
                 and result.get("settings_skin_round_trip") is True
                 and result.get("saved_skin_survives_reset") is True)
+    if case == "themecontrols":
+        phases={tag+phase for tag in ("dark","pastel","custom") for phase in ("audio","ambient","return")} | {"custompolicy","customreset","customcancel"}
+        return (result.get("passed") is True and result.get("journey")==case
+            and result.get("freshProfile") is True and result.get("normalProfileUsed") is False
+            and set(result.get("phases",[]))==phases and result.get("palettes")==["dark","pastel","custom"]
+            and result.get("layoutBytesUnchanged") is True
+            and bool(result.get("nativeKodiBefore")) and result.get("nativeKodiBefore")==result.get("nativeKodiAfter"))
+    if case == "themefaults":
+        phases={tag+phase for tag in ("dark","pastel","custom") for phase in ("gallery","loading","error","retry","return")}
+        return (result.get("passed") is True and result.get("journey")=="themefaults"
+            and result.get("freshProfile") is True and result.get("normalProfileUsed") is False
+            and set(result.get("phases",[]))==phases and result.get("palettes")==["dark","pastel","custom"]
+            and result.get("controlledFaults")==3 and result.get("layoutBytesUnchanged") is True
+            and set(result.get("loadingFrames",{}))=={tag+"loading-frame.png" for tag in ("dark","pastel","custom")}
+            and all(re.fullmatch(r"[0-9a-f]{64}",v) for v in result["loadingFrames"].values())
+            and bool(result.get("nativeKodiBefore")) and result.get("nativeKodiBefore")==result.get("nativeKodiAfter"))
+    if case in {"themes","themecustom"}:
+        phases=("home","origin","search","searchkeyboard","searchreturn","gallery","galleryreturn","movies","details","shows","seasons","episodes","network","networkkeyboard","sources","remotes","profiles","vpn","storepreferences","system","display","audio","ambient","media","folders","import","components","inputs","apps","appdialog","appkeyboard","return")
+        palettes=["custom"] if case=="themecustom" else ["dark","pastel","custom"]
+        required={tag+phase for tag in palettes for phase in phases} | {"custompolicy","customreset","customcancel"}
+        return (result.get("passed") is True and result.get("journey")==case
+                and result.get("freshProfile") is True and result.get("normalProfileUsed") is False
+                and result.get("palettes")==palettes
+                and required.issubset(set(result.get("phases",[])))
+                and result.get("layoutBytesUnchanged") is True
+                and bool(result.get("nativeKodiBefore")) and result.get("nativeKodiBefore")==result.get("nativeKodiAfter"))
     return result.get("passed") is True
 
 
@@ -392,16 +422,16 @@ def feature_helper_command(source, helper, executable, flags):
 
 
 def verified_studio_helper(root, expected, kind='studio'):
-    if kind not in {'studio','history','reference'}:raise RuntimeError('Unsupported bounded helper kind')
+    if kind not in {'studio','history','reference','reference-collections'}:raise RuntimeError('Unsupported bounded helper kind')
     if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):raise RuntimeError('Studio requires an exact helper digest')
     path=root/'bin'/(kind+'-helper-'+expected+'.py')
     if path.is_symlink() or path.resolve()!=path or not path.is_file() or digest(path)!=expected:raise RuntimeError('Studio helper identity mismatch')
     return path
 
 
-def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False, designs=False, search=False):
+def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False, designs=False, search=False, themes=False, themefaults=False, themecustom=False, themecontrols=False):
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+['--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+(['--themes-only'] if themes else [])+(['--themes-faults-only'] if themefaults else [])+(['--themes-custom-only'] if themecustom else [])+(['--themes-controls-only'] if themecontrols else [])+['--inspect']
 
 
 def history_helper_command(source, helper, executable, pages=False):
@@ -409,9 +439,15 @@ def history_helper_command(source, helper, executable, pages=False):
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/tv-library-acceptance.py'),str(executable),'--pages' if pages else '--history','--inspect']
 
 
-def reference_helper_command(source, helper, executable, flags):
-    bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-reference-acceptance.py'),str(executable)]+flags
+def reference_helper_command(source, helper, executable, flags, collections_helper=None):
+    bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);collections=sys.argv.pop(1);"
+    bootstrap+="import importlib.util;"
+    bootstrap+="spec=importlib.util.spec_from_file_location('reference_collections',collections) if collections else None;"
+    bootstrap+="module=importlib.util.module_from_spec(spec) if spec else None;"
+    bootstrap+="exec(compile(Path(collections).read_bytes(),str(Path(frozen).with_name('reference_collections.py')),'exec'),module.__dict__) if module else None;"
+    bootstrap+="sys.modules.update({'reference_collections':module}) if module else None;"
+    bootstrap+="sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-reference-acceptance.py'),str(collections_helper) if collections_helper else '',str(executable)]+flags
 
 
 def guide_backend_diagnostics(run):
@@ -639,7 +675,25 @@ def write_soak_receipt(run, evidence, executable):
     atomic_json(run/'guide-soak-receipt.json',{'receipt':str(receipts[0]),'sourceDigest':digest(run/'files.sha256'),'executableSha256':digest(executable)})
 
 
-def qml_coverage(root, run, base_id, suite, expected_suite, qml, harness, label):
+def original_full_payload_matches(base, result):
+    """A pruned staged copy may use its exact retained installed release bytes."""
+    payload = base / "payload"
+    if payload.is_symlink() or payload.resolve() != payload:
+        raise RuntimeError("Original full staged payload path is redirected")
+    if payload.exists():
+        return payload_hashes(payload) == result.get("payload")
+    record = base / "deploy-result.json"
+    if record.is_symlink() or not record.is_file():
+        raise RuntimeError("Original full payload and installed receipt are missing")
+    release = Path(json.loads(record.read_text())["release"])
+    releases = Path.home() / ".local/share/isolde-appliance/releases"
+    if (release.parent != releases or not re.fullmatch(r"[0-9a-f]{24}", release.name)
+            or release.resolve() != release or not release.is_dir()):
+        raise RuntimeError("Original full installed payload path is unsafe or missing")
+    return payload_hashes(release) == result.get("payload")
+
+
+def qml_coverage(root, run, base_id, suite, expected_suite, qml, harness, label, added_harness=frozenset()):
     """Verify original full coverage and an explicit bounded QML delta."""
     if suite!=expected_suite or not isinstance(base_id,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',base_id):
         raise RuntimeError(label+' QML reuse requires '+expected_suite+' and an exact base run')
@@ -649,13 +703,13 @@ def qml_coverage(root, run, base_id, suite, expected_suite, qml, harness, label)
     result=json.loads((base/'test-result.json').read_text())
     if result.get('passed') is not True or result.get('fullSuite') is not True or result.get('sourceDigest')!=digest(base/'files.sha256'):
         raise RuntimeError('Guide QML reuse requires a passing original full suite')
-    if payload_hashes(base/'payload')!=result.get('payload'):
+    if not original_full_payload_matches(base,result):
         raise RuntimeError('Full-suite base payload changed')
     before=manifest(base/'files.sha256');after=manifest(run/'files.sha256')
     changed=sorted(name for name in before.keys()|after.keys() if before.get(name)!=after.get(name))
     if not qml.intersection(changed) or any(name not in qml|harness and not name.startswith('docs/') for name in changed):
         raise RuntimeError('Source changes exceed the focused '+label+' QML coverage boundary')
-    if any(name not in before or name not in after for name in changed):
+    if any(name not in after or (name not in before and name not in added_harness) for name in changed):
         raise RuntimeError('Guide QML reuse cannot add or remove source files')
     return {'baseRunId':base_id,'baseSourceDigest':result['sourceDigest'],
             'sourceDigest':digest(run/'files.sha256'),'changedPaths':changed,'changed'+label+'Qml':sorted(qml.intersection(changed))}
@@ -669,6 +723,11 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 
 def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='shell_appearance':
+        return qml_coverage(root,run,base_id,suite,'shell_appearance',{'qml/NetworkSettingsView.qml','qml/PageAppCarousel.qml','qml/OrbCard.qml','qml/AudioSettingsView.qml','qml/AmbientSettingsView.qml'},
+            {'tests/studio/tst_shell.qml','tests/tst_surface_appearance.cpp','tests/fixtures/shell-theme-routes.json',
+             'tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/reference_collections.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1'},
+            'ShellKeyboard',{'tests/fixtures/shell-theme-routes.json'})
     if suite=='studio_visuals':
         return qml_coverage(root,run,base_id,suite,'studio_visuals',
             {'qml/PageStudioView.qml','qml/CommandCenter.qml'},
@@ -968,6 +1027,7 @@ class Oracle:
             if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors","studio_color_interactions"}
             if suite == "studio_closure_regressions":expected={"studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance"}
             if suite == "studio_colors":expected={"studio_colors","studio_color_interactions"}
+            if suite == "shell_appearance":expected={"studio_selection","studio_shell","surface_appearance_contracts","home_component_navigation"}
             if suite == "studio_visuals":expected={"studio_quick","studio_artwork","studio_shell","home_component_navigation","studio_navigation"}
             if suite == "studio_remaining":expected={"studio_quick","studio_performance","studio_design_contracts","component_contracts"}
             if suite == "studio_performance":expected={"studio_performance","studio_design_contracts","component_contracts"}
@@ -1039,7 +1099,7 @@ class Oracle:
             if bundle.resolve()!=bundle or hashes.resolve()!=hashes or digest(hashes)!=maintenance_tests_digest:
                 raise RuntimeError("Maintenance self-test bundle checksum mismatch")
             entries=manifest(hashes)
-            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tools/home-components-acceptance.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt"} or entries["tools/vm-oracle.py"]!=driver_digest:
+            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tools/home-components-acceptance.py","tools/reference_collections.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt","config/studio-defaults.json","tests/fixtures/shell-theme-routes.json"} or entries["tools/vm-oracle.py"]!=driver_digest:
                 raise RuntimeError("Unexpected maintenance self-test dependencies")
             if any((bundle/name).resolve()!=bundle/name for name in entries):
                 raise RuntimeError("Redirected maintenance self-test dependency")
@@ -1175,11 +1235,12 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None):
+    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None):
+        if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
         if history_helper_digest and case not in ('history','pages'):raise RuntimeError('Library helper is history/pages-only')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
-        if studio_helper_digest and case not in ('studio','studio-designs','studio-search','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
+        if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
@@ -1196,15 +1257,17 @@ class Oracle:
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
         if reference_helper_digest:
             helper=verified_studio_helper(self.root,reference_helper_digest,'reference')
-            command=reference_helper_command(source,helper,executable,flags)
+            collections_helper=verified_studio_helper(self.root,reference_collections_digest,'reference-collections') if reference_collections_digest else None
+            command=reference_helper_command(source,helper,executable,flags,collections_helper)
+            if reference_collections_digest:self.update(referenceCollectionsHelperSha256=reference_collections_digest)
             self.update(acceptanceHelperSha256=reference_helper_digest)
         if case in ('history','pages') and history_helper_digest:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
             command=history_helper_command(source,helper,executable,pages=case=='pages')
             self.update(acceptanceHelperSha256=history_helper_digest)
-        if case in ('studio','studio-designs','studio-search','desktop','collections','catalog') and studio_helper_digest:
+        if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
-            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search')
+            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search',themes=case=='themes',themefaults=case=='themefaults',themecustom=case=='themecustom',themecontrols=case=='themecontrols')
             self.update(acceptanceHelperSha256=studio_helper_digest)
         if case=='guide-features' and feature_helper_digest:
             helper=verified_guide_helper(self.root,feature_helper_digest,'features')
@@ -1232,7 +1295,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("themes","studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -1297,6 +1360,14 @@ class Oracle:
         if prune_payloads:
             payloads=sorted((p for p in candidates if (p/'payload').is_dir()),key=lambda p:(p/'payload').stat().st_mtime,reverse=True)
             protected.update(payloads[:3])
+        # Focused candidates depend on an original full-suite proof. Retain its
+        # payload while any existing reuse receipt still pins that run.
+        for candidate in candidates:
+            record = candidate / "test-result.json"
+            if record.is_file() and not record.is_symlink():
+                base_id = json.loads(record.read_text()).get("coverageReuse", {}).get("baseRunId", "")
+                if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", base_id):
+                    protected.add(runs / base_id)
         # A stopped-profile acceptance receipt still needs its exact executable.
         # Never discard that payload while reclaiming older generated runs.
         protected.update(p for p in candidates if (p/'guide-soak-receipt.json').exists() or (p/'guide-soak-receipt.json').is_symlink())
@@ -1424,6 +1495,7 @@ def collect_evidence(run, case, directories):
             if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json','cached-artwork-observation.json','original-home-layout.json')]
             if case in {"studio-designs", "studio-search"}:
                 paths += [directory / name for name in ("network-denial.json", "portable-export.json")]
+            if case=="themefaults":paths += [directory/(tag+"loading-frame.png") for tag in ("dark","pastel","custom")]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:
@@ -1481,7 +1553,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -1661,6 +1733,7 @@ def main():
     parser.add_argument('--studio-helper-digest')
     parser.add_argument('--history-helper-digest')
     parser.add_argument('--reference-helper-digest')
+    parser.add_argument('--reference-collections-digest')
     parser.add_argument("--orphan-visual-pid", type=int, default=0)
     args = parser.parse_args()
     if args.orphan_visual_pid and (args.action != "recover" or not 1 < args.orphan_visual_pid < 2**31): parser.error("Visual orphan PID is Recover-only")
@@ -1757,7 +1830,7 @@ def main():
             elif args.action == "test":
                 oracle.test(args.suite,args.reuse_full_run)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest,args.reference_collections_digest)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":

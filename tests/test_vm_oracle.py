@@ -540,6 +540,19 @@ class OracleTests(unittest.TestCase):
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(reference_frozen),'args':[str(reference_frozen),str(executable)]+flags,'dependency':'frozen dependency'})
             self.assertIn('untouched',reference_frozen.read_text())
+            (folder/'reference_collections.py').write_text("VALUE='frozen collections'")
+            collections_code="VALUE='verified overlay collections'"
+            collections_digest=hashlib.sha256(collections_code.encode()).hexdigest()
+            collections_helper=root/'bin'/('reference-collections-helper-'+collections_digest+'.py')
+            collections_helper.write_text(collections_code)
+            self.assertEqual(oracle.verified_studio_helper(root,collections_digest,'reference-collections'),collections_helper)
+            reference_helper.write_text("import json,reference_collections;print(json.dumps({'value':reference_collections.VALUE,'file':__file__}))")
+            command=oracle.reference_helper_command(source,reference_helper,executable,flags,collections_helper);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'value':'verified overlay collections','file':str(reference_frozen)})
+            self.assertEqual((folder/'reference_collections.py').read_text(),"VALUE='frozen collections'")
+            collections_helper.write_text('tampered')
+            with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,collections_digest,'reference-collections')
             reference_helper.write_bytes(b'tampered')
             with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected,'reference')
             with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected,'unreviewed')
@@ -642,6 +655,129 @@ class OracleTests(unittest.TestCase):
         oracle.atomic_json(base/'test-result.json',result);(base/'payload/bin/isolde').write_bytes(b'modified')
         with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
 
+    def test_theme_journey_fixture_and_required_receipt_boundaries(self):
+        source=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
+        spec=importlib.util.spec_from_file_location('theme_fixture',source)
+        helper=importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules,{'fcntl':Mock()}):spec.loader.exec_module(helper)
+        for index in range(3):
+            doc=helper.theme_document(index)
+            self.assertNotEqual(doc['theme'],doc['pages'][0]['layout']['theme'])
+            self.assertEqual(doc['components'][0]['action']['type'],'open-page')
+            self.assertEqual(doc['homePageId'],'theme-home')
+            self.assertEqual(doc['schemaVersion'],2)
+            self.assertTrue(all(page['layout']['schemaVersion']==2 and page['layout']['components'] for page in doc['pages']))
+            self.assertNotEqual(doc['pages'][0]['layout']['theme'],doc['pages'][1]['layout']['theme'])
+            for item in doc['components']+doc['pages'][0]['layout']['components']+doc['pages'][1]['layout']['components']:
+                self.assertRegex(item['id'],r'^[A-Za-z0-9_-]+$')
+        self.assertEqual(json.loads((Path(__file__).resolve().parents[1]/'tests/fixtures/shell-theme-routes.json').read_text()),[helper.theme_document(i) for i in range(3)])
+        self.assertFalse(oracle.visual_result_passed('themes',{'passed':True}))
+        phases=('home','origin','search','searchkeyboard','searchreturn','gallery','galleryreturn','movies','details','shows','seasons','episodes','network','networkkeyboard','sources','remotes','profiles','vpn','storepreferences','system','display','audio','ambient','media','folders','import','components','inputs','apps','appdialog','appkeyboard','return')
+        receipt=dict(passed=True,journey='themes',freshProfile=True,normalProfileUsed=False,palettes=['dark','pastel','custom'],phases=[tag+phase for tag in ('dark','pastel','custom') for phase in phases]+['custompolicy','customreset','customcancel'],layoutBytesUnchanged=True,nativeKodiBefore={'sources.xml':'kept'},nativeKodiAfter={'sources.xml':'kept'})
+        self.assertTrue(oracle.visual_result_passed('themes',receipt))
+        receipt['phases'].remove('pastelimport');self.assertFalse(oracle.visual_result_passed('themes',receipt))
+        custom=dict(receipt,journey='themecustom',palettes=['custom'],phases=[p for p in receipt['phases'] if p.startswith('custom')])
+        self.assertTrue(oracle.visual_result_passed('themecustom',custom))
+        custom['phases'].remove('customimport');self.assertFalse(oracle.visual_result_passed('themecustom',custom))
+
+        command=oracle.studio_helper_command(Path('/frozen'),Path('/helper'),Path('/installed'),themes=True)
+        self.assertIn('--themes-only',command)
+        self.assertEqual(oracle.CASES['themes'][0],'home-components-acceptance.py')
+
+    def test_original_full_payload_can_verify_exact_retained_release_after_cache_prune(self):
+        home=self.root/'home';home.mkdir();base=self.root/'base';base.mkdir()
+        releases=home/'.local/share/isolde-appliance/releases'
+        release=releases/('a'*24);(release/'bin').mkdir(parents=True);(release/'bin/isolde').write_bytes(b'full tested executable')
+        result={'payload':oracle.payload_hashes(release)}
+        (base/'deploy-result.json').write_text(json.dumps({'release':str(release)}))
+        with patch.object(oracle.Path,'home',return_value=home):
+            self.assertTrue(oracle.original_full_payload_matches(base,result))
+            (release/'bin/isolde').write_bytes(b'modified')
+            self.assertFalse(oracle.original_full_payload_matches(base,result))
+            (base/'deploy-result.json').write_text(json.dumps({'release':str(self.root/'outside')}))
+            with self.assertRaises(RuntimeError):oracle.original_full_payload_matches(base,result)
+            (base/'payload/bin').mkdir(parents=True);(base/'payload/bin/isolde').write_bytes(b'changed staged file')
+            self.assertFalse(oracle.original_full_payload_matches(base,result))
+
+    def test_reference_socket_timeout_retains_partial_request_diagnostics(self):
+        source=Path(__file__).resolve().parents[1]/'tools/reference_collections.py'
+        spec=importlib.util.spec_from_file_location('reference_timeout',source)
+        helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
+        for partial in (b'',b'{'):
+            provider=helper.ReferenceCollections.__new__(helper.ReferenceCollections)
+            provider.stopped=threading.Event();provider.requests=[];provider.errors=[];provider.idle_connections=[]
+            connection=Mock();connection.recv.side_effect=([partial] if partial else [])+[helper.socket.timeout('timed out')]
+            owner=Mock();owner.__enter__=Mock(return_value=connection);owner.__exit__=Mock(return_value=False)
+            owner.recv=connection.recv
+            provider.socket=Mock();provider.socket.accept.side_effect=[(owner,None),OSError('closed')]
+            provider.serve()
+            self.assertEqual(provider.errors,[dict(error='timed out',stage='read',receivedBytes=len(partial),method=None)] if partial else [])
+            self.assertEqual(provider.idle_connections,[] if partial else [dict(error='timed out',receivedBytes=0)])
+            self.assertEqual(provider.requests,[])
+
+    def test_theme_controls_receipt_requires_all_palettes_and_preservation(self):
+        phases=[tag+phase for tag in ('dark','pastel','custom') for phase in ('audio','ambient','return')]+['custompolicy','customreset','customcancel']
+        receipt=dict(passed=True,journey='themecontrols',freshProfile=True,normalProfileUsed=False,palettes=['dark','pastel','custom'],phases=phases,layoutBytesUnchanged=True,nativeKodiBefore={'sources.xml':'kept'},nativeKodiAfter={'sources.xml':'kept'})
+        self.assertTrue(oracle.visual_result_passed('themecontrols',receipt))
+        for field,value in [('phases',phases[:-1]),('nativeKodiAfter',{}),('layoutBytesUnchanged',False),('normalProfileUsed',True)]:
+            self.assertFalse(oracle.visual_result_passed('themecontrols',dict(receipt,**{field:value})))
+        command=oracle.studio_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),themecontrols=True)
+        self.assertIn('--themes-controls-only',command)
+        self.assertEqual(oracle.CASES['themecontrols'][0],'home-components-acceptance.py')
+
+    def test_owned_x11_frame_capture_preserves_pixels_and_releases_native_image(self):
+        import ast,ctypes
+        from PIL import Image
+        helper=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
+        function=next(n for n in ast.parse(helper.read_text(encoding='utf-8')).body if isinstance(n,ast.FunctionDef) and n.name=='capture_x11_window')
+        namespace={'ctypes':ctypes};exec(compile(ast.Module(body=[function],type_ignores=[]),str(helper),'exec'),namespace)
+        pixels=ctypes.create_string_buffer(bytes([0,0,255,0,0,255,0,0]))
+        frame=SimpleNamespace(contents=SimpleNamespace(width=2,height=1,byte_order=0,bits_per_pixel=32,red_mask=0xff0000,green_mask=0xff00,blue_mask=0xff,data=ctypes.addressof(pixels),bytes_per_line=8))
+        def geometry(*args):args[5]._obj.value=2;args[6]._obj.value=1;return 1
+        x11=SimpleNamespace(XGetGeometry=Mock(side_effect=geometry),XGetImage=Mock(return_value=frame),XDestroyImage=Mock())
+        with tempfile.TemporaryDirectory() as directory:
+            target=Path(directory)/'frame.png';namespace['capture_x11_window'](x11,1,0x123,target)
+            with Image.open(target) as rendered:self.assertEqual([rendered.getpixel((x,0)) for x in range(2)],[(255,0,0),(0,255,0)])
+            self.assertEqual(x11.XGetImage.call_args.args[1],0x123);x11.XDestroyImage.assert_called_once_with(frame)
+            frame.contents.bits_per_pixel=16
+            with self.assertRaisesRegex(RuntimeError,'pixel format'):namespace['capture_x11_window'](x11,1,0x123,target)
+            self.assertEqual(x11.XDestroyImage.call_count,2)
+
+    def test_theme_fault_receipt_requires_loading_error_recovery_and_native_preservation(self):
+        phases=[tag+phase for tag in ('dark','pastel','custom') for phase in ('gallery','loading','error','retry','return')]
+        receipt=dict(passed=True,journey='themefaults',freshProfile=True,normalProfileUsed=False,palettes=['dark','pastel','custom'],phases=phases,layoutBytesUnchanged=True,nativeKodiBefore={'sources.xml':'kept'},nativeKodiAfter={'sources.xml':'kept'},controlledFaults=3,loadingFrames={tag+'loading-frame.png':'a'*64 for tag in ('dark','pastel','custom')})
+        self.assertTrue(oracle.visual_result_passed('themefaults',receipt))
+        for field,value in (('controlledFaults',2),('phases',phases[:-1]),('nativeKodiAfter',{'sources.xml':'changed'})):
+            self.assertFalse(oracle.visual_result_passed('themefaults',dict(receipt,**{field:value})))
+        command=oracle.studio_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),themefaults=True)
+        self.assertIn('--themes-faults-only',command)
+        self.assertEqual(oracle.CASES['themefaults'][0],'home-components-acceptance.py')
+
+    def test_shell_keyboard_reuse_refuses_uncovered_runtime_changes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder).resolve();base=root/'runs/base';current=root/'runs/focused'
+            base.mkdir(parents=True);current.mkdir()
+            values={'qml/NetworkSettingsView.qml':b'old','qml/SettingsView.qml':b'parent','src/home/HomeLayout.cpp':b'owner','config/studio-defaults.json':b'defaults'}
+            def write(run,data):
+                (run/'files.sha256').write_text(''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n' for name,value in sorted(data.items())))
+            write(base,values);changed=dict(values,**{'qml/NetworkSettingsView.qml':b'focus ownership','tests/fixtures/shell-theme-routes.json':b'fixture'})
+            write(current,changed);(base/'payload/bin').mkdir(parents=True);(base/'payload/bin/isolde').write_bytes(b'full candidate')
+            oracle.atomic_json(base/'test-result.json',{'passed':True,'fullSuite':True,'sourceDigest':oracle.digest(base/'files.sha256'),'payload':oracle.payload_hashes(base/'payload')})
+            proof=oracle.focused_qml_coverage(root,current,'base','shell_appearance')
+            self.assertEqual(proof['changedShellKeyboardQml'],['qml/NetworkSettingsView.qml'])
+            for name in ('qml/SettingsView.qml','src/home/HomeLayout.cpp','config/studio-defaults.json','qml/Unexpected.qml'):
+                write(current,dict(changed,**{name:b'uncovered'}))
+                with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','shell_appearance')
+            write(current,changed);(base/'payload/bin/isolde').write_bytes(b'tampered')
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','shell_appearance')
+
+    def test_shell_appearance_batch_selects_all_three_boundaries(self):
+        targets,pattern=oracle.suite_selection('shell_appearance')
+        self.assertEqual(set(targets),{'isolde_studio_quick_tests','isolde_home_navigation_tests','isolde_surface_appearance_tests'})
+        for name in ('studio_selection','studio_shell','surface_appearance_contracts','home_component_navigation'):
+            self.assertIsNotNone(re.fullmatch(pattern,name))
+        self.assertIsNone(re.fullmatch(pattern,'studio_performance'))
+
     def test_studio_suite_builds_only_matching_test_targets(self):
         targets, pattern = oracle.suite_selection("studio")
         self.assertEqual(targets, ["isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests", "isolde_studio_design_tests"])
@@ -708,6 +844,22 @@ class OracleTests(unittest.TestCase):
             with patch.object(oracle.socket,'gethostname',return_value='isolde-test'), patch.object(oracle.os,'getuid',return_value=proc.stat().st_uid+1,create=True), patch.object(oracle.os,'kill') as kill:
                 with self.assertRaisesRegex(RuntimeError,'another user'):oracle.recover_visual_orphan(run,123,root/'proc')
                 kill.assert_not_called()
+
+    def test_studio_startup_waits_only_for_transient_empty_x11_client_list(self):
+        import ast
+        helper=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
+        startup=next(n for n in ast.walk(ast.parse(helper.read_text(encoding='utf-8'))) if isinstance(n,ast.FunctionDef) and n.name=='start_shell')
+        child=SimpleNamespace(pid=123,poll=lambda:None,terminate=Mock(),wait=Mock())
+        process=SimpleNamespace(Popen=Mock(return_value=child),CalledProcessError=subprocess.CalledProcessError)
+        namespace=dict(offline_module=None,executable=Path('/app'),env={},log=None,subprocess=process,
+            run=Mock(side_effect=[subprocess.CalledProcessError(1,['wmctrl'],stderr='Cannot get client list properties.'),'0x123 0 123 isolde','']),focus_window=Mock(return_value=0x123),time=SimpleNamespace(sleep=Mock()))
+        exec(compile(ast.Module(body=[startup],type_ignores=[]),str(helper),'exec'),namespace)
+        self.assertEqual(namespace['start_shell'](),(child,'0x123',0x123))
+        namespace['run']=Mock(side_effect=[subprocess.CalledProcessError(1,['wmctrl'],output='',stderr=''),'0x123 0 123 isolde',''])
+        self.assertEqual(namespace['start_shell']()[1],'0x123')
+        namespace['run']=Mock(side_effect=subprocess.CalledProcessError(1,['wmctrl'],stderr='Cannot open display'))
+        with self.assertRaises(subprocess.CalledProcessError):namespace['start_shell']()
+        child.terminate.assert_called_once()
 
     def test_studio_startup_failure_stops_its_unassigned_child(self):
         import ast
@@ -928,14 +1080,15 @@ class OracleTests(unittest.TestCase):
         def read_text(path,*args,**kwargs):
             if path==Path('/proc/self/mountinfo'):return '1 0 0:1 / / rw - ext4 /dev/unit-test rw\n'
             return original(path,*args,**kwargs)
+        (runs/'recent-a/test-result.json').write_text(json.dumps({'coverageReuse':{'baseRunId':'1'}}))
         # All generated trees are old by directory mtime, while payload 3–5 are
         # the latest actual staged candidates. Directory cleanup must not unpin them.
         with patch.object(runner,'command',return_value='isolde-test'),patch.object(runner,'stage'),patch.object(oracle.Path,'home',return_value=home),patch.object(oracle.Path,'read_text',read_text),patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=2*1024**3)):
             runner.prepare_guest_space(3,prune_payloads=True)
         for run in old[2:]:self.assertTrue((run/'payload/bin/isolde').is_file())
         for run in old:self.assertEqual((run/'source.log').read_text(),'retain evidence')
-        for run in old[:2]:
-            self.assertFalse((run/'payload').exists());self.assertTrue((run/'test-result.json').is_file())
+        self.assertTrue((old[0]/'payload/bin/isolde').is_file())
+        self.assertFalse((old[1]/'payload').exists());self.assertTrue((old[1]/'test-result.json').is_file())
 
     def test_source_cleanup_refuses_corruption_unknown_files_and_mounts(self):
         for change in ("source","archive","manifest","extra","unowned-pyc","mount","submount","ancestor-mount"):

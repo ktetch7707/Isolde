@@ -139,7 +139,12 @@ QVariantMap ComponentSchema::surfacePalette(const QVariantMap &appearance)
     result["elevatedFocusColor"] = readable(result["focusColor"], elevated, 3.0);
     result["backgroundTextColor"] = readable(result["textColor"], backdrop, textMinimum);
     result["backgroundMutedColor"] = readable(result["mutedColor"], backdrop, textMinimum);
+    result["backgroundFocusColor"] = readable(result["focusColor"], backdrop, 3.0);
+    result["elevatedErrorColor"] = readable(result.value("errorColor", "#cb3247"), elevated, textMinimum);
+    result["backgroundErrorColor"] = readable(result.value("errorColor", "#cb3247"), backdrop, textMinimum);
     result["inputTextColor"] = readable(result.value("inputTextColor", result["textColor"]), QColor(result["inputColor"].toString()), textMinimum);
+    result["inputMutedColor"] = readable(result["mutedColor"], QColor(result["inputColor"].toString()), textMinimum);
+    result["inputFocusColor"] = readable(result["focusColor"], QColor(result["inputColor"].toString()), 3.0);
     result["focusColor"] = readable(result.value("focusColor", "#c994a5"), surface, 3.0);
     result["selectedFocusColor"] = readable(result["focusColor"], selected, 3.0);
     for (const auto &key : QStringList{"outlineColor", "accentColor", "unavailableColor"})

@@ -103,7 +103,7 @@ Item {
                 radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? shell.text : shell.outline
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
                 Column {
                     anchors.left: parent.left
                     anchors.right: valueText.left
@@ -116,11 +116,12 @@ Item {
                 }
                 Text { font.family: shell.fontFamily;
                     id: valueText
+                    objectName: "ambientValue-" + index
                     anchors.right: parent.right
                     anchors.rightMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.value
-                    color: shell.warning
+                    color: root.selectedIndex === index ? shell.selectedText : shell.text
                     font.pixelSize: 16 * shell.textScale
                     font.weight: Font.DemiBold
                 }
@@ -155,13 +156,13 @@ Item {
             radius: 14
             color: shell.elevated
             border.width: 2
-            border.color: shell.focus
+            border.color: shell.elevatedFocus
             Column {
                 anchors.fill: parent
                 anchors.margins: 24
                 spacing: 14 * shell.gapScale
                 Text { font.family: shell.fontFamily; text: "PHOTO SOURCE"; color: shell.elevatedText; font.pixelSize: 28 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                Text { font.family: shell.fontFamily; text: ambientSettings.photoCount + " photos · " + ambientSettings.photoDirectory; color: shell.muted; font.pixelSize: 15 * shell.textScale; elide: Text.ElideMiddle; width: parent.width }
+                Text { font.family: shell.fontFamily; text: ambientSettings.photoCount + " photos · " + ambientSettings.photoDirectory; color: shell.elevatedMuted; font.pixelSize: 15 * shell.textScale; elide: Text.ElideMiddle; width: parent.width }
                 Repeater {
                     model: root.sourceActions
                     delegate: Rectangle {
@@ -172,11 +173,11 @@ Item {
                         radius: shell.radius
                         color: root.sourceActionIndex === index ? shell.selected : shell.surface
                         border.width: root.sourceActionIndex === index ? 2 : 1
-                        border.color: root.sourceActionIndex === index ? shell.text : shell.outline
+                        border.color: root.sourceActionIndex === index ? shell.selectedFocus : shell.outline
                         Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: modelData; color: (root.sourceActionIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 16 * shell.textScale; font.weight: Font.DemiBold }
                     }
                 }
-                Text { font.family: shell.fontFamily; text: "Managed folder is the TV-safe default. Enter folder path supports advanced users until a full media picker exists."; color: shell.muted; font.pixelSize: 13 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
+                Text { font.family: shell.fontFamily; text: "Managed folder is the TV-safe default. Enter folder path supports advanced users until a full media picker exists."; color: shell.elevatedMuted; font.pixelSize: 13 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
             }
         }
     }

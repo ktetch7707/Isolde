@@ -132,7 +132,7 @@ Item {
                     width: optionList.width; height: 49; radius: 7
                     color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 2 : 1
-                    border.color: root.selectedIndex === index ? shell.text : shell.outline
+                    border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
                     Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.42; text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap }
                     Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: parent.width * 0.43; anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.value; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 14 * shell.textScale; elide: Text.ElideRight }
                     MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.activateSelected() } }

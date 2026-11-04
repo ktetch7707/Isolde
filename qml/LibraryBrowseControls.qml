@@ -23,7 +23,7 @@ Rectangle {
             selectedCollection && selectedCollection.home ? "Hide shelf from Home" : "Show shelf on Home",
             "Move earlier", "Move later", "Shelf " + (selectedCollection && selectedCollection.media === "shows" ? "shows" : "movies")
                 + ": " + (selectedCollection && selectedCollection.count ? selectedCollection.count : 6) + " · change", "Back"]
-    visible: active; color: shell.surface; radius: 14
+    visible: active; color: shell.surface; radius: shell.radius
     function manualCollectionsFor(item) {
         const media = item && item.mediaType === "tvshow" ? "shows" : "movies"
         return kodiMedia.collections.filter(c => c.kind === "manual" && c.media === media)
@@ -135,7 +135,7 @@ Rectangle {
         highlightRangeMode: ListView.ApplyRange
         delegate: Rectangle {
             required property int index; required property string modelData
-            width: choices.width; height: 58; radius: shell.radius; color: root.selectedIndex === index ? shell.selected : shell.surface;border.width:root.selectedIndex===index?2:0;border.color:shell.focus
+            width: choices.width; height: 58; radius: shell.radius; color: root.selectedIndex === index ? shell.selected : shell.surface;border.width:root.selectedIndex===index?2:0;border.color:root.selectedIndex===index?shell.selectedFocus:shell.focus
             Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 14; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21*(root.appearance.typographyScale || 1); elide: Text.ElideRight; text: modelData }
             MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
         }

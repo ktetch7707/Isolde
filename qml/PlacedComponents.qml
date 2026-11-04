@@ -119,6 +119,7 @@ Item {
                 sourceComponent:PageAppCarousel {
                     buttonItems:node.buttons?node.childEntries.filter(e=>!e.item.hidden).sort((a,b)=>a.placement.y-b.placement.y || a.placement.x-b.placement.x).map(e=>e.item):null
                     registry:surface.host.appProvider;collection:node.modelData.item.appCollection || ({mode:"selected",ids:[]});style:Object.assign({},node.buttons?((surface.host.collectionDefaults || {}).carousel || {}).presentation || {}:{},node.style);appearance:surface.host.appearance;unit:surface.unit
+                    galleryAppearance:surface.host.shellAppsAppearance || surface.host.appearance
                     readOnly:surface.host.editMode || surface.host.previewOnly
                     engaged:surface.host.activeMediaWidgetId===node.modelData.item.id;highlighted:node.selected
                     onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)

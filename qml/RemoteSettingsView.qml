@@ -65,17 +65,17 @@ Item {
             height: 128
             radius: 14
             color: shell.background
-            border.color: remoteSettings.setupMode ? shell.focus : shell.outline
+            border.color: shell.backgroundFocus
 
             Column {
                 anchors.fill: parent
                 anchors.margins: 20
                 spacing: 8 * shell.gapScale
-                Text { font.family: shell.fontFamily; text: remoteSettings.setupStatus; color: shell.text; font.pixelSize: 24 * shell.textScale; font.weight: Font.DemiBold }
+                Text { font.family: shell.fontFamily; text: remoteSettings.setupStatus; color: shell.backgroundText; font.pixelSize: 24 * shell.textScale; font.weight: Font.DemiBold }
                 Text { font.family: shell.fontFamily;
                     width: parent.width
                     text: "Minimum working remote: Up, Down, Left, Right, OK, Back, Home. Power can toggle Ambient Mode now or control the TV later through HDMI-CEC."
-                    color: shell.muted
+                    color: shell.backgroundMuted
                     font.pixelSize: 15 * shell.textScale
                     wrapMode: Text.WordWrap
                 }
@@ -93,7 +93,7 @@ Item {
                 radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? shell.text : shell.outline
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
 
                 Column {
                     anchors.left: parent.left

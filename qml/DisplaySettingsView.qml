@@ -55,7 +55,7 @@ Item {
                 radius: shell.radius
                 color: shell.elevated
                 border.width: 3
-                border.color: shell.text
+                border.color: shell.elevatedFocus
 
                 Text { font.family: shell.fontFamily;
                     anchors.centerIn: parent
@@ -78,7 +78,7 @@ Item {
                 radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? shell.text : shell.outline
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
 
                 Column {
                     anchors.left: parent.left

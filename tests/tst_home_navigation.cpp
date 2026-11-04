@@ -10,6 +10,7 @@
 #include "home/ComponentSchema.h"
 #include "settings/SearchSettings.h"
 #include "media/KodiImporter.h"
+#include <QQmlProperty>
 #include <QBuffer>
 #include <QImage>
 #include <functional>
@@ -669,6 +670,19 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme()
     auto *importPage = findItem(qobject_cast<QQuickItem *>(root.get()), "kodiImportPage");
     QVERIFY(importPage);
     QCOMPARE(importPage->property("appearance").toMap(), pastel);
+    // Selected borders need a token derived against selectedColor, not surfaceColor.
+    const auto custom = ComponentSchema::surfacePalette({{"surfaceColor", "#000000"},
+        {"selectedColor", "#ffffff"}, {"elevatedColor", "#ffffff"}, {"inputColor", "#ffffff"},
+        {"textColor", "#ffffff"}, {"focusColor", "#ffffff"}, {"highContrast", true}});
+    QVERIFY(root->setProperty("appearance", custom));
+    QTRY_COMPARE(QQmlProperty::read(folderRow, "border.color").value<QColor>(), QColor(custom["selectedFocusColor"].toString()));
+    auto *importRow = findItem(importPage, "kodiImportActionRow"); QVERIFY(importRow);
+    QTRY_COMPARE(QQmlProperty::read(importRow, "border.color").value<QColor>(), QColor(custom["selectedFocusColor"].toString()));
+    QCOMPARE(folderPage->property("pendingRemoval").toString(), QString("/media/keep-this-folder"));
+    QCOMPARE(media.status(), status);
+    const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+    if (!artifacts.isEmpty()) QVERIFY(window.grabWindow().save(artifacts + "/studio-test-shell-media-settings-custom.png"));
+
 }
 void HomeNavigationTests::appearancePreviewCancelAndApply()
 {
@@ -820,6 +834,7 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
 {
     QTemporaryDir dir;
     QLocalServer server; QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    int requests = 0;
     connect(&server, &QLocalServer::newConnection, &server, [&] {
         while (server.hasPendingConnections()) {
             auto *socket = server.nextPendingConnection();
@@ -829,6 +844,13 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
                 if (!bytes.endsWith('\n')) return;
                 const auto request = QJsonDocument::fromJson(bytes).object();
                 const auto method = request["method"].toString();
+                ++requests;
+                if (server.property("rejectThemeRead").toBool() && method.startsWith("VideoLibrary.Get")) {
+                    server.setProperty("rejectThemeRead", false);
+                    socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]},
+                        {"error", QJsonObject{{"code", -32000}, {"message", "Controlled theme outage"}}}}).toJson(QJsonDocument::Compact) + '\n');
+                    socket->disconnectFromServer(); return;
+                }
                 QJsonObject result;
                 if (method == "JSONRPC.Version") result = {{"version", QJsonObject{{"major", 13}}}};
                 else if (method == "Isolde.CreatePlaylist") {
@@ -874,6 +896,50 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QVERIFY(command(InputManager::Confirm)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("seasons"));
     QVERIFY(command(InputManager::Confirm)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("episodes"));
     QVERIFY(command(InputManager::Menu)); QVERIFY(!root->property("details").isNull());
+    // Appearance changes must repaint existing production browse/detail children
+    // without rebuilding the client, navigating, or refreshing the Kodi query.
+    QTest::qWait(200); // Let the episode artwork request settle before counting repaint traffic.
+    const auto detailsBefore = root->property("details");
+    const auto itemsBefore = media.items();
+    const auto requestCount = requests;
+    int paletteIndex = 0;
+    for (const auto &raw : QList<QVariantMap>{
+             {{"surfaceColor", "#202126"}, {"backgroundEnd", "#101014"}, {"elevatedColor", "#28262f"}},
+             {{"surfaceColor", "#f5edf3"}, {"backgroundEnd", "#e9d8e3"}, {"elevatedColor", "#ffffff"},
+              {"textColor", "#241d2b"}, {"focusColor", "#6d3b69"}},
+             {{"surfaceColor", "#000000"}, {"selectedColor", "#ffffff"}, {"elevatedColor", "#ffffff"},
+              {"backgroundEnd", "#ffffff"}, {"textColor", "#ffffff"}, {"mutedColor", "#ffffff"},
+              {"focusColor", "#ffffff"}, {"highContrast", true}, {"motionEnabled", false}}}) {
+        const auto tokens = ComponentSchema::surfacePalette(raw);
+        QVERIFY(root->setProperty("appearance", tokens));
+        QTest::qWait(50);
+        auto *panel = root->findChild<QObject *>("libraryDetailsPanel");
+        auto *subtitle = root->findChild<QObject *>("libraryDetailsSubtitle");
+        auto *playback = root->findChild<QObject *>("libraryDetailsPlayback");
+        QVERIFY(panel); QVERIFY(subtitle); QVERIFY(playback);
+        QCOMPARE(panel->property("color").value<QColor>(), QColor(tokens["elevatedColor"].toString()));
+        QCOMPARE(subtitle->property("color").value<QColor>(), QColor(tokens["elevatedFocusColor"].toString()));
+        QCOMPARE(playback->property("color").value<QColor>(), QColor(tokens["elevatedFocusColor"].toString()));
+        QCOMPARE(root->property("details"), detailsBefore);
+        QCOMPARE(media.items(), itemsBefore); QCOMPARE(media.selectedIndex(), 0); QCOMPARE(requests, requestCount);
+        const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+        if (!artifacts.isEmpty()) QVERIFY(window.grabWindow().save(artifacts + QString("/studio-test-shell-kodi-details-%1.png").arg(paletteIndex)));
+        ++paletteIndex;
+    }
+
+    QVERIFY(command(InputManager::Back)); // Close details before an explicit failed refresh.
+    server.setProperty("rejectThemeRead", true); media.refresh(); QTRY_VERIFY(!media.busy()); QVERIFY(!media.connected());
+    auto *statusLine = root->findChild<QObject *>("libraryStatusLine"); QVERIFY(statusLine);
+    const auto outageRequests = requests;
+    for (const auto &background : QStringList{"#101014", "#f5edf3", "#ffffff"}) {
+        const auto tokens = ComponentSchema::surfacePalette({{"surfaceColor", "#000000"}, {"backgroundEnd", background},
+            {"textColor", "#ffffff"}, {"errorColor", "#ffffff"}, {"highContrast", true}});
+        root->setProperty("appearance", tokens); QTest::qWait(20);
+        QCOMPARE(statusLine->property("color").value<QColor>(), QColor(tokens["backgroundErrorColor"].toString()));
+        QCOMPARE(requests, outageRequests); QCOMPARE(media.selectedIndex(), 0);
+    }
+    media.refresh(); QTRY_VERIFY(!media.busy()); QVERIFY(media.connected());
+    QVERIFY(command(InputManager::Menu));
     QVERIFY(command(InputManager::NavigateRight)); QTRY_VERIFY(!media.busy());
     QCOMPARE(server.property("episode").toMap()["episodeid"].toInt(), 9);
     QCOMPARE(server.property("episode").toMap()["resume"].toBool(), false);
