@@ -2,6 +2,8 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
     property var appearance: ({})
     property int selectedIndex: 0
     property int activePage: -1
@@ -71,19 +73,19 @@ Item {
         else if (command === inputManager.confirm && selectedIndex === 8) activePage = 8
     }
 
-    DisplaySettingsView {
+    DisplaySettingsView { appearance: root.appearance;
         id: displayPage
         anchors.fill: parent
         visible: root.activePage === 0
     }
 
-    AudioSettingsView {
+    AudioSettingsView { appearance: root.appearance;
         id: audioPage
         anchors.fill: parent
         visible: root.activePage === 1
     }
 
-    AmbientSettingsView {
+    AmbientSettingsView { appearance: root.appearance;
         id: ambientPage
         anchors.fill: parent
         visible: root.activePage === 2
@@ -92,11 +94,11 @@ Item {
 
     signal previewRequested()
     KodiSettingsView { id: kodiPage; anchors.fill: parent; visible: root.activePage === 6; appearance: root.appearance }
-    ComponentSettingsView {
+    ComponentSettingsView { appearance: root.appearance;
         id: componentPage; anchors.fill: parent; visible: root.activePage === 7
         onCaptureSetupRequested: root.activePage = 8
     }
-    CaptureSettingsView { id: capturePage; anchors.fill: parent; visible: root.activePage === 8 }
+    CaptureSettingsView { appearance: root.appearance; id: capturePage; anchors.fill: parent; visible: root.activePage === 8 }
 
     onSelectedIndexChanged: {
         const row = rowsRepeater.itemAt(selectedIndex)
@@ -112,21 +114,21 @@ Item {
     Column {
         id: contents
         width: parent.width
-        spacing: 18
+        spacing: 18 * shell.gapScale
 
-        Text {
+        Text { font.family: shell.fontFamily;
             text: "SYSTEM"
-            color: "#F8FAFC"
-            font.pixelSize: 30
+            color: shell.text
+            font.pixelSize: 30 * shell.textScale
             font.weight: Font.DemiBold
             font.letterSpacing: 3
         }
 
-        Text {
+        Text { font.family: shell.fontFamily;
             width: parent.width
             text: "Core TV controls should live here so normal users never need the Ubuntu desktop."
-            color: "#9EABC1"
-            font.pixelSize: 18
+            color: shell.muted
+            font.pixelSize: 18 * shell.textScale
             wrapMode: Text.WordWrap
         }
 
@@ -138,10 +140,10 @@ Item {
                 required property var modelData
                 width: parent.width
                 height: 84
-                radius: 10
-                color: root.selectedIndex === index ? "#2B416B" : "#111A2A"
+                radius: shell.radius
+                color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                border.color: root.selectedIndex === index ? shell.text : shell.outline
 
                 Column {
                     anchors.left: parent.left
@@ -149,23 +151,23 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 18
                     anchors.rightMargin: 16
-                    spacing: 5
-                    Text {
+                    spacing: 5 * shell.gapScale
+                    Text { font.family: shell.fontFamily;
                         text: modelData.name
-                        color: "#F8FAFC"
-                        font.pixelSize: 21
+                        color: (root.selectedIndex === index) ? shell.selectedText : shell.text
+                        font.pixelSize: 21 * shell.textScale
                         font.weight: Font.DemiBold
                     }
-                    Text {
+                    Text { font.family: shell.fontFamily;
                         width: parent.width
                         text: modelData.detail
-                        color: "#9EABC1"
-                        font.pixelSize: 14
+                        color: (root.selectedIndex === index) ? shell.selectedText : shell.muted
+                        font.pixelSize: 14 * shell.textScale
                         elide: Text.ElideRight
                     }
                 }
 
-                Text {
+                Text { font.family: shell.fontFamily;
                     id: statusText
                     anchors.right: parent.right
                     anchors.rightMargin: 18
@@ -173,8 +175,8 @@ Item {
                     width: 190
                     horizontalAlignment: Text.AlignRight
                     text: modelData.status
-                    color: index === 1 ? "#C8D3E5" : index === 3 ? "#D5B083" : "#91A0BC"
-                    font.pixelSize: 14
+                    color: index === 1 ? shell.text : index === 3 ? shell.warning : shell.muted
+                    font.pixelSize: 14 * shell.textScale
                     wrapMode: Text.WordWrap
                 }
             }
@@ -183,15 +185,15 @@ Item {
         Rectangle {
             width: parent.width
             height: 88
-            radius: 10
-            color: "#101A2D"
-            border.color: "#26344F"
-            Text {
+            radius: shell.radius
+            color: shell.elevated
+            border.color: shell.outline
+            Text { font.family: shell.fontFamily;
                 anchors.fill: parent
                 anchors.margins: 18
                 text: "Volume uses the available audio backend. Application crash recovery is installed with appliance startup. OS power/update controls remain unavailable; existing settings and profiles are preserved."
-                color: "#C8D3E5"
-                font.pixelSize: 16
+                color: shell.elevatedText
+                font.pixelSize: 16 * shell.textScale
                 wrapMode: Text.WordWrap
             }
         }

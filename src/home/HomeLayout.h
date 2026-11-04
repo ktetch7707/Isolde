@@ -81,6 +81,7 @@ public:
     QVariantList studioPages() const;
     QVariantMap studioAppearance() const;
     QVariantMap homeAppearance() const;
+    Q_INVOKABLE QVariantMap surfaceAppearance(const QString &surface, const QString &originId = {}) const;
     bool load(const QString &defaultPath = {}, const QString &userPath = {});
     Q_INVOKABLE bool addAppTile(const QString &appId);
     Q_INVOKABLE bool addActionTile(const QString &name, const QString &actionType, const QString &target, const QString &categoryId = {}, const QString &openWith = {});
@@ -135,6 +136,7 @@ public:
     [[nodiscard]] QVariantList components() const;
     void setCollections(const QVariantList &collections);
     void setCaptureInputsReady(bool ready);
+    Q_INVOKABLE QVariantMap responsivePresentation(const QVariantMap &value, double width, double height, double unit = 1) const;
     Q_INVOKABLE QVariantList sourceChoices(const QString &itemId) const;
     Q_INVOKABLE bool rebindSource(const QString &itemId, const QString &sourceId);
     [[nodiscard]] AppRegistry *registry() const { return m_registry; }
@@ -171,8 +173,9 @@ public:
     // rollback), restoring the previous model on failure. focusOrigin()
     // restores the exact canvas origin after apply/recovery dialogs.
     Q_INVOKABLE QByteArray committedDocument() const;
-    static bool validateStudioDocument(const QByteArray &data, QString *error = nullptr);
+    static bool validateStudioDocument(const QByteArray &data, QString *error = nullptr, const QVariantMap &defaults = {});
     Q_INVOKABLE QObject *beginStudio();
+    Q_INVOKABLE bool pageAllowed(const QString &id) const;
     Q_INVOKABLE bool applyStudioDraft(const QByteArray &draft,
                                       const QString &focusComponentId = {});
     Q_INVOKABLE QString focusOrigin() const { return m_focusOrigin; }
@@ -193,6 +196,8 @@ private:
     bool save();
     QByteArray documentData() const;
     QString skinDirectory() const;
+    QJsonObject skinSnapshot(const QString &id) const;
+    QVariantMap componentPresentation(const QVariantMap &authored) const;
     bool applySkinDocument(QJsonObject document, const QJsonObject &assets, bool addMissingPages = false);
     bool storePage(const QString &id, const QJsonObject &document);
     void syncPages();

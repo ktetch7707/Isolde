@@ -1,4 +1,5 @@
 #include "ComponentSchema.h"
+#include "DesignSystem.h"
 #include "app/AppRegistry.h"
 #include <QJsonArray>
 #include <QJsonObject>
@@ -9,6 +10,7 @@
 #include <QColor>
 #include <QSet>
 #include <QMap>
+#include <QRect>
 
 bool ComponentSchema::validRecentStudioColors(const QVariant &value)
 {
@@ -199,6 +201,10 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
                 const auto ids=it.value().toString().split(',');if(ids.size()>128)return false;QSet<QString> seen;
                 for(const auto &id:ids){if(!safeId(id.trimmed()) || seen.contains(id.trimmed()))return false;seen.insert(id.trimmed());}
             }
+        } else if (key == "styleId") {
+            if (it.value().metaType().id()!=QMetaType::QString || !safeId(it.value().toString())) return false;
+        } else if (key == "responsive") {
+            if (!section || it.value().metaType().id()!=QMetaType::QVariantMap || !DesignSystem::validResponsive(it.value().toMap())) return false;
         } else if(key=="guideSurface") {
             if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"full","overlay"}.contains(it.value().toString()))return false;
         } else if(key=="guideOverlayPosition") {
@@ -249,8 +255,9 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
+    if (value.contains("designLibrary") && (value["designLibrary"].metaType().id()!=QMetaType::QVariantMap || !DesignSystem::valid(value["designLibrary"].toMap()))) return false;
     if(value.contains("header")) {
         if(value["header"].metaType().id()!=QMetaType::QVariantMap)return false;
         const auto header=value["header"].toMap();
@@ -397,7 +404,8 @@ bool ComponentSchema::validPlacement(const QVariantMap &value, int maxColumns, i
         if (!keys.contains(it.key())) return false;
         bool ok; const double number = it.value().toDouble(&ok);
         if (!ok || it.value().metaType().id() == QMetaType::QString || it.value().metaType().id() == QMetaType::Bool
-            || !std::isfinite(number) || std::floor(number) != number) return false;
+            || !std::isfinite(number) || std::floor(number) != number || number < 0
+            || number > ((it.key() == "x" || it.key() == "width") ? maxColumns : maxRows)) return false;
     }
     const int x = value.value("x").toInt(), y = value.value("y").toInt();
     const int width = value.value("width").toInt(), height = value.value("height").toInt();
@@ -570,6 +578,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     for(const auto &key:QStringList{"showTitle","showType","showLogo","logoFill"})if(input.contains(key) && input[key].metaType().id()!=QMetaType::Bool)return reject(error,"Presentation toggles must be boolean values.");
     if(input.contains("accent") && (input["accent"].metaType().id()!=QMetaType::QString || !QColor(input["accent"].toString()).isValid() || QColor(input["accent"].toString()).alpha()!=255))return reject(error,"Choose an opaque accent color.");
     if(input.contains("symbol") && (input["symbol"].metaType().id()!=QMetaType::QString || input["symbol"].toString().size()>MaxSymbolLength))return reject(error,"Use a short symbol.");
+    for (const auto &key : {"linkedDesign", "designNode"}) if (input.contains(key) && (input[key].metaType().id()!=QMetaType::QString || !safeId(input[key].toString()))) return reject(error, "Invalid reusable component identity.");
     if (input.contains("placement")) {
         // Shape-only bounds here; the layout validates against its actual grid and neighbors.
         const auto placement = input.value("placement");
@@ -675,23 +684,22 @@ QString ComponentSchema::unavailable(const QVariantMap &value, const AppRegistry
 bool ComponentSchema::placementsFit(const QJsonArray &items, const QVariantMap &grid)
 {
     const int columns = grid.value("columns").toInt(), rows = grid.value("rows").toInt();
+    QList<QRect> placements;
+    placements.reserve(items.size());
     for (const auto &entry : items) {
         const auto item = entry.toObject();
         if (!item.contains("placement")) continue;
-        if (!validPlacement(item.value("placement").toObject().toVariantMap(), columns, rows))
-            return false;
+        const auto placement = item.value("placement").toObject().toVariantMap();
+        if (!validPlacement(placement, columns, rows)) return false;
+        placements.append(QRect(placement.value("x").toInt(), placement.value("y").toInt(),
+                                placement.value("width").toInt(), placement.value("height").toInt()));
     }
     if (grid.value("overlap").toBool()) return true;
-    for (qsizetype i = 0; i < items.size(); ++i) {
-        const auto first = items[i].toObject();
-        if (!first.contains("placement")) continue;
-        for (qsizetype j = i + 1; j < items.size(); ++j) {
-            const auto second = items[j].toObject();
-            if (second.contains("placement") && placementsOverlap(
-                    first.value("placement").toObject().toVariantMap(),
-                    second.value("placement").toObject().toVariantMap())) return false;
-        }
-    }
+    // Decode each validated rectangle once. Movement previews validate this
+    // boundary every frame; converting JSON/maps inside the pair loop is costly.
+    for (qsizetype i = 0; i < placements.size(); ++i)
+        for (qsizetype j = i + 1; j < placements.size(); ++j)
+            if (placements[i].intersects(placements[j])) return false;
     return true;
 }
 

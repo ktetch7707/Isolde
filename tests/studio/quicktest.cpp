@@ -1,5 +1,6 @@
 #include "home/ComponentSchema.h"
 #include "home/HomeLayout.h"
+#include "home/StudioSession.h"
 #include "input/InputManager.h"
 #include "settings/DisplaySettings.h"
 #include <QtQuickTest>
@@ -11,7 +12,11 @@
 #include <QTemporaryDir>
 #include <QSettings>
 #include <QCoreApplication>
+#include <QImage>
 #include <memory>
+#include <chrono>
+#include <QSaveFile>
+#include <QDir>
 
 // No service, network client or normal-profile path is supplied to the editor.
 // Each scenario owns a new saved document under this process's temporary root.
@@ -30,6 +35,27 @@ public:
         display=std::make_unique<DisplaySettings>();
     }
     QString artifacts() const { return qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS"); }
+    Q_INVOKABLE double monotonicMilliseconds() const {
+        return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    Q_INVOKABLE int activeStudioClients() const {
+        int count=0;for(auto *session:home.findChildren<StudioSession *>())if(session->property("active").toBool())++count;return count;
+    }
+    Q_INVOKABLE bool writePerformance(const QString &tag,const QVariantMap &receipt) const {
+        if(!QStringList{"720","1080"}.contains(tag) || artifacts().isEmpty())return false;
+        QSaveFile output(QDir(artifacts()).filePath("studio-performance-"+tag+".json"));
+        const auto bytes=QJsonDocument::fromVariant(receipt).toJson();
+        return output.open(QIODevice::WriteOnly) && output.write(bytes)==bytes.size() && output.commit();
+    }
+
+    Q_INVOKABLE QString referenceFixture() const {
+        const auto directory = temp.filePath(QString("reference-input-%1").arg(sequence));
+        if (!QDir().mkpath(directory)) return {};
+        const auto path = directory + "/reference.png";
+        QImage image(160, 90, QImage::Format_RGB32);
+        image.fill(QColor("#6688aa"));
+        return image.save(path) ? path : QString();
+    }
     Q_INVOKABLE QString artworkFixture() const {
         const auto path=temp.filePath("artwork-input");QDir().mkpath(path);
         QFile file(path+"/animation.gif");if(!file.open(QIODevice::WriteOnly))return {};

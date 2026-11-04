@@ -18,6 +18,44 @@ import sys
 import tarfile
 import time
 import xml.etree.ElementTree as ET
+from urllib.parse import urlsplit
+
+
+def repository_dns_probe(host):
+    if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", host):
+        raise ValueError("Invalid Android repository hostname")
+    try:
+        result = subprocess.run(
+            ["getent", "ahosts", host], capture_output=True, text=True, timeout=8
+        )
+    except subprocess.TimeoutExpired:
+        return {"host": host, "resolved": False, "error": "DNS lookup timed out"}
+    addresses = sorted({line.split()[0] for line in result.stdout.splitlines() if line.split()})
+    return {
+        "host": host,
+        "resolved": result.returncode == 0 and bool(addresses),
+        "addresses": addresses,
+        "error": result.stderr[:2048] if result.returncode else "",
+    }
+
+
+def resolver_status():
+    command = shutil.which("resolvectl")
+    if not command:
+        return {"available": False, "error": "resolvectl is not installed"}
+    try:
+        result = subprocess.run(
+            [command, "status", "--no-pager"], capture_output=True, text=True, timeout=8
+        )
+    except subprocess.TimeoutExpired:
+        return {"available": True, "error": "resolvectl status timed out"}
+    return {
+        "available": True,
+        "exit": result.returncode,
+        "output": result.stdout[:16384],
+        "error": result.stderr[:2048],
+    }
+
 
 def guide_backend_probe(home):
     """Read only the active Isolde profile's bridge, with no scan/tune/auth.
@@ -99,11 +137,19 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "desktop_mode": "isolde_desktop_mode_tests",
           "vpn": "isolde_vpn_tests",
           "studio_quick": "isolde_studio_quick_tests",
+          "studio_safety": "isolde_studio_quick_tests",
           "studio_selection": "isolde_studio_quick_tests",
           "studio_artwork": "isolde_studio_quick_tests",
+          "studio_visuals": ("isolde_studio_quick_tests", "isolde_home_navigation_tests"),
           "studio_colors": "isolde_studio_quick_tests",
           "studio_workflows": "isolde_studio_quick_tests",
           "studio_cutover": "isolde_studio_quick_tests",
+          "studio_design_contracts": ("isolde_studio_design_tests",),
+          "studio_reuse": ("isolde_studio_quick_tests", "isolde_studio_design_tests"),
+          "studio_remaining": ("isolde_studio_quick_tests", "isolde_studio_design_tests", "isolde_component_tests"),
+          "studio_performance": ("isolde_studio_quick_tests", "isolde_studio_design_tests", "isolde_component_tests"),
+          "studio_closure_regressions": ("isolde_studio_quick_tests", "isolde_studio_design_tests", "isolde_home_navigation_tests"),
+          "studio_designs": ("isolde_studio_quick_tests", "isolde_studio_design_tests", "isolde_component_tests"),
           "studio_gestures": "isolde_studio_quick_tests",
           "studio_grid": "isolde_studio_quick_tests",
           "studio_destinations": "isolde_studio_quick_tests",
@@ -112,14 +158,28 @@ SUITES = {"all": None, "component_contracts": "isolde_component_tests",
           "studio_overlays": "isolde_studio_quick_tests",
           "studio_unit": "isolde_component_tests",
           "studio_behavior": "isolde_home_navigation_tests",
-          "studio": ("isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests")}
+          "studio": ("isolde_studio_quick_tests", "isolde_component_tests", "isolde_home_navigation_tests", "isolde_studio_design_tests")}
 
 
 def suite_selection(suite):
     """One allowlisted selection authority for build targets and CTest names."""
     targets = SUITES[suite]
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
-    pattern = "^(studio_quick|studio_selection|studio_artwork|studio_colors|studio_workflows|studio_cutover|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    pattern = "^(studio_quick|studio_safety|studio_selection|studio_artwork|studio_colors|studio_color_interactions|studio_workflows|studio_cutover|studio_performance|studio_reuse|studio_designs|studio_design_contracts|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
+    if suite == "studio_closure_regressions":
+        pattern="^(studio_quick|studio_colors|studio_color_interactions|home_component_navigation|studio_design_contracts|studio_performance)$"
+    if suite == "studio_visuals":
+        pattern = "^(studio_quick|studio_artwork|studio_shell|home_component_navigation|studio_navigation)$"
+    if suite == "studio_remaining":
+        pattern="^(studio_quick|studio_performance|studio_design_contracts|component_contracts)$"
+    if suite == "studio_colors":
+        pattern="^(studio_colors|studio_color_interactions)$"
+    if suite == "studio_performance":
+        pattern = "^(studio_performance|studio_design_contracts|component_contracts)$"
+    if suite == "studio_reuse":
+        pattern = "^(studio_reuse|studio_design_contracts)$"
+    if suite == "studio_designs":
+        pattern = "^(studio_designs|studio_design_contracts|component_contracts|studio_quick|studio_colors|studio_color_interactions|studio_cutover)$"
     if suite == "studio_grid":
         pattern = "^(studio_grid|studio_grid_controls)$"
     if suite == "vpn":
@@ -137,6 +197,8 @@ CASES = {"catalog": ("home-components-acceptance.py", ["--studio", "--catalog", 
          "collections": ("home-components-acceptance.py", ["--studio", "--collections", "--inspect"]),
          "history": ("tv-library-acceptance.py", ["--history", "--inspect"]),
          "studio": ("home-components-acceptance.py", ["--studio", "--inspect"]),
+         "studio-designs": ("home-components-acceptance.py", ["--studio", "--designs-only", "--inspect"]),
+         "studio-search": ("home-components-acceptance.py", ["--studio", "--search-only", "--inspect"]),
          "desktop": ("home-components-acceptance.py", ["--studio", "--desktop", "--inspect"]),
          "lounge": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
          "pastel": ("home-reference-acceptance.py", ["--skin-from-settings", "--inspect"]),
@@ -169,6 +231,15 @@ def visual_result_passed(case, result):
             and colors.get('captures')==['colorpreview','colorapplied','colorrecent','colorreset','chromepreview','chromeapplied','colorreopened']
             and all(workflows.get(k) is True for k in ('proportionalSize','sizeCancel','headerApply','headerRecovery','cameraNoWrite','resetCancel'))
             and workflows.get('captures')==['sizepreview','sizeapplied','headerpreview','headerorder','headerapplied','headerreopened','canvaszoom','resetcancel'])
+    if case=='studio-search':
+        network=result.get('network',{})
+        return (result.get('passed') is True and result.get('journey')=='studio-search' and result.get('freshProfile') is True and result.get('normalProfileUsed') is False and network.get('socketErrnos')==[101,101] and network.get('unixSocketAvailable') is True and result.get('actualInputActions',0)>0 and len(result.get('captureTrace',[]))>=3)
+    if case=='studio-designs':
+        designs=result.get('designs',{})
+        required=('remoteSharedStyle','sharedImpactPreview','myComponents','linkedInsertDetach','freshIdentities','allFourTemplatesCustomized','currentPagePreservedRoot','namedMilestone','versionPreviewCancelNoWrite','defaultsApplyVersionRestoreExact','remotePortableExportImport','privateReferenceChooseHideRemove','coldReopenPreservedBytes','offlineSocketFilter')
+        return (result.get('passed') is True and result.get('freshProfile') is True and result.get('normalProfileUsed') is False
+                and result.get('journey')=='studio-designs' and all(designs.get(key) is True for key in required)
+                and result.get('actualInputActions',0)>0 and isinstance(result.get('captureTrace'),list) and len(result['captureTrace'])>=20)
     if case=='catalog':
         return (all(result.get(k) is True for k in ('passed','freshProfile','remoteImport','invalidRefused','privateDraft','framingCancel','atomicGifApply','reopenPreserved','remotePrimitives','independentText','linkedImage','layersSelection'))
             and isinstance(result.get('managedGifSha256'),str) and re.fullmatch(r'[a-f0-9]{64}',result['managedGifSha256']) is not None
@@ -321,21 +392,26 @@ def feature_helper_command(source, helper, executable, flags):
 
 
 def verified_studio_helper(root, expected, kind='studio'):
-    if kind not in {'studio','history'}:raise RuntimeError('Unsupported bounded helper kind')
+    if kind not in {'studio','history','reference'}:raise RuntimeError('Unsupported bounded helper kind')
     if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):raise RuntimeError('Studio requires an exact helper digest')
     path=root/'bin'/(kind+'-helper-'+expected+'.py')
     if path.is_symlink() or path.resolve()!=path or not path.is_file() or digest(path)!=expected:raise RuntimeError('Studio helper identity mismatch')
     return path
 
 
-def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False):
+def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False, designs=False, search=False):
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+['--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+['--inspect']
 
 
-def history_helper_command(source, helper, executable):
+def history_helper_command(source, helper, executable, pages=False):
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/tv-library-acceptance.py'),str(executable),'--history','--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/tv-library-acceptance.py'),str(executable),'--pages' if pages else '--history','--inspect']
+
+
+def reference_helper_command(source, helper, executable, flags):
+    bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-reference-acceptance.py'),str(executable)]+flags
 
 
 def guide_backend_diagnostics(run):
@@ -593,6 +669,10 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 
 def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='studio_visuals':
+        return qml_coverage(root,run,base_id,suite,'studio_visuals',
+            {'qml/PageStudioView.qml','qml/CommandCenter.qml'},
+            {'tests/studio/tst_artwork.qml','tests/studio/tst_shell.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1','tools/home-components-acceptance.py'},'StudioVisuals')
     if suite=='studio_artwork':
         return qml_coverage(root,run,base_id,suite,'studio_artwork',
             {'qml/StudioImageFraming.qml','qml/StudioArtworkPicker.qml','qml/StudioInspector.qml','qml/PageStudioView.qml'},
@@ -687,6 +767,24 @@ class Oracle:
     def links(self):
         prefix = Path.home() / ".local/share/isolde-appliance"
         return {name: str((prefix / name).resolve()) for name in ("current", "previous")}
+
+    def deployed_release(self, payload, target):
+        deployment = self.run / "deploy-result.json"
+        if deployment.is_file():
+            release = json.loads(deployment.read_text()).get("release")
+            if not isinstance(release, str) or self.links()["current"] != release or digest(Path(release) / "bin/isolde") != digest(payload / "bin/isolde"):
+                raise RuntimeError("Native configuration requires this deployed snapshot in Isolde-Test")
+            return release
+        if target != "android":
+            raise RuntimeError("Native configuration requires this deployed snapshot in Isolde-Test")
+        release = self.links()["current"]
+        release_path = Path(release)
+        releases = (Path.home() / ".local/share/isolde-appliance/releases").resolve()
+        if release_path.parent != releases or not release_path.is_dir():
+            raise RuntimeError("Android setup without a deployment receipt requires the current Isolde release")
+        if payload_hashes(release_path) != payload_hashes(payload):
+            raise RuntimeError("Android setup without a deployment receipt requires an exact match to this tested payload")
+        return release
 
     def restore(self, before):
         expected = before["ActiveState"] == "active"
@@ -814,6 +912,17 @@ class Oracle:
             android[label] = {"exit": result.returncode, "output": output[:8192], "error": result.stderr[:2048]}
         android["session"] = {key: value for line in self.command("systemctl", "--user", "show-environment").splitlines()
                               for key, separator, value in [line.partition("=")] if separator and key in {"XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "WAYLAND_DISPLAY", "DISPLAY"}}
+        release = Path(self.state["releases"]["current"])
+        config_path = release / "share/isolde/config/android-runtime.json"
+        if release.is_symlink() or not config_path.is_file() or config_path.is_symlink() or config_path.stat().st_size > 65536:
+            raise RuntimeError("Cannot safely inspect the current release's Android repository configuration")
+        runtime_config = json.loads(config_path.read_text())
+        key_url = runtime_config["repository"]["keyUrl"]
+        parsed_key_url = urlsplit(key_url)
+        if parsed_key_url.scheme != "https" or not parsed_key_url.hostname:
+            raise RuntimeError("Current Android repository key URL is invalid")
+        android["repositoryDns"] = repository_dns_probe(parsed_key_url.hostname)
+        android["resolverStatus"] = resolver_status()
         atomic_json(self.run/"android-capabilities.json", android)
 
     def test(self, suite, reuse_full_run=None):
@@ -833,7 +942,7 @@ class Oracle:
         command = ["cmake", "--build", str(build), "--parallel", "2"]
         targets, pattern = suite_selection(suite)
         if reuse:targets=targets+['isolde']
-        if reuse and suite=='studio_artwork':pattern='^(studio_artwork|studio_selection|studio_quick|studio_colors)$'
+        if reuse and suite=='studio_artwork':pattern='^(studio_artwork|studio_selection|studio_quick|studio_colors|studio_color_interactions)$'
         if targets:
             command += ["--target"] + targets
         self.stage("build", command, 1200)
@@ -843,14 +952,28 @@ class Oracle:
                    "--output-junit", str(self.run / "ctest.xml")]
         if suite != "all":
             command += ["-R", pattern]
-        # The full suite now contains 39 serial suites. Keep individual test
-        # deadlines intact while allowing the complete run to report failures.
-        self.stage("ctest", command, 600 if suite == "all" else 360, env)
+        # The 45-suite passing baseline took 557.69s; the 53-suite Studio
+        # candidate adds measured design/reuse/cutover/safety coverage. Bound
+        # the aggregate at 15 minutes, retaining every individual deadline.
+        try:
+            self.stage("ctest", command, 900 if suite == "all" else 600 if suite == "studio" else 360, env)
+        finally:
+            last = build / "Testing/Temporary/LastTest.log"
+            if last.is_file():
+                shutil.copy2(last, self.run / "LastTest.log")
         xml = ET.parse(self.run / "ctest.xml").getroot()
         cases = list(xml.iter("testcase"))
         if suite != "all":
-            expected = {"studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_workflows", "studio_cutover", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
-            if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors"}
+            expected = {"studio_quick", "studio_safety", "studio_selection", "studio_artwork", "studio_colors", "studio_color_interactions", "studio_workflows", "studio_cutover", "studio_performance", "studio_reuse", "studio_designs", "studio_design_contracts", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
+            if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors","studio_color_interactions"}
+            if suite == "studio_closure_regressions":expected={"studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance"}
+            if suite == "studio_colors":expected={"studio_colors","studio_color_interactions"}
+            if suite == "studio_visuals":expected={"studio_quick","studio_artwork","studio_shell","home_component_navigation","studio_navigation"}
+            if suite == "studio_remaining":expected={"studio_quick","studio_performance","studio_design_contracts","component_contracts"}
+            if suite == "studio_performance":expected={"studio_performance","studio_design_contracts","component_contracts"}
+            if suite == "studio_reuse":expected={"studio_reuse","studio_design_contracts"}
+            if suite == "studio_designs":
+                expected = {"studio_designs", "studio_design_contracts", "component_contracts", "studio_quick", "studio_colors", "studio_color_interactions", "studio_cutover"}
             if suite == "studio_grid":
                 expected = {"studio_grid", "studio_grid_controls"}
             if suite == "home_component_navigation":
@@ -869,9 +992,6 @@ class Oracle:
             raise RuntimeError("CTest report contains no tests or failures")
         if any(c.find("skipped") is not None for c in cases):
             raise RuntimeError("CTest skipped tests; inspect the report before claiming a pass")
-        last = build / "Testing/Temporary/LastTest.log"
-        if last.is_file():
-            shutil.copy2(last, self.run / "LastTest.log")
         verify_tree(work / "source", entries)
         service_after, releases_after = self.service(), self.links()
         self.update(service=service_after, releases=releases_after)
@@ -948,6 +1068,10 @@ class Oracle:
                             if item.startswith(b'XDG_CACHE_HOME='):active.append(Path(os.fsdecode(item.split(b'=',1)[1])))
                     except OSError:pass
                 removed=remove_fixture_caches(Path('/tmp'),mounts,active)
+                if shutil.disk_usage(self.root).free<2*1024**3:
+                    # Recent completed caches are reproducible too; active
+                    # fixtures and all config/media/evidence remain protected.
+                    removed+=remove_fixture_caches(Path('/tmp'),mounts,active,preserve_recent=0)
                 atomic_json(self.run/'guest-fixture-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'fixtureDataPreserved':True,'freeGiB':round(shutil.disk_usage(self.root).free/1024**3,2)})
             if shutil.disk_usage(self.root).free<3*1024**3:
                 raise RuntimeError("Verified obsolete artifacts could not recover 3 GiB; inspect storage evidence")
@@ -963,9 +1087,9 @@ class Oracle:
             self.prepare_guest_space()
             self.stage("games-runtime-install",["python3",str(self.run/"source/tools/provision-games.py"),"--install","--fixture","--receipt",str(self.run/"games-runtime-install.json")],2400)
             return
-        deployed=json.loads((self.run/"deploy-result.json").read_text())
-        if self.command("hostname")!="isolde-test" or self.links()["current"]!=deployed["release"] or digest(Path(deployed["release"])/"bin/isolde")!=digest(payload/"bin/isolde"):
-            raise RuntimeError("Native configuration requires this deployed snapshot in Isolde-Test")
+        self.deployed_release(payload, target)
+        if self.command("hostname")!="isolde-test":
+            raise RuntimeError("Native configuration is restricted to Isolde-Test")
         if target=="android":self.prepare_guest_space(8)
         script=self.run/"source/tools/provision-default-apps.py"
         command=["/usr/bin/python3",str(script),"isolation","--source",str(self.run/"source")]
@@ -1051,10 +1175,11 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None):
-        if history_helper_digest and case!='history':raise RuntimeError('History helper is history-case-only')
+    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None):
+        if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
+        if history_helper_digest and case not in ('history','pages'):raise RuntimeError('Library helper is history/pages-only')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
-        if studio_helper_digest and case not in ('studio','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
+        if studio_helper_digest and case not in ('studio','studio-designs','studio-search','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload()
@@ -1069,13 +1194,17 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
-        if case=='history' and history_helper_digest:
+        if reference_helper_digest:
+            helper=verified_studio_helper(self.root,reference_helper_digest,'reference')
+            command=reference_helper_command(source,helper,executable,flags)
+            self.update(acceptanceHelperSha256=reference_helper_digest)
+        if case in ('history','pages') and history_helper_digest:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
-            command=history_helper_command(source,helper,executable)
+            command=history_helper_command(source,helper,executable,pages=case=='pages')
             self.update(acceptanceHelperSha256=history_helper_digest)
-        if case in ('studio','desktop','collections','catalog') and studio_helper_digest:
+        if case in ('studio','studio-designs','studio-search','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
-            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog')
+            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search')
             self.update(acceptanceHelperSha256=studio_helper_digest)
         if case=='guide-features' and feature_helper_digest:
             helper=verified_guide_helper(self.root,feature_helper_digest,'features')
@@ -1103,7 +1232,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -1293,6 +1422,8 @@ def collect_evidence(run, case, directories):
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
             if case=="guide-features":paths += [directory/name for name in ('guide-features.json','guide-soak-ready.json')]
             if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json','cached-artwork-observation.json','original-home-layout.json')]
+            if case in {"studio-designs", "studio-search"}:
+                paths += [directory / name for name in ("network-denial.json", "portable-export.json")]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:
@@ -1302,12 +1433,55 @@ def collect_evidence(run, case, directories):
                     archive.add(path, arcname=str(Path(directory.name) / path.relative_to(directory)), recursive=False)
 
 
+def recover_visual_orphan(run, pid, proc_root=Path("/proc")):
+    """Stop one proven private child left by a failed visual-helper startup."""
+    if socket.gethostname() != "isolde-test" or pid <= 1:
+        raise RuntimeError("Private visual recovery requires Isolde-Test and a child PID")
+    proc = proc_root / str(pid)
+    if not proc.is_dir() or proc.stat().st_uid != os.getuid():
+        raise RuntimeError("Visual child is absent or belongs to another user")
+    executable = (proc / "exe").resolve(strict=True)
+    expected = (run / "payload/bin/isolde").resolve(strict=True)
+    if executable != expected:
+        raise RuntimeError("Visual child does not use this run's tested executable")
+    result = json.loads((run / "test-result.json").read_text())
+    if result.get("passed") is not True or result.get("payload", {}).get("bin/isolde") != digest(executable):
+        raise RuntimeError("Visual child executable lacks a matching tested payload")
+    values = (proc / "environ").read_bytes().split(b"\0")
+    config = next((value.partition(b"=")[2].decode() for value in values if value.startswith(b"XDG_CONFIG_HOME=")), "")
+    if not re.fullmatch(r"/tmp/isolde-components-acceptance-[A-Za-z0-9_-]+/config", config):
+        raise RuntimeError("Visual child is not using a disposable acceptance profile")
+    directory = Path(config)
+    if directory.resolve(strict=True) != directory or directory.stat().st_uid != os.getuid():
+        raise RuntimeError("Visual child profile is redirected or foreign")
+    fixture = str(directory.parent)
+    logs = list(run.glob("visual-*.log"))[:64]
+    if not any(path.stat().st_size <= 8*1024**2 and fixture in path.read_text() and "NameError" in path.read_text() for path in logs):
+        raise RuntimeError("No matching failed-startup evidence for this visual child")
+    started = (proc / "stat").read_text().split()[21]
+    # Recheck birth identity immediately before signalling; never use pkill or
+    # a window PID alone, and never touch the installed service process.
+    if (proc / "stat").read_text().split()[21] != started or (proc / "exe").resolve(strict=True) != executable:
+        raise RuntimeError("Visual child identity changed during recovery")
+    os.kill(pid, signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while proc.is_dir() and time.monotonic() < deadline:
+        try:
+            fields = (proc / "stat").read_text().split()
+            if fields[21] != started or fields[2] == "Z": break
+        except FileNotFoundError: break
+        time.sleep(.1)
+    else:
+        if proc.is_dir(): raise RuntimeError("Verified visual child did not stop after SIGTERM")
+    return {"pid":pid,"processStartTicks":started,"executable":str(executable),"privateConfig":config,"stopped":True,"signal":"SIGTERM"}
+
+
 def write_report(run):
     """A flat, allowlisted bundle; never the source tree, payload, caches or credentials."""
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(studio|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -1424,11 +1598,12 @@ def remove_backed_up_archives(root, backups, mounts=()):
         archive.unlink();removed.append({'runId':identity,'sha256':checksum})
     return removed
 
-def remove_fixture_caches(root, mounts, active, target_free=3*1024**3):
+def remove_fixture_caches(root, mounts, active, target_free=3*1024**3, preserve_recent=3):
     if root.resolve()!=root or root.is_symlink():raise RuntimeError("Redirected fixture cache root")
     fixtures=sorted((p for p in root.iterdir() if re.fullmatch(r"isolde-(?:tv-acceptance|components-acceptance|reference-config)-[A-Za-z0-9_-]+",p.name) and p.is_dir() and not p.is_symlink()),key=lambda p:p.stat().st_mtime,reverse=True)
     removed=[]
-    for fixture in fixtures[3:]:
+    if preserve_recent not in (0,3):raise RuntimeError('Unsupported fixture cache retention')
+    for fixture in fixtures[preserve_recent:]:
         if shutil.disk_usage(root).free>=target_free:break
         cache=fixture/'cache'
         if not cache.exists():continue
@@ -1485,7 +1660,10 @@ def main():
     parser.add_argument("--feature-helper-digest")
     parser.add_argument('--studio-helper-digest')
     parser.add_argument('--history-helper-digest')
+    parser.add_argument('--reference-helper-digest')
+    parser.add_argument("--orphan-visual-pid", type=int, default=0)
     args = parser.parse_args()
+    if args.orphan_visual_pid and (args.action != "recover" or not 1 < args.orphan_visual_pid < 2**31): parser.error("Visual orphan PID is Recover-only")
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
         parser.error("Bounded lock waiting (0–900 seconds) is restricted to Test/Configure/Visual")
@@ -1512,6 +1690,21 @@ def main():
             if key in {"DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}: environment[key] = value
         windows = subprocess.run(["wmctrl", "-lpx"], env=environment, capture_output=True, text=True, timeout=10)
         status["windowClasses"] = [line.split(None, 5)[:4] for line in windows.stdout.splitlines()[:64]]
+        status["isoldeWindowProcesses"] = []
+        for window in status["windowClasses"]:
+            if len(window) < 4 or window[3] != "isolde.Isolde" or not window[2].isdigit(): continue
+            proc = Path("/proc") / window[2]
+            record = {"pid": int(window[2]), "exists": proc.is_dir()}
+            if proc.is_dir() and proc.stat().st_uid == os.getuid():
+                try:
+                    record["executable"] = str((proc / "exe").resolve(strict=True))
+                    record["processStartTicks"] = (proc / "stat").read_text().split()[21]
+                    values = (proc / "environ").read_bytes().split(b"\0")
+                    config = next((value.partition(b"=")[2].decode() for value in values if value.startswith(b"XDG_CONFIG_HOME=")), "")
+                    if re.fullmatch(r"/tmp/isolde-components-acceptance-[A-Za-z0-9_-]+/config", config):
+                        record["privateVisualConfig"] = config
+                except (OSError, IndexError, UnicodeError): pass
+            status["isoldeWindowProcesses"].append(record)
         status["vpnPlatform"]=vpn_platform()
         status["androidSetup"]={"runtimeExecutable":shutil.which("waydroid"),
             "runtimeConfigured":Path("/var/lib/waydroid/waydroid.cfg").is_file(),
@@ -1564,7 +1757,7 @@ def main():
             elif args.action == "test":
                 oracle.test(args.suite,args.reuse_full_run)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":
@@ -1574,6 +1767,13 @@ def main():
             elif args.action == "configure":
                 oracle.configure_native(args.configure_target,args.maintenance_tests_digest)
             elif args.action == "recover":
+                if args.orphan_visual_pid:
+                    layouts = oracle.layout_hashes();service = oracle.service();links = oracle.links()
+                    receipt = recover_visual_orphan(oracle.run, args.orphan_visual_pid)
+                    atomic_json(oracle.run / "orphan-visual-recovery.json", receipt)
+                    if oracle.layout_hashes() != layouts or oracle.service() != service or oracle.links() != links:
+                        raise RuntimeError("Normal profile/service/release changed during private-child recovery")
+                    oracle.update(orphanVisualRecovery=receipt,service=service)
                 lease = root / "service-lease.json"
                 if lease.is_file():
                     record = json.loads(lease.read_text())

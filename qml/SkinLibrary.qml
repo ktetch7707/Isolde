@@ -11,6 +11,8 @@ Rectangle {
     property bool confirming: false
     property string message: ""
     property var pageUpdates: []
+    property bool draftApplication: false
+    signal previewRequested(string id)
     readonly property var entries: layoutModel.skins || []
     readonly property var choice: entries[selected] || ({})
     readonly property var operations: ["Apply skin", "Save current as new skin", "Rename saved skin", "Delete saved skin", "Update starter pages"]
@@ -18,6 +20,7 @@ Rectangle {
     function begin() { selected = 0; operation = 0; naming = ""; confirming = false; message = ""; open = true }
     function execute() {
         message = ""
+        if (operation === 0 && draftApplication) { previewRequested(choice.id); return }
         if (operation === 4) {
             pageUpdates = layoutModel.skinPageUpdates(choice.id)
             if (!pageUpdates.length) { message = "No unchanged starter links need updating. Custom links are kept."; return }

@@ -2,6 +2,7 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
     property bool passwordMode: false
     property var appearance: ({})
     property string hint: "D-pad choose    Enter type/select    Esc cancel"
@@ -51,32 +52,32 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 12
-        color: root.appearance.surfaceColor || "#182238"
+        radius: shell.radius
+        color: shell.surface
         border.width: 2
-        border.color: root.appearance.focusColor || "#4D7ED8"
+        border.color: shell.focus
 
         Column {
             anchors.fill: parent
             anchors.margins: 18
-            spacing: 14
+            spacing: 14 * shell.gapScale
 
             Rectangle {
                 width: parent.width
                 height: 50
-                radius: 8
-                color: root.appearance.selectedColor || "#0E1628"
+                radius: shell.radius
+                color: shell.input
                 border.width: 1
-                border.color: "#354462"
-                Text {
+                border.color: shell.outline
+                Text { font.family: shell.fontFamily;
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
                     text: root.passwordMode && root.value.length > 0 ? "•".repeat(root.value.length) : root.value
-                    color: root.appearance.textColor || "#F8FAFC"
-                    font.pixelSize: 20
+                    color: shell.inputText
+                    font.pixelSize: 20 * shell.textScale
                     elide: Text.ElideRight
                 }
             }
@@ -84,8 +85,8 @@ Item {
             Grid {
                 width: parent.width
                 columns: root.columns
-                columnSpacing: 8
-                rowSpacing: 8
+                columnSpacing: 8 * shell.gapScale
+                rowSpacing: 8 * shell.gapScale
                 Repeater {
                     model: root.keys
                     delegate: Rectangle {
@@ -93,14 +94,14 @@ Item {
                         required property string modelData
                         width: (parent.width - parent.columnSpacing * (root.columns - 1)) / root.columns
                         height: 40
-                        radius: 8
-                        color: root.selectedIndex === index ? root.appearance.selectedColor || "#E8EEF8" : root.appearance.surfaceColor || (modelData === "Done" ? "#2B6B4B" : "#111A2A")
+                        radius: shell.radius
+                        color: root.selectedIndex === index ? shell.selected : shell.surface
                         border.width: root.selectedIndex === index ? 3 : 1
-                        border.color: root.selectedIndex === index ? root.appearance.focusColor || "#F8FAFC" : root.appearance.mutedColor || "#2B3853"
-                        Text {
+                        border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
+                        Text { font.family: shell.fontFamily;
                             anchors.centerIn: parent
                             text: modelData
-                            color: root.appearance.textColor || (root.selectedIndex === index ? "#07111F" : "#F8FAFC")
+                            color: root.selectedIndex === index ? shell.selectedText : shell.text
                             font.pixelSize: modelData.length > 1 ? 13 : 18
                             font.weight: Font.DemiBold
                         }
@@ -108,11 +109,11 @@ Item {
                 }
             }
 
-            Text {
+            Text { font.family: shell.fontFamily;
                 width:parent.width;wrapMode:Text.Wrap
                 text: root.hint
-                color: root.appearance.mutedColor || "#91A0BC"
-                font.pixelSize: 15
+                color: shell.muted
+                font.pixelSize: 15 * shell.textScale
             }
         }
     }

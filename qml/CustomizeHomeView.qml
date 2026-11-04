@@ -12,10 +12,13 @@ Item {
     property var artwork: []
     property var themes: []
     property bool ready: false
+    property bool resumeDesignOrigin: false
+    property string designPageId: ""
+    property string designComponentId: ""
     readonly property bool editing: studio.open || skins.open
     signal closed()
     signal pageRequested(string id)
-    function start() { if (ready && visible && !editing) studio.show(initialPageId, initialComponentId) }
+    function start() { if (ready && visible && !editing) {studio.show(resumeDesignOrigin?designPageId:initialPageId, resumeDesignOrigin?designComponentId:initialComponentId);resumeDesignOrigin=false} }
     function handleCommand(command) {
         // Home has the same cancel/dirty-draft contract as Back in the editor.
         if (command === inputManager.home) command = inputManager.back
@@ -38,6 +41,7 @@ Item {
         provider: root.provider
         onClosed: root.closed()
         onSkinsRequested: {
+            root.designPageId=pageId;root.designComponentId=selectedId;root.resumeDesignOrigin=true
             if (session) session.invalidate()
             open = false
             skins.begin()
@@ -47,6 +51,8 @@ Item {
         id: skins
         anchors.fill: parent
         layoutModel: root.layoutModel
+        draftApplication: true
+        onPreviewRequested:id=>{open=false;root.start();studio.openDesign(id)}
         z: 101
         onOpenChanged: if (!open && root.visible) Qt.callLater(root.start)
     }

@@ -69,7 +69,7 @@ def main():
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a"); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     profile = str(uuid.uuid4())
     evidence = Path(tempfile.mkdtemp(prefix="isolde-tv-acceptance-"))
-    print("Fixture evidence: " + str(evidence) + " · profile " + profile, flush=True)
+    print("Fixture evidence: " + str(evidence) + " Â· profile " + profile, flush=True)
     media = Path.home() / "Videos/Isolde-Acceptance" / ("Isolde-tv-test-" + profile)
     data = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share")))
     userdata = data / "Isolde/native-profiles" / profile / "kodi/home/.kodi/userdata"
@@ -586,75 +586,112 @@ provider.setSettingString("searchlanguage","en-US")
             print("Real Kodi seasons, episodes and local artwork passed", flush=True)
             run("wmctrl", "-i", "-a", shell, env=env)
             if args.pages:
+                started=time.monotonic();input_trace=[];capture_trace=[]
+                layout=config/"profiles"/profile/"home-layout.json"
+                defaults=json.loads((Path(__file__).resolve().parents[1]/"config/default-home-layout.json").read_text())
                 def press(name,count=1):
-                    for _ in range(count): key(shell,name,0.07)
+                    for _ in range(count):
+                        input_trace.append({"target":"shell","name":name,"elapsedSeconds":time.monotonic()-started});key(shell,name,0.07)
                     time.sleep(0.4)
                 def captured(phase):
                     print(phase.upper()+"_READY "+str(evidence),flush=True)
                     wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" captured",seconds=150)
-                def home_settings():
-                    press("Home");press("Up",30);press("Left",3);press("Right");press("Return");press("Left",30)
-                def edit_navigation():
-                    press("Up",30);press("Right",3);press("Return")
-                    press("Left",30);press("Right",24);press("Return")
-                    press("Down",9);press("Right");press("Escape");press("Escape")
-                press("Home");home_settings();press("Right",25);press("Return")
-                press("Right",4);press("Return");press("Down",20);press("Return")
-                layout=config/"profiles"/profile/"home-layout.json"
-                document=wait(lambda:json.loads(layout.read_text()),"Page saved from Settings")
+                    capture_trace.append({"phase":phase,"actions":len(input_trace),"elapsedSeconds":time.monotonic()-started})
+                def menu(action,extra=0):
+                    document=json.loads(layout.read_text()) if layout.exists() else defaults
+                    pages=len(document.get("pages",[]))+int(document.get("rootPage",{}).get("visible",True))+extra
+                    offsets={"add":0,"appearance":1,"designs":4,"apply":7}
+                    index=1 if action=="root" else 1+pages+offsets[action]
+                    press("Up",30);press("Down");press("Down",index);press("Return")
+                def apply(extra=0):
+                    menu("apply",extra);press("Return")
+                def enter_editor():
+                    run("wmctrl","-i","-a",shell,env=env)
+                    x11.XSetInputFocus(display,int(shell,16),2,0);x11.XSync(display,0)
+                    x11.XGetInputFocus.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_ulong),ctypes.POINTER(ctypes.c_int)]
+                    def focused():
+                        target=ctypes.c_ulong();mode=ctypes.c_int()
+                        x11.XGetInputFocus(display,ctypes.byref(target),ctypes.byref(mode))
+                        return target.value==int(shell,16)
+                    wait(focused,"Studio page journey owns shell focus")
+                    press("Home");press("Up",30);press("Left",3);press("Right");press("Return")
+                def leave_editor():
+                    press("Escape",3);press("Home")
+                def page_navigation(index,extra=0):
+                    menu("appearance",extra);press("Down",2);press("Return")
+                    press("Down",2);press("Return");press("Up",30);press("Down",index);press("Return")
+                    press("Escape",2)
+                enter_editor();press("Return")  # Add page, with an actual remote keyboard name.
+                press("Return");press("Down",5);press("Return")
+                captured("blank")
+                assert not layout.exists(),"Blank page creation must stay private until Apply"
+                menu("add",1);press("Down");press("Return")  # Two-column catalog: Media shelf.
+                press("Down",6);press("Return");captured("shelfplacement");press("Return")  # Shows · All, accept placement.
+                menu("add",1);press("Down",2);press("Right");press("Return");press("Return");press("Return")  # Widgets → Clock.
+                menu("add",1);press("Down");press("Right");press("Return");press("Return");press("Return")  # App carousel → all installed apps.
+                captured("blankcomponents")
+                page_navigation(0,1);apply(1)
+                document=wait(lambda:json.loads(layout.read_text()),"Studio blank page and real Shows shelf applied")
+                assert len(document["pages"])==1
                 page_id=document["pages"][0]["id"]
-                assert document["pages"][0]["layout"]["categories"][0]["presentation"]["libraryKind"]=="shows"
-                press("Left",4);press("Return");time.sleep(2)
-                captured("page")
-                press("Return");press("Return");time.sleep(0.7);press("Return");time.sleep(0.7);press("Return")
+                page=document["pages"][0]["layout"]
+                assert any(i.get("widgetType")=="clock" for i in page["components"])
+                assert any(i.get("family")=="app-bar" for i in page["components"])
+                assert any(i.get("source",{}).get("libraryKind")=="shows" or i.get("presentation",{}).get("libraryKind")=="shows" for i in page["components"])
+                assert page["composition"]["pageNavigation"]=="left"
+                menu("root");press("Return")  # Root Home page context → Edit page.
+                menu("appearance");press("Down",3);press("Return");press("Down",2);press("Return")
+                press("Down");press("Return");press("Escape",2);apply()
+                wait(lambda:json.loads(layout.read_text())["composition"].get("moviePage")==page_id,"Named page selected as Movies destination")
+                leave_editor();key(shell,"m",modifiers=4);time.sleep(2);captured("page")
+                for _ in range(5):
+                    if rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing":break
+                    press("Return");time.sleep(.7)
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Page widget real Kodi episode playback passed")
-                key("kodi","Return");wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Page widget pause passed")
-                key("kodi","Escape");wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Page widget stop and return passed")
-                time.sleep(1.2)  # The native stop acknowledgement precedes the shell's playback-status poll.
-                for _ in range(3):key(shell,"Escape",0.6)  # Episode -> seasons -> shows -> leave widget.
-                press("Home")
-                home_settings();press("Right",25);press("Return");press("Right",9);press("Return")
-                assert json.loads(layout.read_text())["composition"]["navigation"][-1]["action"]["pageId"]==page_id
-                press("Escape");press("Escape");press("Escape")
-                press("Up",30);press("Down");press("Right",30);press("Return");time.sleep(1)
-                captured("tab")
-                edit_navigation()
-                assert json.loads(layout.read_text())["pages"][0]["layout"]["composition"]["pageNavigation"]=="top"
-                captured("top")
-                edit_navigation()
-                assert json.loads(layout.read_text())["pages"][0]["layout"]["composition"]["pageNavigation"]=="none"
-                captured("standalone")
-                press("Home");home_settings();press("Right",25);press("Return");press("Right",11);press("Return")
-                assert json.loads(layout.read_text())["composition"]["moviePage"]==page_id
-                press("Escape");press("Escape");press("Escape")
-                # Ctrl+M uses the same typed Movies action as a launcher; its destination is configurable.
-                key(shell,"m",modifiers=4);time.sleep(1)
+                captured("playing")
+                input_trace.append({"target":"kodi","name":"Return","elapsedSeconds":time.monotonic()-started});key("kodi","Return")
+                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Page widget pause passed")
+                input_trace.append({"target":"kodi","name":"Escape","elapsedSeconds":time.monotonic()-started});key("kodi","Escape")
+                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Page widget stop and return passed")
+                time.sleep(1.2)
+                captured("playbackreturn")
+                for mode,index in [("top",1),("none",2)]:
+                    enter_editor();press("Up",30);press("Down");press("Down",2);press("Return");press("Return")
+                    page_navigation(index);apply()
+                    wait(lambda:json.loads(layout.read_text())["pages"][0]["layout"]["composition"]["pageNavigation"]==mode,"Studio page navigation "+mode+" applied")
+                    leave_editor();key(shell,"m",modifiers=4);time.sleep(1);captured("top" if mode=="top" else "standalone")
                 captured("direct")
-                press("Home");home_settings();press("Right",23);press("Return");press("Right");press("Return");press("Down",20);press("Return")
+                enter_editor();press("Up",30);press("Down");press("Down",7);press("Return");press("Down",4);press("Return")
+                press("Right");press("Return");press("Down",20);press("Return")
                 saved=list((config/"profiles"/profile/"skins").glob("user-*.json"))
                 assert len(saved)==1 and json.loads(saved[0].read_text())["layout"]["pages"][0]["id"]==page_id
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                 (evidence/"attempt-config.json").write_bytes(layout.read_bytes())
-                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"page_id":page_id,"settings_only_creation_and_customization":True,"home_tab":True,"direct_launcher_destination":True,"navigation_modes":["left","top","none"],"real_kodi_episode_play_pause_stop_return":True,"skin_includes_pages":True,"media_unchanged":True,"visual_review_required":True,"executable":str(args.executable.resolve())},indent=2))
+                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"page_id":page_id,"settings_only_creation_and_customization":True,"home_tab":False,"home_tab_note":"Native route/tab contracts supplement this installed direct-destination journey; no Home tab is injected or claimed.","direct_launcher_destination":True,"navigation_modes":["left","top","none"],"real_kodi_episode_play_pause_stop_return":True,"skin_includes_pages":True,"media_unchanged":True,"normal_profile_used":False,"visual_review_required":True,"executable":str(args.executable.resolve()),"inputTrace":input_trace,"captureTrace":capture_trace,"actualInputActions":len(input_trace),"journeyElapsedSeconds":time.monotonic()-started},indent=2))
                 print("Evidence: "+str(evidence),flush=True)
                 return
             # Refresh initially empty Shows using its toolbar's Refresh button.
             key(shell, "Up")
             for _ in range(5): key(shell, "Right")
             key(shell, "Return"); time.sleep(1)
-            key(shell, "Down"); key(shell, "Return"); time.sleep(1)  # Show → seasons.
-            key(shell, "Return"); time.sleep(1)  # Specials → episode.
+            key(shell, "Down"); key(shell, "Return"); time.sleep(1)  # Show â†’ seasons.
+            key(shell, "Return"); time.sleep(1)  # Specials â†’ episode.
             key(shell, "Return")
             wait(lambda: rpc(directory, "Isolde.PlaybackStatus").get("state") == "playing", "Remote episode playback passed")
             key("kodi", "Return")
             wait(lambda: rpc(directory, "Isolde.PlaybackStatus").get("state") == "paused", "Remote episode pause passed")
             key("kodi", "Escape")
             wait(lambda: rpc(directory, "Isolde.PlaybackStatus").get("state") == "ended", "Remote episode stop and return passed")
-            key(shell, "Escape"); key(shell, "Escape")  # Episode → seasons → shows.
+            key(shell, "Escape"); key(shell, "Escape")  # Episode â†’ seasons â†’ shows.
             for p, digest in hashes.items(): assert hashlib.sha256(Path(p).read_bytes()).hexdigest() == digest
             (evidence / "result.json").write_text(json.dumps({"passed": True, "profile": profile, "shows": len(shows), "seasons": len(seasons), "episodes": len(eps), "media_unchanged": True}, indent=2))
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
+        if args.pages and args.inspect and process and process.poll() is None:
+            print("FAILED_READY "+str(evidence),flush=True)
+            deadline=time.monotonic()+30
+            while not (evidence/"failed-captured").exists() and time.monotonic()<deadline:
+                time.sleep(.2)
         if args.movie_art:
             try:
                 (evidence/"movie-diagnostic.json").write_text(json.dumps(rpc(userdata/"isolde","VideoLibrary.GetMovies",

@@ -1,13 +1,14 @@
 param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
-    [ValidateSet('all','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_selection','studio_artwork','studio_colors','studio_workflows','studio_cutover','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
-    [ValidateSet('studio','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
+    [ValidateSet('all','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_safety','studio_selection','studio_artwork','studio_visuals','studio_colors','studio_workflows','studio_cutover','studio_designs','studio_design_contracts','studio_reuse','studio_performance','studio_remaining','studio_closure_regressions','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
+    [string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [string]$GuideReplayPlan,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ReuseFullRun,
     [switch]$Capture,
     [switch]$Storage,
+    [ValidateRange(0,2147483647)][int]$OrphanVisualPid=0,
     [string[]]$RestoreSourceRunIds = @(),
     [string[]]$BackedUpSourceRunIds = @(),
     [switch]$GuideDiagnostics,
@@ -17,7 +18,12 @@ param(
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
-if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation','studio_selection','studio_artwork'))) { throw 'ReuseFullRun requires Test with a supported bounded QML suite.' }
+if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
+$validCases = @('studio','studio-designs','studio-search','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')
+$Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })
+$invalidCases = @($Cases | Where-Object { $_ -notin $validCases })
+if (!$Cases.Count -or $invalidCases.Count) { throw "Cases must be comma-separated values from: $($validCases -join ', ')" }
+if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation','studio_selection','studio_artwork','studio_visuals'))) { throw 'ReuseFullRun requires Test with a supported bounded QML suite.' }
 if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
 if ($RestoreSourceRunIds.Count -gt 32 -or ($RestoreSourceRunIds.Count -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'artifacts'))) { throw 'Archive restoration requires artifact maintenance and at most 32 source runs.' }
 if ($BackedUpSourceRunIds.Count -gt 128 -or ($BackedUpSourceRunIds.Count -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'artifacts'))) { throw 'Archive pruning requires artifact maintenance and at most 128 backed-up source runs.' }
@@ -87,7 +93,13 @@ try {
             $featureDigest = ''
             $studioDigest = ''
             $historyDigest = ''
-            if ($case -in @('studio','desktop','collections','catalog')) {
+            $referenceDigest = ''
+            if ($case -in @('lounge','pastel')) {
+                $helper = Join-Path $PSScriptRoot 'home-reference-acceptance.py'
+                $referenceDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/reference-helper-$referenceDigest.py")) -TimeoutSeconds 30 -Log $transport
+            }
+            if ($case -in @('studio','studio-designs','studio-search','desktop','collections','catalog')) {
                 $helper = Join-Path $PSScriptRoot 'home-components-acceptance.py'
                 $studioDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/studio-helper-$studioDigest.py")) -TimeoutSeconds 30 -Log $transport
@@ -97,7 +109,7 @@ try {
                 $featureDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-features-$featureDigest.py")) -TimeoutSeconds 30 -Log $transport
             }
-            if ($case -eq 'history') {
+            if ($case -in @('history','pages')) {
                 $helper = Join-Path $PSScriptRoot 'tv-library-acceptance.py'
                 $historyDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/history-helper-$historyDigest.py")) -TimeoutSeconds 30 -Log $transport
@@ -110,12 +122,13 @@ try {
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -ReferenceHelperDigest $referenceDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
         }
     } else {
         $remoteAction = $Action.ToLowerInvariant()
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
         if ($Storage) { $command += ' --storage' }
+        if ($OrphanVisualPid) { $command += " --orphan-visual-pid $OrphanVisualPid" }
         if ($GuideDiagnostics) { $command += ' --guide-diagnostics' }
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($ReuseFullRun) { $command += " --reuse-full-run $ReuseFullRun" }

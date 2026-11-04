@@ -2,6 +2,7 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
     required property var homeItems
     required property var availableApps
     required property var artwork
@@ -84,7 +85,7 @@ Item {
             inPage = true
     }
 
-    Rectangle { anchors.fill: parent; color: "#080C18" }
+    Rectangle { anchors.fill: parent; color: shell.background }
 
     CustomizeHomeView {
         id: homePage
@@ -104,55 +105,59 @@ Item {
     Row {
         anchors.fill: parent
         anchors.margins: 54
-        spacing: 28
+        spacing: 28 * shell.gapScale
         visible: !(root.inPage && root.selectedSection === 1)
 
         Column {
             width: 360
             height: parent.height
-            spacing: 12
-            Text { text: "SETTINGS"; color: "#F8FAFC"; font.pixelSize: 38; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-            Text { text: inPage ? "Esc returns to settings" : "↑ ↓ choose    Enter open    Esc home"; color: "#91A0BC"; font.pixelSize: 16 }
-            Repeater {
+            spacing: 12 * shell.gapScale
+            Text { font.family: shell.fontFamily; text: "SETTINGS"; color: shell.backgroundText; font.pixelSize: 38 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+            Text { font.family: shell.fontFamily; width:parent.width;wrapMode:Text.Wrap;text: "Theme: " + (root.appearance.themeSource || "Home") + "\n" + (inPage ? "Esc returns to settings" : "↑ ↓ choose    Enter open    Esc home"); color: shell.backgroundMuted; font.pixelSize: 16 * shell.textScale }
+            ListView {
+                objectName:"settingsSections"
+                width:parent.width;height:parent.height-y;clip:true
+                spacing:8*shell.gapScale;currentIndex:root.selectedSection
+                highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
                 model: root.sections
                 delegate: Rectangle {
                     required property int index
                     required property var modelData
-                    width: parent.width; height: Math.max(52, (root.height - 208) / root.sections.length - 12); radius: 8
-                    color: root.selectedSection === index ? "#2B416B" : "#111A2A"
+                    width: ListView.view.width; height: 76 * shell.textScale; radius: shell.radius
+                    color: root.selectedSection === index ? shell.selected : shell.surface
                     border.width: root.selectedSection === index ? 3 : 1
-                    border.color: root.selectedSection === index ? "#F8FAFC" : "#2B3853"
+                    border.color: root.selectedSection === index ? shell.text : shell.outline
                     Column {
-                        anchors.fill: parent; anchors.margins: 14; spacing: 6
-                        Text { text: modelData.name; color: "#F8FAFC"; font.pixelSize: 22; font.weight: Font.DemiBold }
-                        Text { text: modelData.description; color: "#9EABC1"; font.pixelSize: 13; elide: Text.ElideRight; width: parent.width }
+                        anchors.fill: parent; anchors.margins: 14; spacing: 6 * shell.gapScale
+                        Text { font.family: shell.fontFamily; text: modelData.name; color: (root.selectedSection === index) ? shell.selectedText : shell.text; font.pixelSize: 22 * shell.textScale; font.weight: Font.DemiBold }
+                        Text { font.family: shell.fontFamily; text: modelData.description; color: (root.selectedSection === index) ? shell.selectedText : shell.muted; font.pixelSize: 13 * shell.textScale; elide: Text.ElideRight; width: parent.width }
                     }
                 }
             }
         }
 
         Rectangle {
-            width: parent.width - 388
+            width: parent.width - 360 - parent.spacing
             height: parent.height
-            radius: 10
-            color: "#0F1728"
-            border.color: "#26344F"
+            radius: shell.radius
+            color: shell.elevated
+            border.color: shell.outline
             Item {
                 anchors.fill: parent
                 anchors.margins: 26
-                NetworkSettingsView { id: networkPage; anchors.fill: parent; visible: root.selectedSection === 0 }
+                NetworkSettingsView { appearance: root.appearance; id: networkPage; anchors.fill: parent; visible: root.selectedSection === 0 }
                 VpnSettingsView { id: vpnPage; anchors.fill: parent; appearance: root.appearance; visible: root.inPage && root.selectedSection === 6 }
                 StoreSettingsView { id: storePage; anchors.fill: parent; appearance:root.appearance; visible: root.inPage && root.selectedSection === 7 }
                 Column {
                     visible: root.selectedSection === 1
                     anchors.centerIn: parent
-                    spacing: 10
-                    Text { text: "HOME"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                    Text { text: "Open to edit tiles, artwork, categories, and background"; color: "#91A0BC"; font.pixelSize: 18 }
+                    spacing: 10 * shell.gapScale
+                    Text { font.family: shell.fontFamily; text: "HOME"; color: shell.elevatedText; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+                    Text { font.family: shell.fontFamily; text: "Open to edit tiles, artwork, categories, and background"; color: shell.muted; font.pixelSize: 18 * shell.textScale }
                 }
-                SourceSettingsView { id: sourcePage; anchors.fill: parent; visible: root.selectedSection === 2 }
-                ProfileSettingsView { id: profilePage; anchors.fill: parent; visible: root.selectedSection === 5 }
-                RemoteSettingsView { id: remotePage; anchors.fill: parent; visible: root.selectedSection === 3 }
+                SourceSettingsView { appearance: root.appearance; id: sourcePage; anchors.fill: parent; visible: root.selectedSection === 2 }
+                ProfileSettingsView { appearance: root.appearance; id: profilePage; anchors.fill: parent; visible: root.selectedSection === 5 }
+                RemoteSettingsView { appearance: root.appearance; id: remotePage; anchors.fill: parent; visible: root.selectedSection === 3 }
                 SystemSettingsView {
                     id: systemPage
                     anchors.fill: parent

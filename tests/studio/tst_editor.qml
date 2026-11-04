@@ -11,6 +11,7 @@ Item {
         property var editor: null
         property string diskBaseline: ""
         Component { id: editorComponent; App.PageStudioView { width: 1280; height: 720; layoutModel: homeLayout } }
+        SignalSpy { id: skinsSpy; signalName: "skinsRequested" }
         function init() {
             failOnWarning(/Binding loop detected|ReferenceError|TypeError/)
         }
@@ -101,24 +102,56 @@ Item {
             scenario("named-tools",()=>{
                 givenPage(false,false)
                 verify(!editor.menuEntries.some(e=>e.label==="More tools"))
+                verify(!editor.menuEntries.some(e=>e.action==="more"))
                 verify(editor.menuEntries.some(e=>e.label==="Layers"))
                 verify(editor.menuEntries.some(e=>e.label==="Saved designs"))
+                for(const label of ["Page appearance","Editor settings","Review & Apply"])verify(editor.menuEntries.some(e=>e.label===label),label)
                 const before=document()
+                skinsSpy.target=editor;skinsSpy.clear()
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Saved designs"));compare(editor.mode,"designTools");compare(skinsSpy.count,0);skinsSpy.target=null
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Layers"));compare(editor.mode,"layers")
+                command(inputManager.back);compare(editor.mode,"canvas")
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Page appearance"));compare(editor.mode,"inspector")
+                const inspector=findChild(editor,"studioInspector");compare(inspector.pageMode,true);verify(inspector.tabs.includes("Layout"))
+                command(inputManager.back);compare(editor.mode,"canvas")
                 editor.beginGesture(false);command(inputManager.navigateRight);command(inputManager.confirm)
                 const moved=document();editor.toolbarFocus=true;editor.menuIndex=0
                 command(inputManager.navigateUp);verify(editor.historyFocus)
                 command(inputManager.confirm);compare(document(),before)
                 command(inputManager.navigateRight);command(inputManager.confirm);compare(document(),moved)
                 command(inputManager.navigateDown);verify(!editor.historyFocus)
+                const origin=editor.selectedId
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Review & Apply"));compare(editor.mode,"apply")
+                verify(editor.dialogLabels()[2].indexOf("Page health")===0)
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="safety"));compare(editor.mode,"safety")
+                compare(editor.dialogLabels()[0],"Try interaction")
+                editor.choice=0;command(inputManager.confirm);compare(editor.mode,"preview")
+                compare(document(),moved);compare(editor.selectedId,origin)
+                command(inputManager.back);compare(editor.mode,"canvas");compare(editor.selectedId,origin)
                 editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="editorSettings"))
                 compare(editor.mode,"editorSettings");editor.choice=2;command(inputManager.confirm)
                 compare(editor.mode,"restoreDefaults");compare(editor.choice,0)
-                command(inputManager.confirm);compare(editor.mode,"editorSettings");compare(document(),moved)
+                compare(editor.dialogLabels().slice(0,2).join("|"),"Cancel|Restore this page in draft; keep other pages");verify(editor.dialogLabels()[2].indexOf("Whole interface")>=0)
+                command(inputManager.confirm);compare(editor.mode,"editorSettings");compare(editor.choice,2);compare(document(),moved)
                 editor.choice=2;command(inputManager.confirm);editor.choice=1;command(inputManager.confirm)
-                compare(editor.mode,"canvas");verify(document()!==moved)
-                verify(editor.session.undo());compare(document(),moved)
+                compare(editor.mode,"canvas");compare(editor.toolbarFocus,true);compare(editor.selectedId,"");verify(document()!==moved)
+                verify(editor.session.undo());compare(document(),moved);compare(editor.toolbarFocus,true)
                 compare(studioFixture.disk(),diskBaseline)
             })
+        }
+        function test_studio_menu_last_action_is_not_clipped() {
+            givenPage(false,false)
+            editor.toolbarFocus=true
+            settle()
+            const menu=findChild(editor,"studioMenuEntries")
+            verify(menu!==null)
+            tryVerify(()=>menu.contentHeight>0)
+            verify(menu.contentHeight<=menu.height,"one-page menu content="+menu.contentHeight+", viewport="+menu.height+", entries="+editor.menuEntries.length)
+            const last=menu.itemAtIndex(editor.menuEntries.length-1)
+            verify(last!==null)
+            verify(last.y+last.height<=menu.contentY+menu.height)
+            compare(editor.menuEntries[editor.menuEntries.length-1].action,"edit")
+            compare(studioFixture.disk(),diskBaseline)
         }
         function test_studio_colors_use_shared_picker_cancel_and_one_undo() {
             scenario("studio-colors",()=>{

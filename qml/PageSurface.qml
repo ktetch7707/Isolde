@@ -34,6 +34,7 @@ Item {
     signal navigationRejected(string reason)
     function showPage(id,origin,replace){
         if(editing){navigationRejected("Finish or discard the Studio draft before opening another page.");return false}
+        if(!layoutModel.pageAllowed(id)){settingsRequested(5);return}
         if(!layoutModel.pageModel(id))return
         if(activeId && !replace && id!==activeId && history.length>=historyLimit){navigationRejected("Page history is full. Use Back or Home before opening another page.");return false}
         if(!activeId)homeOrigin=origin || ""

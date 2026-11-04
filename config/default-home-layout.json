@@ -2,6 +2,12 @@
   "schemaVersion": 1,
   "rootPage": {"name": "Home", "visible": true, "position": 0},
   "theme": {
+    "surfaceThemes": {
+      "search": {"schemaVersion": 1, "mode": "origin"},
+      "apps": {"schemaVersion": 1, "mode": "origin"},
+      "settings": {"schemaVersion": 1, "mode": "home"},
+      "kodi": {"schemaVersion": 1, "mode": "origin"}
+    },
     "brandVisible": false,
     "backgroundStart": "#19191E",
     "backgroundEnd": "#101014",

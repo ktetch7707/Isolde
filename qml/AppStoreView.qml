@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 
 Item {
+ SurfacePalette {id:shell;appearance:root.appearance}
  id:root;objectName:"appStoreView"
  required property var entries
  property var catalog:appCatalog
@@ -264,7 +265,7 @@ Item {
   }
  }
  Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;text:root.busy?root.operationName:root.catalog.errorString || root.catalog.operationStatus || root.catalog.storeStatus || qsTr("D-pad Browse · OK Select · Search Find an app · Back Return");color:root.ink;font.pixelSize:17*root.typeScale;elide:Text.ElideRight}
- Rectangle {anchors.fill:parent;visible:root.addWebOpen;z:5;color:Qt.rgba(0,0,0,0.7)
+ Rectangle {anchors.fill:parent;visible:root.addWebOpen;z:5;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.horizontalCenter:parent.horizontalCenter;y:root.searchOpen?root.gap:(parent.height-height)/2;width:parent.width*0.76;height:webForm.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:webForm;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:12
@@ -279,7 +280,7 @@ Item {
    }
   }
  }
- Rectangle {anchors.fill:parent;visible:!!root.confirmation;z:5;color:Qt.rgba(0,0,0,0.7)
+ Rectangle {anchors.fill:parent;visible:!!root.confirmation;z:5;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:body.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:body;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
@@ -297,7 +298,7 @@ Item {
    }
   }
  }
- Rectangle {anchors.fill:parent;visible:root.toolsMenuOpen;z:7;color:Qt.rgba(0,0,0,0.7)
+ Rectangle {anchors.fill:parent;visible:root.toolsMenuOpen;z:7;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:storeMenu.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:storeMenu;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
@@ -311,7 +312,7 @@ Item {
    }
   }
  }
- Rectangle {anchors.fill:parent;visible:root.busy;z:8;color:Qt.rgba(0,0,0,0.7)
+ Rectangle {anchors.fill:parent;visible:root.busy;z:8;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:progressBody.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:progressBody;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap

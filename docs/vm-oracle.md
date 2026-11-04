@@ -29,7 +29,8 @@ Additional graphical journeys can be selected with `-Cases studio,desktop,lounge
 
 Collection acceptance: `Visual -Cases collections -Installed` uses the verified SHA-addressed Home/Studio helper overlay against the same tested executable. It creates a disposable profile and an explicitly labelled interactive desktop-client fixture, uses ordinary Store removal/reinstall and App/Button galleries, verifies native input/normal exit/exact repeated launch return, and refuses page-byte changes. It is not third-party FreeTube playback evidence. Seventeen captured phases still require agent review. `collections` is a distinct case; desktop/Studio cases retain their existing routes and frozen dependency paths.
 
-Wrapper verification without the VM: `pwsh -NoProfile -File tools/test-test-all.ps1`.
+The separate code-quality/refactoring initiative runs locally and does not
+invoke this VM runner.
 
 T11 extended cases: `Visual -Cases guide-lifecycle` adds real natural-end/surf/deleted-file repair to the existing Guide surfaces journey; `guide-features` adds remote source/artwork/portability/template/calendar workflows. Their distinct additional scope is bounded to 1,740 guest seconds / 1,800 host seconds, with unchanged 110-second capture reviews. A successful lifecycle run records an off-time fixture receipt. `guide-soak` on the **same run ID** refuses less than 43,200 real off-time seconds, verifies the frozen executable and committed slots, and cold-starts only that disposable profile in a denied network namespace. Never count its preparation or a simulated clock jump as a twelve-hour/offline pass. Existing case budgets and normal-profile preservation remain unchanged.
 
@@ -38,6 +39,8 @@ From the repository root:
 ```powershell
 # Optional: connection, tools, disk and service check; changes no release/profile.
 ./tools/vm-test.ps1 Check
+# Android preflight reports bounded DNS resolution for the current release's
+# pinned repository host plus read-only resolvectl status; it never changes networking.
 
 # Normal development gate. Prints RUN_ID and EVIDENCE immediately.
 ./tools/vm-test.ps1 Test
@@ -63,6 +66,10 @@ From the repository root:
 # Only when deployment is requested: activate the already tested payload and restart.
 ./tools/vm-test.ps1 Deploy -RunId <id>
 ./tools/vm-test.ps1 Visual -RunId <id> -Installed
+
+# If deployment stops at Android app registration because its setup receipt is stale,
+# Configure android may refresh setup only when current exactly matches the full tested payload.
+./tools/vm-test.ps1 Configure -ConfigureTarget android -RunId <same-id>
 
 # Inspect a running/failed run. Never start a second build to get progress.
 ./tools/vm-test.ps1 Status -RunId <id>
@@ -131,3 +138,7 @@ Low-level scripts are implementation details. `run-visual-acceptance.ps1` requir
 `guide-reopen` with `tools/guide-reopen-inputs.json` is a distinct bounded actual-cold-start check, using a separately hash-verified helper with the unchanged passing app. It reports no twelve-hour claim and currently inherits normal networking. It cannot satisfy disconnected acceptance. `Status -GuideDiagnostics` adds bounded readonly disposable-fixture slot comparison and native-sandbox probes; normal Status stays small.
 
 `guide-features` likewise uploads the current `tools/guide_features.py` under its SHA-256 identity and verifies that identity before loading it with the frozen TV harness/dependencies and passing application payload. It never edits a frozen source tree or changes payload hashes. The run records `acceptanceHelperSha256`; the helper result/capture contract remains mandatory. This permits cause-directed feature-harness diagnosis without another application full suite.
+
+### Bounded Studio visual corrections
+
+`Test -Suite studio_visuals -ReuseFullRun <original-full-run>` permits only existing `PageStudioView.qml` and `CommandCenter.qml`, their artwork/shell regressions and named harness/docs files. It runs Studio quick/artwork/shell plus Home and Studio navigation registrations. The full-origin manifest and payload must match; C++/configuration/other QML changes are refused. This covers the observed composite-heading annotation and Search fallback-symbol overflow without repeating an applicable full suite. `Visual -Cases studio-search -Installed` uses a fresh private profile, the frozen socket-denial fixture, actual remote keyboard query, Search/recovery captures and a strict input/network receipt. It does not replay template/style/export/version workflows that are unchanged by a Search icon correction.

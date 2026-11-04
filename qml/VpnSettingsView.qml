@@ -3,6 +3,7 @@ import QtQuick.Controls
 
 Item {
     id: root
+    SurfacePalette {id:shell;appearance:root.appearance}
     property var appearance: ({})
     readonly property real textScale: appearance.typographyScale || 1
     readonly property color textColor: appearance.textColor || palette.text
@@ -160,8 +161,14 @@ Item {
             Label { width: parent.width; wrapMode: Text.WordWrap; color: root.textColor; font.pixelSize: 22 * root.textScale; text: "Install VPN support on this device? This downloads the official clients, adds their repositories and installs Isolde's administrator-owned location-saving tool. Your system account can then use that tool to save the active VPN and switch only your profile-owned saved locations without another password prompt. Other administrator operations stay protected. Approve installer prompts in the guest. Your account password stays in the provider app." }
             Row {
                 spacing: 24
-                Button { text: "Cancel"; highlighted: !root.approveInstall; onClicked: root.installPrompt = false }
-                Button { text: "Install"; highlighted: root.approveInstall; onClicked: { root.installPrompt = false; vpnSettings.perform(root.pendingProvider ? "install" : "defaults", root.pendingProvider) } }
+                Button {
+                    background: Rectangle {color:shell.surface;radius:shell.radius;border.width:parent.highlighted?3:1;border.color:shell.focus}
+                    contentItem: Text {text:parent.text;color:shell.text;font.pixelSize:20*shell.textScale}
+                    text: "Cancel"; highlighted: !root.approveInstall; onClicked: root.installPrompt = false }
+                Button {
+                    background: Rectangle {color:shell.surface;radius:shell.radius;border.width:parent.highlighted?3:1;border.color:shell.focus}
+                    contentItem: Text {text:parent.text;color:shell.text;font.pixelSize:20*shell.textScale}
+                    text: "Install"; highlighted: root.approveInstall; onClicked: { root.installPrompt = false; vpnSettings.perform(root.pendingProvider ? "install" : "defaults", root.pendingProvider) } }
             }
         }
     }

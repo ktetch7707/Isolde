@@ -2,6 +2,9 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property int selectedIndex: 0
     readonly property var rows: [
         { name: "Safe Area", value: displaySettings.safeArea + "%", help: "Pulls Isolde's interface inward for TVs that crop the edges." },
@@ -28,14 +31,14 @@ Item {
 
     Column {
         anchors.fill: parent
-        spacing: 18
+        spacing: 18 * shell.gapScale
 
-        Text { text: "DISPLAY"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-        Text {
+        Text { font.family: shell.fontFamily; text: "DISPLAY"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily;
             width: parent.width
             text: "Tune Isolde for real TVs: cropped edges, couch-distance readability, and motion comfort."
-            color: "#9EABC1"
-            font.pixelSize: 18
+            color: shell.muted
+            font.pixelSize: 18 * shell.textScale
             wrapMode: Text.WordWrap
         }
 
@@ -43,21 +46,21 @@ Item {
             width: parent.width
             height: 210
             radius: 14
-            color: "#080C18"
-            border.color: "#26344F"
+            color: shell.background
+            border.color: shell.outline
 
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: Math.round(parent.width * displaySettings.safeArea / 100)
-                radius: 10
-                color: "#121E34"
+                radius: shell.radius
+                color: shell.elevated
                 border.width: 3
-                border.color: "#F8FAFC"
+                border.color: shell.text
 
-                Text {
+                Text { font.family: shell.fontFamily;
                     anchors.centerIn: parent
                     text: "VISIBLE TV AREA"
-                    color: "#F8FAFC"
+                    color: shell.elevatedText
                     font.pixelSize: Math.round(20 * displaySettings.uiScale / 100)
                     font.weight: Font.DemiBold
                     font.letterSpacing: 3
@@ -72,10 +75,10 @@ Item {
                 required property var modelData
                 width: parent.width
                 height: 76
-                radius: 10
-                color: root.selectedIndex === index ? "#2B416B" : "#111A2A"
+                radius: shell.radius
+                color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                border.color: root.selectedIndex === index ? shell.text : shell.outline
 
                 Column {
                     anchors.left: parent.left
@@ -83,12 +86,12 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 18
                     anchors.rightMargin: 16
-                    spacing: 4
-                    Text { text: modelData.name; color: "#F8FAFC"; font.pixelSize: 20; font.weight: Font.DemiBold }
-                    Text { width: parent.width; text: modelData.help; color: "#9EABC1"; font.pixelSize: 14; elide: Text.ElideRight }
+                    spacing: 4 * shell.gapScale
+                    Text { font.family: shell.fontFamily; text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 20 * shell.textScale; font.weight: Font.DemiBold }
+                    Text { font.family: shell.fontFamily; width: parent.width; text: modelData.help; color: (root.selectedIndex === index) ? shell.selectedText : shell.muted; font.pixelSize: 14 * shell.textScale; elide: Text.ElideRight }
                 }
 
-                Text {
+                Text { font.family: shell.fontFamily;
                     id: valueText
                     anchors.right: parent.right
                     anchors.rightMargin: 18
@@ -96,17 +99,17 @@ Item {
                     width: 150
                     horizontalAlignment: Text.AlignRight
                     text: modelData.value
-                    color: "#C8D3E5"
-                    font.pixelSize: 18
+                    color: (root.selectedIndex === index) ? shell.selectedText : shell.text
+                    font.pixelSize: 18 * shell.textScale
                     font.weight: Font.DemiBold
                 }
             }
         }
 
-        Text {
+        Text { font.family: shell.fontFamily;
             text: "← → adjust    Enter toggle/reset    Esc back"
-            color: "#73819B"
-            font.pixelSize: 15
+            color: shell.unavailable
+            font.pixelSize: 15 * shell.textScale
         }
     }
 }

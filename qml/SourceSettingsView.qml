@@ -2,6 +2,9 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property int selectedIndex: 0
 
     readonly property var rows: [
@@ -53,21 +56,21 @@ Item {
 
     Column {
         anchors.fill: parent
-        spacing: 18
+        spacing: 18 * shell.gapScale
 
-        Text {
+        Text { font.family: shell.fontFamily;
             text: "SOURCES"
-            color: "#F8FAFC"
-            font.pixelSize: 30
+            color: shell.text
+            font.pixelSize: 30 * shell.textScale
             font.weight: Font.DemiBold
             font.letterSpacing: 3
         }
 
-        Text {
+        Text { font.family: shell.fontFamily;
             width: parent.width
             text: "Detected sources are temporary until you keep them on Home. Permanent drives and folders should be added through Add Tile so the user owns the layout."
-            color: "#9EABC1"
-            font.pixelSize: 18
+            color: shell.muted
+            font.pixelSize: 18 * shell.textScale
             wrapMode: Text.WordWrap
         }
 
@@ -78,19 +81,19 @@ Item {
                 required property var modelData
                 width: parent.width
                 height: 86
-                radius: 10
-                color: root.selectedIndex === index ? "#2B416B" : "#111A2A"
+                radius: shell.radius
+                color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                border.color: root.selectedIndex === index ? shell.text : shell.outline
 
-                Text {
+                Text { font.family: shell.fontFamily;
                     anchors.left: parent.left
                     anchors.leftMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
                     width: 54
                     text: modelData.kind ? "⚙" : modelData.symbol
-                    color: modelData.kind ? "#91A0BC" : modelData.accent
-                    font.pixelSize: 28
+                    color: modelData.kind ? shell.muted : modelData.accent
+                    font.pixelSize: 28 * shell.textScale
                     font.weight: Font.Bold
                     horizontalAlignment: Text.AlignHCenter
                 }
@@ -101,12 +104,12 @@ Item {
                     anchors.right: statusText.left
                     anchors.rightMargin: 16
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 5
-                    Text { text: root.rowName(modelData); color: "#F8FAFC"; font.pixelSize: 21; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                    Text { text: root.rowDetail(modelData); color: "#9EABC1"; font.pixelSize: 14; elide: Text.ElideRight; width: parent.width }
+                    spacing: 5 * shell.gapScale
+                    Text { font.family: shell.fontFamily; text: root.rowName(modelData); color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * shell.textScale; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
+                    Text { font.family: shell.fontFamily; text: root.rowDetail(modelData); color: (root.selectedIndex === index) ? shell.selectedText : shell.muted; font.pixelSize: 14 * shell.textScale; elide: Text.ElideRight; width: parent.width }
                 }
 
-                Text {
+                Text { font.family: shell.fontFamily;
                     id: statusText
                     anchors.right: parent.right
                     anchors.rightMargin: 18
@@ -114,8 +117,8 @@ Item {
                     width: 150
                     horizontalAlignment: Text.AlignRight
                     text: root.rowStatus(modelData)
-                    color: modelData.kind === "toggle" && sourceManager.automaticSourcesEnabled ? "#A7F3D0" : "#91A0BC"
-                    font.pixelSize: 14
+                    color: modelData.kind === "toggle" && sourceManager.automaticSourcesEnabled ? shell.success : shell.muted
+                    font.pixelSize: 14 * shell.textScale
                     wrapMode: Text.WordWrap
                 }
             }
@@ -124,15 +127,15 @@ Item {
         Rectangle {
             width: parent.width
             height: 92
-            radius: 10
-            color: "#101A2D"
-            border.color: "#26344F"
-            Text {
+            radius: shell.radius
+            color: shell.elevated
+            border.color: shell.outline
+            Text { font.family: shell.fontFamily;
                 anchors.fill: parent
                 anchors.margins: 18
                 text: "Controls: ← → toggles automatic tiles · Enter refreshes or hides the selected detected source · Home shows new sources first with Keep/Hide commands."
-                color: "#C8D3E5"
-                font.pixelSize: 16
+                color: shell.elevatedText
+                font.pixelSize: 16 * shell.textScale
                 wrapMode: Text.WordWrap
             }
         }

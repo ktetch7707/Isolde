@@ -19,10 +19,55 @@ QVariantMap HomeLayout::homeAppearance() const {
     if(m_owner)return m_owner->homeAppearance();
     for(const auto &entry:m_pages)if(entry.toObject()["id"]==m_homePageId) {
         auto result=appearance();const auto overrides=entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap();
-        for(auto it=overrides.cbegin();it!=overrides.cend();++it)result[it.key()]=it.value();
+        for(auto it=overrides.cbegin();it!=overrides.cend();++it) {
+            if(it.key()=="surfaceThemes") {
+                auto policies=result.value(it.key()).toMap();const auto local=it.value().toMap();
+                for(auto policy=local.cbegin();policy!=local.cend();++policy)policies[policy.key()]=policy.value();
+                result[it.key()]=policies;
+            } else result[it.key()]=it.value();
+        }
         return result;
     }
     return appearance();
+}
+
+QVariantMap HomeLayout::surfaceAppearance(const QString &surface, const QString &originId) const
+{
+    if (m_owner) return m_owner->surfaceAppearance(surface, originId);
+    if (!QStringList{"search", "apps", "settings", "kodi"}.contains(surface)) return {};
+    const auto home = homeAppearance();
+    auto origin = home;
+    QVariantMap originTheme;
+    QString originName;
+    if (originId.isEmpty()) {
+        originName = rootPageName();
+        const auto raw = appearance();
+        for (const auto &key : m_themeKeys) if (raw.contains(key)) originTheme[key] = raw[key];
+    }
+    QString source = rootPageName();
+    for (const auto &entry : m_pages) {
+        const auto page = entry.toObject();
+        if (page["id"] == m_homePageId) source = page["name"].toString();
+        if (!originId.isEmpty() && page["id"] == originId) {
+            originName = page["name"].toString();
+            originTheme = page["layout"].toObject()["theme"].toObject().toVariantMap();
+        }
+    }
+    for (auto it = originTheme.cbegin(); it != originTheme.cend(); ++it) origin[it.key()] = it.value();
+    // Settings never observes an originating page or an editor's private draft.
+    const auto policies = home.value("surfaceThemes").toMap();
+    const auto localPolicies = originTheme.value("surfaceThemes").toMap();
+    const auto policy = (surface != "settings" && localPolicies.contains(surface) ? localPolicies : policies).value(surface).toMap();
+    const auto mode = policy.value("mode", surface == "settings" ? "home" : "origin").toString();
+    auto effective = mode == "home" || surface == "settings" ? home : origin;
+    if (mode == "custom") {
+        const auto tokens = policy.value("tokens").toMap();
+        for (auto it = tokens.cbegin(); it != tokens.cend(); ++it) effective[it.key()] = it.value();
+    }
+    auto result = ComponentSchema::surfacePalette(effective);
+    result["themeSource"] = surface == "settings" || mode == "home" || originName.isEmpty() ? source : originName;
+    result["themeMode"] = mode;
+    return result;
 }
 
 QString HomeLayout::createPage(const QString &name, const QString &preset) {
@@ -36,7 +81,7 @@ QString HomeLayout::createPage(const QString &name, const QString &preset) {
     QJsonArray sections;
     if(preset!="blank")sections.append(QJsonObject{{"id","library"},{"name",preset=="shows"?"Shows":"Movies"},{"presentation",QJsonObject{
         {"variant","library"},{"height",PresetLibrarySectionHeight},{"libraryKind",preset=="shows"?"shows":"movies"},{"libraryView","all"},{"libraryLayout","grid"},{"libraryColumns",DefaultLibraryColumns},{"padding",DefaultLibraryPadding},{"radius",DefaultLibraryRadius},{"panelOpacity",DefaultPanelOpacity}}}});
-    QJsonObject document{{"schemaVersion",2},{"theme",QJsonObject::fromVariantMap(appearance())},{"composition",config},{"categories",sections},{"components",QJsonArray{}}};
+    QJsonObject document{{"schemaVersion",2},{"theme",QJsonObject{}},{"composition",config},{"categories",sections},{"components",QJsonArray{}}};
     if(preset=="home"){document=QJsonDocument::fromJson(documentData()).object();document.remove("pages");document.remove("homePageId");document.remove("rootPage");document.remove("studioAppearance");}
     m_pages.append(QJsonObject{{"id",id},{"name",name.trimmed()},{"layout",document}});
     if(!save()){m_pages.removeLast();return {};}emit layoutChanged();return id;
@@ -129,7 +174,10 @@ bool HomeLayout::storePage(const QString &id,const QJsonObject &document) {
     if(!validator.loadDocument(QJsonDocument(document).toJson(),false)){setError(validator.errorString());return false;}
     for(qsizetype i=0;i<m_pages.size();++i){auto entry=m_pages[i].toObject();if(entry["id"]!=id)continue;
         const auto previous=m_pages;entry["layout"]=document;m_pages[i]=entry;
-        if(!save()){m_pages=previous;return false;}emit layoutChanged();return true;}
+        QString validationError;
+        if(!validateStudioDocument(documentData(),&validationError,m_defaultTheme) || !save()){
+            m_pages=previous;if(!validationError.isEmpty())setError(validationError);return false;
+        }emit layoutChanged();return true;}
     setError(tr("This page was removed. Choose another page."));return false;
 }
 QObject *HomeLayout::pageModel(const QString &id) {

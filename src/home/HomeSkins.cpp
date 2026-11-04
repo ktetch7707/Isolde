@@ -1,6 +1,8 @@
+#include "settings/ProfileManager.h"
 #include "HomeLayout.h"
 #include "ComponentSchema.h"
 #include "ManagedGif.h"
+#include "HomeDesignData.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -53,26 +55,8 @@ QVariantList starterTemplates(const QString &defaultPath) {
     }
     return result;
 }
-// Only managed artwork paths are traversed. Skins never read arbitrary paths or URLs.
-QJsonValue artwork(QJsonValue value, const std::function<QString(const QString &)> &visit) {
-    if (value.isObject()) {
-        auto object = value.toObject();
-        for (auto it = object.begin(); it != object.end(); ++it) {
-            if ((it.key() == "wallpaper" || it.key() == "customLogo") && it.value().isString() && !it.value().toString().isEmpty()) it.value() = visit(it.value().toString());
-            else it.value() = artwork(it.value(), visit);
-        }
-        return object;
-    }
-    if (value.isArray()) {
-        auto array = value.toArray();
-        for (qsizetype i = 0; i < array.size(); ++i) array[i] = artwork(array[i], visit);
-        return array;
-    }
-    return value;
-}
-bool safeArtwork(const QString &path) {
-    return QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$").match(path).hasMatch();
-}
+using HomeDesignData::artwork;
+using HomeDesignData::safeArtwork;
 }
 
 QString HomeLayout::skinDirectory() const {
@@ -117,6 +101,7 @@ QString HomeLayout::saveSkin(const QString &name) {
     setError({}); emit skinsChanged(); return id;
 }
 bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &assets, bool addMissingPages) {
+    if (!ProfileManager::allows("edit")) { setError(tr("Editing is restricted in Settings > Profiles.")); return false; }
     const auto previous = documentData();
     const auto legacy = m_legacyDocument;
     QJsonArray mergedPages=m_pages;
@@ -171,11 +156,11 @@ bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &asse
     }
     emit layoutChanged(); return true;
 }
-bool HomeLayout::applySkin(const QString &id) {
+QJsonObject HomeLayout::skinSnapshot(const QString &id) const {
     if (id == "builtin-default") {
         QFile file(m_defaultPath);
-        if (!file.open(QIODevice::ReadOnly)) { setError(tr("Unable to read the default skin.")); return false; }
-        return applySkinDocument(QJsonDocument::fromJson(file.readAll()).object(), {});
+        if (!file.open(QIODevice::ReadOnly) || file.size() > MaxLayoutSize) return {};
+        return {{"schemaVersion", 1}, {"layout", QJsonDocument::fromJson(file.readAll()).object()}, {"assets", QJsonObject{}}};
     }
     QJsonObject skin;
     bool starter = false;
@@ -186,7 +171,11 @@ bool HomeLayout::applySkin(const QString &id) {
         skin = readObject(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath(relative));
         if (skin.isEmpty()) skin = readObject(":/config/" + relative);
     } else if (id.startsWith("user-") && ComponentSchema::safeId(id)) skin = readObject(QDir(skinDirectory()).filePath(id + ".json"));
-    if (skin["schemaVersion"].toInt() != 1 || !skin["layout"].isObject() || !skin["assets"].isObject()) {
+    return skin;
+}
+bool HomeLayout::applySkin(const QString &id) {
+    const auto skin = skinSnapshot(id);
+    if (skin["schemaVersion"].toDouble(-1) != 1 || !skin["layout"].isObject() || !skin["assets"].isObject()) {
         setError(tr("This skin is missing or invalid.")); return false;
     }
     if(skin.contains("pagePolicy") && skin["pagePolicy"]!="add-missing") {setError(tr("Unsupported skin page policy."));return false;}

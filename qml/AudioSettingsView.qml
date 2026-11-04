@@ -2,6 +2,9 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property int selectedIndex: 0
     onVisibleChanged: if (!visible) audioSettings.stopTestSound()
     property int outputIndex: 0
@@ -67,14 +70,14 @@ Item {
     Column {
         id: contents
         width: parent.width
-        spacing: 18
+        spacing: 18 * shell.gapScale
 
-        Text { text: "AUDIO"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-        Text {
+        Text { font.family: shell.fontFamily; text: "AUDIO"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily;
             width: parent.width
                 text: "Set the TV once at a comfortable middle level, then let Isolde handle everyday volume and mute."
-            color: "#9EABC1"
-            font.pixelSize: 18
+            color: shell.muted
+            font.pixelSize: 18 * shell.textScale
             wrapMode: Text.WordWrap
         }
 
@@ -82,8 +85,8 @@ Item {
             width: parent.width
             height: 140
             radius: 14
-            color: "#080C18"
-            border.color: "#26344F"
+            color: shell.background
+            border.color: shell.outline
 
             Rectangle {
                 anchors.left: parent.left
@@ -93,20 +96,20 @@ Item {
                 anchors.rightMargin: 28
                 height: 18
                 radius: 9
-                color: "#1A2740"
+                color: shell.input
                 Rectangle {
                     width: parent.width * audioSettings.volume / 100
                     height: parent.height
                     radius: parent.radius
-                    color: audioSettings.muted ? "#64748B" : "#4D7ED8"
+                    color: audioSettings.muted ? shell.unavailable : shell.focus
                 }
             }
 
-            Text {
+            Text { font.family: shell.fontFamily;
                 anchors.centerIn: parent
                 text: !audioSettings.mixerAvailable ? "UNCONFIRMED" : audioSettings.muted ? "MUTED" : audioSettings.volume + "%"
-                color: "#F8FAFC"
-                font.pixelSize: 32
+                color: shell.text
+                font.pixelSize: 32 * shell.textScale
                 font.weight: Font.DemiBold
                 font.letterSpacing: 3
             }
@@ -120,10 +123,10 @@ Item {
                 required property var modelData
                 width: parent.width
                 height: index === 10 || index === 12 ? 120 : 68
-                radius: 10
-                color: root.selectedIndex === index ? "#2B416B" : "#111A2A"
+                radius: shell.radius
+                color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                border.color: root.selectedIndex === index ? shell.text : shell.outline
 
                 Column {
                     anchors.left: parent.left
@@ -131,12 +134,12 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 18
                     anchors.rightMargin: 16
-                    spacing: 3
-                    Text { text: modelData.name; color: "#F8FAFC"; font.pixelSize: 19; font.weight: Font.DemiBold }
-                    Text { width: parent.width; text: modelData.help; color: "#9EABC1"; font.pixelSize: 13; wrapMode: index === 10 || index === 12 ? Text.WordWrap : Text.NoWrap; elide: Text.ElideRight }
+                    spacing: 3 * shell.gapScale
+                    Text { font.family: shell.fontFamily; text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 19 * shell.textScale; font.weight: Font.DemiBold }
+                    Text { font.family: shell.fontFamily; width: parent.width; text: modelData.help; color: (root.selectedIndex === index) ? shell.selectedText : shell.muted; font.pixelSize: 13 * shell.textScale; wrapMode: index === 10 || index === 12 ? Text.WordWrap : Text.NoWrap; elide: Text.ElideRight }
                 }
 
-                Text {
+                Text { font.family: shell.fontFamily;
                     id: valueText
                     anchors.right: parent.right
                     anchors.rightMargin: 18
@@ -144,8 +147,8 @@ Item {
                     width: index === 10 ? 260 : 190
                     horizontalAlignment: Text.AlignRight
                     text: modelData.value
-                    color: "#C8D3E5"
-                    font.pixelSize: 17
+                    color: (root.selectedIndex === index) ? shell.selectedText : shell.text
+                    font.pixelSize: 17 * shell.textScale
                     font.weight: Font.DemiBold
                     wrapMode: Text.WordWrap
                     maximumLineCount: 4
@@ -154,11 +157,11 @@ Item {
             }
         }
 
-        Text {
+        Text { font.family: shell.fontFamily;
             width: parent.width
             text: "Backend: " + audioSettings.backendStatus + "    ← → adjust/choose    Enter apply/toggle/reset    Esc back"
-            color: "#73819B"
-            font.pixelSize: 15
+            color: shell.unavailable
+            font.pixelSize: 15 * shell.textScale
             wrapMode: Text.WordWrap
         }
     }

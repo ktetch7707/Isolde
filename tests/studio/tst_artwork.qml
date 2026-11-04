@@ -24,6 +24,21 @@ Item {
             const inspector=findChild(editor,"studioInspector");verify(inspector!==null);compare(inspector.pageMode,false);compare(editor.selectedId,id)
             compare(studioFixture.disk(),diskBaseline)
         }
+        function test_container_move_preview_preserves_the_authored_heading(){
+            const proposal=editor.session.additionProposal("container",{x:0,y:1,width:2,height:2},"cancel","","","",{name:"Container heading",presentation:{showHeading:true,layout:{schemaVersion:1,mode:"grid",columns:2,rows:1,gap:12,padding:0}}},false)
+            verify(proposal.valid,proposal.reason)
+            verify(editor.session.execute("batch",{commands:proposal.commands}),editor.session.errorString)
+            editor.selectedId=proposal.id;settle()
+            const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
+            editor.beginGesture(false);settle();verify(editor.collisionPreview.valid)
+            const label=findChild(editor,"studioProposalName-"+proposal.id)
+            verify(label!==null);compare(label.visible,false)
+            verify(editor.footerText.indexOf("Container heading")>=0)
+            if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-container-heading-preview.png")
+            editor.handleCommand(inputManager.back);settle()
+            compare(JSON.stringify(editor.session.document),before);compare(editor.session.changeCount,count)
+            compare(studioFixture.disk(),diskBaseline)
+        }
         function test_empty_artwork_folder_keeps_a_visible_recovery_focus(){
             const emptySession={errorString:"",browseArtwork:function(){return {directory:"/fixture",parent:"/fixture",home:"/fixture",pictures:"/fixture",entries:[],page:0,pages:1}}}
             const picker=createTemporaryObject(artworkPickerComponent,tests.parent,{session:emptySession,appearance:homeLayout.studioAppearance});verify(picker!==null)

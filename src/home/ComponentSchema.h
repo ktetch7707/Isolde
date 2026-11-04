@@ -7,6 +7,11 @@ class AppRegistry;
 // Every validator returns true only for documents that satisfy the layout
 // bounds declared in ComponentSchema.cpp; values are never clamped silently.
 namespace ComponentSchema {
+// Shell policies are layout data. Missing policies inherit the opening page;
+// Settings always uses designated Home, including its explicit custom policy.
+bool validSurfaceThemes(const QVariant &value);
+bool readableSurfaceThemes(const QVariantMap &home, const QVariantMap &origin);
+QVariantMap surfacePalette(const QVariantMap &appearance);
 constexpr int MaxRecentStudioColors = 8;
 bool validRecentStudioColors(const QVariant &value);
 // Versioned native-channel definitions and bounded nested rule trees.

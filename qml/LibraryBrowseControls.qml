@@ -2,6 +2,7 @@ import QtQuick
 
 Rectangle {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
     objectName:"libraryBrowseControls"
     property var provider:null
     property var appearance:({})
@@ -22,7 +23,7 @@ Rectangle {
             selectedCollection && selectedCollection.home ? "Hide shelf from Home" : "Show shelf on Home",
             "Move earlier", "Move later", "Shelf " + (selectedCollection && selectedCollection.media === "shows" ? "shows" : "movies")
                 + ": " + (selectedCollection && selectedCollection.count ? selectedCollection.count : 6) + " · change", "Back"]
-    visible: active; color: appearance.surfaceColor || "#10182B"; radius: 14
+    visible: active; color: shell.surface; radius: 14
     function manualCollectionsFor(item) {
         const media = item && item.mediaType === "tvshow" ? "shows" : "movies"
         return kodiMedia.collections.filter(c => c.kind === "manual" && c.media === media)
@@ -99,7 +100,7 @@ Rectangle {
         }
     }
     MouseArea { anchors.fill: parent }
-    Text { id: heading; x: 30; y: 25; width: parent.width - 60; color: root.appearance.textColor || "#F8FAFC"; font.pixelSize: 27*(root.appearance.typographyScale || 1)
+    Text { font.family: shell.fontFamily; id: heading; x: 30; y: 25; width: parent.width - 60; color: shell.text; font.pixelSize: 27*(root.appearance.typographyScale || 1)
         text:root.mode==="playlists"?"Saved playlists · "+kodiMedia.mediaKind:root.mode==="savePlaylist"?"Name this Kodi playlist":root.mode==="playlistSaveState"?"Save playlist":root.mode === "search" ? "SEARCH LOCAL " + kodiMedia.mediaKind.toUpperCase() + " · WEB OFF"
             : root.mode === "tag" ? "KODI TAG · enter the exact tag name"
             : root.mode === "genre" ? "GENRE · enter the exact genre"
@@ -130,16 +131,16 @@ Rectangle {
     }
     ListView {
         id: choices; x: 30; y: heading.y + heading.height + 20; width: parent.width - 60; height: parent.height - y - 90
-        visible: !root.typing; model: root.rows; clip: true; spacing: 8; currentIndex: root.selectedIndex
+        visible: !root.typing; model: root.rows; clip: true; spacing: 8 * shell.gapScale; currentIndex: root.selectedIndex
         highlightRangeMode: ListView.ApplyRange
         delegate: Rectangle {
             required property int index; required property string modelData
-            width: choices.width; height: 58; radius: 8; color: root.selectedIndex === index ? root.appearance.selectedColor || "#2B416B" : root.appearance.surfaceColor || "#172238";border.width:root.selectedIndex===index?2:0;border.color:root.appearance.focusColor || "#C994A5"
-            Text { anchors.fill: parent; anchors.margins: 14; color: root.appearance.textColor || "#F8FAFC"; font.pixelSize: 21*(root.appearance.typographyScale || 1); elide: Text.ElideRight; text: modelData }
+            width: choices.width; height: 58; radius: shell.radius; color: root.selectedIndex === index ? shell.selected : shell.surface;border.width:root.selectedIndex===index?2:0;border.color:shell.focus
+            Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 14; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21*(root.appearance.typographyScale || 1); elide: Text.ElideRight; text: modelData }
             MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
         }
     }
-    Text { x: 30; anchors.bottom: parent.bottom; anchors.bottomMargin: 20; width: parent.width - 60; wrapMode: Text.WordWrap; color: root.appearance.mutedColor || "#D5B083"; font.pixelSize: 17*(root.appearance.typographyScale || 1)
+    Text { font.family: shell.fontFamily; x: 30; anchors.bottom: parent.bottom; anchors.bottomMargin: 20; width: parent.width - 60; wrapMode: Text.WordWrap; color: shell.muted; font.pixelSize: 17*(root.appearance.typographyScale || 1)
         text:root.mode==="playlistSaveState"?kodiMedia.playlistStatus:root.mode==="playlists"?(root.playlistCatalog?root.playlistCatalog.status:"Kodi unavailable · Back returns"):root.mode==="savePlaylist"?"Saves this library view as a playlist in Kodi. Back cancels without writing.":kodiMedia.collectionStatus || "Collections are reusable local rules. They do not move files or edit Kodi tags. Back cancels."
     }
 }

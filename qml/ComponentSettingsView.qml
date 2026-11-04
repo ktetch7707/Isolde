@@ -2,6 +2,9 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property bool captureSetupFocused: false
     signal captureSetupRequested()
     function handleCommand(command) {
@@ -23,32 +26,32 @@ Item {
         anchors.fill: parent; clip: true
         contentHeight: contents.implicitHeight
         Column {
-            id: contents; width: parent.width; spacing: 16
-            Text { text: "COMPONENTS"; color: "#F8FAFC"; font.pixelSize: 30 }
-            Text { width: parent.width; text: componentHealth.status; wrapMode: Text.WordWrap; color: "#BCC8DD"; font.pixelSize: 19 }
+            id: contents; width: parent.width; spacing: 16 * shell.gapScale
+            Text { font.family: shell.fontFamily; text: "COMPONENTS"; color: shell.text; font.pixelSize: 30 * shell.textScale }
+            Text { font.family: shell.fontFamily; width: parent.width; text: componentHealth.status; wrapMode: Text.WordWrap; color: shell.muted; font.pixelSize: 19 * shell.textScale }
             Repeater {
                 model: componentHealth.components
                 delegate: Rectangle {
                     required property var modelData
-                    width: parent.width; height: info.implicitHeight + 28; radius: 10; color: "#172238"
+                    width: parent.width; height: info.implicitHeight + 28; radius: shell.radius; color: shell.surface
                     Column {
                         id: info; anchors.left: parent.left; anchors.right: parent.right
-                        anchors.top: parent.top; anchors.margins: 14; spacing: 6
-                        Text { text: modelData.name + " · " + modelData.version; width: parent.width; wrapMode: Text.WordWrap; color: "#F8FAFC"; font.pixelSize: 20 }
-                        Text { text: modelData.status; width: parent.width; wrapMode: Text.WordWrap; color: "#BCC8DD"; font.pixelSize: 17 }
+                        anchors.top: parent.top; anchors.margins: 14; spacing: 6 * shell.gapScale
+                        Text { font.family: shell.fontFamily; text: modelData.name + " · " + modelData.version; width: parent.width; wrapMode: Text.WordWrap; color: shell.text; font.pixelSize: 20 * shell.textScale }
+                        Text { font.family: shell.fontFamily; text: modelData.status; width: parent.width; wrapMode: Text.WordWrap; color: shell.muted; font.pixelSize: 17 * shell.textScale }
                     }
                 }
             }
             Rectangle {
-                width: parent.width; height: 60; radius: 10; color: "#2B416B"; border.color: "#F8FAFC"
-                Text { anchors.centerIn: parent; text: componentHealth.busy ? "Checking…" : "Check again · Enter"; color: "white"; font.pixelSize: 20 }
+                width: parent.width; height: 60; radius: shell.radius; color: shell.selected; border.color: shell.text
+                Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: componentHealth.busy ? "Checking…" : "Check again · Enter"; color: shell.text; font.pixelSize: 20 * shell.textScale }
                 MouseArea { anchors.fill: parent; onClicked: componentHealth.refresh() }
             }
-            Text { width: parent.width; wrapMode: Text.WordWrap; text: "Capture setup is available under System → HDMI Inputs. Device presence and installed runtimes do not certify signal, switch routing, or hardware compatibility."; color: "#91A0BC"; font.pixelSize: 17 }
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Capture setup is available under System → HDMI Inputs. Device presence and installed runtimes do not certify signal, switch routing, or hardware compatibility."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
             Rectangle {
-                width: parent.width; height: 60; radius: 8; color: "#172238"
-                border.width: root.captureSetupFocused ? 3 : 1; border.color: root.captureSetupFocused ? "#FFFFFF" : "#4D7ED8"
-                Text { anchors.centerIn: parent; text: "Open HDMI Inputs"; color: "#F8FAFC"; font.pixelSize: 19; font.weight: Font.DemiBold }
+                width: parent.width; height: 60; radius: shell.radius; color: shell.surface
+                border.width: root.captureSetupFocused ? 3 : 1; border.color: root.captureSetupFocused ? shell.text : shell.focus
+                Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: "Open HDMI Inputs"; color: shell.text; font.pixelSize: 19 * shell.textScale; font.weight: Font.DemiBold }
                 MouseArea { anchors.fill: parent; onClicked: root.captureSetupRequested() }
             }
         }

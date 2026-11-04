@@ -8,6 +8,33 @@
 #include <QStandardPaths>
 #include <QUuid>
 #include <QCoreApplication>
+#include "home/ComponentSchema.h"
+
+namespace {
+bool validPolicy(const QVariant &value)
+{
+    if (!value.isValid()) return true; // Older profiles default to unrestricted editing.
+    if (value.metaType().id() != QMetaType::QVariantMap) return false;
+    const auto policy = value.toMap();
+    for (auto it = policy.begin(); it != policy.end(); ++it) {
+        if (it.key() == "editingAllowed" || it.key() == "installsAllowed") {
+            if (it.value().metaType().id() != QMetaType::Bool) return false;
+        } else if (it.key() == "restrictedDestinations") {
+            if (it.value().metaType().id() != QMetaType::QVariantList && it.value().metaType().id() != QMetaType::QStringList) return false;
+            if (it.value().metaType().id() == QMetaType::QVariantList)
+                for (const auto &id : it.value().toList()) if (id.metaType().id() != QMetaType::QString) return false;
+            const auto ids = it.value().toStringList();
+            if (ids.size() > 64) return false;
+            for (const auto &id : ids) if (!ComponentSchema::safeId(id) || id == "settings") return false;
+        } else return false;
+    }
+    return true;
+}
+QVariantMap recoveryPolicy()
+{
+    return {{"editingAllowed", false}, {"installsAllowed", false}};
+}
+}
 
 ProfileManager::ProfileManager(const QString &root, QObject *parent) : QObject(parent),
     m_root(root.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) : root)
@@ -31,6 +58,7 @@ ProfileManager::ProfileManager(const QString &root, QObject *parent) : QObject(p
     }
     if (!found) qFatal("Active profile is missing");
     qApp->setProperty("isoldeProfile", m_active);
+    publishPolicy();
 }
 QString ProfileManager::activeName() const {
     for (const auto &entry : m_profiles) if (entry.toMap().value("id") == m_active) return entry.toMap().value("name").toString();
@@ -71,6 +99,9 @@ bool ProfileManager::renameProfile(const QString &name) {
 }
 bool ProfileManager::selectProfile(const QString &id) {
     if (id == m_active) return true;
+    if (qApp->property("isoldeStudioDirty").toBool()) {
+        m_error = tr("Apply or discard the Studio draft before switching profiles."); emit changed(); return false;
+    }
     bool found = false;
     for (const auto &p : m_profiles) found |= p.toMap().value("id") == id;
     if (!found) return false;
@@ -78,5 +109,64 @@ bool ProfileManager::selectProfile(const QString &id) {
     m_active = id;
     if (!save()) { m_active = previous; emit changed(); return false; }
     qApp->setProperty("isoldeProfile", m_active);
+    publishPolicy();
     emit switchRequested(); return true;
+}
+
+QVariantMap ProfileManager::activePolicy() const
+{
+    for (const auto &value : m_profiles) {
+        const auto profile = value.toMap();
+        if (profile["id"] == m_active) return validPolicy(profile.value("policy")) ? profile.value("policy").toMap() : recoveryPolicy();
+    }
+    return {};
+}
+bool ProfileManager::editingAllowed() const { return activePolicy().value("editingAllowed", true).toBool(); }
+bool ProfileManager::installsAllowed() const { return activePolicy().value("installsAllowed", true).toBool(); }
+QStringList ProfileManager::restrictedDestinations() const { return activePolicy().value("restrictedDestinations").toStringList(); }
+void ProfileManager::publishPolicy()
+{
+    qApp->setProperty("isoldeProfilePolicy", activePolicy());
+    for (const auto &value : m_profiles) {
+        const auto profile = value.toMap();
+        if (profile["id"] == m_active && !validPolicy(profile.value("policy"))) {
+            m_error = tr("This profile's household policy is invalid. Editing and installation are disabled. Change a policy control here to replace it; the saved file is kept until then.");
+            emit changed(); break;
+        }
+    }
+}
+bool ProfileManager::allows(const QString &operation, const QString &destination)
+{
+    const auto policy = qApp->property("isoldeProfilePolicy").toMap();
+    if (operation == "edit") return policy.value("editingAllowed", true).toBool();
+    if (operation == "install") return policy.value("installsAllowed", true).toBool();
+    if (operation == "destination") return !policy.value("restrictedDestinations").toStringList().contains(destination);
+    return false;
+}
+bool ProfileManager::setPolicy(const QString &key, const QVariant &value)
+{
+    if (key == "editingAllowed" && !value.toBool() && qApp->property("isoldeStudioDirty").toBool()) {
+        m_error = tr("Apply or discard the Studio draft before restricting editing."); emit changed(); return false;
+    }
+    const auto previous = m_profiles;
+    for (auto &entry : m_profiles) {
+        auto profile = entry.toMap();
+        if (profile["id"] != m_active) continue;
+        auto policy = validPolicy(profile.value("policy")) ? profile.value("policy").toMap() : recoveryPolicy(); policy[key] = value;
+        profile["policy"] = policy; entry = profile;
+    }
+    if (!save()) { m_profiles = previous; emit changed(); return false; }
+    publishPolicy(); emit changed(); return true;
+}
+bool ProfileManager::setEditingAllowed(bool allowed) { return setPolicy("editingAllowed", allowed); }
+bool ProfileManager::setInstallsAllowed(bool allowed) { return setPolicy("installsAllowed", allowed); }
+bool ProfileManager::setRestrictedDestinations(const QStringList &ids)
+{
+    if (ids.size() > 64) { m_error = tr("Restrict at most 64 destinations."); emit changed(); return false; }
+    for (const auto &id : ids) {
+        if (!ComponentSchema::safeId(id) || id == "settings") {
+            m_error = tr("Choose valid destinations; Settings remains available for recovery."); emit changed(); return false;
+        }
+    }
+    return setPolicy("restrictedDestinations", ids);
 }

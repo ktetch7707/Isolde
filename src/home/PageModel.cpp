@@ -37,7 +37,17 @@ PageModel::PageModel(HomeLayout *owner, const QString &id, QObject *parent)
     : QObject(parent)
     , m_owner(owner)
     , m_pageId(id)
-{}
+{
+    if(!m_owner)return;
+    m_inheritedAppearance=m_owner->homeAppearance();
+    m_sharedStyles=m_owner->m_composition.value("designLibrary").toMap().value("styles").toList();
+    connect(m_owner,&HomeLayout::layoutChanged,this,[this]{
+        const auto inherited=m_owner->homeAppearance();
+        if(inherited!=m_inheritedAppearance){m_inheritedAppearance=inherited;emit presentationChanged();}
+        const auto styles=m_owner->m_composition.value("designLibrary").toMap().value("styles").toList();
+        if(styles!=m_sharedStyles){m_sharedStyles=styles;emit placementsChanged();}
+    });
+}
 
 bool PageModel::loadDocument(const QByteArray &data, bool /*userDocument*/)
 {
@@ -118,6 +128,7 @@ QVariantList PageModel::resolveItems(const QJsonArray &components) const
     for (const auto &value : components) {
         const auto object = value.toObject();
         auto item = object.toVariantMap();
+        if(m_owner)item["presentation"]=m_owner->componentPresentation(item.value("presentation").toMap());
         const auto action = normalizedActionForItem(object);
         if (!action.isEmpty()) {
             item.insert("actionType", action.value(QStringLiteral("type")).toString());
@@ -348,6 +359,13 @@ bool PageModel::setAppearance(const QVariantMap &changes)
     const auto defaults = themeDefaults();
     for (auto it = normalized.begin(); it != normalized.end(); ++it) {
         const auto key = it.key();
+        if (key == "surfaceThemes") {
+            if (!ComponentSchema::validSurfaceThemes(it.value())) {
+                m_owner->setError(tr("Invalid shell appearance policy."));
+                return false;
+            }
+            continue;
+        }
         if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd") {
             const QColor color(it.value().toString());
             if (!color.isValid() || color.alpha() != 255) {
@@ -427,7 +445,7 @@ double PageModel::tileRoundness() const
             return qBound(0.0, theme.value("tileRoundness").toDouble(0.18), 1.0);
     }
     if (!m_owner) return 0.18;
-    return m_owner->tileRoundness();
+    return m_owner->homeAppearance().value("tileRoundness",m_owner->tileRoundness()).toDouble();
 }
 
 bool PageModel::brandVisible() const
