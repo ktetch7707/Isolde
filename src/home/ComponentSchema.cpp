@@ -12,6 +12,35 @@
 #include <QMap>
 #include <QRect>
 
+bool ComponentSchema::validSourcePolicy(const QVariantMap &value)
+{
+    for (auto it=value.cbegin(); it!=value.cend(); ++it) {
+        const auto key=it.key(); const auto v=it.value();
+        if (key=="schemaVersion" || key=="duration") {
+            const auto type=v.metaType().id();
+            if (type!=QMetaType::Int && type!=QMetaType::UInt && type!=QMetaType::LongLong && type!=QMetaType::ULongLong && type!=QMetaType::Double) return false;
+            const double n=v.toDouble();
+            if (!std::isfinite(n) || std::floor(n)!=n || (key=="schemaVersion" ? n!=1 : n!=0 && (n<5 || n>60))) return false;
+        } else if (key=="mode") {
+            if (v.metaType().id()!=QMetaType::QString || !QStringList{"off","compact","widget"}.contains(v.toString())) return false;
+        } else if (key=="pages" || key=="slots" || key=="events" || key=="types") {
+            if (v.metaType().id()!=QMetaType::QVariantList || v.toList().size()>(key=="events" || key=="types" ? 4:64)) return false;
+            QSet<QString> seen;
+            for (const auto &entry:v.toList()) {
+                if (entry.metaType().id()!=QMetaType::QString) return false;
+                const auto id=entry.toString();
+                if (seen.contains(id)) return false;
+                if (key=="events" || key=="types") { if (!QStringList{"movie-disc","game-disc","media-folder","file-source"}.contains(id)) return false; }
+                else if (!safeId(id) && !(key=="pages" && id.isEmpty())) return false;
+                seen.insert(id);
+            }
+        } else if (key=="reconnect" || key=="suppressPlayback" || key=="suppressSetup" || key=="suppressEditing" || key=="discoveryEnabled") {
+            if (v.metaType().id()!=QMetaType::Bool) return false;
+        } else return false;
+    }
+    return true;
+}
+
 bool ComponentSchema::validRecentStudioColors(const QVariant &value)
 {
     if(value.metaType().id()!=QMetaType::QVariantList || value.toList().size()>MaxRecentStudioColors)return false;

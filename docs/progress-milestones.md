@@ -1,5 +1,33 @@
 # Weighted, independently verifiable milestones
 
+## T25/T26 — source containment and dedicated gallery
+
+Each original Scope group keeps its weight. Native contracts, remote behavior
+and installed acceptance are separate; no code-presence or abandoned-test credit.
+
+| Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
+| --- | --- | --- | --- |
+| T25.1.a | done | Validated profile display policy round-trips atomically; discovery facts remain independent. | docs/t25-sources-2026-11-07.md: C sources2/2; profile appearance schema/read-preservation and atomic decision rollback contracts. |
+| T25.1.b | open | Remote policy controls cover pages/slots/events/reconnect/lifetime/suppression without new grants. | Settings/Studio actual-input and installed acceptance pending. |
+| T25.2.a | open | Both source families have bounded validated presets and shared presentation controls. | Schema/draft/placement/cancel contracts pending. |
+| T25.2.b | open | Runtime/Studio render matching contained, themed source components with remote controls. | QML and reviewed dark/pastel installed captures pending. |
+| T25.3.a | open | Generic slot projection replaces prepending; overflow, suppression and missing slots preserve layout/focus. | Native/QML containment and no-layout-write evidence pending. |
+| T25.3.b | open | Packaged compact default, full Sources recovery and both reference pairs pass installed review. | Exact-candidate VM journeys and captures pending. |
+| T25.4.a | open | Deduplication, reconnect/dismiss/restore/handler/promotion rollback and idempotency pass native tests. | Existing dedup salvage alone does not finish the outcome. |
+| T25.4.b | open | Remote actions, error/retry, unplugged focus and cancel behavior pass actual-input/installed journeys. | QML and installed acceptance pending. |
+| T25.5.a | done | Injected probes and profile-local atomic persistence refuse invalid/corrupt input without mutation. | docs/t25-sources-2026-11-07.md: C native injected-root/independent-store/corrupt-file/write-failure/no-media-mutation assertions pass. |
+| T25.5.b | open | Final source candidate passes required integrated/installed/reference checks and agent review. | Known Studio/history failures must be resolved; final evidence pending. |
+| T26.1.a | open | Typed All Apps/Search routes and read-only legacy compatibility pass native contracts. | Dispatcher/schema/legacy tests pending. |
+| T26.1.b | open | Every gallery entry point opens All Apps with exact origin, never implicit Search. | QML entry-point audit and installed routes pending. |
+| T26.2.a | open | Bounded deduplicated installed-app adapter and validated gallery preset pass native tests. | Registry/catalog states/counts/fallback tests pending. |
+| T26.2.b | open | Themed live gallery reflects actual states and registry changes in installed VM. | Reviewed runtime/state captures pending. |
+| T26.3.a | open | Existing profile document stores validated gallery layout/presentation/sort/favorites/filter controls. | Studio/schema/draft/atomic bounds tests pending. |
+| T26.3.b | open | Remote editing, Preview/Cancel/Apply and packaged fallback pass installed review. | Actual-input and installed evidence pending. |
+| T26.4.a | open | Browse/filter/launch/failure/retry and stable gallery/origin restoration pass QML contracts. | Stable IDs/scroll/empty-state/no-provider-request tests pending. |
+| T26.4.b | open | Actual app launch/return and gallery Back restore full origin chain in installed VM. | Native app fixture and reviewed captures pending. |
+| T26.5.a | open | Legacy/custom/skin/state/offline/removal cases pass native and actual-input regressions. | Focused route/state matrix pending. |
+| T26.5.b | open | Final gallery candidate passes full/integrated/installed and both reference pairs. | Candidate hashes, reports and agent review pending. |
+
 ## T24 — installed cutover (five original groups, weights unchanged)
 
 Final installed acceptance completed November4,2026. All five original groups retain their weights and inherited requirements. See docs/studio-batch-acceptance-2026-11-04.md for the final candidate,34-task audit, actual measurements,58 reviewed installed captures and explicit evidence reuse.

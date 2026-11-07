@@ -47,6 +47,7 @@ static QByteArray readFile(const QString &path) { QFile file(path); if (!file.op
 class ComponentTests : public QObject {
     Q_OBJECT
 private slots:
+    void sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts();
     void steamGamesUseProviderIdentityAndReviewedImport();
     void guideActionsValidateIdentityAndAppearance();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
@@ -635,6 +636,23 @@ void ComponentTests::skinsRejectInvalidAndFailedApplications()
     QVERIFY(!layout.applySkin("builtin-pastel")); QCOMPARE(layout.components(),items);
     QCOMPARE(layout.appearance()["focusColor"].toString(),QString("#123456"));
 }
+void ComponentTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
+{
+    QVERIFY(ComponentSchema::validSourcePolicy({{"schemaVersion",1},{"mode","compact"},{"duration",8},{"pages",QVariantList{"home"}},{"slots",QVariantList{"status"}}}));
+    for (const auto &value:QVariantList{QVariantMap{{"duration","8"}},QVariantMap{{"duration",true}},QVariantMap{{"duration",61}},QVariantMap{{"mode",false}},QVariantMap{{"events",QVariantList{1}}},QVariantMap{{"pages",QVariantList{"a","a"}}},QVariantMap{{"types",QVariantList{"shell"}}},QVariantMap{{"command","touch file"}}})
+        QVERIFY(!ComponentSchema::validSourcePolicy(value.toMap()));
+    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    const auto defaults=dir.filePath("defaults.json"),saved=dir.filePath("home.json");
+    writeFile(defaults,R"({"schemaVersion":1,"items":[]})");
+    const QByteArray invalid=R"({"schemaVersion":1,"theme":{"sourcePolicy":{"mode":"execute"}},"items":[]})";
+    writeFile(saved,invalid); HomeLayout home(&registry); QVERIFY(home.load(defaults,saved));
+    QCOMPARE(readFile(saved),invalid); QVERIFY(!home.appearance().contains("sourcePolicy"));
+    QVERIFY(home.setAppearance({{"sourcePolicy",QVariantMap{{"schemaVersion",1},{"mode","widget"},{"duration",0}}}}));
+    const auto original=readFile(saved); HomeLayout reload(&registry); QVERIFY(reload.load(defaults,saved));
+    QCOMPARE(readFile(saved),original); QCOMPARE(reload.appearance().value("sourcePolicy").toMap().value("mode").toString(),QString("widget"));
+    QVERIFY(!reload.setAppearance({{"sourcePolicy",QVariantMap{{"mode","shell"}}}})); QCOMPARE(readFile(saved),original);
+}
+
 void ComponentTests::validatesContracts()
 {
     for (const auto &value : QVariantList{

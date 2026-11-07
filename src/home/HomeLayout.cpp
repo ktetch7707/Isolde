@@ -33,6 +33,10 @@ bool normalizeAppearance(QVariantMap &values)
     const auto defaults = appearanceDefaults();
     for (auto it = values.begin(); it != values.end(); ++it) {
         const auto key = it.key();
+        if (key=="sourcePolicy") {
+            if (it.value().metaType().id()!=QMetaType::QVariantMap || !ComponentSchema::validSourcePolicy(it.value().toMap())) return false;
+            continue;
+        }
         if (key == "surfaceThemes") {
             if (!ComponentSchema::validSurfaceThemes(it.value())) return false;
             continue;
@@ -788,6 +792,7 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         if (theme.contains(it.key())) it.value() = theme.value(it.key()).toVariant();
     if (m_defaultTheme.contains("surfaceThemes")) presentation["surfaceThemes"] = m_defaultTheme["surfaceThemes"];
     if (theme.contains("surfaceThemes")) presentation["surfaceThemes"] = theme["surfaceThemes"].toVariant();
+    if (theme.contains("sourcePolicy")) presentation["sourcePolicy"] = theme["sourcePolicy"].toVariant();
     if (!normalizeAppearance(presentation)) { setError(tr("Home appearance contains invalid values.")); return false; }
     if (!m_owner) {
         auto shellBase = presentation;
@@ -1225,9 +1230,11 @@ bool HomeLayout::applyTheme(const QVariantMap &theme, bool includeSuggestedArtwo
 {
     auto presentation = appearanceDefaults();
     if (m_appearance.contains("surfaceThemes")) presentation["surfaceThemes"] = m_appearance["surfaceThemes"];
+    if (m_appearance.contains("sourcePolicy")) presentation["sourcePolicy"] = m_appearance["sourcePolicy"];
     for (auto it = presentation.begin(); it != presentation.end(); ++it)
         if (theme.contains(it.key())) it.value() = theme.value(it.key());
     if (theme.contains("surfaceThemes")) presentation["surfaceThemes"] = theme["surfaceThemes"];
+    if (theme.contains("sourcePolicy")) presentation["sourcePolicy"] = theme["sourcePolicy"];
     if (!normalizeAppearance(presentation)) return false;
     const QColor startColor(theme.value(QStringLiteral("backgroundStart")).toString());
     const QColor endColor(theme.value(QStringLiteral("backgroundEnd")).toString());

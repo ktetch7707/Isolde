@@ -123,6 +123,7 @@ def guide_backend_probe(home):
     return result
 
 SUITES = {"all": None, "component_contracts": "isolde_component_tests",
+          "sources": ("isolde_tests", "isolde_component_tests"),
           "guide_contracts": "isolde_guide_tests",
           "guide_remote_ui": "isolde_guide_ui_tests",
           "guide": ("isolde_guide_tests", "isolde_guide_ui_tests", "isolde_kodi_media_tests"),
@@ -191,6 +192,8 @@ def suite_selection(suite):
         pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote)$"
     if suite == "games":
         pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning|steam_games)$"
+    if suite == "sources":
+        pattern = "^(isolde_tests|component_contracts)$"
     if suite == "guide":
         pattern = "^(guide_contracts|guide_remote_ui|kodi_local_bridge|kodi_playback|kodi_media_client)$"
     if suite == "home_component_navigation":
@@ -1048,6 +1051,8 @@ class Oracle:
                 expected = {"home_component_navigation", "studio_navigation"}
             if suite == "vpn":
                 expected = {"vpn_setup", "vpn_launch"}
+            if suite == "sources":
+                expected = {"isolde_tests", "component_contracts"}
             if suite == "store":
                 expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote"}
             if suite == "games":

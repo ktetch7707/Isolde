@@ -359,6 +359,12 @@ bool PageModel::setAppearance(const QVariantMap &changes)
     const auto defaults = themeDefaults();
     for (auto it = normalized.begin(); it != normalized.end(); ++it) {
         const auto key = it.key();
+        if (key=="sourcePolicy") {
+            if (it.value().metaType().id()!=QMetaType::QVariantMap || !ComponentSchema::validSourcePolicy(it.value().toMap())) {
+                m_owner->setError(tr("Invalid source display policy.")); return false;
+            }
+            continue;
+        }
         if (key == "surfaceThemes") {
             if (!ComponentSchema::validSurfaceThemes(it.value())) {
                 m_owner->setError(tr("Invalid shell appearance policy."));

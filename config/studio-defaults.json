@@ -1,4 +1,5 @@
 {
+  "sourcePolicyDefaults": {"schemaVersion":1,"discoveryEnabled":true,"mode":"compact","pages":["home"],"slots":[],"events":["movie-disc","game-disc","media-folder","file-source"],"types":["movie-disc","game-disc","media-folder","file-source"],"duration":8,"reconnect":true,"suppressPlayback":true,"suppressSetup":true,"suppressEditing":true},
   "responsiveDefaults": {"schemaVersion": 1, "policy": "wrap", "minimumWidth": 80, "minimumHeight": 48, "aspect": 1.7777777777777777},
   "schemaVersion": 1,
   "referenceViewport": {"width": 1280, "height": 720},

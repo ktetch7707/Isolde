@@ -7,6 +7,7 @@ class AppRegistry;
 // Every validator returns true only for documents that satisfy the layout
 // bounds declared in ComponentSchema.cpp; values are never clamped silently.
 namespace ComponentSchema {
+bool validSourcePolicy(const QVariantMap &value);
 // Shell policies are layout data. Missing policies inherit the opening page;
 // Settings always uses designated Home, including its explicit custom policy.
 bool validSurfaceThemes(const QVariant &value);
