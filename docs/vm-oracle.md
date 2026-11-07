@@ -6,13 +6,15 @@ Testing frequency, readiness, evidence reuse and failure diagnosis follow [the e
 
 ## Standing machine-boundary permission (user, 2026-10-21)
 
-Isolde-Test is a disposable Isolde test machine. Agents may perform necessary **guest-only** cleanup and testing/setup autonomously; do not repeatedly ask permission for obsolete guest build artifacts or ordinary test setup. Prefer deleting obsolete staged payloads before useful source/evidence or active test data. Resolve/check every destructive target inside the guest and exclude host/shared mounts. Record cleanup and retain useful diagnostics. The runner itself still does not silently delete artifacts; its low-space guard prompts an agent to inspect and manage guest space, not another approval loop.
+Isolde-Test is a disposable Isolde test machine. Agents may perform necessary **guest-only** cleanup and testing/setup autonomously; do not repeatedly ask permission for obsolete guest build artifacts or ordinary test setup. User revision, November7: normal `Test` now automatically cleans verified obsolete guest artifacts below 3 GiB, after runner self-tests and under the existing guest lock. It uses the same checked maintenance implementation as explicit Configure. Prefer this single invocation over separate Status/Configure calls. A cleanup receipt records reclaimed bytes and whether the 3 GiB target and 2 GiB test minimum were met. Unsafe paths/checksums still fail; a missed 3 GiB target alone does not block testing above 2 GiB.
 
 The Windows host is the user's personal machine. Keep host changes within the authorized project workspace/requested outputs; no unrelated cleanup, host packages/toolchains, services, security/settings or personal-data changes. Guest authorization does not extend to the host. This preference is also saved in the root `AGENTS.md` for future sessions.
 
 The VM is the existing **Isolde-Test** developer machine. Preserve Household, Kodi, installed releases and the graphical login. Routine testing goes through `tools/vm-test.ps1` in **PowerShell 7**. Do not assemble ad hoc SSH/build/capture loops.
 
 ## Verified artifact maintenance
+
+Normal `Test` needs no preparatory cleanup call. On low space, its existing connection also measures free bytes, automatically verifies up to 1,024 saved workspace archive hashes and sends one bounded receipt. No host archive is deleted. The guest retains the newest runs/three staged payloads, reuse and stopped-profile pins, logs/screenshots/manifests, installed releases, normal profiles and the incremental cache. It prunes verified older payloads, reproducible source copies, guest package/fixture caches and obsolete archives with exact host backups. Healthy disks skip hashing and cleanup. Extremely full disks that cannot receive/extract a source snapshot, or disks with no safely reclaimable artifacts, still fail with evidence. CTest now uses `--stop-on-failure` so one named failure does not consume the rest of the suite budget.
 
 After reviewing `Status -Storage`, use `./tools/vm-test.ps1 Configure -ConfigureTarget artifacts -RunId <unique-id>` to recover guest space without a passing application payload. This runs the matching, hash-verified runner self-tests before cleanup. It retains the current/newest runs, three newest actual staged payloads, payloads pinned by stopped-profile receipts, archives/manifests, evidence, installed releases, profiles and the incremental build cache. Older generated payloads are removed only after verifying their passing full-test payload manifest; unknown/modified bytes stop maintenance. Obsolete extracted source copies are removed only after archive/member/source checksum and link/mount checks. The receipts record checked guest paths. This action requires the native Isolde-Test oracle directory, aims for 3 GiB free, and never performs host cleanup or deployment. Failure to reach the maintenance target is reported honestly; a later Test still enforces its own 2 GiB minimum.
 
@@ -127,7 +129,7 @@ For installed native-app checks, verify the guest's graphical login is active (`
 | Build / CTest failure | Read the stage log, fix the cause, then one new Test. No repeated clean builds. |
 | Capture/acknowledgement failure | Runner cancels its guardian and preserves diagnostics. Correct the cause, rerun Visual on the same tested run. |
 | Missing display / failed service restoration | Inspect status and the user journal. Recover only when no test owns the locks. No duplicate manual Isolde launch. |
-| Less than 2 GiB free | Stop and review disk use. The runner never deletes old evidence, profiles or releases automatically. |
+| Less than 2 GiB after automatic preflight | Inspect the cleanup receipt and storage failure. Safe cleanup already ran; no blind retries or manual deletion of evidence/profiles/releases. |
 
 ## Machine and limits
 

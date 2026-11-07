@@ -49,7 +49,7 @@ $transport = Join-Path $local 'transport.log'
 $guestRun = $null; $exitCode = 0
 $launched = $false
 try {
-    $homeResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "python3 -c 'from pathlib import Path; print(Path.home())'") -TimeoutSeconds 25 -Log $transport
+    $homeResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "python3 -c 'from pathlib import Path; import shutil; print(Path.home()); print(shutil.disk_usage(Path.home()).free)'") -TimeoutSeconds 25 -Log $transport
     $guestHome = $homeResult.Lines | Where-Object { $_ -match '^/[A-Za-z0-9/_.-]+$' } | Select-Object -Last 1
     if (!$guestHome) { throw 'Could not determine a safe guest home path.' }
     $guestRun = "$guestHome/isolde-oracle/runs/$RunId"
@@ -66,14 +66,10 @@ try {
         if ($expected -notmatch '^[a-f0-9]{64}$' -or (Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Saved source archive checksum mismatch.' }
         $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($archive,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/recovery-$expected.tar.gz")) -TimeoutSeconds 40 -Log $transport
     }
-    if ($BackedUpSourceRunIds.Count) {
-        $backups = foreach ($sourceRun in $BackedUpSourceRunIds) {
-            if ($sourceRun -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') { throw 'Unsafe backup run ID.' }
-            $archive = Join-Path $repo "build/vm-oracle/$sourceRun/snapshot/source.tar.gz"
-            $expected = ((Get-Content -LiteralPath (Join-Path $repo "build/vm-oracle/$sourceRun/snapshot/archive.sha256") -Raw) -split '\s+')[0]
-            if ($expected -notmatch '^[a-f0-9]{64}$' -or (Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Host backup checksum mismatch.' }
-            @{runId=$sourceRun;sha256=$expected}
-        }
+    $guestFree = $homeResult.Lines | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1
+    if (!$guestFree) { throw 'Could not determine guest free space.' }
+    if ($BackedUpSourceRunIds.Count -or ($Action -eq 'Test' -and [long]$guestFree -lt 3GB)) {
+        $backups = @(Get-OracleSourceBackups -Root (Join-Path $repo 'build/vm-oracle') -RunIds $BackedUpSourceRunIds)
         $receipt = Join-Path $local 'host-source-backups.json'
         ConvertTo-Json -InputObject @($backups) | Set-Content -LiteralPath $receipt -Encoding utf8NoBOM
         $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($receipt,"isolde-dev@127.0.0.1:$guestRun/host-source-backups.json")) -TimeoutSeconds 30 -Log $transport

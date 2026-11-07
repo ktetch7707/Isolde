@@ -747,6 +747,11 @@ def focused_qml_coverage(root, run, base_id, suite):
     return guide_qml_coverage(root,run,base_id,suite)
 
 
+def ctest_command(build, report):
+    return ["ctest", "--test-dir", str(build), "--output-on-failure", "--stop-on-failure",
+            "--timeout", "120", "--output-junit", str(report)]
+
+
 class Oracle:
     def __init__(self, root, run_id):
         self.root = root
@@ -882,7 +887,7 @@ class Oracle:
                 raise RuntimeError("Required guest tool missing: " + tool)
         free = shutil.disk_usage(self.root).free
         if free < 2 * 1024**3:
-            raise RuntimeError("Less than 2 GiB free; stop and review space. No automatic deletion.")
+            raise RuntimeError("Less than 2 GiB free after test preflight; inspect guest cleanup receipts and storage.")
         self.update(hostname=self.command("hostname"), freeGiB=round(free / 1024**3, 2),
                     service=self.service(), releases=self.links())
         environment = dict(os.environ)
@@ -985,11 +990,15 @@ class Oracle:
         atomic_json(self.run/"android-capabilities.json", android)
 
     def test(self, suite, reuse_full_run=None):
+        if reuse_full_run and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', reuse_full_run):
+            raise RuntimeError("Unsafe full-run reuse identity")
+        self.maintenance_pins = {self.root / 'runs' / reuse_full_run} if reuse_full_run else set()
+        source, entries = extract_snapshot(self.run)
+        self.stage("oracle-self-test", ["python3", str(source / "tests/test_vm_oracle.py")], 90)
+        self.automatic_test_cleanup()
         self.check()
         service_before, releases_before = self.state["service"], self.state["releases"]
-        source, entries = extract_snapshot(self.run)
         reuse=focused_qml_coverage(self.root,self.run,reuse_full_run,suite) if reuse_full_run else None
-        self.stage("oracle-self-test", ["python3", str(source / "tests/test_vm_oracle.py")], 30)
         work = self.root / "work"
         old = json.loads((work / "manifest.json").read_text()) if (work / "manifest.json").exists() else {}
         changed = sync_workspace(source, work / "source", entries, old)
@@ -1007,8 +1016,7 @@ class Oracle:
         self.stage("build", command, 1200)
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="software",
                    ISOLDE_TEST_ARTIFACTS=str(self.run))
-        command = ["ctest", "--test-dir", str(build), "--output-on-failure", "--timeout", "120",
-                   "--output-junit", str(self.run / "ctest.xml")]
+        command = ctest_command(build, self.run / "ctest.xml")
         if suite != "all":
             command += ["-R", pattern]
         # The 45-suite passing baseline took 557.69s; the 53-suite Studio
@@ -1085,6 +1093,52 @@ class Oracle:
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
 
+    def automatic_test_cleanup(self):
+        before = shutil.disk_usage(self.root).free
+        if before >= 3 * 1024**3:
+            return
+        print("PREFLIGHT reclaiming verified guest artifacts (target 3 GiB, minimum 2 GiB)", flush=True)
+        try:
+            self.maintain_artifacts(minimum_gib=2)
+        finally:
+            after = shutil.disk_usage(self.root).free
+            atomic_json(self.run / "guest-test-cleanup.json", {
+                "guest": "isolde-test", "freeBefore": before, "freeAfter": after,
+                "reclaimedBytes": after - before, "targetGiB": 3, "minimumGiB": 2,
+                "targetReached": after >= 3 * 1024**3, "minimumMet": after >= 2 * 1024**3})
+        print(f"PREFLIGHT guest cleanup complete: {after / 1024**3:.2f} GiB free", flush=True)
+
+    def maintain_artifacts(self, minimum_gib=3):
+        self.prepare_guest_space(3, prune_sources=True, prune_payloads=True)
+        backups=self.run/'host-source-backups.json'
+        if backups.exists():
+            if backups.resolve()!=backups or backups.stat().st_size>262144:raise RuntimeError('Unsafe archive backup receipt')
+            archive_mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+            removed=remove_backed_up_archives(self.root,json.loads(backups.read_text()),archive_mounts, preserve_recent=True, target_free=3*1024**3, protected=getattr(self, 'maintenance_pins', ()))
+            atomic_json(self.run/'guest-archive-cleanup.json',{'guest':'isolde-test','targets':removed,'hostBackupsVerified':True})
+        if shutil.disk_usage(self.root).free<3*1024**3:
+            for line in Path('/proc/self/mountinfo').read_text().splitlines():
+                if line.split()[4]=='/tmp' and line.split(' - ',1)[1].split()[0] not in {'tmpfs','ext4','xfs','btrfs'}:raise RuntimeError('Acceptance cache cleanup requires native guest /tmp')
+            mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+            active=[]
+            for process in Path('/proc').iterdir():
+                if not process.name.isdigit():continue
+                for name in ('cwd','exe'):
+                    try:active.append((process/name).resolve(strict=True))
+                    except (OSError,RuntimeError):pass
+                try:
+                    for item in (process/'environ').read_bytes().split(b'\0'):
+                        if item.startswith(b'XDG_CACHE_HOME='):active.append(Path(os.fsdecode(item.split(b'=',1)[1])))
+                except OSError:pass
+            removed=remove_fixture_caches(Path('/tmp'),mounts,active)
+            if shutil.disk_usage(self.root).free<2*1024**3:
+                # Recent completed caches are reproducible too; active
+                # fixtures and all config/media/evidence remain protected.
+                removed+=remove_fixture_caches(Path('/tmp'),mounts,active,preserve_recent=0)
+            atomic_json(self.run/'guest-fixture-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'fixtureDataPreserved':True,'freeGiB':round(shutil.disk_usage(self.root).free/1024**3,2)})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
+
     def configure_native(self, target="native", maintenance_tests_digest=None):
         if target not in {"native","surfshark","android","android-repair","games","guide","artifacts"}: raise ValueError("Unsupported guest configuration target")
         if target=="artifacts":
@@ -1106,35 +1160,7 @@ class Oracle:
             verify_tree(bundle,entries)
             self.stage("guest-maintenance-self-tests",[sys.executable,str(tests)],90)
             remove_generated_payload_cache(self.run)
-            self.prepare_guest_space(3, prune_sources=True, prune_payloads=True)
-            backups=self.run/'host-source-backups.json'
-            if backups.exists():
-                if backups.resolve()!=backups or backups.stat().st_size>32768:raise RuntimeError('Unsafe archive backup receipt')
-                archive_mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
-                removed=remove_backed_up_archives(self.root,json.loads(backups.read_text()),archive_mounts)
-                atomic_json(self.run/'guest-archive-cleanup.json',{'guest':'isolde-test','targets':removed,'hostBackupsVerified':True})
-            if shutil.disk_usage(self.root).free<3*1024**3:
-                for line in Path('/proc/self/mountinfo').read_text().splitlines():
-                    if line.split()[4]=='/tmp' and line.split(' - ',1)[1].split()[0] not in {'tmpfs','ext4','xfs','btrfs'}:raise RuntimeError('Acceptance cache cleanup requires native guest /tmp')
-                mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
-                active=[]
-                for process in Path('/proc').iterdir():
-                    if not process.name.isdigit():continue
-                    for name in ('cwd','exe'):
-                        try:active.append((process/name).resolve(strict=True))
-                        except (OSError,RuntimeError):pass
-                    try:
-                        for item in (process/'environ').read_bytes().split(b'\0'):
-                            if item.startswith(b'XDG_CACHE_HOME='):active.append(Path(os.fsdecode(item.split(b'=',1)[1])))
-                    except OSError:pass
-                removed=remove_fixture_caches(Path('/tmp'),mounts,active)
-                if shutil.disk_usage(self.root).free<2*1024**3:
-                    # Recent completed caches are reproducible too; active
-                    # fixtures and all config/media/evidence remain protected.
-                    removed+=remove_fixture_caches(Path('/tmp'),mounts,active,preserve_recent=0)
-                atomic_json(self.run/'guest-fixture-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'fixtureDataPreserved':True,'freeGiB':round(shutil.disk_usage(self.root).free/1024**3,2)})
-            if shutil.disk_usage(self.root).free<3*1024**3:
-                raise RuntimeError("Verified obsolete artifacts could not recover 3 GiB; inspect storage evidence")
+            self.maintain_artifacts()
             return
         payload=self.tested_payload()
         if target=="guide":
@@ -1356,7 +1382,7 @@ class Oracle:
         # native build cache and all profile/account trees are retained.
         runs = self.root / "runs"
         candidates = sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p:p.stat().st_mtime, reverse=True)
-        protected = {self.run, *candidates[:3]}
+        protected = {self.run, *candidates[:3], *getattr(self, 'maintenance_pins', ())}
         if prune_payloads:
             payloads=sorted((p for p in candidates if (p/'payload').is_dir()),key=lambda p:(p/'payload').stat().st_mtime,reverse=True)
             protected.update(payloads[:3])
@@ -1417,7 +1443,7 @@ class Oracle:
             # Retain the newest legacy build plus every live process tree.
             # The incremental oracle cache is separate and remains untouched.
             for old in old_runs[:-1][:128]:
-                if shutil.disk_usage(self.root).free >= 8 * 1024**3: break
+                if shutil.disk_usage(self.root).free >= target_gib * 1024**3: break
                 target = old/"build"
                 if not target.is_dir() or any(p == target or p.is_relative_to(target) for p in active): continue
                 # Record the checked absolute target before deleting generated
@@ -1653,13 +1679,20 @@ def cancel_owned(root, run_id):
     raise RuntimeError("Owned runner has not finished cleanup; preserve evidence and inspect Status")
 
 
-def remove_backed_up_archives(root, backups, mounts=()):
-    if root.resolve()!=root or not isinstance(backups,list) or len(backups)>128:raise RuntimeError('Invalid backed-up archive maintenance')
+def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, target_free=None, protected=()):
+    if root.resolve()!=root or not isinstance(backups,list) or len(backups)>1024:raise RuntimeError('Invalid backed-up archive maintenance')
     runs=root/'runs';removed=[]
+    recent=set()
+    if preserve_recent:
+        # Removing generated children changes a run directory's mtime. Retain
+        # actual newest source archives using their unchanged upload timestamps.
+        recent=set(sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink() and (p/'source.tar.gz').is_file() and not (p/'source.tar.gz').is_symlink()),key=lambda p:(p/'source.tar.gz').stat().st_mtime,reverse=True)[:3])
     for entry in backups:
+        if target_free is not None and shutil.disk_usage(root).free >= target_free:break
         identity=entry.get('runId','');checksum=entry.get('sha256','')
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',identity) or not re.fullmatch(r'[a-f0-9]{64}',checksum):raise RuntimeError('Unsafe backed-up archive identity')
         run=runs/identity;archive=run/'source.tar.gz';record=run/'archive.sha256'
+        if run in recent or run in protected:continue
         if not archive.exists():continue
         if run.resolve()!=run or archive.resolve()!=archive or record.resolve()!=record:raise RuntimeError('Redirected archive backup')
         if any(m==archive or m.is_relative_to(archive) or (m!=Path('/') and archive.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted archive backup refused')

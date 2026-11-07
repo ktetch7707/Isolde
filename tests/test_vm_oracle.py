@@ -1032,6 +1032,58 @@ class OracleTests(unittest.TestCase):
         oracle.extract_snapshot(run)
         return run,runs
 
+    def test_automatic_test_cleanup_skips_healthy_disk_and_records_low_space(self):
+        runner=oracle.Oracle(self.root/'oracle','cleanup')
+        with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=4*1024**3)),patch.object(runner,'maintain_artifacts') as cleanup:
+            runner.automatic_test_cleanup()
+            cleanup.assert_not_called()
+        with patch.object(oracle.shutil,'disk_usage',side_effect=[SimpleNamespace(free=1024**3),SimpleNamespace(free=int(2.5*1024**3))]),patch.object(runner,'maintain_artifacts') as cleanup:
+            runner.automatic_test_cleanup()
+            cleanup.assert_called_once_with(minimum_gib=2)
+        receipt=json.loads((runner.run/'guest-test-cleanup.json').read_text())
+        self.assertTrue(receipt['minimumMet']);self.assertFalse(receipt['targetReached'])
+        self.assertGreater(receipt['reclaimedBytes'],0)
+
+    def test_ctest_stops_before_unrelated_work_after_first_failure(self):
+        build=self.root/'ctest-fixture';build.mkdir();marker=build/'must-not-run'
+        script=build/'later.py';script.write_text('from pathlib import Path\nimport sys\nPath(sys.argv[1]).write_text("ran")\n')
+        (build/'CTestTestfile.cmake').write_text(
+            f'add_test(first "{Path(sys.executable).as_posix()}" "-c" "raise SystemExit(1)")\n'
+            f'add_test(later "{Path(sys.executable).as_posix()}" "{script.as_posix()}" "{marker.as_posix()}")\n')
+        result=subprocess.run(oracle.ctest_command(build,build/'results.xml'),capture_output=True,text=True,timeout=15)
+        self.assertNotEqual(result.returncode,0);self.assertFalse(marker.exists())
+        self.assertIn('first',result.stdout)
+
+    def test_automatic_cleanup_records_failure_without_hiding_it(self):
+        runner=oracle.Oracle(self.root/'oracle','cleanup-failure')
+        with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=1024**3)),patch.object(runner,'maintain_artifacts',side_effect=RuntimeError('unsafe mount')):
+            with self.assertRaisesRegex(RuntimeError,'unsafe mount'):runner.automatic_test_cleanup()
+        self.assertFalse(json.loads((runner.run/'guest-test-cleanup.json').read_text())['minimumMet'])
+
+    def test_test_preflight_self_tests_before_cleanup_and_machine_check(self):
+        runner=oracle.Oracle(self.root/'oracle','ordered-cleanup');events=[]
+        def stop():events.append('check');raise RuntimeError('stop before build')
+        with patch.object(oracle,'extract_snapshot',side_effect=lambda run:(events.append('extract') or (run/'source',{}))),patch.object(runner,'stage',side_effect=lambda *args:events.append(args[0])),patch.object(runner,'automatic_test_cleanup',side_effect=lambda:events.append('cleanup')),patch.object(runner,'check',side_effect=stop):
+            with self.assertRaisesRegex(RuntimeError,'stop before build'):runner.test('component_contracts','requested-base')
+        self.assertEqual(events,['extract','oracle-self-test','cleanup','check'])
+        self.assertEqual(runner.maintenance_pins,{runner.root/'runs/requested-base'})
+
+    def test_backup_pruning_preserves_recent_runs_and_stops_at_target(self):
+        root=self.root/'oracle';runs=root/'runs';runs.mkdir(parents=True);backups=[]
+        for i in range(6):
+            run=runs/str(i);run.mkdir();archive=run/'source.tar.gz';archive.write_bytes(b'original')
+            checksum=oracle.digest(archive);(run/'archive.sha256').write_text(checksum+'  source.tar.gz')
+            (run/'status.json').write_text(json.dumps({'state':'passed'}));os.utime(run,(i,i));os.utime(archive,(i,i))
+            backups.append({'runId':str(i),'sha256':checksum})
+        with patch.object(oracle.shutil,'disk_usage',side_effect=lambda _:SimpleNamespace(free=(4 if not (runs/'0/source.tar.gz').exists() else 1)*1024**3)):
+            removed=oracle.remove_backed_up_archives(root,backups,preserve_recent=True,target_free=3*1024**3)
+        self.assertEqual(removed,[backups[0]])
+        for i in range(1,6):self.assertTrue((runs/str(i)/'source.tar.gz').exists())
+        # No space target: even then the newest three archives stay available.
+        oracle.remove_backed_up_archives(root,backups,preserve_recent=True,protected={runs/'1'})
+        self.assertTrue((runs/'1/source.tar.gz').exists())
+        for i in range(3,6):self.assertTrue((runs/str(i)/'source.tar.gz').exists())
+
     def test_source_cleanup_preserves_verified_recovery_and_reextracts(self):
         run,runs=self.recovery_snapshot("old")
         preserved={name:(run/name).read_bytes() for name in ("source.tar.gz","archive.sha256","files.sha256")}
