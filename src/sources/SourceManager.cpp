@@ -109,6 +109,8 @@ SourceManager::SourceManager(AppRegistry *registry, QObject *parent) : QObject(p
     m_refreshTimer.setSingleShot(false);
     connect(&m_refreshTimer, &QTimer::timeout, this, &SourceManager::refresh);
     m_refreshTimer.start();
+    if (registry)
+        connect(registry, &AppRegistry::appsChanged, this, &SourceManager::refresh);
     refresh();
 }
 
@@ -210,20 +212,25 @@ void SourceManager::setProbeRootsForTests(const QStringList &roots)
 QVariantList SourceManager::scanSources() const
 {
     QVariantList result;
+    QSet<QString> seen;
     for (const auto &root : m_probeRoots) {
         const QDir directory(root);
         if (!directory.exists())
             continue;
         const auto entries = directory.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
         for (const auto &entry : entries) {
+            if (entry.isSymLink())
+                continue;
             const auto actionType = actionTypeForPath(entry);
             const auto handler = defaultHandlerForAction(actionType);
             if (handler.isEmpty())
                 continue;
             const auto tile = sourceTileForPath(entry, handler);
             const auto id = tile.value(QStringLiteral("id")).toString();
-            if (!m_hiddenSources.contains(id) && !m_permanentSources.contains(id))
+            if (!tile.isEmpty() && !seen.contains(id) && !m_hiddenSources.contains(id) && !m_permanentSources.contains(id)) {
+                seen.insert(id);
                 result.append(tile);
+            }
         }
     }
     return result;

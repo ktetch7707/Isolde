@@ -452,6 +452,18 @@ void IsoldeTests::sourceManagerProjectsContextualTilesAndPromotionState()
     SourceManager sources(&registry);
     sources.setProbeRootsForTests({directory.path()});
     QCOMPARE(sources.items().size(), 3);
+    const auto originalSources = sources.items();
+    QSignalSpy sourceChanges(&sources, &SourceManager::sourcesChanged);
+    sources.setProbeRootsForTests({directory.path(), directory.path()});
+    QCOMPARE(sources.items(), originalSources); // Repeated roots must not duplicate identities.
+    sources.refresh();
+    QCOMPARE(sourceChanges.count(), 0); // Unchanged scans must not rebuild Home/focus.
+    const auto alias = directory.filePath("alias");
+    if (QFile::link(directory.filePath("USB Movies"), alias)) {
+        sources.refresh();
+        QCOMPARE(sources.items(), originalSources); // Do not follow links outside probe roots.
+        QVERIFY(QFile::remove(alias));
+    }
     const auto tile = sources.items().first().toMap();
     QCOMPARE(tile.value("kind").toString(), QString("action"));
     QCOMPARE(tile.value("contextual").toBool(), true);
@@ -489,6 +501,10 @@ void IsoldeTests::sourceManagerProjectsContextualTilesAndPromotionState()
     SourceManager noHandlerSources(&registryWithoutHandlers);
     noHandlerSources.setProbeRootsForTests({directory.path()});
     QCOMPARE(noHandlerSources.items().size(), 0);
+    QVERIFY(registryWithoutHandlers.loadFromData(config));
+    QCOMPARE(noHandlerSources.items().size(), 3); // Handler installation refreshes immediately.
+    QVERIFY(registryWithoutHandlers.removeApp("movies"));
+    QCOMPARE(noHandlerSources.items().size(), 0); // Removed handlers cannot remain launch targets.
 }
 
 void IsoldeTests::artPackCatalogLoadsAndHomeAppliesArtwork()
