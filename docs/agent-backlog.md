@@ -44,36 +44,36 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 
 ## Overall (update every edit)
 
-| Task | Priority | Title | % | Status |
+| Task | Priority | Title | % | Coding% | Status |
 |------|----------|-------|---|--------|
-| T15 | 1 | Page Studio design and user validation | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T16 | 2 | Draft transactions, history and profile safety | 100% | verified foundation; final integrated regression T31 |
-| T17 | 3 | Shared canvas geometry and legacy compatibility | 100% | verified foundation; evidence reusable by T05 |
-| T18 | 4 | Unified Studio workspace and selection | 100% | verified foundation; broad cutover remains T24 |
-| T19 | 5 | Remote movement, resize and collision | 100% | verified reflow foundation; later UX gates retained |
-| T20 | 6 | Desktop parity, layers and nested editing | 100% | installed movement parity accepted; 4/4 final milestones |
-| T21 | 7 | Inspector, real components, header and controls | 100% | 14/14 weighted milestones accepted; installed candidate and agent-run task walkthrough complete |
-| T22 | 8 | Templates, tokens, reuse and portability | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T23 | 9 | Apply, versions, restore and navigation safety | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T24 | 10 | Installed Studio usability and cutover | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
-| T27 | 11 | Shared theme across shell surfaces | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
-| T25 | 12 | Contained configurable detected sources | 20% | native policy/isolated atomic storage verified; remote/containment/installed acceptance open |
-| T26 | 13 | Configurable All Apps destination | 0% | gallery/Store-return slices verified; broad scope open |
-| T28 | 14 | Genuine Web search header toggle | 0% | implemented slices; complete combined acceptance open |
-| T29 | 15 | Verified Store, Android and Chromium remote | 13% | Android baseline accepted; source/bridge/playback/lifecycle open |
-| T01 | 16 | Current-source build and visual ledger | 100% | frozen T21 Linux build/source/reference ledger reconciled |
-| T05 | 17 | Grid renderer evidence reconciliation | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
-| T03 | 18 | Local Kodi search installed acceptance | 83% | native search contracts accepted; installed real-Kodi closure open |
-| T04 | 19 | Complete Kodi interface, preservation and import | 14% | creation verified; full management/setup/video open |
-| T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 0% | partial implementation; six broad gates open |
-| T09 | 21 | Playback preference and viewing controls | 0% | direct playback exists; complete matrix open |
-| T10 | 22 | Capture/HDMI/audio software and editors | 33% | software foundation verified; physical H04 separate |
-| T11 | 23 | Guide / PseudoTV | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
-| T14 | 24 | Online discovery and Linguist subtitles | 0% | retained active; provider/model decisions open |
-| T30 | 25 | Unified Games, local copies/discs and emulators | 0% | new plan mapped; software 0/9; H02/H03 physical |
-| T13 | 26 | Appliance software, distribution and user setup guide | 0% | installer foundation; clean-VM/recovery and beginner guide open |
-| T31 | 27 | Frozen first-product software acceptance | 5% | tool inventory verified; 0/7 final groups accepted |
-| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **1568 / 27 rounded; weighted progress, S1 incomplete** |
+| T15 | 1 | Page Studio design and user validation | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T16 | 2 | Draft transactions, history and profile safety | 100% | 100% | verified foundation; final integrated regression T31 |
+| T17 | 3 | Shared canvas geometry and legacy compatibility | 100% | 100% | verified foundation; evidence reusable by T05 |
+| T18 | 4 | Unified Studio workspace and selection | 100% | 100% | verified foundation; broad cutover remains T24 |
+| T19 | 5 | Remote movement, resize and collision | 100% | 100% | verified reflow foundation; later UX gates retained |
+| T20 | 6 | Desktop parity, layers and nested editing | 100% | 100% | installed movement parity accepted; 4/4 final milestones |
+| T21 | 7 | Inspector, real components, header and controls | 100% | 100% | 14/14 weighted milestones accepted; installed candidate and agent-run task walkthrough complete |
+| T22 | 8 | Templates, tokens, reuse and portability | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T23 | 9 | Apply, versions, restore and navigation safety | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T24 | 10 | Installed Studio usability and cutover | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
+| T27 | 11 | Shared theme across shell surfaces | 100% | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
+| T25 | 12 | Contained configurable detected sources | 20% | 100% | native policy/isolated atomic storage verified; remote/containment/installed acceptance open |
+| T26 | 13 | Configurable All Apps destination | 0% | 50% | gallery/Store-return slices verified; broad scope open |
+| T28 | 14 | Genuine Web search header toggle | 0% | 100% | implemented slices; complete combined acceptance open |
+| T29 | 15 | Verified Store, Android and Chromium remote | 13% | 100% | Android baseline accepted; source/bridge/playback/lifecycle open |
+| T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
+| T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
+| T03 | 18 | Local Kodi search installed acceptance | 83% | 100% | native search contracts accepted; installed real-Kodi closure open |
+| T04 | 19 | Complete Kodi interface, preservation and import | 14% | 40% | creation verified; playlist delete/rename and safe rollback implemented; full management/setup/video open |
+| T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 0% | 40% | partial implementation; six broad gates open |
+| T09 | 21 | Playback preference and viewing controls | 0% | 50% | direct playback exists; complete matrix open |
+| T10 | 22 | Capture/HDMI/audio software and editors | 33% | 60% | software foundation verified; physical H04 separate |
+| T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
+| T14 | 24 | Online discovery and Linguist subtitles | 0% | 35% | retained active; provider/model decisions open |
+| T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 15% | new plan mapped; software 0/9; H02/H03 physical |
+| T13 | 26 | Appliance software, distribution and user setup guide | 0% | 35% | installer foundation; clean-VM/recovery and beginner guide open; appliance validation code added |
+| T31 | 27 | Frozen first-product software acceptance | 5% | 10% | tool inventory verified; 0/7 final groups accepted |
+| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **76%** | **1568 / 27 rounded; weighted progress, S1 incomplete** |
 
 ## Current checkpoint summary
 
