@@ -9,8 +9,9 @@ Item {
     readonly property var rows: [
         { name: "Safe Area", value: displaySettings.safeArea + "%", help: "Pulls Isolde's interface inward for TVs that crop the edges." },
         { name: "UI Scale", value: displaySettings.uiScale + "%", help: "Makes the living-room interface larger or smaller." },
-        { name: "Reduced Motion", value: "Unavailable", help: "Animation reduction is not implemented yet." },
-        { name: "Reset Display", value: "Defaults", help: "Restore safe area, scale, and motion defaults." }
+        { name: "Reduced Motion", value: displaySettings.reduceMotion ? "On" : "Off", help: "Reduces animations and motion for accessibility." },
+        { name: "High Contrast", value: appearance.contrast === "high" ? "On" : "Off", help: "Increases text and border contrast for visibility." },
+        { name: "Reset Display", value: "Defaults", help: "Restore safe area, scale, motion, and contrast defaults." }
     ]
 
     function handleCommand(command) {
@@ -25,7 +26,9 @@ Item {
             if (selectedIndex === 0) displaySettings.adjustSafeArea(1)
             else if (selectedIndex === 1) displaySettings.adjustUiScale(5)
         } else if (command === inputManager.confirm) {
-            if (selectedIndex === 3) displaySettings.reset()
+            if (selectedIndex === 4) displaySettings.reset()
+            else if (selectedIndex === 2) displaySettings.toggleReduceMotion()
+            else if (selectedIndex === 5) appearance.contrast = (appearance.contrast === "high") ? "default" : "high"
         }
     }
 
@@ -107,7 +110,7 @@ Item {
         }
 
         Text { font.family: shell.fontFamily;
-            text: "← → adjust    Enter toggle/reset    Esc back"
+            text: "← → adjust    Enter toggle/cycle    Esc back"
             color: shell.unavailable
             font.pixelSize: 15 * shell.textScale
         }
