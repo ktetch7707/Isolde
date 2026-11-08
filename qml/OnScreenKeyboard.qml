@@ -5,14 +5,26 @@ Item {
     SurfacePalette { id: shell; appearance: root.appearance }
     property bool passwordMode: false
     property var appearance: ({})
-    property string hint: "D-pad choose    Enter type/select    Esc cancel"
+        property string hint: mode === "letters" ? "D-pad choose    Enter type/select    Esc cancel" : (mode === "numbers" ? "D-pad choose    Enter    Esc cancel") : "D-pad choose    Enter type/select    Esc cancel"
+    signal focusRestored()
+    property string focusRestorerId: ""
     property string value: ""
     property int selectedIndex: 0
+    property string mode: "letters"
     property bool shift: false
-    readonly property var keys: shift
+    readonly property var keys: (function(){
+        var caps=["1","2","3","4","5","6","7","8","9","0","Q","W","E","R","T","Y","U","I","O","P","A","S","D","F","G","H","J","K","L","-","Shift","Z","X","C","V","B","N","M","_","Del","Space",".","@","#","!","?",":","/","{","}","\\","Clear","Done"]
+        var lower=["1","2","3","4","5","6","7","8","9","0","q","w","e","r","t","y","u","i","o","p","a","s","d","f","g","h","j","k","l","-","z","x","c","v","b","n","m","_","Del","Space",".","@","#","!","?",":","/","{","}","\\","Clear","Done"]
+        var numbers=["1","2","3","4","5","6","7","8","9","0",".","Del","Space","Done"]
+        var symbols=["1","2","3","4","5","6","7","8","9","0","`","~","[","]",";","'","%","&","*","(",")","$","€","£","¥","_","+","|","\\","/","<",">","=","?","!","{","}","[","]",":",";",'"',"'",",","<",">","\\.","@","#","£","€","™","§","%","+","=","-","_","|","\\","/"]
+        if (mode==="numbers") return numbers
+        if (mode==="symbols") return symbols
+        if (mode==="letters" && shift) return caps
+        return lower
+    })()
         ? ["1","2","3","4","5","6","7","8","9","0","Q","W","E","R","T","Y","U","I","O","P","A","S","D","F","G","H","J","K","L","-","Shift","Z","X","C","V","B","N","M","_","Del","Space",".","@","#","!","?",",",":","/","{","}","\\","Clear","Done"]
         : ["1","2","3","4","5","6","7","8","9","0","q","w","e","r","t","y","u","i","o","p","a","s","d","f","g","h","j","k","l","-","Shift","z","x","c","v","b","n","m","_","Del","Space",".","@","#","!","?",",",":","/","Clear","Done"]
-    readonly property int columns: 10
+    readonly property int columns: mode === "numbers" ? 4 : 10
     signal accepted(string text)
     signal canceled()
 
@@ -34,7 +46,11 @@ Item {
 
     function press(key) {
         if (key === "Shift") {
-            shift = !shift
+            if (mode === "symbols") {
+                shift = !shift
+            } else {
+                shift = !shift
+            }
         } else if (key === "Del") {
             value = value.slice(0, -1)
         } else if (key === "Space") {
@@ -43,10 +59,16 @@ Item {
             value = ""
         } else if (key === "Done") {
             accepted(value)
+            if (focusRestorerId.length) {
+                focusRestored()
+            }
         } else {
             value += key
-            if (shift)
+            if (mode === "symbols" && shift) {
                 shift = false
+            } else if (shift) {
+                shift = false
+            }
         }
     }
 
@@ -102,8 +124,35 @@ Item {
                             anchors.centerIn: parent
                             text: modelData
                             color: root.selectedIndex === index ? shell.selectedText : shell.text
-                            font.pixelSize: modelData.length > 1 ? 13 : 18
+                            font.pixelSize: 18 * (modelData === "Shift" ? 0.85 : 1)
                             font.weight: Font.DemiBold
+                        }
+                    }
+                }
+            }
+            Row {
+                width: parent.width
+                height: 48
+                spacing: 12 * shell.gapScale
+                Repeater {
+                    model: ["letters", "numbers", "symbols"]
+                    delegate: Rectangle {
+                        width: (parent.width - 24 * shell.gapScale) / 3
+                        height: 36
+                        radius: shell.radius
+                        color: root.mode === modelData ? shell.selected : shell.surface
+                        border.width: root.mode === modelData ? 2 : 1
+                        border.color: root.mode === modelData ? shell.selectedFocus : shell.outline
+                        Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 8
+                            text: modelData
+                            color: root.mode === modelData ? shell.selectedText : shell.backgroundText
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        MouseArea { anchors.fill: parent
+                            onClicked: { root.mode = modelData }
                         }
                     }
                 }

@@ -17,6 +17,7 @@ Item {
     property int selectedConnectionAction: 0
     property bool keyboardOpen: false
     property string keyboardTarget: "password"
+    readonly property var focusRestorerId: "wifiPassword"
     readonly property var actions: ["Refresh", networkSettings.wifiEnabled ? "Turn Wi-Fi off" : "Turn Wi-Fi on", "Join hidden Wi-Fi"]
     readonly property int firstDeviceIndex: actions.length
     readonly property int firstNetworkIndex: actions.length + networkSettings.devices.length
@@ -38,6 +39,16 @@ Item {
         return networkSettings.savedConnections[index]
     }
 
+    Connections {
+        target: tvKeyboard
+        function onFocusRestored() {
+            if (passwordPrompt || hiddenNetworkPrompt) {
+                passwordPrompt = false
+                hiddenNetworkPrompt = false
+                wifiPassword.forceActiveFocus()
+            }
+        }
+    }
     function handleCommand(command) {
         if (keyboardOpen) {
             tvKeyboard.handleCommand(command)
@@ -62,6 +73,7 @@ Item {
             return
         }
         if (passwordPrompt || hiddenNetworkPrompt) {
+            tvKeyboard.focusRestorerId = "wifiPassword"
             if (command === inputManager.back) {
                 passwordPrompt = false
                 hiddenNetworkPrompt = false
