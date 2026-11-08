@@ -81,7 +81,7 @@ Item {
             if (index < 0) index = 0
             index = (index + direction + templates.length) % templates.length
             captureController.setCommandTemplate(templates[index])
-        } else if (selectedIndex === 6) {
+        } else if (selectedIndex === 7) {
             captureController.selectInput((captureController.selectedInput - 1 + direction + 8) % 8 + 1)
         }
     }

@@ -37,7 +37,10 @@ CaptureController::CaptureController(QObject *parent) : QObject(parent),
     connect(&m_mediaDevices, &QMediaDevices::videoInputsChanged, this, &CaptureController::refreshDevices);
     connect(&m_mediaDevices, &QMediaDevices::audioInputsChanged, this, &CaptureController::refreshDevices);
     connect(m_camera, &QCamera::errorOccurred, this, [this](QCamera::Error, const QString &message) {
-        if (m_previewRequested) setStatus("error", "Capture card could not start: " + message);
+        if (m_previewRequested) {
+            stopPreview();
+            setStatus("error", "Capture card error: " + message + " Retry preview after checking the device.");
+        }
     });
     connect(&m_serial, &QSerialPort::bytesWritten, this, [this](qint64 count) {
         if (m_serialBytesPending <= 0) return;
@@ -455,7 +458,7 @@ bool CaptureController::startPreview()
 #endif
     setStatus("awaiting-frames", startupStatus);
     m_camera->start();
-    return true;
+    return m_previewRequested;
 }
 
 void CaptureController::stopPreview()

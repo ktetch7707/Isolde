@@ -21,6 +21,91 @@ function method(file, name, context, anchor) {
     vm.runInContext(source.slice(start, end), context, {filename: file + ":" + name});
 }
 
+test("capture settings arrows change only the selected input row", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        selectedIndex: 6,
+        captureController: {selectedInput: 1, selectInput: input => calls.push(input)},
+    });
+    method("CaptureSettingsView.qml", "adjust", scope);
+    scope.adjust(1);
+    assert.deepEqual(calls, []);
+    scope.selectedIndex = 7;
+    scope.adjust(-1);
+    assert.deepEqual(calls, [8]);
+    scope.adjust(1);
+    assert.deepEqual(calls, [8, 2]);
+});
+
+test("capture session preserves selection for retry after a failed switch", () => {
+    const calls = [], inputManager = {back: 1, home: 2, navigateLeft: 3, navigateRight: 4, confirm: 5};
+    let succeeds = false;
+    const scope = vm.createContext({
+        inputManager, chooseInput: false, selectionPending: true, pendingSwitchConfirmation: false,
+        captureController: {
+            selectedInput: 4, state: "receiving-frames",
+            switchInput: input => { calls.push(input); return succeeds; },
+        },
+    });
+    method("CaptureSessionView.qml", "handleCommand", scope);
+    scope.handleCommand(inputManager.confirm);
+    assert.equal(scope.selectionPending, true);
+    assert.equal(scope.pendingSwitchConfirmation, false);
+    succeeds = true;
+    scope.handleCommand(inputManager.confirm);
+    assert.equal(scope.selectionPending, false);
+    assert.equal(scope.pendingSwitchConfirmation, true);
+    assert.deepEqual(calls, [4, 4]);
+});
+
+test("a failed direct capture launch opens the input picker for retry", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        videoOutput: {}, originId: "", chooseInput: false, pendingSwitchConfirmation: false,
+        selectionPending: true, open: false,
+        captureController: {
+            setVideoOutput: () => {}, selectInput: input => calls.push(input),
+            switchInput: () => false,
+        },
+    });
+    method("CaptureSessionView.qml", "openSession", scope);
+    scope.openSession(3, "origin");
+    assert.equal(scope.open, true);
+    assert.equal(scope.chooseInput, true);
+    assert.equal(scope.originId, "origin");
+    assert.deepEqual(calls, [3]);
+});
+
+test("keyboard modes, shift, and completion work with remote commands", () => {
+    const accepted = [], inputManager = {navigateLeft: 1, navigateRight: 2, navigateUp: 3, navigateDown: 4, back: 5, confirm: 6};
+    const scope = vm.createContext({
+        inputManager, mode: "letters", shift: false, selectedIndex: 0, value: "",
+        focusRestorerId: "", accepted: value => accepted.push(value), canceled() {},
+    });
+    method("OnScreenKeyboard.qml", "keyList", scope);
+    method("OnScreenKeyboard.qml", "press", scope);
+    method("OnScreenKeyboard.qml", "handleCommand", scope);
+    Object.defineProperty(scope, "keys", {get: () => scope.keyList()});
+    const confirmKey = key => {
+        const index = scope.keys.indexOf(key);
+        assert.ok(index >= 0, `${key} is reachable in ${scope.mode}`);
+        while (scope.selectedIndex < index) scope.handleCommand(inputManager.navigateRight);
+        while (scope.selectedIndex > index) scope.handleCommand(inputManager.navigateLeft);
+        scope.handleCommand(inputManager.confirm);
+    };
+    confirmKey("Shift");
+    confirmKey("Q");
+    assert.equal(scope.value, "Q");
+    assert.equal(scope.shift, false);
+    confirmKey("#+=");
+    confirmKey("\\");
+    confirmKey("123");
+    confirmKey("2");
+    confirmKey("ABC");
+    confirmKey("Done");
+    assert.deepEqual(accepted, ["Q\\2"]);
+});
+
 test("page Back restores its saved state and skips a removed or restricted page", () => {
     const restored = [], pages = new Set(["first", "restricted", "last"]);
     const scope = vm.createContext({
