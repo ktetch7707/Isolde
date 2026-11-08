@@ -1,0 +1,97 @@
+{
+  "assets": {},
+  "layout": {
+    "components": [
+      {
+        "id": "main-apps",
+        "name": "Apps",
+        "kind": "widget",
+        "widgetType": "container",
+        "componentType": "container",
+        "placement": {
+          "width": 4,
+          "x": 0,
+          "y": 0,
+          "height": 3
+        },
+        "presentation": {
+          "variant": "orb",
+          "surfaceOpacity": 1,
+          "diameter": 88,
+          "layout": {
+            "padding": 16,
+            "mode": "row",
+            "schemaVersion": 1,
+            "wrap": false,
+            "rows": 1,
+            "gap": 24,
+            "visibleColumns": 6,
+            "columns": 16
+          },
+          "labelSize": 18
+        },
+        "appCollection": {
+          "mode": "all",
+          "ids": []
+        },
+        "family": "app-bar",
+        "categoryId": "apps",
+        "source": {
+          "provider": "shell",
+          "schemaVersion": 1,
+          "kind": "container"
+        }
+      }
+    ],
+    "theme": {
+      "selectedColor": "#344c70",
+      "backgroundStart": "#101725",
+      "brandVisible": false,
+      "textColor": "#f3f5fa",
+      "typographyScale": 1,
+      "mutedColor": "#b7c4d8",
+      "homeColumns": 5,
+      "focusColor": "#8dc8ff",
+      "spacing": 16,
+      "motionEnabled": false,
+      "tileRoundness": 0.18,
+      "backgroundEnd": "#182338",
+      "fontFamily": "DejaVu Sans",
+      "surfaceColor": "#243249"
+    },
+    "schemaVersion": 2,
+    "categories": [
+      {
+        "id": "apps",
+        "name": "Apps"
+      }
+    ],
+    "composition": {
+      "enabled": true,
+      "pageNavigation": "left",
+      "identity": "Compact launcher",
+      "grid": {
+        "overlap": false,
+        "snap": true,
+        "rows": 3,
+        "mode": "screen",
+        "gap": 16,
+        "margin": 16,
+        "columns": 4
+      },
+      "columns": 1,
+      "headerMode": "identity",
+      "headerControls": [
+        "search",
+        "settings",
+        "edit"
+      ],
+      "gap": 24,
+      "margin": 32,
+      "schemaVersion": 1,
+      "fit": false
+    }
+  },
+  "schemaVersion": 1,
+  "name": "Compact launcher"
+}

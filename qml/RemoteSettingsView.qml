@@ -2,6 +2,9 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property int selectedIndex: 0
     readonly property string profileLabel: remoteSettings.profile === "media" ? "Media remote" : remoteSettings.profile === "gamepad" ? "Gamepad" : "Simple TV remote"
     readonly property string powerLabel: remoteSettings.powerAction === "tv-standby" ? "TV standby" : remoteSettings.powerAction === "tv-on" ? "TV on" : "Ambient toggle"
@@ -46,14 +49,14 @@ Item {
     Column {
         id: contents
         width: parent.width
-        spacing: 18
+        spacing: 18 * shell.gapScale
 
-        Text { text: "REMOTE SETUP"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-        Text {
+        Text { font.family: shell.fontFamily; text: "REMOTE SETUP"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily;
             width: parent.width
             text: "Test remote buttons, select an input profile, and configure available HDMI-CEC commands. Custom button remapping is not available yet."
-            color: "#9EABC1"
-            font.pixelSize: 18
+            color: shell.muted
+            font.pixelSize: 18 * shell.textScale
             wrapMode: Text.WordWrap
         }
 
@@ -61,19 +64,19 @@ Item {
             width: parent.width
             height: 128
             radius: 14
-            color: "#080C18"
-            border.color: remoteSettings.setupMode ? "#4D7ED8" : "#26344F"
+            color: shell.background
+            border.color: shell.backgroundFocus
 
             Column {
                 anchors.fill: parent
                 anchors.margins: 20
-                spacing: 8
-                Text { text: remoteSettings.setupStatus; color: "#F8FAFC"; font.pixelSize: 24; font.weight: Font.DemiBold }
-                Text {
+                spacing: 8 * shell.gapScale
+                Text { font.family: shell.fontFamily; text: remoteSettings.setupStatus; color: shell.backgroundText; font.pixelSize: 24 * shell.textScale; font.weight: Font.DemiBold }
+                Text { font.family: shell.fontFamily;
                     width: parent.width
                     text: "Minimum working remote: Up, Down, Left, Right, OK, Back, Home. Power can toggle Ambient Mode now or control the TV later through HDMI-CEC."
-                    color: "#9EABC1"
-                    font.pixelSize: 15
+                    color: shell.backgroundMuted
+                    font.pixelSize: 15 * shell.textScale
                     wrapMode: Text.WordWrap
                 }
             }
@@ -87,10 +90,10 @@ Item {
                 required property var modelData
                 width: parent.width
                 height: 72
-                radius: 10
-                color: root.selectedIndex === index ? "#2B416B" : "#111A2A"
+                radius: shell.radius
+                color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
 
                 Column {
                     anchors.left: parent.left
@@ -98,12 +101,12 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 18
                     anchors.rightMargin: 16
-                    spacing: 3
-                    Text { text: modelData.name; color: "#F8FAFC"; font.pixelSize: 20; font.weight: Font.DemiBold }
-                    Text { width: parent.width; text: modelData.help; color: "#9EABC1"; font.pixelSize: 13; elide: Text.ElideRight }
+                    spacing: 3 * shell.gapScale
+                    Text { font.family: shell.fontFamily; text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 20 * shell.textScale; font.weight: Font.DemiBold }
+                    Text { font.family: shell.fontFamily; width: parent.width; text: modelData.help; color: (root.selectedIndex === index) ? shell.selectedText : shell.muted; font.pixelSize: 13 * shell.textScale; elide: Text.ElideRight }
                 }
 
-                Text {
+                Text { font.family: shell.fontFamily;
                     id: valueText
                     anchors.right: parent.right
                     anchors.rightMargin: 18
@@ -111,19 +114,19 @@ Item {
                     width: 210
                     horizontalAlignment: Text.AlignRight
                     text: modelData.value
-                    color: "#C8D3E5"
-                    font.pixelSize: 16
+                    color: (root.selectedIndex === index) ? shell.selectedText : shell.text
+                    font.pixelSize: 16 * shell.textScale
                     font.weight: Font.DemiBold
                     wrapMode: Text.WordWrap
                 }
             }
         }
 
-        Text {
+        Text { font.family: shell.fontFamily;
             width: parent.width
             text: "Current backend: keyboard/HID-equivalent input plus safe cec-client detection/commands. Follow-on: evdev/libinput device discovery, Bluetooth pairing, CEC remote events, remap profiles, and guided troubleshooting."
-            color: "#73819B"
-            font.pixelSize: 15
+            color: shell.unavailable
+            font.pixelSize: 15 * shell.textScale
             wrapMode: Text.WordWrap
         }
     }

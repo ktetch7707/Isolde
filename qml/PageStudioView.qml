@@ -1,6 +1,7 @@
 // PageStudioView.qml — remote-first page editor: canvas, context menu, dialogs, preview/apply.
 import QtQuick
 import QtQuick.Controls
+import "StudioTree.js" as StudioTree
 
 Item {
     id: studio
@@ -32,6 +33,25 @@ Item {
     property var addingConfiguration:({})
     property bool inspectorReturn:false
     property bool samplePreview:false
+    property string stressScenario:"real"
+    property var interactionOrigin:({})
+    property var versionEntries:[]
+    property var versionOrigin:({})
+    property var defaultRemovedPages:[]
+    property string versionId:""
+    property string versionScope:"page"
+    property bool comparingCurrent:false
+    property var renderedFindings:[]
+    readonly property var findings:(session && (mode==="apply" || mode==="health")?session.healthFindings:[]).concat(renderedFindings).concat(preview.layoutError?[{pageId:pageId,componentId:selectedId,property:"placement",message:preview.layoutError,blocking:true}]:[])
+    readonly property var changedPages:session && mode==="apply"?session.changeSummary:[]
+    readonly property var stressSamples: {
+        const samples=layoutModel?layoutModel.studioOptions.designSamples || []:[]
+        if(stressScenario==="empty")return []
+        if(stressScenario==="large")return Array.from({length:50},(_,i)=>Object.assign({},samples[i%samples.length] || {},{name:"Sample "+(i+1),title:"Sample "+(i+1)}))
+        if(stressScenario==="long")return samples.map(i=>Object.assign({},i,{name:layoutModel.studioOptions.stressTitle,title:layoutModel.studioOptions.stressTitle}))
+        if(stressScenario==="missing")return samples.map(i=>Object.assign({},i,{artwork:"",poster:"",thumbnail:"",art:{}}))
+        return samples
+    }
     property string structureType:""
     property string structureId:""
     property var navSections:[]
@@ -66,7 +86,7 @@ Item {
     property string sizeError: ""
     property bool contextExpanded: false
     onModeChanged:if(mode==="context")contextExpanded=false
-    readonly property var sizeSettings: layoutModel ? (layoutModel.studioOptions.inspector.size || {}) : ({})
+    readonly property var sizeSettings: layoutModel ? ((layoutModel.studioOptions.inspector || {}).size || {}) : ({})
     readonly property bool proportionalSize: !!current && (sizeSettings.proportionalTypes || []).indexOf(current.componentType)>=0
     property bool pendingScrollEnable:false
     property bool scrollingDraft:false
@@ -101,7 +121,8 @@ Item {
     property string keyboardAction: ""
     property string keyboardReturnMode: "context"
     property var palette: draftModel?draftModel.studioAppearance:layoutModel ? layoutModel.studioAppearance : ({})
-    readonly property var draftModel: session ? ((gridEditing || mode==="flowMove" || mode==="scrolling" || mode==="arrange" || mode==="childLayout" || mode==="replaceReview" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
+    property real alternateViewportRatio:0
+    readonly property var draftModel: session ? ((mode==="reuseTools" && reuseTools.view==="review" || mode==="designTools" && designTools.previewing || gridEditing || mode==="flowMove" || mode==="scrolling" || mode==="arrange" || mode==="childLayout" || mode==="replaceReview" || (mode==="versionReview" || mode==="conflictCompare") && !comparingCurrent || mode==="defaultsReview" || mode==="inspector" && inspector.previewActive) && session.proposalModel ? session.proposalModel : session.model) : null
     readonly property var page: draftModel ? (pageId ? draftModel.pageModel(pageId) : draftModel) : null
     readonly property var items: page ? page.items : []
     readonly property var pageGrid:page?page.grid:({})
@@ -118,11 +139,7 @@ Item {
         const model=pageId?session.model.pageModel(pageId):session.model
         return model?model.items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId)):[]
     }
-    readonly property var layerRows: {
-        const rows=[]
-        function append(parent,depth){for(const item of items.filter(i=>(i.parentId || "")===parent)){rows.push({item:item,depth:depth});if(item.componentType==="container" && expandedGroups[item.id])append(item.id,depth+1)}}
-        append("",0);return rows
-    }
+    readonly property var layerRows: StudioTree.layerRows(items, expandedGroups)
     readonly property var gridModes:layoutModel && layoutModel.studioOptions?layoutModel.studioOptions.gridModes || []:[]
     readonly property bool gridMode: {
         if(!page || !page.composition.enabled || !page.composition.grid)return false
@@ -146,6 +163,7 @@ Item {
     readonly property string operationSummary:componentName(addingType?null:current)+" · row "+(candidate.y+1)+", column "+(candidate.x+1)+" · "+candidate.width+" × "+candidate.height+" cells"
     readonly property string operationTitle:({headerContext:"Header",editorSettings:"Editor settings",replaceReview:"Replace component",restoreDefaults:"Reset page",apply:"Review changes",view:"Canvas view",noRoom:"No room",flowMove:"Move in this layout",moveOptions:"Move and size",anchors:"Resize anchor",destination:"Choose a section",groupDestination:"Move into a group",orderBefore:gridMode?"Reading order before":"Move before",orderAfter:gridMode?"Reading order after":"Move after",collision:"Resolve overlap",collisionDetails:"Affected components",geometry:"Position and size",conversionPreview:"Review page layout",gridExact:"Exact layout values"})[mode] || ""
     readonly property string footerText: {
+        if(preview.layoutError)return breadcrumb+" · "+preview.layoutError
         if(mode==="flowMove")return message
         if(mode==="move" || mode==="resize")return (addingType?"Adding ":mode==="move"?(grid.overlap?"Moving layer · ":"Moving "):"Resizing ")+componentName(addingType?null:current)+(message?" · "+message:mode==="move" && collisionPreview.valid===false?" · "+collisionPreview.reason:"")
         if(mode==="collision")return breadcrumb+" · Resolve overlap · Choose a proposal or Cancel · Back cancels"
@@ -205,15 +223,38 @@ Item {
         if((mode!=="collision" && mode!=="collisionDetails") || (mode==="collision" && choice===2) || !session)return ({})
         return collisionStrategy==="shift"?shiftPreview:swapPreview
     }
-    readonly property real textScale: palette.typographyScale || 1
-    readonly property real spacing: palette.spacing || 20
+    // Keep proposal cards alive while only their geometry changes. A QVariant
+    // array model would destroy/recreate every card on each remote step.
+    ListModel { id:placementPreviewModel;dynamicRoles:true;Component.onCompleted:studio.updatePlacementPreviews() }
+    onCollisionPreviewChanged:updatePlacementPreviews()
+    function updatePlacementPreviews() {
+        if(!placementPreviewModel)return
+        const placements=collisionPreview.valid ? collisionPreview.placements : []
+        for(let index=0;index<placements.length;++index) {
+            const placement=placements[index]
+            let existing=index
+            while(existing<placementPreviewModel.count && placementPreviewModel.get(existing).componentId!==placement.id)++existing
+            if(existing===placementPreviewModel.count)placementPreviewModel.insert(index,{componentId:placement.id,candidatePlacement:placement.placement,previewCategory:placement.categoryId || "",previewParent:placement.parentId || ""})
+            else {
+                if(existing!==index)placementPreviewModel.move(existing,index,1)
+                placementPreviewModel.setProperty(index,"candidatePlacement",placement.placement)
+                placementPreviewModel.setProperty(index,"previewCategory",placement.categoryId || "")
+                placementPreviewModel.setProperty(index,"previewParent",placement.parentId || "")
+            }
+        }
+        if(placementPreviewModel.count>placements.length)placementPreviewModel.remove(placements.length,placementPreviewModel.count-placements.length)
+    }
+    readonly property var referenceViewport:layoutModel ? layoutModel.studioOptions.referenceViewport || {} : ({})
+    readonly property real viewportScale:width>0 && height>0 && referenceViewport.width && referenceViewport.height ? Math.min(width/referenceViewport.width,height/referenceViewport.height) : 1
+    readonly property real textScale: (palette.typographyScale || 1)*viewportScale
+    readonly property real spacing: (palette.spacing || 20)*viewportScale
     readonly property var pageEntries:draftModel?draftModel.studioPages:[]
     readonly property var removalDestinations:pageEntries.filter(p=>p.id!==pageId)
     readonly property string breadcrumb:((pageEntries.find(p=>p.id===pageId)||{}).name || "Page")+(sectionMode?" / "+(scopeOverview?"All sections":selectedSection?selectedSection.name:"Uncategorized"):"")
         +groupBreadcrumb()
     function groupBreadcrumb(){let result=[],id=parentScopeId;for(let depth=0;id && depth<4;++depth){const group=items.find(i=>i.id===id);if(!group)break;result.unshift(group.name || group.id);id=group.parentId || ""}return result.length?" / "+result.join(" / "):""}
     readonly property var menuEntries:[{label:"＋ Add page",action:"new"}].concat(pageEntries.map(p=>({label:(p.id===draftModel.homePageId?"⌂ ":"")+p.name,action:"page",id:p.id}))).concat([
-        {label:"＋ Add component",action:"add"},{label:"Page appearance",action:"appearance"},{label:"Layers",action:"layers"},{label:"Saved designs",action:"designs"},{label:"Editor settings",action:"editorSettings"},{label:"Review & Apply",action:"apply"},{label:"Edit page →",action:"edit"}])
+        {label:"＋ Add component",action:"add"},{label:"Page appearance",action:"appearance"},{label:"Layers",action:"layers"},{label:"Shared styles & My components",action:"reuse"},{label:"Saved designs",action:"designs"},{label:"Editor settings",action:"editorSettings"},{label:"Try, versions & safety",action:"safety"},{label:"Review & Apply",action:"apply"},{label:"Edit page →",action:"edit"}])
     function activateMenu(index) {
         menuIndex=index;const entry=menuEntries[index];if(!entry)return
         choice=0;historyFocus=false
@@ -223,15 +264,18 @@ Item {
         else if(entry.action==="appearance")openInspector(true)
         else if(entry.action==="layers")mode="layers"
         else if(entry.action==="editorSettings")mode="editorSettings"
-        else if(entry.action==="designs"){if(session.dirty)message="Apply or discard this draft before opening saved designs.";else skinsRequested()}
-        else if(entry.action==="more")mode="more"
-        else if(entry.action==="apply")mode="apply"
+        else if(entry.action==="reuse")mode="reuseTools"
+        else if(entry.action==="designs"){mode="designTools";designTools.begin()}
+        else if(entry.action==="safety")mode="safety"
+        else if(entry.action==="apply"){stressScenario="real";samplePreview=false;mode="apply";Qt.callLater(()=>Qt.callLater(collectRenderedFindings))}
         else {toolbarFocus=false;mode="canvas";if(!current && scopedItems.length)selectedId=scopedItems[0].id}
     }
     signal closed()
+    function openDesign(id) {mode="designTools";designTools.begin();designTools.selectedDesign=id;designTools.chooseScope("design")}
     signal skinsRequested()
     visible: open
     z: 100
+    onPageIdChanged:renderedFindings=[]
     onCurrentChanged:if(current && !manipulating){parentScopeId=current.parentId || "";if(sectionMode){let root=current;for(let depth=0;root.parentId && depth<4;++depth)root=items.find(i=>i.id===root.parentId) || root;scopeId=root.categoryId || ""}Qt.callLater(()=>{if(current && current.placement && gridMode && !manipulating)preview.revealPlacement(current.placement,scopeId,current.parentId || "")})}
     onChoiceChanged:if(mode==="collision" && choice<2)collisionStrategy=choice===0?"shift":"swap"
     onScopeIdChanged:if(open && sectionMode && !scopeOverview)Qt.callLater(()=>{if(open && sectionMode)preview.revealScope(scopeId)})
@@ -240,13 +284,15 @@ Item {
         historyFocus=false
         headerSelection=""
         pointerBoundaryError=""
+        stressScenario="real";samplePreview=false;interactionOrigin=({});renderedFindings=[]
         session = layoutModel.beginStudio()
+        if(!session || !session.active){message=session?session.errorString:"Editing is unavailable.";mode="restricted";toolbarFocus=false;open=true;return}
         pageId = id || (!session.model.rootPageVisible?session.model.homePageId:""); selectedId = component || "";pageFocus=({})
         mode = "canvas"; toolbarFocus = true; tool = 0;menuIndex=0; message = "";deletedSelection=""
         scopeOverview=true;scopeId=current?current.categoryId || "":page && page.sections.length?page.sections[0].id || "":""
         open = true
     }
-    function close() { pointerBoundaryError=""; if(session) session.invalidate(); open=false; closed() }
+    function close() { stressScenario="real";samplePreview=false;interactionOrigin=({});pointerBoundaryError=""; if(session) session.invalidate(); open=false; closed() }
     function command(op,args) {
         if (!session || !session.execute(op,args || {},["newPage","renamePage","duplicatePage","reorderPage","removePage","setHomePage","studioAppearance"].indexOf(op)>=0 ? "" : pageId)) {
             message = session ? session.errorString : "The edit session is closed."
@@ -259,12 +305,21 @@ Item {
     function openHeader(part) {
         headerSelection=part || "title"
         openInspector(true);inspector.tab=inspector.tabs.indexOf("Header");inspector.view="fields";inspector.controlsShown=true
-        const key=headerSelection==="title"?"identity":headerSelection==="clock"?"showClock":headerSelection==="search" || headerSelection==="settings" || headerSelection==="edit"?"headerControls":"headerMode"
+        const key=headerSelection==="title"?"identity":headerSelection==="clock"?"showClock":["sources","search","settings","edit"].indexOf(headerSelection)>=0?"headerControls":"headerMode"
         inspector.selected=Math.max(0,inspector.fields.findIndex(field=>field.key===key))
     }
     function openStructureInspector(type,id){openInspector(false);inspector.structureType=type;inspector.structureId=id;structureType=type;structureId=id}
-    function projected(item){return mode==="inspector" && inspector.editingState!=="base" && (inspector.structureType==="section"?item.categoryId===inspector.structureId:inspector.selectedIds.indexOf(item.id)>=0)?Object.assign({},item,{designState:inspector.editingState}):item}
+    function projected(item){
+        if(stressScenario==="long")return Object.assign({},item,{name:layoutModel.studioOptions.stressTitle})
+        if(stressScenario==="missing")return Object.assign({},item,{customLogo:"",logoSource:""})
+        return mode==="inspector" && inspector.editingState!=="base" && (inspector.structureType==="section"?item.categoryId===inspector.structureId:inspector.selectedIds.indexOf(item.id)>=0)?Object.assign({},item,{designState:inspector.editingState}):item}
     function inspectorOperation(name){
+        if(name==="editableMenu"){
+            const menu=(page.items || []).find(item=>item.family==="page-menu")
+            if(menu){selectedId=menu.id;toolbarFocus=false;openInspector(false)}
+            else startAddition("page-menu",{})
+            return
+        }
         inspectorReturn=false
         if(name.indexOf("replace:")===0){
             const type=name.slice(8),proposal=session.replacementProposal(selectedId,type,pageId)
@@ -349,7 +404,7 @@ Item {
         addingType="";pendingScrollEnable=false;mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;message="Canceled · no draft or history changes."
         const viewport=gestureViewport
         // Let proposal delegates and queued selection reveals settle first.
-        Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))
+        Qt.callLater(()=>Qt.callLater(()=>{if(studio && studio.open && preview)preview.restoreEditorViewport(viewport)}))
     }
     function previewFlowTarget(target) {
         if(mode!=="flowMove" || target<0 || target>=flowIds.length || target===flowTargetIndex)return
@@ -377,7 +432,7 @@ Item {
             mode="canvas";toolbarFocus=false;message="Arrangement updated in draft."
         }else{
             session.cancelPreview();mode="layers";choice=arrangementReturnChoice;message=""
-            const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))
+            const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>{if(studio && studio.open && preview)preview.restoreEditorViewport(viewport)}))
         }
     }
     function beginChildLayout(fromInspector) {
@@ -397,7 +452,7 @@ Item {
             if(preview.layoutError){message=preview.layoutError;return}
             if(session.proposalModel && !session.acceptPreview()){childLayoutValid=false;message=session.errorString;return}
             message="Group layout updated in draft."
-        }else{session.cancelPreview();message="";const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))}
+        }else{session.cancelPreview();message="";const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>{if(studio && studio.open && preview)preview.restoreEditorViewport(viewport)}))}
         mode=childLayoutFromInspector?"inspector":"canvas";toolbarFocus=false
     }
     function beginRelative(before) {
@@ -427,7 +482,7 @@ Item {
     }
     function cancelGrid() {
         ++gridPreviewSerial;session.cancelPreview();mode=inspectorReturn?"inspector":"canvas";inspectorReturn=false;message=""
-        const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>preview.restoreEditorViewport(viewport)))
+        const viewport=gestureViewport;Qt.callLater(()=>Qt.callLater(()=>{if(studio && studio.open && preview)preview.restoreEditorViewport(viewport)}))
     }
     function gridField(index) {
         if(index===1)return {key:"columns",min:4,max:16,integer:true,step:1}
@@ -511,9 +566,59 @@ Item {
         else if(index===4) { if(!session.redo()) message=session.errorString }
         else if(index===5) beginGrid()
         else if(index===6) { camera.zoom=1; message="Canvas fitted to the current device aspect." }
-        else if(index===7) { preview.restoreFocus(selectedId); mode="preview"; message="Draft preview: external actions are intercepted. Back returns to editing." }
+        else if(index===7) beginInteraction()
         else if(index===8) mode="apply"
         else if(index===9){if(sectionMode)mode="scopes";else message="Section scopes are available in scrolling section layouts."}
+    }
+    function editSnapshot(){return {pageId:pageId,selectedId:selectedId,scopeId:scopeId,parentScopeId:parentScopeId,scopeOverview:scopeOverview,toolbarFocus:toolbarFocus,headerSelection:headerSelection,viewport:preview.editorViewport(),pageFocus:Object.assign({},pageFocus)}}
+    function beginInteraction() {
+        interactionOrigin=editSnapshot()
+        preview.restoreFocus(selectedId);scopeOverview=true;mode="preview";message="External actions are intercepted."
+    }
+    function restoreEditSnapshot(origin) {
+        pageId=origin.pageId || "";selectedId=origin.selectedId || "";scopeId=origin.scopeId || "";parentScopeId=origin.parentScopeId || "";scopeOverview=origin.scopeOverview!==false
+        pageFocus=Object.assign({},origin.pageFocus || {});toolbarFocus=!!origin.toolbarFocus;headerSelection=origin.headerSelection || "";mode="canvas"
+        Qt.callLater(()=>Qt.callLater(()=>{if(studio && studio.open && preview)preview.restoreEditorViewport(origin.viewport || {})}))
+    }
+    function finishRestore(origin,text) {
+        restoreEditSnapshot(origin)
+        if(!pageEntries.some(p=>p.id===pageId)){pageId=session.model.homePageId || "";selectedId="";toolbarFocus=true}
+        if(!current){selectedId="";toolbarFocus=true}
+        message=text
+    }
+    function endInteraction() {
+        restoreEditSnapshot(interactionOrigin);interactionOrigin=({});message="Returned to the draft. Nothing applied."
+    }
+    function interactionAction(action,originId) {
+        if(action.type==="open-page" || action.type==="root-page") {
+            const target=action.type==="root-page"?"":action.pageId
+            if(!pageEntries.some(p=>p.id===target)){message="This draft destination is unavailable.";return}
+            pageFocus[pageId]=originId;pageId=target;Qt.callLater(()=>preview.restoreFocus(pageFocus[target] || ""));return
+        }
+        message="Would invoke "+action.type+". No external action was performed."
+    }
+    function collectRenderedFindings() {
+        const pending=[preview],result=[],seen={};let inspected=0
+        while(pending.length && inspected++<32768 && result.length<256){
+            const node=pending.pop()
+            if(!node.visible)continue
+            if(node.designLabelClipped && node.item && node.item.id && !seen[node.item.id]){
+                seen[node.item.id]=true;result.push({pageId:pageId,componentId:node.item.id,property:"name",message:"The rendered label is clipped at this viewport. Review label size, wrapping or component size.",blocking:false})
+            }
+            const children=node.children || [];for(let i=0;i<children.length;++i)pending.push(children[i])
+        }
+        renderedFindings=result
+    }
+    function reviewApply() {
+        if(preview.layoutError){message=preview.layoutError;mode="applyFailed";choice=1;return}
+        if(session.apply(selectedId)){mode="canvas";message="Applied successfully. All pages saved."}
+        else{mode="applyFailed";choice=1;message=session.errorString}
+    }
+    function focusFinding(finding) {
+        pageId=finding.pageId || "";selectedId=finding.componentId || "";scopeOverview=true;toolbarFocus=false
+        if(!selectedId){mode="canvas";toolbarFocus=true;message=finding.message;return}
+        openInspector(false);message=finding.message
+        Qt.callLater(()=>{inspector.view="fields";inspector.controlsShown=true;const index=inspector.fields.findIndex(f=>f.key===finding.property || f.type===finding.property);if(index>=0)inspector.selected=index})
     }
     function context(index) {
         choice=index
@@ -553,8 +658,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
         if(mode==="editorAppearance")return ["Surface color","Selected surface","Text color","Supporting text","Focus color","Reset Studio colors"]
         if(mode==="editorSettings")return ["Canvas view","Studio colors","Reset interface…"]
-        if(mode==="more")return ["Undo","Redo","Layers","Grid and sections","Try interaction","Section scope","Studio appearance","Canvas view","Saved skins","Restore defaults"]
-        if(mode==="restoreDefaults")return ["Cancel","Restore this page in draft; keep other pages"]
+        if(mode==="restoreDefaults")return ["Cancel","Restore this page in draft; keep other pages","Restore Whole interface..."]
+        if(mode==="defaultsReview")return ["Keep draft","Restore Whole interface in draft"].concat(defaultRemovedPages.map(p=>"Remove page: "+p.name))
         if(mode==="context") return (current && (current.componentType==="container" || current.componentType==="carousel")) ? ["Move","Edit component","Duplicate","Delete…","Edit contents"] : ["Move","Edit component","Duplicate","Delete…"]
         if(mode==="flowMove")return ["Move before…","Move after…","Convert to a grid…","Cancel"]
         if(mode==="moveOptions")return ["Position and size",gridMode?"Reading order before…":"Move before…",gridMode?"Reading order after…":"Move after…",sectionMode?"Move to section…":"Sections unavailable in this layout","Resize anchor…","Move into group…","Return to "+gestureMode]
@@ -584,11 +689,67 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="dirty") return ["Keep editing", "Discard draft…", "Review & Apply"]
         if(mode==="discard") return ["Keep editing", "Discard all draft pages"]
         if(mode==="remove") return ["Cancel", "Delete component"]
-        if(mode==="apply") return ["Apply all draft changes", "Keep editing","Try interaction"]
+        if(mode==="apply") return ["Apply all draft changes", "Keep editing","Page health - "+findings.length+" findings"].concat(changedPages.map(p=>p.name+" - "+p.change+"; "+p.details))
+        if(mode==="applyFailed")return ["Retry Apply","Continue editing","Discard draft…","Compare / reload saved design","Save draft as a named local version...","Review page health"]
+        if(mode==="conflictCompare")return [comparingCurrent?"Show saved design":"Show current draft","Keep draft and return","Reload saved design..."]
+        if(mode==="reloadConfirm")return ["Keep draft","Reload saved design; discard this draft"]
+        if(mode==="health")return findings.length?findings.map(f=>f.message):["No design findings · Back returns"]
+        if(mode==="safety")return ["Try interaction","Content stress testing","Named versions / restore",session && session.editorLocked?"Unlock editor":"Lock editor against accidental changes"]
+        if(mode==="stress")return ["Real content","Long titles","Missing artwork","Empty collections","Large collections (50)"]
+        if(mode==="versions")return ["Save named milestone…","Restore scope · "+(versionScope==="page"?"Current page":"Whole interface"),"Delete all saved version history..."].concat(versionEntries.map(v=>v.name+" · "+v.created))
+        if(mode==="versionReview")return [comparingCurrent?"Show saved version":"Show current draft","Restore as one draft change","Cancel","Delete saved version..."]
+        if(mode==="deleteVersion")return ["Keep version","Delete saved version"]
+        if(mode==="resetVersions")return ["Keep version history","Delete all saved version history"]
+        if(mode==="restricted")return ["Close Studio; use Settings > Profiles for recovery"]
         if(mode==="history") return ["Keep history and cancel edit", "Release history; keep draft"]
         return []
     }
     function activateChoice() {
+        if(mode==="safety"){
+            if(choice===0)beginInteraction()
+            else if(choice===1){mode="stress";choice=0}
+            else if(choice===2){versionEntries=session.versions();mode="versions";choice=0;message=session.errorString || "Keep up to 10 versions / 40 MiB of layouts and 128 shared images / 64 MiB. Oldest versions expire. Apps, accounts, device settings and Kodi media are outside restore scope."}
+            else{session.setEditorLocked(!session.editorLocked);message=session.editorLocked?"Editor locked. Try, versions & safety > Unlock editor restores editing.":"Editor unlocked."}
+            return
+        }
+        if(mode==="stress"){gestureViewport=preview.editorViewport();stressScenario=["real","long","missing","empty","large"][choice];samplePreview=stressScenario!=="real";message="Editor-only scenario. Apply and export contain real data.";mode="canvas";toolbarFocus=false;Qt.callLater(()=>Qt.callLater(()=>{if(studio && studio.open && preview)preview.restoreEditorViewport(gestureViewport)}));return}
+        if(mode==="health"){if(findings.length)focusFinding(findings[choice]);return}
+        if(mode==="versions"){
+            if(choice===0)beginKeyboard("saveVersion","")
+            else if(choice===1){versionScope=versionScope==="page"?"interface":"page"}
+            else if(choice===2){mode="resetVersions";choice=0;message="Delete this profile's named and automatic version history, including damaged backups. Current draft, applied design, current artwork, apps, accounts and Kodi media are kept. This cannot be undone."}
+            else{versionOrigin=editSnapshot();versionId=versionEntries[choice-3].id;if(session.previewVersion(versionId,versionScope,pageId)){comparingCurrent=false;mode="versionReview";choice=2;message="Compare the saved version with your current draft. Restore stays undoable until Apply."}else message=session.errorString}
+            return
+        }
+        if(mode==="versionReview"){
+            if(choice===0)comparingCurrent=!comparingCurrent
+            else if(choice===1){if(session.acceptPreview())finishRestore(versionOrigin,"Restored in draft. Undo returns to the previous draft; Apply saves.");else message=session.errorString}
+            else if(choice===2){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="versions";choice=0}
+            else{session.cancelPreview();mode="deleteVersion";choice=0;message="Delete this saved milestone and its unreferenced archive artwork. The current draft and applied design are kept."}
+            return
+        }
+        if(mode==="resetVersions"){if(choice===0 || session.resetVersions()){versionEntries=session.versions();mode="versions";choice=0;message="Version history is ready. Your draft and applied design are unchanged."}else message=session.errorString;return}
+        if(mode==="deleteVersion"){if(choice===0 || session.deleteVersion(versionId)){versionEntries=session.versions();restoreEditSnapshot(versionOrigin);mode="versions";choice=0}else message=session.errorString;return}
+        if(mode==="applyFailed"){
+            if(choice===0)reviewApply()
+            else if(choice===1)mode="canvas"
+            else if(choice===2){mode="discard";choice=0}
+            else if(choice===3){versionOrigin=editSnapshot();if(session.previewSavedDesign()){mode="conflictCompare";choice=1;comparingCurrent=false;message="Compare the saved design with your current draft. Reload requires a separate discard choice."}else message=session.errorString}
+            else if(choice===4)beginKeyboard("saveVersion","")
+            else{mode="health";choice=0}
+            return
+        }
+        if(mode==="conflictCompare"){
+            if(choice===0)comparingCurrent=!comparingCurrent
+            else{session.cancelPreview();restoreEditSnapshot(versionOrigin);mode=choice===1?"applyFailed":"reloadConfirm";choice=0;message="Reload discards this draft. Save a named local version first to keep a copy."}
+            return
+        }
+        if(mode==="reloadConfirm"){
+            if(choice===0)mode="applyFailed"
+            else if(session.reloadApplied()){mode="canvas";pageId=session.model.homePageId || "";selectedId="";toolbarFocus=true;message="Saved design reloaded."}
+            else message=session.errorString
+            return
+        }
         if(mode==="replaceReview"){
             if(choice===1){session.cancelPreview();mode="inspector";message=""}
             else if(session.acceptPreview()){mode="inspector";inspector.begin(false);inspector.view="fields";message="Replacement accepted in draft."}
@@ -646,16 +807,21 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="restoreDefaults") {
             if(choice===1) {
                 if(command("restorePageDefaults",{})){selectedId="";headerSelection="";mode="canvas";toolbarFocus=true}
+            } else if(choice===2){
+                versionOrigin=editSnapshot();const before=pageEntries.slice()
+                if(session.previewDefaults("interface")){
+                    defaultRemovedPages=before.filter(p=>!session.proposalModel.studioPages.some(next=>next.id===p.id))
+                    pageId=session.proposalModel.homePageId || "";selectedId="";mode="defaultsReview";choice=0
+                    message="Replace the whole interface in the draft, including "+defaultRemovedPages.length+" removed pages. Apps, accounts, device settings and Kodi media are kept. Undo restores the interface; Apply saves."
+                }else message=session.errorString
             } else {mode="editorSettings";choice=2}
             return
         }
-        if(mode==="more"){
-            if(choice>=8){
-                if(session.dirty){message="Apply or discard your draft before changing saved skins or restoring defaults.";return}
-                if(choice===8)skinsRequested();else{mode="restoreDefaults";choice=0;message="Restores Home's packaged layout. Other pages, saved skins, apps and Kodi media stay unchanged."}
-                return
-            }
-            if(choice===7){mode="view";choice=0;return}if(choice===6){mode="editorAppearance";choice=0;return}const index=[3,4,2,5,7,9][choice];mode="canvas";chooseTool(index);return
+        if(mode==="defaultsReview"){
+            if(choice===0){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="restoreDefaults";choice=2}
+            else if(choice===1){if(session.acceptPreview())finishRestore(versionOrigin,"Packaged defaults restored in draft. Undo restores your complete interface; Apply saves.");else message=session.errorString}
+            else message="This page is removed only after you accept the draft replacement and Apply. Undo restores it."
+            return
         }
         if(mode==="editorAppearance") {
             const key=["surfaceColor","selectedColor","textColor","mutedColor","focusColor"][choice];openInspector(false);inspector.editorMode=true;inspector.view="fields";inspector.tab=0;inspector.controlsShown=true
@@ -749,7 +915,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(choice===1){const id=selectedId;if(!command("remove",{id:id}))return;deletedSelection=id;selectedId=items.length?items[0].id:""}
             mode="canvas";return
         }
-        if(mode==="apply") {if(choice===1)mode="canvas";else if(choice===2)chooseTool(7);else if(preview.layoutError)message=preview.layoutError;else if(session.apply(selectedId)){mode="canvas";message="Applied successfully. All pages saved."}else message=session.errorString;return}
+        if(mode==="apply") {if(choice===1)mode="canvas";else if(choice===2){mode="health";choice=0}else if(choice>=3){const target=changedPages[choice-3];if(!pageEntries.some(p=>p.id===target.pageId)){message="This page is removed in the draft. Undo restores it.";return}pageId=target.pageId || "";selectedId=pageFocus[pageId] || "";mode="canvas";toolbarFocus=true}else reviewApply();return}
         if(mode==="history") {
             if(choice===1){session.continueWithNewHistoryBaseline();mode=addingType?"move":"canvas"}
             else if(addingType)cancelGesture()
@@ -757,6 +923,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         }
     }
     function handleCommand(c) {
+        if(mode==="reuseTools"){reuseTools.handleCommand(c);return}
+        if(mode==="designTools"){designTools.handleCommand(c);return}
         if(contextDialog.compact){if(c===inputManager.back){mode="canvas";return}if(c===inputManager.confirm)contextExpanded=true;return}
         if (!open) return
         if (!session || !session.active) {close();return}
@@ -774,7 +942,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             return
         }
         if(mode==="scrolling"){
-            if(c===inputManager.back || c===inputManager.confirm && choice===2){session.cancelPreview();mode="inspector";const viewport=scrollingViewport;Qt.callLater(()=>preview.restoreEditorViewport(viewport));return}
+            if(c===inputManager.back || c===inputManager.confirm && choice===2){session.cancelPreview();mode="inspector";const viewport=scrollingViewport;Qt.callLater(()=>{if(studio && studio.open && preview)preview.restoreEditorViewport(viewport)});return}
             if(c===inputManager.navigateUp)choice=Math.max(0,choice-1)
             else if(c===inputManager.navigateDown)choice=Math.min(2,choice+1)
             else if((c===inputManager.navigateLeft || c===inputManager.navigateRight) && choice===0)previewScrolling(c===inputManager.navigateRight)
@@ -809,8 +977,12 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="catalog"){catalog.handleCommand(c);return}
         if(mode==="inspector"){inspector.handleCommand(c);return}
         if(mode==="keyboard") {keyboard.handleCommand(c);return}
-        if(mode==="preview") {if(c===inputManager.back)mode="canvas";else preview.handleCommand(c);return}
+        if(mode==="preview") {if(c===inputManager.back)endInteraction();else preview.handleCommand(c);return}
         if(c===inputManager.back) {
+            if(mode==="defaultsReview"){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="restoreDefaults";choice=2;return}
+            if(mode==="conflictCompare"){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="applyFailed";choice=1;return}
+            if(mode==="resetVersions"){mode="versions";choice=2;return}
+            if(mode==="versionReview" || mode==="deleteVersion"){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="versions";choice=0;return}
             if(mode==="view" || mode==="restoreDefaults"){choice=mode==="view"?0:2;mode="editorSettings";return}
             if(mode==="replaceReview"){session.cancelPreview();mode="inspector";message="";return}
             if(mode==="canvas" && historyFocus){historyFocus=false;return}
@@ -929,9 +1101,10 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             color:studio.palette.surfaceColor;radius:studio.spacing/2
             Column {
                 anchors.fill:parent;anchors.margins:studio.spacing;spacing:studio.spacing/2
-                Text {text:"Page Studio";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
-                Text {id:menuStatus;width:parent.width;text:session && session.errorString?"Edit refused: "+session.errorString:session && session.dirty?"Draft · "+session.changeCount+" changes":"Your interface";wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+                Text {id:menuTitle;text:"Page Studio";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
+                Text {textFormat:Text.PlainText;id:menuStatus;width:parent.width;text:session && session.errorString?"Edit refused: "+session.errorString:preview.layoutError?"Layout needs attention: "+preview.layoutError:session && session.dirty?"Draft · "+session.changeCount+" changes":"Your interface";wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
                 Row {
+                    id:historyControls
                     width:parent.width;spacing:studio.spacing/2
                     Repeater {model:2;delegate:Rectangle {
                         required property int index
@@ -947,14 +1120,15 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     }}
                 }
                 ListView {
-                    width:parent.width;height:Math.max(100,pageRail.height-200*studio.textScale-menuStatus.implicitHeight);clip:true
+                    objectName:"studioMenuEntries"
+                    width:parent.width;height:Math.max(100,parent.height-menuTitle.implicitHeight-menuStatus.implicitHeight-historyControls.height-3*parent.spacing);clip:true
                     model:studio.menuEntries;currentIndex:studio.menuIndex;highlightRangeMode:ListView.ApplyRange
                     delegate:Rectangle {
                         required property int index;required property var modelData
-                        width:ListView.view.width;height:48*studio.textScale;radius:studio.spacing/3
+                        width:ListView.view.width;height:Math.max(40*studio.textScale,Math.min(48*studio.textScale,Math.floor(ListView.view.height/studio.menuEntries.length)));radius:studio.spacing/3
                         color:studio.menuIndex===index?studio.palette.selectedColor:"transparent"
                         border.width:studio.menuIndex===index?2:0;border.color:studio.palette.focusColor
-                        Text {anchors.fill:parent;anchors.margins:studio.spacing/2;verticalAlignment:Text.AlignVCenter;text:modelData.label;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+                        Text {textFormat:Text.PlainText;anchors.fill:parent;anchors.margins:studio.spacing/2;verticalAlignment:Text.AlignVCenter;text:modelData.label;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
                         MouseArea {anchors.fill:parent;onClicked:studio.activateMenu(index)}
                     }
                 }
@@ -964,7 +1138,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             id:canvasArea;parent:studio;anchors.fill:parent;clip:true
             Item {
                 id:camera;property real zoom:1;property real panX:0;property real panY:0
-                width:studio.width;height:studio.height
+                width:studio.alternateViewportRatio>0?Math.min(studio.width,studio.height*studio.alternateViewportRatio):studio.width;height:studio.alternateViewportRatio>0?width/studio.alternateViewportRatio:studio.height
                 scale:Math.min(canvasArea.width/width,canvasArea.height/height)*zoom
                 transformOrigin:Item.TopLeft
                 x:(canvasArea.width-width*scale)/2+panX;y:(canvasArea.height-height*scale)/2+panY
@@ -981,8 +1155,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     previewExtentRows:studio.scrollingEnabled && !studio.parentScopeId && studio.manipulating?Math.min(studio.placementRows,Math.max(studio.candidate.y+studio.candidate.height,...(studio.collisionPreview.placements || []).map(p=>p.placement.y+p.placement.height))):0
                     grid:studio.pageGrid;placements:studio.page?studio.page.placements:[]
                     editMode:studio.mode!=="preview";scopeView:studio.sectionMode && !studio.scopeOverview;editScopeId:studio.scopeId
-                    libraryProvider:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating || studio.gridEditing || studio.mode==="arrange" || studio.mode==="childLayout";samplePreview:studio.samplePreview
-                    sampleItems:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
+                    libraryProvider:studio.stressScenario!=="real"?null:studio.provider;pageKey:"studio."+(studio.pageId || "home");previewOnly:true;freezeData:studio.manipulating || studio.gridEditing || studio.mode==="arrange" || studio.mode==="childLayout";samplePreview:studio.samplePreview
+                    sampleItems:studio.stressScenario!=="real"?studio.stressSamples:studio.layoutModel?studio.layoutModel.studioOptions.designSamples || []:[]
                     editSelection:studio.selectedId
                     suppressedComponentIds:studio.collisionPreview.valid?studio.collisionPreview.placements.map(p=>p.id):studio.manipulating && studio.mode!=="flowMove" && !studio.addingType && studio.current?[studio.selectedId]:[]
                     onEditSelected:componentId=>{if(studio.mode!=="canvas")return;studio.headerSelection="";studio.selectedId=componentId;studio.toolbarFocus=false;studio.mode="context";studio.choice=0}
@@ -991,7 +1165,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     backgroundEnd:studio.page?studio.page.backgroundEnd:studio.layoutModel.backgroundEnd
                     wallpaperSource:studio.page?studio.page.wallpaperSource:""
                     internetAvailable:false;localNetworkAvailable:false;hasContextualSources:false
-                    onActionActivated:(action,originId)=>studio.message="Preview only: would invoke "+action.type
+                    onActionActivated:(action,originId)=>studio.interactionAction(action,originId)
                     onSettingsRequested:section=>studio.message="Return to editing to change settings."
                     onSearchRequested:studio.message="Search is unavailable in draft preview."
                 }
@@ -1009,13 +1183,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         color:"transparent";border.width:3;border.color:studio.palette.focusColor
                         Text {anchors.bottom:parent.top;text:"Position "+(studio.flowTargetIndex+1)+" of "+studio.flowIds.length;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale}
                     }
-                    Rectangle {
-                        visible:!studio.gridMode && !!preview.editRect && !studio.toolbarFocus
-                        x:preview.editRect?preview.editRect.x:0;y:preview.editRect?preview.editRect.y:0
-                        width:preview.editRect?preview.editRect.width:0;height:preview.editRect?preview.editRect.height:0
-                        color:"transparent"
-                        Text {anchors.bottom:parent.top;width:parent.width;text:studio.current?studio.current.name || studio.current.widgetType || studio.current.id:"";color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;elide:Text.ElideRight;font.pixelSize:16*studio.textScale}
-                    }
+                    // Flow selection already has a focus outline and the exact
+                    // name in the footer; an extra label would overlap headings.
                     Repeater {
                         model:studio.gridMode && (studio.mode==="move" || studio.mode==="resize" || studio.mode==="geometry") ? studio.grid.columns*(studio.grid.rows+(studio.scrollingEnabled && !studio.parentScopeId?2:0)) : 0
                         delegate:Rectangle {
@@ -1053,7 +1222,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                             readonly property var rect:studio.gridMode?preview.clippedPlacement(modelData.placement,modelData.categoryId || studio.scopeId,modelData.parentId || ""):preview.editorRectFor(modelData.id) || ({x:0,y:0,width:0,height:0})
                             objectName:"studioSelectionTarget-"+modelData.id
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent";border.width:0
-                            Text {objectName:"studioSelectionName-"+modelData.id;visible:!modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
+                            Text {textFormat:Text.PlainText;objectName:"studioSelectionName-"+modelData.id;visible:studio.gridMode && !modelData.parentId && modelData.id===studio.selectedId && !studio.toolbarFocus && !studio.manipulating;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));text:studio.componentName(modelData)+(modelData.hidden?" · Hidden":"")+(modelData.locked?" · Locked":"");color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:16*studio.textScale;elide:Text.ElideRight}
                             MouseArea {
                                 id:pointerDrag
                                 objectName:"studioHit-"+modelData.id
@@ -1170,19 +1339,22 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                             metrics:({valid:true,margin:0,gap:0,cellW:width,cellH:height});host:preview;unit:preview.componentUnit
                             catalog:studio.addingType?studio.addPrototype.viewItems:studio.items
                         }
-                        Text {anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));x:Math.max(studio.spacing-preview.x-parent.x,Math.min(0,studio.width-preview.x-parent.x-width-studio.spacing));text:(studio.mode==="resize"?"Sizing "+studio.resizeAxis:"Moving")+" · "+studio.componentName(studio.addingType?null:studio.current);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight;Accessible.role:Accessible.StaticText;Accessible.name:studio.operationSummary}
+                        Text {textFormat:Text.PlainText;anchors.bottom:parent.top;width:Math.min(studio.width-2*studio.spacing,Math.max(parent.width,200*studio.textScale));x:Math.max(studio.spacing-preview.x-parent.x,Math.min(0,studio.width-preview.x-parent.x-width-studio.spacing));text:(studio.mode==="resize"?"Sizing "+studio.resizeAxis:"Moving")+" · "+studio.componentName(studio.addingType?null:studio.current);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight;Accessible.role:Accessible.StaticText;Accessible.name:studio.operationSummary}
                     }
                     Repeater {
-                        model:studio.collisionPreview.valid ? studio.collisionPreview.placements : []
+                        model:placementPreviewModel
                         delegate:Rectangle {
-                            required property var modelData
+                            required property string componentId
+                            required property var candidatePlacement
+                            required property string previewCategory
+                            required property string previewParent
                             required property int index
-                            readonly property var previewItem:studio.items.find(i=>i.id===modelData.id) || (studio.addPrototype.viewItems || []).find(i=>i.id===modelData.id) || {id:modelData.id,kind:"widget",widgetType:studio.addingType,name:studio.addingType}
-                            objectName:"studioProposal-"+modelData.id
-                            readonly property var section:studio.page.sections.find(s=>(s.id || "")===(modelData.categoryId || ""))
-                            readonly property var rect:preview.placementRectFor(modelData.placement,modelData.categoryId!==undefined?modelData.categoryId:studio.scopeId,modelData.parentId || "")
+                            readonly property var previewItem:studio.items.find(i=>i.id===componentId) || (studio.addPrototype.viewItems || []).find(i=>i.id===componentId) || {id:componentId,kind:"widget",widgetType:studio.addingType,name:studio.addingType}
+                            objectName:"studioProposal-"+componentId
+                            readonly property var section:studio.page.sections.find(s=>(s.id || "")===previewCategory)
+                            readonly property var rect:preview.placementRectFor(candidatePlacement,previewCategory,previewParent)
                             x:rect.x;y:rect.y;width:rect.width;height:rect.height;color:"transparent"
-                            HomeCard {objectName:"studioProposedCard-"+parent.modelData.id;visible:parent.previewItem.componentType!=="container" && parent.previewItem.componentType!=="library";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page.backgroundEnd;item:Object.assign({},parent.previewItem,{presentation:Object.assign({},parent.section?parent.section.presentation || {}:{},parent.previewItem.presentation || {})});appearance:studio.page.appearance;selected:parent.modelData.id===studio.selectedId || !!studio.addingType && parent.modelData.id===(studio.addPrototype.root || {}).id;opacity:parent.previewItem.opacity===undefined?1:parent.previewItem.opacity}
+                            HomeCard {objectName:"studioProposedCard-"+parent.componentId;visible:parent.previewItem.componentType!=="container" && parent.previewItem.componentType!=="library";anchors.fill:parent;enabled:false;unit:preview.componentUnit;outsideColor:studio.page.backgroundEnd;item:Object.assign({},parent.previewItem,{presentation:Object.assign({},parent.section?parent.section.presentation || {}:{},parent.previewItem.presentation || {})});appearance:studio.page.appearance;selected:parent.componentId===studio.selectedId || !!studio.addingType && parent.componentId===(studio.addPrototype.root || {}).id;opacity:parent.previewItem.opacity===undefined?1:parent.previewItem.opacity}
                             PlacedComponents {
                                 anchors.fill:parent;enabled:false;previewOverlay:true;editorSelectionId:studio.addingType?(studio.addPrototype.root || {}).id || "":studio.selectedId
                                 visible:parent.previewItem.componentType==="container" || parent.previewItem.componentType==="library"
@@ -1190,7 +1362,11 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                                 metrics:({valid:true,margin:0,gap:0,cellW:width,cellH:height})
                                 host:preview;unit:preview.componentUnit;catalog:studio.addingType?studio.items.concat(studio.addPrototype.viewItems || []):studio.items
                             }
-                            Text {anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:7;text:(index+1)+" · "+studio.componentName(parent.previewItem);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:15*studio.textScale;elide:Text.ElideRight}
+                            Accessible.role:Accessible.StaticText
+                            Accessible.name:(index+1)+" · "+studio.componentName(previewItem)
+                            // Composite surfaces already own their heading/toolbar area.
+                            // Keep their name in the footer and accessibility tree.
+                            Text {textFormat:Text.PlainText;objectName:"studioProposalName-"+parent.componentId;visible:parent.previewItem.componentType!=="container" && parent.previewItem.componentType!=="library";anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:7;text:(index+1)+" · "+studio.componentName(parent.previewItem);color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;font.pixelSize:15*studio.textScale;elide:Text.ElideRight}
                         }
                     }
                 }
@@ -1198,7 +1374,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             }
             Text {anchors.centerIn:parent;visible:!studio.items.length && studio.mode==="canvas";text:"Empty page · Confirm to add a component";color:studio.palette.textColor;font.pixelSize:26*studio.textScale}
         }
-        Text {parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview" && studio.mode!=="catalog";text:studio.footerText;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
+        Text {textFormat:Text.PlainText;parent:studio;anchors.bottom:parent.bottom;anchors.left:parent.left;anchors.margins:studio.spacing;z:2;width:parent.width-2*studio.spacing;visible:!studio.toolbarFocus && studio.mode!=="preview" && studio.mode!=="catalog";text:studio.footerText;color:studio.palette.textColor;style:Text.Outline;styleColor:studio.palette.surfaceColor;wrapMode:Text.Wrap;font.pixelSize:17*studio.textScale}
     }
     Rectangle {
         objectName:"studioScrollingPanel";visible:studio.mode==="scrolling";z:6
@@ -1215,7 +1391,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 contentItem:Text {leftPadding:40*studio.textScale;text:"Allow vertical scrolling";verticalAlignment:Text.AlignVCenter;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;wrapMode:Text.Wrap}
                 onClicked:studio.previewScrolling(!studio.scrollingDraft)
             }
-            Text {visible:!!studio.message;width:parent.width;text:studio.message;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;wrapMode:Text.Wrap}
+            Text {textFormat:Text.PlainText;visible:!!studio.message;width:parent.width;text:studio.message;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;wrapMode:Text.Wrap}
             Repeater {
                 model:["Done","Cancel"]
                 delegate:Rectangle {
@@ -1239,7 +1415,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         y:studio.spacing;color:studio.palette.surfaceColor;border.width:1;border.color:studio.palette.mutedColor;radius:studio.spacing/2
         Column {
             id:moveActionColumn;width:parent.width-2*studio.spacing;x:studio.spacing;y:studio.spacing;spacing:studio.spacing/2
-            Text {width:parent.width;text:studio.mode==="flowMove"?"Position "+(studio.flowTargetIndex+1)+" of "+studio.flowIds.length:studio.parentScopeId?"Move into "+studio.componentName(studio.parentGroup):studio.sectionMode?"Move to "+(studio.selectedSection?studio.selectedSection.name:"Uncategorized"):"Move on page";color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+            Text {textFormat:Text.PlainText;width:parent.width;text:studio.mode==="flowMove"?"Position "+(studio.flowTargetIndex+1)+" of "+studio.flowIds.length:studio.parentScopeId?"Move into "+studio.componentName(studio.parentGroup):studio.sectionMode?"Move to "+(studio.selectedSection?studio.selectedSection.name:"Uncategorized"):"Move on page";color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
             Row {
                 width:parent.width;spacing:studio.spacing/2
                 Repeater {
@@ -1273,7 +1449,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         color:studio.palette.surfaceColor;radius:studio.spacing/2;border.width:2;border.color:studio.palette.focusColor
         Column {
             id:sizeColumn;anchors.left:parent.left;anchors.right:parent.right;anchors.margins:studio.spacing;y:studio.spacing;spacing:studio.spacing/2
-            Text {text:"Size · "+studio.componentName(studio.addingType?null:studio.current);width:parent.width;elide:Text.ElideRight;color:studio.palette.textColor;font.pixelSize:22*studio.textScale}
+            Text {textFormat:Text.PlainText;text:"Size · "+studio.componentName(studio.addingType?null:studio.current);width:parent.width;elide:Text.ElideRight;color:studio.palette.textColor;font.pixelSize:22*studio.textScale}
             Repeater {
                 model:studio.mode==="size" && studio.sizeControlsVisible?["width","height"]:[]
                 delegate:Column {
@@ -1297,7 +1473,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     }
                 }
             }
-            Text {visible:studio.sizeControlsVisible && (!!studio.sizeError || !studio.collisionPreview.valid);text:studio.sizeError || studio.collisionPreview.reason || studio.message;width:parent.width;wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
+            Text {textFormat:Text.PlainText;visible:studio.sizeControlsVisible && (!!studio.sizeError || !studio.collisionPreview.valid);text:studio.sizeError || studio.collisionPreview.reason || studio.message;width:parent.width;wrapMode:Text.Wrap;color:studio.palette.textColor;font.pixelSize:16*studio.textScale}
             Repeater {
                 model:studio.sizeControlsVisible?["Done","Hide controls","Advanced…","Cancel"].concat(studio.proportionalSize?[(studio.sizeAspectLocked?"✓ ":"")+(studio.sizeSettings.proportionsLabel || "Keep proportions")]:[]):["Show size controls"]
                 delegate:Rectangle {
@@ -1313,7 +1489,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
     }
     Rectangle {
         id:contextDialog;objectName:"studioContext"
-        visible:studio.mode!=="canvas" && studio.mode!=="flowMove" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="size" && studio.mode!=="preview" && studio.mode!=="inspector" && studio.mode!=="catalog" && studio.mode!=="scrolling" && studio.mode!=="arrange" && studio.mode!=="childLayout" && studio.mode!=="convert"
+        visible:studio.mode!=="reuseTools" && studio.mode!=="designTools" && studio.mode!=="canvas" && studio.mode!=="flowMove" && studio.mode!=="move" && studio.mode!=="resize" && studio.mode!=="size" && studio.mode!=="preview" && studio.mode!=="inspector" && studio.mode!=="catalog" && studio.mode!=="scrolling" && studio.mode!=="arrange" && studio.mode!=="childLayout" && studio.mode!=="convert"
         z:3
         readonly property bool contextual:studio.mode==="context" || studio.mode==="properties"
         readonly property real sideRoom:selectionRect?Math.max(selectionRect.x-2*studio.spacing,studio.width-selectionRect.x-selectionRect.width-2*studio.spacing):studio.width
@@ -1328,18 +1504,19 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         color:studio.palette.surfaceColor;border.width:3;border.color:studio.palette.focusColor;radius:studio.spacing
         Column {
             id:dialogColumn;visible:!contextDialog.compact;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:studio.spacing;spacing:studio.spacing/2
-            Text {id:dialogHeading;width:parent.width;text:studio.operationTitle?studio.operationTitle:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="more"?"More tools":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
-            Text {id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save the complete interface draft: "+(session?session.changeCount:0)+" operations across Home and pages." : studio.mode==="remove" ? "Remove "+studio.componentName(studio.current)+" and its children? This is one undoable draft change; Apply saves it." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
+            Text {textFormat:Text.PlainText;id:dialogHeading;width:parent.width;text:studio.operationTitle?studio.operationTitle:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
+            Text {textFormat:Text.PlainText;id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save once atomically: "+studio.changedPages.length+" affected pages/settings, "+studio.findings.length+" design findings. Review the list below. Intentional empty or unavailable content may be kept." : studio.mode==="remove" ? "Remove "+studio.componentName(studio.current)+" and its children? This is one undoable draft change; Apply saves it." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
             ListView {
-                width:parent.width;height:Math.min(studio.dialogLabels().length*42*studio.textScale,Math.max(42*studio.textScale,studio.height-dialogHeading.implicitHeight-dialogMessage.implicitHeight-6*studio.spacing))
+                objectName:"studioDialogList"
+                width:parent.width;height:Math.min(Math.max(42*studio.textScale,contentHeight),Math.max(42*studio.textScale,studio.height-dialogHeading.implicitHeight-dialogMessage.implicitHeight-6*studio.spacing))
                 clip:true;currentIndex:studio.choice;highlightRangeMode:ListView.ApplyRange
                 model:studio.mode==="keyboard" ? []:studio.dialogLabels()
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     objectName:"studioDialogChoice-"+index
                     readonly property bool available:studio.mode==="conversionPreview" && index===0?studio.gridPreviewValid && !studio.gridGeometryPending && !preview.layoutError:studio.mode!=="collision" || index>1 || (index===0?!!studio.shiftPreview.valid:!!studio.swapPreview.valid)
-                    width:dialogColumn.width;height:42*studio.textScale;color:studio.choice===index?studio.palette.selectedColor:"transparent";border.width:studio.choice===index?2:0;border.color:studio.palette.focusColor
-                    Text {visible:studio.mode!=="view" || index!==0;anchors.fill:parent;anchors.margins:8;text:modelData;color:parent.available?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+                    width:dialogColumn.width;height:Math.max(42*studio.textScale,choiceText.visible?choiceText.implicitHeight+16:0);color:studio.choice===index?studio.palette.selectedColor:"transparent";border.width:studio.choice===index?2:0;border.color:studio.palette.focusColor
+                    Text {textFormat:Text.PlainText;id:choiceText;objectName:"studioDialogLabel-"+index;visible:studio.mode!=="view" || index!==0;wrapMode:Text.Wrap;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:8;text:modelData;color:parent.available?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:18*studio.textScale}
                     Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.description:available?"":"Unavailable. Choose another proposal or Cancel."
                     MouseArea {anchors.fill:parent;enabled:studio.mode!=="view" || index!==0;onClicked:{studio.choice=index;studio.activateChoice()}}
                     Slider {
@@ -1421,7 +1598,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     }
                 }
             }
-            Text {width:parent.width;visible:text.length>0;text:studio.message;wrapMode:Text.Wrap;color:studio.arrangementValid?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
+            Text {textFormat:Text.PlainText;width:parent.width;visible:text.length>0;text:studio.message;wrapMode:Text.Wrap;color:studio.arrangementValid?studio.palette.textColor:studio.palette.mutedColor;font.pixelSize:16*studio.textScale}
             Row {
                 width:parent.width;spacing:studio.spacing/2
                 Repeater {
@@ -1496,10 +1673,35 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         onOperation:name=>studio.inspectorOperation(name)
         onSamplesChanged:enabled=>studio.samplePreview=enabled
     }
+    StudioReusePanel {
+        id:reuseTools;viewportScale:studio.viewportScale;visible:studio.open && studio.mode==="reuseTools";z:8
+        defaults:studio.layoutModel?studio.layoutModel.studioOptions.responsiveDefaults || {}:({})
+        anchors.right:parent.right;anchors.top:parent.top;anchors.bottom:parent.bottom
+        width:Math.min(studio.width-2*studio.spacing,studio.layoutModel?studio.layoutModel.studioOptions.menuWidth*1.5*studio.viewportScale:480*studio.viewportScale)
+        session:studio.session;pageId:studio.pageId;selectedId:studio.selectedId;categoryId:studio.current?studio.current.categoryId || "":"";selectedPresentation:studio.current?studio.current.presentation || {}:({});appearance:studio.palette
+        onClosed:{studio.alternateViewportRatio=0;studio.mode="canvas";studio.toolbarFocus=false}
+        onViewportRequested:ratio=>studio.alternateViewportRatio=ratio
+    }
+    StudioDesignPanel {
+        id:designTools;viewportScale:studio.viewportScale;visible:studio.open && studio.mode==="designTools";z:8
+        anchors.right:parent.right;anchors.top:parent.top;anchors.bottom:parent.bottom
+        width:Math.min(studio.width-2*studio.spacing,studio.layoutModel?studio.layoutModel.studioOptions.menuWidth*1.5*studio.viewportScale:480*studio.viewportScale)
+        session:studio.session;pageId:studio.pageId;appearance:studio.palette
+        onClosed:{studio.mode="canvas";studio.toolbarFocus=false}
+        onAccepted:scope=>{if(scope==="interface")studio.pageId=studio.session.model.homePageId || "";studio.parentScopeId="";studio.scopeId="";studio.selectedId="";studio.mode="canvas";studio.toolbarFocus=false;studio.message="Design added to the draft. Undo restores it; Review & Apply saves it."}
+        onManageRequested:{if(studio.session.dirty)message="Apply or discard this draft before managing saved copies.";else studio.skinsRequested()}
+    }
+    Image {
+        objectName:"studioReferenceImage";parent:studio;anchors.fill:parent;z:2
+        visible:studio.open && studio.mode!=="preview" && designTools.referenceVisible && source.toString().length>0
+        source:studio.session?studio.session.referenceSource:"";opacity:designTools.referenceOpacity
+        fillMode:Image.PreserveAspectFit;asynchronous:false
+    }
     OnScreenKeyboard {
-        id:keyboard;objectName:"studioKeyboard";visible:studio.mode==="keyboard";anchors.fill:parent;z:10;appearance:studio.palette;hint:studio.message
+        id:keyboard;objectName:"studioKeyboard";visible:studio.mode==="keyboard";width:studio.width/studio.viewportScale;height:studio.height/studio.viewportScale;scale:studio.viewportScale;transformOrigin:Item.TopLeft;z:10;appearance:studio.palette;hint:studio.message
         onCanceled:studio.mode=studio.keyboardReturnMode
         onAccepted:text=>{
+            if(studio.keyboardAction==="saveVersion"){if(studio.session.saveVersion(text)){studio.versionEntries=studio.session.versions();studio.mode="versions";studio.choice=0;studio.message="Named milestone saved."}else studio.message=studio.session.errorString;return}
             if(studio.keyboardAction==="navAdd" || studio.keyboardAction==="sectionAdd"){
                 const section=studio.keyboardAction==="sectionAdd";if(studio.command(section?"section":"navigation",{kind:"add",name:text})){studio.mode=section?"sections":"navigation";studio.choice=0}return
             }

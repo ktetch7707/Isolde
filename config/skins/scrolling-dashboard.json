@@ -1,0 +1,177 @@
+{
+  "assets": {},
+  "layout": {
+    "components": [
+      {
+        "id": "main-apps",
+        "name": "Apps",
+        "kind": "widget",
+        "widgetType": "container",
+        "componentType": "container",
+        "placement": {
+          "width": 4,
+          "x": 0,
+          "y": 0,
+          "height": 3
+        },
+        "presentation": {
+          "variant": "orb",
+          "surfaceOpacity": 1,
+          "diameter": 88,
+          "layout": {
+            "padding": 16,
+            "mode": "row",
+            "schemaVersion": 1,
+            "wrap": false,
+            "rows": 1,
+            "gap": 24,
+            "visibleColumns": 6,
+            "columns": 16
+          },
+          "labelSize": 18
+        },
+        "appCollection": {
+          "mode": "all",
+          "ids": []
+        },
+        "family": "app-bar",
+        "categoryId": "apps",
+        "source": {
+          "provider": "shell",
+          "schemaVersion": 1,
+          "kind": "container"
+        }
+      },
+      {
+        "componentType": "library",
+        "source": {
+          "kind": "library",
+          "libraryKind": "movies",
+          "provider": "kodi",
+          "libraryView": "all",
+          "schemaVersion": 1,
+          "libraryValue": ""
+        },
+        "widgetType": "library",
+        "schemaVersion": 1,
+        "kind": "widget",
+        "placement": {
+          "x": 0,
+          "height": 3,
+          "width": 4,
+          "y": 3
+        },
+        "id": "featured",
+        "name": "Featured content",
+        "presentation": {
+          "libraryKind": "movies",
+          "libraryColumns": 5,
+          "libraryLayout": "row",
+          "libraryView": "all",
+          "libraryLimit": 50,
+          "libraryChrome": true
+        },
+        "categoryId": "featured"
+      },
+      {
+        "componentType": "library",
+        "source": {
+          "kind": "library",
+          "libraryKind": "shows",
+          "provider": "kodi",
+          "libraryView": "all",
+          "schemaVersion": 1,
+          "libraryValue": ""
+        },
+        "widgetType": "library",
+        "schemaVersion": 1,
+        "kind": "widget",
+        "placement": {
+          "x": 0,
+          "height": 3,
+          "width": 4,
+          "y": 6
+        },
+        "id": "shows",
+        "name": "TV shows",
+        "presentation": {
+          "libraryKind": "shows",
+          "libraryColumns": 5,
+          "libraryLayout": "row",
+          "libraryView": "all",
+          "libraryLimit": 50,
+          "libraryChrome": true
+        },
+        "categoryId": "shows"
+      }
+    ],
+    "theme": {
+      "selectedColor": "#344c70",
+      "backgroundStart": "#101725",
+      "brandVisible": false,
+      "textColor": "#f3f5fa",
+      "typographyScale": 1,
+      "mutedColor": "#b7c4d8",
+      "homeColumns": 5,
+      "focusColor": "#8dc8ff",
+      "spacing": 16,
+      "motionEnabled": false,
+      "tileRoundness": 0.18,
+      "backgroundEnd": "#182338",
+      "fontFamily": "DejaVu Sans",
+      "surfaceColor": "#243249"
+    },
+    "schemaVersion": 2,
+    "categories": [
+      {
+        "presentation": {
+          "height": 240
+        },
+        "name": "Apps",
+        "id": "apps"
+      },
+      {
+        "presentation": {
+          "height": 320
+        },
+        "id": "featured",
+        "name": "Featured content"
+      },
+      {
+        "presentation": {
+          "height": 320
+        },
+        "id": "shows",
+        "name": "TV shows"
+      }
+    ],
+    "composition": {
+      "enabled": true,
+      "pageNavigation": "left",
+      "identity": "Scrolling dashboard",
+      "grid": {
+        "snap": true,
+        "mode": "screen",
+        "margin": 16,
+        "overlap": false,
+        "rows": 3,
+        "gap": 16,
+        "columns": 4
+      },
+      "columns": 1,
+      "headerMode": "identity",
+      "headerControls": [
+        "search",
+        "settings",
+        "edit"
+      ],
+      "gap": 24,
+      "verticalScrolling": true,
+      "margin": 32,
+      "schemaVersion": 1,
+      "fit": false
+    }
+  },
+  "schemaVersion": 1,
+  "name": "Scrolling dashboard"
+}

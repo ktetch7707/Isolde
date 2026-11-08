@@ -89,6 +89,8 @@ signals:
     void documentLoaded();
 
 private:
+    QVariantMap m_inheritedAppearance;
+    QVariantList m_sharedStyles;
     HomeLayout *m_owner = nullptr;
     QString m_pageId;
     QJsonObject m_pageDocument;

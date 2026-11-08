@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QJsonDocument>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QStack>
@@ -45,7 +46,9 @@ class StudioSession final : public QObject {
     Q_PROPERTY(bool active READ active NOTIFY changed)
     Q_PROPERTY(QVariantList availableActions READ actionChoices NOTIFY changed)
     Q_PROPERTY(QObject *proposalModel READ proposalModel NOTIFY changed)
-
+    Q_PROPERTY(QVariantList changeSummary READ changeSummary NOTIFY changed)
+    Q_PROPERTY(QVariantList healthFindings READ healthFindings NOTIFY changed)
+    Q_PROPERTY(bool editorLocked READ editorLocked NOTIFY changed)
 public:
     static constexpr int kMaxUndoSteps = 100;
     static constexpr qsizetype kMaxHistoryBytes = 32 * 1024 * 1024;
@@ -66,6 +69,33 @@ public:
     Q_INVOKABLE void cancelPreview();
     Q_INVOKABLE bool execute(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
     Q_INVOKABLE bool apply(const QString &focusId = {});
+    QVariantList changeSummary() const;
+    QVariantList healthFindings() const;
+    bool editorLocked() const { return m_editorLocked; }
+    Q_INVOKABLE void setEditorLocked(bool locked);
+    Q_INVOKABLE QVariantList versions();
+    Q_INVOKABLE bool saveVersion(const QString &name);
+    Q_INVOKABLE bool deleteVersion(const QString &id);
+    Q_INVOKABLE bool resetVersions();
+    Q_INVOKABLE bool previewDefaults(const QString &scope, const QString &pageId = {});
+    Q_INVOKABLE bool previewVersion(const QString &id, const QString &scope, const QString &pageId = {});
+    Q_INVOKABLE bool reloadApplied();
+    Q_INVOKABLE bool previewSavedDesign();
+    Q_INVOKABLE QVariantList designChoices() const;
+    Q_INVOKABLE QVariantList reusableChoices(const QString &kind) const;
+    Q_INVOKABLE QVariantMap previewReuse(const QString &operation, const QVariantMap &arguments, const QString &pageId = {});
+    // Design/import previews share the normal proposal model and one-step Undo.
+    // Page scope preserves every other page; interface scope reports additions,
+    // replacements and removals before acceptPreview. Only apply() publishes assets.
+    Q_INVOKABLE QVariantMap previewDesign(const QString &id, const QString &scope, const QString &pageId = {});
+    Q_INVOKABLE QVariantMap previewImport(const QString &path, const QString &scope, const QString &pageId = {}, const QVariantMap &appRemap = {});
+    Q_INVOKABLE bool exportDesign(const QString &path, const QString &scope, const QString &pageId = {});
+    Q_INVOKABLE QVariantMap browseDesignFiles(const QString &directory = {}, int page = 0) const;
+    Q_PROPERTY(QString referenceSource READ referenceSource NOTIFY changed)
+    // Editor-only image state: never serialized, exported or copied to profile artwork.
+    QString referenceSource() const { return m_referenceSource; }
+    Q_INVOKABLE bool setReferenceImage(const QString &path);
+    Q_INVOKABLE void clearReferenceImage();
     Q_INVOKABLE QVariantMap componentPrototype(const QString &type, const QVariantMap &configuration = {});
     Q_INVOKABLE QVariantMap replacementProposal(const QString &id, const QString &type, const QString &pageId = {});
     Q_INVOKABLE QVariantList artworkChoices() const;
@@ -129,7 +159,18 @@ signals:
     void changed();
 
 private:
+    bool currentProfile() const;
+    bool profileStorageSafe() const;
+    bool diskRevisionUnchanged() const;
+    bool editingPermitted();
+    QByteArray readAppliedDocument();
+    bool writeVersions(const QJsonArray &entries, QJsonObject assets);
+    QJsonObject stageDesignArtwork(QJsonObject document, const QJsonObject &assets, bool *valid);
+    bool proposeDocument(const QByteArray &bytes);
+    bool archiveVersion(const QString &name, const QByteArray &document);
+    bool readVersions(QJsonArray &entries, QJsonObject *assets = nullptr);
     void configureWorker(HomeLayout &worker, bool assetPaths = false) const;
+    QVariantMap proposeDesign(QJsonObject document, const QJsonObject &assets, const QString &scope, const QString &pageId);
     bool validNewAction(const QVariantMap &value);
     bool validDraft(const QByteArray &data);
     void setError(const QString &message);
@@ -144,6 +185,7 @@ private:
     QHash<QString,QString> m_stagedAssets;
     HomeLayout *m_model = nullptr;
     QString m_profilePath;
+    QString m_profileId;
     bool m_active = false;
     HomeLayout *m_proposalModel = nullptr;
     QByteArray m_proposed;
@@ -151,4 +193,7 @@ private:
     QByteArray m_diskBaseline;
     bool m_diskExisted = false;
     bool m_diskReadable = true;
+    QTemporaryDir *m_referenceStage = nullptr;
+    QString m_referenceSource;
+    bool m_editorLocked = false;
 };

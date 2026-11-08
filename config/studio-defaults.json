@@ -1,6 +1,24 @@
 {
+  "headerLabels":{"sources":"Sources"},"headerActions":{"sources":{"schemaVersion":1,"type":"settings","section":2}},
+  "sourcePolicyFields":[
+    {"key":"discoveryEnabled","label":"Local discovery","choices":[{"name":"On","value":true},{"name":"Off","value":false}]},
+    {"key":"mode","label":"Presentation","choices":[{"name":"Off","value":"off"},{"name":"Compact notice","value":"compact"},{"name":"Contained widget","value":"widget"}]},
+    {"key":"pages","label":"Allowed pages","multiple":true,"options":"pages"},
+    {"key":"slots","label":"Allowed declared slots · empty means any","multiple":true,"options":"slots"},
+    {"key":"events","label":"Notification events","multiple":true,"choices":[{"name":"Movie discs","value":"movie-disc"},{"name":"Game discs","value":"game-disc"},{"name":"Media folders","value":"media-folder"},{"name":"Files","value":"file-source"}]},
+    {"key":"types","label":"Permitted local source types","multiple":true,"choices":[{"name":"Movie discs","value":"movie-disc"},{"name":"Game discs","value":"game-disc"},{"name":"Media folders","value":"media-folder"},{"name":"Files","value":"file-source"}]},
+    {"key":"duration","label":"Notice duration","choices":[{"name":"Until dismissed","value":0},{"name":"5 seconds","value":5},{"name":"8 seconds","value":8},{"name":"15 seconds","value":15},{"name":"30 seconds","value":30},{"name":"60 seconds","value":60}]},
+    {"key":"reconnect","label":"Notify after reconnect","choices":[{"name":"On","value":true},{"name":"Once per profile session","value":false}]},
+    {"key":"suppressPlayback","label":"Suppress during playback","choices":[{"name":"On","value":true},{"name":"Off","value":false}]},
+    {"key":"suppressSetup","label":"Suppress during setup","choices":[{"name":"On","value":true},{"name":"Off","value":false}]},
+    {"key":"suppressEditing","label":"Suppress during editing","choices":[{"name":"On","value":true},{"name":"Off","value":false}]}
+  ],
+  "sourcePolicyDefaults": {"schemaVersion":1,"discoveryEnabled":true,"mode":"compact","pages":["home"],"slots":[],"events":["movie-disc","game-disc","media-folder","file-source"],"types":["movie-disc","game-disc","media-folder","file-source"],"duration":8,"reconnect":true,"suppressPlayback":true,"suppressSetup":true,"suppressEditing":true},
+  "responsiveDefaults": {"schemaVersion": 1, "policy": "wrap", "minimumWidth": 80, "minimumHeight": 48, "aspect": 1.7777777777777777},
   "schemaVersion": 1,
+  "referenceViewport": {"width": 1280, "height": 720},
   "rootPageName": "Home",
+  "stressTitle": "A very long sample title to inspect wrapping, clipping and focus at the current viewport with the production renderer",
   "guide": {
     "rows": 5, "minutes": 120, "channelWidth": 220, "labelSize": 20, "gap": 8, "radius": 12,
     "surface": "full", "overlayWidth": 95, "overlayHeight": 72, "overlayRows": 3, "overlayPosition": "bottom-center",
@@ -323,6 +341,8 @@
   ],
   "componentVariants": {"button":[{"id":"standard","name":"Standard button","description":"A compact editable shortcut.","span":{"width":2,"height":1},"presentation":{"variant":"source","labelPosition":"inside"}},{"id":"round","name":"Round icon","description":"A circular icon with an independent label.","span":{"width":2,"height":2},"presentation":{"variant":"orb","diameter":110,"labelPosition":"below","labelPill":false}},{"id":"wide","name":"Wide tile","description":"A wide editable shortcut.","span":{"width":4,"height":1},"presentation":{"variant":"source","labelPosition":"inside"}},{"id":"poster","name":"Poster button","description":"A portrait shortcut. Choose artwork in Edit component.","span":{"width":2,"height":3},"presentation":{"variant":"image","labelPosition":"below","artFit":"cover"}}],"image":[{"id":"landscape","name":"Landscape image","description":"A wide image with optional links and labels.","span":{"width":3,"height":2},"presentation":{"variant":"image","labelPosition":"hidden","artFit":"cover"}},{"id":"poster","name":"Poster image","description":"A portrait image with an independent label.","span":{"width":2,"height":3},"presentation":{"variant":"image","labelPosition":"below","artFit":"cover"}},{"id":"contained","name":"Fit full artwork","description":"Keep the whole image visible inside its bounds.","span":{"width":4,"height":3},"presentation":{"variant":"image","labelPosition":"hidden","artFit":"contain"}}],"text":[{"id":"body","name":"Text","description":"An editable block of plain text.","span":{"width":3,"height":1},"presentation":{"bodySize":20,"bodyBold":false,"bodyAlign":"left","bodyWrap":true}},{"id":"heading","name":"Heading","description":"Large plain text for an independent heading.","span":{"width":4,"height":1},"presentation":{"bodySize":32,"bodyBold":true,"bodyAlign":"left","bodyWrap":true}}]},
   "componentPresets": {
+    "source-notice":{"id":"source-notice","name":"Source notice slot","kind":"widget","widgetType":"container","componentType":"container","family":"source-notice","placement":{"x":0,"y":0,"width":3,"height":1},"presentation":{"sourceVariant":"compact","sourceMaximum":1,"sourceBadge":true,"sourceDetails":false,"variant":"source","labelPosition":"inside","labelSize":18,"radius":12,"surfaceOpacity":1,"focusWidth":3,"layout":{"schemaVersion":1,"mode":"row","columns":1,"rows":1,"visibleColumns":1,"padding":0,"gap":8}}},
+    "detected-sources":{"id":"detected-sources","name":"Detected sources","kind":"widget","widgetType":"container","componentType":"container","family":"detected-sources","placement":{"x":0,"y":0,"width":6,"height":2},"presentation":{"sourceVariant":"cards","sourceMaximum":4,"sourceBadge":true,"sourceDetails":true,"variant":"source","labelPosition":"inside","labelSize":18,"radius":12,"surfaceOpacity":1,"focusWidth":3,"moreLabel":"View all","galleryTitle":"Detected sources","layout":{"schemaVersion":1,"mode":"row","columns":6,"rows":1,"visibleColumns":4,"padding":8,"gap":8}}},
     "shape": {"id":"shape","name":"Shape","kind":"widget","widgetType":"shape","componentType":"shape","placement":{"x":0,"y":0,"width":2,"height":2},"presentation":{"shape":"rectangle","surfaceOpacity":1,"labelPosition":"hidden","radius":20}},
     "text": {"id":"text","name":"Text","kind":"widget","widgetType":"text","componentType":"text","placement":{"x":0,"y":0,"width":3,"height":1},"presentation":{"bodyText":"Your text","bodySize":20,"bodyBold":false,"bodyAlign":"left","bodyWrap":true,"bodyLines":4,"bodyPadding":16,"bodyLineHeight":1,"surfaceOpacity":0,"labelPosition":"hidden"}},
     "tv-guide": {
@@ -469,6 +489,8 @@
     }
   },
   "catalog": [
+    {"id":"source-notice","name":"Source notice slot","description":"A bounded, themed source status region. Display policy is in Home Header controls.","icon":"display"},
+    {"id":"detected-sources","name":"Detected sources","description":"Contained detected devices and folders with View all; no automatic layout injection.","icon":"display"},
     {
       "id": "button",
       "name": "Button",
@@ -571,6 +593,12 @@
       "arrow-right"
     ],
     "fields": [
+      {"tab":"Content","scope":"presentation","key":"sourceVariant","label":"Source layout","type":"choice","families":["source-notice","detected-sources"],"choices":["compact","list","cards"]},
+      {"tab":"Content","scope":"presentation","key":"sourceMaximum","label":"Maximum visible items","type":"choice","families":["source-notice","detected-sources"],"choices":[1,2,3,4,5,6]},
+      {"tab":"Content","scope":"presentation","key":"sourceBadge","label":"Source count badge","type":"toggle","families":["source-notice","detected-sources"]},
+      {"tab":"Content","scope":"presentation","key":"sourceDetails","label":"Source details","type":"toggle","families":["source-notice","detected-sources"]},
+      {"tab":"Appearance","scope":"presentation","key":"variant","label":"Source card style","type":"choice","families":["source-notice","detected-sources"],"choices":["source","summary","orb","media"]},
+      {"tab":"Appearance","scope":"presentation","key":"labelPosition","label":"Source labels","type":"choice","families":["source-notice","detected-sources"],"choices":["inside","below","hidden"]},
       {"tab":"Content","scope":"component","key":"name","label":"Editor name","type":"text"},
       {"tab":"Content","scope":"presentation","key":"subtitle","label":"Text / supporting text","type":"text","excludeTypes":["container"]},
       {"tab":"Content","scope":"presentation","key":"label","label":"Artwork badge","type":"text","advanced":true,"excludeTypes":["container"]},
@@ -585,7 +613,7 @@
       {"tab":"Content","scope":"appCollection","key":"section","label":"App group","type":"appGroup","families":["app-bar"],"fallback":"All app groups"},
       {"tab":"Content","scope":"appCollection","key":"showStore","label":"App Store in More apps","type":"toggle","families":["app-bar"],"fallback":true},
       {"tab":"Appearance","scope":"presentation","key":"logoMode","label":"App logo treatment","type":"choice","choices":["cutout","original","tile"],"families":["app-bar"],"fallback":"cutout"},
-      {"tab":"Content","scope":"component","key":"addChild","label":"Add a child component","type":"children","excludeFamilies":["app-bar","page-menu"],"types":["container"],"excludeTypes":["section","navigation"]},
+      {"tab":"Content","scope":"component","key":"addChild","label":"Add a child component","type":"children","excludeFamilies":["app-bar","page-menu","source-notice","detected-sources"],"types":["container"],"excludeTypes":["section","navigation"]},
       {"tab":"Appearance","scope":"presentation","key":"variant","label":"Card style","type":"choice","choices":["source","summary","banner","orb","media","recent","text","image"],"excludeTypes":["library","container","section"]},
       {"tab":"Appearance","scope":"presentation","key":"surfaceColor","label":"Surface","type":"color","advanced":false},
       {"tab":"Appearance","scope":"presentation","key":"labelColor","label":"Text","type":"color","advanced":false},
@@ -622,7 +650,7 @@
       {"tab":"Appearance","scope":"presentation","key":"headingBold","label":"Bold heading","type":"toggle","fallback":false,"advanced":true},
       {"tab":"Appearance","scope":"component","key":"opacity","label":"Whole component opacity","type":"number","control":"slider","displayScale":100,"displayUnit":"%","min":0,"max":1,"step":0.05,"fallback":1,"advanced":true,"excludeTypes":["section","navigation"]},
       {"tab":"Appearance","scope":"component","key":"crop","label":"Crop / focal point","type":"crop","excludeTypes":["section","navigation"]},
-      {"tab":"Layout","scope":"component","key":"position","label":"Outer size","type":"geometry","excludeTypes":["section","navigation"]},
+      {"tab":"Layout","scope":"component","key":"position","label":"Outer size","type":"geometry","excludeTypes":["section","navigation","text"]},
       {"tab":"Layout","scope":"component","key":"layout","label":"Internal layout","type":"layout","types":["container"],"excludeTypes":["section","navigation"]},
       {"tab":"Layout","scope":"presentation","key":"libraryColumns","control":"stepper","label":"Visible cards","type":"number","types":["library","section"],"min":1,"max":12,"step":1,"fallback":4},
       {"tab":"Layout","scope":"presentation","key":"guideRows","control":"slider","label":"Guide visible rows","type":"number","types":["library"],"families":["tv-guide"],"min":3,"max":12,"step":1,"fallback":5},
@@ -716,6 +744,31 @@
     ],
     "studioFields": [{"tab":"Colors","scope":"studioAppearance","key":"surfaceColor","label":"Surface","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"selectedColor","label":"Selected surface","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"textColor","label":"Text","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"mutedColor","label":"Supporting text","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"focusColor","label":"Focus","type":"color"},{"tab":"Colors","scope":"studioAppearance","key":"reset","label":"Reset Studio colors","type":"editorColorsReset"}],
     "pageFields": [
+      {"tab":"Header","scope":"theme","key":"sourcePolicy","label":"Source display policy","type":"sourcePolicy"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"surface","label":"Surface","type":"choice","choices":[{"name":"Search","value":"search"},{"name":"All Apps / app surfaces","value":"apps"},{"name":"Settings \u00b7 Home source only","value":"settings"},{"name":"Isolde media browser","value":"kodi"}]},
+      {"tab":"Shell","scope":"surfaceTheme","key":"mode","label":"Theme source","type":"choice","choices":[{"name":"Use Home theme","value":"home"},{"name":"Use opening page theme","value":"origin"},{"name":"Custom override","value":"custom"}]},
+      {"tab":"Shell","scope":"surfaceTheme","key":"surfaceColor","label":"Surface","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"selectedColor","label":"Selected surface","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"textColor","label":"Text","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"mutedColor","label":"Supporting text","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"focusColor","label":"Focus","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"backgroundEnd","label":"Background","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"elevatedColor","label":"Dialog / details surface","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"inputColor","label":"Input surface","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"inputTextColor","label":"Input text","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"outlineColor","label":"Outline","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"accentColor","label":"Accent","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"scrimColor","label":"Overlay scrim","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"successColor","label":"Success","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"warningColor","label":"Warning","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"errorColor","label":"Error","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"unavailableColor","label":"Unavailable","type":"color"},
+      {"tab":"Shell","scope":"surfaceTheme","key":"typographyScale","label":"Text scale","type":"number","control":"slider","min":0.8,"max":1.3,"step":0.05,"fallback":1},
+      {"tab":"Shell","scope":"surfaceTheme","key":"cornerRadius","label":"Corners","type":"number","control":"slider","min":0,"max":48,"step":1,"fallback":8},
+      {"tab":"Shell","scope":"surfaceTheme","key":"scrimOpacity","label":"Scrim opacity","type":"number","control":"slider","min":0,"max":1,"step":0.05,"fallback":0.85},
+      {"tab":"Shell","scope":"surfaceTheme","key":"panelOpacity","label":"Panel opacity","type":"number","control":"slider","min":0,"max":1,"step":0.05,"fallback":1},
+      {"tab":"Shell","scope":"surfaceTheme","key":"motionEnabled","label":"Motion","type":"toggle","fallback":true},
+      {"tab":"Shell","scope":"surfaceTheme","key":"highContrast","label":"High contrast","type":"toggle","fallback":false},
       {"tab":"Colors","scope":"theme","key":"backgroundStart","label":"Background top / solid","type":"color"},
       {"tab":"Colors","scope":"theme","key":"backgroundEnd","label":"Background bottom","type":"color"},
       {"tab":"Colors","scope":"theme","key":"surfaceColor","label":"Component surface","type":"color"},
@@ -841,6 +894,7 @@
     "artZoom": 1
   },
   "headerChoices": [
+    {"name":"Source notice, Settings and Edit","value":["sources","settings","edit"]},{"name":"Source notice, Search, Settings and Edit","value":["sources","search","settings","edit"]},
     {
       "name": "Search and Settings",
       "value": [

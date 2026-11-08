@@ -1,3 +1,4 @@
+// TEST EDITOR TOOL
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
 #include "app/FdroidProvider.h"
@@ -147,6 +148,7 @@ struct ProfileRuntime {
         qWarning("%s", qPrintable(catalog.errorString()));
     if (!homeLayout.load({}, profiles.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
+    sourceManager.setLayout(&homeLayout);
     desktopMode.setPresentation(homeLayout.studioOptions().value("desktop").toMap());
     guide=std::make_unique<GuideController>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("guide.sqlite"),profiles.activeId());
     actions.setGuide(guide.get());

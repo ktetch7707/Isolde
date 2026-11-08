@@ -166,7 +166,27 @@ void KodiService::suspend(bool suspended)
     if (suspended) { stop(); m_status = "Kodi is open as an app."; emit changed(); }
     else start();
 }
-void KodiService::retry() { if (!switching()) { stop(); start(); } }
+void KodiService::setAlwaysPlayLocally(bool value)
+{
+    if (m_alAlwaysPlayLocally == value) return;
+    m_alAlwaysPlayLocally = value;
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi");
+    settings.beginGroup(QStringLiteral("profiles/") + m_profile + QStringLiteral("/kodi"));
+    settings.setValue(QStringLiteral("alwaysPlayLocally"), value);
+    settings.endGroup();
+    emit alwaysPlayLocallyChanged();
+}
+
+void KodiService::resetAlwaysPlayLocally()
+{
+    m_alAlwaysPlayLocally = true;
+    QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi");
+    settings.beginGroup(QStringLiteral("profiles/") + m_profile + QStringLiteral("/kodi"));
+    settings.remove(QStringLiteral("alwaysPlayLocally"));
+    settings.endGroup();
+    emit alwaysPlayLocallyChanged();
+}
+
 void KodiService::markReady()
 {
     if (m_ready || m_process.state() != QProcess::Running) return;

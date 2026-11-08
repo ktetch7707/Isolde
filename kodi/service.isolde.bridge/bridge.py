@@ -158,7 +158,7 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0" or type(request_id) is not int:
         return error(-32600, "Invalid request")
     playback_methods = {"Isolde.PlayGuideStream", "Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl"}
-    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GuideCandidates", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
+    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GuideCandidates", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "Isolde.DeletePlaylist", "Isolde.RenamePlaylist", "Isolde.ReorderPlaylist", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
     if not isinstance(params, dict):
@@ -174,6 +174,24 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
             return {"jsonrpc":"2.0","id":request_id,"result":playlists.create(params)}
         except Exception:
             return error(-32000,"Could not save this Kodi playlist. Check the name, view and profile storage; previous playlists are unchanged.")
+    if request["method"]=="Isolde.DeletePlaylist":
+        try:
+            if playlists is None:raise ValueError("Managed playlists unavailable")
+            return {"jsonrpc":"2.0","id":request_id,"result":playlists.delete(params)}
+        except Exception:
+            return error(-32000,"Could not delete this Kodi playlist. Previous playlists are unchanged.")
+    if request["method"]=="Isolde.RenamePlaylist":
+        try:
+            if playlists is None:raise ValueError("Managed playlists unavailable")
+            return {"jsonrpc":"2.0","id":request_id,"result":playlists.rename(params)}
+        except Exception:
+            return error(-32000,"Could not rename this Kodi playlist. Previous playlists are unchanged.")
+    if request["method"]=="Isolde.ReorderPlaylist":
+        try:
+            if playlists is None:raise ValueError("Managed playlists unavailable")
+            return {"jsonrpc":"2.0","id":request_id,"result":playlists.reorderPlaylist(params)}
+        except Exception:
+            return error(-32000,"Could not reorder this Kodi playlist. Previous playlists are unchanged.")
     if request["method"] in ("Isolde.GetPlaylists", "Isolde.GetPlaylistItems"):
         try:
             return {"jsonrpc":"2.0","id":request_id,"result":read_playlist(request["method"],params,execute)}

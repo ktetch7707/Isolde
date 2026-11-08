@@ -11,6 +11,7 @@ Item {
     property bool artworkMotionAllowed:true
     property var artworkResolver:typeof homeLayout!=="undefined"?homeLayout:null
     property var headerDefaults:typeof homeLayout!=="undefined" && homeLayout?homeLayout.studioOptions.headerDefaults || {}:({})
+    readonly property var referenceViewport:typeof homeLayout!=="undefined" && homeLayout?homeLayout.studioOptions.referenceViewport || {}:({})
     property string editHeaderSelection:""
     signal editHeaderSelected(string part)
     property var suppressedComponentIds:[]
@@ -74,7 +75,7 @@ Item {
     property var placements: []
     property int previewExtentRows:0
     readonly property int firstVisibleGridRow:composed.firstVisibleGridRow
-    readonly property var pageViewport:composed.viewportRect()
+    property var pageViewport:({x:0,y:0,width:0,height:0})
     readonly property bool editorGeometryReady:composed.editorGeometryReady
     readonly property var gridMetrics: composed.placementCell
     readonly property real componentUnit:composed.unit
@@ -87,10 +88,12 @@ Item {
     function placementRectFor(p,scope,parentId) {
         const surface=groupSurface(parentId)
         if(!surface || !surface.item)return composed.placementRect(p,scope)
-        const c=surface.item.metrics,scroll=composed.scrollOffset
+        const c=surface.item.metrics
         let ancestor=surface;while(ancestor && ancestor!==root){const geometry=ancestor.x+ancestor.y+ancestor.width+ancestor.height+ancestor.scale;ancestor=ancestor.parent}
-        const origin=surface.mapToItem(root,0,0)
-        return {x:origin.x+p.x*(c.cellW+c.gap),y:origin.y+p.y*(c.cellH+c.gap),width:p.width*c.cellW+(p.width-1)*c.gap,height:p.height*c.cellH+(p.height-1)*c.gap}
+        const x=p.x*(c.cellW+c.gap),y=p.y*(c.cellH+c.gap)
+        const width=p.width*c.cellW+(p.width-1)*c.gap,height=p.height*c.cellH+(p.height-1)*c.gap
+        const topLeft=surface.mapToItem(root,x,y),bottomRight=surface.mapToItem(root,x+width,y+height)
+        return {x:topLeft.x,y:topLeft.y,width:bottomRight.x-topLeft.x,height:bottomRight.y-topLeft.y}
     }
     function gridMetricsFor(scope,parentId) { const surface=groupSurface(parentId);return surface && surface.item?surface.item.metrics:composed.gridMetricsFor(scope) }
     function revealScope(scope) { composed.revealScope(scope) }
@@ -109,6 +112,37 @@ Item {
         for(const id of Object.keys(groupSurfaces)){const surface=groupSurface(id);if(surface && surface.editorViewport)groups[id]=surface.editorViewport()}
         return {legacyY:sectionFlick.contentY,composed:composed.editorViewport(),groups:groups}
     }
+    property int navigationGeneration: 0
+    function navigationState(origin) {
+        return {focus:origin || focusedItemId, viewport:editorViewport(),
+            collections:JSON.parse(JSON.stringify(appCollectionFocus)),
+            recoveryFocused:recoveryFocused, recoveryIndex:recoveryIndex,
+            legacyMenuFocused:legacyMenuFocused || origin==="legacy-page-menu",
+            legacyPageId:menuPages[legacyMenu.selectedPage]?menuPages[legacyMenu.selectedPage].id:"",
+            composition:composed.navigationState()}
+    }
+    function resetNavigationState(state) {
+        const saved=state || {}, generation=++navigationGeneration
+        appCollectionFocus=saved.collections || ({})
+        composed.resetNavigationState(saved.composition)
+        sectionFlick.cancelFlick();sectionFlick.contentY=0
+        recoveryFocused=false
+        focusedIndex=0;focusedItemId=items[0]?items[0].id:""
+        repairFocus()
+        if(saved.focus || focusedItemId)restoreFocus(saved.focus || focusedItemId)
+        if(saved.recoveryFocused)recoveryFocused=true
+        const count=composition.enabled?composed.headerControls.length:legacyHeaderControls.length
+        recoveryIndex=Number.isInteger(saved.recoveryIndex) && saved.recoveryIndex>=0 && saved.recoveryIndex<count?saved.recoveryIndex:0
+        legacyMenuFocused=!!saved.legacyMenuFocused && legacyMenuEnabled
+        if(legacyMenuFocused){legacyMenu.selectedPage=Math.max(0,menuPages.findIndex(page=>page.id===saved.legacyPageId));composed.navigationFocused=true;recoveryFocused=false}
+        // Focus restoration can queue its own reveal. Restore authored scroll
+        // last, without letting an old page's callback affect a newer route.
+        const originAvailable=!saved.focus || saved.recoveryFocused || legacyMenuFocused || items.some(item=>item.id===saved.focus && focusable(item)) || saved.focus.startsWith("tab-") || saved.focus.startsWith("section-")
+        if(saved.viewport && originAvailable)Qt.callLater(()=>Qt.callLater(()=>{
+            if(root && generation===root.navigationGeneration)root.restoreEditorViewport(saved.viewport)
+        }))
+    }
+    function updatePageViewport(){pageViewport=composed.viewportRect()}
     function restoreEditorViewport(state) {
         if(!state || state.legacyY===undefined)return
         sectionFlick.cancelFlick();sectionFlick.contentY=state.legacyY
@@ -122,6 +156,14 @@ Item {
     property var setItemPlacement: null
     property var gridCollisions: null
     property var libraryProvider: null
+    property var sourceProvider:typeof sourceManager!=="undefined"?sourceManager:null
+    property var sourceWorkflow:({editing:editMode})
+    readonly property var headerControlLabels:typeof homeLayout!=="undefined" && homeLayout?(homeLayout.studioOptions.headerLabels || {}):({})
+    readonly property var headerControlActions:typeof homeLayout!=="undefined" && homeLayout?(homeLayout.studioOptions.headerActions || {}):({})
+    readonly property var legacyHeaderControls:composition.headerControls || ["settings","edit"]
+    readonly property int headerSourceCount:{const revision=sourceProvider?sourceProvider.revision:0;return sourceProvider?sourceProvider.projected(menuActiveId,"header-sources",true,sourceWorkflow).length:0}
+    function headerControlLabel(control){return control==="sources"?(headerControlLabels.sources || "Sources")+(headerSourceCount?" · "+headerSourceCount:""):control==="edit"?editLabel:control==="search"?"Search":"Settings"}
+    function activateHeaderControl(control){if(control==="sources"){if(sourceProvider)sourceProvider.requestSource("");actionActivated(headerControlActions.sources || {},"header-sources")}else if(control==="search")searchRequested();else settingsRequested(control==="edit"?1:-1)}
     property var appProvider:typeof appRegistry!=="undefined"?appRegistry:null
     property var collectionDefaults:typeof homeLayout!=="undefined"?homeLayout.studioOptions.componentPresets || ({}):({})
     property bool previewOnly:false
@@ -131,6 +173,20 @@ Item {
     property string pageKey: "home"
     property var menuPages:typeof homeLayout!=="undefined"?homeLayout.studioPages:[]
     property string menuActiveId:""
+    readonly property var shellAppsAppearance: {
+        const model = artworkResolver
+        const revision = appearance
+        const inherited = model ? model.homeAppearance : null
+        return model && typeof model.surfaceAppearance === "function" ? model.surfaceAppearance("apps", menuActiveId) : appearance
+    }
+    property bool legacyMenuFocused:false
+    readonly property bool legacyMenuEnabled:!!composition.enabled && !!menuActiveId && ["left","top"].indexOf(composition.pageNavigation)>=0 && !items.some(item=>item.family==="page-menu")
+    onLegacyMenuEnabledChanged:if(!legacyMenuEnabled)legacyMenuFocused=false
+    function activateLegacyPage(index) {
+        const page=menuPages[index];if(!page || editMode)return
+        legacyMenuFocused=false;composed.navigationFocused=false
+        actionActivated(page.id?{type:"open-page",pageId:page.id}:{type:"root-page"},"legacy-page-menu")
+    }
     property string editLabel: "Edit Home"
     property string selectMode: "single"
     property string selectTrigger: "click"
@@ -164,7 +220,7 @@ Item {
         focusedItemId = items[focusedIndex] ? items[focusedIndex].id : ""
         repairFocus()
     }
-    Component.onCompleted:{if (items[focusedIndex])focusedItemId=items[focusedIndex].id;repairFocus()}
+    Component.onCompleted:{if (items[focusedIndex])focusedItemId=items[focusedIndex].id;repairFocus();Qt.callLater(updatePageViewport)}
     onEditModeChanged:repairFocus()
     readonly property int columns: Math.min(appearance.homeColumns || 3, (width < 1000 ? 2 : Math.floor(width / 200)))
     readonly property int gridUnits: columns * 2
@@ -258,13 +314,27 @@ Item {
     }
 
     function handleCommand(command) {
+        if(legacyMenuEnabled && !editMode) {
+            if(legacyMenuFocused) {
+                const horizontal=composition.pageNavigation==="top"
+                if(command===inputManager.back || command===(horizontal?inputManager.navigateDown:inputManager.navigateRight)) {
+                    legacyMenuFocused=false;composed.navigationFocused=false;return
+                }
+                if(command===inputManager.confirm){activateLegacyPage(legacyMenu.selectedPage);return}
+                const delta=command===(horizontal?inputManager.navigateLeft:inputManager.navigateUp)?-1:command===(horizontal?inputManager.navigateRight:inputManager.navigateDown)?1:0
+                legacyMenu.selectedPage=Math.max(0,Math.min(menuPages.length-1,legacyMenu.selectedPage+delta));return
+            }
+            if(recoveryFocused && (composition.pageNavigation==="top" || recoveryIndex===0) && command===(composition.pageNavigation==="top"?inputManager.navigateUp:inputManager.navigateLeft)) {
+                recoveryFocused=false;composed.navigationFocused=true;legacyMenuFocused=true;return
+            }
+        }
         if (composition.enabled) { composed.handleCommand(command); return }
         if (recoveryFocused || !items.length) {
             recoveryFocused = true
-            if (command === inputManager.navigateLeft) recoveryIndex = 0
-            else if (command === inputManager.navigateRight) recoveryIndex = 1
+            if (command === inputManager.navigateLeft) recoveryIndex = Math.max(0,recoveryIndex-1)
+            else if (command === inputManager.navigateRight) recoveryIndex = Math.min(legacyHeaderControls.length-1,recoveryIndex+1)
             else if (command === inputManager.navigateDown && items.some(i=>focusable(i))) recoveryFocused = false
-            else if (command === inputManager.confirm) settingsRequested(recoveryIndex === 0 ? -1 : 1)
+            else if (command === inputManager.confirm) activateHeaderControl(legacyHeaderControls[recoveryIndex])
             return
         }
         let next = focusedIndex
@@ -352,14 +422,14 @@ Item {
         Row {
             width: parent.width; height: 42; spacing: 12
             Repeater {
-                model: ["Settings", "Edit Home"]
+                model: root.legacyHeaderControls
                 delegate: Rectangle {
                     required property int index; required property string modelData
                     width: 150; height: 42; radius: 12; color: root.appearance.surfaceColor || "#202126"
                     border.width: !root.editMode && (root.recoveryFocused || !root.items.length) && root.recoveryIndex === index ? 3 : 0
                     border.color: root.appearance.focusColor || "#C994A5"
-                    Text { anchors.centerIn: parent; text: modelData; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 19 * root.textScale }
-                    MouseArea { anchors.fill: parent; onClicked: { root.recoveryFocused = true; root.recoveryIndex = index; root.settingsRequested(index === 0 ? -1 : 1) } }
+                    Text { anchors.centerIn: parent; width:parent.width-12;text:root.headerControlLabel(modelData);elide:Text.ElideRight;horizontalAlignment:Text.AlignHCenter;color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 19 * root.textScale }
+                    MouseArea { anchors.fill: parent; onClicked: { root.recoveryFocused = true; root.recoveryIndex = index; root.activateHeaderControl(modelData) } }
                 }
             }
             Text { anchors.verticalCenter: parent.verticalCenter; text: root.items.length ? "↑ Settings · Menu Search" : "Home is empty · OK opens Settings"; color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: 16 * root.textScale }
@@ -513,5 +583,21 @@ Item {
             }
         }
     }
-    ComposedHome { id: composed; anchors.fill: parent; host: root; visible: !!root.composition.enabled }
+    Connections {
+        target:composed
+        function onViewportGeometryChanged(){Qt.callLater(root.updatePageViewport)}
+    }
+    PageNavigation {
+        id:legacyMenu;objectName:"legacyPageNavigation"
+        unit:Math.min(root.width/(root.referenceViewport.width || 1280),root.height/(root.referenceViewport.height || 720))
+        anchors.fill:parent;enabledNavigation:root.legacyMenuEnabled
+        composition:root.composition;appearance:root.appearance;pages:root.menuPages;activeId:root.menuActiveId
+        navigationFocused:root.legacyMenuFocused;enabled:!root.editMode
+        onChosen:index=>root.activateLegacyPage(index)
+    }
+    ComposedHome {
+        id:composed;anchors.fill:parent
+        anchors.leftMargin:legacyMenu.contentLeft;anchors.topMargin:legacyMenu.contentTop
+        host:root;visible:!!root.composition.enabled
+    }
 }

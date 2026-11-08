@@ -6,6 +6,10 @@
 #include <QSet>
 #include <QTimer>
 #include <QVariantList>
+#include <QPointer>
+#include <QMap>
+
+class HomeLayout;
 
 class SourceManager final : public QObject {
     Q_OBJECT
@@ -14,9 +18,27 @@ class SourceManager final : public QObject {
     Q_PROPERTY(QVariantList sections READ sections NOTIFY sourcesChanged)
     Q_PROPERTY(QVariantList sources READ sources NOTIFY sourcesChanged)
     Q_PROPERTY(int visibleSourceCount READ visibleSourceCount NOTIFY sourcesChanged)
+    Q_PROPERTY(QVariantMap policy READ policy NOTIFY sourcesChanged)
+    Q_PROPERTY(QVariantList hiddenSources READ hiddenSources NOTIFY sourcesChanged)
+    Q_PROPERTY(QString errorString READ errorString NOTIFY sourcesChanged)
+    Q_PROPERTY(int revision READ revision NOTIFY sourcesChanged)
+    Q_PROPERTY(QString requestedSourceId READ requestedSourceId NOTIFY sourcesChanged)
 
 public:
-    explicit SourceManager(AppRegistry *registry, QObject *parent = nullptr);
+    explicit SourceManager(AppRegistry *registry, QObject *parent = nullptr, const QString &statePath = {});
+    void setLayout(HomeLayout *layout);
+    QVariantMap policy() const;
+    QVariantList hiddenSources() const;
+    QString errorString() const { return m_error; }
+    int revision() const { return m_revision; }
+    QString requestedSourceId() const { return m_requestedId; }
+    Q_INVOKABLE bool requestSource(const QString &id);
+    Q_INVOKABLE bool setPolicy(const QVariantMap &changes);
+    Q_INVOKABLE QVariantList projected(const QString &pageId, const QString &slotId, bool notice, const QVariantMap &workflow = {}) const;
+    Q_INVOKABLE bool dismissSource(const QString &id);
+    Q_INVOKABLE QVariantList handlers(const QString &id) const;
+    Q_INVOKABLE bool chooseHandler(const QString &id, const QString &handler);
+    Q_INVOKABLE bool promoteSource(const QString &id);
 
     [[nodiscard]] bool automaticSourcesEnabled() const;
     void setAutomaticSourcesEnabled(bool enabled);
@@ -37,16 +59,25 @@ signals:
     void sourcesChanged();
 
 private:
-    QVariantList scanSources() const;
+    QVariantList scanSources(QString *error) const;
     QString defaultHandlerForAction(const QString &actionType) const;
     void loadState();
-    void saveState() const;
+    bool saveState();
+    bool fail(const QString &message);
+    bool decide(const QString &id, const QString &key, const QVariant &value);
 
     AppRegistry *m_registry;
     bool m_automaticSourcesEnabled = true;
     QVariantList m_sources;
     QStringList m_probeRoots;
-    QSet<QString> m_hiddenSources;
-    QSet<QString> m_permanentSources;
     QTimer m_refreshTimer;
+    QPointer<HomeLayout> m_layout;
+    QVariantMap m_decisions;
+    QVariantList m_discovered;
+    QMap<QString,qint64> m_events;
+    QSet<QString> m_seen, m_dismissed;
+    QString m_statePath, m_error, m_requestedId;
+    bool m_writable=true;
+    int m_revision=0;
+    int m_scanTicks=0;
 };

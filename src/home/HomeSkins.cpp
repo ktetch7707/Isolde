@@ -1,6 +1,8 @@
+#include "settings/ProfileManager.h"
 #include "HomeLayout.h"
 #include "ComponentSchema.h"
 #include "ManagedGif.h"
+#include "HomeDesignData.h"
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -9,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSet>
 #include <QRegularExpression>
 #include <QUuid>
 #include <functional>
@@ -29,26 +32,31 @@ bool writeObject(const QString &path, const QJsonObject &object) {
 bool validName(const QString &name) {
     return !name.trimmed().isEmpty() && name.trimmed().size() <= 80 && !name.contains(QChar::Null);
 }
-// Only managed artwork paths are traversed. Skins never read arbitrary paths or URLs.
-QJsonValue artwork(QJsonValue value, const std::function<QString(const QString &)> &visit) {
-    if (value.isObject()) {
-        auto object = value.toObject();
-        for (auto it = object.begin(); it != object.end(); ++it) {
-            if ((it.key() == "wallpaper" || it.key() == "customLogo") && it.value().isString() && !it.value().toString().isEmpty()) it.value() = visit(it.value().toString());
-            else it.value() = artwork(it.value(), visit);
-        }
-        return object;
+QVariantList starterTemplates(const QString &defaultPath) {
+    const auto relative = QStringLiteral("skins/templates.json");
+    auto catalog = readObject(QDir(QFileInfo(defaultPath).absolutePath()).filePath(relative));
+    if (catalog.isEmpty()) catalog = readObject(":/config/" + relative);
+    const auto entries = catalog["templates"].toArray();
+    if (catalog.size() != 2 || catalog["schemaVersion"].toDouble(-1) != 1
+        || !catalog["templates"].isArray() || entries.isEmpty() || entries.size() > 16) return {};
+    QVariantList result;
+    QSet<QString> ids;
+    for (const auto &value : entries) {
+        const auto entry = value.toObject();
+        const auto id = entry["id"].toString();
+        if (entry.size() != 3 || !ComponentSchema::safeId(id) || ids.contains(id)
+            || QStringList{"default", "lounge", "pastel"}.contains(id)
+            || !validName(entry["name"].toString())
+            || !entry["description"].isString() || entry["description"].toString().trimmed().isEmpty()
+            || entry["description"].toString().size() > 240) return {};
+        ids.insert(id);
+        result.append(QVariantMap{{"id", "builtin-" + id}, {"name", entry["name"].toString()},
+                                 {"description", entry["description"].toString()}, {"builtIn", true}});
     }
-    if (value.isArray()) {
-        auto array = value.toArray();
-        for (qsizetype i = 0; i < array.size(); ++i) array[i] = artwork(array[i], visit);
-        return array;
-    }
-    return value;
+    return result;
 }
-bool safeArtwork(const QString &path) {
-    return QRegularExpression("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$").match(path).hasMatch();
-}
+using HomeDesignData::artwork;
+using HomeDesignData::safeArtwork;
 }
 
 QString HomeLayout::skinDirectory() const {
@@ -60,6 +68,7 @@ QVariantList HomeLayout::skins() const {
         QVariantMap{{"id", "builtin-lounge"}, {"name", tr("Cinema lounge")}, {"builtIn", true}, {"description", tr("Dark reference design · sample artwork and cards")}},
         QVariantMap{{"id", "builtin-pastel"}, {"name", tr("Pastel sky")}, {"builtIn", true}, {"description", tr("Cloud wallpaper, glass panels, installed apps and Kodi viewing history")}}
     };
+    result.append(starterTemplates(m_defaultPath));
     const QDir directory(skinDirectory());
     for (const auto &file : directory.entryList({"*.json"}, QDir::Files, QDir::Name)) {
         const auto id = QFileInfo(file).completeBaseName();
@@ -92,6 +101,7 @@ QString HomeLayout::saveSkin(const QString &name) {
     setError({}); emit skinsChanged(); return id;
 }
 bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &assets, bool addMissingPages) {
+    if (!ProfileManager::allows("edit")) { setError(tr("Editing is restricted in Settings > Profiles.")); return false; }
     const auto previous = documentData();
     const auto legacy = m_legacyDocument;
     QJsonArray mergedPages=m_pages;
@@ -146,19 +156,26 @@ bool HomeLayout::applySkinDocument(QJsonObject document, const QJsonObject &asse
     }
     emit layoutChanged(); return true;
 }
-bool HomeLayout::applySkin(const QString &id) {
+QJsonObject HomeLayout::skinSnapshot(const QString &id) const {
     if (id == "builtin-default") {
         QFile file(m_defaultPath);
-        if (!file.open(QIODevice::ReadOnly)) { setError(tr("Unable to read the default skin.")); return false; }
-        return applySkinDocument(QJsonDocument::fromJson(file.readAll()).object(), {});
+        if (!file.open(QIODevice::ReadOnly) || file.size() > MaxLayoutSize) return {};
+        return {{"schemaVersion", 1}, {"layout", QJsonDocument::fromJson(file.readAll()).object()}, {"assets", QJsonObject{}}};
     }
     QJsonObject skin;
-    if (id == "builtin-lounge" || id == "builtin-pastel") {
+    bool starter = false;
+    for (const auto &entry : starterTemplates(m_defaultPath))
+        if (entry.toMap()["id"].toString() == id) starter = true;
+    if (id == "builtin-lounge" || id == "builtin-pastel" || starter) {
         const auto relative = "skins/" + id.mid(8) + ".json";
         skin = readObject(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath(relative));
         if (skin.isEmpty()) skin = readObject(":/config/" + relative);
     } else if (id.startsWith("user-") && ComponentSchema::safeId(id)) skin = readObject(QDir(skinDirectory()).filePath(id + ".json"));
-    if (skin["schemaVersion"].toInt() != 1 || !skin["layout"].isObject() || !skin["assets"].isObject()) {
+    return skin;
+}
+bool HomeLayout::applySkin(const QString &id) {
+    const auto skin = skinSnapshot(id);
+    if (skin["schemaVersion"].toDouble(-1) != 1 || !skin["layout"].isObject() || !skin["assets"].isObject()) {
         setError(tr("This skin is missing or invalid.")); return false;
     }
     if(skin.contains("pagePolicy") && skin["pagePolicy"]!="add-missing") {setError(tr("Unsupported skin page policy."));return false;}

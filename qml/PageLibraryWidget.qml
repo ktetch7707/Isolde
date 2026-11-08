@@ -14,16 +14,16 @@ Item {
     property bool frozen:false
     property bool samplePreview:false
     property var sampleItems:[]
-    readonly property bool games:style.libraryKind==="games"
-    readonly property bool unifiedGuide:style.libraryKind==="channels" && typeof guideController!=="undefined" && !!guideController
+    readonly property bool games:!samplePreview && style.libraryKind==="games"
+    readonly property bool unifiedGuide:!samplePreview && style.libraryKind==="channels" && typeof guideController!=="undefined" && !!guideController
     property var heldClient:null
     property var frozenItems:[]
     property int frozenIndex:-1
-    readonly property var client:games || unifiedGuide?null:frozen?heldClient:provider ? provider.client(widgetKey,style) : null
+    readonly property var client:games || unifiedGuide || samplePreview?null:frozen?heldClient:provider ? provider.client(widgetKey,style) : null
     onClientChanged:if(!frozen)heldClient=client
     onFrozenChanged:{if(frozen){frozenItems=heldClient?heldClient.items.slice():[];frozenIndex=heldClient?heldClient.selectedIndex:-1}else frozenItems=[]}
     readonly property var liveItems:frozen?frozenItems:client?client.items:[]
-    readonly property bool usingSamples:readOnly && samplePreview && !liveItems.length
+    readonly property bool usingSamples:readOnly && samplePreview
     readonly property var displayedItems:usingSamples?sampleItems:liveItems.slice(0,style.libraryLimit || 50)
     onDisplayedItemsChanged:Qt.callLater(function(){
         if(!root.frozen && root.client && !root.client.busy && root.displayedItems.length>0

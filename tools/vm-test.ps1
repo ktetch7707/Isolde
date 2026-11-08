@@ -1,13 +1,14 @@
 param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
-    [ValidateSet('all','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_selection','studio_artwork','studio_colors','studio_workflows','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
-    [ValidateSet('studio','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string[]]$Cases = @('studio','lounge','pastel'),
+    [ValidateSet('all','sources','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_safety','studio_selection','studio_artwork','studio_visuals','shell_appearance','studio_colors','studio_workflows','studio_cutover','studio_designs','studio_design_contracts','studio_reuse','studio_performance','studio_remaining','studio_closure_regressions','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
+    [string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [string]$GuideReplayPlan,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ReuseFullRun,
     [switch]$Capture,
     [switch]$Storage,
+    [ValidateRange(0,2147483647)][int]$OrphanVisualPid=0,
     [string[]]$RestoreSourceRunIds = @(),
     [string[]]$BackedUpSourceRunIds = @(),
     [switch]$GuideDiagnostics,
@@ -17,7 +18,12 @@ param(
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
-if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation','studio_selection','studio_artwork'))) { throw 'ReuseFullRun requires Test with a supported bounded QML suite.' }
+if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
+$validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')
+$Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })
+$invalidCases = @($Cases | Where-Object { $_ -notin $validCases })
+if (!$Cases.Count -or $invalidCases.Count) { throw "Cases must be comma-separated values from: $($validCases -join ', ')" }
+if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation','studio_selection','studio_artwork','studio_visuals','shell_appearance'))) { throw 'ReuseFullRun requires Test with a supported bounded QML suite.' }
 if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
 if ($RestoreSourceRunIds.Count -gt 32 -or ($RestoreSourceRunIds.Count -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'artifacts'))) { throw 'Archive restoration requires artifact maintenance and at most 32 source runs.' }
 if ($BackedUpSourceRunIds.Count -gt 128 -or ($BackedUpSourceRunIds.Count -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'artifacts'))) { throw 'Archive pruning requires artifact maintenance and at most 128 backed-up source runs.' }
@@ -43,7 +49,7 @@ $transport = Join-Path $local 'transport.log'
 $guestRun = $null; $exitCode = 0
 $launched = $false
 try {
-    $homeResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "python3 -c 'from pathlib import Path; print(Path.home())'") -TimeoutSeconds 25 -Log $transport
+    $homeResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "python3 -c 'from pathlib import Path; import shutil; print(Path.home()); print(shutil.disk_usage(Path.home()).free)'") -TimeoutSeconds 25 -Log $transport
     $guestHome = $homeResult.Lines | Where-Object { $_ -match '^/[A-Za-z0-9/_.-]+$' } | Select-Object -Last 1
     if (!$guestHome) { throw 'Could not determine a safe guest home path.' }
     $guestRun = "$guestHome/isolde-oracle/runs/$RunId"
@@ -60,14 +66,10 @@ try {
         if ($expected -notmatch '^[a-f0-9]{64}$' -or (Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Saved source archive checksum mismatch.' }
         $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($archive,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/recovery-$expected.tar.gz")) -TimeoutSeconds 40 -Log $transport
     }
-    if ($BackedUpSourceRunIds.Count) {
-        $backups = foreach ($sourceRun in $BackedUpSourceRunIds) {
-            if ($sourceRun -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') { throw 'Unsafe backup run ID.' }
-            $archive = Join-Path $repo "build/vm-oracle/$sourceRun/snapshot/source.tar.gz"
-            $expected = ((Get-Content -LiteralPath (Join-Path $repo "build/vm-oracle/$sourceRun/snapshot/archive.sha256") -Raw) -split '\s+')[0]
-            if ($expected -notmatch '^[a-f0-9]{64}$' -or (Get-FileHash -LiteralPath $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Host backup checksum mismatch.' }
-            @{runId=$sourceRun;sha256=$expected}
-        }
+    $guestFree = $homeResult.Lines | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1
+    if (!$guestFree) { throw 'Could not determine guest free space.' }
+    if ($BackedUpSourceRunIds.Count -or ($Action -eq 'Test' -and [long]$guestFree -lt 3GB)) {
+        $backups = @(Get-OracleSourceBackups -Root (Join-Path $repo 'build/vm-oracle') -RunIds $BackedUpSourceRunIds)
         $receipt = Join-Path $local 'host-source-backups.json'
         ConvertTo-Json -InputObject @($backups) | Set-Content -LiteralPath $receipt -Encoding utf8NoBOM
         $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($receipt,"isolde-dev@127.0.0.1:$guestRun/host-source-backups.json")) -TimeoutSeconds 30 -Log $transport
@@ -87,7 +89,19 @@ try {
             $featureDigest = ''
             $studioDigest = ''
             $historyDigest = ''
-            if ($case -in @('studio','desktop','collections','catalog')) {
+            $referenceDigest = ''
+            $referenceCollectionsDigest = ''
+            if ($case -in @('lounge','pastel')) {
+                $helper = Join-Path $PSScriptRoot 'home-reference-acceptance.py'
+                $referenceDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/reference-helper-$referenceDigest.py")) -TimeoutSeconds 30 -Log $transport
+            }
+            if ($case -in @('lounge','pastel')) {
+                $collectionsHelper = Join-Path $PSScriptRoot 'reference_collections.py'
+                $referenceCollectionsDigest = (Get-FileHash -LiteralPath $collectionsHelper -Algorithm SHA256).Hash.ToLowerInvariant()
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($collectionsHelper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/reference-collections-helper-$referenceCollectionsDigest.py")) -TimeoutSeconds 30 -Log $transport
+            }
+            if ($case -in @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog')) {
                 $helper = Join-Path $PSScriptRoot 'home-components-acceptance.py'
                 $studioDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/studio-helper-$studioDigest.py")) -TimeoutSeconds 30 -Log $transport
@@ -97,7 +111,7 @@ try {
                 $featureDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-features-$featureDigest.py")) -TimeoutSeconds 30 -Log $transport
             }
-            if ($case -eq 'history') {
+            if ($case -in @('history','pages')) {
                 $helper = Join-Path $PSScriptRoot 'tv-library-acceptance.py'
                 $historyDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/history-helper-$historyDigest.py")) -TimeoutSeconds 30 -Log $transport
@@ -110,19 +124,20 @@ try {
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -ReferenceHelperDigest $referenceDigest -ReferenceCollectionsDigest $referenceCollectionsDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
         }
     } else {
         $remoteAction = $Action.ToLowerInvariant()
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
         if ($Storage) { $command += ' --storage' }
+        if ($OrphanVisualPid) { $command += " --orphan-visual-pid $OrphanVisualPid" }
         if ($GuideDiagnostics) { $command += ' --guide-diagnostics' }
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($ReuseFullRun) { $command += " --reuse-full-run $ReuseFullRun" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
         if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'artifacts') {
-            $maintenanceFiles = @('tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt')
+            $maintenanceFiles = @('tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/reference_collections.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt','config/studio-defaults.json','tests/fixtures/shell-theme-routes.json')
             $maintenanceLines = foreach ($relative in $maintenanceFiles) {
                 $hash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
                 "$hash  $relative"
@@ -131,7 +146,7 @@ try {
             [IO.File]::WriteAllText($maintenanceManifest,($maintenanceLines -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
             $maintenanceHash = (Get-FileHash -LiteralPath $maintenanceManifest -Algorithm SHA256).Hash.ToLowerInvariant()
             $bundle = "$guestHome/isolde-oracle/bin/maintenance-$driverHash-$maintenanceHash"
-            $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "mkdir -p $bundle/tools $bundle/tests $bundle/qml") -TimeoutSeconds 25 -Log $transport
+            $null = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + "mkdir -p $bundle/tools $bundle/tests $bundle/qml $bundle/config $bundle/tests/fixtures") -TimeoutSeconds 25 -Log $transport
             foreach ($relative in $maintenanceFiles) {
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @((Join-Path $repo $relative),"isolde-dev@127.0.0.1:$bundle/$relative")) -TimeoutSeconds 30 -Log $transport
             }

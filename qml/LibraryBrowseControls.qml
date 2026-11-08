@@ -2,6 +2,7 @@ import QtQuick
 
 Rectangle {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
     objectName:"libraryBrowseControls"
     property var provider:null
     property var appearance:({})
@@ -13,16 +14,19 @@ Rectangle {
     property int selectedIndex: 0
     property var selectedCollection: null
     property var pendingItem: null
-    readonly property bool active: mode.length > 0
-    readonly property bool typing: ["search", "save", "savePlaylist", "tag", "genre", "rename", "newManual"].indexOf(mode) >= 0
-    readonly property var rows: mode==="playlists"?["Save current view as playlist…","Refresh saved playlists"].concat(playlistCatalog?(playlistCatalog.items || []).map(i=>i.title):[]):mode==="playlistSaveState"?(savedPlaylistFile?["Return to library","Browse saved playlists"]:["Return to library","Retry name / save"]):mode === "collections" ? ["New Kodi tag view…", "New genre view…"].concat(kodiMedia.collections.map(c => c.name + " · " + c.media))
+    property string playlistManageMode: ""
+    property int pendingPlaylistIndex: -1
+    readonly property bool active: mode.length > 0 || playlistManageMode.length > 0
+    readonly property bool typing: ["search", "save", "savePlaylist", "tag", "genre", "rename", "newManual", "renamePlaylist", "reorderPlaylist"].indexOf(mode) >= 0
+    readonly property var playlistItem: pendingPlaylistIndex >= 0 && playlistCatalog && pendingPlaylistIndex < playlistCatalog.items.length ? playlistCatalog.items[pendingPlaylistIndex] : null
+    readonly property var rows: playlistManageMode==="manage"?(playlistItem?["Rename…","Reorder…","Delete…","Back"]:["Back"]):playlistManageMode==="renamePlaylist"?["Enter new name","Back"]:playlistManageMode==="deletePlaylist"?["Confirm delete","Cancel"]:playlistManageMode==="reorderPlaylist"?["Enter new order (e.g. 2,0,1)","Back"]:mode==="playlists"?["Save current view as playlist…","Refresh saved playlists"].concat(playlistCatalog?(playlistCatalog.items || []).map(i=>i.title+" · manage"):[]):mode==="playlistSaveState"?(savedPlaylistFile?["Return to library","Browse saved playlists"]:["Return to library","Retry name / save"]):mode === "collections" ? ["New Kodi tag view…", "New genre view…"].concat(kodiMedia.collections.map(c => c.name + " · " + c.media))
         : mode === "addSelected" ? addSelectedRows()
         : mode === "remove" ? ["Cancel", "Remove collection definition (keep Kodi media)"]
         : ["Open collection", "Rename", "Remove…",
             selectedCollection && selectedCollection.home ? "Hide shelf from Home" : "Show shelf on Home",
             "Move earlier", "Move later", "Shelf " + (selectedCollection && selectedCollection.media === "shows" ? "shows" : "movies")
                 + ": " + (selectedCollection && selectedCollection.count ? selectedCollection.count : 6) + " · change", "Back"]
-    visible: active; color: appearance.surfaceColor || "#10182B"; radius: 14
+    visible: active; color: shell.surface; radius: shell.radius
     function manualCollectionsFor(item) {
         const media = item && item.mediaType === "tvshow" ? "shows" : "movies"
         return kodiMedia.collections.filter(c => c.kind === "manual" && c.media === media)
@@ -50,6 +54,32 @@ Rectangle {
     }
     function handleCommand(command) {
         if (typing) { keyboard.handleCommand(command); return }
+        if(playlistManageMode.length){
+            if(command===inputManager.back){playlistManageMode="";pendingPlaylistIndex=-1;selectedIndex=0;return}
+            if(command===inputManager.navigateUp)selectedIndex=Math.max(0,selectedIndex-1)
+            else if(command===inputManager.navigateDown)selectedIndex=Math.min(rows.length-1,selectedIndex+1)
+            else if(command===inputManager.confirm){
+                if(playlistManageMode==="manage"){
+                    if(selectedIndex===0){playlistManageMode="renamePlaylist";selectedIndex=0;return}
+                    else if(selectedIndex===1){playlistManageMode="reorderPlaylist";selectedIndex=0;return}
+                    else if(selectedIndex===2){playlistManageMode="deletePlaylist";selectedIndex=0;return}
+                    else {playlistManageMode="";pendingPlaylistIndex=-1;selectedIndex=0;return}
+                }else if(playlistManageMode==="renamePlaylist"){
+                    if(selectedIndex===0){mode="renamePlaylist";return}
+                    playlistManageMode="manage";selectedIndex=0;return
+                }else if(playlistManageMode==="reorderPlaylist"){
+                    if(selectedIndex===0){mode="reorderPlaylist";return}
+                    playlistManageMode="manage";selectedIndex=0;return
+                }else if(playlistManageMode==="deletePlaylist"){
+                    if(selectedIndex===0 && playlistItem && playlistItem.playlistName){
+                        kodiMedia.deletePlaylist(playlistItem.playlistName)
+                        if(playlistCatalog && !kodiMedia.busy)provider.refresh(playlistCatalog)
+                    }
+                    playlistManageMode="";pendingPlaylistIndex=-1;selectedIndex=0;return
+                }
+            }
+            return
+        }
         if(mode==="playlists" || mode==="playlistSaveState"){
             if(command===inputManager.back){mode="";return}
             if(command===inputManager.navigateUp)selectedIndex=Math.max(0,selectedIndex-1)
@@ -59,7 +89,7 @@ Rectangle {
                     if(selectedIndex===0)mode="";else if(!kodiMedia.busy)begin(savedPlaylistFile?"playlists":"savePlaylist")
                 }else if(selectedIndex===0)begin("savePlaylist")
                 else if(selectedIndex===1){if(playlistCatalog)provider.refresh(playlistCatalog)}
-                else {const entry=playlistCatalog?playlistCatalog.items[selectedIndex-2]:null;if(entry && !kodiMedia.busy){kodiMedia.openView(kodiMedia.mediaKind,"playlist",entry.playlistName);mode=""}}
+                else {const entry=playlistCatalog?playlistCatalog.items[selectedIndex-2]:null;if(entry && !kodiMedia.busy){pendingPlaylistIndex=selectedIndex-2;playlistManageMode="manage";selectedIndex=0}}
             }
             return
         }
@@ -99,7 +129,7 @@ Rectangle {
         }
     }
     MouseArea { anchors.fill: parent }
-    Text { id: heading; x: 30; y: 25; width: parent.width - 60; color: root.appearance.textColor || "#F8FAFC"; font.pixelSize: 27*(root.appearance.typographyScale || 1)
+    Text { font.family: shell.fontFamily; id: heading; x: 30; y: 25; width: parent.width - 60; color: shell.text; font.pixelSize: 27*(root.appearance.typographyScale || 1)
         text:root.mode==="playlists"?"Saved playlists · "+kodiMedia.mediaKind:root.mode==="savePlaylist"?"Name this Kodi playlist":root.mode==="playlistSaveState"?"Save playlist":root.mode === "search" ? "SEARCH LOCAL " + kodiMedia.mediaKind.toUpperCase() + " · WEB OFF"
             : root.mode === "tag" ? "KODI TAG · enter the exact tag name"
             : root.mode === "genre" ? "GENRE · enter the exact genre"
@@ -125,21 +155,39 @@ Rectangle {
                 root.selectedIndex = 1 + kodiMedia.collections.length
             }
             else if (root.mode === "rename") { kodiMedia.renameCollection(root.selectedCollection.id, text); root.begin("collections") }
+            else if (root.mode === "renamePlaylist") {
+                if(!text.trim().length || text.trim().length>80)return
+                if(playlistItem && playlistItem.playlistName){
+                    kodiMedia.renamePlaylist(playlistItem.playlistName, text.trim())
+                    if(playlistCatalog && !kodiMedia.busy)provider.refresh(playlistCatalog)
+                }
+                mode="";playlistManageMode="";pendingPlaylistIndex=-1;return
+            }
+            else if (root.mode === "reorderPlaylist") {
+                if(!text.trim().length)return
+                const parts=text.trim().split(",").map(s=>parseInt(s.trim(),10))
+                if(parts.some(isNaN)||parts.some(i=>i<0)||new Set(parts).size!==parts.length)return
+                if(playlistItem && playlistItem.playlistName){
+                    kodiMedia.reorderPlaylist(playlistItem.playlistName, parts)
+                    if(playlistCatalog && !kodiMedia.busy)provider.refresh(playlistCatalog)
+                }
+                mode="";playlistManageMode="";pendingPlaylistIndex=-1;return
+            }
             else { kodiMedia.setView(root.mode, text); root.mode = "" }
         }
     }
     ListView {
         id: choices; x: 30; y: heading.y + heading.height + 20; width: parent.width - 60; height: parent.height - y - 90
-        visible: !root.typing; model: root.rows; clip: true; spacing: 8; currentIndex: root.selectedIndex
+        visible: !root.typing; model: root.rows; clip: true; spacing: 8 * shell.gapScale; currentIndex: root.selectedIndex
         highlightRangeMode: ListView.ApplyRange
         delegate: Rectangle {
             required property int index; required property string modelData
-            width: choices.width; height: 58; radius: 8; color: root.selectedIndex === index ? root.appearance.selectedColor || "#2B416B" : root.appearance.surfaceColor || "#172238";border.width:root.selectedIndex===index?2:0;border.color:root.appearance.focusColor || "#C994A5"
-            Text { anchors.fill: parent; anchors.margins: 14; color: root.appearance.textColor || "#F8FAFC"; font.pixelSize: 21*(root.appearance.typographyScale || 1); elide: Text.ElideRight; text: modelData }
+            width: choices.width; height: 58; radius: shell.radius; color: root.selectedIndex === index ? shell.selected : shell.surface;border.width:root.selectedIndex===index?2:0;border.color:root.selectedIndex===index?shell.selectedFocus:shell.focus
+            Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 14; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21*(root.appearance.typographyScale || 1); elide: Text.ElideRight; text: modelData }
             MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
         }
     }
-    Text { x: 30; anchors.bottom: parent.bottom; anchors.bottomMargin: 20; width: parent.width - 60; wrapMode: Text.WordWrap; color: root.appearance.mutedColor || "#D5B083"; font.pixelSize: 17*(root.appearance.typographyScale || 1)
-        text:root.mode==="playlistSaveState"?kodiMedia.playlistStatus:root.mode==="playlists"?(root.playlistCatalog?root.playlistCatalog.status:"Kodi unavailable · Back returns"):root.mode==="savePlaylist"?"Saves this library view as a playlist in Kodi. Back cancels without writing.":kodiMedia.collectionStatus || "Collections are reusable local rules. They do not move files or edit Kodi tags. Back cancels."
+    Text { font.family: shell.fontFamily; x: 30; anchors.bottom: parent.bottom; anchors.bottomMargin: 20; width: parent.width - 60; wrapMode: Text.WordWrap; color: shell.muted; font.pixelSize: 17*(root.appearance.typographyScale || 1)
+        text:playlistManageMode==="renamePlaylist"?"Enter new playlist name · Back cancels":playlistManageMode==="reorderPlaylist"?"Enter item order as comma-separated indices (e.g. 2,0,1) · Back cancels":playlistManageMode==="deletePlaylist"?"Delete playlist · " + (playlistItem?playlistItem.title:"") + " · Confirm or Back cancels":playlistManageMode==="manage"?"Manage playlist · " + (playlistItem?playlistItem.title:"") + " · Rename, reorder, or delete":root.mode==="playlistSaveState"?kodiMedia.playlistStatus:root.mode==="playlists"?(root.playlistCatalog?root.playlistCatalog.status:"Kodi unavailable · Back returns"):root.mode==="savePlaylist"?"Saves this library view as a playlist in Kodi. Back cancels without writing.":kodiMedia.collectionStatus || "Collections are reusable local rules. They do not move files or edit Kodi tags. Back cancels."
     }
 }

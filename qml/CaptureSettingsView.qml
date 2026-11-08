@@ -3,6 +3,9 @@ import QtMultimedia
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property int selectedIndex: 0
     property int keyboardMode: 0
     readonly property real leftColumnWidth: width * 0.46
@@ -109,58 +112,58 @@ Item {
 
     Row {
         anchors.fill: parent
-        spacing: 24
+        spacing: 24 * shell.gapScale
         Column {
             width: root.leftColumnWidth
             height: parent.height
-            spacing: 10
-            Text { text: "HDMI INPUTS"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold }
-            Text {
+            spacing: 10 * shell.gapScale
+            Text { font.family: shell.fontFamily; text: "HDMI INPUTS"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold }
+            Text { font.family: shell.fontFamily;
                 width: parent.width; text: "Choose the capture card and audio input. Then select the RS-232 port and a command format from the switch manual. No command is sent until you press Send test switch.";
-                color: "#9EABC1"; font.pixelSize: 16; wrapMode: Text.WordWrap
+                color: shell.muted; font.pixelSize: 16 * shell.textScale; wrapMode: Text.WordWrap
             }
             ListView {
                 id: optionList
-                width: parent.width; height: parent.height - 125; clip: true; spacing: 5
+                width: parent.width; height: parent.height - 125; clip: true; spacing: 5 * shell.gapScale
                 model: root.rows; currentIndex: root.selectedIndex
                 delegate: Rectangle {
                     required property int index
                     required property var modelData
                     width: optionList.width; height: 49; radius: 7
-                    color: root.selectedIndex === index ? "#2B416B" : "#111A2A"
+                    color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 2 : 1
-                    border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
-                    Text { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.42; text: modelData.name; color: "#F8FAFC"; font.pixelSize: 15; wrapMode: Text.WordWrap }
-                    Text { anchors.left: parent.left; anchors.leftMargin: parent.width * 0.43; anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.value; color: "#C8D3E5"; font.pixelSize: 14; elide: Text.ElideRight }
+                    border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
+                    Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width * 0.42; text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap }
+                    Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: parent.width * 0.43; anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: modelData.value; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 14 * shell.textScale; elide: Text.ElideRight }
                     MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.activateSelected() } }
                 }
             }
-            Text { width: parent.width; text: "‹ › Change · OK select/test · Back stop preview"; color: "#91A0BC"; font.pixelSize: 15 }
+            Text { font.family: shell.fontFamily; width: parent.width; text: "‹ › Change · OK select/test · Back stop preview"; color: shell.muted; font.pixelSize: 15 * shell.textScale }
         }
 
         Column {
             width: root.width - root.leftColumnWidth - 24
             height: parent.height
-            spacing: 10
+            spacing: 10 * shell.gapScale
             Rectangle {
-                width: parent.width; height: parent.height * 0.72; radius: 10; color: "#05080E"; clip: true
+                width: parent.width; height: parent.height * 0.72; radius: shell.radius; color: shell.input; clip: true
                 VideoOutput { id: previewOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit; visible: captureController.previewActive }
-                Text {
+                Text { font.family: shell.fontFamily;
                     anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
                     visible: !captureController.previewActive
                     text: "Preview is off\n\nChoose Start video preview to test the capture card without sending an RS-232 command."
-                    color: "#9EABC1"; font.pixelSize: 19
+                    color: shell.muted; font.pixelSize: 19 * shell.textScale
                 }
             }
-            Text { width: parent.width; text: captureController.status + "\n" + captureController.switchStatus; color: captureController.state === "error" || captureController.state === "no-signal" ? "#F2B8B5" : "#C8D3E5"; font.pixelSize: 17; wrapMode: Text.WordWrap }
-            Text {
+            Text { font.family: shell.fontFamily; width: parent.width; text: captureController.status + "\n" + captureController.switchStatus; color: captureController.state === "error" || captureController.state === "no-signal" ? shell.error : shell.text; font.pixelSize: 17 * shell.textScale; wrapMode: Text.WordWrap }
+            Text { font.family: shell.fontFamily;
                 width: parent.width; text: "Generic command formats are examples, not guaranteed switch protocols. Use the exact command from your switch manual. A sent command is not confirmation that routing changed; visually verify the source.";
-                color: "#E2C38C"; font.pixelSize: 15; wrapMode: Text.WordWrap
+                color: shell.warning; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap
             }
         }
     }
 
-    OnScreenKeyboard {
+    OnScreenKeyboard { appearance: root.appearance;
         id: keyboard
         anchors.fill: parent; anchors.margins: 34; z: 5; visible: root.keyboardMode !== 0
         onCanceled: root.keyboardMode = 0

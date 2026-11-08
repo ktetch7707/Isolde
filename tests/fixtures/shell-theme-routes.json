@@ -1,0 +1,779 @@
+[
+  {
+    "schemaVersion": 2,
+    "theme": {
+      "backgroundStart": "#0c3935",
+      "backgroundEnd": "#081f2d",
+      "surfaceColor": "#0c3935",
+      "selectedColor": "#f4e8ce",
+      "elevatedColor": "#f4e8ce",
+      "inputColor": "#f4e8ce",
+      "textColor": "#f4e8ce",
+      "mutedColor": "#f4e8ce",
+      "focusColor": "#ffdf78",
+      "motionEnabled": false,
+      "highContrast": true
+    },
+    "composition": {
+      "schemaVersion": 1,
+      "enabled": true,
+      "grid": {
+        "columns": 4,
+        "rows": 3,
+        "mode": "screen"
+      },
+      "pageNavigation": "none"
+    },
+    "categories": [],
+    "components": [
+      {
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "id": "open-themed-page",
+        "kind": "action",
+        "name": "Open themed page",
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        },
+        "action": {
+          "schemaVersion": 1,
+          "type": "open-page",
+          "pageId": "theme-origin"
+        },
+        "source": {
+          "schemaVersion": 1,
+          "provider": "shell",
+          "kind": "page",
+          "id": "theme-origin"
+        }
+      }
+    ],
+    "homePageId": "theme-home",
+    "pages": [
+      {
+        "id": "theme-home",
+        "name": "Palette Home",
+        "layout": {
+          "schemaVersion": 2,
+          "theme": {
+            "backgroundStart": "#19191e",
+            "backgroundEnd": "#101014",
+            "surfaceColor": "#202126",
+            "selectedColor": "#353039",
+            "textColor": "#f5f1f3",
+            "mutedColor": "#ccc6cf",
+            "focusColor": "#c994a5",
+            "motionEnabled": true,
+            "highContrast": false
+          },
+          "composition": {
+            "schemaVersion": 1,
+            "enabled": true,
+            "grid": {
+              "columns": 4,
+              "rows": 3,
+              "mode": "screen"
+            },
+            "pageNavigation": "none"
+          },
+          "categories": [],
+          "components": [
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "open-themed-page",
+              "kind": "action",
+              "name": "Open themed page",
+              "placement": {
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "action": {
+                "schemaVersion": 1,
+                "type": "open-page",
+                "pageId": "theme-origin"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "shell",
+                "kind": "page",
+                "id": "theme-origin"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "theme-origin",
+        "name": "Theme origin",
+        "layout": {
+          "schemaVersion": 2,
+          "theme": {
+            "backgroundStart": "#f5edf3",
+            "backgroundEnd": "#e9d8e3",
+            "surfaceColor": "#f5edf3",
+            "selectedColor": "#e9d8e3",
+            "textColor": "#241d2b",
+            "mutedColor": "#514b67",
+            "focusColor": "#6d3b69",
+            "motionEnabled": true,
+            "highContrast": false
+          },
+          "composition": {
+            "schemaVersion": 1,
+            "enabled": true,
+            "grid": {
+              "columns": 4,
+              "rows": 3,
+              "mode": "screen"
+            },
+            "pageNavigation": "none"
+          },
+          "categories": [],
+          "components": [
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "movies",
+              "kind": "app",
+              "name": "Movies",
+              "placement": {
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "movies",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "movies"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "movies"
+              }
+            },
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "shows",
+              "kind": "app",
+              "name": "Shows",
+              "placement": {
+                "x": 1,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "shows",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "shows"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "shows"
+              }
+            },
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "apps",
+              "kind": "app",
+              "name": "Apps",
+              "placement": {
+                "x": 2,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "app-store",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "app-store"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "app-store"
+              }
+            },
+            {
+              "id": "theme-apps",
+              "name": "Apps",
+              "kind": "widget",
+              "widgetType": "container",
+              "componentType": "container",
+              "placement": {
+                "x": 0,
+                "y": 1,
+                "width": 4,
+                "height": 1
+              },
+              "presentation": {
+                "showHeading": true,
+                "icon": "grid",
+                "surfaceOpacity": 0.35,
+                "radius": 18,
+                "layout": {
+                  "schemaVersion": 1,
+                  "mode": "row",
+                  "columns": 16,
+                  "rows": 1,
+                  "gap": 14,
+                  "padding": 12,
+                  "visibleColumns": 2,
+                  "wrap": false
+                },
+                "headingSize": 24
+              },
+              "appCollection": {
+                "mode": "all",
+                "ids": [],
+                "showStore": false
+              },
+              "family": "app-bar",
+              "schemaVersion": 1,
+              "source": {
+                "schemaVersion": 1,
+                "provider": "shell",
+                "kind": "container"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "theme": {
+      "backgroundStart": "#19191e",
+      "backgroundEnd": "#101014",
+      "surfaceColor": "#202126",
+      "selectedColor": "#353039",
+      "textColor": "#f5f1f3",
+      "mutedColor": "#ccc6cf",
+      "focusColor": "#c994a5",
+      "motionEnabled": true,
+      "highContrast": false
+    },
+    "composition": {
+      "schemaVersion": 1,
+      "enabled": true,
+      "grid": {
+        "columns": 4,
+        "rows": 3,
+        "mode": "screen"
+      },
+      "pageNavigation": "none"
+    },
+    "categories": [],
+    "components": [
+      {
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "id": "open-themed-page",
+        "kind": "action",
+        "name": "Open themed page",
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        },
+        "action": {
+          "schemaVersion": 1,
+          "type": "open-page",
+          "pageId": "theme-origin"
+        },
+        "source": {
+          "schemaVersion": 1,
+          "provider": "shell",
+          "kind": "page",
+          "id": "theme-origin"
+        }
+      }
+    ],
+    "homePageId": "theme-home",
+    "pages": [
+      {
+        "id": "theme-home",
+        "name": "Palette Home",
+        "layout": {
+          "schemaVersion": 2,
+          "theme": {
+            "backgroundStart": "#f5edf3",
+            "backgroundEnd": "#e9d8e3",
+            "surfaceColor": "#f5edf3",
+            "selectedColor": "#e9d8e3",
+            "textColor": "#241d2b",
+            "mutedColor": "#514b67",
+            "focusColor": "#6d3b69",
+            "motionEnabled": true,
+            "highContrast": false
+          },
+          "composition": {
+            "schemaVersion": 1,
+            "enabled": true,
+            "grid": {
+              "columns": 4,
+              "rows": 3,
+              "mode": "screen"
+            },
+            "pageNavigation": "none"
+          },
+          "categories": [],
+          "components": [
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "open-themed-page",
+              "kind": "action",
+              "name": "Open themed page",
+              "placement": {
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "action": {
+                "schemaVersion": 1,
+                "type": "open-page",
+                "pageId": "theme-origin"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "shell",
+                "kind": "page",
+                "id": "theme-origin"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "theme-origin",
+        "name": "Theme origin",
+        "layout": {
+          "schemaVersion": 2,
+          "theme": {
+            "backgroundStart": "#0c3935",
+            "backgroundEnd": "#081f2d",
+            "surfaceColor": "#0c3935",
+            "selectedColor": "#f4e8ce",
+            "elevatedColor": "#f4e8ce",
+            "inputColor": "#f4e8ce",
+            "textColor": "#f4e8ce",
+            "mutedColor": "#f4e8ce",
+            "focusColor": "#ffdf78",
+            "motionEnabled": false,
+            "highContrast": true
+          },
+          "composition": {
+            "schemaVersion": 1,
+            "enabled": true,
+            "grid": {
+              "columns": 4,
+              "rows": 3,
+              "mode": "screen"
+            },
+            "pageNavigation": "none"
+          },
+          "categories": [],
+          "components": [
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "movies",
+              "kind": "app",
+              "name": "Movies",
+              "placement": {
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "movies",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "movies"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "movies"
+              }
+            },
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "shows",
+              "kind": "app",
+              "name": "Shows",
+              "placement": {
+                "x": 1,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "shows",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "shows"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "shows"
+              }
+            },
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "apps",
+              "kind": "app",
+              "name": "Apps",
+              "placement": {
+                "x": 2,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "app-store",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "app-store"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "app-store"
+              }
+            },
+            {
+              "id": "theme-apps",
+              "name": "Apps",
+              "kind": "widget",
+              "widgetType": "container",
+              "componentType": "container",
+              "placement": {
+                "x": 0,
+                "y": 1,
+                "width": 4,
+                "height": 1
+              },
+              "presentation": {
+                "showHeading": true,
+                "icon": "grid",
+                "surfaceOpacity": 0.35,
+                "radius": 18,
+                "layout": {
+                  "schemaVersion": 1,
+                  "mode": "row",
+                  "columns": 16,
+                  "rows": 1,
+                  "gap": 14,
+                  "padding": 12,
+                  "visibleColumns": 2,
+                  "wrap": false
+                },
+                "headingSize": 24
+              },
+              "appCollection": {
+                "mode": "all",
+                "ids": [],
+                "showStore": false
+              },
+              "family": "app-bar",
+              "schemaVersion": 1,
+              "source": {
+                "schemaVersion": 1,
+                "provider": "shell",
+                "kind": "container"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "schemaVersion": 2,
+    "theme": {
+      "backgroundStart": "#f5edf3",
+      "backgroundEnd": "#e9d8e3",
+      "surfaceColor": "#f5edf3",
+      "selectedColor": "#e9d8e3",
+      "textColor": "#241d2b",
+      "mutedColor": "#514b67",
+      "focusColor": "#6d3b69",
+      "motionEnabled": true,
+      "highContrast": false
+    },
+    "composition": {
+      "schemaVersion": 1,
+      "enabled": true,
+      "grid": {
+        "columns": 4,
+        "rows": 3,
+        "mode": "screen"
+      },
+      "pageNavigation": "none"
+    },
+    "categories": [],
+    "components": [
+      {
+        "schemaVersion": 1,
+        "componentType": "launcher",
+        "id": "open-themed-page",
+        "kind": "action",
+        "name": "Open themed page",
+        "placement": {
+          "x": 0,
+          "y": 0,
+          "width": 1,
+          "height": 1
+        },
+        "action": {
+          "schemaVersion": 1,
+          "type": "open-page",
+          "pageId": "theme-origin"
+        },
+        "source": {
+          "schemaVersion": 1,
+          "provider": "shell",
+          "kind": "page",
+          "id": "theme-origin"
+        }
+      }
+    ],
+    "homePageId": "theme-home",
+    "pages": [
+      {
+        "id": "theme-home",
+        "name": "Palette Home",
+        "layout": {
+          "schemaVersion": 2,
+          "theme": {
+            "backgroundStart": "#0c3935",
+            "backgroundEnd": "#081f2d",
+            "surfaceColor": "#0c3935",
+            "selectedColor": "#f4e8ce",
+            "elevatedColor": "#f4e8ce",
+            "inputColor": "#f4e8ce",
+            "textColor": "#f4e8ce",
+            "mutedColor": "#f4e8ce",
+            "focusColor": "#ffdf78",
+            "motionEnabled": false,
+            "highContrast": true
+          },
+          "composition": {
+            "schemaVersion": 1,
+            "enabled": true,
+            "grid": {
+              "columns": 4,
+              "rows": 3,
+              "mode": "screen"
+            },
+            "pageNavigation": "none"
+          },
+          "categories": [],
+          "components": [
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "open-themed-page",
+              "kind": "action",
+              "name": "Open themed page",
+              "placement": {
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "action": {
+                "schemaVersion": 1,
+                "type": "open-page",
+                "pageId": "theme-origin"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "shell",
+                "kind": "page",
+                "id": "theme-origin"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "theme-origin",
+        "name": "Theme origin",
+        "layout": {
+          "schemaVersion": 2,
+          "theme": {
+            "backgroundStart": "#19191e",
+            "backgroundEnd": "#101014",
+            "surfaceColor": "#202126",
+            "selectedColor": "#353039",
+            "textColor": "#f5f1f3",
+            "mutedColor": "#ccc6cf",
+            "focusColor": "#c994a5",
+            "motionEnabled": true,
+            "highContrast": false
+          },
+          "composition": {
+            "schemaVersion": 1,
+            "enabled": true,
+            "grid": {
+              "columns": 4,
+              "rows": 3,
+              "mode": "screen"
+            },
+            "pageNavigation": "none"
+          },
+          "categories": [],
+          "components": [
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "movies",
+              "kind": "app",
+              "name": "Movies",
+              "placement": {
+                "x": 0,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "movies",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "movies"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "movies"
+              }
+            },
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "shows",
+              "kind": "app",
+              "name": "Shows",
+              "placement": {
+                "x": 1,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "shows",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "shows"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "shows"
+              }
+            },
+            {
+              "schemaVersion": 1,
+              "componentType": "launcher",
+              "id": "apps",
+              "kind": "app",
+              "name": "Apps",
+              "placement": {
+                "x": 2,
+                "y": 0,
+                "width": 1,
+                "height": 1
+              },
+              "appId": "app-store",
+              "action": {
+                "schemaVersion": 1,
+                "type": "launch-app",
+                "appId": "app-store"
+              },
+              "source": {
+                "schemaVersion": 1,
+                "provider": "apps",
+                "kind": "app",
+                "id": "app-store"
+              }
+            },
+            {
+              "id": "theme-apps",
+              "name": "Apps",
+              "kind": "widget",
+              "widgetType": "container",
+              "componentType": "container",
+              "placement": {
+                "x": 0,
+                "y": 1,
+                "width": 4,
+                "height": 1
+              },
+              "presentation": {
+                "showHeading": true,
+                "icon": "grid",
+                "surfaceOpacity": 0.35,
+                "radius": 18,
+                "layout": {
+                  "schemaVersion": 1,
+                  "mode": "row",
+                  "columns": 16,
+                  "rows": 1,
+                  "gap": 14,
+                  "padding": 12,
+                  "visibleColumns": 2,
+                  "wrap": false
+                },
+                "headingSize": 24
+              },
+              "appCollection": {
+                "mode": "all",
+                "ids": [],
+                "showStore": false
+              },
+              "family": "app-bar",
+              "schemaVersion": 1,
+              "source": {
+                "schemaVersion": 1,
+                "provider": "shell",
+                "kind": "container"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

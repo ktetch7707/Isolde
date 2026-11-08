@@ -24,6 +24,13 @@ def run(*args, **kwargs):
     return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
 
 
+def default_theme_matches(actual, expected):
+    """Object key order is irrelevant; only color/text spelling ignores case."""
+    return all(actual.get(key).lower() == value.lower()
+               if isinstance(value, str) and isinstance(actual.get(key), str)
+               else actual.get(key) == value for key, value in expected.items())
+
+
 def collection_review(document):
     """Saved structure identifies required reviews, never provider population.
 
@@ -362,19 +369,37 @@ def main():
                 key("Up",30); key("Right"); key("Return")  # Recovery -> Edit Home.
                 defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
                 visible_pages=len(defaults.get("pages",[]))+int(defaults.get("rootPage",{}).get("visible",True))
-                key("Down",visible_pages+4); key("Return")  # Studio -> Saved designs.
+                def menu(action, document=None):
+                    document=document if document is not None else json.loads(layout.read_text()) if layout.exists() else defaults
+                    pages=len(document.get("pages",[]))+int(document.get("rootPage",{}).get("visible",True))
+                    offsets={"designs":4,"apply":7}
+                    key("Up",30);key("Down");key("Down",1+pages+offsets[action]);key("Return")
+                def manage():
+                    menu("designs");key("Down",4);key("Return")
+                def apply_library_choice(index):
+                    if index==0: target=defaults
+                    elif index in (1,2): target=json.loads((Path(__file__).resolve().parents[1]/('config/skins/'+('lounge' if index==1 else 'pastel')+'.json')).read_text())["layout"]
+                    else: target=json.loads(next((config/'skins').glob('user-*.json')).read_text())["layout"]
+                    key("Up",30);key("Down",index);key("Return")
+                    key("Down");key("Return")  # Explicit whole-interface scope.
+                    key("Up");key("Return")  # Use this draft; no write yet.
+                    menu("apply",target);key("Return")
+                # Already in the initial Studio menu at Add page.
+                key("Down",visible_pages+5);key("Return");key("Down",4);key("Return")
                 if args.capture_library: captured("library")
                 preset_index = 2 if case.name == "home-pastel-reference" else 1
-                key("Down",preset_index); key("Return"); key("Return")
+                apply_library_choice(preset_index)
                 expect(layout.exists,"Built-in skin applied from Settings")
-                key("Right"); key("Return")  # Save current as new skin.
-                key("Down",20); key("Return")  # Accept the default name with the remote keyboard.
+                manage();key("Right");key("Return")  # Save applied design as a personal skin.
+                key("Down",20);key("Return")
                 skin_directory = config / "skins"
                 expect(lambda: len(list(skin_directory.glob("user-*.json"))) == 1,"Personal skin saved from Settings")
                 before_switch = layout.read_bytes()
-                key("Left"); key("Up",30); key("Return"); key("Return")  # Apply default.
+                key("Left");apply_library_choice(0)
                 expect(lambda: not json.loads(layout.read_bytes()).get("composition"),"Default selected in skin library")
-                key("Down",3); key("Return"); key("Return")  # Reapply personal skin.
+                manage()
+                templates=json.loads((Path(__file__).resolve().parents[1]/"config/skins/templates.json").read_text())["templates"]
+                apply_library_choice(3+len(templates))
                 expect(lambda: layout.read_bytes() == before_switch,"Saved skin round trip passed")
                 key("Escape"); key("Escape"); key("Escape")
                 key("Home")  # Capture the destination after the explicit shell return, independent of queued Back events.
@@ -455,13 +480,14 @@ def main():
             if args.capture_library: captured("editor")
             if args.inspect: captured("resetmenu")
             current_document=json.loads(layout.read_text())
-            editor_index=5+len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
+            editor_index=6+len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
             print(f"Reset Studio Editor settings index: {editor_index}",flush=True)
             key("Down",editor_index); key("Return"); key("Down",2); key("Return")  # Editor settings -> Reset interface.
             if args.inspect: captured("resetconfirm")
             key("Down"); key("Return")  # Explicit scoped confirmation.
             assert layout.read_bytes()==original_bytes,"Reset preview wrote before Apply"
-            key("Down"); key("Return"); key("Return")  # Review & Apply -> Apply all draft changes.
+            pages=len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
+            key("Up",30);key("Down");key("Down",1+pages+7);key("Return");key("Return")  # Review & Apply.
             defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
             def reset_verified():
                 if not layout.exists(): return False
@@ -473,7 +499,7 @@ def main():
                     and not restored.get("composition")
                     and {i["id"] for i in restored["components"]}=={i["id"] for i in defaults["items"]}
                     and restored["categories"]==defaults["categories"]
-                    and all(str(restored["theme"].get(k)).lower()==str(v).lower() for k,v in defaults["theme"].items()))
+                    and default_theme_matches(restored["theme"],defaults["theme"]))
             expect(reset_verified, "Reset Home to packaged defaults with other pages preserved passed")
             key("Escape"); key("Escape")
             key("Up", 30); key("Down")  # Capture the first default item, not retained bottom focus.

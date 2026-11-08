@@ -10,6 +10,7 @@
 #include "home/ComponentSchema.h"
 #include "settings/SearchSettings.h"
 #include "media/KodiImporter.h"
+#include <QQmlProperty>
 #include <QBuffer>
 #include <QImage>
 #include <functional>
@@ -257,7 +258,7 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
     QVERIFY(command(InputManager::Confirm)); QCOMPARE(home.composition()["headerMode"].toString(),QString("identity"));
     QVERIFY(command(InputManager::NavigateRight)); QVERIFY(command(InputManager::Confirm));
     auto *keyboard = skins->findChild<QObject *>("skinNameKeyboard"); QVERIFY(keyboard);
-    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("My clouds")))); QCOMPARE(home.skins().size(),4);
+    QVERIFY(QMetaObject::invokeMethod(keyboard,"accepted",Q_ARG(QString,QString("My clouds")))); QCOMPARE(home.skins().size(),8);
     const auto id = home.skins().last().toMap()["id"].toString();
     QVERIFY(command(InputManager::Back)); QVERIFY(!root->property("editing").toBool());
     root->setProperty("actionIndex",24); QVERIFY(command(InputManager::Confirm));
@@ -651,6 +652,37 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme()
     QTRY_VERIFY(folderRow);
     QCOMPARE(folderRow->property("color").value<QColor>(), QColor("#123456"));
     QCOMPARE(root->property("appearance").toMap().value("backgroundEnd").toString(), QString("#010203"));
+    root->setProperty("selectedIndex", 6);
+    folderPage->setProperty("pendingRemoval", "/media/keep-this-folder");
+    // QML arrays are compared by content; QVariant(QJSValue) identity is not the model contract.
+    const auto folderRows = folderPage->property("rows").value<QJSValue>().toVariant();
+    const auto status = media.status();
+    const QVariantMap pastel = ComponentSchema::surfacePalette({{"surfaceColor", "#ffffff"},
+        {"selectedColor", "#e9d8e3"}, {"textColor", "#241d2b"}, {"mutedColor", "#514b67"},
+        {"focusColor", "#6d3b69"}, {"highContrast", true}, {"motionEnabled", false}});
+    QVERIFY(root->setProperty("appearance", pastel));
+    QTRY_COMPARE(folderRow->property("color").value<QColor>(), QColor("#e9d8e3"));
+    QCOMPARE(root->property("selectedIndex").toInt(), 6);
+    QVERIFY(root->property("editingFolders").toBool());
+    QCOMPARE(folderPage->property("pendingRemoval").toString(), QString("/media/keep-this-folder"));
+    QCOMPARE(folderPage->property("rows").value<QJSValue>().toVariant(), folderRows);
+    QCOMPARE(media.status(), status);
+    auto *importPage = findItem(qobject_cast<QQuickItem *>(root.get()), "kodiImportPage");
+    QVERIFY(importPage);
+    QCOMPARE(importPage->property("appearance").toMap(), pastel);
+    // Selected borders need a token derived against selectedColor, not surfaceColor.
+    const auto custom = ComponentSchema::surfacePalette({{"surfaceColor", "#000000"},
+        {"selectedColor", "#ffffff"}, {"elevatedColor", "#ffffff"}, {"inputColor", "#ffffff"},
+        {"textColor", "#ffffff"}, {"focusColor", "#ffffff"}, {"highContrast", true}});
+    QVERIFY(root->setProperty("appearance", custom));
+    QTRY_COMPARE(QQmlProperty::read(folderRow, "border.color").value<QColor>(), QColor(custom["selectedFocusColor"].toString()));
+    auto *importRow = findItem(importPage, "kodiImportActionRow"); QVERIFY(importRow);
+    QTRY_COMPARE(QQmlProperty::read(importRow, "border.color").value<QColor>(), QColor(custom["selectedFocusColor"].toString()));
+    QCOMPARE(folderPage->property("pendingRemoval").toString(), QString("/media/keep-this-folder"));
+    QCOMPARE(media.status(), status);
+    const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+    if (!artifacts.isEmpty()) QVERIFY(window.grabWindow().save(artifacts + "/studio-test-shell-media-settings-custom.png"));
+
 }
 void HomeNavigationTests::appearancePreviewCancelAndApply()
 {
@@ -802,6 +834,7 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
 {
     QTemporaryDir dir;
     QLocalServer server; QVERIFY(server.listen(dir.filePath("rpc.sock")));
+    int requests = 0;
     connect(&server, &QLocalServer::newConnection, &server, [&] {
         while (server.hasPendingConnections()) {
             auto *socket = server.nextPendingConnection();
@@ -811,6 +844,13 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
                 if (!bytes.endsWith('\n')) return;
                 const auto request = QJsonDocument::fromJson(bytes).object();
                 const auto method = request["method"].toString();
+                ++requests;
+                if (server.property("rejectThemeRead").toBool() && method.startsWith("VideoLibrary.Get")) {
+                    server.setProperty("rejectThemeRead", false);
+                    socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]},
+                        {"error", QJsonObject{{"code", -32000}, {"message", "Controlled theme outage"}}}}).toJson(QJsonDocument::Compact) + '\n');
+                    socket->disconnectFromServer(); return;
+                }
                 QJsonObject result;
                 if (method == "JSONRPC.Version") result = {{"version", QJsonObject{{"major", 13}}}};
                 else if (method == "Isolde.CreatePlaylist") {
@@ -856,6 +896,50 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QVERIFY(command(InputManager::Confirm)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("seasons"));
     QVERIFY(command(InputManager::Confirm)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("episodes"));
     QVERIFY(command(InputManager::Menu)); QVERIFY(!root->property("details").isNull());
+    // Appearance changes must repaint existing production browse/detail children
+    // without rebuilding the client, navigating, or refreshing the Kodi query.
+    QTest::qWait(200); // Let the episode artwork request settle before counting repaint traffic.
+    const auto detailsBefore = root->property("details");
+    const auto itemsBefore = media.items();
+    const auto requestCount = requests;
+    int paletteIndex = 0;
+    for (const auto &raw : QList<QVariantMap>{
+             {{"surfaceColor", "#202126"}, {"backgroundEnd", "#101014"}, {"elevatedColor", "#28262f"}},
+             {{"surfaceColor", "#f5edf3"}, {"backgroundEnd", "#e9d8e3"}, {"elevatedColor", "#ffffff"},
+              {"textColor", "#241d2b"}, {"focusColor", "#6d3b69"}},
+             {{"surfaceColor", "#000000"}, {"selectedColor", "#ffffff"}, {"elevatedColor", "#ffffff"},
+              {"backgroundEnd", "#ffffff"}, {"textColor", "#ffffff"}, {"mutedColor", "#ffffff"},
+              {"focusColor", "#ffffff"}, {"highContrast", true}, {"motionEnabled", false}}}) {
+        const auto tokens = ComponentSchema::surfacePalette(raw);
+        QVERIFY(root->setProperty("appearance", tokens));
+        QTest::qWait(50);
+        auto *panel = root->findChild<QObject *>("libraryDetailsPanel");
+        auto *subtitle = root->findChild<QObject *>("libraryDetailsSubtitle");
+        auto *playback = root->findChild<QObject *>("libraryDetailsPlayback");
+        QVERIFY(panel); QVERIFY(subtitle); QVERIFY(playback);
+        QCOMPARE(panel->property("color").value<QColor>(), QColor(tokens["elevatedColor"].toString()));
+        QCOMPARE(subtitle->property("color").value<QColor>(), QColor(tokens["elevatedFocusColor"].toString()));
+        QCOMPARE(playback->property("color").value<QColor>(), QColor(tokens["elevatedFocusColor"].toString()));
+        QCOMPARE(root->property("details"), detailsBefore);
+        QCOMPARE(media.items(), itemsBefore); QCOMPARE(media.selectedIndex(), 0); QCOMPARE(requests, requestCount);
+        const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+        if (!artifacts.isEmpty()) QVERIFY(window.grabWindow().save(artifacts + QString("/studio-test-shell-kodi-details-%1.png").arg(paletteIndex)));
+        ++paletteIndex;
+    }
+
+    QVERIFY(command(InputManager::Back)); // Close details before an explicit failed refresh.
+    server.setProperty("rejectThemeRead", true); media.refresh(); QTRY_VERIFY(!media.busy()); QVERIFY(!media.connected());
+    auto *statusLine = root->findChild<QObject *>("libraryStatusLine"); QVERIFY(statusLine);
+    const auto outageRequests = requests;
+    for (const auto &background : QStringList{"#101014", "#f5edf3", "#ffffff"}) {
+        const auto tokens = ComponentSchema::surfacePalette({{"surfaceColor", "#000000"}, {"backgroundEnd", background},
+            {"textColor", "#ffffff"}, {"errorColor", "#ffffff"}, {"highContrast", true}});
+        root->setProperty("appearance", tokens); QTest::qWait(20);
+        QCOMPARE(statusLine->property("color").value<QColor>(), QColor(tokens["backgroundErrorColor"].toString()));
+        QCOMPARE(requests, outageRequests); QCOMPARE(media.selectedIndex(), 0);
+    }
+    media.refresh(); QTRY_VERIFY(!media.busy()); QVERIFY(media.connected());
+    QVERIFY(command(InputManager::Menu));
     QVERIFY(command(InputManager::NavigateRight)); QTRY_VERIFY(!media.busy());
     QCOMPARE(server.property("episode").toMap()["episodeid"].toInt(), 9);
     QCOMPARE(server.property("episode").toMap()["resume"].toBool(), false);
@@ -1028,6 +1112,31 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
             QCOMPARE(content->width(),double(size.width()));QCOMPARE(content->height(),double(size.height()));
             QCOMPARE(preview->x(),content->x());QCOMPARE(preview->y(),content->y());
             QCOMPARE(preview->width(),content->width());QCOMPARE(preview->height(),content->height());
+            auto *menu=content->findChild<QQuickItem *>("legacyPageNavigation");
+            auto *compositionView=content->findChild<QQuickItem *>("composedHome");
+            QVERIFY(menu);QVERIFY(compositionView);
+            QCOMPARE(menu->property("navigation").toString(),navigation);
+            const auto unit=menu->property("unit").toDouble();QVERIFY(unit>0);
+            QCOMPARE(compositionView->x(),navigation=="left"?260.0*unit:0.0);
+            QCOMPARE(compositionView->y(),navigation=="top"?70.0*unit:0.0);
+            auto *draftComposition=preview->findChild<QQuickItem *>("composedHome");QVERIFY(draftComposition);
+            QCOMPARE(draftComposition->x(),compositionView->x());QCOMPARE(draftComposition->y(),compositionView->y());
+        }
+        if(navigation!="none") {
+            content->setProperty("recoveryFocused",true);
+            if(navigation=="left") {
+                content->setProperty("recoveryIndex",1);
+                QVERIFY(QMetaObject::invokeMethod(content,"handleCommand",Q_ARG(QVariant,input.navigateLeft())));
+                QCOMPARE(content->property("recoveryIndex").toInt(),0);
+                QVERIFY(!content->property("legacyMenuFocused").toBool());
+            }
+            QVERIFY(QMetaObject::invokeMethod(content,"handleCommand",Q_ARG(QVariant,navigation=="left"?input.navigateLeft():input.navigateUp())));
+            QVERIFY(content->property("legacyMenuFocused").toBool());
+            QVariant state;QVERIFY(QMetaObject::invokeMethod(content,"navigationState",Q_RETURN_ARG(QVariant,state),Q_ARG(QVariant,QString("legacy-page-menu"))));
+            QVERIFY(QMetaObject::invokeMethod(content,"handleCommand",Q_ARG(QVariant,input.back())));
+            QVERIFY(!content->property("legacyMenuFocused").toBool());
+            QVERIFY(QMetaObject::invokeMethod(content,"resetNavigationState",Q_ARG(QVariant,state)));
+            QVERIFY(content->property("legacyMenuFocused").toBool());
         }
         // The Store can leave gallery engagement active while its own page is
         // shown. Its saved origin must still restore on a named page.
@@ -1209,6 +1318,11 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel()
     std::function<QQuickItem *(QQuickItem *,const QString &)> findVisual=[&](QQuickItem *item,const QString &name)->QQuickItem *{if(item->objectName()==name)return item;for(auto *child:item->childItems())if(auto *found=findVisual(child,name))return found;return nullptr;};
     auto *session=qobject_cast<StudioSession *>(root->property("session").value<QObject *>());QVERIFY(session);const auto start=session->draft();
     auto *preview=root->findChild<QQuickItem *>("studioPreview");QVERIFY(preview);auto *composed=preview->findChild<QObject *>("composedHome");QVERIFY(composed);
+    auto *scrollContent=composed->findChild<QObject *>("composedContent");QVERIFY(scrollContent);
+    auto *placementGrid=composed->findChild<QQuickItem *>("composedPlacementGrid");QVERIFY(placementGrid);
+    auto *contentItem=qobject_cast<QQuickItem *>(scrollContent->property("contentItem").value<QObject *>());QVERIFY(contentItem);
+    auto *flickable=qobject_cast<QQuickItem *>(scrollContent);QVERIFY(flickable);
+    auto *pageHost=qobject_cast<QQuickItem *>(composed->property("host").value<QObject *>());QVERIFY(pageHost);
     QTest::qWait(30);const auto initialCell=variant(composed->property("placementCell")).toMap();
     for(bool accept:{false,true}){
         QVERIFY(QMetaObject::invokeMethod(root.get(),"startAddition",Q_ARG(QVariant,QString("text")),Q_ARG(QVariant,QVariantMap{})));
@@ -1250,7 +1364,22 @@ void HomeNavigationTests::studioScrollingAddMoveAndCancel()
         const auto actual=rendered->mapToItem(preview,QPointF(0,0));
         QVERIFY(qAbs(actual.y()-visibleRect["y"].toReal())<0.01);QVERIFY(qAbs(actual.x()-visibleRect["x"].toReal())<0.01);
         QVERIFY(visibleRect["y"].toReal()>=viewport["y"].toReal()-0.01);
-        QVERIFY2(visibleRect["y"].toReal()+visibleRect["height"].toReal()<=viewport["y"].toReal()+viewport["height"].toReal()+0.01,qPrintable(QString("target %1 + %2, viewport %3 + %4, scroll %5").arg(visibleRect["y"].toReal()).arg(visibleRect["height"].toReal()).arg(viewport["y"].toReal()).arg(viewport["height"].toReal()).arg(composed->property("scrollOffset").toReal())));
+        const auto candidate=variant(root->property("candidate")).toMap();
+        const auto metrics=variant(composed->property("placementCell")).toMap();
+        const auto gridOrigin=placementGrid->mapToItem(contentItem,QPointF(0,0));
+        const auto contentOrigin=contentItem->mapToItem(preview,QPointF(0,0));
+        const auto viewportOrigin=flickable->mapToItem(preview,QPointF(0,0));
+        const auto viewportHostOrigin=flickable->mapToItem(pageHost,QPointF(0,0));
+        const auto hostOrigin=pageHost->mapToItem(preview,QPointF(0,0));
+        const auto viewportGeometry=composed->property("viewportGeometry").toString();
+        const auto detail=QString("target %1 + %2, viewport %3 + %4, scroll %5, origin %6, content %7/%8, rows %9, extent %10, candidate %11 + %12, cell %13 + %14 gap %15 margin %16")
+            .arg(visibleRect["y"].toReal()).arg(visibleRect["height"].toReal()).arg(viewport["y"].toReal()).arg(viewport["height"].toReal())
+            .arg(composed->property("scrollOffset").toReal()).arg(scrollContent->property("originY").toReal()).arg(scrollContent->property("contentHeight").toReal()).arg(scrollContent->property("height").toReal())
+            .arg(composed->property("contentRows").toInt()).arg(preview->property("previewExtentRows").toInt()).arg(candidate["y"].toInt()).arg(candidate["height"].toInt())
+            .arg(metrics["cellH"].toReal()).arg(metrics["cellW"].toReal()).arg(metrics["gap"].toReal()).arg(metrics["margin"].toReal());
+        const auto diagnostic=detail+QString(", gridY %1, contentY %2, flickable %3/%4, flickableHostY %5, hostY %6, geometry %7")
+            .arg(gridOrigin.y()).arg(contentOrigin.y()).arg(viewportOrigin.y()).arg(flickable->height()).arg(viewportHostOrigin.y()).arg(hostOrigin.y()).arg(viewportGeometry);
+        QVERIFY2(visibleRect["y"].toReal()+visibleRect["height"].toReal()<=viewport["y"].toReal()+viewport["height"].toReal()+0.01,qPrintable(diagnostic));
         QCOMPARE(variant(composed->property("placementCell")).toMap()["cellH"],initialCell["cellH"]);
         QVERIFY(key(accept?InputManager::Confirm:InputManager::Back));
         if(!accept){QTest::qWait(40);QCOMPARE(session->draft(),enabled);QCOMPARE(composed->property("scrollOffset").toInt(),0);}

@@ -59,7 +59,15 @@ Item {
     property string returnView:"fields"
     property int returnSelection:0
     property int keyboardSelection:0
-    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:["Content","Appearance","Layout","Actions","Accessibility","More"]
+    property string shellSurface: "search"
+    readonly property var shellPolicy: ((rawPage.theme || {}).surfaceThemes || {})[shellSurface] || ({})
+    readonly property var shellPreview: {
+        const model = session ? (session.proposalModel || session.model) : null
+        if (!model) return ({})
+        const revision = session.document
+        return model.surfaceAppearance(shellSurface, pageId)
+    }
+    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header","Shell"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:["Content","Appearance","Layout","Actions","Accessibility","More"]
     readonly property var targets:!page?[]:structureType?((structureType==="section"?page.categories:page.composition.navigation) || []).filter(i=>i.id===structureId).map(i=>Object.assign({},i,{componentType:structureType})):(page.items || []).filter(i=>selectedIds.indexOf(i.id)>=0)
     readonly property var current:targets[0] || null
     readonly property var actions:session?session.availableActions:[]
@@ -79,7 +87,9 @@ Item {
     signal samplesChanged(bool enabled)
     function begin(asPage){editorMode=false;pageMode=asPage;structureType="";structureId="";view="tabs";tab=0;selected=0;advanced=false;editingState="base";controlsShown=false;hiddenControls=false;message="Choose a property group. Changes affect the draft; Apply saves them."}
     function local(item,f){
+        if(pageMode && f.type==="sourcePolicy")return (rawPage.theme || {}).sourcePolicy
         if(editorMode)return ((session?session.document:{}).studioAppearance || {})[f.key]
+        if(pageMode && f.scope==="surfaceTheme")return f.key==="surface"?shellSurface:f.key==="mode"?shellPolicy.mode:(shellPolicy.tokens || {})[f.key]
         if(pageMode){if(f.scope==="theme")return (rawPage.theme || {})[f.key];if(f.scope==="background")return ((rawPage.composition || {}).background || {})[f.key];if(f.scope==="headerStyle")return ((rawPage.composition || {}).header || {})[f.key];return (rawPage.composition || {})[f.key]}
         if(f.scope==="presentation"){const p=item.presentation || {};return editingState==="base" || f.tab!=="Appearance"?p[f.key]:((p.states || {})[editingState] || {})[f.key]}
         if(f.scope==="appCollection")return (item.appCollection || {})[f.key]
@@ -89,6 +99,7 @@ Item {
         item=item || {}
         if(!page)return f.fallback!==undefined?f.fallback:""
         const value=local(item,f);if(value!==undefined)return value
+        if(pageMode && f.scope==="surfaceTheme")return f.key==="mode"?(shellSurface==="settings"?"home":"origin"):shellPreview[f.key]
         if(editorMode)return (options.appearance || {})[f.key]
         if(pageMode){if(f.scope==="theme")return page.appearance[f.key];if(f.scope==="background")return (options.backgroundDefaults || {})[f.key];if(f.scope==="headerStyle"){const defaults=(options.headerDefaults || {})[page.composition.headerMode==="identity"?"identity":"navigation"] || {};if(defaults[f.key]!==undefined)return defaults[f.key];if(f.key==="textColor")return page.appearance.textColor;if(f.key==="focusColor")return page.appearance.focusColor;if(f.key==="backgroundColor")return page.appearance.surfaceColor}}
         else if(f.scope==="presentation"){
@@ -198,6 +209,21 @@ Item {
             }else if(reset || f.key==="trailingAction" && value && !value.type)delete style[f.key];else style[f.key]=value
             return run("section",{kind:"presentation",id:structureId,value:style})
         }
+        if(pageMode && f.scope==="surfaceTheme") {
+            if(f.key==="surface"){shellSurface=reset?"search":value;return true}
+            if(shellSurface==="settings" && pageId!==(session.document.homePageId || "")){message="Settings follows designated Home. Open Home to edit its Settings theme.";return false}
+            const policies=Object.assign({},(rawPage.theme || {}).surfaceThemes || {})
+            const policy=Object.assign({schemaVersion:1,mode:shellSurface==="settings"?"home":"origin"},policies[shellSurface] || {})
+            if(f.key==="mode"){
+                if(reset)delete policies[shellSurface]
+                else {policy.mode=value;if(value!=="custom")delete policy.tokens;policies[shellSurface]=policy}
+            } else {
+                const tokens=Object.assign({},policy.tokens || {})
+                if(reset)delete tokens[f.key];else tokens[f.key]=value
+                policy.mode="custom";policy.tokens=tokens;policies[shellSurface]=policy
+            }
+            return run("pagePatch",{scope:"theme",value:{surfaceThemes:Object.keys(policies).length?policies:null}})
+        }
         if(pageMode){let scope=f.scope,key=f.key,change=value
             if(scope==="headerStyle"){scope="composition";key="header";change=Object.assign({},(rawPage.composition || {}).header || {});if(reset)delete change[f.key];else change[f.key]=value}
             if(scope==="background"){scope="composition";key="background";change=Object.assign({},options.backgroundDefaults || {},page.composition.background || {});if(reset)delete change[f.key];else change[f.key]=value}
@@ -229,11 +255,15 @@ Item {
     function activateField(f){
         if(targets.length>1 && ["geometry","layout","children","apps","order","grid","replaceComponent"].indexOf(f.type)>=0){message="Choose one component for this structural operation. Shared appearance and links can edit all selected items.";return}
         activeField=f;returnSelection=selected
+        if(f.type==="sourcePolicy"){
+            if(pageId!==(session.document.homePageId || "")){message="Display policy belongs to designated Home. Open Home's Header controls.";return}
+            view="sourcePolicy";return
+        }
         if(f.type==="replaceComponent"){openChoices((options.replacementChoices || []).map(entry=>({name:entry.name,value:entry.type,kind:"replacement"})));return}
         if(f.type==="number" && (f.control==="slider" || f.control==="stepper")){beginScalar();return}
         if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
         if(f.type==="toggle"){adjust(f,1);return}
-        if(f.type==="choice"){openChoices(f.choices.map(value=>value && typeof value==="object"?value:({name:value,value:value})));return}
+        if(f.type==="choice"){openChoices(f.choices.filter(value=>f.scope!=="surfaceTheme" || f.key!=="mode" || shellSurface!=="settings" || value.value!=="origin").map(value=>value && typeof value==="object"?value:({name:value,value:value})));return}
         if(f.type==="color"){beginColor();return}
         if(f.type==="action"){view="actionPicker";return}
         if(f.type==="typography"){openChoices((options.inspector.typePresets || []).map(p=>({name:p.name,value:p.value,kind:"typography"})));return}
@@ -347,6 +377,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(set(activeField,entry.action || {},false)){view="fields";selected=returnSelection}
     }
     function handleCommand(command){
+        if(view==="sourcePolicy"){if(sourcePolicyEditor.item)sourcePolicyEditor.item.handleCommand(command);return}
         if(view==="framing"){if(framingLoader.item)framingLoader.item.handleCommand(command);return}
         if(view==="imageBrowser"){if(artworkBrowser.item)artworkBrowser.item.handleCommand(command);return}
         if(view==="actionPicker"){if(actionLoader.item)actionLoader.item.handleCommand(command);return}
@@ -498,6 +529,20 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:titleText;width:parent.width;text:root.pageMode?"Page appearance":root.targets.length>1?root.targets.length+" selected components":root.current?root.current.name || "Component":"Component";color:root.appearance.textColor;font.pixelSize:26*root.unit;elide:Text.ElideRight}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:detailText;width:parent.width;text:root.view==="fields"?root.tabs[root.tab]+" · "+root.contrast():root.view==="tabs"?"Choose what to edit":root.view;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:statusText;width:parent.width;text:root.view==="playlistSource"?(root.playlistClient?root.playlistClient.status:"Kodi unavailable · Back returns without changes"):root.current && root.current.unavailableReason?root.current.unavailableReason+" · Change its source or On select link.":root.message;color:root.appearance.mutedColor;font.pixelSize:16*root.unit;wrapMode:Text.Wrap;maximumLineCount:3;elide:Text.ElideRight}
+            Rectangle {
+                id:shellPreviewCard;objectName:"studioShellThemePreview"
+                visible:root.pageMode && root.tabs[root.tab]==="Shell"
+                width:parent.width;height:68*root.unit;radius:sample.radius;color:sample.surface
+                SurfacePalette {id:sample;appearance:root.shellPreview}
+                Row {anchors.fill:parent;anchors.margins:8*root.unit;spacing:10*root.unit
+                    Text {text:"Private preview";color:sample.text;font.pixelSize:16*root.unit}
+                    Rectangle {width:80*root.unit;height:40*root.unit;color:sample.selected;border.width:2;border.color:sample.selectedFocus;radius:sample.radius
+                        Text {anchors.centerIn:parent;text:"Selected";color:sample.selectedText;font.pixelSize:14*root.unit}}
+                    Rectangle {width:65*root.unit;height:40*root.unit;color:sample.input;radius:sample.radius
+                        Text {anchors.centerIn:parent;text:"Input";color:sample.inputText;font.pixelSize:14*root.unit}}
+                    Text {text:"Error";color:sample.error;font.pixelSize:14*root.unit}
+                }
+            }
             Row {
                 visible:root.view==="choices" && root.choices.length>0 && root.choices.length<=3;width:parent.width;spacing:8*root.unit
                 Repeater {
@@ -514,7 +559,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             }
             ListView {
                 visible:root.view!=="choices" || root.choices.length>3
-                id:list;objectName:"studioInspectorFields";width:parent.width;height:Math.max(48*root.unit,parent.height-titleText.height-detailText.height-statusText.height-footerText.height-4*parent.spacing);clip:true;spacing:5*root.unit;currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
+                id:list;objectName:"studioInspectorFields";width:parent.width;height:Math.max(48*root.unit,parent.height-titleText.height-detailText.height-statusText.height-footerText.height-4*parent.spacing-(shellPreviewCard.visible?shellPreviewCard.height+parent.spacing:0));clip:true;spacing:5*root.unit;currentIndex:root.selected;highlightRangeMode:ListView.ApplyRange;highlightMoveDuration:0
                 model:root.labels()
                 // A model reset can reset ListView currentIndex to zero; restore the remote field origin.
                 onModelChanged:Qt.callLater(()=>{list.currentIndex=Qt.binding(()=>root.selected);list.positionViewAtIndex(root.selected,ListView.Contain)})
@@ -619,6 +664,15 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             }
             if(root.keyboardKind==="target")value=Object.assign({},root.pendingAction,{target:text})
             if(root.set(f,value,false)){root.view=root.keyboardKind==="cropNumber"?"crop":"fields";root.selected=root.keyboardKind==="cropNumber"?root.keyboardSelection:root.returnSelection}
+        }
+    }
+    Loader {
+        id:sourcePolicyEditor;anchors.fill:parent;active:root.view==="sourcePolicy"
+        sourceComponent:SourceSettingsView {
+            appearance:root.appearance;layoutModel:root.session?root.session.model:null;manager:null;policyOnly:true
+            Component.onCompleted:{draft=Object.assign({},root.options.sourcePolicyDefaults || {},(root.rawPage.theme || {}).sourcePolicy || {});view="policy";selectedIndex=0}
+            onPolicyAccepted:policy=>{if(root.run("pagePatch",{scope:"theme",value:{sourcePolicy:policy}})){root.view="fields";root.selected=root.returnSelection}}
+            onPolicyCancelled:{root.view="fields";root.selected=root.returnSelection}
         }
     }
 }

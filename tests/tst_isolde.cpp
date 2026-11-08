@@ -232,6 +232,7 @@ private slots:
     void homeLayoutSupportsTypedActionTiles();
     void sessionManagerLaunchesActionWithChosenHandler();
     void sourceManagerProjectsContextualTilesAndPromotionState();
+    void sourcePolicyTransactionsAreIsolatedAndBounded();
     void artPackCatalogLoadsAndHomeAppliesArtwork();
     void presentationModeTravelsThroughRegistryCatalogAndSession();
     void webKioskSessionExposesSafeLaunchUrl();
@@ -449,16 +450,29 @@ void IsoldeTests::sourceManagerProjectsContextualTilesAndPromotionState()
     QVERIFY(QDir().mkpath(directory.filePath("Movie Disc/VIDEO_TS")));
     QVERIFY(QDir().mkpath(directory.filePath("PS5 Game")));
 
-    SourceManager sources(&registry);
+    QTemporaryDir stateDirectory;
+    SourceManager sources(&registry,nullptr,stateDirectory.filePath("first.json"));
     sources.setProbeRootsForTests({directory.path()});
     QCOMPARE(sources.items().size(), 3);
+    const auto originalSources = sources.items();
+    QSignalSpy sourceChanges(&sources, &SourceManager::sourcesChanged);
+    sources.setProbeRootsForTests({directory.path(), directory.path()});
+    QCOMPARE(sources.items(), originalSources); // Repeated roots must not duplicate identities.
+    sources.refresh();
+    QCOMPARE(sourceChanges.count(), 0); // Unchanged scans must not rebuild Home/focus.
+    const auto alias = directory.filePath("alias");
+    if (QFile::link(directory.filePath("USB Movies"), alias)) {
+        sources.refresh();
+        QCOMPARE(sources.items(), originalSources); // Do not follow links outside probe roots.
+        QVERIFY(QFile::remove(alias));
+    }
     const auto tile = sources.items().first().toMap();
     QCOMPARE(tile.value("kind").toString(), QString("action"));
     QCOMPARE(tile.value("contextual").toBool(), true);
     QCOMPARE(tile.value("section").toString(), QString("Detected Sources"));
     QCOMPARE(tile.value("actionType").toString(), QString("open-folder"));
     QCOMPARE(tile.value("action").toMap().value("openWith").toString(), QString("movies"));
-    QCOMPARE(sources.sections().size(), 1);
+    QCOMPARE(sources.sections().size(), 0); // Discovery never injects a layout section.
     bool sawMovieDisc = false;
     bool sawGameDisc = false;
     for (const auto &sourceValue : sources.items()) {
@@ -475,7 +489,7 @@ void IsoldeTests::sourceManagerProjectsContextualTilesAndPromotionState()
     QCOMPARE(sources.items().size(), 3);
 
     QSettings().clear();
-    SourceManager hiddenSources(&registry);
+    SourceManager hiddenSources(&registry,nullptr,stateDirectory.filePath("hidden.json"));
     hiddenSources.setProbeRootsForTests({directory.path()});
     QCOMPARE(hiddenSources.items().size(), 3);
     QVERIFY(hiddenSources.hideSource(hiddenSources.items().first().toMap().value("id").toString()));
@@ -486,9 +500,64 @@ void IsoldeTests::sourceManagerProjectsContextualTilesAndPromotionState()
     QSettings().clear();
     AppRegistry registryWithoutHandlers;
     QVERIFY(registryWithoutHandlers.loadFromData(R"([{"id":"youtube","name":"YouTube","type":"mock","section":"Apps","accent":"#ff0000"}])"));
-    SourceManager noHandlerSources(&registryWithoutHandlers);
+    SourceManager noHandlerSources(&registryWithoutHandlers,nullptr,stateDirectory.filePath("no-handler.json"));
     noHandlerSources.setProbeRootsForTests({directory.path()});
     QCOMPARE(noHandlerSources.items().size(), 0);
+    QCOMPARE(noHandlerSources.sources().size(),3); // Discovery facts do not require a launch handler.
+    QVERIFY(registryWithoutHandlers.loadFromData(config));
+    QCOMPARE(noHandlerSources.items().size(), 3); // Handler installation refreshes immediately.
+    QVERIFY(registryWithoutHandlers.removeApp("movies"));
+    QCOMPARE(noHandlerSources.items().size(), 0); // Removed handlers cannot remain launch targets.
+}
+
+void IsoldeTests::sourcePolicyTransactionsAreIsolatedAndBounded()
+{
+    QTemporaryDir dir; QVERIFY(dir.isValid());
+    const auto probes=dir.filePath("probes"); QVERIFY(QDir().mkpath(probes+"/Film/VIDEO_TS"));
+    const auto defaults=dir.filePath("defaults.json"),saved=dir.filePath("home.json");
+    QFile definition(defaults); QVERIFY(definition.open(QIODevice::WriteOnly));
+    definition.write(R"({"schemaVersion":1,"items":[]})"); definition.close();
+    AppRegistry registry; QVERIFY(registry.loadFromData(config));
+    HomeLayout home(&registry); QVERIFY(home.load(defaults,saved));
+    SourceManager source(&registry,nullptr,dir.filePath("one/decisions.json")); source.setProbeRootsForTests({probes}); source.setLayout(&home);
+    QVERIFY(!QFile::exists(saved)); QVERIFY(!QFile::exists(dir.filePath("one/decisions.json")));
+    QCOMPARE(source.policy().value("mode").toString(),QString("compact"));
+    QVERIFY(source.setPolicy({{"duration",0},{"pages",QVariantList{"home"}}}));
+    QCOMPARE(source.projected("","status",true).size(),1);
+    QCOMPARE(source.projected("other-page","status",true).size(),0);
+    QCOMPARE(source.projected("","status",true,{{"playback",true}}).size(),0);
+    QCOMPARE(source.projected("","status",true,{{"editing",true}}).size(),0);
+    QVERIFY(source.setPolicy({{"slots",QVariantList{"status"}}}));
+    QCOMPARE(source.projected("","missing",true).size(),0);
+    const auto before=home.committedDocument(); const auto rules=source.policy();
+    for (const auto &invalid:QVariantList{QVariantMap{{"duration",true}},QVariantMap{{"duration",1}},QVariantMap{{"duration",8.5}},QVariantMap{{"schemaVersion",2}},QVariantMap{{"events",QVariantList{"unknown"}}},QVariantMap{{"slots",QVariantList{"../bad"}}},QVariantMap{{"pages",QVariantList{"home","home"}}},QVariantMap{{"script","exec"}}}) {
+        QVERIFY(!source.setPolicy(invalid.toMap())); QCOMPARE(source.policy(),rules); QCOMPARE(home.committedDocument(),before);
+    }
+    const auto id=source.items().first().toMap().value("id").toString();
+    QVERIFY(source.dismissSource(id)); QCOMPARE(source.projected("","status",true).size(),0);
+    source.refresh(); QCOMPARE(source.projected("","status",true).size(),0);
+    source.setProbeRootsForTests({}); source.setProbeRootsForTests({probes}); QCOMPARE(source.projected("","status",true).size(),1);
+    QVERIFY(source.setPolicy({{"reconnect",false}}));
+    source.setProbeRootsForTests({}); source.setProbeRootsForTests({probes}); QCOMPARE(source.projected("","status",true).size(),0);
+    QVERIFY(source.hideSource(id)); QCOMPARE(source.hiddenSources().size(),1); QCOMPARE(source.items().size(),0);
+    SourceManager restored(&registry,nullptr,dir.filePath("one/decisions.json")); restored.setProbeRootsForTests({probes});
+    QCOMPARE(restored.hiddenSources().size(),1); QCOMPARE(restored.items().size(),0);
+    SourceManager other(&registry,nullptr,dir.filePath("two/decisions.json")); other.setProbeRootsForTests({probes});
+    QCOMPARE(other.items().size(),1); QVERIFY(other.hiddenSources().isEmpty());
+    QVERIFY(restored.forgetSourceDecision(id)); QCOMPARE(restored.items().size(),1);
+    QVERIFY(!restored.chooseHandler(id,"unknown")); QVERIFY(restored.chooseHandler(id,"movies"));
+    restored.setLayout(&home); QVERIFY(restored.promoteSource(id));
+    const auto afterKeep=home.committedDocument(); QVERIFY(restored.promoteSource(id)); QCOMPARE(home.committedDocument(),afterKeep);
+    QVERIFY(QFileInfo(probes+"/Film/VIDEO_TS").isDir()); // Decisions never mutate source media.
+    QFile blocker(dir.filePath("blocker")); QVERIFY(blocker.open(QIODevice::WriteOnly)); blocker.write("unchanged"); blocker.close();
+    SourceManager failing(&registry,nullptr,dir.filePath("blocker/decisions.json")); failing.setProbeRootsForTests({probes});
+    QVERIFY(!failing.hideSource(id)); QCOMPARE(failing.items().size(),1); QVERIFY(failing.hiddenSources().isEmpty()); QVERIFY(!failing.errorString().isEmpty());
+    QFile corrupt(dir.filePath("corrupt.json")); QVERIFY(corrupt.open(QIODevice::WriteOnly)); const QByteArray bad="{\"schemaVersion\":99}"; corrupt.write(bad); corrupt.close();
+    SourceManager invalid(&registry,nullptr,corrupt.fileName()); invalid.setProbeRootsForTests({probes});
+    QVERIFY(!invalid.hideSource(id)); QVERIFY(corrupt.open(QIODevice::ReadOnly)); QCOMPARE(corrupt.readAll(),bad); corrupt.close();
+    HomeLayout reload(&registry); QVERIFY(reload.load(defaults,saved));
+    SourceManager reloaded(&registry,nullptr,dir.filePath("one/decisions.json")); reloaded.setProbeRootsForTests({probes}); reloaded.setLayout(&reload);
+    QCOMPARE(reloaded.policy(),source.policy());
 }
 
 void IsoldeTests::artPackCatalogLoadsAndHomeAppliesArtwork()

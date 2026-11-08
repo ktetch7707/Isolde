@@ -2,11 +2,12 @@ import QtQuick
 
 Rectangle {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
     objectName: "kodiLibrary"
     property var appearance: ({})
     property var provider: null
     readonly property real textScale: appearance.typographyScale || 1
-    color: root.appearance.backgroundEnd || "#101014"
+    color: shell.background
     property bool open: false
     property bool returnToHomeAfterPlayback: false
     property bool returnToSearchAfterPlayback: false
@@ -89,72 +90,73 @@ Rectangle {
     }
     MouseArea { anchors.fill: parent }
     Column {
-        anchors.fill: parent; anchors.margins: Math.max(32, root.width * 0.04); spacing: 16
-        Text { text: "YOUR LIBRARY  /  KODI"; color: "#879CBC"; font.pixelSize: 15 * root.textScale; font.letterSpacing: 3 }
-        Text { text: kodiMedia.browseTitle; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 34 * root.textScale; width: parent.width; elide: Text.ElideRight }
-        Text { text: profileManager.activeName + " · " + kodiMedia.viewKind + (kodiMedia.viewValue ? ": " + kodiMedia.viewValue : "") + " · Local library · Web OFF"; color: root.appearance.focusColor || "#C994A5"; font.pixelSize: 17 * root.textScale }
+        anchors.fill: parent; anchors.margins: Math.max(32, root.width * 0.04); spacing: 16 * shell.gapScale
+        Text { font.family: shell.fontFamily; text: "YOUR LIBRARY  /  KODI"; color: shell.backgroundMuted; font.pixelSize: 15 * root.textScale; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily; text: kodiMedia.browseTitle; color: shell.backgroundText; font.pixelSize: 34 * root.textScale; width: parent.width; elide: Text.ElideRight }
+        Text { font.family: shell.fontFamily; text: profileManager.activeName + " · " + kodiMedia.viewKind + (kodiMedia.viewValue ? ": " + kodiMedia.viewValue : "") + " · Local library · Web OFF"; color: shell.backgroundFocus; font.pixelSize: 17 * root.textScale }
         Row {
-            width: parent.width; height: 56; spacing: 8
+            width: parent.width; height: 56; spacing: 8 * shell.gapScale
             Repeater { model: root.toolbar
                 delegate: Rectangle {
                     required property int index; required property var modelData
-                    width: (parent.width - (root.toolbar.length - 1) * 8) / root.toolbar.length; height: 56; radius: 10
-                    color: root.appearance.surfaceColor || "#202126"; border.width: kodiMedia.selectedIndex < 0 && root.toolbarIndex === index ? 3 : 0; border.color: root.appearance.focusColor || "#C994A5"
-                    Text { anchors.fill: parent; anchors.margins: 7; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrapMode: Text.WordWrap; text: modelData.label; font.pixelSize: 16 * root.textScale; color: root.appearance.textColor || "#F5F1F3" }
+                    width: (parent.width - (root.toolbar.length - 1) * 8) / root.toolbar.length; height: 56; radius: shell.radius
+                    color: shell.surface; border.width: kodiMedia.selectedIndex < 0 && root.toolbarIndex === index ? 3 : 0; border.color: shell.focus
+                    Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 7; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; wrapMode: Text.WordWrap; text: modelData.label; font.pixelSize: 16 * root.textScale; color: shell.text }
                     MouseArea { anchors.fill: parent; onClicked: { kodiMedia.selectIndex(-1); root.toolbarIndex = index; root.toolbarAction(index) } }
                 }
             }
         }
         Row {
-            width: parent.width; height: Math.max(100, root.height - 335); spacing: 28
+            width: parent.width; height: Math.max(100, root.height - 335); spacing: 28 * shell.gapScale
             ListView {
                 id: list; objectName: "libraryItems"
-                width: parent.width * 0.61; height: parent.height; clip: true; spacing: 9
+                width: parent.width * 0.61; height: parent.height; clip: true; spacing: 9 * shell.gapScale
                 model: kodiMedia.items; currentIndex: kodiMedia.selectedIndex; highlightRangeMode: ListView.ApplyRange; highlightMoveDuration: 0
                 delegate: Rectangle {
                     required property var modelData; required property int index
-                    width: ListView.view.width; height: Math.max(78, 72 * root.textScale); radius: 12; color: kodiMedia.selectedIndex === index ? root.appearance.selectedColor || "#353039" : root.appearance.surfaceColor || "#202126"
-                    border.width: kodiMedia.selectedIndex === index ? 2 : 0; border.color: root.appearance.focusColor || "#C994A5"
+                    width: ListView.view.width; height: Math.max(78, 72 * root.textScale); radius: shell.radius; color: kodiMedia.selectedIndex === index ? shell.selected : shell.surface
+                    border.width: kodiMedia.selectedIndex === index ? 2 : 0; border.color: (kodiMedia.selectedIndex === index) ? shell.selectedFocus : shell.focus
                     Column {
-                        anchors.fill: parent; anchors.margins: 13; spacing: 5
-                        Text { width: parent.width; text: modelData.title || modelData.label || "Untitled"; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 21 * root.textScale; elide: Text.ElideRight }
-                        Text { width: parent.width; text: root.subtitle(modelData); color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: 15 * root.textScale; elide: Text.ElideRight }
+                        anchors.fill: parent; anchors.margins: 13; spacing: 5 * shell.gapScale
+                        Text { font.family: shell.fontFamily; width: parent.width; text: modelData.title || modelData.label || "Untitled"; color: (kodiMedia.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * root.textScale; elide: Text.ElideRight }
+                        Text { font.family: shell.fontFamily; width: parent.width; text: root.subtitle(modelData); color: (kodiMedia.selectedIndex === index) ? shell.selectedText : shell.muted; font.pixelSize: 15 * root.textScale; elide: Text.ElideRight }
                     }
                     MouseArea { anchors.fill: parent; enabled: !kodiMedia.busy && !kodiMedia.playbackActive; acceptedButtons: Qt.LeftButton | Qt.RightButton
                         onClicked: mouse => { kodiMedia.selectIndex(index); if (mouse.button === Qt.RightButton) root.details = modelData; else kodiMedia.activate(index) } }
                 }
-                Text { anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; visible: !kodiMedia.items.length
-                    text: kodiMedia.busy ? "Loading from Kodi…" : kodiMedia.status + "\n\n↑ Toolbar · Refresh to retry · Back to return"; color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: 21 * root.textScale }
+                Text { font.family: shell.fontFamily; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; visible: !kodiMedia.items.length
+                    text: kodiMedia.busy ? "Loading from Kodi…" : kodiMedia.status + "\n\n↑ Toolbar · Refresh to retry · Back to return"; color: shell.backgroundMuted; font.pixelSize: 21 * root.textScale }
             }
             Column {
-                width: parent.width - list.width - parent.spacing; height: parent.height; spacing: 12
+                width: parent.width - list.width - parent.spacing; height: parent.height; spacing: 12 * shell.gapScale
                 Rectangle {
-                    width: parent.width; height: Math.max(80, parent.height - 125); radius: 16; color: root.appearance.surfaceColor || "#202126"; clip: true
+                    width: parent.width; height: Math.max(80, parent.height - 125); radius: shell.radius; color: shell.surface; clip: true
                     Image { anchors.fill: parent; anchors.margins: 1; source: kodiArtwork.source; fillMode: Image.PreserveAspectFit; sourceSize.width: 500; sourceSize.height: 650 }
-                    Text { anchors.centerIn: parent; width: parent.width - 30; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; visible: !kodiArtwork.source
-                        text: root.selectedItem ? kodiArtwork.status || "Kodi library" : "Choose a title"; color: "#758BAE"; font.pixelSize: 18 * root.textScale }
+                    Text { font.family: shell.fontFamily; anchors.centerIn: parent; width: parent.width - 30; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; visible: !kodiArtwork.source
+                        text: root.selectedItem ? kodiArtwork.status || "Kodi library" : "Choose a title"; color: shell.unavailable; font.pixelSize: 18 * root.textScale }
                 }
-                Text { text: root.selectedItem ? root.selectedItem.title : ""; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 23 * root.textScale; width: parent.width; maximumLineCount: 2; wrapMode: Text.WordWrap; elide: Text.ElideRight }
-                Text { text: root.selectedItem ? root.selectedItem.plot || root.subtitle(root.selectedItem) : ""; color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: 16 * root.textScale; width: parent.width; maximumLineCount: 3; wrapMode: Text.WordWrap; elide: Text.ElideRight }
+                Text { font.family: shell.fontFamily; text: root.selectedItem ? root.selectedItem.title : ""; color: shell.backgroundText; font.pixelSize: 23 * root.textScale; width: parent.width; maximumLineCount: 2; wrapMode: Text.WordWrap; elide: Text.ElideRight }
+                Text { font.family: shell.fontFamily; text: root.selectedItem ? root.selectedItem.plot || root.subtitle(root.selectedItem) : ""; color: shell.backgroundMuted; font.pixelSize: 16 * root.textScale; width: parent.width; maximumLineCount: 3; wrapMode: Text.WordWrap; elide: Text.ElideRight }
             }
         }
-        Text { text: kodiMedia.status + (kodiMedia.playbackStatus ? " · " + kodiMedia.playbackStatus : ""); width: parent.width; elide: Text.ElideRight; color: "#9EB0CC"; font.pixelSize: 15 * root.textScale }
-        Text { text: "OK open / play / resume    Menu details    ↑ Toolbar    ← → Pages    Back " + (kodiMedia.canGoBack ? "parent" : "Home"); color: root.appearance.focusColor || "#C994A5"; font.pixelSize: 16 * root.textScale; width: parent.width; elide: Text.ElideRight }
+        Text { font.family: shell.fontFamily; objectName: "libraryStatusLine"; text: kodiMedia.status + (kodiMedia.playbackStatus ? " · " + kodiMedia.playbackStatus : ""); width: parent.width; elide: Text.ElideRight; color: !kodiMedia.busy && !kodiMedia.connected ? shell.backgroundError : shell.backgroundMuted; font.pixelSize: 15 * root.textScale }
+        Text { font.family: shell.fontFamily; text: "OK open / play / resume    Menu details    ↑ Toolbar    ← → Pages    Back " + (kodiMedia.canGoBack ? "parent" : "Home"); color: shell.backgroundFocus; font.pixelSize: 16 * root.textScale; width: parent.width; elide: Text.ElideRight }
     }
     Rectangle {
-        anchors.fill: parent; anchors.margins: 35; color: "#101B30"; radius: 18; visible: root.details !== null
+        objectName: "libraryDetailsPanel"
+        anchors.fill: parent; anchors.margins: 35; color: shell.elevated; radius: shell.radius; visible: root.details !== null
         Column {
-            anchors.fill: parent; anchors.margins: 35; spacing: 22
-            Text { width: parent.width; text: root.details ? root.details.title : ""; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 34 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
-            Text { width: parent.width; text: root.subtitle(root.details); color: root.appearance.focusColor || "#C994A5"; font.pixelSize: 21 * root.textScale; wrapMode: Text.WordWrap }
-            Text { width: parent.width; text: root.details ? root.details.plot || "No description supplied by Kodi." : ""; color: "#DCE5F3"; font.pixelSize: 22 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: Math.max(2, Math.floor((root.height - 340) / 28)); elide: Text.ElideRight }
-                    Text { width: parent.width; text: root.details && root.details.mediaType === "tvshow" ? "OK browse · Menu curate · Back close"
+            anchors.fill: parent; anchors.margins: 35; spacing: 22 * shell.gapScale
+            Text { font.family: shell.fontFamily; width: parent.width; text: root.details ? root.details.title : ""; color: shell.elevatedText; font.pixelSize: 34 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight }
+            Text { font.family: shell.fontFamily; width: parent.width; objectName: "libraryDetailsSubtitle"; text: root.subtitle(root.details); color: shell.elevatedFocus; font.pixelSize: 21 * root.textScale; wrapMode: Text.WordWrap }
+            Text { font.family: shell.fontFamily; width: parent.width; text: root.details ? root.details.plot || "No description supplied by Kodi." : ""; color: shell.elevatedText; font.pixelSize: 22 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: Math.max(2, Math.floor((root.height - 340) / 28)); elide: Text.ElideRight }
+                    Text { font.family: shell.fontFamily; width: parent.width; text: root.details && root.details.mediaType === "tvshow" ? "OK browse · Menu curate · Back close"
                         : root.details && root.details.mediaType === "season" ? "OK browse · Back close"
-                    : "OK play / resume · Right restart · Menu curate · Back close\nDuring playback: OK pause · Left/Right seek · Back stop · Home return"; color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: 20 * root.textScale; wrapMode: Text.WordWrap }
-            Text { text: kodiMedia.playbackStatus; color: root.appearance.focusColor || "#C994A5"; font.pixelSize: 18 * root.textScale }
+                    : "OK play / resume · Right restart · Menu curate · Back close\nDuring playback: OK pause · Left/Right seek · Back stop · Home return"; color: shell.elevatedMuted; font.pixelSize: 20 * root.textScale; wrapMode: Text.WordWrap }
+            Text { font.family: shell.fontFamily; objectName: "libraryDetailsPlayback"; text: kodiMedia.playbackStatus; color: shell.elevatedFocus; font.pixelSize: 18 * root.textScale }
         }
         MouseArea { anchors.right: parent.right; anchors.top: parent.top; width: 90; height: 45; onClicked: root.details = null
-            Text { anchors.centerIn: parent; text: "Back"; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 20 * root.textScale } }
+            Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: "Back"; color: shell.elevatedText; font.pixelSize: 20 * root.textScale } }
     }
     LibraryBrowseControls { id: browseControls; provider:root.provider;appearance:root.appearance;anchors.fill: parent; anchors.margins: 35; z: 10 }
 }

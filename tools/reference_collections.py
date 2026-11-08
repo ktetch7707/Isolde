@@ -16,6 +16,7 @@ class ReferenceCollections:
     def __init__(self, evidence, fixture, repository):
         self.requests = []
         self.errors = []
+        self.idle_connections = []
         self.installed = []
         self.fixture = fixture
         self.evidence = evidence
@@ -79,8 +80,10 @@ class ReferenceCollections:
                 return
             with connection:
                 connection.settimeout(2)
+                message = b""
+                request = None
+                stage = "read"
                 try:
-                    message = b""
                     while not message.endswith(b"\n") and len(message) <= 65536:
                         chunk = connection.recv(65536)
                         if not chunk:
@@ -88,10 +91,17 @@ class ReferenceCollections:
                         message += chunk
                     request = json.loads(message)
                     self.requests.append(request)
+                    stage = "reply"
                     result = self.reply(request)
                     connection.sendall(json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": result}).encode()+b"\n")
                 except (OSError, ValueError, KeyError) as error:
-                    self.errors.append(str(error))
+                    # Match BridgeServer.poll: a connection with no request is
+                    # not an RPC failure. Retain the transport diagnostic.
+                    if isinstance(error, socket.timeout) and not message:
+                        self.idle_connections.append({"error":str(error),"receivedBytes":0})
+                        continue
+                    self.errors.append({"error":str(error),"stage":stage,"receivedBytes":len(message),
+                                        "method":request.get("method") if isinstance(request,dict) else None})
 
     def reply(self, request):
         method, params = request["method"], request.get("params", {})
@@ -149,7 +159,7 @@ class ReferenceCollections:
         self.socket.close()
         self.thread.join(timeout=3)
         (self.evidence / "provider-requests.json").write_text(json.dumps({
-            "requests": self.requests, "errors": self.errors,
+            "requests": self.requests, "errors": self.errors, "idleConnections": self.idle_connections,
             "installedCatalogApps": self.installed,
             "fixtureOnly": True, "realPlaybackVerified": False,
         }, indent=2))

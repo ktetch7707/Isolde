@@ -2,13 +2,8 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
     property var appearance: ({})
-    readonly property color accentColor: appearance.focusColor || "#C994A5"
-    readonly property color surfaceColor: appearance.surfaceColor || "#172238"
-    readonly property color selectedColor: appearance.selectedColor || "#353039"
-    readonly property color textColor: appearance.textColor || "#F5F1F3"
-    readonly property color mutedColor: appearance.mutedColor || "#AAA5AF"
-    readonly property int cardRadius: Math.round(4 + 12 * (appearance.tileRoundness === undefined ? 0.2 : appearance.tileRoundness))
     property int selectedIndex: 0
     property bool editingFolders: false
     property bool showingImport: false
@@ -45,7 +40,7 @@ Item {
             else kodiMedia.refresh()
         }
     }
-    Rectangle { anchors.fill: parent; color: root.appearance.backgroundEnd || "#101014" }
+    Rectangle { anchors.fill: parent; color: shell.surface }
     Flickable {
     id: scroll
     visible: !root.editingFolders && !root.showingImport
@@ -55,10 +50,10 @@ Item {
     boundsBehavior: Flickable.StopAtBounds
     Column {
         id: contents
-        width: parent.width; spacing: 20
-        Text { text: "MEDIA LIBRARY"; color: root.textColor; font.pixelSize: 30 }
-        Text { width: parent.width; wrapMode: Text.WordWrap; text: "Keep Kodi ready behind Isolde for this profile. The outgoing Kodi instance closes before another profile starts."; color: root.mutedColor; font.pixelSize: 20 }
-        Text { width: parent.width; wrapMode: Text.WordWrap; text: kodiService.status; color: root.accentColor; font.pixelSize: 22 }
+        width: parent.width; spacing: 20 * shell.gapScale
+        Text { font.family: shell.fontFamily; text: "MEDIA LIBRARY"; color: shell.text; font.pixelSize: 30 * shell.textScale }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Keep Kodi ready behind Isolde for this profile. The outgoing Kodi instance closes before another profile starts."; color: shell.muted; font.pixelSize: 20 * shell.textScale }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: kodiService.status; color: shell.focus; font.pixelSize: 22 * shell.textScale }
         Repeater {
             id: actions
             model: ["Automatic startup: " + (kodiService.enabled ? "On" : "Off"), "Restart Kodi background service", "Scan for New Movies", "Refresh library connection", "Frontend: " + (kodiService.frontend === "isolde" ? "Isolde (preview) — select for Kodi" : "Kodi application — select for Isolde"), "Open Kodi with your existing setup", "Media folder access · " + kodiService.libraryFolders.length + " allowed", "Web search: " + (searchPreferences.webEnabled ? "ON — no provider configured, Kodi results only" : "OFF — Kodi library only"), "Import existing desktop Kodi · backup/preview/import/rollback"]
@@ -66,18 +61,18 @@ Item {
                 required property int index
                 required property string modelData
                 objectName: "mediaLibraryActionRow"
-                width: parent.width; height: 80; radius: root.cardRadius
-                color: root.selectedIndex === index ? root.selectedColor : root.surfaceColor
+                width: parent.width; height: 80; radius: shell.radius
+                color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 2 : 0
-                border.color: root.accentColor
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
                 opacity: kodiService.switching || (index === 5 && kodiService.frontend !== "kodi") || (index === 2 && (!kodiMedia.connected || kodiMedia.busy)) || (index === 3 && kodiMedia.busy) ? 0.45 : 1
-                Text { anchors.fill: parent; anchors.margins: 18; text: modelData; color: root.textColor; font.pixelSize: 21; wrapMode: Text.WordWrap }
+                Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 18; text: modelData; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * shell.textScale; wrapMode: Text.WordWrap }
                 MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
             }
         }
-        Text { width: parent.width; wrapMode: Text.WordWrap; text: root.selectedIndex >= 4 ? kodiService.status : (kodiMedia.scanStatus || kodiMedia.status); color: root.accentColor; font.pixelSize: 18 }
-        Text { width: parent.width; wrapMode: Text.WordWrap; text: "Both frontends use this Isolde profile's same Kodi home. Switching does not replace your skin, add-ons, sources or library. Exit Kodi normally before switching back."; color: root.mutedColor; font.pixelSize: 17 }
-        Text { width: parent.width; wrapMode: Text.WordWrap; text: "Put new movies in your existing movie folder, then scan here. Kodi uses this profile's configured video sources and content settings (including subfolders when enabled). This does not move, rename, import or clean up files. Use Media folder access below to allow a collection, then configure its movie content once in Kodi. Startup alone does not grant file access."; color: root.mutedColor; font.pixelSize: 17 }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: root.selectedIndex >= 4 ? kodiService.status : (kodiMedia.scanStatus || kodiMedia.status); color: shell.focus; font.pixelSize: 18 * shell.textScale }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Both frontends use this Isolde profile's same Kodi home. Switching does not replace your skin, add-ons, sources or library. Exit Kodi normally before switching back."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Put new movies in your existing movie folder, then scan here. Kodi uses this profile's configured video sources and content settings (including subfolders when enabled). This does not move, rename, import or clean up files. Use Media folder access below to allow a collection, then configure its movie content once in Kodi. Startup alone does not grant file access."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
     }
     }
     KodiImportView { id: importPage; objectName: "kodiImportPage"; anchors.fill: parent; visible: root.showingImport; appearance: root.appearance }

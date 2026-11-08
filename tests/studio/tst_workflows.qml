@@ -45,6 +45,30 @@ Item {
                 throw error
             }
         }
+        function test_editable_page_menu_add_cancel_accept_and_reopen() {
+            givenPage(false,false)
+            verify(editor.command("newPage",{name:"Menu page"}))
+            const id=editor.session.document.pages[0].id
+            editor.pageId=id;editor.selectedId="";editor.toolbarFocus=false
+            const before=document(),disk=studioFixture.disk()
+            editor.openInspector(true)
+            const inspector=findChild(editor,"studioInspector")
+            verify(inspector!==null)
+            const field=homeLayout.studioOptions.inspector.pageFields.find(f=>f.type==="editableMenu")
+            verify(field!==undefined);inspector.activateField(field)
+            compare(editor.mode,"move");compare(editor.addingType,"page-menu")
+            command(inputManager.back);compare(document(),before);compare(studioFixture.disk(),disk)
+            editor.openInspector(true);inspector.activateField(field)
+            command(inputManager.confirm);compare(editor.mode,"canvas")
+            const items=editor.session.document.pages[0].layout.components
+            compare(items.filter(item=>item.family==="page-menu").length,1)
+            compare(editor.session.document.pages[0].layout.composition.pageNavigation,"none")
+            compare(studioFixture.disk(),disk)
+            editor.openInspector(true);inspector.activateField(field)
+            compare(editor.mode,"inspector");compare(editor.current.family,"page-menu")
+            compare(editor.session.document.pages[0].layout.components.length,items.length)
+            verify(editor.session.undo());compare(document(),before)
+        }
         function test_proportional_size_cancel_refusal_and_pointer_remote_transaction() {
             givenPage(false,false)
             verify(editor.session.execute("addResolved",{type:"shape",placement:{x:1,y:0,width:1,height:1}}));settle();editor.selectedId=editor.items.find(i=>i.id!=="cell-0").id;settle()
@@ -64,7 +88,9 @@ Item {
             command(inputManager.back);compare(document(),before);compare(studioFixture.disk(),diskBaseline)
         }
         function test_size_role_labels_and_named_tools_are_reachable() {
-            givenPage(false,false);editor.openInspector(false)
+            givenPage(false,false)
+            verify(editor.session.execute("addResolved",{type:"shape",placement:{x:1,y:0,width:1,height:1}}));settle()
+            editor.selectedId=editor.items.find(i=>i.id!=="cell-0").id;settle();editor.openInspector(false)
             const inspector=findChild(editor,"studioInspector");compare(inspector.labels()[2],"Size & layout");compare(inspector.labels()[3],"Action")
             inspector.selected=2;command(inputManager.confirm);compare(inspector.fields[0].label,"Outer size")
             command(inputManager.confirm);compare(editor.mode,"size");command(inputManager.back);compare(editor.mode,"inspector");compare(inspector.selected,0)
@@ -72,6 +98,26 @@ Item {
             const before=document();editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="editorSettings"));compare(editor.mode,"editorSettings")
             editor.choice=0;command(inputManager.confirm);compare(editor.mode,"view");editor.choice=0;command(inputManager.confirm);compare(document(),before)
             command(inputManager.back);compare(editor.mode,"editorSettings");compare(editor.choice,0);compare(document(),before);compare(studioFixture.disk(),diskBaseline)
+        }
+        function test_size_context_dpad_route_restores_exact_field() {
+            givenPage(false,false)
+            verify(editor.session.execute("addResolved",{type:"shape",placement:{x:1,y:0,width:1,height:1}}));settle()
+            editor.selectedId=editor.items.find(i=>i.id!=="cell-0").id;settle()
+            const before=document(),selectedId=editor.selectedId
+            command(inputManager.confirm);compare(editor.mode,"context")
+            command(inputManager.navigateDown);command(inputManager.confirm)
+            compare(editor.mode,"inspector")
+            const inspector=findChild(editor,"studioInspector");verify(inspector!==null)
+            const sizeTab=inspector.labels().indexOf("Size & layout");verify(sizeTab>=0)
+            for(let i=0;i<sizeTab;++i)command(inputManager.navigateDown)
+            compare(inspector.selected,sizeTab);command(inputManager.confirm)
+            compare(inspector.view,"fields");compare(inspector.fields[0].label,"Outer size")
+            command(inputManager.confirm);compare(editor.mode,"size")
+            command(inputManager.navigateRight);compare(editor.candidate.width,2)
+            compare(document(),before);compare(editor.selectedId,selectedId)
+            command(inputManager.back);compare(editor.mode,"inspector")
+            compare(inspector.view,"fields");compare(inspector.tab,sizeTab);compare(inspector.selected,0)
+            compare(document(),before);compare(studioFixture.disk(),diskBaseline)
         }
         function test_hidden_header_layers_recovery_and_field_return() {
             givenPage(false,false)
