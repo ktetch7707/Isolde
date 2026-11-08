@@ -6,3 +6,11 @@
 *.user.*
 compile_commands.json
 __pycache__/
+/coverage/
+/evidence/
+coverage_output.txt
+out.txt
+output.txt
+temp_test.txt
+tst_isolde.txt
+=
