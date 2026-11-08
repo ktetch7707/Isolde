@@ -48,6 +48,7 @@ class ComponentTests : public QObject {
     Q_OBJECT
 private slots:
     void sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts();
+    void sourceFamiliesUseGenericBoundedComposition();
     void steamGamesUseProviderIdentityAndReviewedImport();
     void guideActionsValidateIdentityAndAppearance();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
@@ -636,6 +637,23 @@ void ComponentTests::skinsRejectInvalidAndFailedApplications()
     QVERIFY(!layout.applySkin("builtin-pastel")); QCOMPARE(layout.components(),items);
     QCOMPARE(layout.appearance()["focusColor"].toString(),QString("#123456"));
 }
+void ComponentTests::sourceFamiliesUseGenericBoundedComposition()
+{
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps)); HomeLayout home(&registry); QVERIFY(home.load());
+    const auto presets=home.studioOptions().value("componentPresets").toMap();
+    for (const auto &family:{"detected-sources","source-notice"}) {
+        const auto prototype=presets.value(family).toMap(); QVERIFY(!prototype.isEmpty()); QString error;
+        const auto normalized=ComponentSchema::component(prototype,false,&error); QVERIFY2(!normalized.isEmpty(),qPrintable(error));
+        QCOMPARE(normalized.value("source").toMap().value("provider").toString(),QString("sources"));
+        auto invalid=prototype; auto style=prototype.value("presentation").toMap(); style["sourceMaximum"]=7; invalid["presentation"]=style;
+        QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+        style["sourceMaximum"]=true;invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+        style=prototype.value("presentation").toMap();style["sourceVariant"]="floating";invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+    }
+    const auto controls=home.composition().value("headerControls").toList(); QVERIFY(controls.contains("sources"));
+    QVERIFY(!home.studioOptions().value("sourcePolicyFields").toList().isEmpty());
+}
+
 void ComponentTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
 {
     QVERIFY(ComponentSchema::validSourcePolicy({{"schemaVersion",1},{"mode","compact"},{"duration",8},{"pages",QVariantList{"home"}},{"slots",QVariantList{"status"}}}));

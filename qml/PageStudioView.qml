@@ -305,7 +305,7 @@ Item {
     function openHeader(part) {
         headerSelection=part || "title"
         openInspector(true);inspector.tab=inspector.tabs.indexOf("Header");inspector.view="fields";inspector.controlsShown=true
-        const key=headerSelection==="title"?"identity":headerSelection==="clock"?"showClock":headerSelection==="search" || headerSelection==="settings" || headerSelection==="edit"?"headerControls":"headerMode"
+        const key=headerSelection==="title"?"identity":headerSelection==="clock"?"showClock":["sources","search","settings","edit"].indexOf(headerSelection)>=0?"headerControls":"headerMode"
         inspector.selected=Math.max(0,inspector.fields.findIndex(field=>field.key===key))
     }
     function openStructureInspector(type,id){openInspector(false);inspector.structureType=type;inspector.structureId=id;structureType=type;structureId=id}

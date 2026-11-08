@@ -177,6 +177,7 @@ qt_add_qml_module(isolde
         qml/StudioGridEditor.qml
         qml/PageBackdrop.qml
         qml/PageMenuWidget.qml
+        qml/PageSourcesWidget.qml
         qml/StudioInspector.qml
         qml/StudioReusePanel.qml
         qml/StudioDesignPanel.qml
@@ -385,6 +386,9 @@ if(BUILD_TESTING)
     set_tests_properties(studio_shell PROPERTIES TIMEOUT 30 LABELS "shell;studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME store_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_store.qml)
+    add_test(NAME sources_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_sources.qml)
+    set_tests_properties(sources_remote_ui PROPERTIES TIMEOUT 60 LABELS "sources;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(store_remote_ui PROPERTIES TIMEOUT 30 LABELS "store;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_gestures COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_gestures.qml)

@@ -32,6 +32,7 @@ Item {
     }
 
     function handleCommand(command) {
+        if (inPage && selectedSection === 2 && sourcePage.editing) { sourcePage.handleCommand(command); return }
         if (inPage && selectedSection === 6 && (vpnPage.editing || command !== inputManager.back)) {
             vpnPage.handleCommand(command)
             return

@@ -19,6 +19,10 @@ Item {
     property string galleryId:""
     property bool pendingGalleryRestore:false
     property string message:""
+    property int previousCardIndex:0
+    property int previousGalleryIndex:0
+    onSelectedIdChanged:{const index=cards.findIndex(a=>a.id===selectedId);if(index>=0)previousCardIndex=index}
+    onGalleryIdChanged:{const index=galleryApps.findIndex(a=>a.id===galleryId);if(index>=0)previousGalleryIndex=index}
     readonly property var allApps:(registry?registry.apps:[]).filter(a=>(a.type==="web" || a.type==="desktop" || a.type==="android") && (!collection.section || a.section===collection.section))
     readonly property bool collectionTooLarge:collection.mode==="all" && allApps.length>128
     readonly property var eligible:{
@@ -33,8 +37,8 @@ Item {
     readonly property var storeApp:buttons || collection.showStore===false?null:(registry?registry.apps:[]).find(a=>a.type==="store") || null
     readonly property var galleryApps:eligible.concat(storeApp?[storeApp]:[])
     readonly property var cards:eligible.slice(0,overflow?capacity-1:capacity).concat(overflow?[{id:"__more__",name:style.moreLabel || "More apps"}]:[])
-    onCardsChanged:if(!cards.some(a=>a.id===selectedId))selectedId=cards.length?cards[0].id:""
-    onGalleryAppsChanged:if(!galleryApps.some(a=>a.id===galleryId))galleryId=galleryApps.length?galleryApps[0].id:""
+    onCardsChanged:if(!cards.some(a=>a.id===selectedId))selectedId=cards.length?cards[Math.min(previousCardIndex,cards.length-1)].id:""
+    onGalleryAppsChanged:if(!galleryApps.some(a=>a.id===galleryId))galleryId=galleryApps.length?galleryApps[Math.min(previousGalleryIndex,galleryApps.length-1)].id:""
     signal engage()
     signal launch(var action)
     function logoSource(app){return (style.logoMode || "cutout")==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}

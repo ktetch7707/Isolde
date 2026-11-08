@@ -36,6 +36,38 @@ bool ComponentSchema::validSourcePolicy(const QVariantMap &value)
             }
         } else if (key=="reconnect" || key=="suppressPlayback" || key=="suppressSetup" || key=="suppressEditing" || key=="discoveryEnabled") {
             if (v.metaType().id()!=QMetaType::Bool) return false;
+        } else if (key=="detectedSource") {
+            // T25: Contained configurable detected source policy
+            // Enforce: source ID must be valid, type must be recognized,
+            // and containment zone must be specified for remote decisions
+            if (v.metaType().id()!=QMetaType::QVariantMap) return false;
+            const auto &s=v.toMap();
+            if (!s.contains(QStringLiteral("id")) || !safeId(s.value(QStringLiteral("id")).toString())) return false;
+            if (!s.contains(QStringLiteral("type")) || !QStringList{"movie-disc","game-disc","media-folder","file-source"}.contains(s.value(QStringLiteral("type")).toString())) return false;
+            // Containment zone validation
+            if (s.contains(QStringLiteral("containment"))) {
+                const auto& containment = s.value(QStringLiteral("containment")).toString();
+                if (containment == "remote") {
+                    // Remote containment requires remoteRef field
+                    if (!s.contains(QStringLiteral("remoteRef"))) return false;
+                    if (!s.value(QStringLiteral("remoteRef")).toString().isEmpty()) return false;
+                } else if (containment == "local") {
+                    // Local containment requires localPath field
+                    if (!s.contains(QStringLiteral("localPath"))) return false;
+                } else {
+                    return false;
+                }
+            }
+        } else if (key=="appliance") {
+            // T13: Appliance software distribution
+            // Enforce: appliance ID must be valid, type must be recognized,
+            // and distribution mode must be specified
+            if (v.metaType().id()!=QMetaType::QVariantMap) return false;
+            const auto &a=v.toMap();
+            if (!a.contains(QStringLiteral("id")) || !safeId(a.value(QStringLiteral("id")).toString())) return false;
+            if (!a.contains(QStringLiteral("type")) || !QStringList{"whiteware","AV appliance","climate appliance"}.contains(a.value(QStringLiteral("type")).toString())) return false;
+            if (a.contains(QStringLiteral("distributionMode")) && !QStringList{"direct","partner","self-install"}.contains(a.value(QStringLiteral("distributionMode")).toString())) return false;
+            if (a.contains(QStringLiteral("requiresSetup")) && a.value(QStringLiteral("requiresSetup")).toBool() != !a.value(QStringLiteral("requiresSetup")).toBool()) return false;
         } else return false;
     }
     return true;
@@ -115,7 +147,7 @@ constexpr int MaxHomeLayoutColumns = 2;
 
 // Page composition bounds.
 constexpr int MaxNavigationTabs = 64;
-constexpr int MaxHeaderControls = 3;
+constexpr int MaxHeaderControls = 4;
 // Min/MaxSidebarWidth, Min/MaxSectionHeight, Min/MaxDesignHeight are declared
 // in ComponentSchema.h (shared with HomeLayout).
 }
@@ -184,6 +216,13 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if(it.value().metaType().id()!=QMetaType::QString || !(key=="fillMode"?QStringList{"solid","gradient"}:QStringList{"vertical","horizontal"}).contains(it.value().toString()))return false;
         } else if(key=="shape") {
             if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"rectangle","rounded","ellipse","pill","divider"}.contains(it.value().toString()))return false;
+        } else if(key=="sourceMaximum") {
+            if(it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool)return false;
+            const auto n=it.value().toDouble();if(!std::isfinite(n) || std::floor(n)!=n || n<1 || n>6)return false;
+        } else if(key=="sourceVariant") {
+            if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"compact","list","cards"}.contains(it.value().toString()))return false;
+        } else if(key=="sourceDetails" || key=="sourceBadge") {
+            if(it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if(key=="visibleLabel" || key=="bodyText" || key=="moreLabel" || key=="galleryTitle") {
             if(it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>(key=="bodyText"?4096:160) || it.value().toString().contains(QChar::Null))return false;
         } else if(key=="artFit" || key=="labelPosition" || key=="textAlign" || key=="logoMode") {
@@ -367,7 +406,7 @@ bool ComponentSchema::validComposition(const QVariantMap &value)
     if (value.contains("headerControls")) {
         const auto controls = value["headerControls"].toList(); QSet<QString> unique;
         if (controls.isEmpty() || controls.size() > MaxHeaderControls || value["headerControls"].metaType().id() != QMetaType::QVariantList) return false;
-        for (const auto &control : controls) { const auto id = control.toString(); if (!QStringList{"search", "settings", "edit"}.contains(id) || unique.contains(id)) return false; unique.insert(id); }
+        for (const auto &control : controls) { const auto id = control.toString(); if (!QStringList{"sources", "search", "settings", "edit"}.contains(id) || unique.contains(id)) return false; unique.insert(id); }
         if (!unique.contains("settings") && !unique.contains("edit")) return false;
     }
     if(value.value("verticalScrolling").toBool() && (!value.value("enabled").toBool() || !value.contains("grid") || normalizedGrid(value.value("grid").toMap()).value("mode")!="screen"))return false;
@@ -575,7 +614,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
     const auto shape=input.value("presentation").toMap().value("shape").toString();
     if(!shape.isEmpty() && type!="shape" && (type!="container" || shape=="ellipse" || shape=="divider"))return reject(error,"Choose a supported decorative shape or rectangular container.");
     if(input.contains("name") && (input["name"].metaType().id()!=QMetaType::QString || input["name"].toString().size()>MaxComponentNameLength || input["name"].toString().contains(QChar::Null)))return reject(error,"Use a component name of at most 160 characters.");
-    if(input.contains("family") && !((type=="container" && QStringList{"carousel","app-bar","page-menu"}.contains(input["family"].toString())) || (type=="library" && QStringList{"recently-viewed","music-library","tv-guide"}.contains(input["family"].toString()))))return reject(error,"Unsupported component family.");
+    if(input.contains("family") && !((type=="container" && QStringList{"carousel","app-bar","page-menu","detected-sources","source-notice"}.contains(input["family"].toString())) || (type=="library" && QStringList{"recently-viewed","music-library","tv-guide"}.contains(input["family"].toString()))))return reject(error,"Unsupported component family.");
     if(input.contains("appCollection")) {
         if(type!="container" || input.value("family")!="app-bar" || input["appCollection"].metaType().id()!=QMetaType::QVariantMap)return reject(error,"Choose an app carousel for an app collection.");
         const auto collection=input["appCollection"].toMap();
@@ -659,6 +698,7 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
         if (kind != "widget" || input.value("widgetType") != type) return reject(error, "Unsupported widget.");
         if(type=="container" && (input.value("name").toString().trimmed().isEmpty() || input.value("name").toString().size()>MaxNameLength || input.value("name").toString().contains(QChar::Null) || !validChildLayout(input.value("presentation").toMap().value("layout").toMap())))return reject(error,"A group needs a name and a bounded internal layout.");
         source = {{"schemaVersion", 1}, {"provider", "shell"}, {"kind", type}};
+        if(QStringList{"detected-sources","source-notice"}.contains(input.value("family").toString())) source={{"schemaVersion",1},{"provider","sources"},{"kind",input.value("family")}};
         result.remove("action");
     } else {
         auto requested = input.value("action").toMap();
@@ -802,6 +842,7 @@ bool ComponentSchema::hierarchyFits(const QJsonArray &items,const QVariantMap &c
     for(auto it=byId.cbegin();it!=byId.cend();++it)if(it.value()["componentType"]=="container"){
         if(it.value().contains("appCollection") && !children.value(it.key()).isEmpty())return fail("An app collection uses registry membership, not placed children.");
         if(it.value().value("family")=="page-menu" && !children.value(it.key()).isEmpty())return fail("A page menu uses page membership, not placed children.");
+        if(QStringList{"detected-sources","source-notice"}.contains(it.value().value("family").toString()) && !children.value(it.key()).isEmpty())return fail("A detected-source component projects device facts, not placed children.");
         if(it.value().value("family")=="carousel") {
             if(children.value(it.key()).size()>128)return fail("A button carousel supports up to 128 buttons.");
             for(const auto &child:children.value(it.key()))if(child.toObject()["componentType"]!="button")return fail("A button carousel contains buttons. Use a group for other components.");

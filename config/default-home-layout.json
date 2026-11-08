@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "composition":{"schemaVersion":1,"enabled":false,"headerControls":["sources","settings","edit"]},
   "rootPage": {"name": "Home", "visible": true, "position": 0},
   "theme": {
     "surfaceThemes": {

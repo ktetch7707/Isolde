@@ -267,6 +267,14 @@ bool SourceManager::dismissSource(const QString &id)
     if (sourceAction(id).isEmpty()) return fail(tr("This source disconnected. Reconnect it and retry."));
     m_dismissed.insert(id); ++m_revision; emit sourcesChanged(); return true;
 }
+bool SourceManager::requestSource(const QString &id)
+{
+    if (!id.isEmpty()) {
+        bool found=false; for (const auto &value:m_discovered) found|=value.toMap().value("id")==id;
+        if (!found) return fail(tr("This source disconnected. Choose another source."));
+    }
+    m_requestedId=id; ++m_revision; emit sourcesChanged(); return true;
+}
 QVariantMap SourceManager::sourceAction(const QString &id) const
 {
     for (const auto &value:m_discovered) if (value.toMap().value("id")==id && value.toMap().value("compatibleHandler").toBool()) return value.toMap().value("action").toMap();

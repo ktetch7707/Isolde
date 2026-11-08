@@ -227,9 +227,9 @@ Window {
                 artworkMotionAllowed:window.homeArtworkMotionActive
                 anchors.fill: parent
                 visible: (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android")) && !pageSurface.open
-                items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
+                items: homeLayout.components.concat(kodiShelves.items)
                 authoredItems: homeLayout.components
-                sections: sourceManager.sections.concat(homeLayout.sections).concat(kodiShelves.sections)
+                sections: homeLayout.sections.concat(kodiShelves.sections)
                 authoredSections: homeLayout.sections
                 brandVisible: homeLayout.brandVisible
                 backgroundStart: homeLayout.backgroundStart
@@ -247,12 +247,12 @@ Window {
                 internetAvailable: networkSettings.internetAvailable
                 localNetworkAvailable: networkSettings.localNetworkAvailable
                 hasContextualSources: sourceManager.items.length > 0
+                sourceWorkflow:({playback:sessionManager.active,setup:!setupState.complete,editing:home.editMode})
                 onActionActivated: (action, originId) => { if (setupState.complete) actionDispatcher.dispatch(action, originId) }
                 onSettingsRequested: section => actionDispatcher.dispatch({ type: "settings", section: section }, "")
                 onSearchRequested: window.openSearchFromPage()
                 onKeepSourceRequested: source => {
-                    if (source && source.action && homeLayout.addActionTile(source.name, source.action.type, source.action.target, "", source.action.openWith))
-                        sourceManager.markPermanent(source.id)
+                    if (source) sourceManager.promoteSource(source.id)
                 }
                 onHideSourceRequested: sourceId => sourceManager.hideSource(sourceId)
             }
@@ -320,6 +320,7 @@ Window {
                 id:pageSurface;anchors.fill:parent;visible:open && (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android"))
                 artworkMotionAllowed:window.homeArtworkMotionActive
                 layoutModel:homeLayout;provider:pageData;availableApps:appRegistry.apps;artwork:artPacks.artwork;themes:artPacks.themes
+                sourceWorkflow:({playback:sessionManager.active,setup:!setupState.complete,editing:pageSurface.editing})
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}
                 onSearchRequested:window.openSearchFromPage()

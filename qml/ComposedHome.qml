@@ -299,6 +299,7 @@ Item {
         const control = headerControls[index]
         if(host.editMode){host.editHeaderSelected(control);return}
         if (control === "search") host.searchRequested()
+        else if (control === "sources") host.activateHeaderControl(control)
         else host.settingsRequested(control === "edit" ? 1 : -1)
     }
     function focusEntry(entry) {
@@ -336,8 +337,8 @@ Item {
         if (!current) { host.recoveryFocused = true; return }
         const focusedItem=(host.items || []).find(i=>i.id===current.id)
         const pageMenu=focusedItem && focusedItem.family==="page-menu"
-        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || focusedItem.family==="page-menu" || focusedItem.family==="carousel")) && widgets[current.id]
-            && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm || pageMenu && (command===inputManager.navigateUp || command===inputManager.navigateDown))) {
+        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || ["page-menu","carousel","detected-sources","source-notice"].indexOf(focusedItem.family)>=0)) && widgets[current.id]
+            && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm || focusedItem && ["detected-sources","source-notice"].indexOf(focusedItem.family)>=0 && command===inputManager.menu || pageMenu && (command===inputManager.navigateUp || command===inputManager.navigateDown))) {
             activeWidget=current.id
             const handled=widgets[current.id].handleCommand(command)
             if(!pageMenu || handled)return
@@ -425,7 +426,7 @@ Item {
                             LineIcon { visible:(root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))!=="label"; x:root.headerStyle.controlDisplay==="icon"?(parent.width-width)/2:16*root.unit; anchors.verticalCenter:parent.verticalCenter; width:(root.headerStyle.iconSize || 23)*root.unit; height:width; name:modelData === "search" ? "search" : "settings"; ink:root.headerInk }
                             Text { visible:root.headerStyle.controlDisplay!=="icon";anchors.verticalCenter:parent.verticalCenter; x:(root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))==="both"?(24+(root.headerStyle.iconSize || 23))*root.unit:(parent.width-width)/2
                                 width:Math.min(implicitWidth,Math.max(0,parent.width-((root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))==="both"?32+(root.headerStyle.iconSize || 23):16)*root.unit));elide:Text.ElideRight
-                                text:modelData === "edit" ? host.editLabel : modelData === "search" ? "Search" : "Settings"; color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.controlSize || (root.identityHeader ? 14 : 15))*root.unit }
+                                text:host.headerControlLabel(modelData); color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.controlSize || (root.identityHeader ? 14 : 15))*root.unit }
                             MouseArea { anchors.fill:parent; onClicked:root.activateControl(index) }
                         }
                     }

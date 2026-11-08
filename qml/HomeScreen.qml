@@ -131,7 +131,8 @@ Item {
         repairFocus()
         if(saved.focus || focusedItemId)restoreFocus(saved.focus || focusedItemId)
         if(saved.recoveryFocused)recoveryFocused=true
-        recoveryIndex=saved.recoveryIndex===1?1:0
+        const count=composition.enabled?composed.headerControls.length:legacyHeaderControls.length
+        recoveryIndex=Number.isInteger(saved.recoveryIndex) && saved.recoveryIndex>=0 && saved.recoveryIndex<count?saved.recoveryIndex:0
         legacyMenuFocused=!!saved.legacyMenuFocused && legacyMenuEnabled
         if(legacyMenuFocused){legacyMenu.selectedPage=Math.max(0,menuPages.findIndex(page=>page.id===saved.legacyPageId));composed.navigationFocused=true;recoveryFocused=false}
         // Focus restoration can queue its own reveal. Restore authored scroll
@@ -155,6 +156,14 @@ Item {
     property var setItemPlacement: null
     property var gridCollisions: null
     property var libraryProvider: null
+    property var sourceProvider:typeof sourceManager!=="undefined"?sourceManager:null
+    property var sourceWorkflow:({editing:editMode})
+    readonly property var headerControlLabels:typeof homeLayout!=="undefined" && homeLayout?(homeLayout.studioOptions.headerLabels || {}):({})
+    readonly property var headerControlActions:typeof homeLayout!=="undefined" && homeLayout?(homeLayout.studioOptions.headerActions || {}):({})
+    readonly property var legacyHeaderControls:composition.headerControls || ["settings","edit"]
+    readonly property int headerSourceCount:{const revision=sourceProvider?sourceProvider.revision:0;return sourceProvider?sourceProvider.projected(menuActiveId,"header-sources",true,sourceWorkflow).length:0}
+    function headerControlLabel(control){return control==="sources"?(headerControlLabels.sources || "Sources")+(headerSourceCount?" · "+headerSourceCount:""):control==="edit"?editLabel:control==="search"?"Search":"Settings"}
+    function activateHeaderControl(control){if(control==="sources"){if(sourceProvider)sourceProvider.requestSource("");actionActivated(headerControlActions.sources || {},"header-sources")}else if(control==="search")searchRequested();else settingsRequested(control==="edit"?1:-1)}
     property var appProvider:typeof appRegistry!=="undefined"?appRegistry:null
     property var collectionDefaults:typeof homeLayout!=="undefined"?homeLayout.studioOptions.componentPresets || ({}):({})
     property bool previewOnly:false
@@ -322,10 +331,10 @@ Item {
         if (composition.enabled) { composed.handleCommand(command); return }
         if (recoveryFocused || !items.length) {
             recoveryFocused = true
-            if (command === inputManager.navigateLeft) recoveryIndex = 0
-            else if (command === inputManager.navigateRight) recoveryIndex = 1
+            if (command === inputManager.navigateLeft) recoveryIndex = Math.max(0,recoveryIndex-1)
+            else if (command === inputManager.navigateRight) recoveryIndex = Math.min(legacyHeaderControls.length-1,recoveryIndex+1)
             else if (command === inputManager.navigateDown && items.some(i=>focusable(i))) recoveryFocused = false
-            else if (command === inputManager.confirm) settingsRequested(recoveryIndex === 0 ? -1 : 1)
+            else if (command === inputManager.confirm) activateHeaderControl(legacyHeaderControls[recoveryIndex])
             return
         }
         let next = focusedIndex
@@ -413,14 +422,14 @@ Item {
         Row {
             width: parent.width; height: 42; spacing: 12
             Repeater {
-                model: ["Settings", "Edit Home"]
+                model: root.legacyHeaderControls
                 delegate: Rectangle {
                     required property int index; required property string modelData
                     width: 150; height: 42; radius: 12; color: root.appearance.surfaceColor || "#202126"
                     border.width: !root.editMode && (root.recoveryFocused || !root.items.length) && root.recoveryIndex === index ? 3 : 0
                     border.color: root.appearance.focusColor || "#C994A5"
-                    Text { anchors.centerIn: parent; text: modelData; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 19 * root.textScale }
-                    MouseArea { anchors.fill: parent; onClicked: { root.recoveryFocused = true; root.recoveryIndex = index; root.settingsRequested(index === 0 ? -1 : 1) } }
+                    Text { anchors.centerIn: parent; width:parent.width-12;text:root.headerControlLabel(modelData);elide:Text.ElideRight;horizontalAlignment:Text.AlignHCenter;color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: 19 * root.textScale }
+                    MouseArea { anchors.fill: parent; onClicked: { root.recoveryFocused = true; root.recoveryIndex = index; root.activateHeaderControl(modelData) } }
                 }
             }
             Text { anchors.verticalCenter: parent.verticalCenter; text: root.items.length ? "↑ Settings · Menu Search" : "Home is empty · OK opens Settings"; color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: 16 * root.textScale }

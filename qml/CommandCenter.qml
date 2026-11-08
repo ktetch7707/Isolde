@@ -76,6 +76,12 @@ Item {
     function updateMediaSearch() {
         const text = query.trim()
         if (!open || text.length < 2) { invalidateMediaSearch(); return }
+        if (!webSearchEnabled) {
+            // T28.4: Network denial when web search is switched OFF —
+            // cancel any provider-mediated search and remain on local results only.
+            invalidateMediaSearch()
+            return
+        }
         if (!movieSearchClient || !showSearchClient || !episodeSearchClient) return
         movieSearchClient.openView("movies", "search", text)
         showSearchClient.openView("shows", "search", text)

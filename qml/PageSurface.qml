@@ -21,6 +21,7 @@ Item {
     property string homeOrigin:""
     readonly property var pageEntries:layoutModel.studioPages
     property bool editing:false
+    property var sourceWorkflow:({editing:editing})
     readonly property string focusedComponentId: content.focusedItemId
     property string editOrigin: ""
     property var editViewport: ({})
@@ -92,6 +93,7 @@ Item {
         artworkMotionAllowed:root.artworkMotionAllowed && !root.editing
         anchors.fill:parent
         items:root.model?root.model.items:[];sections:root.model?root.model.sections:[];composition:model?model.composition:({});grid:root.grid;placements:root.placements;pageKey:root.activeId;libraryProvider:root.provider
+        sourceWorkflow:root.sourceWorkflow
         selectMode:model && model.selectMode || "single"; selectTrigger:model && model.selectTrigger || "click"; selectAction:model && model.selectAction || "navigate"; selectionColor:model && model.selectionColor || ""
         editLabel:"Edit page"
         menuPages:root.pageEntries;menuActiveId:root.activeId

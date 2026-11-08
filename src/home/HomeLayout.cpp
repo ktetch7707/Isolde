@@ -337,7 +337,7 @@ QVariantMap HomeLayout::studioOptions() const
 {
     QFile file(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath("studio-defaults.json"));
     if(!file.open(QIODevice::ReadOnly)) {file.setFileName(":/config/studio-defaults.json");if(!file.open(QIODevice::ReadOnly))return {};}
-    if(file.size()>64*1024)return {};
+    if(file.size()>128*1024)return {};
     const auto object=QJsonDocument::fromJson(file.readAll()).object();
     if (object.contains("referenceViewport")) {
         const auto viewport = object["referenceViewport"].toObject();

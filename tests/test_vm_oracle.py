@@ -1056,9 +1056,10 @@ class OracleTests(unittest.TestCase):
 
     def test_source_policy_suite_runs_registered_native_contracts(self):
         targets,pattern=oracle.suite_selection('sources')
-        self.assertEqual(targets,['isolde_tests','isolde_component_tests'])
+        self.assertEqual(targets,['isolde_tests','isolde_component_tests','isolde_studio_quick_tests'])
         self.assertIsNotNone(re.fullmatch(pattern,'isolde_tests'))
         self.assertIsNotNone(re.fullmatch(pattern,'component_contracts'))
+        self.assertIsNotNone(re.fullmatch(pattern,'sources_remote_ui'))
         self.assertIsNone(re.fullmatch(pattern,'studio_quick'))
 
     def test_automatic_cleanup_records_failure_without_hiding_it(self):

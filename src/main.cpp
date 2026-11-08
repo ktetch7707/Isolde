@@ -1,3 +1,4 @@
+// TEST EDITOR TOOL
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
 #include "app/FdroidProvider.h"

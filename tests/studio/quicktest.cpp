@@ -3,6 +3,7 @@
 #include "home/StudioSession.h"
 #include "input/InputManager.h"
 #include "settings/DisplaySettings.h"
+#include "sources/SourceManager.h"
 #include <QtQuickTest>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -23,7 +24,21 @@
 class StudioTestSetup : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString artifacts READ artifacts CONSTANT)
+    Q_PROPERTY(QObject *sources READ sources NOTIFY sourcesChanged)
 public:
+    QObject *sources() const { return sourceManager.get(); }
+    Q_INVOKABLE bool resetSources(int count) {
+        if(count<0 || count>12 || !reset())return false;
+        if(!registry.loadFromData(R"([{"id":"source-handler","name":"Source handler","type":"mock","handledActions":["open-folder","open-file"]}])"))return false;
+        sourceRoot=temp.filePath(QString("source-probes-%1").arg(sequence));
+        if(!QDir().mkpath(sourceRoot))return false;
+        for(int i=0;i<count;++i)if(!QDir().mkpath(sourceRoot+QString("/Source %1").arg(i)))return false;
+        sourceManager=std::make_unique<SourceManager>(&registry,nullptr,temp.filePath(QString("source-state-%1.json").arg(sequence)));
+        sourceManager->setProbeRootsForTests({sourceRoot});sourceManager->setLayout(&home);
+        if(!sourceManager->setPolicy({{"mode","widget"},{"duration",0},{"pages",QVariantList{"home"}}}))return false;
+        emit sourcesChanged();return true;
+    }
+    Q_INVOKABLE void sourcesConnected(bool connected) { if(sourceManager)sourceManager->setProbeRootsForTests(connected?QStringList{sourceRoot}:QStringList{}); }
     StudioTestSetup() : home(&registry) {
         if(!temp.isValid())return;
         // Exercise the real global display binding without reading or writing
@@ -100,6 +115,8 @@ public:
         QFile file(saved);
         return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
     }
+signals:
+    void sourcesChanged();
 public slots:
     void qmlEngineAvailable(QQmlEngine *engine) {
         engine->rootContext()->setContextProperty("studioFixture", this);
@@ -116,6 +133,8 @@ private:
     QString saved;
     int sequence = 0;
     std::unique_ptr<DisplaySettings> display;
+    std::unique_ptr<SourceManager> sourceManager;
+    QString sourceRoot;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(studio, StudioTestSetup)

@@ -87,6 +87,7 @@ Item {
     signal samplesChanged(bool enabled)
     function begin(asPage){editorMode=false;pageMode=asPage;structureType="";structureId="";view="tabs";tab=0;selected=0;advanced=false;editingState="base";controlsShown=false;hiddenControls=false;message="Choose a property group. Changes affect the draft; Apply saves them."}
     function local(item,f){
+        if(pageMode && f.type==="sourcePolicy")return (rawPage.theme || {}).sourcePolicy
         if(editorMode)return ((session?session.document:{}).studioAppearance || {})[f.key]
         if(pageMode && f.scope==="surfaceTheme")return f.key==="surface"?shellSurface:f.key==="mode"?shellPolicy.mode:(shellPolicy.tokens || {})[f.key]
         if(pageMode){if(f.scope==="theme")return (rawPage.theme || {})[f.key];if(f.scope==="background")return ((rawPage.composition || {}).background || {})[f.key];if(f.scope==="headerStyle")return ((rawPage.composition || {}).header || {})[f.key];return (rawPage.composition || {})[f.key]}
@@ -254,6 +255,10 @@ Item {
     function activateField(f){
         if(targets.length>1 && ["geometry","layout","children","apps","order","grid","replaceComponent"].indexOf(f.type)>=0){message="Choose one component for this structural operation. Shared appearance and links can edit all selected items.";return}
         activeField=f;returnSelection=selected
+        if(f.type==="sourcePolicy"){
+            if(pageId!==(session.document.homePageId || "")){message="Display policy belongs to designated Home. Open Home's Header controls.";return}
+            view="sourcePolicy";return
+        }
         if(f.type==="replaceComponent"){openChoices((options.replacementChoices || []).map(entry=>({name:entry.name,value:entry.type,kind:"replacement"})));return}
         if(f.type==="number" && (f.control==="slider" || f.control==="stepper")){beginScalar();return}
         if(f.type==="number" || f.type==="text"){beginKeyboard(f.type,effective(current,f));return}
@@ -372,6 +377,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(set(activeField,entry.action || {},false)){view="fields";selected=returnSelection}
     }
     function handleCommand(command){
+        if(view==="sourcePolicy"){if(sourcePolicyEditor.item)sourcePolicyEditor.item.handleCommand(command);return}
         if(view==="framing"){if(framingLoader.item)framingLoader.item.handleCommand(command);return}
         if(view==="imageBrowser"){if(artworkBrowser.item)artworkBrowser.item.handleCommand(command);return}
         if(view==="actionPicker"){if(actionLoader.item)actionLoader.item.handleCommand(command);return}
@@ -658,6 +664,15 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             }
             if(root.keyboardKind==="target")value=Object.assign({},root.pendingAction,{target:text})
             if(root.set(f,value,false)){root.view=root.keyboardKind==="cropNumber"?"crop":"fields";root.selected=root.keyboardKind==="cropNumber"?root.keyboardSelection:root.returnSelection}
+        }
+    }
+    Loader {
+        id:sourcePolicyEditor;anchors.fill:parent;active:root.view==="sourcePolicy"
+        sourceComponent:SourceSettingsView {
+            appearance:root.appearance;layoutModel:root.session?root.session.model:null;manager:null;policyOnly:true
+            Component.onCompleted:{draft=Object.assign({},root.options.sourcePolicyDefaults || {},(root.rawPage.theme || {}).sourcePolicy || {});view="policy";selectedIndex=0}
+            onPolicyAccepted:policy=>{if(root.run("pagePatch",{scope:"theme",value:{sourcePolicy:policy}})){root.view="fields";root.selected=root.returnSelection}}
+            onPolicyCancelled:{root.view="fields";root.selected=root.returnSelection}
         }
     }
 }
