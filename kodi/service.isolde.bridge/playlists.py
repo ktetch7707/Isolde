@@ -10,6 +10,24 @@ class Playlists:
         self.profile = Path(profile).absolute()
         self.managed = managed
 
+    def _playlist_dir(self):
+        directory=os.open("/",os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:
+            for part in self.profile.parts[1:]:
+                if part in (".",".."):raise ValueError("Invalid profile path")
+                child=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=directory)
+                os.close(directory);directory=child
+            for part in ("playlists","video"):
+                try:
+                    os.mkdir(part,mode=0o700,dir_fd=directory);os.fsync(directory)
+                except FileExistsError:pass
+                child=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=directory)
+                os.close(directory);directory=child
+            return directory
+        except Exception:
+            os.close(directory)
+            raise
+
     def create(self, params):
         if not self.managed or set(params) != {"name", "kind", "view", "value"}:
             raise ValueError("Managed Kodi playlist creation required")
@@ -35,20 +53,10 @@ class Playlists:
         temporary=".isolde-playlist-"+str(uuid.uuid4())
         # Walk from / with openat/O_NOFOLLOW. Subsequent operations use the
         # directory descriptor, so replacing a pathname cannot redirect writes.
-        directory=os.open("/",os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        directory=self._playlist_dir()
         published=False
         temporary_created=False
         try:
-            for part in self.profile.parts[1:]:
-                if part in (".",".."):raise ValueError("Invalid profile path")
-                child=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=directory)
-                os.close(directory);directory=child
-            for part in ("playlists","video"):
-                try:
-                    os.mkdir(part,mode=0o700,dir_fd=directory);os.fsync(directory)
-                except FileExistsError:pass
-                child=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=directory)
-                os.close(directory);directory=child
             with os.scandir(directory) as entries:
                 if sum(1 for _,entry in zip(range(128),entries))>=128:raise ValueError("At most 128 saved video playlists")
             descriptor=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=directory)
@@ -68,3 +76,44 @@ class Playlists:
             except FileNotFoundError:pass
             finally:os.close(directory)
         return {"saved":True,"name":name.strip(),"playlistName":filename,"kind":kind}
+
+    def delete(self, params):
+        if not self.managed or set(params) != {"name"}:
+            raise ValueError("Managed Kodi playlist deletion required")
+        name = params.get("name")
+        if not playlist_name(name):raise ValueError("Invalid playlist name")
+        directory=self._playlist_dir()
+        try:
+            os.unlink(name,dir_fd=directory);os.fsync(directory)
+        except FileNotFoundError:
+            raise ValueError("Playlist not found")
+        finally:
+            os.close(directory)
+        return {"deleted":True,"name":name}
+
+    def rename(self, params):
+        if not self.managed or set(params) != {"name","newName"}:
+            raise ValueError("Managed Kodi playlist rename required")
+        name, new_name = params.get("name"), params.get("newName")
+        if not playlist_name(name) or not playlist_name(new_name):
+            raise ValueError("Invalid playlist name")
+        if name == new_name:
+            return {"renamed":True,"name":name,"newName":new_name}
+        directory=self._playlist_dir()
+        temporary=".isolde-rename-"+str(uuid.uuid4())
+        try:
+            os.link(name,temporary,src_dir_fd=directory,dst_dir_fd=directory,follow_symlinks=False)
+            os.unlink(name,dir_fd=directory);os.fsync(directory)
+            os.link(temporary,new_name,src_dir_fd=directory,dst_dir_fd=directory,follow_symlinks=False)
+            os.unlink(temporary,dir_fd=directory);os.fsync(directory)
+        except FileExistsError:
+            try:os.unlink(temporary,dir_fd=directory)
+            except FileNotFoundError:pass
+            raise ValueError("A playlist with the new name already exists")
+        except FileNotFoundError:
+            try:os.unlink(temporary,dir_fd=directory)
+            except FileNotFoundError:pass
+            raise ValueError("Playlist not found")
+        finally:
+            os.close(directory)
+        return {"renamed":True,"name":name,"newName":new_name}

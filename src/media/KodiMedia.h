@@ -42,6 +42,8 @@ public:
     Q_INVOKABLE void selectIndex(int index);
     Q_INVOKABLE void openLibrary(const QString &kind);
     Q_INVOKABLE void savePlaylist(const QString &name);
+    Q_INVOKABLE void renamePlaylist(const QString &name, const QString &newName);
+    Q_INVOKABLE void deletePlaylist(const QString &name);
     QString playlistStatus() const { return m_playlistStatus; }
     void openPlaylists();
     static bool validPlaylistName(const QString &name);
