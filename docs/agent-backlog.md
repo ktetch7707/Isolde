@@ -66,7 +66,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T03 | 18 | Local Kodi search installed acceptance | 83% | 100% | native search contracts accepted; installed real-Kodi closure open |
 | T04 | 19 | Complete Kodi interface, preservation and import | 14% | 100% | all scope items implemented: backup/preview/import/rollback, first-library setup, Desktop/Return, nested-folder scan, playlist create/reorder/delete, library sources/settings/artwork, Kodi capability inventory |
 | T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 0% | 100% | all code complete: keyboard symbol mode + focus-restore + global tvKeyboard; screensaver QML pages; universal return binding; reduced-motion/contrast; app support matrix; VPN setup/provisioning complete |
-| T09 | 21 | Playback preference and viewing controls | 0% | 50% | direct playback exists; complete matrix open |
+| T09 | 21 | Playback preference and viewing controls | 0% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
 | T10 | 22 | Capture/HDMI/audio software and editors | 33% | 60% | software foundation verified; physical H04 separate |
 | T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
 | T14 | 24 | Online discovery and Linguist subtitles | 0% | 35% | retained active; provider/model decisions open |
