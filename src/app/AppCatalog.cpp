@@ -1,3 +1,4 @@
+#include "settings/ProfileManager.h"
 #include "app/AppCatalog.h"
 
 #include <QCoreApplication>
@@ -432,6 +433,7 @@ bool AppCatalog::load(const QString &catalogPath, const QString &statePath, cons
 
 bool AppCatalog::install(const QString &id)
 {
+    if (!ProfileManager::allows("install")) { setError(tr("App installation is restricted in this profile. Change it in Settings > Profiles.")); return false; }
     if (id.startsWith("provider:")) {
         for (const auto &value : m_providerResults) {
             const auto result=value.toMap();
@@ -536,6 +538,7 @@ bool AppCatalog::customEntry(const QJsonObject &data,Entry *entry)
 
 bool AppCatalog::installCustom(const QJsonObject &data)
 {
+    if (!ProfileManager::allows("install")) { setError(tr("App installation is restricted in this profile. Change it in Settings > Profiles.")); return false; }
     if(busy()){setError(tr("Finish the current app operation first."));return false;}
     Entry entry;if(!customEntry(data,&entry))return false;
     if(const auto *existing=findEntry(entry.app.id))return install(existing->app.id);
@@ -576,6 +579,7 @@ bool AppCatalog::downloadAndInstall(const QString &storeId)
 
 bool AppCatalog::beginDownload(const QVariantMap &result, bool update)
 {
+    if (!ProfileManager::allows("install")) { setError(tr("App installation is restricted in this profile. Change it in Settings > Profiles.")); return false; }
     if(!m_onlineStoreSearch || !m_provider || busy()){setError(tr("Enable online Store access and finish the current operation first."));return false;}
     const auto storeId=result.value("storeId").toString();
     const QUrl artifactUrl = update?QUrl(result.value("downloadUrl").toString()):m_provider->artifactUrl(storeId);
@@ -615,6 +619,7 @@ bool AppCatalog::beginDownload(const QVariantMap &result, bool update)
 
 bool AppCatalog::stageProviderArtifact(const QString &storeId, const QVariantMap &result)
 {
+    if (!ProfileManager::allows("install")) { setError(tr("App installation was restricted before the download completed.")); emit operationFailed(m_errorString); return false; }
     Q_UNUSED(storeId);
     const auto package=result.value("packageName").toString();
     const auto id="fdroid-"+QString::fromLatin1(QCryptographicHash::hash(package.toUtf8(),QCryptographicHash::Sha256).toHex().left(24));

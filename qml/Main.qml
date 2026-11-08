@@ -9,8 +9,15 @@ Window {
     visibility: Qt.application.arguments.indexOf("--windowed") >= 0 ? Window.Windowed : Window.FullScreen
     color: "#0B1020"
     title: "Isolde " + isoldeVersion
+    OnScreenKeyboard { id: tvKeyboard; width: window.width; height: window.height; z: 20000 }
     readonly property real uiScaleFactor: displaySettings.uiScale / 100
     readonly property int safeAreaPixels: Math.round(Math.min(width, height) * displaySettings.safeArea / 100)
+    property string shellProfileId: profileManager.activeId
+    onShellProfileIdChanged: Qt.callLater(() => {
+        commandCenter.themeOrigin = ""
+        kodiLibrary.themeOrigin = ""
+        store.themeOrigin = ""
+    })
     property bool ambientActive: false
     readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
     property string launchErrorText: ""
@@ -40,8 +47,15 @@ Window {
         actionDispatcher.dispatch({ type: "launch-app", appId: appId }, originId || "")
     }
 
+    function shellAppearance(surface, origin) {
+        // Reading the notifying property makes the invokable resolution reactive.
+        const home = homeLayout.homeAppearance
+        return homeLayout.surfaceAppearance(surface, origin)
+    }
+
     function openSearchFromPage() {
         const onPage = pageSurface.open && pageSurface.model
+        commandCenter.themeOrigin = onPage ? pageSurface.activeId : ""
         commandCenter.pageId = onPage ? pageSurface.activeId : ""
         commandCenter.pageSources = onPage ? pageSurface.model.pageSearchSources() : []
         commandCenter.open = true
@@ -111,12 +125,15 @@ Window {
             return
         }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
+        if(launchErrorOverlay.visible){launchErrorOverlay.handleCommand(command);return}
+        // Editor cancellation must run before the global Home route tears down
+        // its session; a dirty draft always gets the ordinary exit choice.
+        if(sessionManager.active && sessionManager.currentAppType === "settings" && settings.homeEditing){settings.handleCommand(command);return}
+        if(!sessionManager.active && pageSurface.editing){pageSurface.handleCommand(command);return}
         if(command===inputManager.home){window.showDesignatedHome();return}
         if(tvGuide.open && !sessionManager.active && !launchErrorOverlay.visible){tvGuide.handleCommand(command);return}
         if (kodiLibrary.open && !sessionManager.active) { kodiLibrary.handleCommand(command); return }
-        if (launchErrorOverlay.visible) {
-            launchErrorOverlay.handleCommand(command)
-        } else if (!sessionManager.active && pageSurface.open) {
+        if (!sessionManager.active && pageSurface.open) {
             pageSurface.handleCommand(command)
         } else if (!sessionManager.active && command===inputManager.menu && (home.widgetActive || home.groupActive)) {
             home.handleCommand(command)
@@ -211,9 +228,9 @@ Window {
                 artworkMotionAllowed:window.homeArtworkMotionActive
                 anchors.fill: parent
                 visible: (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android")) && !pageSurface.open
-                items: homeLayout.components.concat(sourceManager.items).concat(kodiShelves.items)
+                items: homeLayout.components.concat(kodiShelves.items)
                 authoredItems: homeLayout.components
-                sections: sourceManager.sections.concat(homeLayout.sections).concat(kodiShelves.sections)
+                sections: homeLayout.sections.concat(kodiShelves.sections)
                 authoredSections: homeLayout.sections
                 brandVisible: homeLayout.brandVisible
                 backgroundStart: homeLayout.backgroundStart
@@ -231,12 +248,12 @@ Window {
                 internetAvailable: networkSettings.internetAvailable
                 localNetworkAvailable: networkSettings.localNetworkAvailable
                 hasContextualSources: sourceManager.items.length > 0
+                sourceWorkflow:({playback:sessionManager.active,setup:!setupState.complete,editing:home.editMode})
                 onActionActivated: (action, originId) => { if (setupState.complete) actionDispatcher.dispatch(action, originId) }
                 onSettingsRequested: section => actionDispatcher.dispatch({ type: "settings", section: section }, "")
                 onSearchRequested: window.openSearchFromPage()
                 onKeepSourceRequested: source => {
-                    if (source && source.action && homeLayout.addActionTile(source.name, source.action.type, source.action.target, "", source.action.openWith))
-                        sourceManager.markPermanent(source.id)
+                    if (source) sourceManager.promoteSource(source.id)
                 }
                 onHideSourceRequested: sourceId => sourceManager.hideSource(sourceId)
             }
@@ -278,7 +295,9 @@ Window {
                 anchors.fill: parent
                 visible: sessionManager.active && sessionManager.currentAppType === "store"
                 entries: appCatalog.allEntries
-                appearance: homeLayout.homeAppearance
+                property string themeOrigin: ""
+                onVisibleChanged: if (visible) themeOrigin = pageSurface.open ? pageSurface.activeId : ""
+                appearance: window.shellAppearance("apps", themeOrigin)
                 onOperationSettled: { if(visible){window.raise();window.requestActivate();shellSurface.forceActiveFocus()} }
                 onOpenRequested: appId => { sessionManager.exitCurrent(); Qt.callLater(()=>sessionManager.launch(appId)) }
             }
@@ -291,7 +310,9 @@ Window {
                 availableApps: appRegistry.apps
                 artwork: artPacks.artwork
                 themes: artPacks.themes
-                appearance: homeLayout.homeAppearance
+                appearance: window.shellAppearance("settings", "")
+                editPageId: pageSurface.open ? pageSurface.activeId : ""
+                editComponentId: pageSurface.open ? pageSurface.focusedComponentId : home.focusedItemId
                 onPreviewAmbientRequested: window.ambientActive = true
                 onPageRequested:id=>{ sessionManager.goHome(); actionDispatcher.dispatch({type:"open-page",pageId:id},"") }
             }
@@ -300,10 +321,12 @@ Window {
                 id:pageSurface;anchors.fill:parent;visible:open && (!sessionManager.active || (sessionManager.currentAppType === "desktop" || sessionManager.currentAppType === "android"))
                 artworkMotionAllowed:window.homeArtworkMotionActive
                 layoutModel:homeLayout;provider:pageData;availableApps:appRegistry.apps;artwork:artPacks.artwork;themes:artPacks.themes
+                sourceWorkflow:({playback:sessionManager.active,setup:!setupState.complete,editing:pageSurface.editing})
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}
                 onSearchRequested:window.openSearchFromPage()
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
+                onNavigationRejected:reason=>{window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
             }
 
             AmbientOverlay {
@@ -315,10 +338,11 @@ Window {
 
             Rectangle {
                 id: launchErrorOverlay
+                SurfacePalette {id:errorTheme;appearance:window.shellAppearance("apps", pageSurface.open ? pageSurface.activeId : "")}
                 anchors.fill: parent
                 visible: window.launchErrorText.length > 0
                 z: 70
-                color: "#EE050812"
+                color: errorTheme.scrim
 
                 function handleCommand(command) {
                     if (command === inputManager.back || command === inputManager.home) {
@@ -329,7 +353,7 @@ Window {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
                         sessionManager.launch(retryId)
-                    } else if (command === inputManager.navigateRight) {
+                    } else if (command === inputManager.navigateRight && (window.launchErrorAppId.length || window.launchErrorVpn)) {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
                         sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")
@@ -346,9 +370,9 @@ Window {
                     width: Math.min(parent.width - 120, 820)
                     height: 360
                     radius: 22
-                    color: "#111A2D"
+                    color: errorTheme.elevated
                     border.width: 3
-                    border.color: "#FCA5A5"
+                    border.color: errorTheme.error
 
                     Column {
                         anchors.fill: parent
@@ -356,30 +380,30 @@ Window {
                         spacing: 18
                         Text {
                             text: window.launchErrorAppId.length ? "APP DIDN'T START" : "ACTION NEEDED"
-                            color: "#FCA5A5"
-                            font.pixelSize: 34
+                            color: errorTheme.error
+                            font.pixelSize: 34 * errorTheme.textScale
                             font.weight: Font.DemiBold
                             font.letterSpacing: 4
                         }
                         Text {
                             text: window.launchErrorText
-                            color: "#F8FAFC"
-                            font.pixelSize: 22
+                            color: errorTheme.elevatedText
+                            font.pixelSize: 22 * errorTheme.textScale
                             wrapMode: Text.WordWrap
                             width: parent.width
                         }
                         Text {
                             text: window.launchErrorAppId.length ? "Isolde returned to Home instead of leaving you in the desktop. You can retry, open the App Store, or uninstall the package." : "The app was not started. Your installed package and configuration have not been changed."
-                            color: "#AAB5C9"
-                            font.pixelSize: 17
+                            color: errorTheme.elevatedMuted
+                            font.pixelSize: 17 * errorTheme.textScale
                             wrapMode: Text.WordWrap
                             width: parent.width
                         }
-                        Rectangle { width: parent.width; height: 1; color: "#2B3853" }
+                        Rectangle { width: parent.width; height: 1; color: errorTheme.outline }
                         Text {
                             text: window.launchErrorVpn ? "Enter Retry    → VPN settings    Esc Close" : window.launchErrorAppId.length ? "Enter Retry    → App Store    ← Uninstall    Esc Close" : "Esc Close"
-                            color: "#D5B083"
-                            font.pixelSize: 18
+                            color: errorTheme.elevatedText
+                            font.pixelSize: 18 * errorTheme.textScale
                             font.weight: Font.DemiBold
                         }
                     }
@@ -406,7 +430,7 @@ Window {
         }
     }
 
-    KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; provider:pageData;appearance: homeLayout.homeAppearance }
+    KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; provider:pageData;property string themeOrigin: "";appearance: window.shellAppearance("kodi", themeOrigin) }
     property var pendingGuideSearchReturn:null
     property var guideSearchReturn:null
     GuideView {
@@ -439,7 +463,8 @@ Window {
         apps: appRegistry.apps
         packages: appCatalog.entries
         searchSettings: searchPreferences
-        appearance:homeLayout.homeAppearance
+        appearance:window.shellAppearance("search", themeOrigin)
+        property string themeOrigin: ""
         movieSearchClient: searchMovies
         showSearchClient: searchShows
         episodeSearchClient: searchEpisodes
@@ -532,7 +557,7 @@ Window {
     }
     Connections {
         target: actionDispatcher
-        function onDrawerRequested() { commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
+        function onDrawerRequested() { commandCenter.themeOrigin = pageSurface.open ? pageSurface.activeId : ""; commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
         function onGuideRequested(origin,presentation,focusChannelId){window.guideSearchReturn=window.pendingGuideSearchReturn;commandCenter.open=false;if((presentation.guideSurface || homeLayout.studioOptions.guide.surface)!=="overlay")kodiLibrary.open=false;tvGuide.showFocused(origin,presentation,focusChannelId)}
         function onRestoreFocusRequested(originId) {
             if(tvGuide.open)return
@@ -542,6 +567,7 @@ Window {
         function onPageRequested(id,originId) {commandCenter.open=false;if(id)pageSurface.showPage(id,originId,false);else{sessionManager.goHome();pageSurface.closeAll();home.restoreFocus(originId)}}
         function onRejected(reason) { window.launchErrorAppId = ""; window.launchErrorText = reason }
         function onLibraryRequested(returnHome) {
+            kodiLibrary.themeOrigin = commandCenter.open ? commandCenter.themeOrigin : pageSurface.open ? pageSurface.activeId : ""
             commandCenter.open = false
             kodiLibrary.returnToHomeAfterPlayback = returnHome
             kodiLibrary.open = true
@@ -554,6 +580,6 @@ Window {
     }
     Connections {
         target: kodiLibrary
-        function onSearchRequested() { commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
+        function onSearchRequested() { commandCenter.themeOrigin = kodiLibrary.themeOrigin; commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
     }
 }

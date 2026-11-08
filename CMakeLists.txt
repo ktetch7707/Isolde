@@ -27,6 +27,7 @@ add_library(isolde_core STATIC
     src/media/KodiArtwork.cpp
     src/media/KodiArtwork.h
     src/home/ComponentSchema.cpp
+    src/home/SurfaceAppearance.cpp
     src/home/ComponentSchema.h
     src/home/ManagedGif.cpp
     src/home/ManagedGif.h
@@ -63,6 +64,12 @@ add_library(isolde_core STATIC
     src/app/AppRegistry.h
     src/home/HomeLayout.cpp
     src/home/StudioSession.cpp
+    src/home/StudioSafety.cpp
+    src/home/DesignSystem.cpp
+    src/home/DesignSystem.h
+    src/home/StudioReuse.cpp
+    src/home/StudioDesigns.cpp
+    src/home/HomeDesignData.h
     src/home/StudioSession.h
     src/home/HomeSkins.cpp
     src/home/HomePages.cpp
@@ -148,6 +155,7 @@ qt_add_qml_module(isolde
         qml/AppTile.qml
         qml/MockSessionView.qml
         qml/OnScreenKeyboard.qml
+        qml/SurfacePalette.qml
         qml/AppStoreView.qml
         qml/StoreSettingsView.qml
         qml/AmbientScreen.qml
@@ -157,23 +165,22 @@ qt_add_qml_module(isolde
         qml/ClockWidget.qml
         qml/CommandCenter.qml
         qml/CustomizeHomeView.qml
-        qml/AppearanceEditor.qml
         qml/ComposedHome.qml
         qml/HomeCard.qml
         qml/LineIcon.qml
-        qml/ComponentLayoutEditor.qml
         qml/SkinLibrary.qml
-        qml/HomeDesignEditor.qml
-        qml/PageManager.qml
         qml/PageNavigation.qml
         qml/PageSurface.qml
-        qml/PageEditor.qml
         qml/PageStudioView.qml
+        qml/StudioTree.js
         qml/StudioLayoutEditor.qml
         qml/StudioGridEditor.qml
         qml/PageBackdrop.qml
         qml/PageMenuWidget.qml
+        qml/PageSourcesWidget.qml
         qml/StudioInspector.qml
+        qml/StudioReusePanel.qml
+        qml/StudioDesignPanel.qml
         qml/StudioActionPicker.qml
         qml/StudioAppPicker.qml
         qml/StudioArtworkPicker.qml
@@ -212,6 +219,11 @@ qt_add_resources(isolde "isolde_config"
         config/studio-defaults.json
         config/skins/lounge.json
         config/skins/pastel.json
+        config/skins/templates.json
+        config/skins/compact-launcher.json
+        config/skins/scrolling-dashboard.json
+        config/skins/poster-sidebar.json
+        config/skins/minimal-pastel.json
         config/packages/ambient-weather/manifest.json
         config/packages/living-room-radio/manifest.json
         config/packages/photo-gallery/manifest.json
@@ -348,11 +360,35 @@ if(BUILD_TESTING)
     add_test(NAME studio_quick COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_editor.qml)
     set_tests_properties(studio_quick PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_safety COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_safety.qml)
+    set_tests_properties(studio_safety PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_selection COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_selection.qml)
     add_test(NAME studio_artwork COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_artwork.qml)
     add_test(NAME studio_workflows COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_workflows.qml)
+    add_test(NAME studio_color_interactions COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_color_interactions.qml)
+    set_tests_properties(studio_color_interactions PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_performance COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_performance.qml)
+    set_tests_properties(studio_performance PROPERTIES TIMEOUT 180 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_reuse COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_reuse.qml)
+    set_tests_properties(studio_reuse PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_designs COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_designs.qml)
+    set_tests_properties(studio_designs PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+    add_test(NAME studio_cutover COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_cutover.qml)
+    set_tests_properties(studio_cutover PROPERTIES TIMEOUT 60 LABELS "studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_colors COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_colors.qml)
+    add_test(NAME studio_shell COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_shell.qml)
+    set_tests_properties(studio_shell PROPERTIES TIMEOUT 30 LABELS "shell;studio;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME store_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_store.qml)
+    add_test(NAME sources_remote_ui COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_sources.qml)
+    set_tests_properties(sources_remote_ui PROPERTIES TIMEOUT 60 LABELS "sources;quick;qml"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     set_tests_properties(store_remote_ui PROPERTIES TIMEOUT 30 LABELS "store;quick;qml"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     add_test(NAME studio_gestures COMMAND isolde_studio_quick_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/studio/tst_gestures.qml)
@@ -414,6 +450,15 @@ if(BUILD_TESTING)
     set_tests_properties(games_remote_ui PROPERTIES TIMEOUT 30 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     target_link_libraries(isolde_component_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME component_contracts COMMAND isolde_component_tests)
+    qt_add_executable(isolde_surface_appearance_tests tests/tst_surface_appearance.cpp)
+    target_link_libraries(isolde_surface_appearance_tests PRIVATE isolde_core Qt6::Test)
+    add_test(NAME surface_appearance_contracts COMMAND isolde_surface_appearance_tests)
+    set_tests_properties(surface_appearance_contracts PROPERTIES TIMEOUT 30 LABELS "shell;unit")
+    qt_add_executable(isolde_studio_design_tests tests/tst_studio_designs.cpp)
+    target_link_libraries(isolde_studio_design_tests PRIVATE isolde_core Qt6::Test)
+    qt_add_resources(isolde_studio_design_tests "studio_test_defaults" PREFIX "/" FILES config/studio-defaults.json)
+    add_test(NAME studio_design_contracts COMMAND isolde_studio_design_tests)
+    set_tests_properties(studio_design_contracts PROPERTIES TIMEOUT 60)
     add_test(NAME studio_unit COMMAND isolde_component_tests
         studioSessionDraftUndoBoundsAndNoWrite studioCommandsAreAtomicAndProfileScoped
         studioApplyAtomicFailureAndFocusPreserved studioCollisionProposalsAndParity
@@ -458,6 +503,7 @@ if(BUILD_TESTING)
     set_tests_properties(home_component_navigation PROPERTIES TIMEOUT 60 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME studio_cutover_report COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_studio_cutover_report.py)
         qt_add_executable(isolde_audio_tests tests/tst_audio.cpp)
         target_link_libraries(isolde_audio_tests PRIVATE isolde_core Qt6::Test)
         target_compile_definitions(isolde_audio_tests PRIVATE AUDIO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fake-mixer.py")
@@ -510,4 +556,6 @@ if(BUILD_TESTING)
     add_test(NAME profile_browser_isolation COMMAND isolde_profile_browser_tests)
     set_tests_properties(profile_browser_isolation PROPERTIES TIMEOUT 180 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 endif()
-qt_add_executable(isolde_home_layout_tests tests/tst_home_layout.cpp) target_link_libraries(isolde_home_layout_tests PRIVATE isolde_core Qt6::Test) add_test(NAME home_layout COMMAND isolde_home_layout_tests)
+qt_add_executable(isolde_home_layout_tests tests/tst_home_layout.cpp)
+target_link_libraries(isolde_home_layout_tests PRIVATE isolde_core Qt6::Test)
+add_test(NAME home_layout COMMAND isolde_home_layout_tests)

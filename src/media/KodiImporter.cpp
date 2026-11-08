@@ -159,11 +159,11 @@ void KodiImporter::scanExistingKodi() {
 
     m_conflicts.clear();
     if (results.value(QStringLiteral("sourcesFile")).toBool())
-        m_conflicts << "Existing sources.xml will be merged with Isolde-managed sources.";
+        m_conflicts << "Existing sources.xml detected: Isolde preserves Kodi's sources by reference; configure media sources natively in Kodi → Videos → Files → Add videos.";
     if (results.value(QStringLiteral("watchStateDb")).toBool())
-        m_conflicts << "Existing watch/resume state will be preserved; Isolde does not edit Kodi databases.";
+        m_conflicts << "Existing watch/resume state detected: Isolde does not edit Kodi databases or watched/progress state.";
     if (results.value(QStringLiteral("addonCount")).toInt() > 0)
-        m_conflicts << "Existing add-ons detected; skin/add-on settings are read-only references.";
+        m_conflicts << "Existing add-ons detected: skin and add-on settings are read-only references, not imported by Isolde.";
 
     m_canImport = true;
     m_canRollback = false;
@@ -309,19 +309,39 @@ void KodiImporter::rollback() {
     }
 
     bool ok = true;
+    QString rollbackTemp = backupDir() + QLatin1String("/rollback-temp-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+    QDir().mkpath(rollbackTemp);
+
     QStringList filesToRestore{
         QStringLiteral("guisettings.xml"),
         QStringLiteral("sources.xml")
     };
 
+    // Before overwriting any existing Kodi config, back up the current files
+    // to a temporary location so a failed rollback cannot destroy both copies.
     for (const auto &name : filesToRestore) {
-        QFileInfo backupInfo(m_backupPath + QLatin1String("/") + name);
-        if (!backupInfo.exists()) continue;
-        if (!QFile::copy(backupInfo.absoluteFilePath(),
-                         userdata + QLatin1String("/") + name)) {
-            ok = false; break;
+        QFileInfo currentInfo(userdata + QLatin1String("/") + name);
+        if (currentInfo.exists()) {
+            if (!QFile::copy(currentInfo.absoluteFilePath(),
+                             rollbackTemp + QLatin1String("/") + name)) {
+                ok = false; break;
+            }
         }
     }
+
+    if (ok) {
+        for (const auto &name : filesToRestore) {
+            QFileInfo backupInfo(m_backupPath + QLatin1String("/") + name);
+            if (!backupInfo.exists()) continue;
+            if (!QFile::copy(backupInfo.absoluteFilePath(),
+                             userdata + QLatin1String("/") + name)) {
+                ok = false; break;
+            }
+        }
+    }
+
+    // Clean up the temporary current-config backup regardless of outcome.
+    QDir(rollbackTemp).removeRecursively();
 
     m_importInProgress = false;
     if (ok) {

@@ -3,11 +3,12 @@ import QtQuick.Controls
 
 Item {
     id: root
+    SurfacePalette {id:shell;appearance:root.appearance}
     property var appearance: ({})
     readonly property real textScale: appearance.typographyScale || 1
-    readonly property color textColor: appearance.textColor || palette.text
-    readonly property color surfaceColor: appearance.surfaceColor || palette.window
-    readonly property color focusColor: appearance.focusColor || palette.highlight
+    readonly property color textColor: shell.text
+    readonly property color surfaceColor: shell.surface
+    readonly property color focusColor: shell.focus
     property int selectedIndex: 0
     property bool installPrompt: false
     property string pendingProvider: ""
@@ -99,7 +100,6 @@ Item {
         else if (command === inputManager.navigateDown) selectedIndex = Math.min(rows.length - 1, selectedIndex + 1)
         else if (command === inputManager.confirm) activate(selectedIndex)
     }
-    SystemPalette { id: palette; colorGroup: SystemPalette.Active }
     Rectangle { anchors.fill: parent; color: root.surfaceColor }
     ListView {
         id: list
@@ -107,20 +107,20 @@ Item {
         clip: true
         model: root.rows
         currentIndex: root.selectedIndex
-        spacing: 8 * root.textScale
+        spacing: 8 * shell.gapScale
         header: Column {
         width: list.width
-        spacing: 16 * root.textScale
-        Label { text: root.mode === "apps" ? "VPN for each app" : root.mode === "locations" ? "Choose app location" : root.mode === "country" ? "Where is this server?" : "VPN setup"; font.pixelSize: 30 * root.textScale; color: root.textColor }
-        Label {
+        spacing: 16 * shell.gapScale
+        Label {font.family:shell.fontFamily; text: root.mode === "apps" ? "VPN for each app" : root.mode === "locations" ? "Choose app location" : root.mode === "country" ? "Where is this server?" : "VPN setup"; font.pixelSize: 30 * root.textScale; color: root.textColor }
+        Label {font.family:shell.fontFamily;
             width: parent.width
             wrapMode: Text.WordWrap
             color: root.textColor
             font.pixelSize: 18 * root.textScale
             text: root.mode === "capture" ? "Save the currently connected country for automatic app switching? Isolde privately copies this connection’s WireGuard key inside NetworkManager and switches to the saved location. The provider’s original configuration is kept. Isolde checks the copy before handing over. If the final check fails, review the connection status before retrying. Keys are never displayed or uploaded. Back cancels." : root.mode !== "main" ? "Up / Down choose · Confirm select · Back cancels without saving" : "1. The installer downloads both providers.\n2. Open your provider app, sign in and connect to the country you want.\n3. Return here and Save connected location. Isolde handles the keys and detects the country.\n4. Choose a VPN location for each app.\n\nNo browser or configuration files are needed. Connections affect this whole device. The country check contacts IPinfo through the VPN."
         }
-        Label { width: parent.width; wrapMode: Text.WordWrap; text: vpnSettings.message; color: root.textColor; font.pixelSize: 18 * root.textScale }
-        Label {width:parent.width;wrapMode:Text.WordWrap;text:appVpn.errorString;color:root.textColor;font.pixelSize:18*root.textScale}
+        Label {font.family:shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: vpnSettings.message; color: root.textColor; font.pixelSize: 18 * root.textScale }
+        Label {font.family:shell.fontFamily;width:parent.width;wrapMode:Text.WordWrap;text:appVpn.errorString;color:root.textColor;font.pixelSize:18*root.textScale}
         }
             delegate: Button {
                 required property int index
@@ -129,22 +129,23 @@ Item {
                 height: Math.max(64 * root.textScale, contentItem.implicitHeight + 24)
                 text: modelData.label
                 font.pixelSize: 18 * root.textScale
+                font.family: shell.fontFamily
                 contentItem: Text {
                     textFormat: Text.PlainText
                     text: parent.text
                     font: parent.font
                     wrapMode: Text.WordWrap
-                    color: root.textColor
+                    color: index === root.selectedIndex ? shell.selectedText : shell.text
                     verticalAlignment: Text.AlignVCenter
                 }
                 enabled: !vpnSettings.busy
                 highlighted: index === root.selectedIndex
                 onClicked: root.activate(index)
                 background: Rectangle {
-                    color: root.surfaceColor
+                    color: index === root.selectedIndex ? shell.selected : shell.surface
                     border.width: index === root.selectedIndex ? 3 : 1
-                    border.color: index === root.selectedIndex ? root.focusColor : root.textColor
-                    radius: 8
+                    border.color: index === root.selectedIndex ? shell.selectedFocus : shell.outline
+                    radius: shell.radius
                 }
             }
     }
@@ -157,11 +158,17 @@ Item {
             anchors.centerIn: parent
             width: parent.width - 48
             spacing: 24
-            Label { width: parent.width; wrapMode: Text.WordWrap; color: root.textColor; font.pixelSize: 22 * root.textScale; text: "Install VPN support on this device? This downloads the official clients, adds their repositories and installs Isolde's administrator-owned location-saving tool. Your system account can then use that tool to save the active VPN and switch only your profile-owned saved locations without another password prompt. Other administrator operations stay protected. Approve installer prompts in the guest. Your account password stays in the provider app." }
+            Label {font.family:shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; color: root.textColor; font.pixelSize: 22 * root.textScale; text: "Install VPN support on this device? This downloads the official clients, adds their repositories and installs Isolde's administrator-owned location-saving tool. Your system account can then use that tool to save the active VPN and switch only your profile-owned saved locations without another password prompt. Other administrator operations stay protected. Approve installer prompts in the guest. Your account password stays in the provider app." }
             Row {
                 spacing: 24
-                Button { text: "Cancel"; highlighted: !root.approveInstall; onClicked: root.installPrompt = false }
-                Button { text: "Install"; highlighted: root.approveInstall; onClicked: { root.installPrompt = false; vpnSettings.perform(root.pendingProvider ? "install" : "defaults", root.pendingProvider) } }
+                Button {
+                    background: Rectangle {color:shell.surface;radius:shell.radius;border.width:parent.highlighted?3:1;border.color:shell.focus}
+                    contentItem: Text {font.family:shell.fontFamily;text:parent.text;color:shell.text;font.pixelSize:20*shell.textScale}
+                    text: "Cancel"; highlighted: !root.approveInstall; onClicked: root.installPrompt = false }
+                Button {
+                    background: Rectangle {color:shell.surface;radius:shell.radius;border.width:parent.highlighted?3:1;border.color:shell.focus}
+                    contentItem: Text {font.family:shell.fontFamily;text:parent.text;color:shell.text;font.pixelSize:20*shell.textScale}
+                    text: "Install"; highlighted: root.approveInstall; onClicked: { root.installPrompt = false; vpnSettings.perform(root.pendingProvider ? "install" : "defaults", root.pendingProvider) } }
             }
         }
     }

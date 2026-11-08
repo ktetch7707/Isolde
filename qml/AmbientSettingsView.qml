@@ -2,6 +2,9 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property int selectedIndex: 0
     property bool sourcePanelOpen: false
     property bool pathKeyboardOpen: false
@@ -86,9 +89,9 @@ Item {
     Column {
         id: contentColumn
         width: parent.width
-        spacing: 18
-        Text { text: "AMBIENT MODE"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-        Text { text: "Customize timeout, slideshow behavior, and screensaver widgets."; color: "#9EABC1"; font.pixelSize: 18; wrapMode: Text.WordWrap; width: parent.width }
+        spacing: 18 * shell.gapScale
+        Text { font.family: shell.fontFamily; text: "AMBIENT MODE"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily; text: "Customize timeout, slideshow behavior, and screensaver widgets."; color: shell.muted; font.pixelSize: 18 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
 
         Repeater {
             model: root.rows
@@ -97,43 +100,44 @@ Item {
                 required property var modelData
                 width: parent.width
                 height: 70
-                radius: 10
-                color: root.selectedIndex === index ? "#2B416B" : "#111A2A"
+                radius: shell.radius
+                color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
-                border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
+                border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
                 Column {
                     anchors.left: parent.left
                     anchors.right: valueText.left
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.leftMargin: 18
                     anchors.rightMargin: 16
-                    spacing: 4
-                    Text { text: modelData.name; color: "#F8FAFC"; font.pixelSize: 20; font.weight: Font.DemiBold }
-                    Text { text: modelData.help; color: "#9EABC1"; font.pixelSize: 13; elide: Text.ElideMiddle; width: parent.width }
+                    spacing: 4 * shell.gapScale
+                    Text { font.family: shell.fontFamily; text: modelData.name; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 20 * shell.textScale; font.weight: Font.DemiBold }
+                    Text { font.family: shell.fontFamily; text: modelData.help; color: (root.selectedIndex === index) ? shell.selectedText : shell.muted; font.pixelSize: 13 * shell.textScale; elide: Text.ElideMiddle; width: parent.width }
                 }
-                Text {
+                Text { font.family: shell.fontFamily;
                     id: valueText
+                    objectName: "ambientValue-" + index
                     anchors.right: parent.right
                     anchors.rightMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.value
-                    color: "#D5B083"
-                    font.pixelSize: 16
+                    color: root.selectedIndex === index ? shell.selectedText : shell.text
+                    font.pixelSize: 16 * shell.textScale
                     font.weight: Font.DemiBold
                 }
             }
         }
 
-        Text {
+        Text { font.family: shell.fontFamily;
             text: "← → adjust values    Enter toggle/cycle/preview    Esc back"
-            color: "#91A0BC"
-            font.pixelSize: 15
+            color: shell.muted
+            font.pixelSize: 15 * shell.textScale
         }
-        Text {
+        Text { font.family: shell.fontFamily;
             visible: ambientSettings.errorString.length > 0
             text: ambientSettings.errorString
-            color: "#E85C68"
-            font.pixelSize: 15
+            color: shell.error
+            font.pixelSize: 15 * shell.textScale
             wrapMode: Text.WordWrap
             width: parent.width
         }
@@ -143,22 +147,22 @@ Item {
     Rectangle {
         visible: root.sourcePanelOpen
         anchors.fill: parent
-        color: "#CC050812"
+        color: shell.scrim
         z: 10
         Rectangle {
             anchors.centerIn: parent
             width: Math.min(parent.width - 70, 680)
             height: root.pathKeyboardOpen ? parent.height - 40 : 360
             radius: 14
-            color: "#151E32"
+            color: shell.elevated
             border.width: 2
-            border.color: "#4D7ED8"
+            border.color: shell.elevatedFocus
             Column {
                 anchors.fill: parent
                 anchors.margins: 24
-                spacing: 14
-                Text { text: "PHOTO SOURCE"; color: "#F8FAFC"; font.pixelSize: 28; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                Text { text: ambientSettings.photoCount + " photos · " + ambientSettings.photoDirectory; color: "#9EABC1"; font.pixelSize: 15; elide: Text.ElideMiddle; width: parent.width }
+                spacing: 14 * shell.gapScale
+                Text { font.family: shell.fontFamily; text: "PHOTO SOURCE"; color: shell.elevatedText; font.pixelSize: 28 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+                Text { font.family: shell.fontFamily; text: ambientSettings.photoCount + " photos · " + ambientSettings.photoDirectory; color: shell.elevatedMuted; font.pixelSize: 15 * shell.textScale; elide: Text.ElideMiddle; width: parent.width }
                 Repeater {
                     model: root.sourceActions
                     delegate: Rectangle {
@@ -166,19 +170,19 @@ Item {
                         required property string modelData
                         width: parent.width
                         height: 42
-                        radius: 8
-                        color: root.sourceActionIndex === index ? "#2B416B" : "#111A2A"
+                        radius: shell.radius
+                        color: root.sourceActionIndex === index ? shell.selected : shell.surface
                         border.width: root.sourceActionIndex === index ? 2 : 1
-                        border.color: root.sourceActionIndex === index ? "#F8FAFC" : "#2B3853"
-                        Text { anchors.centerIn: parent; text: modelData; color: "#F8FAFC"; font.pixelSize: 16; font.weight: Font.DemiBold }
+                        border.color: root.sourceActionIndex === index ? shell.selectedFocus : shell.outline
+                        Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: modelData; color: (root.sourceActionIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 16 * shell.textScale; font.weight: Font.DemiBold }
                     }
                 }
-                Text { text: "Managed folder is the TV-safe default. Enter folder path supports advanced users until a full media picker exists."; color: "#91A0BC"; font.pixelSize: 13; wrapMode: Text.WordWrap; width: parent.width }
+                Text { font.family: shell.fontFamily; text: "Managed folder is the TV-safe default. Enter folder path supports advanced users until a full media picker exists."; color: shell.elevatedMuted; font.pixelSize: 13 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
             }
         }
     }
 
-    OnScreenKeyboard {
+    OnScreenKeyboard { appearance: root.appearance;
         id: pathKeyboard
         visible: root.pathKeyboardOpen
         z: 20

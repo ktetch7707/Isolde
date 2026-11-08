@@ -15,29 +15,66 @@ Item {
     readonly property var grid:model?model.grid:({})
     readonly property var placements:model?model.placements:([])
     property var history:[]
+    // Runtime history is transient, with the same 64-page ceiling as authored
+    // pages. Refuse growth explicitly rather than dropping the oldest origin.
+    readonly property int historyLimit:64
     property string homeOrigin:""
     readonly property var pageEntries:layoutModel.studioPages
     property bool editing:false
+    property var sourceWorkflow:({editing:editing})
+    readonly property string focusedComponentId: content.focusedItemId
+    property string editOrigin: ""
+    property var editViewport: ({})
+    property var editNavigationState: ({})
     property bool artworkMotionAllowed:true
     property bool internetAvailable:true
     property bool localNetworkAvailable:true
     signal closed(string origin)
     signal searchRequested()
     signal settingsRequested(int section)
+    signal navigationRejected(string reason)
     function showPage(id,origin,replace){
+        if(editing){navigationRejected("Finish or discard the Studio draft before opening another page.");return false}
+        if(!layoutModel.pageAllowed(id)){settingsRequested(5);return}
         if(!layoutModel.pageModel(id))return
+        if(activeId && !replace && id!==activeId && history.length>=historyLimit){navigationRejected("Page history is full. Use Back or Home before opening another page.");return false}
         if(!activeId)homeOrigin=origin || ""
-        else if(!replace && id!==activeId)history=history.concat([{id:activeId,focus:origin || content.focusedItemId}])
+        else if(!replace && id!==activeId)history=history.concat([{id:activeId,state:content.navigationState(origin)}])
         activeId=id;editing=false
-        content.recoveryFocused=false;content.focusedIndex=0
+        content.resetNavigationState()
+        return true
     }
-    function closeAll(){const origin=homeOrigin;activeId="";history=[];editing=false;closed(origin)}
+    function closeAll(){const origin=homeOrigin;content.resetNavigationState();activeId="";history=[];editing=false;closed(origin)}
     function restoreOrigin(origin){
         if(!content.widgetActive || Object.prototype.hasOwnProperty.call(content.appCollectionFocus,origin))content.restoreFocus(origin)
     }
+    function beginEditing() {
+        if (editing || !model) return
+        editOrigin = content.focusedItemId
+        editViewport = content.editorViewport()
+        editNavigationState = content.navigationState()
+        editing = true
+    }
+    function finishEditing() {
+        editing = false
+        if (!model) { closeAll(); return }
+        // Restore the stable origin before restoring its scroll position;
+        // HomeScreen chooses a reachable fallback if Apply removed that item.
+        content.resetNavigationState(editNavigationState)
+    }
     function back(){
-        if(history.length){let stack=history.slice();const previous=stack.pop();history=stack;showPage(previous.id,"",true);Qt.callLater(()=>content.restoreFocus(previous.focus))}
-        else closeAll()
+        if(editing)return
+        while(history.length){
+            let stack=history.slice();const previous=stack.pop();history=stack
+            // A page removed by Apply or restricted since navigation must not
+            // strand Back or open an unrelated Settings page.
+            const allowed=typeof layoutModel.pageAllowed!=="function" || layoutModel.pageAllowed(previous.id)
+            if(!layoutModel.pageModel(previous.id) || !allowed)continue
+            showPage(previous.id,"",true)
+            content.resetNavigationState(previous.state)
+            return
+        }
+        closeAll()
     }
     function handleCommand(command){
         if(editing){editor.handleCommand(command);return}
@@ -46,7 +83,9 @@ Item {
         if(command===inputManager.search){searchRequested();return}
         content.handleCommand(command)
     }
-    Connections { target:root.layoutModel;function onLayoutChanged(){if(root.activeId && !root.model)root.closeAll()} }
+    // An atomic Apply may remove the page being edited. Keep Studio alive to
+    // show its result, then use the normal designated-Home recovery on close.
+    Connections { target:root.layoutModel;function onLayoutChanged(){if(root.activeId && !root.model && !root.editing)root.closeAll()} }
     Rectangle {anchors.fill:parent;color:root.model?root.model.backgroundEnd:"#101014"}
     PageBackdrop {id:wallpaper;anchors.fill:parent;source:root.model?root.model.wallpaperSource:"";config:root.config.background || {};startColor:root.model?root.model.backgroundStart:"transparent";endColor:root.model?root.model.backgroundEnd:"transparent"}
     HomeScreen {
@@ -54,6 +93,7 @@ Item {
         artworkMotionAllowed:root.artworkMotionAllowed && !root.editing
         anchors.fill:parent
         items:root.model?root.model.items:[];sections:root.model?root.model.sections:[];composition:model?model.composition:({});grid:root.grid;placements:root.placements;pageKey:root.activeId;libraryProvider:root.provider
+        sourceWorkflow:root.sourceWorkflow
         selectMode:model && model.selectMode || "single"; selectTrigger:model && model.selectTrigger || "click"; selectAction:model && model.selectAction || "navigate"; selectionColor:model && model.selectionColor || ""
         editLabel:"Edit page"
         menuPages:root.pageEntries;menuActiveId:root.activeId
@@ -63,12 +103,13 @@ Item {
         internetAvailable:root.internetAvailable;localNetworkAvailable:root.localNetworkAvailable;hasContextualSources:false
         onActionActivated:(action,origin)=>actionDispatcher.dispatch(action,origin)
         onSearchRequested:root.searchRequested()
-        onSettingsRequested:section=>{if(section===1)root.editing=true;else root.settingsRequested(section)}
+        onSettingsRequested:section=>{if(section===1)root.beginEditing();else root.settingsRequested(section)}
     }
     CustomizeHomeView {
         id:editor;anchors.fill:parent;visible:root.editing;layoutModel:root.layoutModel;provider:root.provider;initialPageId:root.activeId
+        initialComponentId:root.editOrigin
         availableApps:root.availableApps;artwork:root.artwork;themes:root.themes
         onPageRequested:id=>root.showPage(id,"",false)
-        onClosed: {root.editing=false;content.restoreFocus(content.focusedItemId)}
+        onClosed: root.finishEditing()
     }
 }

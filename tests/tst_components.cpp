@@ -11,6 +11,8 @@
 #include "games/GameLibrary.h"
 #include "games/GameEmulators.h"
 #include <QStandardPaths>
+#include "settings/ProfileManager.h"
+#include <QScopeGuard>
 #include "app/AppCatalog.h"
 #include <QSqlQuery>
 #include <QSqlDatabase>
@@ -45,6 +47,8 @@ static QByteArray readFile(const QString &path) { QFile file(path); if (!file.op
 class ComponentTests : public QObject {
     Q_OBJECT
 private slots:
+    void sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts();
+    void sourceFamiliesUseGenericBoundedComposition();
     void steamGamesUseProviderIdentityAndReviewedImport();
     void guideActionsValidateIdentityAndAppearance();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
@@ -55,6 +59,12 @@ private slots:
     void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
     void gamesCuratedPackagesBindThroughRealCatalog();
     void emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData();
+    void studioSafetyVersionsAreBoundedReversibleAndProfileScoped();
+    void studioSafetyArchiveFailureRetainsDraftForRetry();
+    void studioSafetyScopeRestoreAndSavedComparisonRetainDraft();
+    void studioSafetyNamedVersionPreservesStagedArtwork();
+    void studioSafetyHouseholdRestrictionsEnforceBoundaries();
+    void studioSafetyPolicyDamageIsRecoverableWithoutRewrite();
     void validatesContracts();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
@@ -64,9 +74,12 @@ private slots:
     void dispatchesValidatedActionsAndOrigins();
     void failedEditRetainsProfileLayout();
     void skinSnapshotsSurviveResetAndArtworkChanges();
+    void starterTemplatesAreEditableAndPreservePages();
+    void starterTemplateRolesRemainEditableWithoutProviders();
     void skinsRejectInvalidAndFailedApplications();
     void starterPageUpdatesPreserveDesignAndRollback();
     void pagesPersistAndRouteAndTravelWithSkins();
+    void homeCopyPagePreservesExistingPages();
     void studioSessionDraftUndoBoundsAndNoWrite();
     void studioSessionCanonicalIdsAndRevisionConflict();
     void studioApplyAtomicFailureAndFocusPreserved();
@@ -93,6 +106,7 @@ private slots:
     void studioGifArtworkIsBoundedStagedAndProfileScoped();
     void studioPastelPresetUsesEditableButtons();
     void studioStartingStylesAreValidatedDraftData();
+    void densePlacementValidationPreservesBoundsAndTouchingEdges();
 };
 static AppDefinition gamesRuntime(const QString &id="psp-test") {
     AppDefinition app;app.id=id;app.name="PSP runtime";app.type="desktop";
@@ -406,13 +420,46 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     QFile::remove(dir.filePath("home.json"));QVERIFY(QDir().mkdir(dir.filePath("home.json")));
     QVERIFY(!page->setAppearance({{"focusColor","#654321"}}));QCOMPARE(page->appearance(),before);QCOMPARE(layout.pages(),pages);
 }
+void ComponentTests::homeCopyPagePreservesExistingPages()
+{
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));
+    const auto defaults=QFINDTESTDATA("../config/default-home-layout.json");
+    HomeLayout layout(&registry);QVERIFY(layout.load(defaults,dir.filePath("home.json")));
+    const auto moviesId=layout.createPage("Cinema","movies");QVERIFY(!moviesId.isEmpty());
+    const auto showsId=layout.createPage("Television","shows");QVERIFY(!showsId.isEmpty());
+    auto *movies=qobject_cast<PageModel *>(layout.pageModel(moviesId));QVERIFY(movies);
+    auto *shows=qobject_cast<PageModel *>(layout.pageModel(showsId));QVERIFY(shows);
+    QVERIFY(movies->addWidget("text"));QVERIFY(movies->storePage());
+    QVERIFY(shows->setAppearance({{"focusColor","#123456"}}));QVERIFY(shows->storePage());
+    const auto moviesDocument=movies->document();
+    const auto showsDocument=shows->document();
+    const auto existingPages=layout.pages();
+
+    const auto copiedId=layout.createPage("Home copy","home");
+    QVERIFY2(!copiedId.isEmpty(),qPrintable(layout.errorString()));
+    QCOMPARE(layout.pages().size(),existingPages.size()+1);
+    QCOMPARE(layout.pages().mid(0,existingPages.size()),existingPages);
+    QCOMPARE(movies->document(),moviesDocument);
+    QCOMPARE(shows->document(),showsDocument);
+    auto *copied=qobject_cast<PageModel *>(layout.pageModel(copiedId));QVERIFY(copied);
+    QVERIFY(!copied->document().contains("pages"));
+
+    HomeLayout reopened(&registry);QVERIFY(reopened.load(defaults,dir.filePath("home.json")));
+    QCOMPARE(reopened.pages(),layout.pages());
+    auto *reopenedMovies=qobject_cast<PageModel *>(reopened.pageModel(moviesId));QVERIFY(reopenedMovies);
+    auto *reopenedShows=qobject_cast<PageModel *>(reopened.pageModel(showsId));QVERIFY(reopenedShows);
+    auto *reopenedCopy=qobject_cast<PageModel *>(reopened.pageModel(copiedId));QVERIFY(reopenedCopy);
+    QCOMPARE(reopenedMovies->document(),moviesDocument);
+    QCOMPARE(reopenedShows->document(),showsDocument);
+    QVERIFY(!reopenedCopy->document().contains("pages"));
+}
 void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
 {
     QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
     HomeLayout layout(&registry);
     const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
     QVERIFY(layout.load(defaults,dir.filePath("home.json")));
-    QCOMPARE(layout.skins().size(),3);
+    QCOMPARE(layout.skins().size(),7);
     QVERIFY(layout.applySkin("builtin-lounge"));
     QCOMPARE(layout.categories().size(),4);
     QVERIFY(layout.setAppearance({{"fontFamily","Serif"},{"focusColor","#123456"}}));
@@ -432,7 +479,7 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     QVERIFY(layout.applySkin("builtin-pastel"));QCOMPARE(layout.pages().size(),presetPages.size());
     QCOMPARE(moviePage->appearance()["focusColor"].toString(),QString("#123456"));
     QVERIFY(!layout.wallpaperSource().isEmpty());
-    QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),4);
+    QVERIFY(layout.resetToDefaults()); QCOMPARE(layout.skins().size(),8);
     // The snapshot is independent of the live artwork store, and survives a process reload.
     QDir(dir.filePath("artwork")).removeRecursively();
     HomeLayout restored(&registry); QVERIFY(restored.load(defaults,dir.filePath("home.json")));
@@ -447,7 +494,83 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     QVERIFY(restored.deleteSkin(id)); QCOMPARE(readFile(dir.filePath("home.json")),live);
     QVERIFY(!restored.deleteSkin("builtin-default"));
     QVERIFY(restored.applySkin("builtin-default")); QVERIFY(restored.composition().isEmpty());
-    HomeLayout other(&registry); QVERIFY(other.load(defaults,dir.filePath("other/home.json"))); QCOMPARE(other.skins().size(),3);
+    HomeLayout other(&registry); QVERIFY(other.load(defaults,dir.filePath("other/home.json"))); QCOMPARE(other.skins().size(),7);
+}
+void ComponentTests::starterTemplatesAreEditableAndPreservePages()
+{
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    HomeLayout layout(&registry);
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    QVERIFY(layout.load(defaults, dir.filePath("home.json")));
+    const auto pageId = layout.createPage("Keep my page", "movies");
+    QVERIFY(!pageId.isEmpty());
+    const auto pages = layout.pages();
+    for (const auto &id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"}) {
+        QVERIFY2(layout.applySkin("builtin-" + QString::fromLatin1(id)), qPrintable(layout.errorString()));
+        QCOMPARE(layout.pages(), pages);
+        QVERIFY(!layout.components().isEmpty());
+        const auto componentId = layout.components().first().toMap()["id"].toString();
+        QVERIFY(layout.setItemName(componentId, "My edited role"));
+        HomeLayout reopened(&registry);
+        QVERIFY(reopened.load(defaults, dir.filePath("home.json")));
+        QCOMPARE(reopened.pages(), pages);
+        QCOMPARE(reopened.components().first().toMap()["name"].toString(), QString("My edited role"));
+    }
+    const auto previous = layout.committedDocument();
+    QVERIFY(!layout.applySkin("builtin-../compact-launcher"));
+    QCOMPARE(layout.committedDocument(), previous);
+    HomeLayout other(&registry);
+    QVERIFY(other.load(defaults, dir.filePath("other/home.json")));
+    QVERIFY(other.pages().isEmpty());
+    // Reject a fractional catalog version rather than truncating it to version 1.
+    QVERIFY(QDir().mkpath(dir.filePath("config/skins")));
+    writeFile(dir.filePath("config/default.json"), readFile(defaults));
+    auto catalog = QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/skins/templates.json"))).object();
+    catalog["schemaVersion"] = 1.5;
+    writeFile(dir.filePath("config/skins/templates.json"), QJsonDocument(catalog).toJson());
+    HomeLayout invalidCatalog(&registry);
+    QVERIFY(invalidCatalog.load(dir.filePath("config/default.json"), dir.filePath("invalid/home.json")));
+    QCOMPARE(invalidCatalog.skins().size(), 3);
+    const auto unchanged = invalidCatalog.committedDocument();
+    QVERIFY(!invalidCatalog.applySkin("builtin-compact-launcher"));
+    QCOMPARE(invalidCatalog.committedDocument(), unchanged);
+}
+void ComponentTests::starterTemplateRolesRemainEditableWithoutProviders()
+{
+    QTemporaryDir dir;
+    AppRegistry registry;
+    QVERIFY(registry.loadFromData(apps));
+    HomeLayout layout(&registry);
+    QVERIFY(layout.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("home.json")));
+    for (const auto &id : {"compact-launcher", "scrolling-dashboard", "poster-sidebar", "minimal-pastel"}) {
+        QVERIFY(layout.applySkin("builtin-" + QString::fromLatin1(id)));
+        const auto before = layout.committedDocument();
+        const auto disk = readFile(dir.filePath("home.json"));
+        auto *session = qobject_cast<StudioSession *>(layout.beginStudio());
+        QVERIFY(session);
+        const auto nodes = session->document()["components"].toList();
+        for (const auto &value : nodes) {
+            const auto node = value.toMap();
+            const auto componentId = node["id"].toString();
+            QVERIFY(!node["name"].toString().isEmpty());
+            QVERIFY(session->execute("rename", {{"id", componentId}, {"name", "My content role"}}));
+            if (node.contains("appCollection")) {
+                QVERIFY(session->execute("setApps", {{"id", componentId}, {"mode", "selected"}, {"apps", QVariantList{}}}));
+            } else {
+                QCOMPARE(node["source"].toMap()["provider"].toString(), QString("kodi"));
+                auto presentation = node["presentation"].toMap();
+                presentation["libraryColumns"] = 3;
+                QVERIFY2(session->execute("presentation", {{"id", componentId}, {"value", presentation}}), qPrintable(session->errorString()));
+            }
+        }
+        QCOMPARE(layout.committedDocument(), before);
+        QCOMPARE(readFile(dir.filePath("home.json")), disk);
+        session->revert();
+        QCOMPARE(session->draft(), before);
+        session->invalidate();
+    }
 }
 void ComponentTests::starterPageUpdatesPreserveDesignAndRollback()
 {
@@ -514,6 +637,40 @@ void ComponentTests::skinsRejectInvalidAndFailedApplications()
     QVERIFY(!layout.applySkin("builtin-pastel")); QCOMPARE(layout.components(),items);
     QCOMPARE(layout.appearance()["focusColor"].toString(),QString("#123456"));
 }
+void ComponentTests::sourceFamiliesUseGenericBoundedComposition()
+{
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps)); HomeLayout home(&registry); QVERIFY(home.load());
+    const auto presets=home.studioOptions().value("componentPresets").toMap();
+    for (const auto &family:{"detected-sources","source-notice"}) {
+        const auto prototype=presets.value(family).toMap(); QVERIFY(!prototype.isEmpty()); QString error;
+        const auto normalized=ComponentSchema::component(prototype,false,&error); QVERIFY2(!normalized.isEmpty(),qPrintable(error));
+        QCOMPARE(normalized.value("source").toMap().value("provider").toString(),QString("sources"));
+        auto invalid=prototype; auto style=prototype.value("presentation").toMap(); style["sourceMaximum"]=7; invalid["presentation"]=style;
+        QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+        style["sourceMaximum"]=true;invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+        style=prototype.value("presentation").toMap();style["sourceVariant"]="floating";invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+    }
+    const auto controls=home.composition().value("headerControls").toList(); QVERIFY(controls.contains("sources"));
+    QVERIFY(!home.studioOptions().value("sourcePolicyFields").toList().isEmpty());
+}
+
+void ComponentTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
+{
+    QVERIFY(ComponentSchema::validSourcePolicy({{"schemaVersion",1},{"mode","compact"},{"duration",8},{"pages",QVariantList{"home"}},{"slots",QVariantList{"status"}}}));
+    for (const auto &value:QVariantList{QVariantMap{{"duration","8"}},QVariantMap{{"duration",true}},QVariantMap{{"duration",61}},QVariantMap{{"mode",false}},QVariantMap{{"events",QVariantList{1}}},QVariantMap{{"pages",QVariantList{"a","a"}}},QVariantMap{{"types",QVariantList{"shell"}}},QVariantMap{{"command","touch file"}}})
+        QVERIFY(!ComponentSchema::validSourcePolicy(value.toMap()));
+    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    const auto defaults=dir.filePath("defaults.json"),saved=dir.filePath("home.json");
+    writeFile(defaults,R"({"schemaVersion":1,"items":[]})");
+    const QByteArray invalid=R"({"schemaVersion":1,"theme":{"sourcePolicy":{"mode":"execute"}},"items":[]})";
+    writeFile(saved,invalid); HomeLayout home(&registry); QVERIFY(home.load(defaults,saved));
+    QCOMPARE(readFile(saved),invalid); QVERIFY(!home.appearance().contains("sourcePolicy"));
+    QVERIFY(home.setAppearance({{"sourcePolicy",QVariantMap{{"schemaVersion",1},{"mode","widget"},{"duration",0}}}}));
+    const auto original=readFile(saved); HomeLayout reload(&registry); QVERIFY(reload.load(defaults,saved));
+    QCOMPARE(readFile(saved),original); QCOMPARE(reload.appearance().value("sourcePolicy").toMap().value("mode").toString(),QString("widget"));
+    QVERIFY(!reload.setAppearance({{"sourcePolicy",QVariantMap{{"mode","shell"}}}})); QCOMPARE(readFile(saved),original);
+}
+
 void ComponentTests::validatesContracts()
 {
     for (const auto &value : QVariantList{
@@ -1673,7 +1830,15 @@ void ComponentTests::studioHeaderValidationAndDraftRollback()
         QVariantMap{{"timeFormat","arbitrary"}},QVariantMap{{"position","outside"}},QVariantMap{{"backgroundColor","transparent"}},QVariantMap{{"script","anything"}}};
     for(const auto &entry:malformed){auto invalid=composition;invalid["header"]=entry;QVERIFY(!ComponentSchema::validComposition(invalid));}
     QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
-    const auto path=dir.filePath("home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    const auto defaultPath=QFINDTESTDATA("../config/default-home-layout.json");
+    const auto legacyPath=dir.filePath("legacy-home.json"),path=dir.filePath("home.json");
+    const auto legacyBytes=readFile(defaultPath);QVERIFY(!legacyBytes.isEmpty());writeFile(legacyPath,legacyBytes);
+    HomeLayout legacyHome(&registry);QVERIFY(legacyHome.load(defaultPath,legacyPath));QCOMPARE(readFile(legacyPath),legacyBytes);
+    QVERIFY(home.load(defaultPath,path));
+    const auto otherPath=dir.filePath("other-home.json");HomeLayout other(&registry);
+    QVERIFY(other.load(defaultPath,otherPath));
+    const auto otherBytes=readFile(otherPath);
+    const auto otherHeader=other.composition().value("header");
     QVERIFY(!home.studioOptions().value("headerDefaults").toMap().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto before=session->draft();
     QVERIFY(session->previewCommand("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
@@ -1686,12 +1851,14 @@ void ComponentTests::studioHeaderValidationAndDraftRollback()
     QVERIFY(session->undo());QCOMPARE(session->draft(),before);
     QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
     QVERIFY(session->apply(QString()));
+    QCOMPARE(readFile(otherPath),otherBytes);QCOMPARE(other.composition().value("header"),otherHeader);
     HomeLayout reopened(&registry);QVERIFY(reopened.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
     QCOMPARE(reopened.composition().value("header").toMap(),style);
     const auto skin=reopened.saveSkin("Bottom header");QVERIFY(!skin.isEmpty());
     auto changed=reopened.composition();changed["header"]=QVariantMap{{"schemaVersion",1},{"position","top"}};
     QVERIFY(reopened.setComposition(changed));QVERIFY(reopened.applySkin(skin));
     QCOMPARE(reopened.composition().value("header").toMap(),style);
+    QCOMPARE(readFile(otherPath),otherBytes);QCOMPARE(other.composition().value("header"),otherHeader);
 }
 void ComponentTests::studioPageDefaultsAreDraftOnlyAndScoped()
 {
@@ -1918,5 +2085,237 @@ void ComponentTests::studioStartingStylesAreValidatedDraftData()
     HomeLayout refused(&registry);QVERIFY(refused.load(localDefaults,dir.filePath("refused.json")));QVERIFY(refused.studioOptions().isEmpty());
 }
 
+void ComponentTests::studioSafetyVersionsAreBoundedReversibleAndProfileScoped()
+{
+    QTemporaryDir dir;
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    HomeLayout home(&registry);
+    const auto path = dir.filePath("home.json");
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), path));
+    auto *session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session && session->active());
+    const auto baseline = session->draft();
+    QVERIFY(session->execute("newPage", {{"name", "Destination"}}));
+    QVERIFY(!session->changeSummary().isEmpty());
+    QVERIFY(session->saveVersion("Milestone"));
+    const auto version = session->versions().first().toMap()["id"].toString();
+    const auto milestone = session->document();
+    QVERIFY(session->execute("pagePatch", {{"scope", "theme"}, {"value", QVariantMap{{"backgroundStart", "#123456"}}}}));
+    const auto beforeRestore = session->draft();
+    QVERIFY(session->previewVersion(version, "interface"));
+    QCOMPARE(session->draft(), beforeRestore);
+    QVERIFY(!QFile::exists(path));
+    session->cancelPreview(); QCOMPARE(session->draft(), beforeRestore);
+    QVERIFY(session->previewVersion(version, "interface"));
+    QVERIFY(session->acceptPreview()); QCOMPARE(session->document(), milestone);
+    QVERIFY(session->undo()); QCOMPARE(session->draft(), beforeRestore);
+    QVERIFY(!session->previewVersion("../escape", "interface"));
+    QCOMPARE(session->draft(), beforeRestore);
+    for (int i = 0; i < 12; ++i) QVERIFY(session->saveVersion(QString("Version %1").arg(i)));
+    QCOMPARE(session->versions().size(), 10);
+    QVERIFY(!session->previewVersion(version, "interface")); // expired oldest version
+    QVERIFY(session->apply()); QVERIFY(QFile::exists(path));
+    const auto applied = readFile(path);
+    session->invalidate();
+    HomeLayout other(&registry); QVERIFY(other.load(QFINDTESTDATA("../config/default-home-layout.json"), dir.filePath("other.json")));
+    auto *otherSession = qobject_cast<StudioSession *>(other.beginStudio()); QVERIFY(otherSession);
+    QVERIFY(otherSession->versions().isEmpty());
+    QVERIFY(!otherSession->previewVersion(version, "interface"));
+    QCOMPARE(readFile(path), applied);
+    QVERIFY(baseline != applied);
+}
+
+void ComponentTests::studioSafetyArchiveFailureRetainsDraftForRetry()
+{
+    QTemporaryDir dir;
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    const auto path = dir.filePath("home.json");
+    writeFile(path, legacy);
+    HomeLayout home(&registry); QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), path));
+    auto *session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    const auto before = readFile(path), live = home.committedDocument();
+    QVERIFY(session->execute("newPage", {{"name", "Retry destination"}}));
+    const auto draft = session->draft();
+    QVERIFY(QDir().mkdir(path + ".studio-versions.json"));
+    QVERIFY(!session->apply()); QVERIFY(!session->errorString().isEmpty());
+    QCOMPARE(readFile(path), before); QCOMPARE(home.committedDocument(), live); QCOMPARE(session->draft(), draft);
+    QVERIFY(QDir().rmdir(path + ".studio-versions.json"));
+    QVERIFY(session->apply()); QVERIFY(!session->isDirty());
+    QCOMPARE(readFile(path + ".v1.backup.json"), legacy);
+    const auto saved = readFile(path);
+#ifdef Q_OS_UNIX
+    QVERIFY(QFile::rename(path, path + ".actual"));
+    QVERIFY(QFile::link(path + ".actual", path));
+    QVERIFY(!session->apply()); QVERIFY(QFileInfo(path).isSymLink());
+    QCOMPARE(readFile(path + ".actual"), saved);
+    QVERIFY(QFile::remove(path)); QVERIFY(QFile::rename(path + ".actual", path));
+#endif
+    const auto backup = readFile(path + ".studio-versions.json");
+    writeFile(path + ".studio-versions.json", "{broken archive");
+    QVERIFY(!session->saveVersion("Refuse damage"));
+    QCOMPARE(readFile(path + ".studio-versions.json"), QByteArray("{broken archive"));
+    const auto retainedDraft = session->draft();
+    QVERIFY(session->resetVersions()); QVERIFY(session->versions().isEmpty());
+    QCOMPARE(session->draft(), retainedDraft); QCOMPARE(readFile(path), saved);
+    writeFile(path + ".studio-versions.json", backup);
+    QVERIFY(session->execute("newPage", {{"name", "Conflict destination"}}));
+    const auto conflictDraft = session->draft();
+    writeFile(path, saved + "\n"); // a newer disk revision, even if semantically equivalent
+    QVERIFY(!session->apply()); QCOMPARE(session->draft(), conflictDraft);
+    QCOMPARE(readFile(path), saved + "\n");
+    QVERIFY(session->reloadApplied()); QVERIFY(!session->isDirty());
+    QCOMPARE(readFile(path), saved + "\n"); // explicit reload never rewrites
+}
+
+void ComponentTests::studioSafetyNamedVersionPreservesStagedArtwork()
+{
+    QTemporaryDir dir;
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    const auto path = dir.filePath("home.json");
+    HomeLayout home(&registry); QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), path));
+    auto *session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    QImage image(8, 8, QImage::Format_RGB32); image.fill(Qt::red);
+    const auto source = dir.filePath("source.png"); QVERIFY(image.save(source));
+    const auto artwork = session->stageArtwork(source); QVERIFY(!artwork.isEmpty());
+    auto document = QJsonDocument::fromJson(session->draft()).object();
+    auto theme = document["composition"].toObject(); theme["schemaVersion"] = 1; theme["wallpaper"] = artwork; document["composition"] = theme;
+    QVERIFY(session->pushEdit(QJsonDocument(document).toJson()));
+    QVERIFY(session->saveVersion("With staged art"));
+    const auto version = session->versions().first().toMap()["id"].toString();
+    QVERIFY(!QFile::exists(path)); QVERIFY(!QFileInfo::exists(dir.filePath("artwork")));
+    session->invalidate(); QVERIFY(QFile::remove(source));
+    session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    QVERIFY(session->previewVersion(version, "interface"));
+    QVERIFY(session->acceptPreview()); QVERIFY(session->apply());
+    QVERIFY(QFileInfo::exists(dir.filePath(artwork)));
+}
+
+void ComponentTests::studioSafetyScopeRestoreAndSavedComparisonRetainDraft()
+{
+    QTemporaryDir dir;
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    const auto path = dir.filePath("home.json");
+    HomeLayout home(&registry); QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), path));
+    auto *session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    QVERIFY(session->execute("newPage", {{"name", "First destination"}}));
+    QVERIFY(session->execute("newPage", {{"name", "Second destination"}}));
+    QImage image(8, 8, QImage::Format_RGB32); image.fill(Qt::green);
+    QVERIFY(QDir().mkpath(dir.filePath("artwork")));
+    QVERIFY(image.save(dir.filePath("artwork/existing-alias.png")));
+    auto interfaceDocument = QJsonDocument::fromJson(session->draft()).object();
+    auto pages = interfaceDocument["pages"].toArray();
+    auto second = pages[1].toObject(), layout = second["layout"].toObject();
+    auto composition = layout["composition"].toObject(); composition["schemaVersion"] = 1; composition["wallpaper"] = "artwork/existing-alias.png";
+    layout["composition"] = composition; second["layout"] = layout; pages[1] = second; interfaceDocument["pages"] = pages;
+    QVERIFY(session->pushEdit(QJsonDocument(interfaceDocument).toJson()));
+    QVERIFY(session->apply());
+    QVERIFY(session->saveVersion("Two pages"));
+    const auto version = session->versions().first().toMap()["id"].toString();
+    const auto original = session->document();
+    const auto pageId = original["pages"].toList().first().toMap()["id"].toString();
+    QVERIFY(session->execute("pagePatch", {{"scope", "theme"}, {"value", QVariantMap{{"backgroundStart", "#123456"}}}}, pageId));
+    QVERIFY(session->execute("pagePatch", {{"scope", "theme"}, {"value", QVariantMap{{"backgroundStart", "#654321"}}}}));
+    const auto savedAppearance = original["studioAppearance"];
+    auto appearance = session->document()["studioAppearance"].toMap(); appearance["surfaceColor"] = "#171717";
+    QVERIFY(session->execute("studioAppearance", {{"value", appearance}}));
+    const auto before = session->document();
+    const auto disk = readFile(path);
+    QVERIFY(session->previewVersion(version, "page", pageId)); QVERIFY(session->acceptPreview());
+    auto rootBefore = before, rootAfter = session->document(); rootBefore.remove("pages"); rootAfter.remove("pages");
+    QCOMPARE(rootBefore, rootAfter);
+    QCOMPARE(session->document()["pages"], original["pages"]);
+    QVERIFY(session->undo()); QCOMPARE(session->document(), before); QCOMPARE(readFile(path), disk);
+    QVERIFY(session->previewVersion(version, "interface")); QVERIFY(session->acceptPreview());
+    QCOMPARE(session->document()["studioAppearance"], savedAppearance);
+    QVERIFY(session->undo()); QCOMPARE(session->document(), before);
+    QVERIFY(session->previewDefaults("interface")); QCOMPARE(session->document(), before);
+    session->cancelPreview(); QCOMPARE(session->document(), before);
+    QVERIFY(session->previewDefaults("interface")); QVERIFY(session->acceptPreview());
+    QVERIFY(session->document()["pages"].toList().isEmpty());
+    QVERIFY(session->undo()); QCOMPARE(session->document(), before); QCOMPARE(readFile(path), disk);
+    QVERIFY(!session->previewDefaults("unknown")); QCOMPARE(session->document(), before);
+    QVERIFY(session->previewSavedDesign()); QCOMPARE(session->document(), before);
+    session->cancelPreview(); QCOMPARE(session->document(), before);
+    writeFile(path, "{invalid saved design");
+    QVERIFY(!session->reloadApplied()); QCOMPARE(session->document(), before);
+    QCOMPARE(readFile(path), QByteArray("{invalid saved design"));
+    writeFile(path, disk);
+    QVERIFY(session->deleteVersion(version)); QVERIFY(!session->previewVersion(version, "interface"));
+    QCOMPARE(session->document(), before); QCOMPARE(readFile(path), disk);
+}
+
+void ComponentTests::studioSafetyHouseholdRestrictionsEnforceBoundaries()
+{
+    const auto priorPolicy = qApp->property("isoldeProfilePolicy"), priorProfile = qApp->property("isoldeProfile"), priorDirty = qApp->property("isoldeStudioDirty");
+    const auto restore = qScopeGuard([&] { qApp->setProperty("isoldeProfilePolicy", priorPolicy); qApp->setProperty("isoldeProfile", priorProfile); qApp->setProperty("isoldeStudioDirty", priorDirty); });
+    QTemporaryDir dir;
+    ProfileManager profiles(dir.path());
+    QVERIFY(profiles.createProfile("Other"));
+    const auto other = profiles.profiles().last().toMap()["id"].toString();
+    AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    HomeLayout home(&registry); QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"), profiles.layoutPath()));
+    auto *session = qobject_cast<StudioSession *>(home.beginStudio()); QVERIFY(session);
+    const auto baseline = session->draft();
+    session->setEditorLocked(true);
+    QVERIFY(!session->execute("newPage", {{"name", "Denied"}})); QVERIFY(!session->apply());
+    QVERIFY(!session->previewImport(dir.filePath("missing.json"), "interface").value("valid").toBool());
+    QCOMPARE(session->draft(), baseline);
+    session->setEditorLocked(false);
+    QVERIFY(session->execute("newPage", {{"name", "Allowed"}}));
+    QVERIFY(!profiles.selectProfile(other)); QVERIFY(!profiles.setEditingAllowed(false));
+    session->revert();
+    QVERIFY(profiles.setEditingAllowed(false));
+    QVERIFY(!session->execute("newPage", {{"name", "Denied"}})); QVERIFY(!home.applyStudioDraft(baseline));
+    QVERIFY(!home.resetToDefaults()); QVERIFY(!home.applySkin("builtin-default"));
+    QVERIFY(profiles.setInstallsAllowed(false)); QVERIFY(!ProfileManager::allows("install"));
+    AppCatalog catalog(&registry); QVERIFY(!catalog.install("movies")); QVERIFY(catalog.addWebApp("Denied app", "https://example.test", "chromium").isEmpty());
+    QVERIFY(!profiles.setRestrictedDestinations({"settings"}));
+    QVERIFY(profiles.setRestrictedDestinations({"other-page"})); QVERIFY(!ProfileManager::allows("destination", "other-page"));
+    QVERIFY(!home.pageAllowed("other-page")); QVERIFY(home.pageAllowed({}));
+    QVERIFY(profiles.selectProfile(other)); QVERIFY(ProfileManager::allows("edit")); QVERIFY(ProfileManager::allows("install"));
+    QVERIFY(!session->execute("newPage", {{"name", "Outgoing profile denied"}})); QVERIFY(session->versions().isEmpty());
+    QVERIFY(profiles.selectProfile("default")); QVERIFY(!ProfileManager::allows("edit"));
+    QVERIFY(profiles.setEditingAllowed(true)); // permanent recovery is supported
+    session->invalidate(); QVERIFY(session->versions().isEmpty());
+}
+
+void ComponentTests::studioSafetyPolicyDamageIsRecoverableWithoutRewrite()
+{
+    const auto priorPolicy = qApp->property("isoldeProfilePolicy"), priorProfile = qApp->property("isoldeProfile"), priorDirty = qApp->property("isoldeStudioDirty");
+    const auto restore = qScopeGuard([&] { qApp->setProperty("isoldeProfilePolicy", priorPolicy); qApp->setProperty("isoldeProfile", priorProfile); qApp->setProperty("isoldeStudioDirty", priorDirty); });
+    qApp->setProperty("isoldeStudioDirty", false);
+    QTemporaryDir dir;
+    const QByteArray malformed = R"({"active":"default","profiles":[{"id":"default","name":"Household","policy":{"editingAllowed":"yes","unknown":true}}]})";
+    const auto path = dir.filePath("profiles.json"); writeFile(path, malformed);
+    ProfileManager profiles(dir.path());
+    QCOMPARE(readFile(path), malformed); QVERIFY(!profiles.error().isEmpty());
+    QVERIFY(!profiles.editingAllowed()); QVERIFY(!profiles.installsAllowed());
+    QVERIFY(profiles.setEditingAllowed(true)); QVERIFY(profiles.editingAllowed());
+    QVERIFY(!profiles.installsAllowed());
+    const auto repaired = QJsonDocument::fromJson(readFile(path)).object()["profiles"].toArray().first().toObject()["policy"].toObject();
+    QVERIFY(repaired["editingAllowed"].isBool()); QVERIFY(!repaired.contains("unknown"));
+}
+
 QTEST_GUILESS_MAIN(ComponentTests)
 #include "tst_components.moc"
+
+void ComponentTests::densePlacementValidationPreservesBoundsAndTouchingEdges()
+{
+    QVariantMap grid{{"columns",16},{"rows",10},{"overlap",false}};
+    QJsonArray items;
+    for (int i = 0; i < 160; ++i)
+        items.append(QJsonObject{{"placement",QJsonObject{{"x",i % 16},{"y",i / 16},{"width",1},{"height",1}}}});
+    QVERIFY(ComponentSchema::placementsFit(items,grid)); // All edges touch without overlap.
+    items.append(QJsonObject{{"name","Unplaced component"}});
+    QVERIFY(ComponentSchema::placementsFit(items,grid));
+    items.append(items.at(159)); // Last pair still detects a collision.
+    QVERIFY(!ComponentSchema::placementsFit(items,grid));
+    grid["overlap"] = true;
+    QVERIFY(ComponentSchema::placementsFit(items,grid));
+    items.append(QJsonObject{{"placement",QJsonObject{{"x",16},{"y",0},{"width",1},{"height",1}}}});
+    QVERIFY(!ComponentSchema::placementsFit(items,grid)); // Overlap never permits out-of-bounds data.
+    for (const double coordinate : {-1e30,1e30,2147483647.0}) {
+        QVERIFY(!ComponentSchema::validPlacement({{"x",coordinate},{"y",0},{"width",1},{"height",1}},16,10));
+        QVERIFY(!ComponentSchema::validPlacement({{"x",0},{"y",coordinate},{"width",1},{"height",1}},16,10));
+        QVERIFY(!ComponentSchema::validPlacement({{"x",0},{"y",0},{"width",coordinate},{"height",1}},16,10));
+    }
+}

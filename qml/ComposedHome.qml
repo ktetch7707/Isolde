@@ -18,6 +18,20 @@ Item {
             navigationStrip.contentX = Math.max(0,item.x + item.width - navigationStrip.width)
     })
     property bool navigationFocused: false
+    property int navigationGeneration: 0
+    function navigationState() {
+        return {activeTabId:activeTabId, focusedTab:focusedTab, navigationFocused:navigationFocused}
+    }
+    function resetNavigationState(state) {
+        ++navigationGeneration
+        activeWidget="";activeGroup="";sectionActionId=""
+        const saved=state || {}, initial=config.initialTab || (tabs[0] ? tabs[0].id : "")
+        activeTabId=tabs.some(tab=>tab.id===saved.activeTabId)?saved.activeTabId:initial
+        focusedTab=Number.isInteger(saved.focusedTab) && saved.focusedTab>=0 && saved.focusedTab<tabs.length?saved.focusedTab:activeTab
+        navigationFocused=!!saved.navigationFocused
+        content.cancelFlick();content.contentY=0
+        navigationStrip.cancelFlick();navigationStrip.contentX=0
+    }
     property string selectMode: host.selectMode || "single"
     property string selectTrigger: host.selectTrigger || "click"
     property string selectAction: host.selectAction || "navigate"
@@ -50,12 +64,18 @@ Item {
     readonly property var placements: host.placements || []
     readonly property bool sectionMode: !!root.config.grid && root.grid.mode==="sections"
     property var sectionSurfaces: ({})
+    readonly property string viewportGeometry: {
+        let geometry="",ancestor=content
+        while(ancestor && ancestor!==host){
+            geometry += [ancestor.x,ancestor.y,ancestor.width,ancestor.height,ancestor.scale].join(":")+";"
+            ancestor=ancestor.parent
+        }
+        return geometry
+    }
     readonly property real scrollOffset:content.contentY
     function viewportRect(){
-        // mapToItem does not subscribe a binding to ancestor transforms.
-        let ancestor=content
-        while(ancestor && ancestor!==host){const geometry=ancestor.x+ancestor.y+ancestor.width+ancestor.height+ancestor.scale;ancestor=ancestor.parent}
-        const point=content.mapToItem(host,0,0);return {x:point.x,y:point.y,width:content.width,height:content.height}
+        const point=content.mapToItem(host,0,0)
+        return {x:point.x,y:point.y,width:content.width,height:content.height}
     }
     readonly property bool scrollingPage:placementMode && !sectionMode && config.verticalScrolling===true
     readonly property int contentRows: {
@@ -80,7 +100,7 @@ Item {
         for(let depth=0;item && item.parentId && depth<4;++depth)item=(host.items || []).find(i=>i.id===item.parentId)
         if(item && item.placement)revealPlacement(item.placement,item.categoryId || "")
     }
-    function settleRuntimeFocus(){if(scrollingPage && !host.editMode)Qt.callLater(revealFocusedPlacement)}
+    function settleRuntimeFocus(){const generation=navigationGeneration;if(scrollingPage && !host.editMode)Qt.callLater(()=>{if(root && generation===root.navigationGeneration)revealFocusedPlacement()})}
     function editorViewport(){return {y:content.contentY,navigationX:navigationStrip.contentX}}
     function restoreEditorViewport(state){if(!state)return;content.cancelFlick();content.contentY=state.y;navigationStrip.cancelFlick();navigationStrip.contentX=state.navigationX}
     readonly property bool placementMode: {
@@ -117,6 +137,10 @@ Item {
         return true
     }
     readonly property string layoutError: {
+        for(const key of Object.keys(sectionSurfaces)) {
+            const surface=sectionSurfaces[key]
+            if(surface && surface.responsiveError)return surface.responsiveError
+        }
         if(!placementMode)return ""
         if(!sectionMode)return placementCell.valid?"":"Grid spacing or margins leave no room for cells. Edit Grid to repair."
         for(const key of Object.keys(sectionSurfaces)) {
@@ -129,14 +153,15 @@ Item {
     function placementRect(p,scope) {
         const surface=sectionMode?sectionSurfaces[scope || ""]:placementGrid
         const c = gridMetricsFor(scope)
+        // Keep mapped bounds reactive to ancestor geometry and Flickable scrolling.
         let ancestor=surface || placementGrid
         while(ancestor && ancestor!==content.contentItem){const geometry=ancestor.x+ancestor.y+ancestor.width+ancestor.height;ancestor=ancestor.parent}
-        const origin = (surface || placementGrid).mapToItem(content.contentItem, c.margin, c.margin),viewport=viewportRect()
-        // Explicit scroll dependencies keep rendered proposal bindings in
-        // sync; mapToItem alone only updates when it is called again.
-        return {x: viewport.x+origin.x-content.contentX + p.x*(c.cellW+c.gap), y: viewport.y+origin.y-content.contentY + p.y*(c.cellH+c.gap),
-            width: p.width*c.cellW + (p.width-1)*c.gap,
-            height: p.height*c.cellH + (p.height-1)*c.gap}
+        const scroll=content.contentY
+        const origin = (surface || placementGrid).mapToItem(content.contentItem, c.margin, c.margin)
+        const x=origin.x+p.x*(c.cellW+c.gap),y=origin.y+p.y*(c.cellH+c.gap)
+        const width=p.width*c.cellW+(p.width-1)*c.gap,height=p.height*c.cellH+(p.height-1)*c.gap
+        const topLeft=content.contentItem.mapToItem(host,x,y),bottomRight=content.contentItem.mapToItem(host,x+width,y+height)
+        return {x:topLeft.x,y:topLeft.y,width:bottomRight.x-topLeft.x,height:bottomRight.y-topLeft.y}
     }
     function revealScope(scope) {
         const surface=sectionSurfaces[scope || ""];if(!sectionMode || !surface)return
@@ -145,9 +170,10 @@ Item {
     }
     function revealPlacement(p,scope) {
         if(scrollingPage){
-            const rect=placementRect(p,scope),viewport=viewportRect(),c=placementCell
-            if(rect.y<viewport.y)content.contentY=Math.max(0,content.contentY+rect.y-viewport.y-c.gap)
-            else if(rect.y+rect.height>viewport.y+viewport.height)content.contentY=Math.min(Math.max(0,content.contentHeight-content.height),content.contentY+rect.y+rect.height-viewport.y-viewport.height+c.gap)
+            const c=placementCell,origin=placementGrid.mapToItem(content.contentItem,c.margin,c.margin)
+            const top=origin.y+p.y*(c.cellH+c.gap),bottom=top+p.height*c.cellH+(p.height-1)*c.gap
+            if(top<content.contentY)content.contentY=Math.max(0,top-c.gap)
+            else if(bottom>content.contentY+content.height)content.contentY=Math.min(Math.max(0,content.contentHeight-content.height),bottom-content.height+c.gap)
             return
         }
         const surface=sectionSurfaces[scope || ""];if(!sectionMode || !surface)return
@@ -194,7 +220,8 @@ Item {
     readonly property var visibleSections: {
         if (!config.enabled) return []
         const tab = tabs[activeTab]
-        const sections=sectionMode?(host.authoredSections || host.sections):host.sections
+        const rawSections=sectionMode?(host.authoredSections || host.sections):host.sections
+        const sections=rawSections.map(s=>Object.assign({},s,{presentation:host.artworkResolver && host.artworkResolver.responsivePresentation?host.artworkResolver.responsivePresentation(s.presentation || {},content.width,content.height,root.unit):s.presentation || {}}))
         if(sectionMode && host.editMode && host.scopeView)return sections.filter(s=>(s.id || "")===host.editScopeId)
         return !tab || !tab.sections ? sections : tab.sections.map(id => sections.find(s => s.id === id)).filter(s => !!s)
     }
@@ -250,8 +277,9 @@ Item {
         else { activeTabId = tab.id; const first = focusEntries()[0]; if (first) host.focusedIndex = host.itemIndex(first.id) }
     }
     function restoreFocus(id) {
-        Qt.callLater(()=>{if(!root || !root.host || !root.widgets)return;const widget=root.widgets[id];const saved=(root.host.appCollectionFocus || {})[id];if(widget && saved && widget.restoreFocusState){root.activeWidget=id;widget.restoreFocusState(saved)}})
-        if(scrollingPage)Qt.callLater(revealFocusedPlacement)
+        const generation=navigationGeneration
+        Qt.callLater(()=>{if(!root || generation!==root.navigationGeneration || !root.host || !root.widgets)return;const widget=root.widgets[id];const saved=(root.host.appCollectionFocus || {})[id];if(widget && saved && widget.restoreFocusState){root.activeWidget=id;widget.restoreFocusState(saved)}})
+        if(scrollingPage)Qt.callLater(()=>{if(root && generation===root.navigationGeneration)revealFocusedPlacement()})
         const component=(host.items || []).find(i=>i.id===id);activeGroup=component?component.parentId || "":""
         sectionActionId = id.startsWith("section-") ? id : ""
         if(sectionActionId)activeWidget=""
@@ -271,6 +299,7 @@ Item {
         const control = headerControls[index]
         if(host.editMode){host.editHeaderSelected(control);return}
         if (control === "search") host.searchRequested()
+        else if (control === "sources") host.activateHeaderControl(control)
         else host.settingsRequested(control === "edit" ? 1 : -1)
     }
     function focusEntry(entry) {
@@ -308,8 +337,8 @@ Item {
         if (!current) { host.recoveryFocused = true; return }
         const focusedItem=(host.items || []).find(i=>i.id===current.id)
         const pageMenu=focusedItem && focusedItem.family==="page-menu"
-        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || focusedItem.family==="page-menu" || focusedItem.family==="carousel")) && widgets[current.id]
-            && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm || pageMenu && (command===inputManager.navigateUp || command===inputManager.navigateDown))) {
+        if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || ["page-menu","carousel","detected-sources","source-notice"].indexOf(focusedItem.family)>=0)) && widgets[current.id]
+            && (command===inputManager.navigateLeft || command===inputManager.navigateRight || command===inputManager.confirm || focusedItem && ["detected-sources","source-notice"].indexOf(focusedItem.family)>=0 && command===inputManager.menu || pageMenu && (command===inputManager.navigateUp || command===inputManager.navigateDown))) {
             activeWidget=current.id
             const handled=widgets[current.id].handleCommand(command)
             if(!pageMenu || handled)return
@@ -397,7 +426,7 @@ Item {
                             LineIcon { visible:(root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))!=="label"; x:root.headerStyle.controlDisplay==="icon"?(parent.width-width)/2:16*root.unit; anchors.verticalCenter:parent.verticalCenter; width:(root.headerStyle.iconSize || 23)*root.unit; height:width; name:modelData === "search" ? "search" : "settings"; ink:root.headerInk }
                             Text { visible:root.headerStyle.controlDisplay!=="icon";anchors.verticalCenter:parent.verticalCenter; x:(root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))==="both"?(24+(root.headerStyle.iconSize || 23))*root.unit:(parent.width-width)/2
                                 width:Math.min(implicitWidth,Math.max(0,parent.width-((root.headerStyle.controlDisplay || (root.identityHeader?"both":"label"))==="both"?32+(root.headerStyle.iconSize || 23):16)*root.unit));elide:Text.ElideRight
-                                text:modelData === "edit" ? host.editLabel : modelData === "search" ? "Search" : "Settings"; color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.controlSize || (root.identityHeader ? 14 : 15))*root.unit }
+                                text:host.headerControlLabel(modelData); color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.controlSize || (root.identityHeader ? 14 : 15))*root.unit }
                             MouseArea { anchors.fill:parent; onClicked:root.activateControl(index) }
                         }
                     }
@@ -435,6 +464,15 @@ Item {
                         readonly property var style:modelData.presentation || ({})
                         readonly property var metrics:root.geometry.entries[index] || ({span:1})
                         readonly property real padding:(style.padding || 0)*root.unit
+                        readonly property int cardColumns:style.columns || 1
+                        readonly property int cardRows:Math.max(1,Math.ceil((modelData.items || []).length/cardColumns))
+                        readonly property real cardGap:(style.cardGap === undefined ? 16 : style.cardGap)*root.unit
+                        readonly property real cardAreaHeight:Math.max(0,Layout.preferredHeight-2*padding-(heading.visible?heading.height+sectionBody.spacing:0)-(subtitle.visible?subtitle.height+sectionBody.spacing:0))
+                        readonly property real cardWidth:(sectionBody.width-(cardColumns-1)*cardGap)/cardColumns
+                        readonly property real fittedCardWidth:!style.responsive || style.responsive.policy==="scroll" ? cardWidth : Math.min(cardWidth,Math.max(0,(cardAreaHeight-(cardRows-1)*cardGap)/cardRows)*style.responsive.aspect)
+                        readonly property string responsiveError:!root.sectionMode && style.responsive && (modelData.items || []).length && sectionBody.width>0 && sectionView.height>0
+                            && (fittedCardWidth<style.responsive.minimumWidth*root.unit || fittedCardWidth/style.responsive.aspect<style.responsive.minimumHeight*root.unit)
+                            ? "Responsive rules leave no room in "+modelData.name+". Increase the section size, reduce minimum sizes or choose Scroll." : ""
                         Layout.fillWidth:true; Layout.columnSpan:metrics.span
                         Layout.preferredWidth:(content.width-root.gap*(root.columns-1))*metrics.span/root.columns
                         Layout.preferredHeight:root.sectionHeight(style)*root.geometry.factor
@@ -466,7 +504,14 @@ Item {
                                 }
                             }
                             Text { id:subtitle; visible:!!sectionView.style.subtitle; height:visible ? 24*root.unit : 0; text:sectionView.style.subtitle || ""; color:host.appearance.mutedColor || "#AAA4B2"; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:17*root.unit*host.textScale; width:parent.width; elide:Text.ElideRight }
+                            Flickable {
+                                visible:sectionView.style.variant!=="library" && !root.sectionMode
+                                id:sectionScroll;objectName:"responsiveSection-"+sectionView.modelData.id
+                                width:parent.width;height:sectionView.style.responsive?Math.min(sectionCards.implicitHeight,sectionView.cardAreaHeight):sectionCards.implicitHeight
+                                contentWidth:width;contentHeight:sectionCards.implicitHeight;clip:true
+                                interactive:!!sectionView.style.responsive && sectionView.style.responsive.policy==="scroll"
                             Grid {
+                                id:sectionCards
                                 visible: sectionView.style.variant !== "library" && !root.sectionMode
                                 width:parent.width; columns:sectionView.style.columns || 1; spacing:(sectionView.style.cardGap === undefined ? 16 : sectionView.style.cardGap)*root.unit
                                 Repeater {
@@ -481,21 +526,23 @@ Item {
                                         item:Object.assign({},modelData,{presentation:Object.assign({},sectionView.style,modelData.presentation || {})})
                                         variant:sectionView.style.variant || "source"; appearance:host.appearance; unit:root.unit
                                         selectMode:root.selectMode; selectTrigger:root.selectTrigger; selectAction:root.selectAction; selectionColor:root.selectionColor
-                                        width:(parent.width-(parent.columns-1)*parent.spacing)/parent.columns
-                                        height:Math.max(40,(sectionView.Layout.preferredHeight-2*sectionView.padding-(heading.visible ? heading.height+sectionBody.spacing : 0)-(subtitle.visible ? subtitle.height+sectionBody.spacing : 0)
+                                        width:sectionView.style.responsive?sectionView.fittedCardWidth:(parent.width-(parent.columns-1)*parent.spacing)/parent.columns
+                                        height:sectionView.style.responsive?Math.max(sectionView.style.responsive.minimumHeight*root.unit,width/sectionView.style.responsive.aspect):Math.max(40,(sectionView.Layout.preferredHeight-2*sectionView.padding-(heading.visible ? heading.height+sectionBody.spacing : 0)-(subtitle.visible ? subtitle.height+sectionBody.spacing : 0)
                                             -(Math.ceil(sectionView.modelData.items.length/parent.columns)-1)*parent.spacing)/Math.max(1,Math.ceil(sectionView.modelData.items.length/parent.columns)))
                                         selected:host.editMode ? host.editSelection===modelData.id : !root.sectionActionId && !root.navigationFocused && !host.recoveryFocused && host.focusedIndex === host.itemIndex(modelData.id)
                                         outsideColor:host.backgroundEnd
-                                        onSelectedChanged:if(selected) Qt.callLater(root.revealCard,this)
+                                        onSelectedChanged:if(selected){if(sectionScroll.interactive)sectionScroll.contentY=Math.max(0,Math.min(sectionScroll.contentHeight-sectionScroll.height,y+height-sectionScroll.height));Qt.callLater(root.revealCard,this)}
                                         onActivated:{if(host.editMode){host.editSelected(modelData.id);return}root.sectionActionId="";host.focusedIndex=host.itemIndex(modelData.id);root.navigationFocused=false;host.recoveryFocused=false;root.handleCommand(inputManager.confirm)}
                                         MouseArea {anchors.fill:parent;enabled:host.editMode;onClicked:host.editSelected(authoredCard.modelData.id)}
                                     }
                                 }
                             }
+                            }
                             PlacedComponents {
                                 id:sectionPlacement
                                 property string sectionId:sectionView.modelData.id || ""
                                 property string sectionName:sectionView.modelData.name || ""
+                                readonly property string responsiveError:sectionView.responsiveError
                                 property bool editableGrid:sectionView.style.variant!=="library"
                                 readonly property bool geometryReady:sectionView.width>0 && sectionView.height>0 && Math.abs(sectionView.height-sectionView.Layout.preferredHeight)<0.5
                                 width:parent.width;height:Math.max(0,parent.height-heading.height-subtitle.height-2*sectionBody.spacing)
@@ -536,6 +583,7 @@ Item {
             }
             PlacedComponents {
                 id:placementGrid
+                objectName:"composedPlacementGrid"
                 visible:root.placementMode && !root.sectionMode
                 width:content.width;height:content.height
                 items:visible?root.viewportItems:[];metrics:root.placementCell;host:root.host;unit:root.unit

@@ -14,12 +14,13 @@ Item {
     property var searchSettings: null
     property var shellActions: []
     property var appearance: ({})
-    SystemPalette {id:systemPalette}
-    readonly property color ink:appearance.textColor || systemPalette.text
-    readonly property color muted:appearance.mutedColor || systemPalette.mid
-    readonly property color surface:appearance.surfaceColor || systemPalette.window
-    readonly property color focusInk:appearance.focusColor || systemPalette.highlight
-    readonly property color selectedSurface:appearance.selectedColor || systemPalette.highlight
+    SurfacePalette {id:shell;appearance:root.appearance}
+    readonly property color ink:shell.text
+    readonly property color muted:shell.muted
+    readonly property color surface:shell.surface
+    readonly property color focusInk:shell.focus
+    readonly property color searchFocusInk:shell.focus
+    readonly property color selectedSurface:shell.selected
     readonly property bool webSearchEnabled: searchSettings ? searchSettings.webEnabled : false
     property bool open: false
     property bool keyboardOpen: false
@@ -37,11 +38,11 @@ Item {
     signal shellActionRequested(var action)
 
     readonly property var settingsTargets: [
-        { kind: "setting", id: "settings-network", name: "Network", description: "Wi-Fi, saved networks, connection details", action: "Open Settings", section: 0, accent: "#4D7ED8", symbol: "N" },
-        { kind: "setting", id: "settings-home", name: "Customize Home", description: "Tiles, categories, background, artwork, widgets", action: "Open Settings", section: 1, accent: "#9B6BE3", symbol: "H" },
-        { kind: "setting", id: "settings-sources", name: "Sources", description: "Detected discs, drives, media folders, and source policy", action: "Open Settings", section: 2, accent: "#06B6D4", symbol: "▣" },
-        { kind: "setting", id: "settings-remotes", name: "Remotes", description: "Physical remote setup, controllers, button tests, mappings", action: "Open Settings", section: 3, accent: "#22C55E", symbol: "R" },
-        { kind: "setting", id: "settings-system", name: "System", description: "Display, audio, power, support, about", action: "Open Settings", section: 4, accent: "#D58A45", symbol: "S" }
+        { kind: "setting", id: "settings-network", name: "Network", description: "Wi-Fi, saved networks, connection details", action: "Open Settings", section: 0, accent: shell.accent, symbol: "N" },
+        { kind: "setting", id: "settings-home", name: "Customize Home", description: "Tiles, categories, background, artwork, widgets", action: "Open Settings", section: 1, accent: shell.accent, symbol: "H" },
+        { kind: "setting", id: "settings-sources", name: "Sources", description: "Detected discs, drives, media folders, and source policy", action: "Open Settings", section: 2, accent: shell.accent, symbol: "▣" },
+        { kind: "setting", id: "settings-remotes", name: "Remotes", description: "Physical remote setup, controllers, button tests, mappings", action: "Open Settings", section: 3, accent: shell.accent, symbol: "R" },
+        { kind: "setting", id: "settings-system", name: "System", description: "Display, audio, power, support, about", action: "Open Settings", section: 4, accent: shell.accent, symbol: "S" }
     ]
 
     function contains(text, needle) {
@@ -75,6 +76,12 @@ Item {
     function updateMediaSearch() {
         const text = query.trim()
         if (!open || text.length < 2) { invalidateMediaSearch(); return }
+        if (!webSearchEnabled) {
+            // T28.4: Network denial when web search is switched OFF —
+            // cancel any provider-mediated search and remain on local results only.
+            invalidateMediaSearch()
+            return
+        }
         if (!movieSearchClient || !showSearchClient || !episodeSearchClient) return
         movieSearchClient.openView("movies", "search", text)
         showSearchClient.openView("shows", "search", text)
@@ -85,15 +92,15 @@ Item {
         if (!client) return
         const label = mediaType === "movie" ? "Movies" : mediaType === "show" ? "Shows" : "Episodes"
         if (client.busy) {
-            result.push({ kind: "mediaStatus", id: "searching-" + mediaType, name: "Searching " + label, description: "Querying this profile's local Kodi library", action: "Searching", accent: "#344864", symbol: "…" })
+            result.push({ kind: "mediaStatus", id: "searching-" + mediaType, name: "Searching " + label, description: "Querying this profile's local Kodi library", action: "Searching", accent: shell.unavailable, symbol: "…" })
             return
         }
         if (!client.connected) {
-            result.push({ kind: "mediaStatus", id: "offline-" + mediaType, name: label + " unavailable", description: client.status || "Open Kodi to reconnect the local library", action: "Unavailable", accent: "#6A4545", symbol: "!" })
+            result.push({ kind: "mediaStatus", id: "offline-" + mediaType, name: label + " unavailable", description: client.status || "Open Kodi to reconnect the local library", action: "Unavailable", accent: shell.error, symbol: "!" })
             return
         }
         if (client.pageStart > 0)
-            result.push({ kind: "mediaPage", id: "previous-" + mediaType, name: "Previous " + label, description: "Results " + (client.pageStart + 1) + "–" + (client.pageStart + client.items.length) + " of " + client.totalMovies, action: "Previous", mediaType: mediaType, accent: "#344864", symbol: "‹" })
+            result.push({ kind: "mediaPage", id: "previous-" + mediaType, name: "Previous " + label, description: "Results " + (client.pageStart + 1) + "–" + (client.pageStart + client.items.length) + " of " + client.totalMovies, action: "Previous", mediaType: mediaType, accent: shell.unavailable, symbol: "‹" })
         for (let i = 0; i < client.items.length; ++i) {
             const entry = client.items[i]
             const identity = mediaType === "movie" ? entry.movieid : mediaType === "show" ? entry.tvshowid : entry.episodeid
@@ -108,7 +115,7 @@ Item {
                 symbol: mediaType === "movie" ? "M" : mediaType === "show" ? "TV" : "▶" })
         }
         if (client.hasNextPage)
-            result.push({ kind: "mediaPage", id: "next-" + mediaType, name: "More " + label, description: "More matches in the local Kodi library", action: "Next", mediaType: mediaType, accent: "#344864", symbol: "›" })
+            result.push({ kind: "mediaPage", id: "next-" + mediaType, name: "More " + label, description: "More matches in the local Kodi library", action: "Next", mediaType: mediaType, accent: shell.unavailable, symbol: "›" })
     }
 
     function resultItems() {
@@ -157,7 +164,7 @@ Item {
                 if (contains(collection.name, q)) result.push({ kind: "mediaCollection", id: "collection-" + collection.id,
                     collectionId: collection.id, name: collection.name,
                     description: (collection.media || "movies") + " · Saved local Kodi rule", action: "Browse collection",
-                    accent: "#5B8DEF", symbol: "≡" })
+                    accent: shell.accent, symbol: "≡" })
             }
             for (let s = 0; s < pageSources.length; ++s) {
                 const source = pageSources[s]
@@ -172,7 +179,7 @@ Item {
                     result.push({ kind: "pageSource", id: "page-source-" + source.id, pageSourceId: source.id,
                         pageSourceKind: source.kind, pageSourceView: source.view, pageSourceValue: source.value,
                         name: source.name, description: label + " · " + viewLabel + " · Page source",
-                        action: "Open on page", accent: "#468A74", symbol: "▤" })
+                        action: "Open on page", accent: shell.accent, symbol: "▤" })
             }
         }
         return result
@@ -269,7 +276,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#DD050812"
+        color: shell.scrim
     }
 
     Rectangle {
@@ -279,7 +286,7 @@ Item {
         radius: 18
         color: root.surface
         border.width: 2
-        border.color: root.focusInk
+        border.color: root.searchFocusInk
 
         Column {
             anchors.fill: parent
@@ -290,18 +297,18 @@ Item {
                 id:searchHeader
                 width: parent.width
                 height:56
-                Text {anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter; text: "Search"; color: root.ink; font.pixelSize: 34*(root.appearance.typographyScale || 1); font.weight: Font.DemiBold}
+                Text {font.family:shell.fontFamily;anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter; text: "Search"; color: root.ink; font.pixelSize: 34*(root.appearance.typographyScale || 1); font.weight: Font.DemiBold}
                 Switch {
                     id:webSwitch;objectName:"searchWebToggle";anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
                     visible:!!root.searchSettings;checked:root.webSearchEnabled
                     text:"Web search · "+(checked?"On":"Off")
                     Accessible.name:"Web search";Accessible.description:checked?"On. No web provider configured; local results only.":"Off. Local results only."
                     onClicked:{root.focusArea="web";root.lastHeader="web";root.searchSettings.toggleWebEnabled();checked=Qt.binding(()=>root.webSearchEnabled)}
-                    contentItem:Text {text:webSwitch.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter;rightPadding:webSwitch.indicator.width+12}
-                    indicator:Rectangle {x:webSwitch.width-width;y:(webSwitch.height-height)/2;width:54;height:30;radius:height/2;color:webSwitch.checked?root.focusInk:root.muted
+                    contentItem:Text {font.family:shell.fontFamily;text:webSwitch.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter;rightPadding:webSwitch.indicator.width+12}
+                    indicator:Rectangle {x:webSwitch.width-width;y:(webSwitch.height-height)/2;width:54;height:30;radius:height/2;color:webSwitch.checked?root.searchFocusInk:root.muted
                         Rectangle {width:24;height:24;radius:12;x:webSwitch.checked?parent.width-width-3:3;y:3;color:root.surface}
                     }
-                    background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="web"?2:0;border.color:root.focusInk}
+                    background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="web"?2:0;border.color:root.searchFocusInk}
                 }
             }
 
@@ -310,29 +317,29 @@ Item {
                 width: parent.width
                 height: 58
                 radius: 999
-                color: root.surface
+                color: shell.input
                 border.width: root.keyboardOpen || root.focusArea==="query" ? 3 : 1
-                border.color: root.focusArea==="query" ? root.focusInk : root.muted
-                Text {
+                border.color: shell.inputFocus
+                Text {font.family:shell.fontFamily;
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
                     anchors.leftMargin: 24
                     text: root.query.length ? root.query : "Search your library, apps and settings"
-                    color: root.query.length ? root.ink : root.muted
-                    font.pixelSize: 22
+                    color: root.query.length ? shell.inputText : shell.inputMuted
+                    font.pixelSize: 22*shell.textScale
                 }
                 MouseArea {anchors.fill:parent;onClicked:{root.focusArea="query";root.lastHeader="query";root.keyboardOpen=true;searchKeyboard.value=root.query;searchKeyboard.selectedIndex=0}}
             }
 
-            Text {
+            Text {font.family:shell.fontFamily;
                 id:resultCount
                 text: root.results.length + " result" + (root.results.length === 1 ? "" : "s")
                 color: root.muted
-                font.pixelSize: 15
+                font.pixelSize: 15*shell.textScale
                 font.weight: Font.DemiBold
                 font.letterSpacing: 3
             }
-            Text {id:searchStatus;objectName:"searchWebStatus";width:parent.width;wrapMode:Text.WordWrap;text:root.searchSettings && root.searchSettings.errorString?root.searchSettings.errorString:root.webSearchEnabled?"No web provider configured — local results only":root.query.trim().length===1?"Type at least 2 characters to search your Kodi library":"Local results only";color:root.muted;font.pixelSize:14}
+            Text {font.family:shell.fontFamily;id:searchStatus;objectName:"searchWebStatus";width:parent.width;wrapMode:Text.WordWrap;text:root.searchSettings && root.searchSettings.errorString?root.searchSettings.errorString:root.webSearchEnabled?"No web provider configured — local results only":root.query.trim().length===1?"Type at least 2 characters to search your Kodi library":"Local results only";color:root.muted;font.pixelSize:14}
 
             Flickable {
                 id: resultScroller
@@ -357,37 +364,46 @@ Item {
                             radius: 12
                             color: root.selectedIndex === index && root.focusArea==="results" ? root.selectedSurface : root.surface
                             border.width: root.selectedIndex === index && root.focusArea==="results" ? 3 : 1
-                            border.color: root.selectedIndex===index && root.focusArea==="results" ? root.focusInk : root.muted
+                            border.color: root.selectedIndex===index && root.focusArea==="results" ? shell.selectedFocus : shell.outline
                             Rectangle {
-                                width: 48; height: 48; radius: 12
+                                objectName: "searchResultIcon-"+index
+                                width: 48; height: 48; radius: 12; clip: true
                                 anchors.left: parent.left; anchors.leftMargin: 14; anchors.verticalCenter: parent.verticalCenter
-                                color: modelData.logoSource ? "transparent" : modelData.accent
+                                color: modelData.logoSource ? "transparent" : shell.elevated
                                 Image { anchors.fill:parent; source:modelData.logoSource || ""; fillMode:Image.PreserveAspectFit; visible:!!modelData.logoSource }
-                                Text { anchors.centerIn: parent; visible:!modelData.logoSource; text: modelData.symbol; color: root.ink; font.pixelSize: 20; font.weight: Font.DemiBold }
+                                Text {font.family:shell.fontFamily;
+                                    objectName: "searchResultSymbol-"+index
+                                    anchors.fill: parent; anchors.margins: 4
+                                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                    visible:!modelData.logoSource; text: modelData.symbol; textFormat: Text.PlainText
+                                    elide: Text.ElideRight; maximumLineCount: 1
+                                    color: shell.elevatedText; font.pixelSize: 20*shell.textScale; font.weight: Font.DemiBold
+                                }
                             }
                             Column {
                                 anchors.left: parent.left; anchors.leftMargin: 76
                                 anchors.right: actionLabel.left; anchors.rightMargin: 18
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: 3
-                                Text { text: modelData.name; color: root.ink; font.pixelSize: 21; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
-                                Text { text: modelData.description; color: root.muted; font.pixelSize: 14; elide: Text.ElideRight; width: parent.width }
+                                Text {font.family:shell.fontFamily; objectName:"searchResultTitle-"+index; text: modelData.name; textFormat:Text.PlainText; color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : root.ink; font.pixelSize: 21*shell.textScale; font.weight: Font.DemiBold; elide: Text.ElideRight; width: parent.width }
+                                Text {font.family:shell.fontFamily; text: modelData.description; textFormat:Text.PlainText; color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : root.muted; font.pixelSize: 14*shell.textScale; elide: Text.ElideRight; width: parent.width }
                             }
-                            Text {
+                            Text {font.family:shell.fontFamily;
                                 id: actionLabel
+                                objectName: "searchActionLabel"
                                 anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.action
-                                color: root.focusInk
-                                font.pixelSize: 15
+                                color: root.selectedIndex === index && root.focusArea==="results" ? shell.selectedText : shell.text
+                                font.pixelSize: 15*shell.textScale
                                 font.weight: Font.DemiBold
                             }
                         }
                     }
-                    Text {
+                    Text {font.family:shell.fontFamily;
                         visible: root.results.length === 0
                         text: "No matches. Select the search field to edit."
                         color: root.muted
-                        font.pixelSize: 22
+                        font.pixelSize: 22*shell.textScale
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         topPadding: 70
@@ -395,16 +411,17 @@ Item {
                 }
             }
 
-            Text {
+            Text {font.family:shell.fontFamily;
                 id:searchFooter
                 text: root.keyboardOpen ? "D-pad type · Confirm selects · Back closes keyboard" : "D-pad navigate · Confirm selects · Back closes Search"
                 color: root.muted
-                font.pixelSize: 15
+                font.pixelSize: 15*shell.textScale
             }
         }
     }
 
     OnScreenKeyboard {
+        appearance: root.appearance
         id: searchKeyboard
         visible: root.keyboardOpen
         z: 60

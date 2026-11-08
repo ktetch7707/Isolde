@@ -15,6 +15,8 @@ Item {
     property color outsideColor: "#0e1018"
     property real unit: 1
     property date now: new Date()
+    // Actual renderer measurements; Studio consumes these only for nonblocking preflight findings.
+    readonly property bool designLabelClipped:(sourceTitle.visible && sourceTitle.truncated) || (summaryTitle.visible && summaryTitle.truncated) || (bodyText.visible && (bodyText.truncated || bodyText.contentHeight>bodyText.height)) || (mediaTitle.visible && mediaTitle.truncated) || (customTitle.visible && customTitle.truncated)
     readonly property string title: style.visibleLabel===undefined?item.name || (item.widgetType === "clock" ? Qt.formatTime(now,"h:mm") : ""):style.visibleLabel
     Timer { interval: 1000; running: root.visible && root.item.widgetType === "clock"; repeat: true; onTriggered: root.now = new Date() }
     Timer { id: dwellTimer; interval: 700; repeat: false; running: root.selectTrigger === "dwell" && root.selected === false && mouseArea.containsMouse; onTriggered: { mouseArea.forceActiveFocus(); root.activated() } }
@@ -76,7 +78,7 @@ Item {
             x: root.kind === "source" ? (parent.width - width) / 2 : 24 * root.unit
             y: root.kind === "source" ? parent.height * 0.21 : (parent.height - height) / 2
         }
-        Text {textFormat:Text.PlainText;
+        Text {id:sourceTitle;textFormat:Text.PlainText;
             visible: root.kind === "source" && root.item.showTitle!==false && !root.customLabel; anchors.bottom: parent.bottom; anchors.bottomMargin: 16 * root.unit
             width: parent.width - 16; anchors.horizontalCenter: parent.horizontalCenter; horizontalAlignment: Text.AlignHCenter
             text: root.title; color: root.ink; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: 19 * root.textScale; elide: Text.ElideRight
@@ -84,7 +86,7 @@ Item {
         Column {
             visible: root.kind === "summary"; x: 72 * root.unit; anchors.verticalCenter: parent.verticalCenter
             width: parent.width - x - 55 * root.unit; spacing: 5 * root.unit
-            Text {textFormat:Text.PlainText; width: parent.width; text: root.title; color: root.ink; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: 21 * root.textScale; elide: Text.ElideRight }
+            Text {id:summaryTitle;textFormat:Text.PlainText; width: parent.width; text: root.title; color: root.ink; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: 21 * root.textScale; elide: Text.ElideRight }
             Text {textFormat:Text.PlainText; width: parent.width; text: root.style.subtitle || ""; color: root.muted; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: 16 * root.textScale; elide: Text.ElideRight }
         }
         Text {textFormat:Text.PlainText; visible: root.kind === "summary"; anchors.right: parent.right; anchors.rightMargin: 24 * root.unit; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: root.ink; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: 32 * root.unit }
@@ -97,7 +99,7 @@ Item {
         Rectangle { objectName:"cardFocus"; anchors.fill: parent; anchors.margins: -3 * root.unit; color: "transparent"; radius: parent.radius + 3 * root.unit; border.width: root.selected ? Math.max(2,root.style.focusEnabled===false?2:(root.style.focusWidth===undefined?3:root.style.focusWidth))*root.unit : 0; border.color: root.style.focusColor || root.selColor }
     }
     Text {
-        objectName:"componentBodyText"
+        id:bodyText;objectName:"componentBodyText"
         visible:root.kind==="text";x:(root.style.bodyPadding===undefined?16:root.style.bodyPadding)*root.unit;y:x
         width:Math.max(0,parent.width-2*x);height:Math.max(0,root.bodyHeight-2*y)
         text:root.style.bodyText===undefined?root.style.subtitle || root.style.label || root.item.name || "":root.style.bodyText
@@ -108,7 +110,7 @@ Item {
         font.bold:root.style.bodyBold===undefined?!!root.style.labelBold:root.style.bodyBold
         font.family:root.appearance.fontFamily || "DejaVu Sans";lineHeight:root.style.bodyLineHeight || 1;verticalAlignment:Text.AlignVCenter
     }
-    Text {textFormat:Text.PlainText;
+    Text {id:mediaTitle;textFormat:Text.PlainText;
         visible: (root.kind === "media" || root.kind === "recent") && !root.customLabel && root.item.showTitle!==false; x: 0; y: surface.height + (root.kind === "recent" ? 5 : 12) * root.unit; width: parent.width
         text: root.title; color: root.ink; font.family: root.appearance.fontFamily || "DejaVu Sans"; font.pixelSize: (root.style.labelSize || (root.kind === "recent" ? 12 : 18)) * root.textScale
         maximumLineCount: 2; wrapMode: Text.WordWrap; elide: Text.ElideRight

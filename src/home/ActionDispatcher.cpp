@@ -1,3 +1,4 @@
+#include "settings/ProfileManager.h"
 #include "ActionDispatcher.h"
 #include "ComponentSchema.h"
 #include "games/GameLibrary.h"
@@ -123,6 +124,12 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
     }
     if (!originId.isEmpty() && !ComponentSchema::safeId(originId)) { emit rejected("Invalid origin."); return false; }
     const auto type = value.value("type").toString();
+    const auto destination = type == "open-page" ? value.value("pageId").toString()
+        : value.value("appId").toString();
+    if ((type == "open-page" && m_layout && !m_layout->pageAllowed(destination))
+        || (type != "open-page" && !destination.isEmpty() && !ProfileManager::allows("destination", destination))) {
+        emit rejected(tr("This destination is restricted in this profile. Settings > Profiles provides recovery.")); return false;
+    }
     if (m_service->switching() && (type == "open-collection" || type == "play-movie" || type == "open-show"
         || (type == "launch-app" && (value.value("appId") == "movies" || value.value("appId") == "shows")))) {
         emit rejected("Kodi is changing frontend. Try again when it finishes."); return false;

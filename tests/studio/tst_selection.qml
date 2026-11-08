@@ -11,7 +11,30 @@ Item {
         Component {id:editorComponent;App.PageStudioView {width:1280;height:720;layoutModel:homeLayout}}
         Component {id:appPickerCatalogComponent;App.StudioCatalog {width:1280;height:720}}
         Component {id:appPickerInspectorComponent;App.StudioInspector {width:1280;height:720}}
+        Component {id:commandCenterComponent;App.CommandCenter {width:1280;height:720;apps:[];packages:[]}}
         SignalSpy {id:appPickerSpy;signalName:"picked"}
+        function test_search_focus_contrast_is_local_to_controls(){
+            const pastel={textColor:"#514b67",mutedColor:"#625b73",surfaceColor:"#f5e7f4",selectedColor:"#edd7ef",focusColor:"#ffffff"}
+            const tokens=homeLayout.resolvedSurfacePalette(pastel)
+            const search=createTemporaryObject(commandCenterComponent,tests.parent,{appearance:pastel,shellActions:[{name:"Open Guide",action:{type:"open-guide"}}]})
+            verify(search!==null)
+            verify(!Qt.colorEqual(search.searchFocusInk,Qt.color(pastel.focusColor)))
+            compare(search.searchFocusInk,Qt.color(tokens.focusColor))
+            compare(Object.keys(search.appearance).sort().join(","),Object.keys(pastel).sort().join(","))
+            for(const key of Object.keys(pastel))compare(search.appearance[key],pastel[key])
+            search.open=true;search.query="guide";search.focusArea="query"
+            const query=findChild(search,"searchQueryControl"),action=findChild(search,"searchActionLabel")
+            verify(query!==null && action!==null)
+            compare(query.border.color,Qt.color(tokens.inputFocusColor));compare(action.color,Qt.color(tokens.textColor))
+            const dim={textColor:"#ffffff",surfaceColor:"#000000",selectedColor:"#ffffff",focusColor:"#666666"}
+            search.appearance=dim
+            compare(search.searchFocusInk,Qt.color(dim.focusColor)) // Valid ring contrast is preserved.
+            tryVerify(function(){const current=findChild(search,"searchActionLabel");return current && Qt.colorEqual(current.color,Qt.color("#ffffff"))}) // Repeater refreshes rows when their accent changes.
+            search.focusArea="results"
+            tryVerify(function(){const current=findChild(search,"searchActionLabel");return current && Qt.colorEqual(current.color,Qt.color(homeLayout.resolvedSurfacePalette(dim).selectedTextColor))})
+            compare(Object.keys(search.appearance).sort().join(","),Object.keys(dim).sort().join(","))
+            for(const key of Object.keys(dim))compare(search.appearance[key],dim[key])
+        }
         function test_starting_styles_remote_cancel_and_pointer_parity(){
             const catalog=createTemporaryObject(appPickerCatalogComponent,tests.parent,{session:editor.session,options:homeLayout.studioOptions,appearance:editor.page.appearance});verify(catalog!==null);catalog.z=10000
             appPickerSpy.target=catalog;appPickerSpy.clear();const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
@@ -611,6 +634,7 @@ Item {
             settle();card=findChild(editor,"placedCard-"+button.id);circle=findChild(card,"orbSurface")
             const recovery=findChild(editor,"studioRecoveryFocus-"+button.id)
             verify(recovery!==null);tryCompare(recovery,"visible",true)
+            compare(recovery.parent.opacity,1,"editor recovery focus must not inherit component opacity")
             compare(recovery.radius,circle.radius);compare(recovery.width,circle.width)
             compare(recovery.border.color,circle.border.color)
             const before=JSON.stringify(editor.session.document),history=editor.session.changeCount

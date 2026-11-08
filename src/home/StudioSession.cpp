@@ -4,6 +4,7 @@
 #include "home/HomeLayout.h"
 
 #include <QJsonArray>
+#include <QCoreApplication>
 #include <QJsonObject>
 #include <QSet>
 #include <QFile>
@@ -24,6 +25,7 @@ StudioSession::StudioSession(QObject *parent)
     : QObject(parent)
 {
     connect(this, &StudioSession::changed, this, [this] {
+        if (m_live && !m_live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString()) qApp->setProperty("isoldeStudioDirty", m_active && isDirty());
         if (m_model && !m_draft.isEmpty() && m_model->documentData() != m_draft) {
             m_model->loadDocument(m_draft, false);
             emit m_model->layoutChanged();
@@ -32,10 +34,10 @@ StudioSession::StudioSession(QObject *parent)
 }
 
 QObject *StudioSession::model() const { return m_model; }
-StudioSession::~StudioSession(){delete m_assetStage;}
+StudioSession::~StudioSession(){invalidate();delete m_assetStage;delete m_referenceStage;}
 QVariantList StudioSession::artworkChoices() const
 {
-    QVariantList result;if(!m_active || !m_live)return result;
+    QVariantList result;if(!currentProfile())return result;
     QSet<QString> paths;
     const auto append=[&](const QString &path){if(result.size()>=256 || paths.contains(path))return;QImageReader reader(path);const auto size=reader.size();if(!size.isValid() || size.width()>16384 || size.height()>16384 || qint64(size.width())*size.height()>32*1024*1024)return;
         paths.insert(path);result.append(QVariantMap{{"name",QFileInfo(path).completeBaseName()},{"source",QUrl::fromLocalFile(path).toString()},{"width",size.width()},{"height",size.height()}});
@@ -48,7 +50,7 @@ QVariantList StudioSession::artworkChoices() const
 }
 QVariantMap StudioSession::browseArtwork(const QString &directory, int page)
 {
-    if(!m_active || !m_live){setError(tr("Reopen Studio before browsing images."));return {};}
+    if(!currentProfile()){setError(tr("Reopen Studio before browsing images."));return {};}
     if(page<0 || page>7){setError(tr("Choose an image page within 1–8."));return {};}
     const auto pictures=QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     const QString path=directory.isEmpty()?(QFileInfo(pictures).isDir()?pictures:QDir::homePath()):directory;
@@ -74,7 +76,8 @@ QString StudioSession::artworkPreview(const QString &source)
 }
 QString StudioSession::stageArtwork(const QString &source)
 {
-    if(!m_active || !m_live){setError(tr("Reopen Studio before importing artwork."));return {};}
+    if (!editingPermitted()) return {};
+    if(!currentProfile()){setError(tr("Reopen Studio before importing artwork."));return {};}
     const QUrl url(source);const auto path=url.isLocalFile()?url.toLocalFile():url.scheme().isEmpty()?source:QString();
     if(path.size()>4096 || !QFileInfo(path).isFile()){setError(tr("Choose a regular local image file."));return {};}
     QFile input(path);if(path.isEmpty() || !input.open(QIODevice::ReadOnly) || input.size()<8 || input.size()>20*1024*1024){setError(tr("Choose a local PNG/JPEG of at most 20 MiB, or a bounded GIF of at most 2 MiB."));return {};}
@@ -94,16 +97,17 @@ QString StudioSession::stageArtwork(const QString &source)
 }
 QVariantList StudioSession::sourceChoices(const QString &id,const QString &pageId) const
 {
-    if(!m_active || !m_live)return {};
+    if(!currentProfile())return {};
     HomeLayout worker(m_live->registry());configureWorker(worker);
     auto document=QJsonDocument::fromJson(m_draft).object();
     if(!pageId.isEmpty()){bool found=false;for(const auto &entry:document["pages"].toArray())if(entry.toObject()["id"]==pageId){document=entry.toObject()["layout"].toObject();found=true;break;}if(!found)return {};}
+    if(!pageId.isEmpty()) {auto composition=document["composition"].toObject();const QJsonValue library=QJsonDocument::fromJson(m_draft).object()["composition"].toObject().value("designLibrary");if(!library.isUndefined())composition["designLibrary"]=library;document["composition"]=composition;}
     if(!worker.loadDocument(QJsonDocument(document).toJson(),false))return {};
     return worker.sourceChoices(id);
 }
 QVariantList StudioSession::actionChoices() const
 {
-    QVariantList choices;if(!m_active || !m_live)return choices;
+    QVariantList choices;if(!currentProfile())return choices;
     for(const auto &entry:m_live->studioOptions().value("actions").toList())choices.append(entry);
     const auto document=QJsonDocument::fromJson(m_draft).object();const auto root=document["rootPage"].toObject();
     if(!root.contains("visible") || root["visible"].toBool())choices.append(QVariantMap{{"name",tr("Open page · ")+root.value("name").toString(m_live->studioOptions().value("rootPageName").toString())},{"action",QVariantMap{{"type","root-page"}}}});
@@ -138,7 +142,7 @@ bool StudioSession::validNewAction(const QVariantMap &value)
 }
 QVariantMap StudioSession::componentPrototype(const QString &type,const QVariantMap &configuration)
 {
-    if(!m_active || !m_live){setError(tr("Reopen Page Studio before adding components."));return {};}
+    if(!currentProfile()){setError(tr("Reopen Page Studio before adding components."));return {};}
     const auto options=m_live->studioOptions();QJsonArray nodes;
     if(options.value("componentPresets").toMap().contains(type))nodes.append(QJsonObject::fromVariantMap(options.value("componentPresets").toMap().value(type).toMap()));
     else if(type=="container")nodes.append(QJsonObject::fromVariantMap(options.value("groupPreset").toMap()));
@@ -211,7 +215,7 @@ QVariantMap StudioSession::componentPrototype(const QString &type,const QVariant
 QVariantMap StudioSession::replacementProposal(const QString &id,const QString &type,const QString &pageId)
 {
     const auto fail=[](const QString &reason){return QVariantMap{{"valid",false},{"reason",reason}};};
-    if(!m_active || !m_live)return fail(tr("Reopen Studio before replacing a component."));
+    if(!currentProfile())return fail(tr("Reopen Studio before replacing a component."));
     if(!QStringList{"button","image","text","shape","container"}.contains(type))return fail(tr("Choose a compatible component type."));
     auto document=QJsonDocument::fromJson(m_draft).object(),page=document;int pageIndex=-1;auto pages=document["pages"].toArray();
     if(!pageId.isEmpty()) {for(int i=0;i<pages.size();++i)if(pages[i].toObject()["id"]==pageId){pageIndex=i;page=pages[i].toObject()["layout"].toObject();break;}if(pageIndex<0)return fail(tr("The page no longer exists."));}
@@ -244,7 +248,7 @@ QVariantMap StudioSession::replacementProposal(const QString &id,const QString &
 }
 bool StudioSession::previewCommand(const QString &operation, const QVariantMap &arguments, const QString &pageId)
 {
-    if (!m_active || !m_live) return false;
+    if (!editingPermitted() || !m_active || !m_live) return false;
     HomeLayout temporary(m_live->registry()); configureWorker(temporary);
     if (!temporary.loadDocument(m_draft, false)) return false;
     StudioSession transaction;
@@ -296,13 +300,15 @@ void StudioSession::cancelPreview()
 
 bool StudioSession::bind(HomeLayout *layout)
 {
-    if (!layout) return false;
+    if (!layout || !editingPermitted()) return false;
     m_live = layout;
     m_profilePath = layout->m_userPath;
+    m_profileId = qApp->property("isoldeProfile").toString();
     QFile disk(m_profilePath);
     m_diskExisted = disk.exists();
     m_diskReadable = !m_diskExisted || (disk.size() <= kMaxDocumentBytes && disk.open(QIODevice::ReadOnly));
     m_diskBaseline = m_diskReadable && m_diskExisted ? disk.readAll() : QByteArray();
+    if (m_model) m_model->deleteLater();
     m_model = new HomeLayout(layout->registry(), this);
     m_model->m_draftOnly = true;
     m_model->m_userPath=layout->m_userPath;
@@ -318,11 +324,15 @@ bool StudioSession::bind(HomeLayout *layout)
 
 void StudioSession::invalidate()
 {
+    if (m_live && !m_live->m_draftOnly && m_profileId == qApp->property("isoldeProfile").toString()) qApp->setProperty("isoldeStudioDirty", false);
     m_active = false;
+    clearReferenceImage();
+    m_editorLocked = false;
     m_live.clear();
     m_stagedAssets.clear();delete m_assetStage;m_assetStage=nullptr;
     m_diskBaseline.clear();
     m_profilePath.clear();
+    m_profileId.clear();
     cancelPreview();
     m_draft.clear();
     m_committed.clear();
@@ -349,6 +359,7 @@ void StudioSession::invalidate()
 
 bool StudioSession::apply(const QString &focusId)
 {
+    if (!editingPermitted()) return false;
     if (!m_active || !m_live || m_live->m_userPath != m_profilePath) {
         setError(QStringLiteral("The profile changed. Reopen Page Studio."));
         return false;
@@ -357,13 +368,11 @@ bool StudioSession::apply(const QString &focusId)
         setError(QStringLiteral("The applied design changed. Reload or copy your draft before applying."));
         return false;
     }
-    QFile disk(m_profilePath);
-    if (!m_diskReadable || disk.exists() != m_diskExisted ||
-        (m_diskExisted && (disk.size() > kMaxDocumentBytes || !disk.open(QIODevice::ReadOnly) || disk.readAll() != m_diskBaseline))) {
+    if (!profileStorageSafe()) { setError(tr("The layout and version history must stay at their actual profile locations.")); return false; }
+    if (!diskRevisionUnchanged()) {
         setError(QStringLiteral("The saved design changed or cannot be read. Reopen Studio before applying; your draft is retained."));
         return false;
     }
-    disk.close();
     QStringList created;
     const auto artDirectory=QDir(QFileInfo(m_profilePath).absolutePath()).filePath("artwork");const bool hadArtDirectory=QFileInfo::exists(artDirectory);
     if(QFileInfo(artDirectory).isSymLink()){setError(tr("The managed artwork directory must stay inside this profile."));return false;}
@@ -381,6 +390,9 @@ bool StudioSession::apply(const QString &focusId)
         QSaveFile output(targetPath);if(!output.open(QIODevice::WriteOnly) || output.write(data)!=data.size() || !output.commit()){cleanup();setError(tr("Could not save artwork. Nothing applied."));return false;}
         created.append(targetPath);
     }
+    // Recheck after potentially expensive image staging, before publishing any layout/version change.
+    if (!diskRevisionUnchanged()) { cleanup(); setError(tr("The saved design changed while preparing artwork. Your draft is retained.")); return false; }
+    if (isDirty() && !archiveVersion(tr("Before Apply"), m_committed)) { cleanup(); return false; }
     if (!m_live->applyStudioDraft(m_draft, focusId)) {
         cleanup();
         setError(m_live->errorString());
@@ -394,7 +406,8 @@ bool StudioSession::apply(const QString &focusId)
 
 bool StudioSession::execute(const QString &operation, const QVariantMap &a, const QString &pageId)
 {
-    if (!m_active || !m_live) { setError(QStringLiteral("Reopen Page Studio before editing.")); return false; }
+    if (!editingPermitted()) return false;
+    if (!currentProfile()) { setError(QStringLiteral("Reopen Page Studio before editing.")); return false; }
     if(operation=="replaceComponent") {
         if(a.size()!=2 || !a.contains("id") || !a.contains("type") || a["id"].metaType().id()!=QMetaType::QString || a["type"].metaType().id()!=QMetaType::QString){setError(tr("Choose a component and its replacement type."));return false;}
         const auto proposal=replacementProposal(a["id"].toString(),a["type"].toString(),pageId);
@@ -569,6 +582,9 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         for (int i = 0; i < pages.size(); ++i) if (pages[i].toObject()["id"] == pageId) pageIndex = i;
         if (pageIndex < 0) { setError(QStringLiteral("That page no longer exists.")); return false; }
         document = pages[pageIndex].toObject()["layout"].toObject();
+    }
+    if(pageIndex>=0 && root["composition"].toObject().contains("designLibrary")) {
+        auto composition=document["composition"].toObject();composition["designLibrary"]=root["composition"].toObject()["designLibrary"];document["composition"]=composition;
     }
     HomeLayout worker(m_live->registry());
     configureWorker(worker);
@@ -951,6 +967,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         result.remove("homePageId");
         result.remove("rootPage");
         result.remove("studioAppearance");
+        auto composition=result["composition"].toObject();composition.remove("designLibrary");result["composition"]=composition;
         auto entry = pages[pageIndex].toObject(); entry["layout"] = result; pages[pageIndex] = entry; root["pages"] = pages;
     } else root = result;
     return pushEdit(QJsonDocument(root).toJson());
@@ -970,6 +987,7 @@ bool StudioSession::open(const QByteArray &committedDocument)
 
 bool StudioSession::pushEdit(const QByteArray &candidateDraft)
 {
+    if (!editingPermitted()) return false;
     if (m_committed.isEmpty()) {
         setError(QStringLiteral("Open a page before editing."));
         return false;
@@ -992,6 +1010,7 @@ bool StudioSession::pushEdit(const QByteArray &candidateDraft)
 
 bool StudioSession::undo()
 {
+    if (!editingPermitted()) return false;
     if (m_undo.isEmpty()) {
         setError(QStringLiteral("Nothing to undo."));
         return false;
@@ -1005,6 +1024,7 @@ bool StudioSession::undo()
 
 bool StudioSession::redo()
 {
+    if (!editingPermitted()) return false;
     if (m_redo.isEmpty()) {
         setError(QStringLiteral("Nothing to redo."));
         return false;
@@ -1018,6 +1038,7 @@ bool StudioSession::redo()
 
 void StudioSession::revert()
 {
+    cancelPreview();
     m_draft = m_committed;
     m_undo.clear();
     m_redo.clear();
@@ -1154,7 +1175,7 @@ bool StudioSession::validDraft(const QByteArray &data)
         return false;
     }
     QString error;
-    if (!HomeLayout::validateStudioDocument(data, &error)) {
+    if (!HomeLayout::validateStudioDocument(data, &error, m_live ? m_live->m_defaultTheme : QVariantMap{})) {
         setError(error);
         return false;
     }
@@ -1304,14 +1325,18 @@ QVariantMap StudioSession::placementProposal(const QString &id, const QVariantMa
     for(int i=0;i<entries.size();++i)if(i!=selected && (entries[i].toObject().value("placement")!=originalEntries[i].toObject().value("placement") || entries[i].toObject().value("categoryId")!=originalEntries[i].toObject().value("categoryId") || entries[i].toObject().value("parentId")!=originalEntries[i].toObject().value("parentId")))appendChange(i);
     doc["components"] = entries;
     QString error;
-    if (!HomeLayout::validateStudioDocument(QJsonDocument(doc).toJson(), &error)) return fail(error);
+    // The draft's content/schema has already passed validDraft. A placement
+    // proposal changes only geometry and ancestry: validate that complete
+    // boundary here rather than renormalizing every unchanged component.
+    // execute("place") still validates the complete document before history/Apply.
+    if (!ComponentSchema::hierarchyFits(entries, composition, doc["categories"].toArray(), &error)) return fail(error);
     return {{"valid", true}, {"placements", changes}, {"reason", QString()}};
 }
 
 QVariantMap StudioSession::additionProposal(const QString &type, const QVariantMap &placement,
                                            const QString &strategy, const QString &pageId, const QString &categoryId, const QString &parentId,const QVariantMap &configuration,bool enableScrolling)
 {
-    if (!m_active || !m_live) return {{"valid",false},{"reason",QStringLiteral("The edit session has closed.")}};
+    if (!currentProfile()) return {{"valid",false},{"reason",QStringLiteral("The edit session has closed.")}};
     HomeLayout temporary(m_live->registry()); configureWorker(temporary);
     if (!temporary.loadDocument(m_draft,false)) return {{"valid",false},{"reason",temporary.errorString()}};
     StudioSession transaction;
@@ -1362,7 +1387,7 @@ QVariantMap StudioSession::additionProposal(const QString &type, const QVariantM
         }
     }
     document["components"]=entries;store();QString error;
-    if(!HomeLayout::validateStudioDocument(QJsonDocument(root).toJson(),&error))return {{"valid",false},{"reason",error}};
+    if(!HomeLayout::validateStudioDocument(QJsonDocument(root).toJson(),&error,m_live ? m_live->m_defaultTheme : QVariantMap{}))return {{"valid",false},{"reason",error}};
     proposal["document"]=root.toVariantMap();
     proposal["commands"] = QVariantList{
         QVariantMap{{"operation","addResolved"},{"arguments",QVariantMap{{"type",type},{"placement",placement},{"strategy",strategy},{"categoryId",categoryId},{"parentId",parentId},{"configuration",configuration},{"enableScrolling",enableScrolling}}},{"pageId",pageId}}

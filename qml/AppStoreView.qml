@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 
 Item {
+ SurfacePalette {id:shell;appearance:root.appearance}
  id:root;objectName:"appStoreView"
  required property var entries
  property var catalog:appCatalog
@@ -11,9 +12,9 @@ Item {
  readonly property real gap:options.spacing || 20
  readonly property int columns:options.columns || 2
  readonly property real typeScale:appearance.typographyScale || 1
- readonly property color ink:appearance.textColor
- readonly property color surface:appearance.surfaceColor
- readonly property color focusColor:appearance.focusColor
+ readonly property color ink:shell.text
+ readonly property color surface:shell.surface
+ readonly property color focusColor:shell.focus
  readonly property real corners:appearance.cornerRadius===undefined?16:appearance.cornerRadius
  property int platformIndex:0
  property bool deviceApps:false
@@ -186,28 +187,28 @@ Item {
   if(cmd===inputManager.confirm){area="actions";actionIndex=0;request(selected && selected.installed?"open":"install")}
   return true
  }
- Rectangle {anchors.fill:parent;color:Qt.darker(root.surface,1.3)}
+ Rectangle {anchors.fill:parent;color:shell.background}
  Column {
   anchors.fill:parent;anchors.margins:root.gap;spacing:root.gap
   Row {
    width:parent.width;height:90*root.typeScale;spacing:root.gap
    Column {width:parent.width-controls.width-root.gap;spacing:6
-    Text {textFormat:Text.PlainText;text:qsTr("App Store");color:root.ink;font.pixelSize:36*root.typeScale;font.weight:Font.DemiBold}
-    Text {textFormat:Text.PlainText;text:qsTr("Find your next favourite.");color:root.ink;opacity:0.65;font.pixelSize:18*root.typeScale}
+    Text {textFormat:Text.PlainText;text:qsTr("App Store");color:shell.backgroundText;font.pixelSize:36*root.typeScale;font.weight:Font.DemiBold}
+    Text {textFormat:Text.PlainText;text:qsTr("Find your next favourite.");color:shell.backgroundMuted;font.pixelSize:18*root.typeScale}
    }
    Row {id:controls;spacing:8;anchors.verticalCenter:parent.verticalCenter
     Repeater {model:[qsTr("Search"),qsTr("Device apps")].concat(root.platforms.map(p=>p.label))
      delegate:Rectangle {required property int index;required property string modelData;objectName:"store-header-"+index
-      width:label.implicitWidth+28;height:50*root.typeScale;radius:root.corners;color:index>=2 && !root.deviceApps && root.platformIndex===index-2?Qt.lighter(root.surface,1.7):root.surface
-      border.width:root.area==="header" && root.headerIndex===index?3:0;border.color:root.focusColor
-      Text {textFormat:Text.PlainText;id:label;anchors.centerIn:parent;text:modelData;color:root.ink;font.pixelSize:18*root.typeScale;font.weight:index>=2?Font.DemiBold:Font.Normal}
+      width:label.implicitWidth+28;height:50*root.typeScale;radius:root.corners;color:index>=2 && !root.deviceApps && root.platformIndex===index-2?shell.selected:root.surface
+      border.width:root.area==="header" && root.headerIndex===index?3:0;border.color:index>=2 && !root.deviceApps && root.platformIndex===index-2?shell.selectedFocus:shell.focus
+      Text {textFormat:Text.PlainText;id:label;anchors.centerIn:parent;text:modelData;color:index>=2 && !root.deviceApps && root.platformIndex===index-2?shell.selectedText:shell.text;font.pixelSize:18*root.typeScale;font.weight:index>=2?Font.DemiBold:Font.Normal}
       MouseArea {anchors.fill:parent;onClicked:{root.area="header";root.headerIndex=index;root.handleCommand(inputManager.confirm)}}
      }
     }
    }
   }
   Row {width:parent.width;height:50*root.typeScale;spacing:root.gap
-   Text {textFormat:Text.PlainText;width:Math.max(0,parent.width-storeToolButton.width-(pager.visible?pager.width+root.gap:0)-root.gap);elide:Text.ElideRight;anchors.verticalCenter:parent.verticalCenter;text:(root.deviceApps?qsTr("Device apps"):root.platforms[root.platformIndex]?root.platforms[root.platformIndex].label+qsTr(" apps"):"")+"  ·  "+root.filtered.length;color:root.ink;font.pixelSize:23*root.typeScale;font.weight:Font.DemiBold}
+   Text {textFormat:Text.PlainText;width:Math.max(0,parent.width-storeToolButton.width-(pager.visible?pager.width+root.gap:0)-root.gap);elide:Text.ElideRight;anchors.verticalCenter:parent.verticalCenter;text:(root.deviceApps?qsTr("Device apps"):root.platforms[root.platformIndex]?root.platforms[root.platformIndex].label+qsTr(" apps"):"")+"  ·  "+root.filtered.length;color:shell.backgroundText;font.pixelSize:23*root.typeScale;font.weight:Font.DemiBold}
    Rectangle {id:storeToolButton;objectName:"storeTool";visible:!root.deviceApps;width:toolLabel.implicitWidth+28;height:parent.height;radius:root.corners;color:root.surface;border.width:root.area==="tools" && root.toolIndex===0?3:1;border.color:root.focusColor
     Text {id:toolLabel;textFormat:Text.PlainText;anchors.centerIn:parent;text:root.platforms[root.platformIndex] && root.platforms[root.platformIndex].type==="web"?qsTr("Add website"):qsTr("F-Droid search: ")+(root.catalog.onlineStoreSearch?qsTr("On"):qsTr("Off"));color:root.ink;font.pixelSize:18*root.typeScale}
     MouseArea {anchors.fill:parent;onClicked:{root.area="tools";root.toolIndex=0;root.storeTool()}}
@@ -227,34 +228,34 @@ Item {
    width:parent.width;height:parent.height-y-54;spacing:root.gap
    GridView {id:grid;objectName:"storeGrid";width:(parent.width-root.gap)*(1-(root.options.detailRatio || 0.42));height:parent.height;clip:true;model:root.filtered;cellWidth:width/root.columns;cellHeight:(root.options.cardHeight || 142)+root.gap
     delegate:Rectangle {required property var modelData;width:grid.cellWidth-root.gap;height:grid.cellHeight-root.gap;radius:root.corners;color:root.surface
-     border.width:root.selectedId===modelData.id && root.area==="grid"?3:1;border.color:root.selectedId===modelData.id?root.focusColor:Qt.lighter(root.surface,1.3)
+     border.width:root.selectedId===modelData.id && root.area==="grid"?3:1;border.color:root.selectedId===modelData.id?root.focusColor:shell.outline
      Row {anchors.fill:parent;anchors.margins:root.gap;spacing:14
       Rectangle {width:52;height:52;radius:root.corners;color:modelData.accent
        Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData.symbol || "+";color:"white";font.pixelSize:28;font.weight:Font.DemiBold}}
       Column {width:parent.width-66;spacing:8
        Text {textFormat:Text.PlainText;width:parent.width;text:modelData.name;color:root.ink;font.pixelSize:21*root.typeScale;font.weight:Font.DemiBold;elide:Text.ElideRight}
-       Text {textFormat:Text.PlainText;width:parent.width;text:modelData.category;color:root.ink;opacity:0.65;font.pixelSize:16*root.typeScale;elide:Text.ElideRight}
-       Text {textFormat:Text.PlainText;text:modelData.updateAvailable?qsTr("Update available"):modelData.installed?qsTr("Installed"):qsTr("Add to Isolde");color:root.ink;opacity:0.7;font.pixelSize:15*root.typeScale}
+       Text {textFormat:Text.PlainText;width:parent.width;text:modelData.category;color:shell.muted;font.pixelSize:16*root.typeScale;elide:Text.ElideRight}
+       Text {textFormat:Text.PlainText;text:modelData.updateAvailable?qsTr("Update available"):modelData.installed?qsTr("Installed"):qsTr("Add to Isolde");color:shell.muted;font.pixelSize:15*root.typeScale}
       }
      }
      MouseArea {anchors.fill:parent;onClicked:{root.selectedId=modelData.id;root.area="actions";root.actionIndex=0}}
     }
-    Text {textFormat:Text.PlainText;anchors.centerIn:parent;width:parent.width*0.8;visible:!root.filtered.length;text:qsTr("No apps found. Try another search or platform.");wrapMode:Text.WordWrap;color:root.ink;font.pixelSize:22*root.typeScale}
+    Text {textFormat:Text.PlainText;anchors.centerIn:parent;width:parent.width*0.8;visible:!root.filtered.length;text:qsTr("No apps found. Try another search or platform.");wrapMode:Text.WordWrap;color:shell.backgroundText;font.pixelSize:22*root.typeScale}
    }
    Rectangle {width:parent.width-grid.width-root.gap;height:parent.height;radius:root.corners;color:root.surface
     Flickable {id:details;objectName:"storeDetails";anchors.fill:parent;anchors.margins:root.gap;contentWidth:width;contentHeight:detailContent.implicitHeight;clip:true;visible:!!root.selected
     Column {id:detailContent;width:details.width;spacing:root.gap
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.name:"";color:root.ink;font.pixelSize:32*root.typeScale;font.weight:Font.DemiBold;wrapMode:Text.WordWrap}
-     Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.publisher:"";color:root.ink;opacity:0.65;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
+     Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.publisher:"";color:shell.muted;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
      Text {textFormat:Text.PlainText;width:parent.width;visible:!!text;text:root.selected?root.selected.provenance || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
      Text {textFormat:Text.PlainText;width:parent.width;visible:!!text;text:root.selected?root.selected.compatibilityReason || "":"";color:root.ink;font.pixelSize:17*root.typeScale;wrapMode:Text.WordWrap}
      Text {textFormat:Text.PlainText;width:parent.width;text:root.selected?root.selected.description:"";color:root.ink;font.pixelSize:20*root.typeScale;wrapMode:Text.WordWrap;maximumLineCount:5;elide:Text.ElideRight}
-     Text {textFormat:Text.PlainText;width:parent.width;text:root.selected && root.selected.installed?qsTr("Added to your current profile."):qsTr("Available to add to your profile.");color:root.ink;opacity:0.65;font.pixelSize:16*root.typeScale;wrapMode:Text.WordWrap}
+     Text {textFormat:Text.PlainText;width:parent.width;text:root.selected && root.selected.installed?qsTr("Added to your current profile."):qsTr("Available to add to your profile.");color:shell.muted;font.pixelSize:16*root.typeScale;wrapMode:Text.WordWrap}
      Repeater {id:actions;model:root.actionItems
       delegate:Rectangle {required property int index;required property var modelData;objectName:"store-action-"+index
-       width:parent.width;height:54*root.typeScale;radius:root.corners;color:index===0?Qt.lighter(root.surface,1.8):root.surface
-       border.width:root.area==="actions" && root.actionIndex===index?3:1;border.color:root.area==="actions" && root.actionIndex===index?root.focusColor:Qt.lighter(root.surface,1.4);opacity:root.busy || (root.selected && root.selected.compatible===false)?0.45:1
-       Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData.label;color:root.ink;font.pixelSize:20*root.typeScale;font.weight:Font.DemiBold}
+       width:parent.width;height:54*root.typeScale;radius:root.corners;color:index===0?shell.selected:root.surface
+       border.width:root.area==="actions" && root.actionIndex===index?3:1;border.color:root.area==="actions" && root.actionIndex===index?(index===0?shell.selectedFocus:shell.focus):shell.outline;opacity:root.busy || (root.selected && root.selected.compatible===false)?0.45:1
+       Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData.label;color:index===0?shell.selectedText:shell.text;font.pixelSize:20*root.typeScale;font.weight:Font.DemiBold}
        MouseArea {anchors.fill:parent;enabled:!root.busy;onClicked:root.request(modelData.op)}
       }
      }
@@ -263,8 +264,8 @@ Item {
    }
   }
  }
- Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;text:root.busy?root.operationName:root.catalog.errorString || root.catalog.operationStatus || root.catalog.storeStatus || qsTr("D-pad Browse · OK Select · Search Find an app · Back Return");color:root.ink;font.pixelSize:17*root.typeScale;elide:Text.ElideRight}
- Rectangle {anchors.fill:parent;visible:root.addWebOpen;z:5;color:Qt.rgba(0,0,0,0.7)
+ Text {textFormat:Text.PlainText;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;text:root.busy?root.operationName:root.catalog.errorString || root.catalog.operationStatus || root.catalog.storeStatus || qsTr("D-pad Browse · OK Select · Search Find an app · Back Return");color:shell.backgroundText;font.pixelSize:17*root.typeScale;elide:Text.ElideRight}
+ Rectangle {anchors.fill:parent;visible:root.addWebOpen;z:5;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.horizontalCenter:parent.horizontalCenter;y:root.searchOpen?root.gap:(parent.height-height)/2;width:parent.width*0.76;height:webForm.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:webForm;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:12
@@ -279,7 +280,7 @@ Item {
    }
   }
  }
- Rectangle {anchors.fill:parent;visible:!!root.confirmation;z:5;color:Qt.rgba(0,0,0,0.7)
+ Rectangle {anchors.fill:parent;visible:!!root.confirmation;z:5;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:body.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:body;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
@@ -297,7 +298,7 @@ Item {
    }
   }
  }
- Rectangle {anchors.fill:parent;visible:root.toolsMenuOpen;z:7;color:Qt.rgba(0,0,0,0.7)
+ Rectangle {anchors.fill:parent;visible:root.toolsMenuOpen;z:7;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:storeMenu.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:storeMenu;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap
@@ -311,7 +312,7 @@ Item {
    }
   }
  }
- Rectangle {anchors.fill:parent;visible:root.busy;z:8;color:Qt.rgba(0,0,0,0.7)
+ Rectangle {anchors.fill:parent;visible:root.busy;z:8;color:shell.scrim
   MouseArea {anchors.fill:parent}
   Rectangle {anchors.centerIn:parent;width:parent.width*0.64;height:progressBody.implicitHeight+root.gap*2;radius:root.corners;color:root.surface
    Column {id:progressBody;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:root.gap;spacing:root.gap

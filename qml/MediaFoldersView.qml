@@ -2,13 +2,8 @@ import QtQuick
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
     property var appearance: ({})
-    readonly property color accentColor: appearance.focusColor || "#C994A5"
-    readonly property color surfaceColor: appearance.surfaceColor || "#172238"
-    readonly property color selectedColor: appearance.selectedColor || "#353039"
-    readonly property color textColor: appearance.textColor || "#F5F1F3"
-    readonly property color mutedColor: appearance.mutedColor || "#AAA5AF"
-    readonly property int cardRadius: Math.round(4 + 12 * (appearance.tileRoundness === undefined ? 0.2 : appearance.tileRoundness))
     property bool browsing: false
     property int selectedIndex: 0
     property string pendingRemoval: ""
@@ -43,15 +38,15 @@ Item {
         if (row) scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, row.y - 20))
     }
     onVisibleChanged: if (!visible) { browsing = false; resetSelection() }
-    Rectangle { anchors.fill: parent; color: root.appearance.backgroundEnd || "#101014" }
+    Rectangle { anchors.fill: parent; color: shell.surface }
     Flickable {
         id: scroll; anchors.fill: parent; contentHeight: contents.implicitHeight; clip: true
         Column {
-            id: contents; width: parent.width; spacing: 16
-            Text { text: "MEDIA FOLDER ACCESS"; color: root.textColor; font.pixelSize: 28 }
-            Text { width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18; color: root.mutedColor
+            id: contents; width: parent.width; spacing: 16 * shell.gapScale
+            Text { font.family: shell.fontFamily; text: "MEDIA FOLDER ACCESS"; color: shell.text; font.pixelSize: 28 * shell.textScale }
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.muted
                 text: browsing ? (kodiService.browsePath || "Choose a storage location") : "Allow Kodi to read an existing media folder and all its subfolders. Both frontends use the same paths. This grants access; it does not reorganize files or change Kodi sources." }
-            Text { width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18; color: root.accentColor
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.focus
                 text: kodiService.canEditFolders ? "Read-only access. Select an allowed folder twice to remove permission." : "To change access: switch to Kodi application mode, then exit Kodi normally." }
             Repeater {
                 id: items; model: root.rows
@@ -59,18 +54,18 @@ Item {
                     required property int index
                     required property string modelData
                     objectName: "mediaFolderActionRow"
-                    width: parent.width; height: label.implicitHeight + 32; radius: root.cardRadius
-                    color: root.selectedIndex === index ? root.selectedColor : root.surfaceColor
+                    width: parent.width; height: label.implicitHeight + 32; radius: shell.radius
+                    color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 2 : 0
-                    border.color: root.accentColor
-                    Text { id: label; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 16
+                    border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
+                    Text { font.family: shell.fontFamily; id: label; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 16
                         text: root.pendingRemoval === modelData ? "Remove permission? Press OK again: " + modelData : modelData
-                        wrapMode: Text.WrapAnywhere; color: root.textColor; font.pixelSize: 19 }
+                        wrapMode: Text.WrapAnywhere; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 19 * shell.textScale }
                     MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
                 }
             }
-            Text { width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18; color: root.accentColor; text: kodiService.folderStatus }
-            Text { width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 17; color: root.mutedColor
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.focus; text: kodiService.folderStatus }
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 17 * shell.textScale; color: shell.muted
                 text: "First setup: Open Kodi → Videos → Files → Add videos. Select the allowed folder at its original path; choose Movies and enable recursive scanning. Use your preferred scraper or Local information only. Existing Kodi sources keep their settings. Then return to Isolde mode and Scan for New Movies. Missing drives do not erase library records." }
         }
     }

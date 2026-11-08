@@ -26,7 +26,8 @@ Item {
             readonly property bool apps:!!modelData.item.appCollection
             readonly property bool buttons:modelData.item.family==="carousel" && !surface.host.editMode
             readonly property bool pageMenu:modelData.item.family==="page-menu"
-            readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu
+            readonly property bool sources:modelData.item.family==="detected-sources" || modelData.item.family==="source-notice"
+            readonly property bool group:modelData.item.componentType==="container" && !apps && !pageMenu && !sources
             readonly property bool library:modelData.item.componentType==="library"
             readonly property bool selected:surface.host.editMode ? surface.editorSelectionId===modelData.item.id : surface.runtimeFocusEnabled && !surface.host.recoveryFocused && surface.host.focusedIndex===surface.host.itemIndex(modelData.item.id)
             readonly property var baseStyle:modelData.item.presentation || ({})
@@ -53,7 +54,7 @@ Item {
             HomeCard {
                 id:card
                 objectName:"placedCard-"+node.modelData.item.id
-                visible:!node.group && !node.library && !node.apps && !node.pageMenu
+                visible:!node.group && !node.library && !node.apps && !node.pageMenu && !node.sources
                 anchors.fill:parent;item:modelData.item;appearance:surface.host.appearance;unit:surface.unit
                 artworkResolver:surface.host.artworkResolver;artworkMotionAllowed:surface.host.artworkMotionAllowed!==false && !surface.host.editMode && !surface.host.freezeData
                 selectMode:surface.host.selectMode;selectTrigger:surface.host.selectTrigger
@@ -119,6 +120,7 @@ Item {
                 sourceComponent:PageAppCarousel {
                     buttonItems:node.buttons?node.childEntries.filter(e=>!e.item.hidden).sort((a,b)=>a.placement.y-b.placement.y || a.placement.x-b.placement.x).map(e=>e.item):null
                     registry:surface.host.appProvider;collection:node.modelData.item.appCollection || ({mode:"selected",ids:[]});style:Object.assign({},node.buttons?((surface.host.collectionDefaults || {}).carousel || {}).presentation || {}:{},node.style);appearance:surface.host.appearance;unit:surface.unit
+                    galleryAppearance:surface.host.shellAppsAppearance || surface.host.appearance
                     readOnly:surface.host.editMode || surface.host.previewOnly
                     engaged:surface.host.activeMediaWidgetId===node.modelData.item.id;highlighted:node.selected
                     onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
@@ -139,6 +141,22 @@ Item {
                 }
                 onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
                 Component.onDestruction:if(!surface.previewOverlay && node.pageMenu && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
+            }
+            Loader {
+                id:sourcesLoader;anchors.fill:parent;active:node.sources
+                sourceComponent:PageSourcesWidget {
+                    provider:surface.previewOverlay?null:surface.host.sourceProvider
+                    artworkSource:node.modelData.item.logoSource || ""
+                    style:node.style;appearance:surface.host.appearance;unit:surface.unit
+                    pageId:surface.host.menuActiveId;slotId:node.modelData.item.id;notice:node.modelData.item.family==="source-notice"
+                    workflow:surface.host.sourceWorkflow || ({editing:surface.host.editMode})
+                    readOnly:surface.host.editMode || surface.host.previewOnly
+                    engaged:surface.host.activeMediaWidgetId===node.modelData.item.id;highlighted:node.selected
+                    onEngage:if(!readOnly)surface.host.engageMediaWidget(node.modelData.item.id)
+                    onLaunch:action=>{if(surface.host.rememberAppFocus)surface.host.rememberAppFocus(node.modelData.item.id,focusState());surface.host.actionActivated(action,node.modelData.item.id)}
+                }
+                onLoaded:if(!surface.previewOverlay)surface.host.registerMediaWidget(node.modelData.item.id,item,false)
+                Component.onDestruction:if(!surface.previewOverlay && node.sources && surface.host)surface.host.registerMediaWidget(node.modelData.item.id,item,true)
             }
             Loader {
                 id:media;anchors.fill:parent;active:node.library

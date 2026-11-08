@@ -1,7 +1,9 @@
 #include "home/HomeLayout.h"
 #include "home/ComponentSchema.h"
+#include "home/DesignSystem.h"
 #include "home/ManagedGif.h"
 #include "home/StudioSession.h"
+#include "settings/ProfileManager.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -31,6 +33,14 @@ bool normalizeAppearance(QVariantMap &values)
     const auto defaults = appearanceDefaults();
     for (auto it = values.begin(); it != values.end(); ++it) {
         const auto key = it.key();
+        if (key=="sourcePolicy") {
+            if (it.value().metaType().id()!=QMetaType::QVariantMap || !ComponentSchema::validSourcePolicy(it.value().toMap())) return false;
+            continue;
+        }
+        if (key == "surfaceThemes") {
+            if (!ComponentSchema::validSurfaceThemes(it.value())) return false;
+            continue;
+        }
         if (key.endsWith("Color") || key == "backgroundStart" || key == "backgroundEnd") {
             const QColor color(it.value().toString());
             if (!color.isValid() || color.alpha() != 255) return false;
@@ -135,6 +145,7 @@ QVariantList HomeLayout::items() const
         const auto object = value.toObject();
         if(hidden.contains(object["id"].toString()))return;
         auto item = object.toVariantMap();
+        item["presentation"]=componentPresentation(item.value("presentation").toMap());
         const auto action = normalizedActionForItem(object);
         if (!action.isEmpty()) {
             item.insert("actionType", action.value(QStringLiteral("type")).toString());
@@ -184,7 +195,16 @@ QVariantList HomeLayout::items() const
     return result;
 }
 
+QVariantMap HomeLayout::componentPresentation(const QVariantMap &authored) const
+{
+    const auto library=(m_owner?m_owner->m_composition:m_composition).value("designLibrary").toMap();
+    return DesignSystem::presentation(authored,library);
+}
 QVariantList HomeLayout::components() const { return items(); }
+QVariantMap HomeLayout::responsivePresentation(const QVariantMap &value, double width, double height, double unit) const
+{
+    return DesignSystem::responsive(value,width,height,unit);
+}
 void HomeLayout::setCollections(const QVariantList &collections)
 {
     if (m_collections == collections) return;
@@ -272,10 +292,11 @@ QString HomeLayout::backgroundEnd() const { return m_backgroundEnd; }
 double HomeLayout::tileRoundness() const { return m_tileRoundness; }
 QVariantMap HomeLayout::appearance() const
 {
-    auto result = appearanceDefaults();
-    for (auto it = m_appearance.cbegin(); it != m_appearance.cend(); ++it) result[it.key()] = it.value();
-    result["backgroundStart"] = m_backgroundStart; result["backgroundEnd"] = m_backgroundEnd;
-    result["tileRoundness"] = m_tileRoundness;
+    auto result = m_owner ? m_owner->homeAppearance() : appearanceDefaults();
+    for (auto it = m_appearance.cbegin(); it != m_appearance.cend(); ++it) if(!m_owner || m_themeKeys.contains(it.key())) result[it.key()] = it.value();
+    if(!m_owner || m_themeKeys.contains("backgroundStart"))result["backgroundStart"] = m_backgroundStart;
+    if(!m_owner || m_themeKeys.contains("backgroundEnd"))result["backgroundEnd"] = m_backgroundEnd;
+    if(!m_owner || m_themeKeys.contains("tileRoundness"))result["tileRoundness"] = m_tileRoundness;
     return result;
 }
 bool HomeLayout::setAppearance(const QVariantMap &changes)
@@ -290,7 +311,9 @@ bool HomeLayout::setAppearance(const QVariantMap &changes)
     if (normalized.contains("backgroundEnd")) m_backgroundEnd = normalized.take("backgroundEnd").toString();
     if (normalized.contains("tileRoundness")) m_tileRoundness = normalized.take("tileRoundness").toDouble();
     for (auto it = normalized.cbegin(); it != normalized.cend(); ++it) m_appearance[it.key()] = it.value();
-    if (!save()) {
+    QString validationError;
+    if (!validateStudioDocument(documentData(), &validationError, m_defaultTheme) || !save()) {
+        if (!validationError.isEmpty()) setError(validationError);
         m_themeKeys=previousKeys;m_appearance = previous; m_backgroundStart = previousStart; m_backgroundEnd = previousEnd;
         m_tileRoundness = previousRoundness; return false;
     }
@@ -314,8 +337,20 @@ QVariantMap HomeLayout::studioOptions() const
 {
     QFile file(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath("studio-defaults.json"));
     if(!file.open(QIODevice::ReadOnly)) {file.setFileName(":/config/studio-defaults.json");if(!file.open(QIODevice::ReadOnly))return {};}
-    if(file.size()>64*1024)return {};
+    if(file.size()>128*1024)return {};
     const auto object=QJsonDocument::fromJson(file.readAll()).object();
+    if (object.contains("referenceViewport")) {
+        const auto viewport = object["referenceViewport"].toObject();
+        if (viewport.size() != 2) return {};
+        const QMap<QString,QPair<int,int>> bounds{{"width",{640,3840}},{"height",{360,2160}}};
+        for (auto it = bounds.cbegin(); it != bounds.cend(); ++it) {
+            const auto value = viewport[it.key()];
+            const double number = value.toDouble(-1);
+            if (!value.isDouble() || !std::isfinite(number) || std::floor(number) != number
+                || number < it.value().first || number > it.value().second) return {};
+        }
+    }
+    if(object.contains("responsiveDefaults") && !DesignSystem::validResponsive(object["responsiveDefaults"].toObject().toVariantMap()))return {};
     if(object["schemaVersion"].toInt()!=1 || !object["defaultGrid"].isObject()
         || !ComponentSchema::validGrid(object["defaultGrid"].toObject().toVariantMap()) || !object["gridModes"].isArray())return {};
     if(!object["appearance"].isObject() || !readableStudioAppearance(object["appearance"].toObject().toVariantMap()))return {};
@@ -438,7 +473,13 @@ QVariantMap HomeLayout::studioOptions() const
         if(defaults.isEmpty())return {};
         for(auto it=defaults.cbegin();it!=defaults.cend();++it)if(!guide.contains(it.key()))guide[it.key()]=it.value();
     }
-    auto result=object.toVariantMap();result["guide"]=guide;result["maxScrollableRows"]=ComponentSchema::MaxScrollableRows;
+    auto result=object.toVariantMap();
+    if (!result.contains("referenceViewport")) {
+        QFile packaged(":/config/studio-defaults.json");
+        if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 64*1024) return {};
+        result["referenceViewport"] = QJsonDocument::fromJson(packaged.readAll()).object()["referenceViewport"].toVariant();
+    }
+    result["guide"]=guide;result["maxScrollableRows"]=ComponentSchema::MaxScrollableRows;
     return result;
 }
 
@@ -698,6 +739,8 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         return false;
     }
     const auto object = document.object();
+    QString designError;
+    if(!m_owner && !DesignSystem::validDocument(object,&designError)){setError(designError);return false;}
     QJsonArray pages;
     if (object.contains("pages") && (!object["pages"].isArray() || object["pages"].toArray().size() > 64 || m_owner)) {
         setError(tr("Invalid page collection.")); return false;
@@ -709,7 +752,7 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         if (!ComponentSchema::safeId(id) || pageIds.contains(id) || page["name"].toString().trimmed().isEmpty()
             || page["name"].toString().size() > 80 || !page["layout"].isObject()
             || !validator.loadDocument(QJsonDocument(page["layout"].toObject()).toJson(), false)) {
-            setError(tr("A page has an invalid identity, name or layout.")); return false;
+            setError(tr("Page %1 has an invalid identity, name or layout: %2").arg(page["name"].toString(),validator.errorString())); return false;
         }
         pageIds.insert(id); pages.append(page);
     }
@@ -747,7 +790,37 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
     for(auto it=presentation.begin();it!=presentation.end();++it)if(m_defaultTheme.contains(it.key()))it.value()=m_defaultTheme.value(it.key());
     for (auto it = presentation.begin(); it != presentation.end(); ++it)
         if (theme.contains(it.key())) it.value() = theme.value(it.key()).toVariant();
+    if (m_defaultTheme.contains("surfaceThemes")) presentation["surfaceThemes"] = m_defaultTheme["surfaceThemes"];
+    if (theme.contains("surfaceThemes")) presentation["surfaceThemes"] = theme["surfaceThemes"].toVariant();
+    if (theme.contains("sourcePolicy")) presentation["sourcePolicy"] = theme["sourcePolicy"].toVariant();
     if (!normalizeAppearance(presentation)) { setError(tr("Home appearance contains invalid values.")); return false; }
+    if (!m_owner) {
+        auto shellBase = presentation;
+        shellBase["backgroundStart"] = start.name();
+        shellBase["backgroundEnd"] = end.name();
+        auto home = shellBase;
+        for (const auto &entry : pages) if (entry.toObject()["id"] == homePage) {
+            const auto values = entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap();
+            for (auto it = values.cbegin(); it != values.cend(); ++it) {
+                if (it.key() == "surfaceThemes") {
+                    auto policies = home.value(it.key()).toMap();
+                    const auto local = it.value().toMap();
+                    for (auto policy = local.cbegin(); policy != local.cend(); ++policy) policies[policy.key()] = policy.value();
+                    home[it.key()] = policies;
+                } else home[it.key()] = it.value();
+            }
+        }
+        const auto readable = [&](const QVariantMap &theme) {
+            auto origin = home;
+            for (auto it = theme.cbegin(); it != theme.cend(); ++it) origin[it.key()] = it.value();
+            return ComponentSchema::readableSurfaceThemes(home, origin);
+        };
+        if (!readable(shellBase)) { setError(tr("Shell custom colors must keep text, status and focus readable.")); return false; }
+        for (const auto &entry : pages)
+            if (!readable(entry.toObject()["layout"].toObject()["theme"].toObject().toVariantMap())) {
+                setError(tr("A page has unreadable shell custom colors.")); return false;
+            }
+    }
     QSet<QString> ids;
     QSet<QString> categoryIds;
     const auto categoryArray = object.value("categories").toArray();
@@ -1156,8 +1229,12 @@ bool HomeLayout::setTileRoundness(double roundness)
 bool HomeLayout::applyTheme(const QVariantMap &theme, bool includeSuggestedArtwork)
 {
     auto presentation = appearanceDefaults();
+    if (m_appearance.contains("surfaceThemes")) presentation["surfaceThemes"] = m_appearance["surfaceThemes"];
+    if (m_appearance.contains("sourcePolicy")) presentation["sourcePolicy"] = m_appearance["sourcePolicy"];
     for (auto it = presentation.begin(); it != presentation.end(); ++it)
         if (theme.contains(it.key())) it.value() = theme.value(it.key());
+    if (theme.contains("surfaceThemes")) presentation["surfaceThemes"] = theme["surfaceThemes"];
+    if (theme.contains("sourcePolicy")) presentation["sourcePolicy"] = theme["sourcePolicy"];
     if (!normalizeAppearance(presentation)) return false;
     const QColor startColor(theme.value(QStringLiteral("backgroundStart")).toString());
     const QColor endColor(theme.value(QStringLiteral("backgroundEnd")).toString());
@@ -1206,7 +1283,9 @@ bool HomeLayout::applyTheme(const QVariantMap &theme, bool includeSuggestedArtwo
         }
         m_items.replace(i, item);
     }
-    if (!save()) {
+    QString validationError;
+    if (!validateStudioDocument(documentData(), &validationError, m_defaultTheme) || !save()) {
+        if (!validationError.isEmpty()) setError(validationError);
         m_themeKeys=previousKeys;
         m_backgroundStart = previousStart;
         m_backgroundEnd = previousEnd;
@@ -1221,6 +1300,7 @@ bool HomeLayout::applyTheme(const QVariantMap &theme, bool includeSuggestedArtwo
 
 bool HomeLayout::resetToDefaults()
 {
+    if (!ProfileManager::allows("edit")) { setError(tr("Editing is restricted in Settings > Profiles.")); return false; }
     if (m_owner || !m_pages.isEmpty()) {
         QFile defaults(m_defaultPath);
         if(!defaults.open(QIODevice::ReadOnly)){setError(tr("Unable to read defaults."));return false;}
@@ -1250,10 +1330,11 @@ bool HomeLayout::save()
 {
     if (m_draftOnly) {
         QString error;
-        const bool ok = validateStudioDocument(documentData(), &error);
+        const bool ok = validateStudioDocument(documentData(), &error, m_defaultTheme);
         setError(error);
         return ok;
     }
+    if (!ProfileManager::allows("edit")) { setError(tr("Editing is restricted in Settings > Profiles.")); return false; }
     if (m_owner) {
         const bool ok=m_owner->storePage(m_pageId,QJsonDocument::fromJson(documentData()).object());
         setError(ok?QString():m_owner->errorString());return ok;
@@ -1286,7 +1367,7 @@ QByteArray HomeLayout::committedDocument() const
     return documentData();
 }
 
-bool HomeLayout::validateStudioDocument(const QByteArray &data, QString *error)
+bool HomeLayout::validateStudioDocument(const QByteArray &data, QString *error, const QVariantMap &defaults)
 {
     const auto count = [](const QJsonObject &document) {
         return document[document["schemaVersion"].toInt() == 1 ? "items" : "components"].toArray().size();
@@ -1297,9 +1378,16 @@ bool HomeLayout::validateStudioDocument(const QByteArray &data, QString *error)
     if (nodes > 1024) { if (error) *error = tr("The interface exceeds 1024 components across its pages."); return false; }
     AppRegistry registry;
     HomeLayout validator(&registry);
+    validator.m_defaultTheme = defaults;
     const bool ok = validator.loadDocument(data, false);
     if (error) *error = validator.errorString();
     return ok;
+}
+
+bool HomeLayout::pageAllowed(const QString &id) const
+{
+    // The designated Home and root recovery surface are always reachable.
+    return id.isEmpty() || id == m_homePageId || ProfileManager::allows("destination", id);
 }
 
 QObject *HomeLayout::beginStudio()
@@ -1312,6 +1400,7 @@ QObject *HomeLayout::beginStudio()
 
 bool HomeLayout::applyStudioDraft(const QByteArray &draft, const QString &focusComponentId)
 {
+    if (!ProfileManager::allows("edit")) { setError(tr("Editing is restricted in Settings > Profiles.")); return false; }
     // T16.5 — validate the candidate without touching the live model first.
     // Snapshot live state; restore it byte-for-byte on any failure so the
     // applied model, original file bytes and focus origin survive intact.

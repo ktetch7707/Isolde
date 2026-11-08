@@ -3,6 +3,9 @@ import QtQuick.Controls
 
 Item {
     id: root
+    SurfacePalette { id: shell; appearance: root.appearance }
+    Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
+    property var appearance: ({})
     property int selectedIndex: 0
     property bool passwordPrompt: false
     property bool hiddenNetworkPrompt: false
@@ -14,6 +17,7 @@ Item {
     property int selectedConnectionAction: 0
     property bool keyboardOpen: false
     property string keyboardTarget: "password"
+    readonly property var focusRestorerId: "wifiPassword"
     readonly property var actions: ["Refresh", networkSettings.wifiEnabled ? "Turn Wi-Fi off" : "Turn Wi-Fi on", "Join hidden Wi-Fi"]
     readonly property int firstDeviceIndex: actions.length
     readonly property int firstNetworkIndex: actions.length + networkSettings.devices.length
@@ -35,6 +39,16 @@ Item {
         return networkSettings.savedConnections[index]
     }
 
+    Connections {
+        target: tvKeyboard
+        function onFocusRestored() {
+            if (passwordPrompt || hiddenNetworkPrompt) {
+                passwordPrompt = false
+                hiddenNetworkPrompt = false
+                wifiPassword.forceActiveFocus()
+            }
+        }
+    }
     function handleCommand(command) {
         if (keyboardOpen) {
             tvKeyboard.handleCommand(command)
@@ -59,6 +73,7 @@ Item {
             return
         }
         if (passwordPrompt || hiddenNetworkPrompt) {
+            tvKeyboard.focusRestorerId = "wifiPassword"
             if (command === inputManager.back) {
                 passwordPrompt = false
                 hiddenNetworkPrompt = false
@@ -123,6 +138,8 @@ Item {
         tvKeyboard.value = target === "ssid" ? wifiSsid.text : wifiPassword.text
         tvKeyboard.selectedIndex = 0
         keyboardOpen = true
+        // Remote keys belong to the TV keyboard, not the underlying TextField.
+        root.forceActiveFocus()
     }
 
     function closePasswordPrompts() {
@@ -136,35 +153,36 @@ Item {
     Rectangle {
         visible: root.connectionPrompt
         anchors.fill: parent
-        color: "#CC050812"
+        color: shell.scrim
         z: 11
         Rectangle {
             anchors.centerIn: parent
             width: Math.min(660, parent.width - 80)
             height: 270
-            radius: 10
-            color: "#151E32"
+            radius: shell.radius
+            color: shell.elevated
             border.width: 2
-            border.color: root.selectedConnectionAction === 1 ? "#E85C68" : "#4D7ED8"
+            border.color: root.selectedConnectionAction === 1 ? shell.elevatedError : shell.elevatedFocus
             Column {
                 anchors.fill: parent
                 anchors.margins: 28
-                spacing: 18
-                Text { text: "SAVED NETWORK"; color: "#F8FAFC"; font.pixelSize: 28; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                Text { text: root.selectedConnectionName; color: "#9EABC1"; font.pixelSize: 19; elide: Text.ElideRight; width: parent.width }
-                Text { text: "Connect brings this saved profile online. Forget removes its saved credentials and settings."; color: "#91A0BC"; font.pixelSize: 16; wrapMode: Text.WordWrap; width: parent.width }
+                spacing: 18 * shell.gapScale
+                Text { font.family: shell.fontFamily; text: "SAVED NETWORK"; color: shell.elevatedText; font.pixelSize: 28 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+                Text { font.family: shell.fontFamily; text: root.selectedConnectionName; color: shell.elevatedMuted; font.pixelSize: 19 * shell.textScale; elide: Text.ElideRight; width: parent.width }
+                Text { font.family: shell.fontFamily; text: "Connect brings this saved profile online. Forget removes its saved credentials and settings."; color: shell.elevatedMuted; font.pixelSize: 16 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
                 Row {
-                    spacing: 12
+                    spacing: 12 * shell.gapScale
                     Repeater {
                         model: root.connectionActions
                         delegate: Rectangle {
                             required property int index
                             required property string modelData
-                            width: 170; height: 52; radius: 8
-                            color: root.selectedConnectionAction === index ? (index === 1 ? "#6B2B35" : "#2B416B") : "#17243A"
+                            objectName: "networkConnectionAction-" + index
+                            width: 170; height: 52; radius: shell.radius
+                            color: root.selectedConnectionAction === index ? shell.selected : shell.surface
                             border.width: root.selectedConnectionAction === index ? 3 : 1
-                            border.color: root.selectedConnectionAction === index ? "#F8FAFC" : "#2B3853"
-                            Text { anchors.centerIn: parent; text: modelData; color: "#F8FAFC"; font.pixelSize: 17; font.weight: Font.DemiBold }
+                            border.color: root.selectedConnectionAction === index ? shell.selectedFocus : shell.focus
+                            Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: modelData; color: root.selectedConnectionAction === index ? shell.selectedText : shell.text; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
                         }
                     }
                 }
@@ -175,58 +193,58 @@ Item {
     Rectangle {
         visible: root.passwordPrompt || root.hiddenNetworkPrompt
         anchors.fill: parent
-        color: "#CC050812"
+        color: shell.scrim
         z: 10
         Rectangle {
             anchors.centerIn: parent
             width: Math.min(620, parent.width - 80)
             height: root.hiddenNetworkPrompt ? 330 : 260
-            radius: 10
-            color: "#151E32"
+            radius: shell.radius
+            color: shell.elevated
             border.width: 2
-            border.color: "#4D7ED8"
+            border.color: shell.elevatedFocus
             Column {
                 anchors.fill: parent
                 anchors.margins: 28
-                spacing: 16
-                Text { text: "JOIN WI-FI"; color: "#F8FAFC"; font.pixelSize: 28; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-                Text { visible: !root.hiddenNetworkPrompt; text: root.selectedSsid; color: "#9EABC1"; font.pixelSize: 18; elide: Text.ElideRight; width: parent.width }
+                spacing: 16 * shell.gapScale
+                Text { font.family: shell.fontFamily; text: "JOIN WI-FI"; color: shell.elevatedText; font.pixelSize: 28 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+                Text { font.family: shell.fontFamily; visible: !root.hiddenNetworkPrompt; text: root.selectedSsid; color: shell.elevatedMuted; font.pixelSize: 18 * shell.textScale; elide: Text.ElideRight; width: parent.width }
                 TextField {
-                    id: wifiSsid
+                    id: wifiSsid; objectName: "networkSsidField"
                     visible: root.hiddenNetworkPrompt
                     width: parent.width
                     height: 54
-                    color: "#F8FAFC"
-                    font.pixelSize: 19
+                    color: shell.inputText
+                    font.pixelSize: 19 * shell.textScale
                     placeholderText: "Network name"
-                    placeholderTextColor: "#71809F"
-                    background: Rectangle { radius: 8; color: "#0E1628"; border.width: 2; border.color: wifiSsid.activeFocus ? "#F8FAFC" : "#354462" }
+                    placeholderTextColor: shell.inputMuted
+                    background: Rectangle { radius: shell.radius; color: shell.input; border.width: 2; border.color: shell.inputFocus }
                     onActiveFocusChanged: if (activeFocus && root.hiddenNetworkPrompt) root.openKeyboard("ssid")
                     onAccepted: wifiPassword.forceActiveFocus()
                 }
                 TextField {
-                    id: wifiPassword
+                    id: wifiPassword; objectName: "networkPasswordField"
                     width: parent.width
                     height: 54
                     echoMode: TextInput.Password
-                    color: "#F8FAFC"
-                    font.pixelSize: 19
+                    color: shell.inputText
+                    font.pixelSize: 19 * shell.textScale
                     placeholderText: "Wi-Fi password"
-                    placeholderTextColor: "#71809F"
-                    background: Rectangle { radius: 8; color: "#0E1628"; border.width: 2; border.color: wifiPassword.activeFocus ? "#F8FAFC" : "#354462" }
+                    placeholderTextColor: shell.inputMuted
+                    background: Rectangle { radius: shell.radius; color: shell.input; border.width: 2; border.color: shell.inputFocus }
                     onActiveFocusChanged: if (activeFocus && (root.passwordPrompt || root.hiddenNetworkPrompt)) root.openKeyboard("password")
                     onAccepted: {
                         networkSettings.connectToWifi(root.hiddenNetworkPrompt ? wifiSsid.text : root.selectedSsid, text)
                         root.closePasswordPrompts()
                     }
                 }
-                Text { text: "Enter connect    Esc cancel    Text fields open TV keyboard"; color: "#91A0BC"; font.pixelSize: 16 }
+                Text { font.family: shell.fontFamily; text: "Enter connect    Esc cancel    Text fields open TV keyboard"; color: shell.elevatedMuted; font.pixelSize: 16 * shell.textScale }
             }
         }
     }
 
-    OnScreenKeyboard {
-        id: tvKeyboard
+    OnScreenKeyboard { appearance: root.appearance;
+        id: tvKeyboard; objectName: "networkTvKeyboard"
         visible: root.keyboardOpen
         z: 20
         anchors.left: parent.left
@@ -246,11 +264,8 @@ Item {
             }
         }
         onCanceled: {
-            root.keyboardOpen = false
-            if (root.keyboardTarget === "ssid")
-                wifiSsid.forceActiveFocus()
-            else
-                wifiPassword.forceActiveFocus()
+            root.closePasswordPrompts()
+            root.forceActiveFocus()
         }
     }
 
@@ -264,84 +279,84 @@ Item {
         Column {
             id: contentColumn
             width: parent.width
-            spacing: 20
+            spacing: 20 * shell.gapScale
 
-            Text { text: "NETWORK"; color: "#F8FAFC"; font.pixelSize: 30; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-            Text { text: networkSettings.summary + "  |  " + networkSettings.connectivity; color: "#9EABC1"; font.pixelSize: 18 }
+            Text { font.family: shell.fontFamily; text: "NETWORK"; color: shell.text; font.pixelSize: 30 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+            Text { font.family: shell.fontFamily; text: networkSettings.summary + "  |  " + networkSettings.connectivity; color: shell.muted; font.pixelSize: 18 * shell.textScale }
 
         Row {
-            spacing: 12
+            spacing: 12 * shell.gapScale
             Repeater {
                 model: root.actions
                 delegate: Rectangle {
                     required property int index
                     required property string modelData
-                    width: 220; height: 54; radius: 8
-                    color: root.selectedIndex === index ? "#2B416B" : "#17243A"
+                    width: 220; height: 54; radius: shell.radius
+                    color: root.selectedIndex === index ? shell.selected : shell.surface
                     border.width: root.selectedIndex === index ? 3 : 1
-                    border.color: root.selectedIndex === index ? "#F8FAFC" : "#2B3853"
-                    Text { anchors.centerIn: parent; text: modelData; color: "#F8FAFC"; font.pixelSize: 17; font.weight: Font.DemiBold }
+                    border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
+                    Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: modelData; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
                 }
             }
         }
 
-        Text { text: "DEVICES"; color: "#91A0BC"; font.pixelSize: 14; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily; text: "DEVICES"; color: shell.muted; font.pixelSize: 14 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
         Repeater {
             model: networkSettings.devices
             delegate: Rectangle {
                 required property int index
                 required property var modelData
-                width: parent.width; height: 58; radius: 8
-                color: root.selectedIndex === index + root.firstDeviceIndex ? "#2B416B" : "#111A2A"
-                border.color: "#2B3853"
-                Text { anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + "  " + modelData.type; color: "#F8FAFC"; font.pixelSize: 18; font.weight: Font.DemiBold }
-                Text { anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.state + (modelData.connection ? "  |  " + modelData.connection : ""); color: "#9EABC1"; font.pixelSize: 16 }
+                width: parent.width; height: 58; radius: shell.radius
+                color: root.selectedIndex === index + root.firstDeviceIndex ? shell.selected : shell.surface
+                border.color: shell.outline
+                Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + "  " + modelData.type; color: (root.selectedIndex === index + root.firstDeviceIndex) ? shell.selectedText : shell.text; font.pixelSize: 18 * shell.textScale; font.weight: Font.DemiBold }
+                Text { font.family: shell.fontFamily; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.state + (modelData.connection ? "  |  " + modelData.connection : ""); color: (root.selectedIndex === index + root.firstDeviceIndex) ? shell.selectedText : shell.muted; font.pixelSize: 16 * shell.textScale }
             }
         }
 
-        Text { visible: networkSettings.connectionDetails.length > 0; text: "CONNECTION DETAILS"; color: "#91A0BC"; font.pixelSize: 14; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily; visible: networkSettings.connectionDetails.length > 0; text: "CONNECTION DETAILS"; color: shell.muted; font.pixelSize: 14 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
         Repeater {
             model: networkSettings.connectionDetails
             delegate: Row {
                 required property var modelData
                 width: parent.width
                 height: 26
-                spacing: 12
-                Text { text: modelData.label; width: 110; color: "#71809F"; font.pixelSize: 15; font.weight: Font.DemiBold }
-                Text { text: modelData.value; width: parent.width - 122; color: "#C8D3E5"; font.pixelSize: 15; elide: Text.ElideRight }
+                spacing: 12 * shell.gapScale
+                Text { font.family: shell.fontFamily; text: modelData.label; width: 110; color: shell.unavailable; font.pixelSize: 15 * shell.textScale; font.weight: Font.DemiBold }
+                Text { font.family: shell.fontFamily; text: modelData.value; width: parent.width - 122; color: shell.text; font.pixelSize: 15 * shell.textScale; elide: Text.ElideRight }
             }
         }
 
-        Text { text: "WI-FI NETWORKS"; color: "#91A0BC"; font.pixelSize: 14; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily; text: "WI-FI NETWORKS"; color: shell.muted; font.pixelSize: 14 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
         Repeater {
             model: networkSettings.wifiNetworks
             delegate: Rectangle {
                 required property int index
                 required property var modelData
-                width: parent.width; height: 54; radius: 8
-                color: root.selectedIndex === index + root.firstNetworkIndex ? "#2B416B" : "#111A2A"
-                border.color: "#2B3853"
-                Text { anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: (modelData.active ? "* " : "") + modelData.ssid; color: "#F8FAFC"; font.pixelSize: 17; font.weight: Font.DemiBold }
-                Text { anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal + "%  " + (modelData.security ? modelData.security : "open"); color: "#9EABC1"; font.pixelSize: 15 }
+                width: parent.width; height: 54; radius: shell.radius
+                color: root.selectedIndex === index + root.firstNetworkIndex ? shell.selected : shell.surface
+                border.color: shell.outline
+                Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: (modelData.active ? "* " : "") + modelData.ssid; color: (root.selectedIndex === index + root.firstNetworkIndex) ? shell.selectedText : shell.text; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
+                Text { font.family: shell.fontFamily; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal + "%  " + (modelData.security ? modelData.security : "open"); color: (root.selectedIndex === index + root.firstNetworkIndex) ? shell.selectedText : shell.muted; font.pixelSize: 15 * shell.textScale }
             }
         }
 
-        Text { text: "SAVED NETWORKS"; color: "#91A0BC"; font.pixelSize: 14; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+        Text { font.family: shell.fontFamily; text: "SAVED NETWORKS"; color: shell.muted; font.pixelSize: 14 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
         Repeater {
             model: networkSettings.savedConnections
             delegate: Rectangle {
                 required property int index
                 required property var modelData
-                width: parent.width; height: 54; radius: 8
-                color: root.selectedIndex === index + root.firstSavedIndex ? "#2B416B" : "#111A2A"
+                width: parent.width; height: 54; radius: shell.radius
+                color: root.selectedIndex === index + root.firstSavedIndex ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index + root.firstSavedIndex ? 2 : 1
-                border.color: root.selectedIndex === index + root.firstSavedIndex ? "#F8FAFC" : "#2B3853"
-                Text { anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: "#F8FAFC"; font.pixelSize: 17; font.weight: Font.DemiBold }
-                Text { anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.type + (modelData.device && modelData.device !== "--" ? "  |  " + modelData.device : ""); color: "#9EABC1"; font.pixelSize: 15 }
+                border.color: root.selectedIndex === index + root.firstSavedIndex ? shell.selectedFocus : shell.outline
+                Text { font.family: shell.fontFamily; anchors.left: parent.left; anchors.leftMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: (root.selectedIndex === index + root.firstSavedIndex) ? shell.selectedText : shell.text; font.pixelSize: 17 * shell.textScale; font.weight: Font.DemiBold }
+                Text { font.family: shell.fontFamily; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: modelData.type + (modelData.device && modelData.device !== "--" ? "  |  " + modelData.device : ""); color: (root.selectedIndex === index + root.firstSavedIndex) ? shell.selectedText : shell.muted; font.pixelSize: 15 * shell.textScale }
             }
         }
 
-            Text { visible: networkSettings.errorString.length > 0; text: networkSettings.errorString; color: "#E85C68"; font.pixelSize: 16; wrapMode: Text.WordWrap; width: parent.width }
+            Text { font.family: shell.fontFamily; visible: networkSettings.errorString.length > 0; text: networkSettings.errorString; color: shell.error; font.pixelSize: 16 * shell.textScale; wrapMode: Text.WordWrap; width: parent.width }
         }
     }
 }

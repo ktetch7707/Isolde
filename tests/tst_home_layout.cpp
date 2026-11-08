@@ -58,3 +58,6 @@ void HomeLayoutTests::test_layout_root_page()
     QVERIFY(layout.rootPageName().isEmpty());
     QVERIFY(layout.rootPageVisible());
 }
+
+QTEST_GUILESS_MAIN(HomeLayoutTests)
+#include "tst_home_layout.moc"
