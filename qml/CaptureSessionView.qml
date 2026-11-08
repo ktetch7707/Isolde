@@ -19,7 +19,8 @@ Item {
         captureController.setVideoOutput(videoOutput)
         if (!chooseInput) {
             captureController.selectInput(input)
-            captureController.switchInput(input)
+            if (!captureController.switchInput(input))
+                chooseInput = true
         }
     }
     function closeSession() {
@@ -58,9 +59,10 @@ Item {
             selectionPending = true
         } else if (command === inputManager.confirm) {
             if (selectionPending) {
-                selectionPending = false
-                pendingSwitchConfirmation = true
-                captureController.switchInput(captureController.selectedInput)
+                if (captureController.switchInput(captureController.selectedInput)) {
+                    selectionPending = false
+                    pendingSwitchConfirmation = true
+                }
             } else if (pendingSwitchConfirmation && captureController.state === "receiving-frames") {
                 pendingSwitchConfirmation = false
             }

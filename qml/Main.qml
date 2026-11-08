@@ -9,7 +9,6 @@ Window {
     visibility: Qt.application.arguments.indexOf("--windowed") >= 0 ? Window.Windowed : Window.FullScreen
     color: "#0B1020"
     title: "Isolde " + isoldeVersion
-    OnScreenKeyboard { id: tvKeyboard; width: window.width; height: window.height; z: 20000 }
     readonly property real uiScaleFactor: displaySettings.uiScale / 100
     readonly property int safeAreaPixels: Math.round(Math.min(width, height) * displaySettings.safeArea / 100)
     property string shellProfileId: profileManager.activeId

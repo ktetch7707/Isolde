@@ -6,6 +6,12 @@ Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/
 
 Verified foundations T15–T24 are accepted as recorded in the backlog. Reopen only a demonstrated regression and preserve applicability evidence.
 
+## Coding handoff — T10 capture recovery, 2026-11-08
+
+Source base `ac3f2e7702c92b78ff2f3e90afd3a382147afc68`. The existing T25/T26 ownership below is preserved; T10 is the next incomplete Coding% item with completed implementation dependencies. Capture Settings now adjusts the input on its own row; synchronous switch failure keeps a retry path, and camera errors stop preview so it can be restarted. The shared keyboard's malformed binding is repaired, its letter/number/symbol modes are remote-operable, and the unintended always-visible global keyboard overlay is removed; Network Settings retains its own keyboard. No acceptance or Coding% credit is claimed for this partial slice.
+
+Testing handoff: run the existing capture protocol/component tests and actual QML keyboard/capture navigation, including camera errors, serial timeout/asynchronous failure and retry, Back/focus, and input switching with virtual devices. Then assess the remaining T10 adapter, atomic editor and audio-route scope. Local Node production-method checks pass for the changed remote paths; the existing full `qml_navigation.test.cjs` has a separate `composition is not defined` fixture failure in the HomeScreen deferred-viewport case. No Qt build, graphical, VM or installed testing was run here.
+
 ## VM-only acceptance authority
 
 The November2 coding-only exception is historical. [Final installed acceptance](studio-batch-acceptance-2026-11-04.md) closes T22/T23/T24 and T15.4; [T27 acceptance](studio-t27-acceptance-2026-11-04.md) is also complete; T25 is next. Earlier coding/diagnosis records below retain their original evidence limitations.
