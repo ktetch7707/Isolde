@@ -117,3 +117,57 @@ class Playlists:
         finally:
             os.close(directory)
         return {"renamed":True,"name":name,"newName":new_name}
+
+    def reorderPlaylist(self, params):
+        if not self.managed or set(params) != {"name","order"}:
+            raise ValueError("Managed Kodi playlist reorder required")
+        name = params.get("name")
+        order = params.get("order")
+        if not playlist_name(name):raise ValueError("Invalid playlist name")
+        if (not isinstance(order,list) or not order
+            or not all(isinstance(i,int) and i>=0 for i in order)
+            or len(set(order))!=len(order)):
+            raise ValueError("Order must be a non-empty list of unique non-negative indices")
+        directory=self._playlist_dir()
+        try:
+            fd=os.open(name,os.O_RDONLY|os.O_NOFOLLOW,dir_fd=directory)
+            try:
+                raw=os.read(fd,1024*1024)
+            finally:
+                os.close(fd)
+            try:
+                text=raw.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValueError("Playlist is not valid UTF-8")
+            # Smart playlists (.xsp) are rule-based; reorder applies to
+            # explicit member playlists (.m3u/.m3u8) only.
+            if name.endswith(".xsp"):
+                raise ValueError("Smart playlists are rule-based; member order is set by the rule.")
+            if not (name.endswith(".m3u") or name.endswith(".m3u8")):
+                raise ValueError("Only .m3u and .m3u8 playlists can be reordered.")
+            lines=text.split("\n")
+            members=[line for line in lines if line and not line.startswith("#")]
+            if any(i>=len(members) for i in order):
+                raise ValueError("Order references items beyond the playlist's members.")
+            reordered=[members[i] for i in order]
+            out_lines=[]
+            member_idx=0
+            for line in lines:
+                if line and not line.startswith("#"):
+                    out_lines.append(reordered[member_idx]);member_idx+=1
+                else:
+                    out_lines.append(line)
+            data="\n".join(out_lines).encode("utf-8")
+            temporary=".isolde-reorder-"+str(uuid.uuid4())
+            fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=directory)
+            try:
+                os.write(fd,data);os.fsync(fd)
+            finally:
+                os.close(fd)
+            os.rename(temporary,name,src_dir_fd=directory,dst_dir_fd=directory)
+            os.fsync(directory)
+        except FileNotFoundError:
+            raise ValueError("Playlist not found")
+        finally:
+            os.close(directory)
+        return {"reordered":True,"name":name,"count":len(members)}

@@ -68,7 +68,7 @@ void KodiMedia::releaseSocket()
 }
 void KodiMedia::fail(const QString &message)
 {
-    if((m_stage==9 || m_stage==10 || m_stage==11) && m_busy)m_playlistStatus="Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. "+message;
+    if((m_stage==9 || m_stage==10 || m_stage==11 || m_stage==12) && m_busy)m_playlistStatus="Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. "+message;
     m_pendingMovie = m_pendingShow = 0;
     m_pendingDirectKind.clear(); m_pendingDirectId = 0;
     const bool wasPlaying = m_playbackActive;
@@ -213,6 +213,20 @@ void KodiMedia::deletePlaylist(const QString &name) {
     }
     ++m_generation;m_busy=true;m_stage=11;m_playlistStatus="Deleting Kodi playlist…";emit changed();
     request("Isolde.DeletePlaylist",{{"name",name.trimmed()}});
+}
+void KodiMedia::reorderPlaylist(const QString &name, const QVariantList &order) {
+    if(m_busy || m_playbackActive || !validPlaylistName(name) || order.isEmpty()){
+        m_playlistStatus="Cannot reorder this playlist. Choose a valid playlist and order, then retry.";emit changed();return;
+    }
+    QVariantList ints;
+    for (const auto &v : order) {
+        if (!v.canConvert<int>()) { m_playlistStatus="Playlist order must be whole-number indices.";emit changed();return; }
+        ints.append(v.toInt());
+    }
+    QSet<int> seen;
+    for (int i : ints) { if (!seen.insert(i).second) { m_playlistStatus="Playlist order contains duplicate indices.";emit changed();return; } }
+    ++m_generation;m_busy=true;m_stage=12;m_playlistStatus="Reordering Kodi playlist…";emit changed();
+    request("Isolde.ReorderPlaylist",{{"name",name.trimmed()},{"order",ints}});
 }
 void KodiMedia::openHistory(int count) {
     if(count < 1 || count > 50 || !canNavigate()) return;
@@ -813,6 +827,13 @@ void KodiMedia::consume()
             m_playlistStatus="Kodi did not confirm the playlist deletion. Previous playlists are unchanged.";emit changed();return;
         }
         m_playlistStatus="Playlist deleted from Kodi · "+result["name"].toString();emit changed();return;
+    }
+    if(m_stage==12){
+        m_busy=false;releaseSocket();
+        if(!result["reordered"].toBool()){
+            m_playlistStatus="Kodi did not confirm the playlist reorder. Previous playlists are unchanged.";emit changed();return;
+        }
+        m_playlistStatus="Playlist reordered in Kodi · "+result["name"].toString();emit changed();return;
     }
     if (m_stage == 5 || m_stage == 6 || m_stage == 7) {
         const auto state = result.value("state").toString();

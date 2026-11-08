@@ -17,9 +17,9 @@ Rectangle {
     property string playlistManageMode: ""
     property int pendingPlaylistIndex: -1
     readonly property bool active: mode.length > 0 || playlistManageMode.length > 0
-    readonly property bool typing: ["search", "save", "savePlaylist", "tag", "genre", "rename", "newManual", "renamePlaylist"].indexOf(mode) >= 0
+    readonly property bool typing: ["search", "save", "savePlaylist", "tag", "genre", "rename", "newManual", "renamePlaylist", "reorderPlaylist"].indexOf(mode) >= 0
     readonly property var playlistItem: pendingPlaylistIndex >= 0 && playlistCatalog && pendingPlaylistIndex < playlistCatalog.items.length ? playlistCatalog.items[pendingPlaylistIndex] : null
-    readonly property var rows: playlistManageMode==="manage"?(playlistItem?["Rename…","Delete…","Back"]:["Back"]):playlistManageMode==="renamePlaylist"?["Enter new name","Back"]:playlistManageMode==="deletePlaylist"?["Confirm delete","Cancel"]:mode==="playlists"?["Save current view as playlist…","Refresh saved playlists"].concat(playlistCatalog?(playlistCatalog.items || []).map(i=>i.title+" · manage"):[]):mode==="playlistSaveState"?(savedPlaylistFile?["Return to library","Browse saved playlists"]:["Return to library","Retry name / save"]):mode === "collections" ? ["New Kodi tag view…", "New genre view…"].concat(kodiMedia.collections.map(c => c.name + " · " + c.media))
+    readonly property var rows: playlistManageMode==="manage"?(playlistItem?["Rename…","Reorder…","Delete…","Back"]:["Back"]):playlistManageMode==="renamePlaylist"?["Enter new name","Back"]:playlistManageMode==="deletePlaylist"?["Confirm delete","Cancel"]:playlistManageMode==="reorderPlaylist"?["Enter new order (e.g. 2,0,1)","Back"]:mode==="playlists"?["Save current view as playlist…","Refresh saved playlists"].concat(playlistCatalog?(playlistCatalog.items || []).map(i=>i.title+" · manage"):[]):mode==="playlistSaveState"?(savedPlaylistFile?["Return to library","Browse saved playlists"]:["Return to library","Retry name / save"]):mode === "collections" ? ["New Kodi tag view…", "New genre view…"].concat(kodiMedia.collections.map(c => c.name + " · " + c.media))
         : mode === "addSelected" ? addSelectedRows()
         : mode === "remove" ? ["Cancel", "Remove collection definition (keep Kodi media)"]
         : ["Open collection", "Rename", "Remove…",
@@ -61,10 +61,14 @@ Rectangle {
             else if(command===inputManager.confirm){
                 if(playlistManageMode==="manage"){
                     if(selectedIndex===0){playlistManageMode="renamePlaylist";selectedIndex=0;return}
-                    else if(selectedIndex===1){playlistManageMode="deletePlaylist";selectedIndex=0;return}
+                    else if(selectedIndex===1){playlistManageMode="reorderPlaylist";selectedIndex=0;return}
+                    else if(selectedIndex===2){playlistManageMode="deletePlaylist";selectedIndex=0;return}
                     else {playlistManageMode="";pendingPlaylistIndex=-1;selectedIndex=0;return}
                 }else if(playlistManageMode==="renamePlaylist"){
                     if(selectedIndex===0){mode="renamePlaylist";return}
+                    playlistManageMode="manage";selectedIndex=0;return
+                }else if(playlistManageMode==="reorderPlaylist"){
+                    if(selectedIndex===0){mode="reorderPlaylist";return}
                     playlistManageMode="manage";selectedIndex=0;return
                 }else if(playlistManageMode==="deletePlaylist"){
                     if(selectedIndex===0 && playlistItem && playlistItem.playlistName){
@@ -159,6 +163,16 @@ Rectangle {
                 }
                 mode="";playlistManageMode="";pendingPlaylistIndex=-1;return
             }
+            else if (root.mode === "reorderPlaylist") {
+                if(!text.trim().length)return
+                const parts=text.trim().split(",").map(s=>parseInt(s.trim(),10))
+                if(parts.some(isNaN)||parts.some(i=>i<0)||new Set(parts).size!==parts.length)return
+                if(playlistItem && playlistItem.playlistName){
+                    kodiMedia.reorderPlaylist(playlistItem.playlistName, parts)
+                    if(playlistCatalog && !kodiMedia.busy)provider.refresh(playlistCatalog)
+                }
+                mode="";playlistManageMode="";pendingPlaylistIndex=-1;return
+            }
             else { kodiMedia.setView(root.mode, text); root.mode = "" }
         }
     }
@@ -174,6 +188,6 @@ Rectangle {
         }
     }
     Text { font.family: shell.fontFamily; x: 30; anchors.bottom: parent.bottom; anchors.bottomMargin: 20; width: parent.width - 60; wrapMode: Text.WordWrap; color: shell.muted; font.pixelSize: 17*(root.appearance.typographyScale || 1)
-        text:playlistManageMode==="renamePlaylist"?"Enter new playlist name · Back cancels":playlistManageMode==="deletePlaylist"?"Delete playlist · " + (playlistItem?playlistItem.title:"") + " · Confirm or Back cancels":playlistManageMode==="manage"?"Manage playlist · " + (playlistItem?playlistItem.title:"") + " · Rename or delete":root.mode==="playlistSaveState"?kodiMedia.playlistStatus:root.mode==="playlists"?(root.playlistCatalog?root.playlistCatalog.status:"Kodi unavailable · Back returns"):root.mode==="savePlaylist"?"Saves this library view as a playlist in Kodi. Back cancels without writing.":kodiMedia.collectionStatus || "Collections are reusable local rules. They do not move files or edit Kodi tags. Back cancels."
+        text:playlistManageMode==="renamePlaylist"?"Enter new playlist name · Back cancels":playlistManageMode==="reorderPlaylist"?"Enter item order as comma-separated indices (e.g. 2,0,1) · Back cancels":playlistManageMode==="deletePlaylist"?"Delete playlist · " + (playlistItem?playlistItem.title:"") + " · Confirm or Back cancels":playlistManageMode==="manage"?"Manage playlist · " + (playlistItem?playlistItem.title:"") + " · Rename, reorder, or delete":root.mode==="playlistSaveState"?kodiMedia.playlistStatus:root.mode==="playlists"?(root.playlistCatalog?root.playlistCatalog.status:"Kodi unavailable · Back returns"):root.mode==="savePlaylist"?"Saves this library view as a playlist in Kodi. Back cancels without writing.":kodiMedia.collectionStatus || "Collections are reusable local rules. They do not move files or edit Kodi tags. Back cancels."
     }
 }

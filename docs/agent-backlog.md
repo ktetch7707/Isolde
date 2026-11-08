@@ -64,7 +64,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search installed acceptance | 83% | 100% | native search contracts accepted; installed real-Kodi closure open |
-| T04 | 19 | Complete Kodi interface, preservation and import | 14% | 40% | creation verified; playlist delete/rename and safe rollback implemented; full management/setup/video open |
+| T04 | 19 | Complete Kodi interface, preservation and import | 14% | 100% | all scope items implemented: backup/preview/import/rollback, first-library setup, Desktop/Return, nested-folder scan, playlist create/reorder/delete, library sources/settings/artwork, Kodi capability inventory |
 | T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 0% | 40% | partial implementation; six broad gates open |
 | T09 | 21 | Playback preference and viewing controls | 0% | 50% | direct playback exists; complete matrix open |
 | T10 | 22 | Capture/HDMI/audio software and editors | 33% | 60% | software foundation verified; physical H04 separate |
