@@ -19,7 +19,20 @@ class KodiService final : public QObject {
     Q_PROPERTY(QString folderStatus READ folderStatus NOTIFY changed)
     Q_PROPERTY(QString browsePath READ browsePath NOTIFY changed)
     Q_PROPERTY(QStringList folderChoices READ folderChoices NOTIFY changed)
+    Q_PROPERTY(bool alwaysPlayLocally READ alwaysPlayLocally WRITE setAlwaysPlayLocally NOTIFY alwaysPlayLocallyChanged)
 public:
+    bool alwaysPlayLocally() const { return m_alAlwaysPlayLocally; }
+    Q_INVOKABLE void setAlwaysPlayLocally(bool value);
+    Q_INVOKABLE void resetAlwaysPlayLocally();
+    void setAlwaysPlayLocallyNoNotify(bool value) { m_alAlwaysPlayLocally = value; }
+    void markReady();
+signals:
+    void changed();
+    void probeRequested();
+    void ready();
+    void unavailable(const QString &reason);
+    void alwaysPlayLocallyChanged();
+private:
     explicit KodiService(const QString &profile, QObject *parent = nullptr);
     ~KodiService() override;
     bool enabled() const { return m_enabled; }
@@ -54,6 +67,7 @@ private:
     void commitFrontend(const QString &frontend);
     QString m_profile, m_status = "Not started";
     bool m_enabled = true, m_stopping = false, m_suspended = false, m_ready = false;
+    bool m_alAlwaysPlayLocally = true;
     QProcess m_process;
     QTimer m_probe;
     int m_checks = 0;
