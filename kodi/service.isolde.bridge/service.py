@@ -24,7 +24,8 @@ class Monitor(xbmc.Monitor):
                 except queue.Full: pass
 
 monitor = Monitor()
-playback = Playback(xbmc.executeJSONRPC, xbmc.executebuiltin, os.environ.get("ISOLDE_MANAGED_KODI") == "1")
+playback = Playback(xbmc.executeJSONRPC, xbmc.executebuiltin, os.environ.get("ISOLDE_MANAGED_KODI") == "1",
+                    subtitle_loader=lambda path: xbmc.Player().setSubtitles(path))
 bridge = LocalBridge(xbmcvfs.translatePath("special://profile/isolde"), xbmc.executeJSONRPC, playback,
                      Artwork(xbmc.executeJSONRPC, xbmcvfs.translatePath("special://profile/Thumbnails")),
                      Playlists(xbmcvfs.translatePath("special://profile/"),playback.managed))

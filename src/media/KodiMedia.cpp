@@ -8,6 +8,7 @@
 #include <QSet>
 #include <QRegularExpression>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QUrl>
 #include <algorithm>
 #ifdef Q_OS_LINUX
@@ -761,6 +762,25 @@ void KodiMedia::playbackControl(const QString &action)
     m_busy = true; m_stage = 7;
     request("Isolde.PlaybackControl", {{"action", action}});
 }
+void KodiMedia::loadSubtitle(const QString &path)
+{
+    const QFileInfo subtitle(path);
+    if (!m_playbackActive || !subtitle.isFile() ||
+        subtitle.suffix().compare(QStringLiteral("srt"), Qt::CaseInsensitive) != 0 ||
+        subtitle.size() > 8 * 1024 * 1024) {
+        m_playbackStatus = QStringLiteral("Load a completed local SRT while an Isolde-managed video is playing.");
+        emit changed();
+        return;
+    }
+    if (m_busy) {
+        m_playbackStatus = QStringLiteral("Kodi is busy. Wait for the current request and retry loading the subtitle.");
+        emit changed();
+        return;
+    }
+    m_busy = true;
+    m_stage = 13;
+    request(QStringLiteral("Isolde.LoadSubtitle"), {{QStringLiteral("path"), subtitle.absoluteFilePath()}});
+}
 void KodiMedia::request(const QString &method, const QJsonObject &params)
 {
     if (m_retired) { fail("This profile is no longer active."); return; }
@@ -787,6 +807,11 @@ void KodiMedia::consume()
         fail(m_mediaKind=="channels"?"TV guide unavailable. Configure a PVR TV source in Kodi, then refresh.":"Kodi returned an incompatible response."); return;
     }
     if (response.contains("error")) {
+        if (m_stage == 13) {
+            m_busy = false; m_timeout.stop(); releaseSocket();
+            m_playbackStatus = QStringLiteral("Kodi could not load this local subtitle. Keep your video playing and retry.");
+            emit changed(); return;
+        }
         if(m_stage==9){m_busy=false;m_timeout.stop();releaseSocket();m_playlistStatus="Could not save this Kodi playlist. Previous playlists are unchanged. Check storage and retry.";emit changed();return;}
         if(m_mediaKind=="playlists" || m_viewKind=="playlist"){
             fail("Kodi video playlist unavailable. Refresh to retry; choose a library playlist of the selected kind. Catalog limit: 128 saved playlists.");return;
@@ -834,6 +859,13 @@ void KodiMedia::consume()
             m_playlistStatus="Kodi did not confirm the playlist reorder. Previous playlists are unchanged.";emit changed();return;
         }
         m_playlistStatus="Playlist reordered in Kodi · "+result["name"].toString();emit changed();return;
+    }
+    if(m_stage==13){
+        m_busy=false;releaseSocket();
+        m_playbackStatus=result.value("loaded").toBool()
+            ? QStringLiteral("Subtitle loaded in Kodi.")
+            : QStringLiteral("Kodi did not confirm loading the subtitle.");
+        emit changed();return;
     }
     if (m_stage == 5 || m_stage == 6 || m_stage == 7) {
         const auto state = result.value("state").toString();

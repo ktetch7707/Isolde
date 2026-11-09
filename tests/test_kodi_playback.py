@@ -26,7 +26,7 @@ class PlaybackTests(unittest.TestCase):
         class Player:
             managed = True
             movie = None
-            def __init__(self, *args): pass
+            def __init__(self, *args, **kwargs): pass
             def control(self, action): events.append(action)
         class Bridge:
             def __init__(self, *args): pass
@@ -322,6 +322,29 @@ class PlaybackTests(unittest.TestCase):
         self.assertEqual(result, {"state": "ended", "home": True, "canPause": False, "canSeek": False, "naturalEnd": False})
         self.assertEqual(self.builtins, ["ActivateWindow(fullscreenvideo)", "Minimize"])
         self.assertEqual(self.path.read_bytes(), b"fixture")
+
+    def test_load_subtitle_requires_owned_local_video_and_readable_srt(self):
+        subtitle = Path(self.temp.name) / "movie.en.srt"
+        subtitle.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+        loaded = []
+        self.player.subtitle_loader = loaded.append
+        self.player.movie = 7
+        self.active = True
+        self.kind = "movie"
+        self.assertEqual(self.player.handle("Isolde.LoadSubtitle", {"path": str(subtitle)}), {"loaded": True})
+        self.assertEqual(loaded, [str(subtitle)])
+        self.item = 8
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.LoadSubtitle", {"path": str(subtitle)})
+        self.item = 7
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.LoadSubtitle", {"path": "https://example.test/movie.en.srt"})
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.LoadSubtitle", {"path": str(Path(self.temp.name) / "movie.vtt")})
+        self.kind = "song"
+        self.player.media_type = "song"
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.LoadSubtitle", {"path": str(subtitle)})
 
     def test_episode_resume_restart_and_type_scoped_ownership(self):
         self.kind = "episode"

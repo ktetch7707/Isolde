@@ -8,8 +8,9 @@ from urllib.error import HTTPError, URLError
 
 
 class Playback:
-    def __init__(self, execute, builtin, managed=False, clock=time.monotonic):
+    def __init__(self, execute, builtin, managed=False, clock=time.monotonic, subtitle_loader=None):
         self.execute, self.builtin, self.managed, self.clock = execute, builtin, managed, clock
+        self.subtitle_loader = subtitle_loader
         self.movie = None
         self.media_type = "movie"
         self.state = "idle"
@@ -80,6 +81,20 @@ class Playback:
     def handle(self, method, params):
         if not self.managed:
             raise ValueError("Playback requires Isolde frontend mode")
+        if method == "Isolde.LoadSubtitle":
+            path = params.get("path")
+            if (set(params) != {"path"} or not isinstance(path, str) or
+                not os.path.isabs(path) or not path.lower().endswith(".srt") or
+                not os.path.isfile(path) or os.path.getsize(path) > 8 * 1024 * 1024):
+                raise ValueError("A readable local SRT is required")
+            if self.movie is None or self.media_type not in ("movie", "episode", "musicvideo") or self.stream_url is not None:
+                raise ValueError("An Isolde-managed local video must be playing")
+            if not self.owned_item(self.player_item(1)):
+                raise ValueError("The active Kodi video is not the Isolde-managed media item")
+            if self.subtitle_loader is None:
+                raise ValueError("Kodi subtitle loading is unavailable")
+            self.subtitle_loader(path)
+            return {"loaded": True}
         scheduled = method == "Isolde.PlayScheduled"
         offset = None
         if method == "Isolde.PlayGuideStream":

@@ -56,6 +56,7 @@ public:
     void retire(const QString &reason);
     Q_INVOKABLE void openShowResult(const QString &query, int tvShowId, int pageStart = 0);
     Q_INVOKABLE void playMedia(const QString &kind, int id, bool resume = true);
+    Q_INVOKABLE void loadSubtitle(const QString &path);
     // Guide coordinator only: explicit broadcast offset, never saved resume.
     bool playScheduled(const QString &kind, int id, int offsetSeconds);
     bool playPvr(int id,int clientId,int uniqueId);

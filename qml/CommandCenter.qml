@@ -8,6 +8,7 @@ Item {
     property var movieSearchClient: null
     property var showSearchClient: null
     property var episodeSearchClient: null
+    property var onlineDiscovery: null
     property var mediaCollections: []
     property string pageId: ""
     property var pageSources: []
@@ -24,10 +25,12 @@ Item {
     readonly property bool webSearchEnabled: searchSettings ? searchSettings.webEnabled : false
     property bool open: false
     property bool keyboardOpen: false
+    property bool regionKeyboardOpen: false
     property string query: ""
     property int selectedIndex: 0
     property string focusArea:"query"
     property string lastHeader:"query"
+    readonly property var discoveryRegions:["US","CA","GB","AU","NZ","IN","JP","KR","FR","DE","ES","BR"]
     signal launchApp(string appId)
     signal openSettings(int section)
     signal installPackage(string packageId)
@@ -36,6 +39,7 @@ Item {
     signal pageSourceRequested(string pageId, string sourceId, string kind, string view, string value)
     signal closeRequested()
     signal shellActionRequested(var action)
+    signal linguistRequested()
 
     readonly property var settingsTargets: [
         { kind: "setting", id: "settings-network", name: "Network", description: "Wi-Fi, saved networks, connection details", action: "Open Settings", section: 0, accent: shell.accent, symbol: "N" },
@@ -75,13 +79,19 @@ Item {
 
     function updateMediaSearch() {
         const text = query.trim()
-        if (!open || text.length < 2) { invalidateMediaSearch(); return }
+        if (!open || text.length < 2) {
+            invalidateMediaSearch()
+            if (onlineDiscovery) onlineDiscovery.cancel()
+            return
+        }
         if (!webSearchEnabled) {
             // T28.4: Network denial when web search is switched OFF —
             // cancel any provider-mediated search and remain on local results only.
             invalidateMediaSearch()
+            if (onlineDiscovery) onlineDiscovery.cancel()
             return
         }
+        if (onlineDiscovery) onlineDiscovery.search(text)
         if (!movieSearchClient || !showSearchClient || !episodeSearchClient) return
         movieSearchClient.openView("movies", "search", text)
         showSearchClient.openView("shows", "search", text)
@@ -182,6 +192,23 @@ Item {
                         action: "Open on page", accent: shell.accent, symbol: "▤" })
             }
         }
+        if (webSearchEnabled && onlineDiscovery) {
+            const onlineItems = onlineDiscovery.results || []
+            for (let o = 0; o < onlineItems.length; ++o) {
+                const title = onlineItems[o]
+                result.push({ kind: "onlineTitle", id: title.identity, providerId: title.providerId,
+                    mediaType: title.mediaType, name: title.name + (title.year ? " (" + title.year + ")" : ""),
+                    description: "TMDB metadata · " + title.region + " · checked " + title.checkedAt + " · not endorsed by TMDB · availability is not entitlement",
+                    action: "Check listings", accent: shell.accent, symbol: title.symbol })
+            }
+            const providers = onlineDiscovery.availability || []
+            for (let p = 0; p < providers.length; ++p) {
+                const listing = providers[p]
+                result.push({ kind: "onlineProvider", id: "provider-" + p, name: listing.name,
+                    description: "TMDB listing · " + listing.tier + " · " + listing.region + " · verify with service · no entitlement claim",
+                    action: "Provider listing", accent: shell.accent, symbol: "↗" })
+            }
+        }
         return result
     }
 
@@ -197,17 +224,27 @@ Item {
             mediaSearchTimer.restart()
         } else {
             keyboardOpen = false
+            regionKeyboardOpen = false
             mediaSearchTimer.stop()
             invalidateMediaSearch()
+            if (onlineDiscovery) onlineDiscovery.cancel()
         }
     }
     onQueryChanged: if (open) mediaSearchTimer.restart()
+    onWebSearchEnabledChanged: {
+        if (!webSearchEnabled && onlineDiscovery) onlineDiscovery.cancel()
+        else if (open) mediaSearchTimer.restart()
+    }
 
     onResultsChanged: selectedIndex = Math.max(0, Math.min(selectedIndex, results.length - 1))
 
     function handleCommand(command) {
         if (!open)
             return
+        if (regionKeyboardOpen) {
+            regionKeyboard.handleCommand(command)
+            return
+        }
         if (keyboardOpen) {
             searchKeyboard.handleCommand(command)
             return
@@ -217,11 +254,23 @@ Item {
             return
         }
         if(focusArea!=="results"){
-            if(command===inputManager.navigateRight && searchSettings){focusArea="web";lastHeader="web"}
+            if(focusArea==="region" && (command===inputManager.navigateRight || command===inputManager.navigateLeft) && searchSettings){
+                const current=discoveryRegions.indexOf(searchSettings.discoveryRegion)
+                const offset=command===inputManager.navigateRight?1:-1
+                const next=Math.max(0,Math.min(discoveryRegions.length-1,(current<0?0:current)+offset))
+                searchSettings.discoveryRegion=discoveryRegions[next];lastHeader="region";updateMediaSearch()
+            }
+            else if(command===inputManager.navigateRight && focusArea==="query"){focusArea="linguist";lastHeader="linguist"}
+            else if(command===inputManager.navigateRight && focusArea==="linguist" && searchSettings){focusArea="region";lastHeader="region"}
+            else if(command===inputManager.navigateRight && focusArea==="region" && searchSettings){focusArea="web";lastHeader="web"}
+            else if(command===inputManager.navigateLeft && focusArea==="web"){focusArea="region";lastHeader="region"}
+            else if(command===inputManager.navigateLeft && focusArea==="region"){focusArea="linguist";lastHeader="linguist"}
             else if(command===inputManager.navigateLeft){focusArea="query";lastHeader="query"}
             else if(command===inputManager.navigateDown)focusArea="results"
             else if(command===inputManager.confirm){
                 if(focusArea==="web"){if(searchSettings)searchSettings.toggleWebEnabled()}
+                else if(focusArea==="linguist"){linguistRequested()}
+                else if(focusArea==="region" && searchSettings){regionKeyboard.value=searchSettings.discoveryRegion;regionKeyboard.mode="letters";regionKeyboard.selectedIndex=0;regionKeyboardOpen=true}
                 else {keyboardOpen=true;searchKeyboard.value=query;searchKeyboard.selectedIndex=0}
             }
             return
@@ -266,6 +315,8 @@ Item {
             const client = item.mediaType === "movie" ? movieSearchClient : item.mediaType === "show" ? showSearchClient : episodeSearchClient
             if (item.action === "Next") client.nextPage()
             else client.previousPage()
+        } else if (item.kind === "onlineTitle" && onlineDiscovery) {
+            onlineDiscovery.loadAvailability(item.mediaType, item.providerId)
         }
     }
 
@@ -298,6 +349,14 @@ Item {
                 width: parent.width
                 height:56
                 Text {font.family:shell.fontFamily;anchors.left:parent.left;anchors.verticalCenter:parent.verticalCenter; text: "Search"; color: root.ink; font.pixelSize: 34*(root.appearance.typographyScale || 1); font.weight: Font.DemiBold}
+                Button {
+                    id:linguistButton;objectName:"searchLinguistOpen"
+                    anchors.right:regionChoice.left;anchors.rightMargin:10;anchors.verticalCenter:parent.verticalCenter
+                    text:"Linguist";Accessible.name:"Open Isolde Linguist subtitle queue"
+                    background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="linguist"?2:0;border.color:root.searchFocusInk}
+                    contentItem:Text {font.family:shell.fontFamily;text:linguistButton.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter}
+                    onClicked:{root.focusArea="linguist";root.lastHeader="linguist";root.linguistRequested()}
+                }
                 Switch {
                     id:webSwitch;objectName:"searchWebToggle";anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
                     visible:!!root.searchSettings;checked:root.webSearchEnabled
@@ -309,6 +368,19 @@ Item {
                         Rectangle {width:24;height:24;radius:12;x:webSwitch.checked?parent.width-width-3:3;y:3;color:root.surface}
                     }
                     background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="web"?2:0;border.color:root.searchFocusInk}
+                }
+                ComboBox {
+                    id:regionChoice;objectName:"searchDiscoveryRegion"
+                    anchors.right:webSwitch.left;anchors.rightMargin:8;anchors.verticalCenter:parent.verticalCenter
+                    width:112;height:42;editable:true
+                    model:root.discoveryRegions
+                    currentIndex:find(root.searchSettings?root.searchSettings.discoveryRegion:"US")
+                    onAccepted:if(root.searchSettings){root.searchSettings.discoveryRegion=editText.toUpperCase();root.updateMediaSearch()}
+                    onActivated:index=>{if(root.searchSettings){root.searchSettings.discoveryRegion=currentText;root.updateMediaSearch()}}
+                    Accessible.name:"Discovery region, ISO 3166-1 alpha-2"
+                    background:Rectangle {color:"transparent";radius:8;border.width:root.focusArea==="region"?2:0;border.color:root.searchFocusInk}
+                    Component.onCompleted:if(root.searchSettings)editText=root.searchSettings.discoveryRegion
+                    Connections {target:root.searchSettings;function onChanged(){if(root.searchSettings && regionChoice.editText!==root.searchSettings.discoveryRegion)regionChoice.editText=root.searchSettings.discoveryRegion}}
                 }
             }
 
@@ -339,7 +411,7 @@ Item {
                 font.weight: Font.DemiBold
                 font.letterSpacing: 3
             }
-            Text {font.family:shell.fontFamily;id:searchStatus;objectName:"searchWebStatus";width:parent.width;wrapMode:Text.WordWrap;text:root.searchSettings && root.searchSettings.errorString?root.searchSettings.errorString:root.webSearchEnabled?"No web provider configured — local results only":root.query.trim().length===1?"Type at least 2 characters to search your Kodi library":"Local results only";color:root.muted;font.pixelSize:14}
+            Text {font.family:shell.fontFamily;id:searchStatus;objectName:"searchWebStatus";width:parent.width;wrapMode:Text.WordWrap;text:root.searchSettings && root.searchSettings.errorString?root.searchSettings.errorString:root.webSearchEnabled && root.onlineDiscovery?root.onlineDiscovery.status:root.webSearchEnabled?"No web provider configured — local results only":root.query.trim().length===1?"Type at least 2 characters to search your Kodi library":"Local results only";color:root.muted;font.pixelSize:14}
 
             Flickable {
                 id: resultScroller
@@ -438,5 +510,25 @@ Item {
             root.focusArea="results"
         }
         onCanceled: root.keyboardOpen = false
+    }
+    OnScreenKeyboard {
+        id: regionKeyboard
+        objectName: "searchDiscoveryRegionKeyboard"
+        appearance: root.appearance
+        visible: root.regionKeyboardOpen
+        z: 61
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: 34
+        height: Math.min(400, parent.height - 68)
+        onAccepted: text => {
+            if (root.searchSettings) root.searchSettings.discoveryRegion = text.toUpperCase()
+            root.regionKeyboardOpen = false
+            root.focusArea = "region"
+            root.lastHeader = "region"
+            root.updateMediaSearch()
+        }
+        onCanceled: root.regionKeyboardOpen = false
     }
 }

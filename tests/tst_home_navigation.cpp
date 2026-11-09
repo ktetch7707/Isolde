@@ -519,10 +519,14 @@ void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure()
     SearchSettings a(nullptr,path,one),b(nullptr,path,two),household(nullptr,path,"default");
     QVERIFY(!a.webEnabled());QVERIFY(!b.webEnabled());QVERIFY(!household.webEnabled());
     a.toggleWebEnabled();QVERIFY(a.webEnabled());QVERIFY(a.errorString().isEmpty());
+    a.setDiscoveryRegion("ca");QCOMPARE(a.discoveryRegion(),QString("CA"));QVERIFY(a.errorString().isEmpty());
+    a.setDiscoveryRegion("USA");QCOMPARE(a.discoveryRegion(),QString("CA"));QVERIFY(!a.errorString().isEmpty());
     SearchSettings restored(nullptr,path,one);QVERIFY(restored.webEnabled());QVERIFY(!b.webEnabled());
+    QCOMPARE(restored.discoveryRegion(),QString("CA"));
     b.toggleWebEnabled();a.toggleWebEnabled();QVERIFY(b.webEnabled());QVERIFY(!a.webEnabled());
     SearchSettings restoredA(nullptr,path,one),restoredB(nullptr,path,two);
     QVERIFY(!restoredA.webEnabled());QVERIFY(restoredB.webEnabled());QVERIFY(!household.webEnabled());
+    QCOMPARE(restoredA.discoveryRegion(),QString("CA"));QCOMPARE(restoredB.discoveryRegion(),QString("US"));
     QFile blocked(dir.filePath("blocked"));QVERIFY(blocked.open(QIODevice::WriteOnly));blocked.write("retain");blocked.close();
     SearchSettings failed(nullptr,dir.filePath("blocked/preferences.ini"),one);
     failed.toggleWebEnabled();QVERIFY(!failed.webEnabled());QVERIFY(!failed.errorString().isEmpty());
@@ -545,6 +549,10 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
     const auto original=list(root->property("results"));QVERIFY(!original.isEmpty());
     for(const auto &entry:original)QVERIFY(entry.toMap()["kind"]!="searchToggle");
     QCOMPARE(root->property("focusArea").toString(),QString("query"));
+    command(InputManager::NavigateRight);QCOMPARE(root->property("focusArea").toString(),QString("linguist"));
+    command(InputManager::NavigateRight);QCOMPARE(root->property("focusArea").toString(),QString("region"));
+    command(InputManager::Confirm);QVERIFY(root->property("regionKeyboardOpen").toBool());
+    command(InputManager::Back);QVERIFY(!root->property("regionKeyboardOpen").toBool());
     command(InputManager::NavigateRight);QCOMPARE(root->property("focusArea").toString(),QString("web"));QVERIFY(!preferences.webEnabled());
     command(InputManager::Confirm);QVERIFY(preferences.webEnabled());QTRY_VERIFY(toggle->property("checked").toBool());
     QCOMPARE(list(root->property("results")),original);QCOMPARE(root->property("selectedIndex").toInt(),0);
@@ -555,7 +563,7 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
     command(InputManager::NavigateLeft);command(InputManager::Confirm);QVERIFY(root->property("keyboardOpen").toBool());
     command(InputManager::Back);QVERIFY(!root->property("keyboardOpen").toBool());QVERIFY(root->property("open").toBool());
     root->setProperty("query","zzzz-no-matches");QTRY_COMPARE(list(root->property("results")).size(),0);
-    command(InputManager::NavigateRight);command(InputManager::NavigateDown);command(InputManager::NavigateUp);
+    command(InputManager::NavigateRight);command(InputManager::NavigateRight);command(InputManager::NavigateRight);command(InputManager::NavigateDown);command(InputManager::NavigateUp);
     QCOMPARE(root->property("focusArea").toString(),QString("web"));
     command(InputManager::Confirm);QVERIFY(!preferences.webEnabled());QCOMPARE(root->property("query").toString(),QString("zzzz-no-matches"));
     auto *toggleItem=qobject_cast<QQuickItem *>(toggle);QVERIFY(toggleItem);QSignalSpy preferenceChanges(&preferences,&SearchSettings::changed);

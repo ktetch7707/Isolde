@@ -25,6 +25,8 @@
 #include "media/KodiArtwork.h"
 #include "media/KodiService.h"
 #include "media/KodiImporter.h"
+#include "media/OnlineDiscovery.h"
+#include "media/SubtitleService.h"
 #include "media/GuideController.h"
 #include "sessions/SessionManager.h"
 #include "sources/SourceManager.h"
@@ -61,6 +63,9 @@ struct ProfileRuntime {
     VpnSettings vpnSettings{qApp->property("isoldeProfile").toString()};
     AppVpn appVpn;
     SearchSettings searchSettings;
+    OnlineDiscovery onlineDiscovery{&searchSettings, nullptr, QUrl(QStringLiteral("https://api.themoviedb.org/3")),
+                                    qEnvironmentVariable("ISOLDE_TMDB_READ_TOKEN")};
+    SubtitleService subtitleService;
     DesktopMode desktopMode;
     AppDefinition pendingNativeDefinition;
     bool pendingNativeLaunch=false;
@@ -91,6 +96,8 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
     engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("discoveryProvider"), &onlineDiscovery);
+    engine.rootContext()->setContextProperty(QStringLiteral("subtitleService"), &subtitleService);
     engine.rootContext()->setContextProperty(QStringLiteral("desktopMode"), &desktopMode);
     engine.rootContext()->setContextProperty(QStringLiteral("captureController"), &captureController);
     engine.rootContext()->setContextProperty(QStringLiteral("kodiMedia"), &kodi);
