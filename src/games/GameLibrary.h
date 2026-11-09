@@ -75,6 +75,8 @@ public:
     QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }
     Q_INVOKABLE bool beginPortableInstall(const QString &source, const QString &runtimeId,
                                           const QString &opticalObservationId = {}, const QString &opticalDevice = {});
+    Q_INVOKABLE bool beginPortableDirectoryInstall(const QString &source, const QString &entrypoint,
+                                                   const QString &runtimeId);
     Q_INVOKABLE bool confirmPortableInstall();
     Q_INVOKABLE void cancelPortableInstall();
     int importCount() const { return m_preview.size(); }
@@ -181,8 +183,10 @@ private:
     QVariantMap m_portableInstallPreview;
     QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination, m_portableGameId;
     QString m_portableOpticalObservationId, m_portableOpticalDevice;
+    QString m_portableDirectoryEntrypoint;
     QStringList m_lastOpticalObservationIds;
     QString m_portablePhase;
+    bool m_portableDirectoryCopy=false;
     bool m_portableCanceled=false;
     std::function<bool()> m_sessionActiveGuard;
 };

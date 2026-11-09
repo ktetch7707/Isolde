@@ -73,6 +73,34 @@ test("standalone portable install requires remote review and confirmation", () =
     assert.equal(scope.mode, "installerInstalling");
 });
 
+test("local game directory copy is an explicit remote review workflow", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        readOnly: false, mode: "catalogTools", choice: 9, message: "",
+        opticalObservationId: "", opticalDevice: "", registeringOpticalGame: false,
+        runtimes: [{id: "native", name: "Native", file: true}],
+        keyboard: {selectedIndex: -1, value: ""},
+        library: {
+            beginPortableDirectoryInstall(...args) { calls.push(args); return true; },
+            portableInstallStatus: "Preflight started",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    method("GamesLibraryWidget.qml", "submitPortableDirectoryField", scope);
+    scope.activateChoice();
+    assert.equal(scope.installingDirectory, true);
+    assert.equal(scope.mode, "installerRuntime");
+    scope.activateChoice();
+    assert.equal(scope.field, 20);
+    assert.equal(scope.mode, "keyboard");
+    scope.submitPortableDirectoryField("/media/approved/Sample Game");
+    assert.equal(scope.field, 21);
+    assert.deepEqual(calls, []);
+    scope.submitPortableDirectoryField("bin/game");
+    assert.deepEqual(calls, [["/media/approved/Sample Game", "bin/game", "native"]]);
+    assert.equal(scope.mode, "installerPreflight");
+});
+
 test("optical remote actions retain the selected media identity and require eject confirmation", () => {
     const calls = [];
     const disc = {observationId: "selected", device: "/dev/sr0", state: "mounted",

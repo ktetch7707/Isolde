@@ -17,6 +17,9 @@ import zipfile
 MAX_ENTRIES = 10000
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
 MAX_ARCHIVE = 512 * 1024 * 1024
+MAX_TREE_DEPTH = 32
+MAX_TREE_PATH_BYTES = 4 * 1024 * 1024
+MIN_FREE_RESERVE = 64 * 1024 * 1024
 MANIFEST = "isolde-game.json"
 
 
@@ -278,6 +281,307 @@ def inspect(source, title_hint=None):
                     "platform": manifest["platform"].strip(), "entrypoint": manifest["entrypoint"],
                     "entrySize": entry_info["size"], "archiveEntries": len(members), "unpackedBytes": total,
                     "archiveSha256": digest.hexdigest(),"archiveFormat":archive_format}
+
+
+def _directory_identity(value):
+    return (value.st_dev, value.st_ino, value.st_size, value.st_mode,
+            value.st_mtime_ns, value.st_ctime_ns, value.st_nlink)
+
+
+def _safe_tree_path(relative):
+    path = PurePosixPath(relative)
+    if (not relative or path.is_absolute() or "\\" in relative or "\x00" in relative
+            or len(relative.encode("utf-8", "strict")) > 4096
+            or any(part in ("", ".", "..") for part in path.parts)
+            or path.as_posix() != relative or path.parts[0] == ".isolde-install.json"):
+        raise ValueError("The game directory contains an unsafe path.")
+    return path
+
+
+def _read_directory_file(parent_fd, name, relative, total, expected_stat):
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    descriptor = os.open(name, flags, dir_fd=parent_fd)
+    with os.fdopen(descriptor, "rb") as source:
+        before = os.fstat(source.fileno())
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or _directory_identity(expected_stat) != _directory_identity(before)):
+            raise ValueError("Game directory files must be regular files without hard links and must not change during inspection.")
+        if before.st_size < 0 or before.st_size > MAX_ARCHIVE or total + before.st_size > MAX_EXPANDED:
+            raise ValueError("Game directory exceeds the 2 GiB total or 512 MiB per-file limit.")
+        digest = hashlib.sha256()
+        remaining = before.st_size
+        while remaining:
+            chunk = source.read(min(1024 * 1024, remaining))
+            if not chunk:
+                raise ValueError("A game directory file changed or became unreadable.")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        if source.read(1):
+            raise ValueError("A game directory file grew during inspection.")
+        after = os.fstat(source.fileno())
+        if _directory_identity(before) != _directory_identity(after):
+            raise ValueError("A game directory file changed during inspection.")
+        return {"path": relative, "size": before.st_size, "mode": before.st_mode & 0o111,
+                "sha256": digest.hexdigest()}, total + before.st_size
+
+
+def _inspect_directory_tree(source):
+    root = Path(source)
+    if root.is_symlink() or not root.is_dir() or root.resolve(strict=True) != root.absolute():
+        raise ValueError("Choose a real game directory inside an approved media folder.")
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    root_fd = os.open(root, flags)
+    records = []
+    files = []
+    directories = []
+    total = 0
+    path_bytes = 0
+
+    def walk(directory_fd, prefix, depth):
+        nonlocal total, path_bytes
+        if depth > MAX_TREE_DEPTH:
+            raise ValueError("Game directory exceeds the 32-level path limit.")
+        names = []
+        try:
+            with os.scandir(directory_fd) as entries:
+                for entry in entries:
+                    if len(records) + len(names) >= MAX_ENTRIES:
+                        raise ValueError("Game directory exceeds the 10,000-entry limit.")
+                    names.append(entry.name)
+            names.sort(key=lambda item: item.encode("utf-8", "strict"))
+        except UnicodeEncodeError:
+            raise ValueError("Game directory contains a filename that is not valid UTF-8.") from None
+        for name in names:
+            if (not name or name in (".", "..") or any(ord(char) < 32 for char in name)
+                    or any(0xD800 <= ord(char) <= 0xDFFF for char in name)):
+                raise ValueError("Game directory contains an unsupported filename.")
+            relative = f"{prefix}/{name}" if prefix else name
+            parts = _safe_tree_path(relative)
+            path_bytes += len(relative.encode("utf-8", "strict"))
+            if path_bytes > MAX_TREE_PATH_BYTES:
+                raise ValueError("Game directory path inventory exceeds the 4 MiB limit.")
+            if len(records) >= MAX_ENTRIES:
+                raise ValueError("Game directory exceeds the 10,000-entry limit.")
+            entry_stat = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            if stat.S_ISLNK(entry_stat.st_mode):
+                raise ValueError("Game directories cannot contain symbolic links.")
+            if stat.S_ISDIR(entry_stat.st_mode):
+                child_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+                child_fd = os.open(name, child_flags, dir_fd=directory_fd)
+                try:
+                    opened = os.fstat(child_fd)
+                    if _directory_identity(entry_stat) != _directory_identity(opened):
+                        raise ValueError("A game directory changed during inspection.")
+                    record = {"type": "directory", "path": relative, "mode": opened.st_mode & 0o111}
+                    records.append(record)
+                    directories.append(relative)
+                    walk(child_fd, relative, depth + 1)
+                    after = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+                    if _directory_identity(opened) != _directory_identity(after):
+                        raise ValueError("A game directory changed during inspection.")
+                finally:
+                    os.close(child_fd)
+            elif stat.S_ISREG(entry_stat.st_mode):
+                record, total = _read_directory_file(directory_fd, name, relative, total, entry_stat)
+                record["type"] = "file"
+                records.append(record)
+                files.append(record)
+            else:
+                raise ValueError("Game directories cannot contain devices, sockets or other special files.")
+            if len(records) > MAX_ENTRIES:
+                raise ValueError("Game directory exceeds the 10,000-entry limit.")
+
+    try:
+        walk(root_fd, "", 1)
+    finally:
+        os.close(root_fd)
+    digest = hashlib.sha256()
+    for record in records:
+        encoded = json.dumps(record, ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":")).encode("utf-8", "strict")
+        digest.update(struct.pack(">I", len(encoded)))
+        digest.update(encoded)
+    return {"files": files, "directories": directories, "total": total,
+            "archiveSha256": digest.hexdigest(), "archiveEntries": len(records)}
+
+
+def inspect_directory(source, entrypoint):
+    root = Path(source)
+    relative = _safe_tree_path(entrypoint)
+    inventory = _inspect_directory_tree(root)
+    selected = next((item for item in inventory["files"] if item["path"] == relative.as_posix()), None)
+    if not selected or not selected["mode"]:
+        raise ValueError("Choose an executable file inside the selected game directory.")
+    root_fd = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+    current_fd = root_fd
+    try:
+        for part in relative.parts[:-1]:
+            next_fd = os.open(part, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                              dir_fd=current_fd)
+            if current_fd != root_fd:
+                os.close(current_fd)
+            current_fd = next_fd
+        descriptor = os.open(relative.parts[-1], os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                             | getattr(os, "O_NONBLOCK", 0),
+                             dir_fd=current_fd)
+        with os.fdopen(descriptor, "rb") as executable:
+            before = os.fstat(executable.fileno())
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_size != selected["size"]):
+                raise ValueError("The selected game executable changed during inspection.")
+            validate_native_executable(executable, before.st_size)
+            executable.seek(0)
+            digest = hashlib.sha256()
+            for chunk in iter(lambda: executable.read(1024 * 1024), b""):
+                digest.update(chunk)
+            if digest.hexdigest() != selected["sha256"]:
+                raise ValueError("The selected game executable changed after preflight.")
+            after = os.fstat(executable.fileno())
+            if _directory_identity(before) != _directory_identity(after):
+                raise ValueError("The selected game executable changed during inspection.")
+    finally:
+        if current_fd != root_fd:
+            os.close(current_fd)
+        os.close(root_fd)
+    title = root.name
+    if (not title or len(title) > 256 or any(ord(char) < 32 or 0xD800 <= ord(char) <= 0xDFFF for char in title)):
+        raise ValueError("The selected game directory name cannot be used as a title.")
+    return {"schemaVersion": 1, "title": title, "platform": "PC",
+            "entrypoint": relative.as_posix(), "entrySize": selected["size"],
+            "archiveEntries": inventory["archiveEntries"], "unpackedBytes": inventory["total"],
+            "archiveSha256": inventory["archiveSha256"], "archiveFormat": "directory-copy"}
+
+
+def install_directory(source, destination, entrypoint, expected_sha256):
+    source = Path(source)
+    destination = Path(destination)
+    stage = destination.with_name(destination.name + ".staging")
+    if (destination.exists() or destination.is_symlink() or stage.exists() or stage.is_symlink()
+            or destination.with_name(destination.name + ".staging-source").exists()):
+        raise ValueError("Install destination already exists. Existing files will not be overwritten.")
+    if source.is_symlink() or not source.is_dir() or source.resolve(strict=True) != source.absolute():
+        raise ValueError("Choose a real game directory inside an approved media folder.")
+    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if destination.parent.is_symlink() or destination.parent.resolve() != destination.parent.absolute():
+        raise ValueError("Install destination parent must not be a symlink.")
+    metadata = inspect_directory(source, entrypoint)
+    if metadata["archiveSha256"] != expected_sha256:
+        raise ValueError("The game directory changed after preflight. Review it again before installing.")
+    free = shutil.disk_usage(destination.parent).free
+    if free < metadata["unpackedBytes"] + MIN_FREE_RESERVE:
+        raise ValueError("Insufficient free space for this game directory and the 64 MiB safety reserve.")
+    stage.mkdir(mode=0o700)
+    def interrupted(signum, frame):
+        raise InterruptedError("Installation canceled")
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+    try:
+        root_fd = os.open(source, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            inventory = _inspect_directory_tree(source)
+            if inventory["archiveSha256"] != expected_sha256:
+                raise ValueError("The game directory changed after preflight. Review it again before installing.")
+            for name in sorted(inventory["directories"], key=lambda value: (value.count("/"), value)):
+                target = stage.joinpath(*PurePosixPath(name).parts)
+                target.mkdir(mode=0o700, parents=True, exist_ok=True)
+            written = 0
+            for item in inventory["files"]:
+                remaining = item["size"]
+                if shutil.disk_usage(destination.parent).free < remaining + MIN_FREE_RESERVE:
+                    raise ValueError("Free space fell below the game-copy safety reserve; staged files were discarded.")
+                parts = PurePosixPath(item["path"]).parts
+                source_fd = os.dup(root_fd)
+                try:
+                    for part in parts[:-1]:
+                        child_fd = os.open(part, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                                           | getattr(os, "O_NOFOLLOW", 0), dir_fd=source_fd)
+                        os.close(source_fd)
+                        source_fd = child_fd
+                    input_fd = os.open(parts[-1], os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                                       | getattr(os, "O_NONBLOCK", 0), dir_fd=source_fd)
+                finally:
+                    os.close(source_fd)
+                target = stage.joinpath(*parts)
+                output_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                                    | getattr(os, "O_NOFOLLOW", 0), 0o700 if item["mode"] else 0o600)
+                digest = hashlib.sha256()
+                with os.fdopen(input_fd, "rb") as input_file, os.fdopen(output_fd, "wb") as output_file:
+                    before = os.fstat(input_file.fileno())
+                    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size != item["size"]:
+                        raise ValueError("A game directory file changed during copy.")
+                    while remaining:
+                        chunk = input_file.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise ValueError("A game directory file changed or became unreadable during copy.")
+                        digest.update(chunk)
+                        output_file.write(chunk)
+                        remaining -= len(chunk)
+                        written += len(chunk)
+                        if written > MAX_EXPANDED:
+                            raise ValueError("Game directory expanded beyond the 2 GiB copy limit.")
+                    if input_file.read(1) or digest.hexdigest() != item["sha256"]:
+                        raise ValueError("A game directory file changed after preflight; staged files were discarded.")
+                    after = os.fstat(input_file.fileno())
+                    if _directory_identity(before) != _directory_identity(after):
+                        raise ValueError("A game directory file changed during copy.")
+                    output_file.flush()
+                    os.fsync(output_file.fileno())
+            after_copy = inspect_directory(source, entrypoint)
+            if after_copy["archiveSha256"] != expected_sha256:
+                raise ValueError("The game directory changed during copy; staged files were discarded.")
+            entry = stage.joinpath(*PurePosixPath(entrypoint).parts)
+            if (entry.is_symlink() or not entry.is_file() or entry.stat().st_size != metadata["entrySize"]):
+                raise ValueError("Installed game entry point failed destination verification.")
+            entry.chmod(0o700)
+            with entry.open("rb") as installed_entry:
+                validate_native_executable(installed_entry, metadata["entrySize"])
+            owned_files = []
+            owned_directories = []
+            for path in stage.rglob("*"):
+                relative = path.relative_to(stage).as_posix()
+                if path.is_symlink():
+                    raise ValueError("Install staging unexpectedly contains a symbolic link.")
+                if path.is_dir():
+                    owned_directories.append(relative)
+                elif path.is_file():
+                    file_digest = hashlib.sha256()
+                    with path.open("rb") as installed_file:
+                        for chunk in iter(lambda: installed_file.read(1024 * 1024), b""):
+                            file_digest.update(chunk)
+                    owned_files.append({"path": relative, "size": path.stat().st_size,
+                                        "sha256": file_digest.hexdigest()})
+                else:
+                    raise ValueError("Install staging contains an unsupported file type.")
+            marker = stage / ".isolde-install.json"
+            ownership = {**metadata, "ownershipSchemaVersion": 1,
+                         "ownedFiles": owned_files, "ownedDirectories": owned_directories}
+            marker_bytes = json.dumps(ownership, ensure_ascii=False).encode("utf-8")
+            if len(marker_bytes) > 16 * 1024 * 1024:
+                raise ValueError("The managed install ownership record exceeds its 16 MiB limit.")
+            with marker.open("wb") as marker_file:
+                marker_file.write(marker_bytes)
+                marker_file.flush()
+                os.fsync(marker_file.fileno())
+            marker.chmod(0o600)
+            for directory in sorted((path for path in stage.rglob("*") if path.is_dir()),
+                                    key=lambda path: len(path.parts), reverse=True) + [stage]:
+                descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+            rename_without_replace(stage, destination)
+            descriptor = os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        finally:
+            os.close(root_fd)
+    except Exception:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+    print(json.dumps(metadata, ensure_ascii=False))
 
 
 def install(source, destination, expected_sha256=None):
@@ -659,8 +963,10 @@ def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--inspect", action="store_true")
+    group.add_argument("--inspect-directory", action="store_true")
     group.add_argument("--inspect-windows", action="store_true")
     group.add_argument("--install", action="store_true")
+    group.add_argument("--install-directory", action="store_true")
     group.add_argument("--uninstall", action="store_true")
     group.add_argument("--prepare-uninstall", action="store_true")
     group.add_argument("--finalize-uninstall", action="store_true")
@@ -671,11 +977,19 @@ def main():
     parser.add_argument("--destination")
     parser.add_argument("--root")
     parser.add_argument("--expected-sha256")
+    parser.add_argument("--entrypoint")
     args = parser.parse_args()
-    if args.inspect or args.inspect_windows:
+    if args.inspect or args.inspect_windows or args.inspect_directory:
         if not args.source:
             parser.error("--inspect requires --source")
-        result = inspect_windows(args.source) if args.inspect_windows else inspect(args.source)
+        if args.inspect_windows:
+            result = inspect_windows(args.source)
+        elif args.inspect_directory:
+            if not args.entrypoint:
+                parser.error("--inspect-directory requires --entrypoint")
+            result = inspect_directory(args.source, args.entrypoint)
+        else:
+            result = inspect(args.source)
         print(json.dumps(result, ensure_ascii=False))
     elif args.inspect_installed:
         if not args.root:
@@ -695,7 +1009,12 @@ def main():
     else:
         if not args.destination or not args.source:
             parser.error("--install requires --source and --destination")
-        install(args.source, args.destination,args.expected_sha256)
+        if args.install_directory:
+            if not args.entrypoint or not args.expected_sha256:
+                parser.error("--install-directory requires --entrypoint and --expected-sha256")
+            install_directory(args.source, args.destination, args.entrypoint, args.expected_sha256)
+        else:
+            install(args.source, args.destination,args.expected_sha256)
 
 
 if __name__ == "__main__":
