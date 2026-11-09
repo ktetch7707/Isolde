@@ -66,6 +66,7 @@ private slots:
     void remoteEditionChooserDispatchesOwnedVersion();
     void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
     void platformShelvesFilterCanonicalGamesRemotely();
+    void directFranchiseAndTagFiltersArePagedAndRemoteOperable();
     void fiveThousandGameCatalogStaysPagedAndSearchable();
     void catalogCapDisablesNextFromLastFullPage();
     void organizationAndManualSmartCollectionsStayProfileLocal();
@@ -647,6 +648,62 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
     const auto continued=continueWidget->property("items");
     const auto continueItems=continued.metaType()==QMetaType::fromType<QJSValue>()?continued.value<QJSValue>().toVariant().toList():continued.toList();
     QCOMPARE(continueItems.size(),1);QCOMPARE(continueItems.first().toMap().value("id").toString(),psp);
+}
+void GamesUiTests::directFranchiseAndTagFiltersArePagedAndRemoteOperable(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    const auto path=dir.filePath("profile/games.sqlite");
+    GameLibrary library(path,&apps);QVERIFY(library.ready());
+    const auto game=library.addGame({{"schemaVersion",1},{"title","First"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
+    QVERIFY(!game.isEmpty());QVERIFY(library.setOrganization(game,"Saga One",{"1","Puzzle"}));
+    const auto connection="direct-filter-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(path);QVERIFY(db.open());
+    QSqlQuery q(db);QVERIFY(q.exec("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<50) "
+        "INSERT INTO games(id,title,platform,runtime,root,target,added) "
+        "SELECT printf('seed-%02d',x),printf('Title %02d',x),'PC',printf('runtime-%02d',x),'','',x FROM n"));
+    QVERIFY(q.exec("INSERT INTO game_metadata(game_id,franchise,tags) SELECT id,'Saga One','[\"1\",\"Puzzle Plus\"]' FROM games WHERE id LIKE 'seed-%'"));
+    q=QSqlQuery();db.close();db=QSqlDatabase();QSqlDatabase::removeDatabase(connection);
+    QCOMPARE(library.page("franchise","saga",0).size(),50);
+    QCOMPARE(library.page("franchise","saga",50).size(),2);
+    QCOMPARE(library.page("tag","1",0).size(),50);
+    QCOMPARE(library.page("tag","1",50).size(),2);
+    QCOMPARE(library.page("tag","puzzle").size(),1);
+    QCOMPARE(library.page("tag","puzz").size(),0);
+    QCOMPARE(library.page("tag","1' OR 1=1 --").size(),0);
+    QVERIFY(library.page("tag"," ").isEmpty());
+    QVERIFY(library.page("franchise",QString(161,'x')).isEmpty());
+    GameLibrary other(dir.filePath("other/games.sqlite"),&apps);QVERIFY(other.ready());
+    QVERIFY(other.page("tag","1").isEmpty());QVERIFY(other.page("franchise","saga").isEmpty());
+
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({
+        {"library",QVariant::fromValue(&library)},{"width",1000},{"height",600},{"engaged",true}}));
+    QVERIFY2(widget,qPrintable(component.errorString()));
+    for(int i=0;i<4;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);
+    for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown); // PC, all, franchise, tag
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("mode").toString(),QString("keyboard"));
+    auto *keyboard=widget->findChild<QObject*>("gamesKeyboard");QVERIFY(keyboard);
+    command(widget.data(),InputManager::Confirm); // 1
+    const auto keysValue=keyboard->property("keys");
+    const auto keys=keysValue.metaType()==QMetaType::fromType<QJSValue>()?keysValue.value<QJSValue>().toVariant().toList():keysValue.toList();
+    int done=-1;for(int i=0;i<keys.size();++i)if(keys.at(i).toString()=="Done"){done=i;break;}
+    QVERIFY(done>0);
+    for(int i=0;i<done;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("queryView").toString(),QString("tag"));
+    QVERIFY(widget->property("canNextPage").toBool());
+    widget->setProperty("toolbar",7);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("offset").toInt(),50);
+    QVERIFY(!widget->property("canNextPage").toBool());
+    widget->setProperty("toolbar",4);command(widget.data(),InputManager::Confirm);
+    command(widget.data(),InputManager::Back); // chooser cancellation retains filter
+    QCOMPARE(widget->property("queryView").toString(),QString("tag"));
+    widget->setProperty("toolbar",1);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("queryView").toString(),QString("all"));
+    QCOMPARE(widget->property("offset").toInt(),0);
 }
 void GamesUiTests::catalogCapDisablesNextFromLastFullPage(){
     QTemporaryDir dir;QVERIFY(dir.isValid());

@@ -21,6 +21,40 @@ function method(file, name, context, anchor) {
     vm.runInContext(source.slice(start, end), context, {filename: file + ":" + name});
 }
 
+test("direct browse filters use the remote chooser and the same next-page query", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        mode: "platformChooser", choice: 2, platformChoices: ["PC"], queryView: "collection",
+        activeCollectionId: "saved", search: "", selectedPlatform: "PC", selected: -1,
+        selectedId: "", offset: 50, field: 0, message: "", keyboard: {value: "", selectedIndex: 0},
+        library: {
+            page(...args) { calls.push(args); return args[2] === 0 ? Array.from({length: 50}, (_, i) => ({id: String(i)})) : [{id: "next"}]; },
+        },
+        pageSize: 50, catalogLimit: 50000, detail: null,
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    method("GamesLibraryWidget.qml", "reload", scope);
+    method("GamesLibraryWidget.qml", "submitDirectFilter", scope);
+    scope.activateChoice();
+    assert.equal(scope.mode, "keyboard");
+    assert.equal(scope.field, 22);
+    scope.submitDirectFilter("  ");
+    assert.equal(scope.mode, "keyboard");
+    assert.equal(scope.queryView, "collection");
+    scope.submitDirectFilter(" Saga ");
+    assert.equal(scope.queryView, "franchise");
+    assert.equal(scope.offset, 0);
+    assert.equal(scope.activeCollectionId, "");
+    assert.deepEqual(calls, [["franchise", "Saga", 0, ""], ["franchise", "Saga", 50, ""]]);
+    assert.equal(scope.canNextPage, true);
+    scope.mode = "platformChooser"; scope.choice = 3;
+    scope.activateChoice();
+    assert.equal(scope.field, 23);
+    scope.submitDirectFilter("Puzzle");
+    assert.equal(scope.queryView, "tag");
+    assert.deepEqual(calls.slice(-2), [["tag", "Puzzle", 0, ""], ["tag", "Puzzle", 50, ""]]);
+});
+
 test("pending uninstall cleanup requires the separate remote confirmation", () => {
     const calls = [];
     const inputManager = {back: 1, navigateDown: 2, navigateRight: 3, navigateUp: 4, navigateLeft: 5, confirm: 6};

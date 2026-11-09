@@ -659,13 +659,15 @@ QString GameLibrary::addGameWithOrigin(const QVariantMap &input,const QString &o
 }
 QVariantList GameLibrary::page(const QString &view, const QString &search, int offset, const QString &platform) {
     if (!m_ready) return {};
-    if (!QStringList{"all","recent","favorites","search","platform","continue"}.contains(view)
-        || search.size()>160 || offset<0 || offset>=MaxGames || offset%PageSize
+    if (!QStringList{"all","recent","favorites","search","platform","continue","franchise","tag"}.contains(view)
+        || search.size()>160 || search.contains(QChar::Null) || offset<0 || offset>=MaxGames || offset%PageSize
         || platform.size()>80 || platform.contains(QChar::Null)
-        || (view=="platform" && (platform.trimmed().isEmpty() || platform!=platform.trimmed()))) {
+        || (view=="platform" && (platform.trimmed().isEmpty() || platform!=platform.trimmed()))
+        || ((view=="franchise" || view=="tag") && (search.trimmed().isEmpty() || search!=search.trimmed()))) {
         fail(tr("Invalid games query.")); return {};
     }
     if(view=="continue" && !m_hasActivity)return {};
+    if((view=="franchise" || view=="tag") && !m_hasMetadata)return {};
     QSqlQuery query(m_db);
     // instr uses literal text, not LIKE wildcards or executable SQL predicates.
     QString sql="SELECT g.id,g.title,g.platform,g.runtime,g.favorite,"
@@ -677,10 +679,15 @@ QVariantList GameLibrary::page(const QString &view, const QString &search, int o
     if(m_hasMetadata)sql+=" LEFT JOIN game_metadata m ON m.game_id=g.id";
     sql+=" WHERE (?=0 OR g.favorite=1) AND (?='' OR lower(g.platform)=lower(?)";
     if(m_hasEditions)sql+=" OR EXISTS(SELECT 1 FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(?))";
-    sql+=") AND (instr(lower(g.title),lower(?))>0";
-    if(m_hasMetadata)sql+=" OR instr(lower(m.franchise),lower(?))>0 OR instr(lower(m.tags),lower(?))>0";
-    if(m_hasRichMetadata)sql+=" OR instr(lower(m.aliases),lower(?))>0 OR instr(lower(m.summary),lower(?))>0";
     sql+=")";
+    if(view=="franchise")sql+=" AND instr(lower(COALESCE(m.franchise,'')),lower(?))>0";
+    else if(view=="tag")sql+=" AND EXISTS(SELECT 1 FROM json_each(COALESCE(m.tags,'[]')) tag WHERE lower(tag.value)=lower(?))";
+    else {
+        sql+=" AND (instr(lower(g.title),lower(?))>0";
+        if(m_hasMetadata)sql+=" OR instr(lower(m.franchise),lower(?))>0 OR instr(lower(m.tags),lower(?))>0";
+        if(m_hasRichMetadata)sql+=" OR instr(lower(m.aliases),lower(?))>0 OR instr(lower(m.summary),lower(?))>0";
+        sql+=")";
+    }
     if(view=="continue")sql+=" AND a.game_id IS NOT NULL";
     sql+=" ORDER BY "+QString(view=="recent"?"g.added DESC,g.id":view=="continue"?"a.last_played DESC,g.id":"g.title COLLATE NOCASE,g.id")+" LIMIT 50 OFFSET ?";
     query.prepare(sql);
@@ -689,8 +696,10 @@ QVariantList GameLibrary::page(const QString &view, const QString &search, int o
     query.addBindValue(view=="platform"?platform:QStringLiteral(""));
     if(m_hasEditions)query.addBindValue(view=="platform"?platform:QStringLiteral(""));
     query.addBindValue(search.isNull()?QStringLiteral(""):search);
-    if(m_hasMetadata){query.addBindValue(search.isNull()?QStringLiteral(""):search);query.addBindValue(search.isNull()?QStringLiteral(""):search);}
-    if(m_hasRichMetadata){query.addBindValue(search.isNull()?QStringLiteral(""):search);query.addBindValue(search.isNull()?QStringLiteral(""):search);}
+    if(view!="franchise" && view!="tag") {
+        if(m_hasMetadata){query.addBindValue(search.isNull()?QStringLiteral(""):search);query.addBindValue(search.isNull()?QStringLiteral(""):search);}
+        if(m_hasRichMetadata){query.addBindValue(search.isNull()?QStringLiteral(""):search);query.addBindValue(search.isNull()?QStringLiteral(""):search);}
+    }
     query.addBindValue(offset);
     if (!query.exec()) { fail(query.lastError().text()); return {}; }
     QVariantList result; while (query.next()) result.append(row(query,artworkDirectory())); return result;
