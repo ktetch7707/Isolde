@@ -47,6 +47,7 @@ private slots:
     void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void opticalIdentityAndMultiDiscReferencesAreDurable();
+    void udfVolumeSetIdentityGroupsDiscNumbers();
     void fullOpticalContentIdentityRejectsTruncationAndChanges();
     void opticalSessionContractNeverClaimsHotSwap();
     void opticalMountInstanceChangesObservation();
@@ -58,6 +59,7 @@ private slots:
     void compatibilityCandidatesNeverClaimInstallerSupport();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
+    void remoteOpticalRemovalOffersRefreshAndRetry();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
     void remoteEditCanCancelAndApplyWithoutMouse();
@@ -251,6 +253,61 @@ void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable(){
     QVERIFY(!OpticalDiscAdapter::parseIsoVolumeDescriptor(QByteArray(2048,'x')).size());
     QVERIFY(!OpticalDiscAdapter::isRootReference(secondRoot+"/../bad"));
 }
+void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers(){
+    const auto put16=[](QByteArray &bytes,int offset,quint16 value){
+        bytes[offset]=char(value&0xff);bytes[offset+1]=char((value>>8)&0xff);
+    };
+    const auto put32=[](QByteArray &bytes,int offset,quint32 value){
+        for(int i=0;i<4;++i)bytes[offset+i]=char((value>>(8*i))&0xff);
+    };
+    const auto finishTag=[](QByteArray descriptor){
+        quint16 crc=0;
+        for(int i=16;i<descriptor.size();++i){
+            crc^=quint16(quint8(descriptor.at(i)))<<8;
+            for(int bit=0;bit<8;++bit)crc=crc&0x8000?quint16((crc<<1)^0x1021):quint16(crc<<1);
+        }
+        descriptor[8]=char(crc&0xff);descriptor[9]=char((crc>>8)&0xff);
+        unsigned checksum=0;for(int i=0;i<16;++i)if(i!=4)checksum=(checksum+quint8(descriptor.at(i)))&0xff;
+        descriptor[4]=char(checksum);return descriptor;
+    };
+    const auto makeTag=[&](quint16 id){
+        QByteArray descriptor(2048,'\0');put16(descriptor,0,id);descriptor[2]=2;descriptor[6]=1;
+        put16(descriptor,10,2032);put32(descriptor,12,256);return descriptor;
+    };
+    const auto fixture=[&](int number,const QByteArray &setName){
+        auto primary=makeTag(1);primary.replace(24,7,"VOLUME1");
+        put16(primary,56,quint16(number));put16(primary,58,2);
+        QByteArray encodedSet(128,'\0');encodedSet[0]=8;encodedSet.replace(1,setName.size(),setName);
+        primary.replace(72,128,encodedSet);
+        auto logical=makeTag(6);auto terminator=makeTag(8);
+        auto anchor=makeTag(2);put32(anchor,20,3*2048);put32(anchor,24,300);
+        QByteArray sequence=finishTag(primary)+finishTag(logical)+finishTag(terminator);
+        return qMakePair(finishTag(anchor),sequence);
+    };
+    const auto first=fixture(1,"ISOLDE-SET"),second=fixture(2,"ISOLDE-SET");
+    const auto firstDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second);
+    const auto secondDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(second.first,second.second);
+    QVERIFY(!firstDescriptor.isEmpty());QVERIFY(!secondDescriptor.isEmpty());
+    QCOMPARE(firstDescriptor.value("mediaSetId"),secondDescriptor.value("mediaSetId"));
+    QCOMPARE(firstDescriptor.value("discNumber").toInt(),1);QCOMPARE(secondDescriptor.value("discNumber").toInt(),2);
+    QCOMPARE(firstDescriptor.value("discCount").toInt(),2);
+    const auto firstMedia=OpticalDiscAdapter::identityForContent(firstDescriptor,QString(64,'a'));
+    const auto secondMedia=OpticalDiscAdapter::identityForContent(secondDescriptor,QString(64,'b'));
+    QVERIFY(firstMedia.value("mediaId")!=secondMedia.value("mediaId"));
+    QCOMPARE(firstMedia.value("mediaSetId"),secondMedia.value("mediaSetId"));
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(OpticalDiscAdapter::rootReference(firstMedia),
+        {{ "mediaId",secondMedia.value("mediaId")},{"mediaSetId",secondMedia.value("mediaSetId")},
+         {"discNumber",2},{"discCount",2},{"state","mounted"}}).value("state").toString(),QString("wrong-disc"));
+    const auto unrelated=fixture(1,"OTHER-SET");
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(unrelated.first,unrelated.second)
+        .value("mediaSetId")!=firstDescriptor.value("mediaSetId"));
+    auto corrupt=first.first;corrupt[100]=char(1);
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(corrupt,first.second).isEmpty());
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second.left(2048)).isEmpty());
+    auto invalidCount=fixture(1,"ISOLDE-SET");
+    put16(invalidCount.second,58,100);invalidCount.second.replace(0,2048,finishTag(invalidCount.second.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(invalidCount.first,invalidCount.second).isEmpty());
+}
 void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable(){
     QStandardPaths::setTestModeEnabled(true);
     const auto alice=QUuid::createUuid().toString(QUuid::WithoutBraces),bob=QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -393,6 +450,28 @@ void GamesUiTests::remoteOpticalInspectionNeverStartsMedia(){
         for(int i=0;i<5;++i)command(widget.data(),InputManager::NavigateDown);
         command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
     }
+    QVERIFY(dispatch.lastAction.isEmpty());
+}
+void GamesUiTests::remoteOpticalRemovalOffersRefreshAndRetry(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},
+        {"dispatcher",QVariant::fromValue(&dispatch)},{"width",1000},{"height",600}}));
+    QVERIFY2(widget,qPrintable(component.errorString()));
+    widget->setProperty("mode","opticalDetails");widget->setProperty("opticalDevice","/dev/sr99");
+    widget->setProperty("opticalSelectedDisc",QVariantMap{{"device","/dev/sr99"},{"state","mounted"},{"mountRoot","/media/old"}});
+    emit library.opticalDiscsChanged({},QStringLiteral("removed"));
+    QCOMPARE(widget->property("opticalSelectedDisc").toMap().value("state").toString(),QString("missing"));
+    auto *choices=widget->findChild<QObject*>("gamesReviewChoices");QVERIFY(choices);
+    auto labels=choices->property("model").toList();
+    QCOMPARE(labels.value(0).toString(),QString("Refresh and retry media"));
+    const QVariantMap replacement{{"device","/dev/sr99"},{"state","mounted"},{"observationId",QString(64,'a')},
+        {"hashState","ready"},{"directPlaySupported",true},{"mountRoot","/media/new"}};
+    emit library.opticalDiscsChanged({replacement},QStringLiteral("changed"));
+    QCOMPARE(widget->property("opticalSelectedDisc").toMap().value("mountRoot").toString(),QString("/media/new"));
+    labels=choices->property("model").toList();
+    QCOMPARE(labels.value(5).toString(),QString("Refresh / retry"));
     QVERIFY(dispatch.lastAction.isEmpty());
 }
 void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){

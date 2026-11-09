@@ -15,6 +15,8 @@ public:
     static QVariantMap classifyRevalidation(const QString &observationId, const QString &device,
                                             const QVariantList &currentDiscs);
     static QVariantMap parseIsoVolumeDescriptor(const QByteArray &descriptor);
+    static QVariantMap parseUdfVolumeDescriptors(const QByteArray &anchorDescriptor,
+                                                  const QByteArray &volumeDescriptors);
     static QVariantMap identityForDevice(const QString &device);
     static QByteArray hashContent(QIODevice *input, quint64 size);
     static QVariantMap identityForContent(QVariantMap descriptor, const QString &contentId);
