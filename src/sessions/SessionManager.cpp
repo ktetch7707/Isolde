@@ -136,8 +136,8 @@ bool writeSteamRecoveryStatuses(const QString &profile,const QVariantMap &status
 }
 
 SessionManager::SessionManager(AppRegistry *registry, QObject *parent)
-    : QObject(parent), m_registry(registry) {
-    m_steamRecoveryStatuses=loadSteamRecoveryStatuses(qApp->property("isoldeProfile").toString());
+    : QObject(parent), m_registry(registry), m_profileId(qApp->property("isoldeProfile").toString()) {
+    m_steamRecoveryStatuses=loadSteamRecoveryStatuses(m_profileId);
     m_opticalTimer.setInterval(2500);
     connect(&m_opticalTimer,&QTimer::timeout,this,&SessionManager::refreshOpticalSession);
 }
@@ -174,10 +174,26 @@ bool SessionManager::acknowledgeSteamRecovery(const QString &identity)
        || QString::number(number)!=identity || !m_steamRecoveryStatuses.contains(identity))return false;
     auto updated=m_steamRecoveryStatuses;
     updated.remove(identity);
-    if(!writeSteamRecoveryStatuses(qApp->property("isoldeProfile").toString(),updated))return false;
+    if(!writeSteamRecoveryStatuses(m_profileId,updated))return false;
     m_steamRecoveryStatuses=updated;
     emit steamRecoveryStatusesChanged();
     return true;
+}
+
+void SessionManager::handleSteamProviderState(const QVariantMap &state)
+{
+    m_steamProviderState=state;
+    const auto identity=state.value("appId").toString();
+    if(QStringList{"incomplete","recovery_required"}.contains(state.value("session_end").toString())
+       && QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch()){
+        auto record=state;record.insert("recoveryPending",true);
+        auto updated=m_steamRecoveryStatuses;updated.insert(identity,record);
+        if(writeSteamRecoveryStatuses(m_profileId,updated)){
+            m_steamRecoveryStatuses=updated;
+            emit steamRecoveryStatusesChanged();
+        }
+    }
+    emit steamProviderStateChanged();
 }
 
 bool SessionManager::hasActiveSession() const { return m_session != nullptr; }
@@ -264,18 +280,7 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     auto *session = m_session.get();
     connect(session,&AppSession::steamProviderStateChanged,this,[this,session](const QVariantMap &state){
         if(m_session.get()!=session)return;
-        m_steamProviderState=state;
-        const auto identity=state.value("appId").toString();
-        if(QStringList{"incomplete","recovery_required"}.contains(state.value("session_end").toString())
-           && QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch()){
-            auto record=state;record.insert("recoveryPending",true);
-            auto updated=m_steamRecoveryStatuses;updated.insert(identity,record);
-            if(writeSteamRecoveryStatuses(qApp->property("isoldeProfile").toString(),updated)){
-                m_steamRecoveryStatuses=updated;
-                emit steamRecoveryStatusesChanged();
-            }
-        }
-        emit steamProviderStateChanged();
+        handleSteamProviderState(state);
     });
     connect(session,&AppSession::gamepadSessionStatusChanged,this,[this,session](const QVariantMap &state){
         if(m_session.get()!=session)return;

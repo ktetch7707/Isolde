@@ -76,6 +76,8 @@ signals:
     void gamepadSessionStatusChanged();
 
 private:
+    friend class ComponentTests;
+    void handleSteamProviderState(const QVariantMap &state);
     bool launchFileAction(const QVariantMap &action, const QString &sourceRoot,
                           const QString &opticalMediaId = {}, const QString &opticalReference = {});
     bool launchDefinition(AppDefinition definition);
@@ -83,6 +85,7 @@ private:
     void finishSession(AppSession *session);
 
     AppRegistry *m_registry;
+    const QString m_profileId;
     std::unique_ptr<AppSession> m_session;
     QString m_previousFocusId;
     QVariantMap m_steamProviderState;

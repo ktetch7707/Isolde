@@ -52,6 +52,7 @@ private slots:
     void sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts();
     void sourceFamiliesUseGenericBoundedComposition();
     void steamGamesUseProviderIdentityAndReviewedImport();
+    void steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch();
     void guideActionsValidateIdentityAndAppearance();
     void captureAndAudioEditorActionsValidateAndDispatch();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
@@ -181,6 +182,47 @@ void ComponentTests::steamGamesUseProviderIdentityAndReviewedImport(){
     QVERIFY(library.beginSteamImport());library.invalidate();QTRY_VERIFY(!library.scanning());QVERIFY(!library.importReady());QVERIFY(library.resolveLaunch(id).isEmpty());
     QVERIFY(QFileInfo::exists(steamapps+"/appmanifest_42.acf"));
     qApp->setProperty("isoldeProfile",QVariant());QVERIFY(QDir(parent).removeRecursively());
+}
+void ComponentTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previous=qApp->property("isoldeProfile");
+    const auto ownerProfile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto activeProfile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto cleanup=qScopeGuard([&]{
+        qApp->setProperty("isoldeProfile",previous);
+        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+ownerProfile).removeRecursively();
+        QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+activeProfile).removeRecursively();
+        QStandardPaths::setTestModeEnabled(false);
+    });
+    qApp->setProperty("isoldeProfile",ownerProfile);
+    const auto appData=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const auto ownerHome=appData+"/native-profiles/"+ownerProfile+"/steam/home/.local/state/isolde";
+    const auto activeHome=appData+"/native-profiles/"+activeProfile+"/steam/home/.local/state/isolde";
+    AppRegistry registry;
+    {
+        SessionManager sessions(&registry);
+        qApp->setProperty("isoldeProfile",activeProfile);
+        const QVariantMap state{{"version",2},{"appId","42"},{"phase","failed"},{"process","unknown"},
+            {"installation","unknown"},{"client","unknown"},{"ownership","unknown"},{"account","unknown"},
+            {"connection","unknown"},{"offline","unknown"},{"exit","unknown"},{"local_save","unknown"},
+            {"cloud_save","unknown"},{"session_end","incomplete"},{"error","process_observation_failed"}};
+        sessions.handleSteamProviderState(state);
+        QVERIFY(!sessions.hasActiveSession());
+        QCOMPARE(sessions.steamRecoveryStatuses().value("42").toMap().value("session_end").toString(),
+                 QString("incomplete"));
+        QVERIFY(QFileInfo::exists(ownerHome+"/steam-recovery.json"));
+        QVERIFY(!QFileInfo::exists(activeHome+"/steam-recovery.json"));
+        const auto journal=QJsonDocument::fromJson(readFile(ownerHome+"/steam-recovery.json")).object()
+                               .value("games").toObject().value("42").toObject();
+        QVERIFY(!journal.contains("pid"));
+        QVERIFY(!journal.contains("pids"));
+        QVERIFY(sessions.acknowledgeSteamRecovery("42"));
+        QVERIFY(!sessions.steamRecoveryStatuses().contains("42"));
+        QVERIFY(QFileInfo::exists(ownerHome+"/steam-recovery.json"));
+        QVERIFY(!QFileInfo::exists(activeHome+"/steam-recovery.json"));
+    }
+    QVERIFY(QDir(appData+"/native-profiles/"+ownerProfile).removeRecursively());
+    QVERIFY(!QFileInfo::exists(activeHome));
 }
 void ComponentTests::guideActionsValidateIdentityAndAppearance() {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);const auto user=dir.filePath("home.json");
