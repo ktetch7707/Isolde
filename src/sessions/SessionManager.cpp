@@ -5,7 +5,9 @@
 #include "sessions/AndroidSession.h"
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
+#include "games/ManagedGamePaths.h"
 #include <QFileInfo>
+#include <QCoreApplication>
 
 #include <QUrl>
 #include <QScopedValueRollback>
@@ -140,9 +142,12 @@ bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sour
     const auto target=input.value("target").toString();
     const auto *runtime=m_registry->find(input.value("openWith").toString());
     const auto error=MediaGrants::validate(sourceRoot);
-    if(!error.isEmpty() || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
+    const auto profile=qApp->property("isoldeProfile").toString();
+    const bool managed=ManagedGamePaths::isInstallRoot(profile,sourceRoot);
+    if((!error.isEmpty() && !managed) || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
         || !QStringList{"game","game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot+'/')
-        || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target){
+        || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target
+        || (managed && !QFileInfo(target).isExecutable())){
         emit sessionRejected(tr("The reviewed game folder is missing, redirected or incompatible. Review its source and retry."));return false;
     }
     return launchFileAction(input,sourceRoot);
@@ -190,6 +195,11 @@ bool SessionManager::launchFileAction(const QVariantMap &input,const QString &so
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionType"), type);
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionTarget"), target);
     if(!sourceRoot.isEmpty())actionDefinition.launchConfiguration.insert("gameSourceRoot",sourceRoot);
+    if(ManagedGamePaths::isInstallRoot(qApp->property("isoldeProfile").toString(),sourceRoot)){
+        actionDefinition.name=QFileInfo(target).completeBaseName();
+        actionDefinition.launchConfiguration.insert("managedGameRoot",sourceRoot);
+        actionDefinition.launchConfiguration.insert("managedGameExecutable",target);
+    }
     qInfo() << "Launching action tile" << type << "target" << target << "with" << openWith;
     return launchDefinition(actionDefinition);
 }

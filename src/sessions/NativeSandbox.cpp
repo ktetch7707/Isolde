@@ -2,6 +2,7 @@
 #include "media/MediaGrants.h"
 #include "games/GameEmulators.h"
 #include "games/SteamLibraryGrants.h"
+#include "games/ManagedGamePaths.h"
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -38,7 +39,7 @@ bool privateDirectory(const QString &path)
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
-                                        const QString &gameSourceRoot, const QString &steamGameId)
+                                        const QString &gameSourceRoot, const QString &steamGameId, const QString &managedGameRoot)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -77,7 +78,10 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         return plan;
     }
     const auto binary = QFileInfo(executable).canonicalFilePath();
-    if (binary.isEmpty() || (!inside(binary, "/usr") && !inside(binary, "/opt"))) {
+    const bool managedExecutable=!managedGameRoot.isEmpty()
+        && ManagedGamePaths::isInstallRoot(profileId,managedGameRoot)
+        && inside(binary,managedGameRoot) && QFileInfo(binary).isExecutable();
+    if (binary.isEmpty() || (!inside(binary, "/usr") && !inside(binary, "/opt") && !managedExecutable)) {
         plan.error = QStringLiteral("This app must be installed in a system application directory before it can run in a separate profile.");
         return plan;
     }
@@ -201,6 +205,9 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             const auto canonical = QFileInfo(requested).canonicalFilePath();
             const auto config = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
             const auto data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+            const bool managedTarget=!managedGameRoot.isEmpty()
+                && ManagedGamePaths::isInstallRoot(profileId,managedGameRoot)
+                && inside(canonical,managedGameRoot);
             bool privateHomePath = false;
             if (inside(canonical, userHome)) {
                 const auto components = QDir(userHome).relativeFilePath(canonical).split('/');
@@ -211,22 +218,24 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                 systemPath |= inside(canonical, system);
             if (canonical.isEmpty() || !QDir::isAbsolutePath(requested)
                 || (!QFileInfo(canonical).isFile() && !QFileInfo(canonical).isDir())
-                || privateHomePath || systemPath
-                || inside(base, canonical) || inside(canonical, base)
-                || inside(config, canonical) || inside(canonical, config)
-                || inside(data, canonical) || inside(canonical, data)
+                || (privateHomePath && !managedTarget) || (systemPath && !managedTarget)
+                || (!managedTarget && (inside(base, canonical) || inside(canonical, base)))
+                || (!managedTarget && (inside(config, canonical) || inside(canonical, config)
+                    || inside(data, canonical) || inside(canonical, data)))
                 ) {
                 plan.error = QStringLiteral("Choose a media file or folder, not a profile, account, or system folder.");
                 return plan;
             }
             if(!gameSourceRoot.isEmpty()){
                 const auto error=MediaGrants::validate(gameSourceRoot);
-                if(!error.isEmpty() || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
-                    || inside(base,gameSourceRoot) || inside(gameSourceRoot,base)){
+                const bool managed=ManagedGamePaths::isInstallRoot(profileId,gameSourceRoot);
+                if((!error.isEmpty() && !managed) || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
+                    || (!managed && (inside(base,gameSourceRoot) || inside(gameSourceRoot,base)))){
                     plan.error="The reviewed game folder is unavailable or redirected. Review it in Games and retry.";return plan;
                 }
                 plan.actionTarget="/media/games/"+QDir(gameSourceRoot).relativeFilePath(canonical);
                 bind(gameSourceRoot,"/media/games");
+                if(managed)args << "--chdir" << "/media/games";
             } else {
                 plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
                 bind(canonical, plan.actionTarget);

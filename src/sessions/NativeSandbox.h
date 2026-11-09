@@ -18,5 +18,6 @@ public:
     static NativeSandboxPlan prepare(const QString &profileId, const QString &appId,
                                     const QString &executable, const QProcessEnvironment &host,
                                     const QString &actionTarget = {}, const QString &storageRoot = {},
-                                    const QString &emulatorRuntime = {}, const QString &gameSourceRoot = {}, const QString &steamGameId = {});
+                                    const QString &emulatorRuntime = {}, const QString &gameSourceRoot = {}, const QString &steamGameId = {},
+                                    const QString &managedGameRoot = {});
 };

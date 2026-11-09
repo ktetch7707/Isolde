@@ -24,6 +24,9 @@ class GameLibrary final : public QObject {
     Q_PROPERTY(int importCount READ importCount NOTIFY importChanged)
     Q_PROPERTY(bool importReady READ importReady NOTIFY importChanged)
     Q_PROPERTY(QString importStatus READ importStatus NOTIFY importChanged)
+    Q_PROPERTY(bool portableInstallBusy READ portableInstallBusy NOTIFY portableInstallChanged)
+    Q_PROPERTY(QString portableInstallStatus READ portableInstallStatus NOTIFY portableInstallChanged)
+    Q_PROPERTY(QVariantMap portableInstallPreview READ portableInstallPreview NOTIFY portableInstallChanged)
 public:
     GameLibrary(const QString &databasePath, AppRegistry *apps, QObject *parent = nullptr);
     ~GameLibrary() override;
@@ -51,6 +54,12 @@ public:
     Q_INVOKABLE bool addSteamLibrary(const QString &path);
     Q_INVOKABLE bool removeSteamLibrary(const QString &path);
     Q_INVOKABLE QVariantList mountedOpticalDiscs() const;
+    bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
+    QString portableInstallStatus() const { return m_portableInstallStatus; }
+    QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }
+    Q_INVOKABLE bool beginPortableInstall(const QString &source, const QString &runtimeId);
+    Q_INVOKABLE bool confirmPortableInstall();
+    Q_INVOKABLE void cancelPortableInstall();
     int importCount() const { return m_preview.size(); }
     bool importReady() const { return m_importReady; }
     Q_INVOKABLE bool beginImport(const QString &root, const QString &runtimeId, const QString &platform);
@@ -87,6 +96,7 @@ signals:
     void errorChanged();
     void importChanged();
     void setupChanged();
+    void portableInstallChanged();
 private:
     bool fail(const QString &error);
     bool compatibleRuntime(const QString &id, bool file) const;
@@ -127,4 +137,11 @@ private:
     QByteArray m_steamScanOutput;
     bool m_steamScanCanceled = false;
     QString m_importStatus;
+    QProcess m_portableInstall;
+    QTimer m_portableInstallDeadline;
+    QByteArray m_portableInstallOutput, m_portableInstallError;
+    QVariantMap m_portableInstallPreview;
+    QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination;
+    QString m_portablePhase;
+    bool m_portableCanceled=false;
 };

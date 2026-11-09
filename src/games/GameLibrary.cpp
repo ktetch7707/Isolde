@@ -2,6 +2,7 @@
 #include "GameEmulators.h"
 #include "SteamLibraryGrants.h"
 #include "OpticalDiscAdapter.h"
+#include "ManagedGamePaths.h"
 #include <QCoreApplication>
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
@@ -191,6 +192,57 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
         m_setupStatus=activated?"Emulators installed and available in Add game. Your games and firmware were not downloaded.":"Runtime files installed, but activation needs repair. "+(m_catalog?m_catalog->errorString():QString("Store unavailable."));
         emit changed();emit setupChanged();
     });
+    m_portableInstallDeadline.setSingleShot(true);m_portableInstallDeadline.setInterval(900000);
+    connect(&m_portableInstallDeadline,&QTimer::timeout,this,&GameLibrary::cancelPortableInstall);
+    connect(&m_portableInstall,&QProcess::readyReadStandardOutput,this,[this]{
+        m_portableInstallOutput+=m_portableInstall.readAllStandardOutput();
+        if(m_portableInstallOutput.size()>65536)cancelPortableInstall();
+    });
+    connect(&m_portableInstall,&QProcess::readyReadStandardError,this,[this]{
+        m_portableInstallError=(m_portableInstallError+m_portableInstall.readAllStandardError()).right(8192);
+    });
+    connect(&m_portableInstall,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){
+        if(error==QProcess::FailedToStart){m_portableInstallStatus="Portable game helper could not start.";m_portablePhase.clear();emit portableInstallChanged();}
+    });
+    connect(&m_portableInstall,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus status){
+        m_portableInstallDeadline.stop();
+        if(!m_ready || m_portablePhase.isEmpty())return;
+        if(code!=0 || status!=QProcess::NormalExit){
+            const auto reason=QString::fromUtf8(m_portableInstallError).right(1000);
+            const auto stage=m_portableDestination+".staging";
+            if(m_portablePhase=="install" && QFileInfo(stage).isDir() && QFileInfo(stage).canonicalFilePath()==stage)QDir(stage).removeRecursively();
+            m_portableInstallStatus=m_portableCanceled?"Install canceled. Existing files and saves were preserved.":
+                "Portable game preflight/install failed. Nothing was added to the catalog. "+reason;
+            m_portablePhase.clear();emit portableInstallChanged();return;
+        }
+        m_portableInstallOutput+=m_portableInstall.readAllStandardOutput();
+        QJsonParseError parse;const auto metadata=QJsonDocument::fromJson(m_portableInstallOutput,&parse).toVariant().toMap();
+        if(parse.error!=QJsonParseError::NoError || metadata.value("schemaVersion").toInt()!=1
+            || metadata.value("title").toString().isEmpty() || metadata.value("platform").toString().isEmpty()){
+            m_portableInstallStatus="Invalid portable game adapter response. Nothing was added to Games.";
+            m_portablePhase.clear();emit portableInstallChanged();return;
+        }
+        if(m_portablePhase=="inspect"){
+            m_portableInstallPreview=metadata;
+            m_portableInstallPreview["destination"]=m_portableDestination;
+            m_portableInstallPreview["runtimeName"]=m_apps->find(m_portableRuntime)->name;
+            m_portablePhase="review";
+            m_portableInstallStatus="Preflight complete. Review runtime, destination and side effects before Install.";
+            emit portableInstallChanged();return;
+        }
+        if(m_portablePhase=="install"){
+            const auto root=m_portableDestination;
+            if(!ManagedGamePaths::isInstallRoot(m_emulatorProfile,root)){
+                m_portableInstallStatus="Installed package failed private destination verification; it was not added to Games.";
+                m_portablePhase.clear();emit portableInstallChanged();return;
+            }
+            const auto id=addGame({{"schemaVersion",1},{"title",metadata.value("title")},
+                {"platform",metadata.value("platform")},{"runtimeId",m_portableRuntime},
+                {"root",root},{"target",metadata.value("entrypoint")}});
+            m_portableInstallStatus=id.isEmpty()?"Package installed but catalog registration failed. Preserve the private recovery folder and retry from Games.":"Installed, verified and added to Games. Launch uses an isolated session; setup scripts are never executed.";
+            m_portablePhase.clear();m_portableInstallPreview.clear();emit portableInstallChanged();return;
+        }
+    });
     m_scanTimer.setInterval(0);
     connect(&m_scanTimer,&QTimer::timeout,this,&GameLibrary::scanStep);
     if (!QDir::isAbsolutePath(path) || QFileInfo(path).isSymLink()) { fail(tr("Choose a private games catalog path.")); return; }
@@ -251,11 +303,12 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
 }
 GameLibrary::~GameLibrary() {
     cancelImport();if(m_steamScan.state()!=QProcess::NotRunning)m_steamScan.waitForFinished(1000);
+    cancelPortableInstall();
     cancelEmulatorSetup();if(setupBusy())m_setup.waitForFinished(5000);
     m_db.close(); m_db = QSqlDatabase(); QSqlDatabase::removeDatabase(m_connection);
 }
 bool GameLibrary::fail(const QString &error) { m_error = error; emit errorChanged(); return false; }
-void GameLibrary::invalidate() { cancelImport();cancelEmulatorSetup(); m_ready = false; m_db.close(); fail(tr("This games profile is no longer active.")); emit changed(); }
+void GameLibrary::invalidate() { cancelImport();cancelEmulatorSetup();cancelPortableInstall(); m_ready = false; m_db.close(); fail(tr("This games profile is no longer active.")); emit changed(); }
 bool GameLibrary::compatibleRuntime(const QString &id, bool file) const {
     const auto *app = m_apps->find(id);
     if (!app || app->type != "desktop") return false;
@@ -325,7 +378,8 @@ void GameLibrary::cancelEmulatorSetup(){
 }
 QString GameLibrary::checkedTarget(const QString &root, const QString &relative) {
     const auto grantError = MediaGrants::validate(root);
-    if (!grantError.isEmpty()) { fail(grantError); return {}; }
+    const bool managed=ManagedGamePaths::isInstallRoot(m_emulatorProfile,root);
+    if (!grantError.isEmpty() && !managed) { fail(grantError); return {}; }
     if (relative.isEmpty() || QDir::isAbsolutePath(relative) || relative.contains('\\') || relative.contains(QChar::Null)
         || relative.size()>4096 || QDir::cleanPath(relative)!=relative || relative.split('/').contains("..")) {
         fail(tr("Choose a file inside the approved game folder.")); return {};
@@ -1295,6 +1349,68 @@ bool GameLibrary::removeSteamLibrary(const QString &path) {
 }
 QVariantList GameLibrary::mountedOpticalDiscs() const {
     return m_ready ? OpticalDiscAdapter::mountedDiscs() : QVariantList{};
+}
+bool GameLibrary::beginPortableInstall(const QString &source,const QString &runtimeId){
+    if(!m_ready || portableInstallBusy() || !m_portablePhase.isEmpty())return fail(tr("Finish or cancel the current game installation first."));
+    if(!compatibleRuntime(runtimeId,true))return fail(tr("Choose an installed Linux game runtime."));
+    const QFileInfo file(source);
+    if(!file.isFile() || file.isSymLink() || file.canonicalFilePath()!=file.absoluteFilePath()
+        || file.size()<1 || file.size()>512LL*1024*1024
+        || !MediaGrants::validate(file.absolutePath()).isEmpty())
+        return fail(tr("Choose a regular portable game ZIP inside an approved media folder."));
+    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/portable-game-installer.py";
+    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde portable-game installer."));
+    m_portableSource=file.canonicalFilePath();m_portableRuntime=runtimeId;
+    m_portableDestination=ManagedGamePaths::gamesRoot(m_emulatorProfile)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces)+"/install";
+    m_portableInstallOutput.clear();m_portableInstallError.clear();m_portableInstallPreview.clear();
+    m_portableCanceled=false;m_portablePhase="inspect";m_portableInstallStatus="Checking bundle contents; nothing will be executed or installed during preflight.";
+    m_portableInstall.start(python,{helper,"--inspect","--source",m_portableSource});
+    m_portableInstallDeadline.start();m_error.clear();emit errorChanged();emit portableInstallChanged();return true;
+}
+bool GameLibrary::confirmPortableInstall(){
+    if(!m_ready || m_portablePhase!="review" || portableInstallBusy())return fail(tr("No portable game package is awaiting confirmation."));
+    if(!compatibleRuntime(m_portableRuntime,true)
+        || !QFileInfo(m_portableSource).isFile()
+        || QFileInfo(m_portableSource).canonicalFilePath()!=m_portableSource
+        || !MediaGrants::validate(QFileInfo(m_portableSource).absolutePath()).isEmpty())
+        return fail(tr("The package source or selected runtime changed. Review preflight again."));
+    const auto parent=QFileInfo(m_portableDestination).absolutePath();
+    const auto gamesRoot=ManagedGamePaths::gamesRoot(m_emulatorProfile);
+    if(gamesRoot.isEmpty() || !QDir().mkpath(parent)
+        || QFileInfo(gamesRoot).canonicalFilePath()!=gamesRoot
+        || QFileInfo(parent).canonicalFilePath()!=parent
+        || QFileInfo(parent).isSymLink()
+        || QFileInfo::exists(m_portableDestination)
+        || QFileInfo::exists(m_portableDestination+".staging")){
+        return fail(tr("Cannot prepare a new private game destination; existing files were preserved."));
+    }
+    if(!QFile::setPermissions(gamesRoot,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner)
+        || !QFile::setPermissions(parent,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner))
+        return fail(tr("Cannot secure the private game install destination."));
+    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/portable-game-installer.py";
+    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde portable-game installer."));
+    m_portableInstallOutput.clear();m_portableInstallError.clear();m_portableCanceled=false;
+    m_portablePhase="install";m_portableInstallStatus="Installing into a new private profile folder. Existing installs and saves will not be overwritten.";
+    m_portableInstall.start(python,{helper,"--install","--source",m_portableSource,"--destination",m_portableDestination});
+    m_portableInstallDeadline.start();emit portableInstallChanged();return true;
+}
+void GameLibrary::cancelPortableInstall(){
+    m_portableInstallDeadline.stop();
+    if(m_portablePhase.isEmpty())return;
+    m_portableCanceled=true;
+    if(m_portableInstall.state()!=QProcess::NotRunning){
+        m_portableInstall.terminate();
+        if(!m_portableInstall.waitForFinished(2000)){m_portableInstall.kill();m_portableInstall.waitForFinished(2000);}
+    }
+    const auto stage=m_portableDestination+".staging";
+    if(m_portablePhase=="install" && QFileInfo(stage).isDir() && QFileInfo(stage).canonicalFilePath()==stage)QDir(stage).removeRecursively();
+    m_portablePhase.clear();m_portableInstallPreview.clear();
+    m_portableInstallStatus="Installation canceled. Existing installations and saves were preserved.";
+    emit portableInstallChanged();
 }
 bool GameLibrary::beginImport(const QString &root,const QString &runtime,const QString &platform) {
     if(!m_ready || scanning() || m_importReady)return fail(tr("Finish or cancel the current import first."));

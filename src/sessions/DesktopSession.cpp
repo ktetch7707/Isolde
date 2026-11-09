@@ -336,14 +336,19 @@ void DesktopSession::launch()
     }
     auto resolvedLaunch = launch;
     const auto steamGame=definition().launchConfiguration.value("steamGameId").toString();
-    if(!steamGame.isEmpty()){
+    const auto managedGame=definition().launchConfiguration.value("managedGameExecutable").toString();
+    if(!managedGame.isEmpty()){
+        resolvedLaunch.program=managedGame;
+        resolvedLaunch.arguments.clear();
+    }else if(!steamGame.isEmpty()){
         resolvedLaunch.program="/usr/bin/python3";
         resolvedLaunch.arguments={"/run/steam-games.py","--launch",steamGame};
     }
     const auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(), definition().id,
         resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString(), {},
         definition().launchConfiguration.value("emulatorRuntime").toString(),
-        definition().launchConfiguration.value("gameSourceRoot").toString(),steamGame);
+        definition().launchConfiguration.value("gameSourceRoot").toString(),steamGame,
+        definition().launchConfiguration.value("managedGameRoot").toString());
     if (!sandbox.error.isEmpty()) {
         setError(sandbox.error);
         setState(State::Exited);
@@ -360,12 +365,13 @@ void DesktopSession::launch()
     }
     if (configuration.contains("actionTarget")) configuration["actionTarget"] = sandbox.actionTarget;
     QString actionError;
-    if (!appendActionArguments(&resolvedLaunch, configuration, &actionError)) {
+    if (managedGame.isEmpty() && !appendActionArguments(&resolvedLaunch, configuration, &actionError)) {
         setError(actionError);
         qWarning() << "Desktop bridge refused action launch" << definition().id << actionError;
         setState(State::Exited);
         return;
     }
+    if(!managedGame.isEmpty())resolvedLaunch.program=sandbox.actionTarget;
     if(!steamGame.isEmpty())
         for(const auto &library:sandbox.steamLibraryRoots)resolvedLaunch.arguments << "--library" << library;
 
