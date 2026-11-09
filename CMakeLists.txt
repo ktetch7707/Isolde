@@ -47,6 +47,9 @@ add_library(isolde_core STATIC
     src/media/SubtitleService.h
     src/media/CaptureController.cpp
     src/media/CaptureController.h
+    src/media/AudioCaptureAdapter.h
+    src/media/QtAudioCaptureAdapter.h
+    src/media/QtAudioCaptureAdapter.cpp
     src/media/SerialCommandWriter.cpp
     src/media/SerialCommandWriter.h
     src/media/KodiShelves.cpp

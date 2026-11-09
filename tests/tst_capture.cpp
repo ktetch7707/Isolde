@@ -1,5 +1,18 @@
 #include "media/CaptureController.h"
+#include "media/AudioCaptureAdapter.h"
 #include <QtTest>
+
+class FakeAudioAdapter final : public AudioCaptureAdapter {
+public:
+    QVariantList available;
+    int stops = 0;
+    QVariantList devices() const override { return available; }
+    bool monitoringSupported() const override { return true; }
+    QString name() const override { return "fixture audio"; }
+    bool configure(QMediaCaptureSession *, const QString &) override { return true; }
+    void stop(QMediaCaptureSession *) override { ++stops; }
+    void publish() { emit devicesChanged(); }
+};
 
 class CaptureTests final : public QObject {
     Q_OBJECT
@@ -7,6 +20,7 @@ private slots:
     void encodesSwitchCommands();
     void rejectsUnsafeOrAmbiguousCommands();
     void validatesInputLabels();
+    void injectedAudioDiscoveryAndHotplug();
 };
 
 void CaptureTests::encodesSwitchCommands()
@@ -44,5 +58,27 @@ void CaptureTests::validatesInputLabels()
     QVERIFY(!CaptureController::isValidInputLabel(QString(QChar(0x85))));
 }
 
-QTEST_APPLESS_MAIN(CaptureTests)
+void CaptureTests::injectedAudioDiscoveryAndHotplug()
+{
+    FakeAudioAdapter audio;
+    audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
+    {
+        CaptureController controller(&audio, nullptr);
+        QCOMPARE(controller.audioDevices().size(), 1);
+        QCOMPARE(controller.audioDevices().first().toMap().value("id").toString(), QString("fixture-a"));
+        QCOMPARE(controller.capabilities().value("audioAdapter").toString(), QString("fixture audio"));
+        QVERIFY(controller.capabilities().value("audioMonitoringSupported").toBool());
+        QVERIFY(!controller.setAudioDevice("missing"));
+        audio.available.clear();
+        audio.publish();
+        QVERIFY(controller.audioDevices().isEmpty());
+        audio.available = {QVariantMap{{"id", "fixture-b"}, {"name", "Reconnected audio"}}};
+        audio.publish();
+        QCOMPARE(controller.audioDevices().first().toMap().value("id").toString(), QString("fixture-b"));
+        controller.stopPreview();
+        QVERIFY(audio.stops > 0);
+    }
+}
+
+QTEST_GUILESS_MAIN(CaptureTests)
 #include "tst_capture.moc"

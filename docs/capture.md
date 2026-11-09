@@ -46,7 +46,7 @@ The switch protocol is model-specific. Isolde does not guess a protocol, infer t
 
 The current software foundation discovers devices, previews via Qt Multimedia's GStreamer-backed camera path, routes audio where the installed Qt version supports it, sends bounded asynchronous RS-232 commands, and reports frame arrival/loss. No capture card or switch is available in the development environment, so device compatibility, input mapping, actual signal detection, latency, resolution changes, frame pacing, audio sync, hotplug, and long-duration operation remain unqualified. Test these on the intended hardware before advertising the inputs as supported.
 
-Known software gaps against the linked roadmap remain: fallback artwork relies on shortcut artwork rather than independently configured artwork for every input. Capture and audio monitoring remain coupled to the Qt Multimedia controller rather than independently injectable production adapters; Qt versions before 6.8 are explicitly video-only. Native and installed virtual-device journeys have not validated these paths.
+Known software gaps against the linked roadmap remain: fallback artwork relies on shortcut artwork rather than independently configured artwork for every input. Audio discovery and monitoring use an injectable adapter, but video capture remains coupled to the Qt Multimedia controller; Qt versions before 6.8 are explicitly video-only. Native and installed virtual-device journeys have not validated these paths.
 
 ## H04 hardware matrix and numeric procedure
 
