@@ -718,7 +718,7 @@ QVariantList GameLibrary::page(const QString &view, const QString &search, int o
     QString sql="SELECT g.id,g.title,g.platform,g.runtime,g.favorite,"
         +(m_hasMetadata?QString("COALESCE(m.franchise,''),COALESCE(m.tags,'[]')"):QString("'', '[]'"))
         +(m_hasRichMetadata?QString(",COALESCE(m.aliases,'[]'),COALESCE(m.summary,'')"):QString(",'[]',''"))
-        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",'')"))
+        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",''"))
         +" FROM games g";
     if(m_hasActivity)sql+=" LEFT JOIN game_activity a ON a.game_id=g.id";
     if(m_hasMetadata)sql+=" LEFT JOIN game_metadata m ON m.game_id=g.id";
@@ -966,7 +966,7 @@ QVariantMap GameLibrary::details(const QString &id) {
     query.prepare("SELECT g.id,g.title,g.platform,g.runtime,g.favorite,"
         +(m_hasMetadata?QString("COALESCE(m.franchise,''),COALESCE(m.tags,'[]')"):QString("'', '[]'"))
         +(m_hasRichMetadata?QString(",COALESCE(m.aliases,'[]'),COALESCE(m.summary,'')"):QString(",'[]',''"))
-        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",'')"))
+        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",''"))
         +",g.root,g.target"
         +" FROM games g"+QString(m_hasMetadata?" LEFT JOIN game_metadata m ON m.game_id=g.id":"")+" WHERE g.id=?");
     query.addBindValue(id);
@@ -1166,7 +1166,7 @@ QVariantList GameLibrary::pageCollection(const QString &id,int offset) {
     const auto kind=collection.value(0).toString(),filter=collection.value(1).toString(),filterValue=collection.value(2).toString();
     QString sql="SELECT g.id,g.title,g.platform,g.runtime,g.favorite,COALESCE(m.franchise,''),COALESCE(m.tags,'[]')"
         +(m_hasRichMetadata?QString(",COALESCE(m.aliases,'[]'),COALESCE(m.summary,'')"):QString(",'[]',''"))
-        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",'')"))
+        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",''"))
         +" FROM games g LEFT JOIN game_metadata m ON m.game_id=g.id";
     if(kind=="manual")sql+=" JOIN game_collection_members cm ON cm.game_id=g.id";
     sql+=" WHERE ";
@@ -1209,7 +1209,7 @@ bool GameLibrary::exportCatalog(const QString &destination) {
         +(m_hasMetadata?QString("COALESCE(m.franchise,''),COALESCE(m.tags,'[]')"):QString("'','[]'"))
         +(m_hasRichMetadata?QString(",COALESCE(m.aliases,'[]'),COALESCE(m.summary,'')"):QString(",'[]',''"))
         +(m_hasActivity?QString(",COALESCE(a.last_played,0)"):QString(",0"))
-        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",'')"))
+        +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",''"))
         +" FROM games g"
         +(m_hasMetadata?QString(" LEFT JOIN game_metadata m ON m.game_id=g.id"):QString())
         +(m_hasActivity?QString(" LEFT JOIN game_activity a ON a.game_id=g.id"):QString())
