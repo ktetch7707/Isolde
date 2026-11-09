@@ -1,4 +1,5 @@
 #include "GameEmulators.h"
+#include "GameResourceLimits.h"
 #include "media/MediaGrants.h"
 #include <QCryptographicHash>
 #include <QDir>
@@ -109,7 +110,18 @@ QVariantMap GameEmulators::coverage(){
     const auto doc=QJsonDocument::fromJson(file.readAll()).toVariant().toMap();
     if(doc.value("schemaVersion").toInt()!=2 || definitions().isEmpty())return {};
     const auto target=doc.value("target").toMap();
-    return {{"target",target},{"integratedPlatforms",doc.value("generationCoverage").toMap().value("integratedPlatforms")},
+    const QVariantMap budgets{
+        {"catalogEntries",GamesResourceLimits::CatalogEntries},
+        {"pageEntries",GamesResourceLimits::PageEntries},
+        {"platforms",GamesResourceLimits::Platforms},
+        {"collections",GamesResourceLimits::Collections},
+        {"editionsPerGame",GamesResourceLimits::EditionsPerGame},
+        {"provenanceRecords",GamesResourceLimits::ProvenanceRecords},
+        {"catalogArchiveBytes",GamesResourceLimits::CatalogArchiveBytes},
+        {"artworkRestoreBytes",GamesResourceLimits::ArtworkRestoreBytes},
+        {"artworkStoreBytes",GamesResourceLimits::ArtworkStoreBytes}};
+    return {{"target",target},{"budgets",budgets},
+        {"integratedPlatforms",doc.value("generationCoverage").toMap().value("integratedPlatforms")},
         {"notIntegrated",doc.value("generationCoverage").toMap().value("notIntegrated")}};
 }
 QString GameEmulators::home(const QString &profile,const QString &id){

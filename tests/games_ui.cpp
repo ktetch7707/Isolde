@@ -421,9 +421,21 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
     for(int i=0;i<8;++i)command(widget.data(),InputManager::NavigateRight);
     command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulators"));
-    QVERIFY(library.emulatorCoverage().value("integratedPlatforms").toList().contains("PSP"));
-    QVERIFY(library.emulatorCoverage().value("notIntegrated").toList().contains("Xbox 360"));
+    const auto coverage=library.emulatorCoverage();
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("PSP"));
+    QVERIFY(coverage.value("notIntegrated").toList().contains("Xbox 360"));
+    const auto budgets=coverage.value("budgets").toMap();
+    QCOMPARE(budgets.value("catalogEntries").toInt(),50000);
+    QCOMPARE(budgets.value("pageEntries").toInt(),50);
+    QCOMPARE(budgets.value("platforms").toInt(),128);
+    QCOMPARE(budgets.value("collections").toInt(),256);
+    QCOMPARE(budgets.value("editionsPerGame").toInt(),32);
+    QCOMPARE(budgets.value("provenanceRecords").toInt(),1600000);
+    QCOMPARE(budgets.value("catalogArchiveBytes").toLongLong(),33554432LL);
+    QCOMPARE(budgets.value("artworkRestoreBytes").toLongLong(),134217728LL);
+    QCOMPARE(budgets.value("artworkStoreBytes").toLongLong(),536870912LL);
     QVERIFY(widget->property("message").toString().contains("Xbox 360"));
+    QVERIFY(widget->property("message").toString().contains("Catalog budgets: 50000 games"));
     command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));
     const auto file=GameEmulators::home(profile,"ppsspp")+"/.config/isolde-emulator/settings.json";
     command(widget.data(),InputManager::Confirm);QVERIFY(!QFileInfo::exists(file)); // default Cancel

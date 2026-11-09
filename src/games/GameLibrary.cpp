@@ -5,6 +5,7 @@
 #include "OpticalDiscGrants.h"
 #include "CompatibilityRuntime.h"
 #include "ManagedGamePaths.h"
+#include "GameResourceLimits.h"
 #include <QCoreApplication>
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
@@ -35,18 +36,18 @@
 #include <limits>
 
 namespace {
-constexpr int MaxGames = 50000;
-constexpr int PageSize = 50;
-constexpr int MaxPlatforms = 128;
-constexpr int MaxCollections = 256;
-constexpr int MaxProvenanceRecords = MaxGames * 32;
+constexpr int MaxGames = GamesResourceLimits::CatalogEntries;
+constexpr int PageSize = GamesResourceLimits::PageEntries;
+constexpr int MaxPlatforms = GamesResourceLimits::Platforms;
+constexpr int MaxCollections = GamesResourceLimits::Collections;
+constexpr int MaxProvenanceRecords = GamesResourceLimits::ProvenanceRecords;
 constexpr int MaxTags = 32;
-constexpr qsizetype MaxCatalogArchiveBytes = 32 * 1024 * 1024;
+constexpr qsizetype MaxCatalogArchiveBytes = GamesResourceLimits::CatalogArchiveBytes;
 constexpr qsizetype MaxArtworkSourceBytes = 16 * 1024 * 1024;
 constexpr qsizetype MaxManagedArtworkBytes = 12 * 1024 * 1024;
 constexpr qint64 MaxArtworkPixels = 16 * 1024 * 1024;
-constexpr qint64 MaxArtworkStoreBytes = 512LL * 1024 * 1024;
-constexpr qint64 MaxRestoreArtworkBytes = 128LL * 1024 * 1024;
+constexpr qint64 MaxArtworkStoreBytes = GamesResourceLimits::ArtworkStoreBytes;
+constexpr qint64 MaxRestoreArtworkBytes = GamesResourceLimits::ArtworkRestoreBytes;
 bool exactKeys(const QJsonObject &object,const QStringList &keys) {
     QStringList actual=object.keys();auto expected=keys;actual.sort();expected.sort();return actual==expected;
 }
