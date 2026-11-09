@@ -38,10 +38,13 @@ class PortableGameInstallerTests(unittest.TestCase):
             for item in extra: archive.writestr(*item)
 
     def package_ustar(self, compressed=False):
-        self.archive=self.root/("fixture.tar.gz" if compressed else "fixture.tar")
+        compression = "gzip" if compressed is True else compressed if compressed else ""
+        suffix = {"gzip": ".gz", "bzip2": ".bz2", "xz": ".xz"}.get(compression, "")
+        mode = {"gzip": "w:gz", "bzip2": "w:bz2", "xz": "w:xz"}.get(compression, "w")
+        self.archive=self.root/("fixture.tar"+suffix)
         files=((installer.MANIFEST,json.dumps(self.manifest).encode(),0o644),
                ("bin/game",b"\x7fELF"+b"\x00"*32,0o755))
-        with tarfile.open(self.archive,"w:gz" if compressed else "w",format=tarfile.USTAR_FORMAT) as archive:
+        with tarfile.open(self.archive,mode,format=tarfile.USTAR_FORMAT) as archive:
             directory=tarfile.TarInfo("bin/");directory.type=tarfile.DIRTYPE;directory.mode=0o755
             archive.addfile(directory)
             for name,data,mode in files:
@@ -325,6 +328,34 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.archive.write_bytes(self.archive.read_bytes()[:20])
         with self.assertRaises((ValueError, EOFError, tarfile.TarError, OSError)):
             installer.inspect(self.archive)
+
+    def test_bzip2_and_xz_ustar_full_install_recovery_and_uninstall(self):
+        for compression, expected_format in (("bzip2","ustar-bzip2"),("xz","ustar-xz")):
+            with self.subTest(compression=compression):
+                self.package_ustar(compressed=compression)
+                preview=installer.inspect(self.archive)
+                self.assertEqual(preview["archiveFormat"],expected_format)
+                destination=self.root/"private"/compression/"install"
+                installer.install(self.archive,destination,preview["archiveSha256"])
+                self.assertEqual((destination/"bin/game").read_bytes(),b"\x7fELF"+b"\x00"*32)
+                recovered=installer.inspect_installed(destination)
+                self.assertEqual(recovered["archiveSha256"],preview["archiveSha256"])
+                installer.prepare_uninstall(destination)
+                installer.recover_uninstall(destination)
+                self.assertTrue((destination/"bin/game").is_file())
+                installer.uninstall(destination)
+                self.assertFalse(destination.exists())
+
+    def test_bzip2_and_xz_truncation_and_expansion_limits_are_rejected(self):
+        for compression in ("bzip2","xz"):
+            with self.subTest(compression=compression):
+                self.package_ustar(compressed=compression)
+                with mock.patch.object(installer,"MAX_EXPANDED",20):
+                    with self.assertRaisesRegex(ValueError,"unpacked size"):
+                        installer.inspect(self.archive)
+                self.archive.write_bytes(self.archive.read_bytes()[:20])
+                with self.assertRaises((ValueError, EOFError, tarfile.TarError, OSError, RuntimeError)):
+                    installer.inspect(self.archive)
 
     def test_uninstall_preserves_modified_or_unowned_payloads(self):
         self.package()

@@ -259,7 +259,7 @@ Item {
             if(choice===7){openSteam();return}
             if(choice===6){const status=library.compatibilityInstallerStatus();mode="compatibilityStatus";choice=0;message="Windows installer support: preflight only. System Wine candidate: "+status.state+". "+status.requirements;return}
             if(choice===5){pendingUninstalls=library.pendingUninstallRecovery();mode="uninstallRecovery";choice=0;message=pendingUninstalls.length?"Select an orphaned uninstall to review. No files are removed.":"No orphaned pending uninstall was found.";return}
-            if(choice===4){registeringOpticalGame=false;opticalObservationId="";opticalDevice="";mode="installerRuntime";choice=0;message="Install a standalone x86-64 Linux ELF or an inert Isolde ZIP, USTAR or gzip-compressed USTAR bundle. Only the standalone file is copied; adjacent files and dependencies are not installed. Setup code is never run.";return}
+            if(choice===4){registeringOpticalGame=false;opticalObservationId="";opticalDevice="";mode="installerRuntime";choice=0;message="Install a standalone x86-64 Linux ELF or an inert Isolde ZIP, USTAR, gzip-, bzip2- or xz-compressed USTAR bundle. Only the standalone file is copied; adjacent files and dependencies are not installed. Setup code is never run.";return}
             if(choice===3){opticalChoices=library.mountedOpticalDiscs();mode="opticalChooser";choice=0;message=opticalChoices.length?"Read-only mounted media and drives reporting data media are listed. No disc content is launched or installed automatically.":"No mounted or unmounted PC optical data media is available.";return}
             if(choice===2){steamLibraryChoices=library.steamLibraries();mode="steamLibraries";choice=0;message="Approve only Steam library folders on mounted storage. Each approved library is visible to Steam read-only for this profile.";return}
             if(choice===8){mode="managedRecoveryRuntime";choice=0;message="Choose an installed file runtime. Isolde verifies each private managed install's complete inventory before restoring a catalog entry.";return}
@@ -332,7 +332,7 @@ Item {
             if(choice===1){
                 if(library.revalidateOpticalDisc(opticalObservationId,opticalDevice).state!=="ready"){message="The selected disc is no longer mounted. Refresh and review it again.";return}
                 registeringOpticalGame=false;
-                mode="installerRuntime";choice=0;message="Choose an installed file runtime, then select a standalone x86-64 Linux ELF or inert Isolde ZIP, USTAR or gzip-compressed USTAR bundle on this read-only disc. Only the standalone file is copied; adjacent files and dependencies are not installed. Setup programs will not run.";return
+                mode="installerRuntime";choice=0;message="Choose an installed file runtime, then select a standalone x86-64 Linux ELF or inert Isolde ZIP, USTAR, gzip-, bzip2- or xz-compressed USTAR bundle on this read-only disc. Only the standalone file is copied; adjacent files and dependencies are not installed. Setup programs will not run.";return
             }
             if(choice===2){const ok=library.approveOpticalMedia(opticalObservationId,opticalDevice);message=ok?"This profile approved the mounted disc's content identity. The grant does not transfer to other profiles.":library.errorString;return}
             if(choice===3){const ok=library.revokeOpticalMedia(opticalObservationId,opticalDevice);message=ok?"This profile's disc access was revoked. Catalog records and files remain unchanged.":library.errorString;return}
@@ -346,7 +346,7 @@ Item {
         if(mode==="installerRuntime"){
             const runtime=runtimes[choice];if(!runtime || !runtime.file){message="Choose an installed file-based game runtime.";return}
             portableRuntimeId=runtime.id;portableRuntimeName=runtime.name;field=17;mode="keyboard";keyboard.selectedIndex=0;keyboard.value=""
-            message=registeringOpticalGame?"Enter a relative path to an executable file on the selected disc.":"Select an authorized standalone x86-64 Linux ELF or Isolde ZIP, USTAR or gzip-compressed USTAR bundle. Nothing is run during inspection.";return
+            message=registeringOpticalGame?"Enter a relative path to an executable file on the selected disc.":"Select an authorized standalone x86-64 Linux ELF or Isolde ZIP, USTAR, gzip-, bzip2- or xz-compressed USTAR bundle. Nothing is run during inspection.";return
         }
         if(mode==="installerReview"){
             if(choice===0){library.cancelPortableInstall();mode=opticalObservationId?"opticalDetails":"catalogTools";choice=opticalObservationId?0:4;return}
