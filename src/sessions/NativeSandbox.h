@@ -15,6 +15,7 @@ struct NativeSandboxPlan {
 // Builds a fail-closed launch. Only append the application's arguments afterward.
 class NativeSandbox {
 public:
+    static bool hasGamepadKeyCapabilities(const QString &bitmap);
     static NativeSandboxPlan prepare(const QString &profileId, const QString &appId,
                                     const QString &executable, const QProcessEnvironment &host,
                                     const QString &actionTarget = {}, const QString &storageRoot = {},

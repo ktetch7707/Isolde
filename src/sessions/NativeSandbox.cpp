@@ -36,7 +36,23 @@ bool privateDirectory(const QString &path)
     return QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 }
 }
-
+bool NativeSandbox::hasGamepadKeyCapabilities(const QString &bitmap)
+{
+    if(bitmap.isEmpty() || bitmap.size()>4096)return false;
+    const auto words=bitmap.split(' ',Qt::SkipEmptyParts);
+    if(words.isEmpty() || words.size()>512)return false;
+    for(const auto &word:words){
+        if(word.isEmpty() || word.size()>16 || !QRegularExpression("^[0-9a-fA-F]+$").match(word).hasMatch())return false;
+    }
+    for(int code=0x120;code<0x140;++code){
+        const auto word=words.size()-1-code/64;
+        if(word<0)continue;
+        bool ok=false;
+        const auto bits=words.at(word).toULongLong(&ok,16);
+        if(ok && (bits&(quint64(1)<<(code%64))))return true;
+    }
+    return false;
+}
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
@@ -171,11 +187,8 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             QFile capabilities("/sys/class/input/"+node+"/device/capabilities/key");
             if(!capabilities.open(QIODevice::ReadOnly))continue;
             const auto bitmap=QString::fromLatin1(capabilities.read(4096)).trimmed().split(' ',Qt::SkipEmptyParts);
-            bool gamepad=false;
-            for(int code=0x120;code<0x140;++code){const auto word=bitmap.size()-1-code/64;
-                if(word>=0){bool ok=false;const auto bits=bitmap.at(word).toULongLong(&ok,16);gamepad|=ok && (bits&(quint64(1)<<(code%64)));}}
             const auto device="/dev/input/"+node;
-            if(gamepad && QFileInfo::exists(device)){if(++granted>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}bind(device,device,"--dev-bind");}
+            if(hasGamepadKeyCapabilities(bitmap.join(' ')) && QFileInfo::exists(device)){if(++granted>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}bind(device,device,"--dev-bind");}
         }
     }
     if (QFileInfo::exists("/sys")) bind("/sys", "/sys");

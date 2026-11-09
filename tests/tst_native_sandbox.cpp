@@ -24,10 +24,26 @@ private slots:
     void invalidIdentityAndSymlinkAreRefused();
     void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
     void externalSteamGrantsAreProfileScopedAndFailClosed();
+    void gamepadCapabilityRecognitionIsBoundedAndExact();
 };
 
 static const QString alice = "11111111-1111-4111-8111-111111111111";
 static const QString bob = "22222222-2222-4222-8222-222222222222";
+
+void NativeSandboxTests::gamepadCapabilityRecognitionIsBoundedAndExact()
+{
+    const auto bitmapFor=[](int code){
+        QStringList words(5,QStringLiteral("0"));
+        words[words.size()-1-code/64]=QString::number(quint64(1)<<(code%64),16);
+        return words.join(' ');
+    };
+    QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x130)));
+    QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x13f)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x12f)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x001e)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities("0 0 invalid 0 0"));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(QString(4097,'0')));
+}
 
 static QByteArray run(const NativeSandboxPlan &plan, const QString &script, const QStringList &extra = {})
 {
