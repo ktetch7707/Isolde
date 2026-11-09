@@ -82,6 +82,10 @@ Item {
             : galleryPresentation.favoritesEnabled ? "favorites" : "store"
     }
 
+    function verticalStep() {
+        return layoutMode === "list" ? 1 : columns
+    }
+
     function handleCommand(command) {
         if (!open) return false
         if (keyboardOpen) {
@@ -135,8 +139,9 @@ Item {
         }
         if (command === inputManager.navigateUp) {
             const index = selectedIndex
-            if (index < 0 || index < columns) focusArea = firstControlArea()
-            else selectAt(index - columns)
+            const step = verticalStep()
+            if (index < 0 || index < step) focusArea = firstControlArea()
+            else selectAt(index - step)
             return true
         }
         if (command === inputManager.navigateDown) {
@@ -144,7 +149,7 @@ Item {
                 focusArea = "store"
                 return true
             }
-            selectAt(Math.min(visibleEntries.length - 1, Math.max(0, selectedIndex) + columns))
+            selectAt(Math.min(visibleEntries.length - 1, Math.max(0, selectedIndex) + verticalStep()))
             return true
         }
         if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {

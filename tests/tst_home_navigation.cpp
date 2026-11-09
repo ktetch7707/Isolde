@@ -52,6 +52,7 @@ private slots:
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
     void allAppsGalleryUsesLocalFilterAndRestoresOrigin();
+    void allAppsListNavigationUsesSingleRowStep();
     void searchHeaderSwitchRemoteFocusAndStableResults();
     void searchPreferenceProfileIsolationAndWriteFailure();
     void appSuppliedIconsUseManagedArtwork();
@@ -121,6 +122,41 @@ void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
     QVERIFY(command(InputManager::Back));
     QCOMPARE(closed.size(), 1);
     QCOMPARE(closed.last().at(0).toString(), QString("home-card"));
+}
+void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
+{
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(APP_GALLERY_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    const QVariantList apps{
+        QVariantMap{{"id","alpha"},{"name","Alpha"},{"type","web"}},
+        QVariantMap{{"id","beta"},{"name","Beta"},{"type","desktop"}},
+        QVariantMap{{"id","gamma"},{"name","Gamma"},{"type","web"}},
+        QVariantMap{{"id","delta"},{"name","Delta"},{"type","android"}}
+    };
+    std::unique_ptr<QObject> gallery(component.createWithInitialProperties({
+        {"entries", apps},
+        {"galleryPresentation", QVariantMap{{"layout","list"},{"columns",5},{"filterEnabled",true}}},
+        {"width",1280},{"height",720}
+    }));
+    QVERIFY2(gallery, qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("page-apps"))));
+    auto command = [&](int value) {
+        return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
+    };
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("gamma"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("focusArea").toString(), QString("filter"));
 }
 void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 {
