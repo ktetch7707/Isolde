@@ -21,6 +21,7 @@
 #include <QJsonObject>
 #include <QImage>
 #include <QRegularExpression>
+#include <QSqlQuery>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -47,6 +48,7 @@ private slots:
     void remoteEditionChooserDispatchesOwnedVersion();
     void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
     void platformShelvesFilterCanonicalGamesRemotely();
+    void fiveThousandGameCatalogStaysPagedAndSearchable();
     void organizationAndManualSmartCollectionsStayProfileLocal();
     void catalogExportRestoreIsBoundedAndTransactional();
 };
@@ -333,6 +335,30 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     QCOMPARE(reopened.pageCollection(smart).size(),1);
     QVERIFY(reopened.removeCollection(manual));
     QCOMPARE(reopened.collections().size(),4);
+}
+void GamesUiTests::fiveThousandGameCatalogStaysPagedAndSearchable(){
+    QTemporaryDir dir;QVERIFY(dir.isValid());
+    const auto path=dir.filePath("scale.sqlite");
+    const auto connection="games-scale-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto seed=QSqlDatabase::addDatabase("QSQLITE",connection);seed.setDatabaseName(path);QVERIFY(seed.open());
+    QSqlQuery query(seed);QVERIFY(query.exec("CREATE TABLE games(id TEXT PRIMARY KEY,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT NOT NULL,root TEXT NOT NULL,target TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0 CHECK(favorite IN (0,1)),added INTEGER NOT NULL,UNIQUE(runtime,root,target))"));
+    QVERIFY(query.exec("CREATE INDEX games_title ON games(title COLLATE NOCASE)"));
+    QVERIFY(query.exec("PRAGMA user_version=1"));QVERIFY(seed.transaction());
+    query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,favorite,added) VALUES(:id,:title,:platform,:runtime,:root,:target,:favorite,:added)");
+    for(int i=0;i<5000;++i){
+        const auto suffix=QString("%1").arg(i,5,10,QLatin1Char('0'));
+        query.bindValue(":id","game-"+suffix);query.bindValue(":title","Fixture "+suffix);
+        query.bindValue(":platform",i%2?"PC":"PSP");query.bindValue(":runtime","runtime-"+suffix);
+        query.bindValue(":root","");query.bindValue(":target","");query.bindValue(":favorite",i%7==0?1:0);query.bindValue(":added",i);
+        QVERIFY2(query.exec(),qPrintable(query.lastError().text()));query.finish();
+    }
+    QVERIFY(seed.commit());query=QSqlQuery();seed.close();seed=QSqlDatabase();QSqlDatabase::removeDatabase(connection);
+    AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(path,&apps);QVERIFY2(library.ready(),qPrintable(library.errorString()));
+    QCOMPARE(library.page("all",{},0).size(),50);
+    QCOMPARE(library.page("all",{},4950).size(),50);
+    QCOMPARE(library.page("search","Fixture 04999",0).size(),1);
+    QCOMPARE(library.page("platform",{},0,"PSP").size(),50);
+    QVERIFY(library.page("all",{},5000).isEmpty());
 }
 void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QTemporaryDir dir;QVERIFY(dir.isValid());
