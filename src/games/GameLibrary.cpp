@@ -133,6 +133,13 @@ QVariantMap row(const QSqlQuery &query,const QString &artworkDirectory) {
         {"franchise",query.value(5).toString()},
         {"tags",tags},{"aliases",aliases},{"summary",query.value(8).toString()},{"artwork",artwork}};
 }
+QString sourceKind(const QString &runtime,const QString &root,const QString &profile) {
+    if(runtime=="steam")return "steam-app";
+    if(OpticalDiscAdapter::isRootReference(root))return "optical-media";
+    if(ManagedGamePaths::isInstallRoot(profile,root))return "isolde-managed-install";
+    if(!root.isEmpty())return "approved-folder";
+    return "runtime-entry";
+}
 }
 
 GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent)
@@ -350,6 +357,7 @@ GameLibrary::~GameLibrary() {
     cancelEmulatorSetup();if(setupBusy())m_setup.waitForFinished(5000);
     m_db.close(); m_db = QSqlDatabase(); QSqlDatabase::removeDatabase(m_connection);
 }
+int GameLibrary::catalogLimit() const { return MaxGames; }
 bool GameLibrary::fail(const QString &error) { m_error = error; emit errorChanged(); return false; }
 void GameLibrary::invalidate() { cancelImport();cancelEmulatorSetup();cancelPortableInstall(); m_ready = false; m_db.close(); fail(tr("This games profile is no longer active.")); emit changed(); }
 bool GameLibrary::compatibleRuntime(const QString &id, bool file) const {
@@ -701,10 +709,15 @@ QVariantMap GameLibrary::details(const QString &id) {
         +(m_hasMetadata?QString("COALESCE(m.franchise,''),COALESCE(m.tags,'[]')"):QString("'', '[]'"))
         +(m_hasRichMetadata?QString(",COALESCE(m.aliases,'[]'),COALESCE(m.summary,'')"):QString(",'[]',''"))
         +(m_hasArtwork?QString(",COALESCE(m.artwork_hash,'')"):QString(",'')"))
+        +",g.root,g.target"
         +" FROM games g"+QString(m_hasMetadata?" LEFT JOIN game_metadata m ON m.game_id=g.id":"")+" WHERE g.id=?");
     query.addBindValue(id);
     if (!query.exec() || !query.next()) return {};
-    return row(query,artworkDirectory());
+    auto result=row(query,artworkDirectory());
+    result["sourceKind"]=sourceKind(query.value(3).toString(),query.value(10).toString(),m_emulatorProfile);
+    result["sourceReference"]=OpticalDiscAdapter::isRootReference(query.value(10).toString())
+        ?OpticalDiscAdapter::mediaIdFromRoot(query.value(10).toString()):query.value(11).toString();
+    return result;
 }
 bool GameLibrary::setOrganization(const QString &id,const QString &franchise,const QStringList &inputTags,
                                   const QStringList &inputAliases,const QString &summary) {
@@ -748,7 +761,10 @@ QVariantList GameLibrary::collections() {
     const auto countExpression="CASE WHEN c.kind='manual' THEN count(m.game_id) "
         "WHEN c.filter_type='favorite' THEN (SELECT count(*) FROM games g WHERE g.favorite=1) "
         "WHEN c.filter_type='title' THEN (SELECT count(*) FROM games g WHERE instr(lower(g.title),lower(c.filter_value))>0) "
-        "WHEN c.filter_type='platform' THEN "+smartPlatform+" ELSE 0 END";
+        "WHEN c.filter_type='platform' THEN "+smartPlatform+" "
+        "WHEN c.filter_type='franchise' THEN (SELECT count(*) FROM games g JOIN game_metadata gm ON gm.game_id=g.id WHERE instr(lower(gm.franchise),lower(c.filter_value))>0) "
+        "WHEN c.filter_type='tag' THEN (SELECT count(*) FROM games g,game_metadata gm,json_each(gm.tags) tag WHERE gm.game_id=g.id AND lower(tag.value)=lower(c.filter_value)) "
+        "WHEN c.filter_type='recent' THEN (SELECT count(*) FROM games g JOIN game_activity ga ON ga.game_id=g.id) ELSE 0 END";
     if(!query.exec("SELECT c.id,c.name,c.kind,c.filter_type,c.filter_value,"+countExpression
         +" FROM game_collections c LEFT JOIN game_collection_members m ON m.collection_id=c.id GROUP BY c.id ORDER BY c.name COLLATE NOCASE,c.id")){
         fail(query.lastError().text());return {};
@@ -765,14 +781,14 @@ QString GameLibrary::createCollection(const QString &name,const QString &kind,co
     if(kind=="manual"){
         if(!filterType.isEmpty() || !filterValue.isEmpty()){fail(tr("Manual collections do not accept executable filters."));return {};}
     }else if(kind=="smart"){
-        if(!QStringList{"platform","favorite","title"}.contains(filterType)
+        if(!QStringList{"platform","favorite","title","franchise","tag","recent"}.contains(filterType)
             || filterValue.size()>80 || filterValue.contains(QChar::Null)
-            || (filterType!="favorite" && filterValue.trimmed().isEmpty())
-            || (filterType=="favorite" && !filterValue.isEmpty())){
+            || (!QStringList{"favorite","recent"}.contains(filterType) && filterValue.trimmed().isEmpty())
+            || (QStringList{"favorite","recent"}.contains(filterType) && !filterValue.isEmpty())){
             fail(tr("Choose one supported declarative smart collection rule."));return {};
         }
     }else{fail(tr("Choose a manual or smart collection."));return {};}
-    if(!m_hasCollections && !ensureOrganizationSchema())return {};
+    if((!m_hasCollections || (filterType=="recent" && !m_hasActivity)) && !ensureOrganizationSchema())return {};
     if(collections().size()>=MaxCollections){fail(tr("This profile already has 256 game collections."));return {};}
     const auto id="collection-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     QSqlQuery query(m_db);query.prepare("INSERT INTO game_collections(id,name,kind,filter_type,filter_value) VALUES(?,?,?,?,?)");
@@ -792,10 +808,10 @@ bool GameLibrary::updateCollection(const QString &id,const QString &name,const Q
     if(kind=="manual"){
         if(!filterType.isEmpty() || !filterValue.isEmpty())return fail(tr("Manual collections do not accept executable filters."));
     }else if(kind=="smart"){
-        if(!QStringList{"platform","favorite","title"}.contains(filterType)
+        if(!QStringList{"platform","favorite","title","franchise","tag","recent"}.contains(filterType)
             || filterValue.size()>80 || filterValue.contains(QChar::Null)
-            || (filterType!="favorite" && filterValue.trimmed().isEmpty())
-            || (filterType=="favorite" && !filterValue.isEmpty()))
+            || (!QStringList{"favorite","recent"}.contains(filterType) && filterValue.trimmed().isEmpty())
+            || (QStringList{"favorite","recent"}.contains(filterType) && !filterValue.isEmpty()))
             return fail(tr("Choose one supported declarative smart collection rule."));
     }else return fail(tr("Collection type is invalid."));
     if(!m_db.transaction())return fail(m_db.lastError().text());
@@ -890,12 +906,15 @@ QVariantList GameLibrary::pageCollection(const QString &id,int offset) {
         sql+=" ORDER BY g.title COLLATE NOCASE,g.id";
     }else if(filter=="favorite")sql+="g.favorite=1 ORDER BY g.title COLLATE NOCASE,g.id";
     else if(filter=="title")sql+="instr(lower(g.title),lower(?))>0 ORDER BY g.title COLLATE NOCASE,g.id";
+    else if(filter=="franchise")sql+="instr(lower(COALESCE(m.franchise,'')),lower(?))>0 ORDER BY g.title COLLATE NOCASE,g.id";
+    else if(filter=="tag")sql+="EXISTS(SELECT 1 FROM json_each(COALESCE(m.tags,'[]')) tag WHERE lower(tag.value)=lower(?)) ORDER BY g.title COLLATE NOCASE,g.id";
+    else if(filter=="recent" && m_hasActivity)sql+="EXISTS(SELECT 1 FROM game_activity a WHERE a.game_id=g.id) ORDER BY (SELECT a.last_played FROM game_activity a WHERE a.game_id=g.id) DESC,g.id";
     else{fail(tr("Collection rule is invalid. No results were changed."));return {};}
     sql+=" LIMIT 50 OFFSET ?";
     QSqlQuery query(m_db);query.prepare(sql);
     if(kind=="manual")query.addBindValue(id);
     else if(filter=="platform"){query.addBindValue(filterValue);if(m_hasEditions)query.addBindValue(filterValue);}
-    else if(filter=="title")query.addBindValue(filterValue);
+    else if(filter=="title" || filter=="franchise" || filter=="tag")query.addBindValue(filterValue);
     query.addBindValue(offset);
     if(!query.exec()){fail(query.lastError().text());return {};}
     QVariantList result;while(query.next())result.append(row(query,artworkDirectory()));return result;

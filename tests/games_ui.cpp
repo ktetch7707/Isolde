@@ -53,6 +53,7 @@ private slots:
     void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
     void platformShelvesFilterCanonicalGamesRemotely();
     void fiveThousandGameCatalogStaysPagedAndSearchable();
+    void catalogCapDisablesNextFromLastFullPage();
     void organizationAndManualSmartCollectionsStayProfileLocal();
     void catalogExportRestoreIsBoundedAndTransactional();
 };
@@ -256,6 +257,9 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     QTRY_COMPARE_WITH_TIMEOUT(widget->property("mode").toString(),QString("importPreview"),10000);
     command(widget.data(),InputManager::NavigateUp);command(widget.data(),InputManager::Confirm);QCOMPARE(library.page().size(),1);
+    const auto steamGame=library.page().first().toMap().value("id").toString();
+    QCOMPARE(library.details(steamGame).value("sourceKind").toString(),QString("steam-app"));
+    QCOMPARE(library.details(steamGame).value("sourceReference").toString(),QString("42"));
     command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     QCOMPARE(dispatch.lastAction.value("type").toString(),QString("launch-game"));QCOMPARE(dispatch.origin,QString("steam-origin"));
     QCOMPARE(library.resolveLaunch(dispatch.lastAction.value("gameId").toString()).value("steamAppId").toString(),QString("42"));
@@ -292,6 +296,7 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
     };
     const auto pc=add("Desk fixture","PC"),psp=add("Handheld fixture","PSP");
     QVERIFY(!pc.isEmpty());QVERIFY(!psp.isEmpty());
+    QCOMPARE(library.details(pc).value("sourceKind").toString(),QString("runtime-entry"));
     QVERIFY(library.setFavorite(psp,true));
     QCOMPARE(library.platforms().size(),2);
     QCOMPARE(library.page("platform",{},0,"psp").size(),1);
@@ -332,6 +337,58 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
     const auto continueItems=continued.metaType()==QMetaType::fromType<QJSValue>()?continued.value<QJSValue>().toVariant().toList():continued.toList();
     QCOMPARE(continueItems.size(),1);QCOMPARE(continueItems.first().toMap().value("id").toString(),psp);
 }
+void GamesUiTests::catalogCapDisablesNextFromLastFullPage(){
+    QTemporaryDir dir;QVERIFY(dir.isValid());
+    const auto path=dir.filePath("catalog-cap.sqlite");
+    const auto connection="games-cap-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto seed=QSqlDatabase::addDatabase("QSQLITE",connection);seed.setDatabaseName(path);QVERIFY(seed.open());
+    QSqlQuery query(seed);
+    QVERIFY(query.exec("CREATE TABLE games(id TEXT PRIMARY KEY,title TEXT NOT NULL,platform TEXT NOT NULL,runtime TEXT NOT NULL,root TEXT NOT NULL,target TEXT NOT NULL,favorite INTEGER NOT NULL DEFAULT 0 CHECK(favorite IN (0,1)),added INTEGER NOT NULL,UNIQUE(runtime,root,target))"));
+    QVERIFY(query.exec("CREATE INDEX games_title ON games(title COLLATE NOCASE)"));
+    QVERIFY(query.exec("PRAGMA user_version=1"));
+    QVERIFY(query.exec("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<49999) "
+        "INSERT INTO games(id,title,platform,runtime,root,target,added) "
+        "SELECT printf('game-%05d',x),printf('Fixture %05d',x),CASE WHEN x<50 THEN 'Small' ELSE 'PC' END,printf('runtime-%05d',x),'','',x FROM n"));
+    query=QSqlQuery();seed.close();seed=QSqlDatabase();QSqlDatabase::removeDatabase(connection);
+    AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    GameLibrary library(path,&apps);QVERIFY2(library.ready(),qPrintable(library.errorString()));
+    QCOMPARE(library.page("all",{},49950).size(),50);
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({
+        {"library",QVariant::fromValue(&library)},{"width",1000},{"height",600},{"engaged",true}}));
+    QVERIFY2(widget,qPrintable(component.errorString()));
+    QCOMPARE(widget->property("catalogLimit").toInt(),50000);
+    QVERIFY(widget->property("canNextPage").toBool());
+    auto labelsValue=widget->property("tools");
+    auto labels=labelsValue.metaType()==QMetaType::fromType<QJSValue>()?labelsValue.value<QJSValue>().toVariant().toList():labelsValue.toList();
+    QCOMPARE(labels.at(7).toString(),QString("Next"));
+    widget->setProperty("toolbar",7);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("offset").toInt(),50);
+    QVERIFY(widget->setProperty("offset",49950));
+    QVERIFY(QMetaObject::invokeMethod(widget.data(),"reload"));
+    QCOMPARE(widget->property("canNextPage").toBool(),false);
+    labelsValue=widget->property("tools");
+    labels=labelsValue.metaType()==QMetaType::fromType<QJSValue>()?labelsValue.value<QJSValue>().toVariant().toList():labelsValue.toList();
+    QCOMPARE(labels.at(7).toString(),QString("End"));
+    auto listed=widget->property("items");
+    auto page=listed.metaType()==QMetaType::fromType<QJSValue>()?listed.value<QJSValue>().toVariant().toList():listed.toList();
+    QCOMPARE(page.size(),50);
+    widget->setProperty("toolbar",7);
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("offset").toInt(),49950);
+    listed=widget->property("items");
+    page=listed.metaType()==QMetaType::fromType<QJSValue>()?listed.value<QJSValue>().toVariant().toList():listed.toList();
+    QCOMPARE(page.size(),50);
+    QVERIFY(library.errorString().isEmpty());
+    widget->setProperty("selectedPlatform","Small");
+    widget->setProperty("queryView","platform");
+    listed=widget->property("items");
+    page=listed.metaType()==QMetaType::fromType<QJSValue>()?listed.value<QJSValue>().toVariant().toList():listed.toList();
+    QCOMPARE(page.size(),50);
+    QCOMPARE(widget->property("canNextPage").toBool(),false);
+    QVERIFY(library.errorString().isEmpty());
+}
 void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));
     GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
@@ -354,13 +411,20 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     QVERIFY(!library.setOrganization(id,"",{},{"duplicate","DUPLICATE"}));
     QVERIFY(!library.setOrganization(id,"",{}, {},QString(4097,'x')));
     QCOMPARE(library.details(id).value("franchise").toString(),QString("Example Saga"));
+    QVERIFY(library.recordCompletedSession(id));
 
     const auto manual=library.createCollection("Favorites to play","manual");
     const auto smart=library.createCollection("Puzzle games","smart","title","example");
     const auto favorites=library.createCollection("My favorites","smart","favorite");
     const auto platform=library.createCollection("PC games","smart","platform","PSP");
+    const auto franchise=library.createCollection("Saga shelf","smart","franchise","saga");
+    const auto tag=library.createCollection("Puzzle tag","smart","tag","puzzle");
+    const auto recent=library.createCollection("Recently played","smart","recent");
     const auto literal=library.createCollection("Literal query","smart","title","x' OR 1=1 --");
-    QVERIFY(!manual.isEmpty());QVERIFY(!smart.isEmpty());QVERIFY(!favorites.isEmpty());QVERIFY(!platform.isEmpty());QVERIFY(!literal.isEmpty());
+    QVERIFY(!manual.isEmpty());QVERIFY(!smart.isEmpty());QVERIFY(!favorites.isEmpty());QVERIFY(!platform.isEmpty());
+    QVERIFY(!franchise.isEmpty());QVERIFY(!tag.isEmpty());QVERIFY(!recent.isEmpty());QVERIFY(!literal.isEmpty());
+    QVERIFY(library.createCollection("Invalid recent rule","smart","recent","now").isEmpty());
+    QVERIFY(library.createCollection("Invalid blank tag","smart","tag","").isEmpty());
     const auto collectionById=[&library](const QString &wanted){
         for(const auto &entry:library.collections())if(entry.toMap().value("id").toString()==wanted)return entry.toMap();
         return QVariantMap{};
@@ -377,6 +441,13 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     QVERIFY(library.updateCollection(platform,"PC games","platform","pc"));
     QCOMPARE(library.pageCollection(platform).size(),2);
     QCOMPARE(collectionById(platform).value("count").toInt(),2);
+    QCOMPARE(library.pageCollection(franchise).size(),1);
+    QCOMPARE(collectionById(franchise).value("count").toInt(),1);
+    QCOMPARE(library.pageCollection(tag).size(),1);
+    QVERIFY(library.updateCollection(tag,"Exact tag","tag","coop"));
+    QCOMPARE(library.pageCollection(tag).size(),0);
+    QCOMPARE(library.pageCollection(recent).size(),1);
+    QCOMPARE(collectionById(recent).value("count").toInt(),1);
     QVERIFY(library.updateCollection(manual,"My ordered games"));
     QVERIFY(!library.updateCollection(manual,"Puzzle games"));
     QCOMPARE(collectionById(manual).value("name").toString(),QString("My ordered games"));
@@ -391,14 +462,17 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     QVERIFY(library.setCollectionMember(manual,id,true));
     QVERIFY(library.removeGame(id));
     QCOMPARE(library.pageCollection(manual).size(),1);
-    QCOMPARE(library.collections().size(),5);
+    QCOMPARE(library.collections().size(),8);
 
     GameLibrary reopened(dir.filePath("profile/games.sqlite"),&apps);
     QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
-    QCOMPARE(reopened.collections().size(),5);
+    QCOMPARE(reopened.collections().size(),8);
     QCOMPARE(reopened.pageCollection(smart).size(),1);
+    QCOMPARE(reopened.pageCollection(recent).size(),0);
+    QCOMPARE(reopened.pageCollection(franchise).size(),0);
+    QCOMPARE(reopened.pageCollection(tag).size(),0);
     QVERIFY(reopened.removeCollection(manual));
-    QCOMPARE(reopened.collections().size(),4);
+    QCOMPARE(reopened.collections().size(),7);
 }
 void GamesUiTests::fiveThousandGameCatalogStaysPagedAndSearchable(){
     QTemporaryDir dir;QVERIFY(dir.isValid());

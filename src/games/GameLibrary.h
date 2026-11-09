@@ -15,6 +15,7 @@ class AppCatalog;
 class GameLibrary final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
+    Q_PROPERTY(int catalogLimit READ catalogLimit CONSTANT)
     Q_PROPERTY(bool ready READ ready NOTIFY changed)
     Q_PROPERTY(QVariantList runtimes READ runtimes NOTIFY changed)
     Q_PROPERTY(QVariantList emulators READ emulators NOTIFY changed)
@@ -31,6 +32,7 @@ public:
     GameLibrary(const QString &databasePath, AppRegistry *apps, QObject *parent = nullptr);
     ~GameLibrary() override;
     bool ready() const { return m_ready; }
+    int catalogLimit() const;
     QString errorString() const { return m_error; }
     QVariantList runtimes() const;
     QVariantList emulators() const;
