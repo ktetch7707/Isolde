@@ -374,10 +374,17 @@ QVariantList OpticalDiscAdapter::mountedDiscs()
             bool sizeOk=false;
             const auto sectors=sizeFile.read(64).trimmed().toULongLong(&sizeOk);
             if(!sizeOk || sectors==0)continue;
-            const auto observed=device+"\nunmounted";
+            QString sequence;
+#ifdef Q_OS_LINUX
+            QFile block(device);
+            quint64 diskSequence=0,diskSize=0;
+            if(diskInfo(block,&diskSequence,&diskSize))sequence=QString::number(diskSequence);
+#endif
+            const auto observationId=mountObservationId(device,"unknown",{}, {},sequence,
+                "unmounted",QString::number(sectors),{});
             result.append(QVariantMap{
                 {"schemaVersion",1},{"sourceType","pc-optical-disc"},
-                {"observationId",QString::fromLatin1(QCryptographicHash::hash(observed.toUtf8(),QCryptographicHash::Sha256).toHex())},
+                {"observationId",observationId},{"mediaTracking",sequence.isEmpty()?"unavailable":"disk-sequence"},
                 {"device",device},{"mountRoot",QString()},{"filesystem","unknown"},
                 {"volumeLabel",QString()},{"mediaId",QString()},
                 {"mediaSetId",QString()},{"discNumber",0},

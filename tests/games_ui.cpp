@@ -88,6 +88,11 @@ void GamesUiTests::opticalMountInstanceChangesObservation(){
     QVERIFY(first!=observe({}));
     QVERIFY(OpticalDiscAdapter::mountObservationId("a\nb","c","","","1","ready","","mount:1")
         !=OpticalDiscAdapter::mountObservationId("a","b\nc","","","1","ready","","mount:1"));
+    const auto unmounted=[](const QString &sequence,const QString &sectors){
+        return OpticalDiscAdapter::mountObservationId("/dev/sr0","unknown",{}, {},sequence,"unmounted",sectors,{});
+    };
+    QVERIFY(unmounted("10","4096")!=unmounted("11","4096"));
+    QVERIFY(unmounted("10","4096")!=unmounted("10","8192"));
 }
 void GamesUiTests::opticalSessionContractNeverClaimsHotSwap(){
     const QVariantMap disc{{"mediaId",QString(64,'a')},{"mediaSetId",QString(64,'b')},
