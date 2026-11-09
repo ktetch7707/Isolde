@@ -19,22 +19,38 @@ MAX_ARCHIVE = 512 * 1024 * 1024
 MANIFEST = "isolde-game.json"
 
 
+class StrictTarInfo(tarfile.TarInfo):
+    def _proc_pax(self, archive):
+        raise ValueError("Extended tar headers are not supported.")
+
+    def _proc_gnulong(self, archive):
+        raise ValueError("Extended tar headers are not supported.")
+
+    def _proc_sparse(self, archive):
+        raise ValueError("Sparse tar entries are not supported.")
+
+
 def open_bundle(stream, archive_format):
     stream.seek(0)
     if archive_format == "zip":
         return zipfile.ZipFile(stream)
-    return tarfile.open(fileobj=stream, mode="r:")
+    return tarfile.open(fileobj=stream, mode="r:gz" if archive_format == "ustar-gzip" else "r:",
+                        tarinfo=StrictTarInfo)
 
 
 def bundle_format(stream):
     if zipfile.is_zipfile(stream):
         stream.seek(0)
         return "zip"
+    stream.seek(0)
+    if stream.read(2) == b"\x1f\x8b":
+        stream.seek(0)
+        return "ustar-gzip"
     stream.seek(257)
     if stream.read(5) == b"ustar":
         stream.seek(0)
         return "ustar"
-    raise ValueError("Choose a ZIP or uncompressed POSIX tar game bundle.")
+    raise ValueError("Choose a ZIP, USTAR or gzip-compressed USTAR game bundle.")
 
 
 def bundle_members(archive, archive_format):
@@ -61,12 +77,12 @@ def bundle_members(archive, archive_format):
             invalid_type = not (directory or info.isfile()) or bool(info.pax_headers)
             invalid_encryption = False
             compressed_size = size
-        name = raw_name.rstrip("/") if directory and archive_format=="ustar" else (
+        name = raw_name.rstrip("/") if directory and archive_format!="zip" else (
             raw_name[:-1] if directory and raw_name.endswith("/") else raw_name)
         path = PurePosixPath(name)
         canonical_name = "/".join(path.parts) + ("/" if directory else "")
         canonical_match=raw_name==canonical_name or (
-            archive_format=="ustar" and directory and raw_name==name)
+            archive_format!="zip" and directory and raw_name==name)
         if (not name or not path.parts or path.is_absolute() or "\\" in name or "\x00" in name
                 or len(name.encode("utf-8", "surrogatepass")) > 4096
                 or not canonical_match or any(part in ("", ".", "..") for part in path.parts)
@@ -379,6 +395,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError, RuntimeError) as error:
+    except (OSError, EOFError, ValueError, zipfile.BadZipFile, tarfile.TarError, RuntimeError) as error:
         print("Portable game install: " + str(error), file=sys.stderr)
         sys.exit(2)

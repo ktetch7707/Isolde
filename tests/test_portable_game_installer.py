@@ -34,11 +34,11 @@ class PortableGameInstallerTests(unittest.TestCase):
             archive.writestr("bin/game",entry)
             for item in extra: archive.writestr(*item)
 
-    def package_ustar(self):
-        self.archive=self.root/"fixture.tar"
+    def package_ustar(self, compressed=False):
+        self.archive=self.root/("fixture.tar.gz" if compressed else "fixture.tar")
         files=((installer.MANIFEST,json.dumps(self.manifest).encode(),0o644),
                ("bin/game",b"\x7fELF"+b"\x00"*32,0o755))
-        with tarfile.open(self.archive,"w",format=tarfile.USTAR_FORMAT) as archive:
+        with tarfile.open(self.archive,"w:gz" if compressed else "w",format=tarfile.USTAR_FORMAT) as archive:
             directory=tarfile.TarInfo("bin/");directory.type=tarfile.DIRTYPE;directory.mode=0o755
             archive.addfile(directory)
             for name,data,mode in files:
@@ -124,13 +124,36 @@ class PortableGameInstallerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unpacked size"):
                 installer.inspect(self.archive)
 
-    def test_compressed_tar_is_explicitly_unsupported(self):
-        self.archive=self.root/"compressed.tar.gz"
-        with tarfile.open(self.archive,"w:gz") as archive:
-            data=b"\x7fELF"+b"\x00"*32
-            info=tarfile.TarInfo("game");info.size=len(data)
-            archive.addfile(info,io.BytesIO(data))
-        with self.assertRaisesRegex(ValueError,"ZIP or uncompressed POSIX tar"):
+    def test_gzip_ustar_preflight_install_and_uninstall(self):
+        self.package_ustar(compressed=True)
+        preview=installer.inspect(self.archive)
+        self.assertEqual(preview["archiveFormat"],"ustar-gzip")
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination,preview["archiveSha256"])
+        self.assertEqual((destination/"bin/game").read_bytes(),b"\x7fELF"+b"\x00"*32)
+        installer.uninstall(destination)
+        self.assertFalse(destination.exists())
+
+    def test_gzip_extended_headers_and_links_are_rejected(self):
+        self.archive=self.root/"extended.tar.gz"
+        with tarfile.open(self.archive,"w:gz",format=tarfile.PAX_FORMAT) as archive:
+            info=tarfile.TarInfo("a"*150);info.size=1
+            archive.addfile(info,io.BytesIO(b"x"))
+        with self.assertRaisesRegex(ValueError,"Extended tar headers"):
+            installer.inspect(self.archive)
+        with tarfile.open(self.archive,"w:gz",format=tarfile.USTAR_FORMAT) as archive:
+            info=tarfile.TarInfo("link");info.type=tarfile.SYMTYPE;info.linkname="/etc"
+            archive.addfile(info)
+        with self.assertRaisesRegex(ValueError,"unsafe"):
+            installer.inspect(self.archive)
+
+    def test_gzip_truncated_and_expansion_limits_are_rejected(self):
+        self.package_ustar(compressed=True)
+        with mock.patch.object(installer,"MAX_EXPANDED",20):
+            with self.assertRaisesRegex(ValueError,"unpacked size"):
+                installer.inspect(self.archive)
+        self.archive.write_bytes(self.archive.read_bytes()[:20])
+        with self.assertRaises((ValueError, EOFError, tarfile.TarError, OSError)):
             installer.inspect(self.archive)
 
     def test_uninstall_preserves_modified_or_unowned_payloads(self):
