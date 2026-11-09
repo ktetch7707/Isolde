@@ -1,4 +1,5 @@
 #include "GameEmulators.h"
+#include <QJsonValue>
 #include "GameResourceLimits.h"
 #include "media/MediaGrants.h"
 #include <QCryptographicHash>
@@ -104,10 +105,11 @@ QVariantList GameEmulators::definitions(){
     for(const auto &key:generations.keys()){
         const auto value=generations.value(key).toMap();
         if(!value.isEmpty()){
-            const QSet<QString> actualKeys(value.keys());
+            const auto keyList=value.keys();
+            const QSet<QString> actualKeys(keyList.cbegin(),keyList.cend());
             if(!std::all_of(actualKeys.cbegin(),actualKeys.cend(),[&generationKeys](const QString &k){return generationKeys.contains(k);}))return {};
             const auto budget=value.value("budget").toMap();
-            if(!budget.isEmpty() && (!budget.value("diskMiB").isDouble() || !budget.value("ramMiB").isDouble()))return {};
+            if(!budget.isEmpty() && (!QJsonValue::fromVariant(budget.value("diskMiB")).isDouble() || !QJsonValue::fromVariant(budget.value("ramMiB")).isDouble()))return {};
         }
     }
     const auto runtimes=doc.value("runtimes").toList();

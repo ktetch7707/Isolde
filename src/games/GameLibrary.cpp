@@ -1820,7 +1820,8 @@ bool GameLibrary::uninstallManagedGame(const QString &id,bool confirmed) {
     if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
     const auto python=QStandardPaths::findExecutable("python3");
     if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde managed-game verifier."));
-    const auto record=registration(id),root=record.value("root").toString();
+    const auto record=registration(id);
+    const auto root=record.value("root").toString();
     if(!ManagedGamePaths::isInstallRoot(m_emulatorProfile,root))return fail(tr("The managed installation changed; no files were removed."));
     m_portableGameId=id;m_portableRuntime.clear();m_portableDestination=root;
     m_portableInstallOutput.clear();m_portableInstallError.clear();m_portableCanceled=false;

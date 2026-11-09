@@ -197,6 +197,7 @@ private:
     QVariantMap m_windowsInstallPreview;
     QString m_portableDirectoryEntrypoint;
     QStringList m_lastOpticalObservationIds;
+    QTimer m_opticalRefreshTimer;
     QString m_portablePhase;
     bool m_portableDirectoryCopy=false;
     bool m_portableCanceled=false;

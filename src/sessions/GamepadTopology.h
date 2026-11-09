@@ -47,7 +47,8 @@ inline bool verifiedGamepadNode(const QString &name,const QString &bitmap,const 
 inline QVariantMap summarize(const QSet<QString> &connected, const QSet<QString> &availableAtLaunch,
                              const QSet<QString> &availableAfterLaunch = {})
 {
-    const auto availableNodes=availableAtLaunch.united(availableAfterLaunch);
+    auto availableNodes=availableAtLaunch;
+    availableNodes.unite(availableAfterLaunch);
     int available = 0;
     for (const auto &node : connected)
         if (availableNodes.contains(node))

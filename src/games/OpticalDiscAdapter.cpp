@@ -21,6 +21,7 @@
 #ifdef Q_OS_LINUX
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <linux/fs.h>
 #include <linux/stat.h>
