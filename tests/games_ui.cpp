@@ -199,6 +199,7 @@ void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval(){
     const QVariantMap old{{"schemaVersion",1},{"observationId",QString(64,'a')},{"device","/dev/sr0"},{"mountRoot","/media/disc-a"},{"state","mounted"}};
     const QVariantMap replacement{{"schemaVersion",1},{"observationId",QString(64,'b')},{"device","/dev/sr0"},{"mountRoot","/media/disc-b"},{"state","mounted"}};
     QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{old}).value("state").toString(),QString("ready"));
+    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr1",{old}).value("state").toString(),QString("missing"));
     const auto changed=OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{replacement});
     QCOMPARE(changed.value("state").toString(),QString("replaced"));
     QCOMPARE(changed.value("disc").toMap().value("observationId").toString(),replacement.value("observationId").toString());
@@ -257,13 +258,15 @@ void GamesUiTests::ejectRefusesWhileSessionIsActive(){
     QVERIFY(library.ready());
     bool active=true;
     library.setSessionActiveGuard([&active]{return active;});
-    QVERIFY(!library.ejectOpticalDisc("/dev/sr0"));
+    QVERIFY(!library.ejectOpticalDisc(QString(64,'a'),"/dev/sr0"));
     QVERIFY(library.errorString().contains("session is active"));
     QVERIFY(!library.uninstallManagedGame("game-test",true));
     QVERIFY(library.errorString().contains("session is active"));
     active=false;
-    QVERIFY(!library.ejectOpticalDisc("/dev/sr9999"));
-    QCOMPARE(library.errorString(),QString("Invalid optical device."));
+    QVERIFY(!library.ejectOpticalDisc(QString(64,'a'),"/dev/sr9999"));
+    QVERIFY(library.errorString().contains("changed"));
+    QVERIFY(!library.mountOpticalDisc(QString(64,'a'),"/dev/sr9999"));
+    QVERIFY(library.errorString().contains("changed"));
 }
 void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces(){
     QStringList calls;

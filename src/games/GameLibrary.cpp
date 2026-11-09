@@ -1995,18 +1995,23 @@ bool GameLibrary::revokeOpticalMedia(const QString &observationId,const QString 
     if(!error.isEmpty())return fail(error);
     m_error.clear();emit errorChanged();return true;
 }
-bool GameLibrary::mountOpticalDisc(const QString &device){
+bool GameLibrary::mountOpticalDisc(const QString &observationId,const QString &device){
     if(!m_ready)return fail(tr("Games is unavailable."));
+    if(revalidateOpticalDisc(observationId,device).value("state")!="unmounted")
+        return fail(tr("The selected disc or drive changed. Refresh optical media and review it again before mounting."));
     QString error;
     if(!OpticalDiscAdapter::mountReadOnly(device,&error))return fail(error);
     m_error.clear();emit errorChanged();return true;
 }
-bool GameLibrary::ejectOpticalDisc(const QString &device){
+bool GameLibrary::ejectOpticalDisc(const QString &observationId,const QString &device){
     if(!m_ready)return fail(tr("Games is unavailable."));
     if(m_sessionActiveGuard && m_sessionActiveGuard())
         return fail(tr("A session is active. Return Home before safely ejecting optical media."));
     if(portableInstallBusy() && m_portableOpticalDevice==device)
         return fail(tr("The disc is being used by the game installer. Finish or cancel it before ejecting."));
+    const auto state=revalidateOpticalDisc(observationId,device).value("state").toString();
+    if(state!="ready" && state!="unmounted")
+        return fail(tr("The selected disc or drive changed. Refresh optical media and review it again before ejecting."));
     QString error;
     if(!OpticalDiscAdapter::eject(device,&error))return fail(error);
     m_error.clear();emit errorChanged();return true;

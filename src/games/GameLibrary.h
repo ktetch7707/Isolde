@@ -68,8 +68,8 @@ public:
                                              const QString &observationId, const QString &device);
     Q_INVOKABLE bool approveOpticalMedia(const QString &observationId, const QString &device);
     Q_INVOKABLE bool revokeOpticalMedia(const QString &observationId, const QString &device);
-    Q_INVOKABLE bool mountOpticalDisc(const QString &device);
-    Q_INVOKABLE bool ejectOpticalDisc(const QString &device);
+    Q_INVOKABLE bool mountOpticalDisc(const QString &observationId,const QString &device);
+    Q_INVOKABLE bool ejectOpticalDisc(const QString &observationId,const QString &device);
     bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
     QString portableInstallStatus() const { return m_portableInstallStatus; }
     QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }

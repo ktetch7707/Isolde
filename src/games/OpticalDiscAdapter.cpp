@@ -514,7 +514,7 @@ QVariantMap OpticalDiscAdapter::classifyRevalidation(const QString &observationI
 {
     for(const auto &item:currentDiscs){
         const auto disc=item.toMap();
-        if(disc.value("observationId")==observationId)
+        if(disc.value("observationId")==observationId && disc.value("device")==device)
             return {{"schemaVersion",1},{"state",disc.value("state")=="mounted"?"ready":"unmounted"},{"disc",disc}};
     }
     for(const auto &item:currentDiscs){

@@ -103,7 +103,7 @@ Item {
     Connections {target:root.library;function onOpticalDiscsChanged(discs,change){
         root.opticalChoices=discs
         if(root.mode==="browse")root.message=change==="inserted"?"A PC optical disc is ready to review. It will not auto-launch. Open Games catalog tools to inspect it.":change==="removed"?"A PC optical disc was removed. Existing catalog entries were preserved.":"PC optical media changed. Review it before any action."
-        else if(root.mode==="opticalChooser")root.message="Mounted optical sources updated. Review the current media; nothing starts automatically."
+        else if(root.mode==="opticalChooser"){root.choice=0;root.message="Mounted optical sources updated. Review the current media; nothing starts automatically."}
     }}
     Connections {target:root.library;function onSetupChanged(){if(root.mode==="emulatorInstallStatus")root.message=root.library.setupStatus}}
     Connections {target:root.library;function onPortableInstallChanged(){
@@ -315,7 +315,7 @@ Item {
         if(mode==="opticalDetails"){
             if(opticalSelectedDisc.state==="unmounted"){
                 if(choice===0){
-                    const ok=library.mountOpticalDisc(opticalDevice)
+                    const ok=library.mountOpticalDisc(opticalObservationId,opticalDevice)
                     opticalChoices=library.mountedOpticalDiscs()
                     mode="opticalChooser";choice=0
                     message=ok?"Read-only mount requested and verified. Select the mounted disc to inspect it; nothing was launched.":library.errorString
@@ -340,7 +340,7 @@ Item {
             mode="opticalChooser";choice=0;return
         }
         if(mode==="opticalEjectReview"){
-            if(choice===1){const ok=library.ejectOpticalDisc(opticalDevice);message=ok?"Safe eject requested. Refresh to confirm the media was removed.":library.errorString}
+            if(choice===1){const ok=library.ejectOpticalDisc(opticalObservationId,opticalDevice);message=ok?"Safe eject requested. Refresh to confirm the media was removed.":library.errorString}
             mode="opticalDetails";choice=0;return
         }
         if(mode==="installerRuntime"){

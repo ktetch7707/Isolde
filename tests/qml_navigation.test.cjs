@@ -73,6 +73,47 @@ test("standalone portable install requires remote review and confirmation", () =
     assert.equal(scope.mode, "installerInstalling");
 });
 
+test("optical remote actions retain the selected media identity and require eject confirmation", () => {
+    const calls = [];
+    const disc = {observationId: "selected", device: "/dev/sr0", state: "mounted",
+        volumeLabel: "Fixture", filesystem: "iso9660", mountRoot: "/media/disc",
+        directPlaySupported: true};
+    let mediaState = "replaced";
+    const scope = vm.createContext({
+        readOnly: false, mode: "opticalChooser", choice: 0, message: "", opticalChoices: [disc],
+        library: {
+            revalidateOpticalDisc(id, device) { calls.push(["revalidate", id, device]); return {state: mediaState, disc}; },
+            ejectOpticalDisc(id, device) { calls.push(["eject", id, device]); return false; },
+            mountOpticalDisc(id, device) { calls.push(["mount", id, device]); return true; },
+            mountedOpticalDiscs() { return []; },
+            errorString: "The selected disc or drive changed.",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.equal(scope.mode, "opticalDetails");
+    scope.activateChoice();
+    assert.match(scope.message, /different media/i);
+    assert.deepEqual(calls, [["revalidate", "selected", "/dev/sr0"]]);
+    scope.choice = 4;
+    scope.activateChoice();
+    assert.equal(scope.mode, "opticalEjectReview");
+    assert.equal(scope.choice, 0);
+    scope.activateChoice();
+    assert.equal(calls.length, 1);
+    scope.choice = 4;
+    scope.activateChoice();
+    scope.choice = 1;
+    scope.activateChoice();
+    assert.deepEqual(calls[1], ["eject", "selected", "/dev/sr0"]);
+    assert.match(scope.message, /changed/i);
+    scope.opticalSelectedDisc = {...disc, state: "unmounted"};
+    scope.choice = 0;
+    scope.activateChoice();
+    assert.deepEqual(calls[2], ["mount", "selected", "/dev/sr0"]);
+    assert.equal(scope.mode, "opticalChooser");
+});
+
 test("app overflow opens All Apps while button overflow retains shortcuts", () => {
     const calls = [];
     const scope = vm.createContext({
