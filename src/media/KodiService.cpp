@@ -26,6 +26,7 @@ KodiService::KodiService(const QString &profile, QObject *parent) : QObject(pare
         emit changed();
     });
     m_enabled = QSettings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi").value("profiles/" + profile + "/kodi/autoStart", true).toBool();
+    m_alAlwaysPlayLocally = QSettings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi").value("profiles/" + profile + "/kodi/alwaysPlayLocally", true).toBool();
     if (!m_enabled) m_status = "Automatic startup is off.";
     m_probe.setInterval(1000);
     connect(&m_probe, &QTimer::timeout, this, [this] {
@@ -170,21 +171,25 @@ void KodiService::retry() { if (!switching()) { stop(); start(); } }
 void KodiService::setAlwaysPlayLocally(bool value)
 {
     if (m_alAlwaysPlayLocally == value) return;
-    m_alAlwaysPlayLocally = value;
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi");
     settings.beginGroup(QStringLiteral("profiles/") + m_profile + QStringLiteral("/kodi"));
     settings.setValue(QStringLiteral("alwaysPlayLocally"), value);
     settings.endGroup();
+    settings.sync();
+    if (settings.status() != QSettings::NoError) { m_status = "Could not save Always Play Locally preference."; emit changed(); return; }
+    m_alAlwaysPlayLocally = value;
     emit alwaysPlayLocallyChanged();
 }
 
 void KodiService::resetAlwaysPlayLocally()
 {
-    m_alAlwaysPlayLocally = true;
     QSettings settings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi");
     settings.beginGroup(QStringLiteral("profiles/") + m_profile + QStringLiteral("/kodi"));
     settings.remove(QStringLiteral("alwaysPlayLocally"));
     settings.endGroup();
+    settings.sync();
+    if (settings.status() != QSettings::NoError) { m_status = "Could not reset Always Play Locally preference."; emit changed(); return; }
+    m_alAlwaysPlayLocally = true;
     emit alwaysPlayLocallyChanged();
 }
 
