@@ -178,6 +178,22 @@ test("optical refresh resets selection and displays replacement identity before 
     assert.match(scope.message, /Media changed/);
 });
 
+test("optical direct play registration clears an earlier directory-copy mode", () => {
+    const disc = {observationId:"disc-id", device:"/dev/sr0", state:"mounted", directPlaySupported:true};
+    const scope = vm.createContext({
+        readOnly:false, mode:"opticalDetails", choice:0, message:"", installingDirectory:true,
+        opticalSelectedDisc:disc, opticalObservationId:disc.observationId, opticalDevice:disc.device,
+        runtimes:[{id:"native", name:"Native", file:true}], keyboard:{selectedIndex:-1,value:""},
+        library:{revalidateOpticalDisc() {return {state:"ready",disc};}},
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.equal(scope.registeringOpticalGame,true);
+    assert.equal(scope.installingDirectory,false);
+    scope.activateChoice();
+    assert.equal(scope.field,17);
+});
+
 test("app overflow opens All Apps while button overflow retains shortcuts", () => {
     const calls = [];
     const scope = vm.createContext({
