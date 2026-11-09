@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QProcess>
 #include <memory>
+#include <functional>
 
 class AppRegistry;
 class AppCatalog;
@@ -39,6 +40,7 @@ public:
     Q_INVOKABLE QVariantMap emulatorSettings(const QString &runtimeId);
     Q_INVOKABLE bool configureEmulator(const QString &runtimeId, const QVariantMap &options, const QString &firmware = {});
     void setCatalog(AppCatalog *catalog) { m_catalog=catalog; }
+    void setSessionActiveGuard(std::function<bool()> guard) { m_sessionActiveGuard=std::move(guard); }
     bool setupBusy() const { return m_setup.state()!=QProcess::NotRunning; }
     QString setupStatus() const { return m_setupStatus; }
     Q_INVOKABLE bool installEmulators(bool consent);
@@ -56,6 +58,7 @@ public:
     Q_INVOKABLE bool addSteamLibrary(const QString &path);
     Q_INVOKABLE bool removeSteamLibrary(const QString &path);
     Q_INVOKABLE QVariantList mountedOpticalDiscs() const;
+    Q_INVOKABLE QVariantList refreshOpticalDiscs() const;
     Q_INVOKABLE QVariantMap revalidateOpticalDisc(const QString &observationId, const QString &device) const;
     Q_INVOKABLE QString registerOpticalGame(const QString &title, const QString &runtimeId,
                                              const QString &relativeExecutable,
@@ -102,6 +105,9 @@ public:
     Q_INVOKABLE bool removeGame(const QString &gameId);
     Q_INVOKABLE bool canUninstallManagedGame(const QString &gameId) const;
     Q_INVOKABLE bool uninstallManagedGame(const QString &gameId, bool confirmed);
+    Q_INVOKABLE QVariantList pendingUninstallRecovery();
+    Q_INVOKABLE QVariantMap compatibilityInstallerStatus() const;
+    Q_INVOKABLE bool recoverOrphanedUninstall(const QString &installationId, bool confirmed);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
     void invalidate();
 signals:
@@ -134,6 +140,7 @@ private:
     bool m_hasCollections = false;
     bool m_hasProvenance = false;
     bool installationExists(const QString &runtime, const QString &root, const QString &target);
+    bool catalogReferencesRoot(const QString &root, bool *referenced);
     bool platformAvailable(const QString &platform);
     bool ensureOrganizationSchema();
     bool ensureRichMetadataSchema();
@@ -166,4 +173,5 @@ private:
     QStringList m_lastOpticalObservationIds;
     QString m_portablePhase;
     bool m_portableCanceled=false;
+    std::function<bool()> m_sessionActiveGuard;
 };

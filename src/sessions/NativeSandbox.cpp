@@ -4,6 +4,7 @@
 #include "games/SteamLibraryGrants.h"
 #include "games/ManagedGamePaths.h"
 #include "games/OpticalDiscAdapter.h"
+#include "games/OpticalDiscGrants.h"
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -15,6 +16,7 @@
 #include <QSet>
 #ifdef Q_OS_LINUX
 #include <unistd.h>
+#include <sys/statvfs.h>
 #endif
 
 namespace {
@@ -64,7 +66,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
                                         const QString &gameSourceRoot, const QString &steamGameId, const QString &managedGameRoot,
-                                        const QString &opticalMediaId)
+                                        const QString &opticalMediaId, const QString &opticalObservationId)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -104,9 +106,29 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     }
     const auto binary = QFileInfo(executable).canonicalFilePath();
     const bool managedExecutable=!managedGameRoot.isEmpty()
+        && gameSourceRoot==managedGameRoot
         && ManagedGamePaths::isInstallRoot(profileId,managedGameRoot)
         && inside(binary,managedGameRoot) && QFileInfo(binary).isExecutable();
-    if (binary.isEmpty() || (!inside(binary, "/usr") && !inside(binary, "/opt") && !managedExecutable)) {
+    bool opticalExecutable=false;
+    if(!opticalMediaId.isEmpty() && OpticalDiscGrants::approved(profileId,opticalMediaId)){
+        for(const auto &item:OpticalDiscAdapter::mountedDiscs()){
+            const auto disc=item.toMap();
+            if(disc.value("mountRoot")==gameSourceRoot && disc.value("mediaId")==opticalMediaId
+                && disc.value("observationId")==opticalObservationId && !opticalObservationId.isEmpty()
+                && disc.value("directPlaySupported").toBool() && inside(binary,gameSourceRoot)
+                && (QFileInfo(binary).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther)))opticalExecutable=true;
+        }
+    }
+    const bool nativeGame=managedExecutable || opticalExecutable;
+    if(!opticalMediaId.isEmpty() && !opticalExecutable){
+        plan.error="The approved optical disc changed or is unavailable. Reinsert it and retry.";return plan;
+    }
+    QFile nativeFile(binary);
+    if(nativeGame && (target!=binary || executable!=binary || !nativeFile.open(QIODevice::ReadOnly)
+        || nativeFile.read(4)!=QByteArray("\x7f""ELF",4))){
+        plan.error="The native game executable changed or is not a Linux ELF file.";return plan;
+    }
+    if (binary.isEmpty() || (!inside(binary, "/usr") && !inside(binary, "/opt") && !nativeGame)) {
         plan.error = QStringLiteral("This app must be installed in a system application directory before it can run in a separate profile.");
         return plan;
     }
@@ -230,6 +252,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             const bool managedTarget=!managedGameRoot.isEmpty()
                 && ManagedGamePaths::isInstallRoot(profileId,managedGameRoot)
                 && inside(canonical,managedGameRoot);
+            const bool opticalTarget=opticalExecutable && canonical==binary;
             bool privateHomePath = false;
             if (inside(canonical, userHome)) {
                 const auto components = QDir(userHome).relativeFilePath(canonical).split('/');
@@ -240,7 +263,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                 systemPath |= inside(canonical, system);
             if (canonical.isEmpty() || !QDir::isAbsolutePath(requested)
                 || (!QFileInfo(canonical).isFile() && !QFileInfo(canonical).isDir())
-                || (privateHomePath && !managedTarget) || (systemPath && !managedTarget)
+                || (privateHomePath && !managedTarget && !opticalTarget) || (systemPath && !managedTarget && !opticalTarget)
                 || (!managedTarget && (inside(base, canonical) || inside(canonical, base)))
                 || (!managedTarget && (inside(config, canonical) || inside(canonical, config)
                     || inside(data, canonical) || inside(canonical, data)))
@@ -255,15 +278,17 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                 for(const auto &disc:OpticalDiscAdapter::mountedDiscs()){
                     const auto value=disc.toMap();
                     if(value.value("mountRoot")==gameSourceRoot && value.value("mediaId")==opticalMediaId
-                        && value.value("directPlaySupported").toBool())optical=true;
+                        && value.value("observationId")==opticalObservationId && !opticalObservationId.isEmpty()
+                        && value.value("directPlaySupported").toBool()
+                        && OpticalDiscGrants::approved(profileId,opticalMediaId))optical=true;
                 }
-                if((!error.isEmpty() && !managed && !optical) || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
+                if((!opticalMediaId.isEmpty() && !optical) || (!error.isEmpty() && !managed && !optical) || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
                     || (!managed && (inside(base,gameSourceRoot) || inside(gameSourceRoot,base)))){
                     plan.error="The reviewed game folder is unavailable or redirected. Review it in Games and retry.";return plan;
                 }
                 plan.actionTarget="/media/games/"+QDir(gameSourceRoot).relativeFilePath(canonical);
                 bind(gameSourceRoot,"/media/games");
-                if(managed)args << "--chdir" << "/media/games";
+                if(managed || optical)args << "--chdir" << "/media/games";
             } else {
                 plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
                 bind(canonical, plan.actionTarget);
@@ -323,7 +348,27 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         bind(helper,"/run/emulator-session.py");bind(manifest,"/run/game-runtimes.json");
         // The packaged script accepts identities, never commands from a game.
     }
-    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--" << executable;
+    bool opticalNoExec=false;
+    if(opticalExecutable){
+        struct statvfs fs{};
+        const auto path=QFile::encodeName(binary);
+        if(::statvfs(path.constData(),&fs)!=0){
+            plan.error="Cannot inspect optical mount execution permissions. Refresh the disc and retry.";return plan;
+        }
+        opticalNoExec=fs.f_flag & ST_NOEXEC;
+    }
+    if(opticalNoExec){
+        auto helperRoot=QCoreApplication::applicationDirPath()+"/share/isolde";
+        if(!QFileInfo(helperRoot+"/optical-exec.py").isReadable())helperRoot=QCoreApplication::applicationDirPath()+"/../share/isolde";
+        const auto helper=helperRoot+"/optical-exec.py";
+        if(!QFileInfo(helper).isReadable() || !QFileInfo("/usr/bin/python3").isExecutable()){
+            plan.error="The optical no-exec adapter is unavailable. Repair Isolde and retry.";return plan;
+        }
+        bind(helper,"/run/isolde-optical-exec.py");
+    }
+    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--";
+    if(opticalNoExec)args << "/usr/bin/python3" << "/run/isolde-optical-exec.py" << plan.actionTarget;
+    else args << (nativeGame ? plan.actionTarget : executable);
     plan.environment.insert("PATH", "/usr/bin:/bin");
     plan.environment.insert("LANG", host.value("LANG", "C.UTF-8"));
     return plan;

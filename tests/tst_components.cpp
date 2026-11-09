@@ -193,6 +193,10 @@ void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCOMPARE(library.resolveLaunch(disc).value("sourceRoot").toString(),root);
     auto forged=gamesRuntime("forged");QVERIFY(forged.isValid());forged.launchConfiguration["gameSourceRoot"]=root;
     QVERIFY(!forged.isValid());QVERIFY(!apps.addApp(forged));
+    for(const auto &key:{"managedGameRoot","managedGameExecutable","opticalMediaId","opticalReference","opticalObservationId"}){
+        auto injected=gamesRuntime("injected");injected.launchConfiguration[key]=root;
+        QVERIFY(!injected.isValid());QVERIFY(!apps.addApp(injected));
+    }
     registration["runtimeId"]="supertux";registration["root"]=QStringLiteral("");registration["target"]=QStringLiteral("");registration["title"]="SuperTux";registration["platform"]="PC";
     const auto native=library.addGame(registration);QVERIFY2(!native.isEmpty(),qPrintable(library.errorString()));
     QCOMPARE(library.resolveLaunch(native).value("appId").toString(),QString("supertux"));

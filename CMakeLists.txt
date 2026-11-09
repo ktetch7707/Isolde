@@ -21,6 +21,8 @@ add_library(isolde_core STATIC
     src/media/GuideRules.cpp
     src/media/GuideRules.h
     src/games/GameLibrary.cpp
+    src/games/CompatibilityRuntime.cpp
+    src/games/CompatibilityRuntime.h
     src/games/SteamLibraryGrants.cpp
     src/games/OpticalDiscAdapter.cpp
     src/games/OpticalDiscGrants.cpp
@@ -310,8 +312,10 @@ install(FILES tools/component-health.py DESTINATION share/isolde)
 install(FILES tools/emulator-session.py DESTINATION share/isolde)
 install(FILES tools/steam-games.py DESTINATION share/isolde)
 install(FILES tools/portable-game-installer.py DESTINATION share/isolde)
+install(FILES tools/optical-exec.py DESTINATION share/isolde)
 configure_file(tools/steam-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/steam-games.py COPYONLY)
 configure_file(tools/portable-game-installer.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/portable-game-installer.py COPYONLY)
+configure_file(tools/optical-exec.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/optical-exec.py COPYONLY)
 install(FILES tools/provision-games.py tools/build-ppsspp.py DESTINATION share/isolde)
 install(FILES tools/fetch-game-fixtures.py DESTINATION share/isolde)
 install(FILES config/game-runtimes.json DESTINATION share/isolde)
@@ -524,6 +528,7 @@ if(BUILD_TESTING)
         add_test(NAME games_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_games_provisioning.py)
         add_test(NAME steam_games COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_steam_games.py)
         add_test(NAME portable_game_installer COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_portable_game_installer.py)
+        add_test(NAME optical_exec_adapter COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_optical_exec.py)
         add_test(NAME vpn_setup COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_vpn_setup.py)
         qt_add_executable(isolde_vpn_tests tests/tst_vpn.cpp)
         target_link_libraries(isolde_vpn_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)

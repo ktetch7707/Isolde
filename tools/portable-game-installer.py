@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install bounded, inert Isolde portable-game bundles; never execute archive content."""
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -11,7 +12,6 @@ import sys
 import signal
 import tarfile
 import zipfile
-import uuid
 
 MAX_ENTRIES = 10000
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
@@ -19,27 +19,47 @@ MAX_ARCHIVE = 512 * 1024 * 1024
 MANIFEST = "isolde-game.json"
 
 
+class StrictTarInfo(tarfile.TarInfo):
+    def _proc_pax(self, archive):
+        raise ValueError("Extended tar headers are not supported.")
+
+    def _proc_gnulong(self, archive):
+        raise ValueError("Extended tar headers are not supported.")
+
+    def _proc_sparse(self, archive):
+        raise ValueError("Sparse tar entries are not supported.")
+
+
 def open_bundle(stream, archive_format):
     stream.seek(0)
     if archive_format == "zip":
         return zipfile.ZipFile(stream)
-    return tarfile.open(fileobj=stream, mode="r:")
+    return tarfile.open(fileobj=stream, mode="r:gz" if archive_format == "ustar-gzip" else "r:",
+                        tarinfo=StrictTarInfo)
 
 
 def bundle_format(stream):
     if zipfile.is_zipfile(stream):
         stream.seek(0)
         return "zip"
+    stream.seek(0)
+    if stream.read(2) == b"\x1f\x8b":
+        stream.seek(0)
+        return "ustar-gzip"
     stream.seek(257)
     if stream.read(5) == b"ustar":
         stream.seek(0)
         return "ustar"
-    raise ValueError("Choose a ZIP or uncompressed POSIX tar game bundle.")
+    raise ValueError("Choose a ZIP, USTAR or gzip-compressed USTAR game bundle.")
 
 
 def bundle_members(archive, archive_format):
     members = []
-    for info in archive.infolist() if archive_format == "zip" else archive.getmembers():
+    total = 0
+    names = set()
+    for info in archive.infolist() if archive_format == "zip" else archive:
+        if len(members) >= MAX_ENTRIES:
+            raise ValueError("Portable game bundle has too many or too few entries.")
         if archive_format == "zip":
             raw_name = info.filename
             directory = info.is_dir()
@@ -57,17 +77,24 @@ def bundle_members(archive, archive_format):
             invalid_type = not (directory or info.isfile()) or bool(info.pax_headers)
             invalid_encryption = False
             compressed_size = size
-        name = raw_name.rstrip("/") if directory and archive_format=="ustar" else (
+        name = raw_name.rstrip("/") if directory and archive_format!="zip" else (
             raw_name[:-1] if directory and raw_name.endswith("/") else raw_name)
         path = PurePosixPath(name)
         canonical_name = "/".join(path.parts) + ("/" if directory else "")
         canonical_match=raw_name==canonical_name or (
-            archive_format=="ustar" and directory and raw_name==name)
+            archive_format!="zip" and directory and raw_name==name)
         if (not name or not path.parts or path.is_absolute() or "\\" in name or "\x00" in name
+                or len(name.encode("utf-8", "surrogatepass")) > 4096
                 or not canonical_match or any(part in ("", ".", "..") for part in path.parts)
                 or path.parts[0] == ".isolde-install.json" or invalid_type
                 or invalid_encryption or size < 0 or compressed_size > MAX_ARCHIVE):
             raise ValueError("Portable game bundle contains an unsafe or non-canonical entry.")
+        if name in names:
+            raise ValueError("Portable game bundle contains an unsafe or duplicate path.")
+        names.add(name)
+        total += size
+        if size > MAX_EXPANDED or total > MAX_EXPANDED:
+            raise ValueError("Portable game bundle exceeds the 2 GiB unpacked size limit.")
         members.append({"name": name, "directory": directory, "size": size,
                         "mode": mode, "info": info})
     return members
@@ -99,18 +126,8 @@ def inspect(source):
             members=bundle_members(archive,archive_format)
             if not members or len(members) > MAX_ENTRIES:
                 raise ValueError("Portable game bundle has too many or too few entries.")
-            total = 0
-            names=set()
-            for member in members:
-                name=member["name"]
-                if name in names:
-                    raise ValueError("Portable game bundle contains an unsafe or duplicate path.")
-                names.add(name)
-                if member["size"] > MAX_EXPANDED:
-                    raise ValueError("Portable game file exceeds the unpacked size limit.")
-                total += member["size"]
-                if total > MAX_EXPANDED:
-                    raise ValueError("Portable game bundle exceeds the 2 GiB unpacked size limit.")
+            total = sum(member["size"] for member in members)
+            names={member["name"] for member in members}
             manifest_members=[member for member in members if member["name"]==MANIFEST]
             if len(manifest_members)!=1 or manifest_members[0]["directory"]:
                 raise ValueError("Bundle must contain a valid isolde-game.json manifest.")
@@ -267,13 +284,9 @@ def install(source, destination, expected_sha256=None):
     print(json.dumps(metadata, ensure_ascii=False))
 
 
-def uninstall(root):
-    def interrupted(signum, frame):
-        raise InterruptedError("Uninstallation canceled")
-    signal.signal(signal.SIGTERM, interrupted)
-    signal.signal(signal.SIGINT, interrupted)
+def verify_install(root, expected_name):
     root = Path(root)
-    if (root.name != "install" or root.is_symlink() or not root.is_dir()
+    if (root.name != expected_name or root.is_symlink() or not root.is_dir()
             or root.resolve(strict=True) != root.absolute()):
         raise ValueError("Choose a verified Isolde-managed install folder.")
     marker = root / ".isolde-install.json"
@@ -338,15 +351,73 @@ def uninstall(root):
             raise ValueError("An installed file changed after installation; nothing was deleted.")
     if ".isolde-install.json" not in {path.name for path in root.iterdir()}:
         raise ValueError("The install ownership marker changed; files were preserved.")
-    quarantine = root.with_name(".isolde-uninstalling-" + str(uuid.uuid4()))
-    os.replace(root, quarantine)
+
+
+def sync_directory(path):
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
-        shutil.rmtree(quarantine)
-    except Exception:
-        if not root.exists() and quarantine.exists():
-            os.replace(quarantine, root)
-        raise
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def rename_without_replace(source, destination):
+    libc = ctypes.CDLL(None, use_errno=True)
+    rename = getattr(libc, "renameat2", None)
+    if rename is None:
+        raise OSError("Atomic no-replace rename is unavailable; files were preserved.")
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    if rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(destination))
+
+
+def prepare_uninstall(root, report=True):
+    root = Path(root)
+    pending = root.with_name("install.uninstall-pending")
+    if pending.exists() or pending.is_symlink():
+        raise ValueError("A previous uninstall needs recovery; existing files were preserved.")
+    verify_install(root, "install")
+    rename_without_replace(root, pending)
+    sync_directory(root.parent)
+    if report:
+        print(json.dumps({"schemaVersion": 1, "staged": True}))
+
+
+def recover_uninstall(root):
+    root = Path(root)
+    pending = root.with_name("install.uninstall-pending")
+    if root.name != "install" or root.exists() or root.is_symlink():
+        raise ValueError("Cannot restore over an existing installation.")
+    verify_install(pending, "install.uninstall-pending")
+    rename_without_replace(pending, root)
+    sync_directory(root.parent)
+    print(json.dumps({"schemaVersion": 1, "restored": True}))
+
+
+def finalize_uninstall(root):
+    root = Path(root)
+    if root.name != "install":
+        raise ValueError("Choose a verified Isolde-managed install folder.")
+    pending = root.with_name("install.uninstall-pending")
+    if root.exists() or root.is_symlink():
+        raise ValueError("The installation is still present; nothing was deleted.")
+    verify_install(pending, "install.uninstall-pending")
+    shutil.rmtree(pending)
+    sync_directory(root.parent)
     print(json.dumps({"schemaVersion": 1, "removed": True}))
+
+
+def uninstall(root):
+    prepare_uninstall(root, report=False)
+    try:
+        finalize_uninstall(root)
+    except Exception:
+        pending = Path(root).with_name("install.uninstall-pending")
+        if not Path(root).exists() and pending.exists():
+            rename_without_replace(pending, root)
+        raise
 
 
 def main():
@@ -355,6 +426,9 @@ def main():
     group.add_argument("--inspect", action="store_true")
     group.add_argument("--install", action="store_true")
     group.add_argument("--uninstall", action="store_true")
+    group.add_argument("--prepare-uninstall", action="store_true")
+    group.add_argument("--finalize-uninstall", action="store_true")
+    group.add_argument("--recover-uninstall", action="store_true")
     parser.add_argument("--source")
     parser.add_argument("--destination")
     parser.add_argument("--root")
@@ -365,10 +439,17 @@ def main():
             parser.error("--inspect requires --source")
         result = inspect(args.source)
         print(json.dumps(result, ensure_ascii=False))
-    elif args.uninstall:
+    elif args.uninstall or args.prepare_uninstall or args.finalize_uninstall or args.recover_uninstall:
         if not args.root:
             parser.error("--uninstall requires --root")
-        uninstall(args.root)
+        if args.prepare_uninstall:
+            prepare_uninstall(args.root)
+        elif args.finalize_uninstall:
+            finalize_uninstall(args.root)
+        elif args.recover_uninstall:
+            recover_uninstall(args.root)
+        else:
+            uninstall(args.root)
     else:
         if not args.destination or not args.source:
             parser.error("--install requires --source and --destination")
@@ -378,6 +459,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError, RuntimeError) as error:
+    except (OSError, EOFError, ValueError, zipfile.BadZipFile, tarfile.TarError, RuntimeError) as error:
         print("Portable game install: " + str(error), file=sys.stderr)
         sys.exit(2)

@@ -2,13 +2,16 @@
 #include "sessions/DesktopSession.h"
 #include "media/MediaGrants.h"
 #include "games/SteamLibraryGrants.h"
+#include "games/ManagedGamePaths.h"
 #include <QSettings>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QProcess>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QtTest>
 
 class NativeSandboxTests : public QObject {
@@ -18,6 +21,8 @@ private slots:
     void profileAndAppStorageRemainSeparate();
     void explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
     void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
+    void managedExecutableUsesSandboxPathAndRejectsChangedContent();
+    void pendingManagedUninstallRecoveryPreservesConflicts();
     void processTreeDiesWithLauncher();
     void gracefulExitFlushesAppState();
     void normalExitRemovesDetachedChildren();
@@ -191,6 +196,44 @@ void NativeSandboxTests::reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot(){
     const auto redirected=bundle.filePath("redirect");QVERIFY(QFile::link(unrelated.path(),redirected));
     QVERIFY(!NativeSandbox::prepare(alice,"fixture","/bin/sh",env,target,storage.path(),{},redirected).error.isEmpty());
     QFile original(resource);QVERIFY(original.open(QIODevice::ReadOnly));QCOMPARE(original.readAll(),QByteArray("preserve-bundle"));
+}
+
+void NativeSandboxTests::managedExecutableUsesSandboxPathAndRejectsChangedContent(){
+    QStandardPaths::setTestModeEnabled(true);
+    QTemporaryDir storage;
+    const auto parent=ManagedGamePaths::gamesRoot(alice)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto root=parent+"/install", target=root+"/game";
+    QVERIFY(QDir().mkpath(root));
+    QFile marker(root+"/.isolde-install.json");QVERIFY(marker.open(QIODevice::WriteOnly));marker.write("{}");marker.close();
+    QVERIFY(QFile::copy("/usr/bin/true",target));
+    QVERIFY(QFile::setPermissions(target,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+    const auto env=QProcessEnvironment::systemEnvironment();
+    const auto plan=NativeSandbox::prepare(alice,"fixture",target,env,target,storage.path(),{},root,{},root);
+    QVERIFY2(plan.error.isEmpty(),qPrintable(plan.error));
+    QCOMPARE(plan.actionTarget,QString("/media/games/game"));
+    QCOMPARE(plan.arguments.last(),plan.actionTarget);
+    QVERIFY(plan.arguments.contains("--ro-bind"));
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture",target,env,target,storage.path(),{},storage.path(),{},root).error.isEmpty());
+    QFile changed(target);QVERIFY(changed.open(QIODevice::WriteOnly|QIODevice::Truncate));changed.write("#!/bin/sh\n");changed.close();
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture",target,env,target,storage.path(),{},root,{},root).error.isEmpty());
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture","/usr/bin/true",env,{},storage.path(),{},root,{}, {},QString(64,'a')).error.isEmpty());
+    QVERIFY(QDir(parent).removeRecursively());
+    QStandardPaths::setTestModeEnabled(false);
+}
+
+void NativeSandboxTests::pendingManagedUninstallRecoveryPreservesConflicts(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto parent=ManagedGamePaths::gamesRoot(alice)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto root=parent+"/install",pending=root+".uninstall-pending";
+    QVERIFY(QDir().mkpath(pending));
+    QFile marker(pending+"/.isolde-install.json");QVERIFY(marker.open(QIODevice::WriteOnly));marker.write("{}");marker.close();
+    QVERIFY(ManagedGamePaths::recoverPendingUninstall(alice,root).isEmpty());
+    QVERIFY(QFileInfo::exists(root+"/.isolde-install.json"));QVERIFY(!QFileInfo::exists(pending));
+    QVERIFY(QDir().mkpath(pending));
+    QVERIFY(!ManagedGamePaths::recoverPendingUninstall(alice,root).isEmpty());
+    QVERIFY(QFileInfo::exists(root+"/.isolde-install.json"));QVERIFY(QFileInfo::exists(pending));
+    QVERIFY(QDir(parent).removeRecursively());
+    QStandardPaths::setTestModeEnabled(false);
 }
 
 void NativeSandboxTests::processTreeDiesWithLauncher()

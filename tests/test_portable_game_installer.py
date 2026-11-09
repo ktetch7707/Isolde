@@ -34,11 +34,11 @@ class PortableGameInstallerTests(unittest.TestCase):
             archive.writestr("bin/game",entry)
             for item in extra: archive.writestr(*item)
 
-    def package_ustar(self):
-        self.archive=self.root/"fixture.tar"
+    def package_ustar(self, compressed=False):
+        self.archive=self.root/("fixture.tar.gz" if compressed else "fixture.tar")
         files=((installer.MANIFEST,json.dumps(self.manifest).encode(),0o644),
                ("bin/game",b"\x7fELF"+b"\x00"*32,0o755))
-        with tarfile.open(self.archive,"w",format=tarfile.USTAR_FORMAT) as archive:
+        with tarfile.open(self.archive,"w:gz" if compressed else "w",format=tarfile.USTAR_FORMAT) as archive:
             directory=tarfile.TarInfo("bin/");directory.type=tarfile.DIRTYPE;directory.mode=0o755
             archive.addfile(directory)
             for name,data,mode in files:
@@ -111,13 +111,49 @@ class PortableGameInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"unsafe"):
             installer.inspect(self.archive)
 
-    def test_compressed_tar_is_explicitly_unsupported(self):
-        self.archive=self.root/"compressed.tar.gz"
-        with tarfile.open(self.archive,"w:gz") as archive:
-            data=b"\x7fELF"+b"\x00"*32
-            info=tarfile.TarInfo("game");info.size=len(data)
-            archive.addfile(info,io.BytesIO(data))
-        with self.assertRaisesRegex(ValueError,"ZIP or uncompressed POSIX tar"):
+    def test_tar_member_limits_are_enforced_during_enumeration(self):
+        self.package_ustar()
+        with mock.patch.object(installer, "MAX_ENTRIES", 2), \
+             mock.patch.object(tarfile.TarFile, "getmembers", side_effect=AssertionError("unbounded enumeration")):
+            with self.assertRaisesRegex(ValueError, "too many"):
+                installer.inspect(self.archive)
+
+    def test_tar_expanded_limit_is_enforced_during_enumeration(self):
+        self.package_ustar()
+        with mock.patch.object(installer, "MAX_EXPANDED", 20):
+            with self.assertRaisesRegex(ValueError, "unpacked size"):
+                installer.inspect(self.archive)
+
+    def test_gzip_ustar_preflight_install_and_uninstall(self):
+        self.package_ustar(compressed=True)
+        preview=installer.inspect(self.archive)
+        self.assertEqual(preview["archiveFormat"],"ustar-gzip")
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination,preview["archiveSha256"])
+        self.assertEqual((destination/"bin/game").read_bytes(),b"\x7fELF"+b"\x00"*32)
+        installer.uninstall(destination)
+        self.assertFalse(destination.exists())
+
+    def test_gzip_extended_headers_and_links_are_rejected(self):
+        self.archive=self.root/"extended.tar.gz"
+        with tarfile.open(self.archive,"w:gz",format=tarfile.PAX_FORMAT) as archive:
+            info=tarfile.TarInfo("a"*150);info.size=1
+            archive.addfile(info,io.BytesIO(b"x"))
+        with self.assertRaisesRegex(ValueError,"Extended tar headers"):
+            installer.inspect(self.archive)
+        with tarfile.open(self.archive,"w:gz",format=tarfile.USTAR_FORMAT) as archive:
+            info=tarfile.TarInfo("link");info.type=tarfile.SYMTYPE;info.linkname="/etc"
+            archive.addfile(info)
+        with self.assertRaisesRegex(ValueError,"unsafe"):
+            installer.inspect(self.archive)
+
+    def test_gzip_truncated_and_expansion_limits_are_rejected(self):
+        self.package_ustar(compressed=True)
+        with mock.patch.object(installer,"MAX_EXPANDED",20):
+            with self.assertRaisesRegex(ValueError,"unpacked size"):
+                installer.inspect(self.archive)
+        self.archive.write_bytes(self.archive.read_bytes()[:20])
+        with self.assertRaises((ValueError, EOFError, tarfile.TarError, OSError)):
             installer.inspect(self.archive)
 
     def test_uninstall_preserves_modified_or_unowned_payloads(self):
@@ -144,6 +180,45 @@ class PortableGameInstallerTests(unittest.TestCase):
                 installer.uninstall(destination)
         self.assertTrue((destination/"bin/game").is_file())
         self.assertFalse(any(path.name.startswith(".isolde-uninstalling-") for path in destination.parent.iterdir()))
+
+    def test_prepared_uninstall_can_be_recovered_before_catalog_commit(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        self.assertFalse(destination.exists())
+        self.assertTrue((pending/"bin/game").is_file())
+        installer.recover_uninstall(destination)
+        self.assertTrue((destination/"bin/game").is_file())
+        self.assertFalse(pending.exists())
+
+    def test_staged_uninstall_refuses_conflicts_and_modified_contents(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        destination.mkdir()
+        (destination/"user-data").write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"still present"):
+            installer.finalize_uninstall(destination)
+        with self.assertRaisesRegex(ValueError,"existing installation"):
+            installer.recover_uninstall(destination)
+        self.assertEqual((destination/"user-data").read_bytes(),b"keep")
+        shutil.rmtree(destination)
+        (pending/"unowned").write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"unowned"):
+            installer.finalize_uninstall(destination)
+        self.assertEqual((pending/"unowned").read_bytes(),b"keep")
+
+    def test_atomic_no_replace_preserves_existing_destination(self):
+        source=self.root/"source";source.mkdir();(source/"data").write_bytes(b"source")
+        destination=self.root/"destination";destination.mkdir()
+        with self.assertRaises(OSError):
+            installer.rename_without_replace(source,destination)
+        self.assertEqual((source/"data").read_bytes(),b"source")
+        self.assertTrue(destination.is_dir())
 
     def test_rejects_traversal_symlinks_duplicates_non_elf_and_bad_manifest(self):
         self.package(extra=[("../escape",b"unsafe")])

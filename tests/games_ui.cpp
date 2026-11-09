@@ -2,6 +2,8 @@
 #include "games/GameEmulators.h"
 #include "games/OpticalDiscAdapter.h"
 #include "games/OpticalDiscGrants.h"
+#include "games/ManagedGamePaths.h"
+#include "games/CompatibilityRuntime.h"
 #include <QStandardPaths>
 #include <QUuid>
 #include "app/AppRegistry.h"
@@ -24,6 +26,8 @@
 #include <QSqlQuery>
 #include <QDBusObjectPath>
 #include <QDBusVariant>
+#include <QBuffer>
+#include <QCryptographicHash>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -42,8 +46,14 @@ private slots:
     void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void opticalIdentityAndMultiDiscReferencesAreDurable();
+    void fullOpticalContentIdentityRejectsTruncationAndChanges();
+    void opticalSessionContractNeverClaimsHotSwap();
     void opticalApprovalsAreProfileScopedAndRevocable();
     void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
+    void ejectRefusesWhileSessionIsActive();
+    void catalogRecoversStagedUninstallOnReopen();
+    void orphanedUninstallRecoveryPreservesRemainingFiles();
+    void compatibilityCandidatesNeverClaimInstallerSupport();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
@@ -63,6 +73,109 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::opticalSessionContractNeverClaimsHotSwap(){
+    const QVariantMap disc{{"mediaId",QString(64,'a')},{"mediaSetId",QString(64,'b')},
+        {"discNumber",1},{"discCount",2},{"mountRoot","/media/first"},{"state","mounted"},{"observationId",QString(64,'e')}};
+    const auto reference=OpticalDiscAdapter::rootReference(disc);
+    const auto pinned=OpticalDiscAdapter::classifySession(reference,"/media/first",true,{disc});
+    QCOMPARE(pinned.value("state").toString(),QString("pinned"));
+    QVERIFY(!pinned.value("hotSwapSupported").toBool());
+    auto reinserted=disc;reinserted["observationId"]=QString(64,'f');
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{reinserted},QString(64,'e')).value("state").toString(),QString("interrupted"));
+    auto other=disc;other["mediaId"]=QString(64,'c');other["discNumber"]=2;
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{other}).value("state").toString(),QString("wrong-disc"));
+    auto relocated=disc;relocated["mountRoot"]="/media/second";
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{relocated}).value("state").toString(),QString("relocated"));
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{}).value("state").toString(),QString("missing"));
+    other["mediaSetId"]=QString(64,'d');
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{other}).value("state").toString(),QString("replaced"));
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",false,{disc}).value("state").toString(),QString("revoked"));
+    const auto missing=OpticalDiscAdapter::classifySession(reference,"/media/first",true,{});
+    QVERIFY(!missing.value("recovery").toString().isEmpty());
+    const auto interrupted=OpticalDiscAdapter::latchSession(missing,pinned);
+    QCOMPARE(interrupted.value("state").toString(),QString("interrupted"));
+    QCOMPARE(OpticalDiscAdapter::latchSession(interrupted,pinned).value("state").toString(),QString("interrupted"));
+    QCOMPARE(OpticalDiscAdapter::latchSession({},pinned).value("state").toString(),QString("pinned"));
+}
+void GamesUiTests::compatibilityCandidatesNeverClaimInstallerSupport(){
+    const auto missing=CompatibilityRuntime::classify(false,false);
+    const auto untrusted=CompatibilityRuntime::classify(true,false);
+    const auto candidate=CompatibilityRuntime::classify(true,true);
+    QCOMPARE(missing.value("state").toString(),QString("missing"));
+    QCOMPARE(untrusted.value("state").toString(),QString("unsafe"));
+    QCOMPARE(candidate.value("state").toString(),QString("unverified"));
+    for(const auto &status:{missing,untrusted,candidate}){
+        QVERIFY(!status.value("supported").toBool());
+        QVERIFY(status.value("requirements").toString().contains("verified"));
+    }
+}
+void GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previous=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    qApp->setProperty("isoldeProfile",profile);
+    const auto identity=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto parent=ManagedGamePaths::gamesRoot(profile)+"/"+identity;
+    auto cleanup=qScopeGuard([&]{QDir(parent).removeRecursively();qApp->setProperty("isoldeProfile",previous);QStandardPaths::setTestModeEnabled(false);});
+    const auto root=parent+"/install",pending=root+".uninstall-pending";
+    QVERIFY(QDir().mkpath(pending));
+    QFile payload(pending+"/remaining-save");QVERIFY(payload.open(QIODevice::WriteOnly));payload.write("keep");payload.close();
+    QTemporaryDir dbdir;AppRegistry apps;GameLibrary library(dbdir.filePath("games.sqlite"),&apps);QVERIFY(library.ready());
+    QCOMPARE(library.pendingUninstallRecovery().size(),1);
+    QVERIFY(!library.recoverOrphanedUninstall(identity,false));
+    QVERIFY(QDir().mkpath(root));QVERIFY(!library.recoverOrphanedUninstall(identity,true));
+    QVERIFY(QDir().rmdir(root));
+    QVERIFY(library.recoverOrphanedUninstall(identity,true));
+    QFile restored(root+"/remaining-save");QVERIFY(restored.open(QIODevice::ReadOnly));QCOMPARE(restored.readAll(),QByteArray("keep"));
+    QVERIFY(library.pendingUninstallRecovery().isEmpty());
+}
+void GamesUiTests::fullOpticalContentIdentityRejectsTruncationAndChanges(){
+    QByteArray bytes(3*1024*1024,'x');
+    QBuffer source(&bytes);QVERIFY(source.open(QIODevice::ReadOnly));
+    const auto digest=OpticalDiscAdapter::hashContent(&source,bytes.size());
+    QCOMPARE(digest,QCryptographicHash::hash(bytes,QCryptographicHash::Sha256));
+    bytes[bytes.size()-1]='y';QVERIFY(source.seek(0));
+    const auto changed=OpticalDiscAdapter::hashContent(&source,bytes.size());
+    QVERIFY(changed!=digest);
+    QVERIFY(source.seek(0));QVERIFY(OpticalDiscAdapter::hashContent(&source,bytes.size()+1).isEmpty());
+    QVERIFY(source.seek(0));QVERIFY(OpticalDiscAdapter::hashContent(&source,0).isEmpty());
+    QVERIFY(OpticalDiscAdapter::hashContent(&source,16ULL*1024*1024*1024+1).isEmpty());
+    const auto id=QString::fromLatin1(digest.toHex());
+    const auto udf=OpticalDiscAdapter::identityForContent({},id);
+    QCOMPARE(udf.value("discNumber").toInt(),1);QCOMPARE(udf.value("discCount").toInt(),1);
+    QCOMPARE(udf.value("mediaSetId").toString(),id);
+    QVERIFY(OpticalDiscAdapter::isRootReference(OpticalDiscAdapter::rootReference(udf)));
+    QVERIFY(OpticalDiscAdapter::identityForContent({},"bad").isEmpty());
+    const QVariantMap set{{"mediaSetId",QString(64,'a')},{"discNumber",2},{"discCount",2}};
+    const auto iso=OpticalDiscAdapter::identityForContent(set,id);
+    QCOMPARE(iso.value("mediaId").toString(),id);
+    QCOMPARE(iso.value("mediaSetId").toString(),QString(64,'a'));
+    QCOMPARE(iso.value("discNumber").toInt(),2);
+}
+void GamesUiTests::catalogRecoversStagedUninstallOnReopen(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previous=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    qApp->setProperty("isoldeProfile",profile);
+    const auto parent=ManagedGamePaths::gamesRoot(profile)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto cleanup=qScopeGuard([&]{QDir(parent).removeRecursively();qApp->setProperty("isoldeProfile",previous);QStandardPaths::setTestModeEnabled(false);});
+    const auto root=parent+"/install",pending=root+".uninstall-pending";
+    QVERIFY(QDir().mkpath(pending));
+    QFile marker(pending+"/.isolde-install.json");QVERIFY(marker.open(QIODevice::WriteOnly));marker.write("{}");marker.close();
+    QFile payload(pending+"/game");QVERIFY(payload.open(QIODevice::WriteOnly));payload.write("keep");payload.close();
+    QTemporaryDir dbdir;AppRegistry apps;const auto path=dbdir.filePath("games.sqlite");
+    {GameLibrary initial(path,&apps);QVERIFY(initial.ready());}
+    {
+        auto db=QSqlDatabase::addDatabase("QSQLITE","uninstall-recovery-test");db.setDatabaseName(path);QVERIFY(db.open());
+        QSqlQuery query(db);query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,0)");
+        for(const auto &value:QStringList{"game-test","Fixture","PC","local-test",root,"game"})query.addBindValue(value);
+        QVERIFY(query.exec());db.close();
+    }
+    QSqlDatabase::removeDatabase("uninstall-recovery-test");
+    {GameLibrary reopened(path,&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));}
+    QVERIFY(QFileInfo::exists(root+"/game"));QVERIFY(!QFileInfo::exists(pending));
+    QFile restored(root+"/game");QVERIFY(restored.open(QIODevice::ReadOnly));QCOMPARE(restored.readAll(),QByteArray("keep"));
 }
 void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval(){
     const QVariantMap old{{"schemaVersion",1},{"observationId",QString(64,'a')},{"device","/dev/sr0"},{"mountRoot","/media/disc-a"},{"state","mounted"}};
@@ -97,6 +210,9 @@ void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable(){
     const auto state=OpticalDiscAdapter::classifyRootReference(root,{wrong});
     QCOMPARE(state.value("state").toString(),QString("wrong-disc"));
     QCOMPARE(state.value("expectedDisc").toInt(),1);
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{wrong,ready}).value("state").toString(),QString("ready"));
+    auto inconsistent=ready;inconsistent["discNumber"]=2;
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{inconsistent}).value("state").toString(),QString("wrong-disc"));
     auto unmounted=wrong;unmounted["observationId"]=QString(64,'c');unmounted["state"]="unmounted";unmounted["mountRoot"]="";
     QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{unmounted}).value("state").toString(),QString("missing"));
     QCOMPARE(OpticalDiscAdapter::classifyRevalidation(QString(64,'a'),"/dev/sr0",{unmounted}).value("state").toString(),QString("replaced"));
@@ -117,6 +233,19 @@ void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable(){
     QVERIFY(OpticalDiscGrants::approved(alice,identity));QVERIFY(!OpticalDiscGrants::approved(bob,identity));
     QVERIFY(OpticalDiscGrants::revoke(alice,identity).isEmpty());QVERIFY(!OpticalDiscGrants::approved(alice,identity));
     QVERIFY(!OpticalDiscGrants::authorize(alice,"not-an-identity").isEmpty());
+}
+void GamesUiTests::ejectRefusesWhileSessionIsActive(){
+    QTemporaryDir dir;AppRegistry apps;GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    QVERIFY(library.ready());
+    bool active=true;
+    library.setSessionActiveGuard([&active]{return active;});
+    QVERIFY(!library.ejectOpticalDisc("/dev/sr0"));
+    QVERIFY(library.errorString().contains("session is active"));
+    QVERIFY(!library.uninstallManagedGame("game-test",true));
+    QVERIFY(library.errorString().contains("session is active"));
+    active=false;
+    QVERIFY(!library.ejectOpticalDisc("/dev/sr9999"));
+    QCOMPARE(library.errorString(),QString("Invalid optical device."));
 }
 void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces(){
     QStringList calls;

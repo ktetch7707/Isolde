@@ -3,6 +3,7 @@
 #include "SteamLibraryGrants.h"
 #include "OpticalDiscAdapter.h"
 #include "OpticalDiscGrants.h"
+#include "CompatibilityRuntime.h"
 #include "ManagedGamePaths.h"
 #include <QCoreApplication>
 #include "app/AppRegistry.h"
@@ -231,7 +232,12 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
         m_portableInstallError=(m_portableInstallError+m_portableInstall.readAllStandardError()).right(8192);
     });
     connect(&m_portableInstall,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){
-        if(error==QProcess::FailedToStart){m_portableInstallStatus="Portable game helper could not start.";m_portablePhase.clear();emit portableInstallChanged();}
+        if(error==QProcess::FailedToStart){
+            m_portableInstallStatus=m_portablePhase=="uninstall-finalize"
+                ?"Catalog updated. Cleanup could not start; the pending managed folder was retained."
+                :"Portable game helper could not start.";
+            m_portablePhase.clear();emit portableInstallChanged();
+        }
     });
     connect(&m_portableInstall,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus status){
         m_portableInstallDeadline.stop();
@@ -242,23 +248,53 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
             if(m_portablePhase=="install" && QFileInfo(stage).isDir() && QFileInfo(stage).canonicalFilePath()==stage)QDir(stage).removeRecursively();
             const auto snapshot=m_portableDestination+".staging-source";
             if(m_portablePhase=="install" && QFileInfo(snapshot).isFile() && !QFileInfo(snapshot).isSymLink())QFile::remove(snapshot);
+            const auto recovery=m_portablePhase=="uninstall"
+                ?ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,m_portableDestination):QString();
             m_portableInstallStatus=m_portablePhase=="uninstall"
-                ?"Safe uninstall stopped or failed. The catalog entry was preserved; inspect the managed folder before retrying. "+reason
+                ?"Safe uninstall stopped or failed. The catalog entry was preserved. "+recovery+" "+reason
+                :m_portablePhase=="uninstall-finalize"
+                ?"Catalog removal completed, but cleanup stopped. The pending managed folder was retained for recovery. "+reason
                 :m_portableCanceled?"Install canceled. Existing files and saves were preserved.":
                     "Portable game preflight/install failed. Nothing was added to the catalog. "+reason;
             m_portablePhase.clear();emit portableInstallChanged();return;
         }
         m_portableInstallOutput+=m_portableInstall.readAllStandardOutput();
         QJsonParseError parse;const auto metadata=QJsonDocument::fromJson(m_portableInstallOutput,&parse).toVariant().toMap();
+        if(m_portablePhase=="uninstall" && m_portableCanceled){
+            const auto recovery=ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,m_portableDestination);
+            m_portableInstallStatus="Uninstall canceled. The catalog entry was preserved. "+recovery;
+            m_portableGameId.clear();m_portablePhase.clear();emit portableInstallChanged();return;
+        }
         if(m_portablePhase=="uninstall"){
             if(parse.error!=QJsonParseError::NoError || metadata.value("schemaVersion").toInt()!=1
-                || !metadata.value("removed").toBool()){
-                m_portableInstallStatus="The ownership verification response was invalid. The catalog entry was preserved.";
-            }else if(removeGame(m_portableGameId)){
-                m_portableInstallStatus="Verified Isolde-owned files removed. Runtime profile and saves were preserved.";
+                || !metadata.value("staged").toBool()){
+                const auto recovery=ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,m_portableDestination);
+                m_portableInstallStatus="The ownership verification response was invalid. The catalog entry was preserved. "+recovery;
             }else{
-                m_portableInstallStatus="Owned game files were removed, but the catalog could not be updated. Restore the profile catalog backup or retry.";
+                m_portablePhase.clear();
+                if(removeGame(m_portableGameId)){
+                    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/portable-game-installer.py";
+                    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
+                    const auto python=QStandardPaths::findExecutable("python3");
+                    if(!python.isEmpty() && QFileInfo(helper).isReadable()){
+                        m_portablePhase="uninstall-finalize";m_portableInstallOutput.clear();m_portableInstallError.clear();
+                        m_portableInstallStatus="Catalog updated. Removing the verified staged installation; saves are preserved.";
+                        m_portableInstall.start(python,{helper,"--finalize-uninstall","--root",m_portableDestination});
+                        m_portableInstallDeadline.start();emit portableInstallChanged();return;
+                    }
+                    m_portableInstallStatus="Catalog updated. The staged install was retained because the cleanup helper is unavailable.";
+                }else{
+                    const auto recovery=ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,m_portableDestination);
+                    m_portableInstallStatus="Catalog update failed. The managed installation was retained. "+recovery;
+                }
             }
+            m_portableGameId.clear();m_portablePhase.clear();emit portableInstallChanged();return;
+        }
+        if(m_portablePhase=="uninstall-finalize"){
+            m_portableInstallStatus=parse.error==QJsonParseError::NoError && metadata.value("schemaVersion").toInt()==1
+                && metadata.value("removed").toBool()
+                ?"Verified Isolde-owned files removed. Runtime profile and saves were preserved."
+                :"Catalog updated, but cleanup could not be confirmed. Inspect the pending managed folder.";
             m_portableGameId.clear();m_portablePhase.clear();emit portableInstallChanged();return;
         }
         if(parse.error!=QJsonParseError::NoError || metadata.value("schemaVersion").toInt()!=1
@@ -267,9 +303,14 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
             m_portablePhase.clear();emit portableInstallChanged();return;
         }
         if(m_portablePhase=="inspect"){
+            const auto *runtime=m_apps->find(m_portableRuntime);
+            if(!runtime || !compatibleRuntime(m_portableRuntime,true)){
+                m_portableInstallStatus="The selected runtime is no longer available. Choose a runtime and inspect the bundle again.";
+                m_portablePhase.clear();emit portableInstallChanged();return;
+            }
             m_portableInstallPreview=metadata;
             m_portableInstallPreview["destination"]=m_portableDestination;
-            m_portableInstallPreview["runtimeName"]=m_apps->find(m_portableRuntime)->name;
+            m_portableInstallPreview["runtimeName"]=runtime->name;
             m_portablePhase="review";
             m_portableInstallStatus="Preflight complete. Review runtime, destination and side effects before Install.";
             emit portableInstallChanged();return;
@@ -378,6 +419,17 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
         if(triggers!=2){fail(tr("Catalog provenance immutability guards are missing. Original data was preserved."));return;}
         m_hasProvenance=true;
     }
+    query.finish();
+    const auto managedPrefix=ManagedGamePaths::gamesRoot(m_emulatorProfile)+'/';
+    const auto recoveryQuery=QString("SELECT root FROM games")+QString(m_hasEditions?" UNION SELECT root FROM game_editions":"");
+    if(!query.exec(recoveryQuery)){fail(tr("Cannot inspect managed uninstall recovery. The catalog was preserved."));return;}
+    while(query.next()){
+        const auto root=query.value(0).toString();
+        if(!root.startsWith(managedPrefix))continue;
+        const auto recovery=ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,root);
+        if(!recovery.isEmpty()){fail(recovery);return;}
+    }
+    query.finish();
     m_ready = true;
     for(const auto &disc:OpticalDiscAdapter::mountedDiscs())
         m_lastOpticalObservationIds.append(disc.toMap().value("observationId").toString());
@@ -409,6 +461,9 @@ QVariantList GameLibrary::runtimes() const {
             result.append(QVariantMap{{"id",id},{"name",app.value("name")},{"file",compatibleRuntime(id,true)},{"provider",id=="steam"?"steam":"local"}});
     }
     return result;
+}
+QVariantMap GameLibrary::compatibilityInstallerStatus() const {
+    return CompatibilityRuntime::discover();
 }
 QVariantList GameLibrary::emulators() const {
     QVariantList result;
@@ -495,6 +550,7 @@ QString GameLibrary::checkedTarget(const QString &root, const QString &relative)
 }
 QString GameLibrary::addGame(const QVariantMap &input) {
     if (!m_ready) { fail(tr("The games catalog is unavailable.")); return {}; }
+    if(m_portablePhase.startsWith("uninstall")){fail(tr("Wait for the managed uninstall to finish before changing game sources."));return {};}
     QString error; const auto registration = ComponentSchema::gameRegistration(input,&error);
     if (registration.isEmpty()) { fail(error); return {}; }
     const auto runtime = registration.value("runtimeId").toString();
@@ -766,6 +822,7 @@ QVariantMap GameLibrary::registration(const QString &id) {
         {"runtimeId",query.value(2)},{"root",query.value(3)},{"target",query.value(4)}};
 }
 bool GameLibrary::updateGame(const QString &id,const QVariantMap &input) {
+    if(m_portablePhase.startsWith("uninstall"))return fail(tr("Wait for the managed uninstall to finish before changing game sources."));
     if(!m_ready || registration(id).isEmpty())return fail(tr("Game not found in this profile."));
     QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
     if(value.isEmpty())return fail(error);
@@ -1160,6 +1217,7 @@ bool GameLibrary::exportCatalog(const QString &destination) {
     m_error.clear();emit errorChanged();return true;
 }
 bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
+    if(m_portablePhase.startsWith("uninstall"))return fail(tr("Wait for the managed uninstall to finish before restoring the catalog."));
     if(!m_ready || !confirmed || !QDir::isAbsolutePath(source) || QDir::cleanPath(source)!=source
         || QFileInfo(source).isSymLink() || !QFileInfo(source).isFile() || QFileInfo(source).canonicalFilePath()!=source
         || QFileInfo(source).size()<1 || QFileInfo(source).size()>MaxCatalogArchiveBytes)
@@ -1474,6 +1532,8 @@ bool GameLibrary::platformAvailable(const QString &platform) {
     return query.exec() && query.next() && query.value(0).toBool();
 }
 bool GameLibrary::removeGame(const QString &id) {
+    if(m_portablePhase=="uninstall" || m_portablePhase=="uninstall-finalize")
+        return fail(tr("Wait for the managed uninstall to finish before changing the catalog."));
     if (!m_ready || details(id).isEmpty()) return fail(tr("Game not found in this profile."));
     QString oldHash;
     if(m_hasArtwork){
@@ -1512,7 +1572,59 @@ bool GameLibrary::canUninstallManagedGame(const QString &id) const {
     if(!gamesQuery.exec() || !gamesQuery.next() || gamesQuery.value(0).toInt()!=0)return false;
     return true;
 }
+bool GameLibrary::catalogReferencesRoot(const QString &root,bool *referenced){
+    QSqlQuery query(m_db);
+    query.prepare("SELECT EXISTS(SELECT 1 FROM games WHERE root=?)"
+        +QString(m_hasEditions?" OR EXISTS(SELECT 1 FROM game_editions WHERE root=?)":""));
+    query.addBindValue(root);if(m_hasEditions)query.addBindValue(root);
+    if(!query.exec() || !query.next())return fail(tr("Cannot verify catalog references; no files were changed."));
+    *referenced=query.value(0).toBool();return true;
+}
+QVariantList GameLibrary::pendingUninstallRecovery(){
+    QVariantList result;
+    if(!m_ready || !m_portablePhase.isEmpty())return result;
+    const auto base=ManagedGamePaths::gamesRoot(m_emulatorProfile);
+    if(base.isEmpty() || !QFileInfo(base).isDir() || QFileInfo(base).canonicalFilePath()!=base)return result;
+    QDirIterator entries(base,QDir::Dirs|QDir::NoDotAndDotDot|QDir::NoSymLinks);
+    int scanned=0;
+    while(entries.hasNext() && scanned++<10000 && result.size()<128){
+        const auto parent=entries.next();
+        const auto identity=QFileInfo(parent).fileName();
+        const auto id=QUuid(identity);
+        if(id.isNull() || id.toString(QUuid::WithoutBraces)!=identity || QFileInfo(parent).canonicalFilePath()!=parent)continue;
+        const auto root=parent+"/install",pending=root+".uninstall-pending";
+        const QFileInfo staged(pending);
+        if(!staged.isDir() || staged.isSymLink() || staged.canonicalFilePath()!=pending)continue;
+        bool referenced=false;
+        if(!catalogReferencesRoot(root,&referenced))return {};
+        if(referenced)continue;
+        result.append(QVariantMap{{"id",identity},{"path",pending},
+            {"markerPresent",QFileInfo(pending+"/.isolde-install.json").isFile()},
+            {"conflict",QFileInfo::exists(root) || QFileInfo(root).isSymLink()}});
+    }
+    return result;
+}
+bool GameLibrary::recoverOrphanedUninstall(const QString &installationId,bool confirmed){
+    if(!m_ready || !confirmed || !m_portablePhase.isEmpty() || portableInstallBusy()
+        || (m_sessionActiveGuard && m_sessionActiveGuard()))
+        return fail(tr("Return Home and confirm recovery after all game operations finish."));
+    const auto uuid=QUuid(installationId);
+    if(uuid.isNull() || uuid.toString(QUuid::WithoutBraces)!=installationId)
+        return fail(tr("Invalid managed installation identity."));
+    const auto root=ManagedGamePaths::gamesRoot(m_emulatorProfile)+'/'+installationId+"/install";
+    bool referenced=false;
+    if(!catalogReferencesRoot(root,&referenced))return false;
+    if(referenced)return fail(tr("The catalog still references this installation. Reopen Games for normal recovery."));
+    const auto pending=root+".uninstall-pending";
+    if(!QFileInfo(pending).isDir() || QFileInfo(pending).isSymLink())
+        return fail(tr("The pending folder is missing or redirected; nothing was changed."));
+    const auto error=ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,root,false);
+    if(!error.isEmpty())return fail(error);
+    m_error.clear();emit errorChanged();emit changed();return true;
+}
 bool GameLibrary::uninstallManagedGame(const QString &id,bool confirmed) {
+    if(m_sessionActiveGuard && m_sessionActiveGuard())
+        return fail(tr("A session is active or starting. Return Home before uninstalling a game."));
     if(!m_ready || !confirmed || portableInstallBusy() || !m_portablePhase.isEmpty()
         || !canUninstallManagedGame(id))
         return fail(tr("Only a separately confirmed, verified Isolde-managed install can be uninstalled."));
@@ -1525,11 +1637,12 @@ bool GameLibrary::uninstallManagedGame(const QString &id,bool confirmed) {
     m_portableGameId=id;m_portableRuntime.clear();m_portableDestination=root;
     m_portableInstallOutput.clear();m_portableInstallError.clear();m_portableCanceled=false;
     m_portablePhase="uninstall";m_portableInstallStatus="Verifying the complete owned-file manifest before removing this install. Profile saves are outside the install folder.";
-    m_portableInstall.start(python,{helper,"--uninstall","--root",root});
+    m_portableInstall.start(python,{helper,"--prepare-uninstall","--root",root});
     m_portableInstallDeadline.start();m_error.clear();emit errorChanged();emit portableInstallChanged();return true;
 }
 QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionId) {
     m_error.clear();emit errorChanged();
+    if(m_portablePhase.startsWith("uninstall")){fail(tr("Wait for the managed uninstall to finish before launching a game."));return {};}
     if (!m_ready || !ComponentSchema::safeId(id)) { fail(tr("Game not found in this profile.")); return {}; }
     if(editionId.isEmpty() && editions(id).size()>1){fail(tr("Choose which edition to play."));return {};}
     if(!editionId.isEmpty() && !ComponentSchema::safeId(editionId)){fail(tr("Invalid edition identity."));return {};}
@@ -1552,7 +1665,8 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionI
     const auto media=optical?OpticalDiscAdapter::resolveRootReference(root).value("disc").toMap():QVariantMap{};
     const auto sourceRoot=optical?media.value("mountRoot").toString():root;
     QVariantMap action{{"type","open-file"},{"openWith",runtime},{"target",target},{"sourceRoot",sourceRoot}};
-    if(optical)action["opticalMediaId"]=media.value("mediaId");
+    if(optical){action["opticalMediaId"]=media.value("mediaId");action["opticalReference"]=root;
+        action["opticalObservationId"]=media.value("observationId");}
     return action;
 }
 bool GameLibrary::installationExists(const QString &runtime,const QString &root,const QString &target) {
@@ -1572,6 +1686,7 @@ QVariantList GameLibrary::editions(const QString &id) {
     return result;
 }
 QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
+    if(m_portablePhase.startsWith("uninstall")){fail(tr("Wait for the managed uninstall to finish before changing game sources."));return {};}
     if(!m_ready || registration(id).isEmpty()){fail(tr("Game not found in this profile."));return {};}
     QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
     if(value.isEmpty()){fail(error);return {};}
@@ -1655,6 +1770,12 @@ bool GameLibrary::removeSteamLibrary(const QString &path) {
 QVariantList GameLibrary::mountedOpticalDiscs() const {
     return m_ready ? OpticalDiscAdapter::mountedDiscs() : QVariantList{};
 }
+QVariantList GameLibrary::refreshOpticalDiscs() const {
+    if(!m_ready)return {};
+    for(const auto &item:OpticalDiscAdapter::mountedDiscs())
+        OpticalDiscAdapter::retryIdentity(item.toMap().value("device").toString());
+    return OpticalDiscAdapter::mountedDiscs();
+}
 QVariantMap GameLibrary::revalidateOpticalDisc(const QString &observationId,const QString &device) const {
     if(!m_ready || !QRegularExpression("^[0-9a-f]{64}$").match(observationId).hasMatch()
         || !QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
@@ -1671,14 +1792,15 @@ QString GameLibrary::registerOpticalGame(const QString &title,const QString &run
     const auto disc=media.value("disc").toMap();
     const auto root=OpticalDiscAdapter::rootReference(disc);
     if(root.isEmpty() || !disc.value("directPlaySupported").toBool()){
-        fail(tr("This disc has no readable ISO identity. Direct Play is supported only for identified ISO9660 discs."));return {};
+        fail(tr("The disc's full-content identity is not ready. Wait for verification or refresh to retry."));return {};
     }
     const auto grantError=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
     if(!grantError.isEmpty()){fail(grantError);return {};}
     const auto target=checkedTarget(root,relativeExecutable);
     if(target.isEmpty())return {};
     QFile executable(target);
-    if(!QFileInfo(target).isExecutable() || !executable.open(QIODevice::ReadOnly)
+    if(!(QFileInfo(target).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther))
+        || !executable.open(QIODevice::ReadOnly)
         || executable.read(20).left(4)!=QByteArray("\x7f""ELF",4)){
         fail(tr("Choose a native Linux ELF executable on the selected disc. Installers and scripts are not run."));return {};
     }
@@ -1700,7 +1822,7 @@ bool GameLibrary::approveOpticalMedia(const QString &observationId,const QString
     const auto media=revalidateOpticalDisc(observationId,device);
     const auto disc=media.value("disc").toMap();
     if(media.value("state")!="ready" || !disc.value("directPlaySupported").toBool())
-        return fail(tr("Only a currently mounted ISO9660 disc with a readable identity can be approved."));
+        return fail(tr("Only a mounted disc with a verified full-content identity can be approved. Wait or refresh to retry."));
     const auto error=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
     if(!error.isEmpty())return fail(error);
     m_error.clear();emit errorChanged();return true;
@@ -1722,6 +1844,10 @@ bool GameLibrary::mountOpticalDisc(const QString &device){
 }
 bool GameLibrary::ejectOpticalDisc(const QString &device){
     if(!m_ready)return fail(tr("Games is unavailable."));
+    if(m_sessionActiveGuard && m_sessionActiveGuard())
+        return fail(tr("A session is active. Return Home before safely ejecting optical media."));
+    if(portableInstallBusy() && m_portableOpticalDevice==device)
+        return fail(tr("The disc is being used by the game installer. Finish or cancel it before ejecting."));
     QString error;
     if(!OpticalDiscAdapter::eject(device,&error))return fail(error);
     m_error.clear();emit errorChanged();return true;
@@ -1736,7 +1862,7 @@ bool GameLibrary::beginPortableInstall(const QString &source,const QString &runt
     if(!file.isFile() || file.isSymLink() || file.canonicalFilePath()!=file.absoluteFilePath()
         || file.size()<1 || file.size()>512LL*1024*1024
         || (opticalObservationId.isEmpty() && !MediaGrants::validate(file.absolutePath()).isEmpty()))
-        return fail(tr("Choose a regular ZIP or uncompressed USTAR bundle inside an approved media folder."));
+        return fail(tr("Choose a regular ZIP, USTAR or gzip-compressed USTAR bundle inside an approved media folder."));
     if(!opticalObservationId.isEmpty()){
         const auto media=revalidateOpticalDisc(opticalObservationId,opticalDevice);
         const auto disc=media.value("disc").toMap();
@@ -1806,7 +1932,10 @@ void GameLibrary::cancelPortableInstall(){
     const auto snapshot=m_portableDestination+".staging-source";
     if(m_portablePhase=="install" && QFileInfo(snapshot).isFile() && !QFileInfo(snapshot).isSymLink())QFile::remove(snapshot);
     m_portablePhase.clear();m_portableInstallPreview.clear();m_portableGameId.clear();
-    m_portableInstallStatus=phase=="uninstall"
+    if(phase=="uninstall")ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,m_portableDestination);
+    m_portableInstallStatus=phase=="uninstall-finalize"
+        ?"Catalog removal completed. Cleanup stopped; inspect the pending managed folder."
+        :phase=="uninstall"
         ?"Uninstall canceled. The catalog entry was preserved; inspect the managed folder before retrying."
         :"Installation canceled. Existing installations and saves were preserved.";
     emit portableInstallChanged();
@@ -1849,6 +1978,7 @@ QVariantList GameLibrary::importPage(int offset) const {
     return m_preview.mid(offset,PageSize);
 }
 bool GameLibrary::commitImport() {
+    if(m_portablePhase.startsWith("uninstall"))return fail(tr("Wait for the managed uninstall to finish before importing games."));
     if(!m_ready || scanning() || !m_importReady)return fail(tr("Wait for the import preview before confirming."));
     const bool steam=m_importRuntime=="steam";
     if(!compatibleRuntime(m_importRuntime,!steam))return fail(tr("The selected runtime is no longer installed."));
