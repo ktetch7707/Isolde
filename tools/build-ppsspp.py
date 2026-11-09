@@ -122,7 +122,7 @@ def build(cache, provisioner=None):
         shutil.copy2(source/"LICENSE.TXT",notices/"copyright")
         (notices/"source.json").write_text(json.dumps({"url":"https://github.com/hrydgard/ppsspp.git","commit":COMMIT,"submodules":submodules},indent=2))
         (tree/"DEBIAN").mkdir()
-        (tree/"DEBIAN/control").write_text("Package: isolde-ppsspp\nVersion: "+VERSION+"\nArchitecture: amd64\nMaintainer: Isolde\nDescription: Isolde pinned PPSSPP runtime, no games or firmware\nDepends: libsdl2-2.0-0, libgl1, libglu1-mesa, libvulkan1, libstdc++6, zlib1g\n")
+        (tree/"DEBIAN/control").write_text("Package: isolde-ppsspp\nVersion: "+VERSION+"\nArchitecture: amd64\nMaintainer: Isolde\nX-Isolde-Source-Commit: "+COMMIT+"\nDescription: Isolde pinned PPSSPP runtime, no games or firmware\nDepends: libsdl2-2.0-0, libgl1, libglu1-mesa, libvulkan1, libstdc++6, zlib1g\n")
         run("dpkg-deb","--build","--root-owner-group",str(tree),str(package),timeout=90)
     with package.open("rb") as stream:actual=hashlib.file_digest(stream,"sha256").hexdigest()
     games.atomic_receipt(receipt,{"schemaVersion":1,"sourceCommit":COMMIT,"submodules":submodules,"version":VERSION,"sha256":actual})

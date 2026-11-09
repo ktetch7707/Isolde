@@ -45,13 +45,11 @@ class GamesProvisioningTests(unittest.TestCase):
 
     def test_install_is_pinned_and_failure_is_not_ready(self):
         states=[{"pcsx2":{"ready":False}},{"pcsx2":{"ready":False}}]
-        with patch.object(games,"platform"),patch.object(games,"inspect",side_effect=states),patch.object(games.shutil,"disk_usage") as disk,patch.object(games,"run") as run:
-            disk.return_value.free=8*1024**3
+        with patch.object(games,"platform"),patch.object(games,"inspect",side_effect=states),\
+                patch.object(games,"recover_package_transaction"),patch.object(games,"prepare_bundle",return_value=Path("bundle")),\
+                patch.object(games,"apply_bundle",side_effect=RuntimeError("fixture failure")) as apply:
             with self.assertRaises(RuntimeError):games.provision(["pcsx2"],True)
-            command=run.call_args.args
-            self.assertIn("pcsx2="+games.PACKAGES["pcsx2"][0],command)
-            self.assertIn("--no-remove",command)
-            self.assertIn("--no-upgrade",command)
+            apply.assert_called_once_with(Path("bundle"))
 
     def test_changed_installed_runtime_is_preserved_instead_of_silently_downgraded(self):
         state={"pcsx2":{"ready":False,"installedVersion":"2.5.0"}}
@@ -113,6 +111,162 @@ except games.ProvisioningCancelled:
                 written=games.register_launchers(state)
                 self.assertEqual(len(written),8)
                 self.assertTrue(all(Path(path).parent==root/"applications" for path in written))
+
+
+class RuntimeBundleTests(unittest.TestCase):
+    def setUp(self):
+        self.directory=tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root=Path(self.directory.name)
+        self.bundle=self.root/"bundle"
+        (self.bundle/"archives").mkdir(parents=True)
+        self.entries=[]
+        for name,version in games.emulator_package_pins().items():
+            filename=name+"_"+version+"_amd64.deb"
+            payload=("fixture package "+name+" "+version).encode()
+            (self.bundle/"archives"/filename).write_bytes(payload)
+            self.entries.append({"package":name,"version":version,"architecture":"amd64","file":filename,
+                "size":len(payload),"sha256":__import__("hashlib").sha256(payload).hexdigest()})
+        manifest_path,_=games.runtime_manifest()
+        self.document={"schemaVersion":1,"target":{"os":"ubuntu","version":"26.04","architecture":"amd64"},
+            "runtimeManifestSha256":__import__("hashlib").sha256(manifest_path.read_bytes()).hexdigest(),
+            "runtimePackages":games.emulator_package_pins(),"packages":self.entries}
+        (self.bundle/"bundle.json").write_text(json.dumps(self.document))
+
+    def fake_runner(self,*args,**kwargs):
+        if args[0]=="/usr/bin/dpkg-deb":
+            archive=Path(args[2])
+            item=next(entry for entry in self.entries if entry["file"]==archive.name)
+            if args[-1]=="X-Isolde-Source-Commit":
+                return subprocess.CompletedProcess(args,0,"fa50bb1976065c4f8b1b47af227d367fe9771555\n","")
+            return subprocess.CompletedProcess(args,0,
+                "\n".join(item[field] for field in ("package","version","architecture"))+"\n","")
+        if args[0]=="apt-cache":
+            package,version=args[2].split("=",1)
+            item=next(entry for entry in self.entries if entry["package"]==package and entry["version"]==version)
+            record="Package: "+package+"\nVersion: "+version+"\nArchitecture: "+item["architecture"]+"\nSHA256: "+item["sha256"]+"\n"
+            return subprocess.CompletedProcess(args,0,record,"")
+        raise AssertionError(args)
+
+    def signed_bundle(self):
+        with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"state")}):
+            games.sign_bundle(self.bundle)
+
+    def test_bundle_detects_archive_changes_and_requires_trusted_signature(self):
+        self.signed_bundle()
+        with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"state")}):
+            doc=games.validate_bundle(self.bundle,self.document["runtimeManifestSha256"],self.fake_runner)
+            def no_index_access(*args,**kwargs):
+                if args[0]=="apt-cache":raise AssertionError("offline verification must not read or refresh package indexes")
+                return self.fake_runner(*args,**kwargs)
+            games.authenticate_bundle(self.bundle,doc,no_index_access)
+            games.authenticate_bundle(self.bundle,doc,self.fake_runner,verify_repository_indices=True)
+            def changed_index(*args,**kwargs):
+                result=self.fake_runner(*args,**kwargs)
+                if args[0]=="apt-cache":
+                    return subprocess.CompletedProcess(args,0,result.stdout.replace("SHA256: ","SHA256: f"),"")
+                return result
+            with self.assertRaisesRegex(ValueError,"signed Ubuntu package index"):
+                games.authenticate_bundle(self.bundle,doc,changed_index,verify_repository_indices=True)
+            archive=self.bundle/"archives"/self.entries[0]["file"]
+            archive.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError,"hash or metadata"):
+                games.validate_bundle(self.bundle,self.document["runtimeManifestSha256"],self.fake_runner)
+            archive.write_bytes(("fixture package "+self.entries[0]["package"]+" "+self.entries[0]["version"]).encode())
+            games.sign_bundle(self.bundle)
+            with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"other-state")}):
+                other_key=games.bundle_signing_paths()
+            with patch.object(games,"bundle_signing_paths",return_value=other_key):
+                with self.assertRaisesRegex(ValueError,"signature"):
+                    games.authenticate_bundle(self.bundle,doc,self.fake_runner)
+
+    def test_failed_install_purges_only_new_packages_and_removes_checkpoint(self):
+        self.signed_bundle()
+        state={}
+        commands=[]
+        def runner(*args,**kwargs):
+            if args[0] in ("/usr/bin/dpkg-deb","apt-cache"):
+                return self.fake_runner(*args,**kwargs)
+            if args[0]=="dpkg-query":
+                name=args[-1]
+                if name in state:
+                    return subprocess.CompletedProcess(args,0,"install ok installed\n"+state[name]+"\n","")
+                return subprocess.CompletedProcess(args,1,"","")
+            if args[0]=="sudo" and "/usr/bin/apt-get" in args:
+                operation=next(value for value in ("install","purge") if value in args);commands.append(args)
+                if operation=="install":
+                    state[self.entries[0]["package"]]=self.entries[0]["version"]
+                    state[self.entries[1]["package"]]=self.entries[1]["version"]
+                    raise subprocess.CalledProcessError(1,args)
+                if operation=="purge":
+                    if "--simulate" in args:
+                        names=args[args.index("purge")+1:]
+                        return subprocess.CompletedProcess(args,0,"".join("Remv "+name+" [1.0]\n" for name in names),"")
+                    state.clear()
+                    return subprocess.CompletedProcess(args,0,"","")
+            raise AssertionError(args)
+        checkpoint=self.root/"checkpoint.json"
+        with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"state")}):
+            with self.assertRaisesRegex(RuntimeError,"newly added packages were rolled back"):
+                games.apply_bundle(self.bundle,runner=runner,checkpoint=checkpoint)
+        self.assertFalse(checkpoint.exists())
+        simulation=next(command for command in commands if "purge" in command and "--simulate" in command)
+        purge=next(command for command in commands if "purge" in command and "--simulate" not in command)
+        self.assertIn("--simulate",simulation)
+        self.assertNotIn("--no-remove",purge)
+        self.assertEqual(state,{})
+
+    def test_interrupted_transaction_is_recovered_before_retry(self):
+        self.signed_bundle()
+        names={entry["package"] for entry in self.entries}
+        before={name:None for name in names}
+        installed_name=self.entries[0]["package"]
+        state={installed_name:self.entries[0]["version"]}
+        checkpoint=self.root/"checkpoint.json"
+        checkpoint.write_text(json.dumps({"schemaVersion":1,"phase":"applying","bundle":str(self.bundle),
+            "before":before,"requested":{installed_name:self.entries[0]["version"]},"createdAt":1}))
+        commands=[]
+        def runner(*args,**kwargs):
+            if args[0] in ("/usr/bin/dpkg-deb","apt-cache"):
+                return self.fake_runner(*args,**kwargs)
+            if args[0]=="dpkg-query":
+                name=args[-1]
+                if name in state:return subprocess.CompletedProcess(args,0,"install ok installed\n"+state[name]+"\n","")
+                return subprocess.CompletedProcess(args,1,"","")
+            if args[0]=="sudo" and "/usr/bin/apt-get" in args and "purge" in args:
+                commands.append(args)
+                if "--simulate" in args:
+                    names=args[args.index("purge")+1:]
+                    return subprocess.CompletedProcess(args,0,"".join("Remv "+name+" [1.0]\n" for name in names),"")
+                state.clear()
+                return subprocess.CompletedProcess(args,0,"","")
+            raise AssertionError(args)
+        with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"state")}):
+            self.assertTrue(games.recover_package_transaction(checkpoint,runner))
+        self.assertFalse(checkpoint.exists())
+        self.assertEqual(state,{})
+        self.assertIn("--simulate",commands[0])
+
+    def test_rollback_refuses_to_purge_packages_outside_its_additions(self):
+        commands=[]
+        def runner(*args,**kwargs):
+            commands.append(args)
+            return subprocess.CompletedProcess(args,0,"Remv isolde-ppsspp [1.0]\nRemv unrelated [1.0]\n","")
+        with self.assertRaisesRegex(RuntimeError,"purge plan differs"):
+            games.purge_added_packages(["isolde-ppsspp"],runner)
+        self.assertEqual(len(commands),1)
+        self.assertIn("--simulate",commands[0])
+
+    def test_offline_provision_uses_bundle_without_network_or_index_refresh(self):
+        states=[{"pcsx2":{"ready":False}},{"pcsx2":{"ready":True}}]
+        with patch.object(games,"platform"),patch.object(games,"inspect",side_effect=states),\
+                patch.object(games,"recover_package_transaction"),patch.object(games,"find_bundle",return_value=self.bundle),\
+                patch.object(games,"apply_bundle") as apply,patch.object(games,"inspect_runtimes",return_value=("a"*64,{})),\
+                patch.object(games,"run") as run:
+            result=games.provision(["pcsx2"],True,offline=True)
+        self.assertTrue(result["ready"])
+        apply.assert_called_once_with(self.bundle)
+        run.assert_not_called()
 
 
 class EmulatorAdapterTests(unittest.TestCase):
