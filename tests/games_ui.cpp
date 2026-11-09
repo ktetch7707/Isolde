@@ -39,6 +39,15 @@ public:
 signals:
     void rejected(const QString &reason);
 };
+class SteamRecoveryProbe : public QObject {
+    Q_OBJECT
+public:
+    QString acknowledged;
+    Q_INVOKABLE bool acknowledgeSteamRecovery(const QString &identity) {
+        acknowledged=identity;
+        return true;
+    }
+};
 class GamesUiTests : public QObject {
     Q_OBJECT
 private slots:
@@ -507,9 +516,9 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     const auto path=parent+"/steam/home/.local/share/Steam/steamapps";QVERIFY(QDir().mkpath(path+"/common/Fixture"));
     QFile manifest(path+"/appmanifest_42.acf");QVERIFY(manifest.open(QIODevice::WriteOnly));manifest.write("\"AppState\" { \"appid\" \"42\" \"name\" \"Steam fixture\" \"StateFlags\" \"4\" \"installdir\" \"Fixture\" }");manifest.close();
     QTemporaryDir dir;AppRegistry apps;auto steam=runtime();steam.id="steam";steam.name="Steam";steam.presentationMode="game-hub";steam.launchConfiguration={{"desktopId","isolde-steam"}};QVERIFY(apps.addApp(steam));
-    GameLibrary library(dir.filePath("games.sqlite"),&apps);InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    GameLibrary library(dir.filePath("games.sqlite"),&apps);InputManager input;GameDispatchProbe dispatch;SteamRecoveryProbe recovery;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
     QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
-    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"originId","steam-origin"},{"width",1000},{"height",600},{"engaged",true}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"sessions",QVariant::fromValue(static_cast<QObject *>(&recovery))},{"originId","steam-origin"},{"width",1000},{"height",600},{"engaged",true}}));QVERIFY2(widget,qPrintable(component.errorString()));
     command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     QTRY_COMPARE_WITH_TIMEOUT(widget->property("mode").toString(),QString("importPreview"),10000);QVERIFY(library.page().isEmpty());
     command(widget.data(),InputManager::Confirm);QVERIFY(library.page().isEmpty()); // Default Cancel.
@@ -541,6 +550,19 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QVERIFY(statusText->property("text").toString().contains("Process observation: observation unavailable"));
     QVERIFY(statusText->property("text").toString().contains("process visibility was incomplete"));
     QVERIFY(statusText->property("text").toString().contains("Session end: incomplete"));
+    QVERIFY(widget->setProperty("recoveryStatuses",QVariantMap{{"42",unknownProcess}}));
+    const auto recoveryActions=widget->property("detailActions").value<QJSValue>().toVariant().toList();
+    int recoveryChoice=-1;
+    for(int i=0;i<recoveryActions.size();++i)
+        if(recoveryActions[i].toString().startsWith("Review Steam recovery warning"))recoveryChoice=i;
+    QVERIFY(recoveryChoice>=0);
+    QVERIFY(widget->setProperty("choice",recoveryChoice));
+    QVERIFY(QMetaObject::invokeMethod(widget.data(),"activateChoice"));
+    QCOMPARE(widget->property("mode").toString(),QString("steamRecoveryReview"));
+    QVERIFY(widget->setProperty("choice",1));
+    QVERIFY(QMetaObject::invokeMethod(widget.data(),"activateChoice"));
+    QCOMPARE(recovery.acknowledged,QString("42"));
+    QVERIFY(widget->property("message").toString().contains("no save, ownership or Cloud-sync result was inferred"));
     auto other=status;other["appId"]="43";QVERIFY(widget->setProperty("providerStatus",other));
     QVERIFY(widget->property("steamStatus").toString().contains("Steam checks account ownership"));
     const auto gameId=dispatch.lastAction.value("gameId").toString();
