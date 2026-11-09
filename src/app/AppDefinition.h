@@ -26,7 +26,7 @@ struct AppDefinition {
     {
         if(id.trimmed().isEmpty() || name.trimmed().isEmpty() || type.trimmed().isEmpty())return false;
         for(const auto &key : {"gameSourceRoot", "steamGameId", "managedGameRoot",
-                               "managedGameExecutable", "opticalMediaId"})
+                               "managedGameExecutable", "opticalMediaId", "opticalReference", "opticalObservationId"})
             if(launchConfiguration.contains(key))return false;
         if(launchConfiguration.contains("emulatorRuntime")){
             const auto runtime=launchConfiguration.value("emulatorRuntime");

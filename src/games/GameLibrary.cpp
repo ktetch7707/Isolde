@@ -418,10 +418,10 @@ QVariantList GameLibrary::runtimes() const {
         if (compatibleRuntime(id,true) || compatibleRuntime(id,false))
             result.append(QVariantMap{{"id",id},{"name",app.value("name")},{"file",compatibleRuntime(id,true)},{"provider",id=="steam"?"steam":"local"}});
     }
-    QVariantMap GameLibrary::compatibilityInstallerStatus() const {
-        return CompatibilityRuntime::discover();
-    }
     return result;
+}
+QVariantMap GameLibrary::compatibilityInstallerStatus() const {
+    return CompatibilityRuntime::discover();
 }
 QVariantList GameLibrary::emulators() const {
     QVariantList result;
@@ -1464,7 +1464,8 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionI
     const auto media=optical?OpticalDiscAdapter::resolveRootReference(root).value("disc").toMap():QVariantMap{};
     const auto sourceRoot=optical?media.value("mountRoot").toString():root;
     QVariantMap action{{"type","open-file"},{"openWith",runtime},{"target",target},{"sourceRoot",sourceRoot}};
-    if(optical)action["opticalMediaId"]=media.value("mediaId");
+    if(optical){action["opticalMediaId"]=media.value("mediaId");action["opticalReference"]=root;
+        action["opticalObservationId"]=media.value("observationId");}
     return action;
 }
 bool GameLibrary::installationExists(const QString &runtime,const QString &root,const QString &target) {

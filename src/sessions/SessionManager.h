@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QVariantMap>
+#include <QTimer>
 #include <memory>
 #include <functional>
 
@@ -20,6 +21,7 @@ class SessionManager final : public QObject {
     Q_PROPERTY(QString currentLaunchUrl READ currentLaunchUrl NOTIFY currentAppChanged)
     Q_PROPERTY(QStringList currentAllowedOrigins READ currentAllowedOrigins NOTIFY currentAppChanged)
     Q_PROPERTY(QString previousFocusId READ previousFocusId NOTIFY previousFocusIdChanged)
+    Q_PROPERTY(QVariantMap opticalSessionStatus READ opticalSessionStatus NOTIFY opticalSessionStatusChanged)
 
 public:
     explicit SessionManager(AppRegistry *registry, QObject *parent = nullptr);
@@ -37,6 +39,7 @@ public:
     [[nodiscard]] QString currentLaunchUrl() const;
     [[nodiscard]] QStringList currentAllowedOrigins() const;
     [[nodiscard]] QString previousFocusId() const;
+    [[nodiscard]] QVariantMap opticalSessionStatus() const { return m_opticalSessionStatus; }
 
     Q_INVOKABLE bool launch(const QString &appId);
     Q_INVOKABLE bool launchAction(const QVariantMap &action);
@@ -57,11 +60,13 @@ signals:
     void sessionRejected(const QString &reason);
     void sessionFailed(const QString &appId, const QString &reason);
     void returnedHome(const QString &focusId);
+    void opticalSessionStatusChanged();
 
 private:
     bool launchFileAction(const QVariantMap &action, const QString &sourceRoot,
-                          const QString &opticalMediaId = {});
+                          const QString &opticalMediaId = {}, const QString &opticalReference = {});
     bool launchDefinition(AppDefinition definition);
+    void refreshOpticalSession();
 
     AppRegistry *m_registry;
     std::unique_ptr<AppSession> m_session;
@@ -70,4 +75,6 @@ private:
     bool m_resumingPrepared=false;
     std::function<QString(const QString &)> m_launchGuard;
     std::function<bool(const AppDefinition &)> m_launchPreparation;
+    QTimer m_opticalTimer;
+    QVariantMap m_opticalSessionStatus;
 };

@@ -47,6 +47,7 @@ private slots:
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void opticalIdentityAndMultiDiscReferencesAreDurable();
     void fullOpticalContentIdentityRejectsTruncationAndChanges();
+    void opticalSessionContractNeverClaimsHotSwap();
     void opticalApprovalsAreProfileScopedAndRevocable();
     void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
     void ejectRefusesWhileSessionIsActive();
@@ -69,6 +70,30 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::opticalSessionContractNeverClaimsHotSwap(){
+    const QVariantMap disc{{"mediaId",QString(64,'a')},{"mediaSetId",QString(64,'b')},
+        {"discNumber",1},{"discCount",2},{"mountRoot","/media/first"},{"state","mounted"},{"observationId",QString(64,'e')}};
+    const auto reference=OpticalDiscAdapter::rootReference(disc);
+    const auto pinned=OpticalDiscAdapter::classifySession(reference,"/media/first",true,{disc});
+    QCOMPARE(pinned.value("state").toString(),QString("pinned"));
+    QVERIFY(!pinned.value("hotSwapSupported").toBool());
+    auto reinserted=disc;reinserted["observationId"]=QString(64,'f');
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{reinserted},QString(64,'e')).value("state").toString(),QString("interrupted"));
+    auto other=disc;other["mediaId"]=QString(64,'c');other["discNumber"]=2;
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{other}).value("state").toString(),QString("wrong-disc"));
+    auto relocated=disc;relocated["mountRoot"]="/media/second";
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{relocated}).value("state").toString(),QString("relocated"));
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{}).value("state").toString(),QString("missing"));
+    other["mediaSetId"]=QString(64,'d');
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",true,{other}).value("state").toString(),QString("replaced"));
+    QCOMPARE(OpticalDiscAdapter::classifySession(reference,"/media/first",false,{disc}).value("state").toString(),QString("revoked"));
+    const auto missing=OpticalDiscAdapter::classifySession(reference,"/media/first",true,{});
+    QVERIFY(!missing.value("recovery").toString().isEmpty());
+    const auto interrupted=OpticalDiscAdapter::latchSession(missing,pinned);
+    QCOMPARE(interrupted.value("state").toString(),QString("interrupted"));
+    QCOMPARE(OpticalDiscAdapter::latchSession(interrupted,pinned).value("state").toString(),QString("interrupted"));
+    QCOMPARE(OpticalDiscAdapter::latchSession({},pinned).value("state").toString(),QString("pinned"));
 }
 void GamesUiTests::compatibilityCandidatesNeverClaimInstallerSupport(){
     const auto missing=CompatibilityRuntime::classify(false,false);

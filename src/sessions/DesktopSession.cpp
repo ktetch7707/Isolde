@@ -349,7 +349,8 @@ void DesktopSession::launch()
         definition().launchConfiguration.value("emulatorRuntime").toString(),
         definition().launchConfiguration.value("gameSourceRoot").toString(),steamGame,
         definition().launchConfiguration.value("managedGameRoot").toString(),
-        definition().launchConfiguration.value("opticalMediaId").toString());
+        definition().launchConfiguration.value("opticalMediaId").toString(),
+        definition().launchConfiguration.value("opticalObservationId").toString());
     if (!sandbox.error.isEmpty()) {
         setError(sandbox.error);
         setState(State::Exited);

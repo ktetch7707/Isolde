@@ -43,7 +43,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
                                         const QString &gameSourceRoot, const QString &steamGameId, const QString &managedGameRoot,
-                                        const QString &opticalMediaId)
+                                        const QString &opticalMediaId, const QString &opticalObservationId)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -91,6 +91,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         for(const auto &item:OpticalDiscAdapter::mountedDiscs()){
             const auto disc=item.toMap();
             if(disc.value("mountRoot")==gameSourceRoot && disc.value("mediaId")==opticalMediaId
+                && disc.value("observationId")==opticalObservationId && !opticalObservationId.isEmpty()
                 && disc.value("directPlaySupported").toBool() && inside(binary,gameSourceRoot)
                 && (QFileInfo(binary).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther)))opticalExecutable=true;
         }
@@ -257,6 +258,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                 for(const auto &disc:OpticalDiscAdapter::mountedDiscs()){
                     const auto value=disc.toMap();
                     if(value.value("mountRoot")==gameSourceRoot && value.value("mediaId")==opticalMediaId
+                        && value.value("observationId")==opticalObservationId && !opticalObservationId.isEmpty()
                         && value.value("directPlaySupported").toBool()
                         && OpticalDiscGrants::approved(profileId,opticalMediaId))optical=true;
                 }

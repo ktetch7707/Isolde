@@ -193,7 +193,7 @@ void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCOMPARE(library.resolveLaunch(disc).value("sourceRoot").toString(),root);
     auto forged=gamesRuntime("forged");QVERIFY(forged.isValid());forged.launchConfiguration["gameSourceRoot"]=root;
     QVERIFY(!forged.isValid());QVERIFY(!apps.addApp(forged));
-    for(const auto &key:{"managedGameRoot","managedGameExecutable","opticalMediaId"}){
+    for(const auto &key:{"managedGameRoot","managedGameExecutable","opticalMediaId","opticalReference","opticalObservationId"}){
         auto injected=gamesRuntime("injected");injected.launchConfiguration[key]=root;
         QVERIFY(!injected.isValid());QVERIFY(!apps.addApp(injected));
     }

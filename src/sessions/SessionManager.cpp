@@ -16,7 +16,28 @@
 #include <QScopedValueRollback>
 
 SessionManager::SessionManager(AppRegistry *registry, QObject *parent)
-    : QObject(parent), m_registry(registry) {}
+    : QObject(parent), m_registry(registry) {
+    m_opticalTimer.setInterval(2500);
+    connect(&m_opticalTimer,&QTimer::timeout,this,&SessionManager::refreshOpticalSession);
+}
+
+void SessionManager::refreshOpticalSession()
+{
+    QVariantMap status;
+    if(m_session){
+        const auto config=m_session->definition().launchConfiguration;
+        const auto reference=config.value("opticalReference").toString();
+        if(OpticalDiscAdapter::isRootReference(reference)){
+            const auto profile=qApp->property("isoldeProfile").toString();
+            status=OpticalDiscAdapter::classifySession(reference,config.value("gameSourceRoot").toString(),
+                OpticalDiscGrants::approved(profile,OpticalDiscAdapter::mediaIdFromRoot(reference)),
+                OpticalDiscAdapter::mountedDiscs(),config.value("opticalObservationId").toString());
+            status=OpticalDiscAdapter::latchSession(m_opticalSessionStatus,status);
+        }
+    }
+    if(status!=m_opticalSessionStatus){m_opticalSessionStatus=status;emit opticalSessionStatusChanged();}
+    if(status.isEmpty())m_opticalTimer.stop();
+}
 
 bool SessionManager::hasActiveSession() const { return m_session != nullptr; }
 QString SessionManager::currentAppId() const { return m_session ? m_session->definition().id : QString(); }
@@ -110,6 +131,7 @@ bool SessionManager::launchDefinition(AppDefinition definition)
         const bool normalDesktopExit = (session->definition().type == "desktop" || session->definition().type == "android") && failure.isEmpty();
         m_intentionalExit = false;
         m_session.reset();
+        refreshOpticalSession();
         emit currentAppChanged();
         emit activeChanged();
         if (intentionalExit || normalDesktopExit) {
@@ -126,6 +148,7 @@ bool SessionManager::launchDefinition(AppDefinition definition)
         return false;
     if (m_session->state() == AppSession::State::Exited) {
         m_session.reset();
+        refreshOpticalSession();
         const auto reason = tr("Unable to start %1.").arg(definition.name);
         emit sessionRejected(reason);
         emit sessionFailed(definition.id, reason);
@@ -133,6 +156,8 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     }
     emit currentAppChanged();
     emit activeChanged();
+    refreshOpticalSession();
+    if(!m_opticalSessionStatus.isEmpty())m_opticalTimer.start();
     return true;
 }
 
@@ -148,17 +173,24 @@ bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sour
     const auto profile=qApp->property("isoldeProfile").toString();
     const bool managed=ManagedGamePaths::isInstallRoot(profile,sourceRoot);
     const auto opticalMediaId=input.value("opticalMediaId").toString();
+    const auto opticalReference=input.value("opticalReference").toString();
+    const auto opticalObservationId=input.value("opticalObservationId").toString();
     bool optical=false;
-    for(const auto &item:OpticalDiscAdapter::mountedDiscs()){
+    const auto discs=OpticalDiscAdapter::mountedDiscs();
+    for(const auto &item:discs){
         const auto disc=item.toMap();
         if(disc.value("mountRoot")==sourceRoot && disc.value("mediaId")==opticalMediaId
+            && disc.value("observationId")==opticalObservationId
+            && OpticalDiscAdapter::classifyRootReference(opticalReference,{disc}).value("state")=="ready"
             && OpticalDiscGrants::approved(profile,opticalMediaId)
             && disc.value("directPlaySupported").toBool())optical=true;
     }
     QFile executable(target);
     const bool nativeElf=(!(managed || optical) || (executable.open(QIODevice::ReadOnly)
         && executable.read(4)==QByteArray("\x7f""ELF",4)));
-    if((!opticalMediaId.isEmpty() && !optical) || (!error.isEmpty() && !managed && !optical)
+    if((!opticalMediaId.isEmpty() && (!optical || !OpticalDiscAdapter::isRootReference(opticalReference)
+        || OpticalDiscAdapter::mediaIdFromRoot(opticalReference)!=opticalMediaId))
+        || (opticalMediaId.isEmpty() && (!opticalReference.isEmpty() || !opticalObservationId.isEmpty())) || (!error.isEmpty() && !managed && !optical)
         || !nativeElf || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
         || !QStringList{"game","game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot+'/')
         || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target
@@ -166,7 +198,7 @@ bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sour
         || (optical && !(QFileInfo(target).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther)))){
         emit sessionRejected(tr("The reviewed game folder is missing, redirected or incompatible. Review its source and retry."));return false;
     }
-    return launchFileAction(input,sourceRoot,optical?opticalMediaId:QString());
+    return launchFileAction(input,sourceRoot,optical?opticalMediaId:QString(),optical?opticalReference:QString());
 }
 bool SessionManager::launchSteamGame(const QString &identity)
 {
@@ -179,7 +211,7 @@ bool SessionManager::launchSteamGame(const QString &identity)
     definition.launchConfiguration.remove("containment"); // Never fullscreen the Steam client instead of its game.
     return launchDefinition(definition);
 }
-bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot,const QString &opticalMediaId)
+bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot,const QString &opticalMediaId,const QString &opticalReference)
 {
     QString error;
     const auto action = ComponentSchema::action(input, &error);
@@ -212,6 +244,8 @@ bool SessionManager::launchFileAction(const QVariantMap &input,const QString &so
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionTarget"), target);
     if(!sourceRoot.isEmpty())actionDefinition.launchConfiguration.insert("gameSourceRoot",sourceRoot);
     if(!opticalMediaId.isEmpty())actionDefinition.launchConfiguration.insert("opticalMediaId",opticalMediaId);
+    if(!opticalReference.isEmpty())actionDefinition.launchConfiguration.insert("opticalReference",opticalReference);
+    if(!opticalReference.isEmpty())actionDefinition.launchConfiguration.insert("opticalObservationId",input.value("opticalObservationId"));
     if(!opticalMediaId.isEmpty() || ManagedGamePaths::isInstallRoot(qApp->property("isoldeProfile").toString(),sourceRoot)){
         actionDefinition.name=QFileInfo(target).completeBaseName();
         if(opticalMediaId.isEmpty())actionDefinition.launchConfiguration.insert("managedGameRoot",sourceRoot);
@@ -233,6 +267,7 @@ void SessionManager::exitCurrent()
         return;
     m_intentionalExit = false;
     m_session.reset();
+    refreshOpticalSession();
     emit currentAppChanged();
     emit activeChanged();
     emit returnedHome(m_previousFocusId);

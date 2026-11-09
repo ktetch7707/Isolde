@@ -235,6 +235,47 @@ QVariantMap OpticalDiscAdapter::classifyRootReference(const QString &root,const 
     return {{"state","missing"},{"expectedDisc",expectedNumber},{"discCount",expectedCount}};
 }
 
+QVariantMap OpticalDiscAdapter::classifySession(const QString &reference,const QString &pinnedRoot,
+                                               bool approved,const QVariantList &currentDiscs,
+                                               const QString &pinnedObservation)
+{
+    auto classified=classifyRootReference(reference,currentDiscs);
+    for(const auto &item:currentDiscs){
+        const auto disc=item.toMap();
+        if(disc.value("mountRoot").toString()==pinnedRoot
+            && classifyRootReference(reference,{disc}).value("state")=="ready"){
+            classified={{"state","ready"},{"disc",disc}};break;
+        }
+    }
+    auto state=classified.value("state").toString();
+    if(!approved)state="revoked";
+    else if(state=="ready" && classified.value("disc").toMap().value("mountRoot").toString()!=pinnedRoot)
+        state="relocated";
+    else if(state=="ready" && !pinnedObservation.isEmpty()
+        && classified.value("disc").toMap().value("observationId").toString()!=pinnedObservation)
+        state="interrupted";
+    else if(state=="ready")state="pinned";
+    else if(state=="missing"){
+        for(const auto &item:currentDiscs)
+            if(item.toMap().value("mountRoot").toString()==pinnedRoot){state="replaced";break;}
+    }
+    return {{"schemaVersion",1},{"state",state},{"expectedDisc",reference.split('/').value(4).toInt()},
+        {"discCount",reference.split('/').value(5).toInt()},{"hotSwapSupported",false},
+        {"recovery",state=="pinned"?"":state=="revoked"
+            ?"This profile's disc approval was revoked. Return Home and review access."
+            :"The session uses a pinned read-only disc mount. Return Home, safely eject or reconnect the expected disc, then retry Play."}};
+}
+
+QVariantMap OpticalDiscAdapter::latchSession(const QVariantMap &previous,QVariantMap current)
+{
+    const auto previousState=previous.value("state").toString();
+    if(current.value("state")=="pinned" && !previousState.isEmpty() && previousState!="pinned"){
+        current["state"]="interrupted";
+        current["recovery"]="The original session mount cannot be restored by reinsertion. Return Home and retry Play with the expected disc.";
+    }
+    return current;
+}
+
 QVariantList OpticalDiscAdapter::mountedDiscs()
 {
     QVariantList result;
