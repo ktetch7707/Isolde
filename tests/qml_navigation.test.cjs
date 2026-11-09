@@ -21,6 +21,24 @@ function method(file, name, context, anchor) {
     vm.runInContext(source.slice(start, end), context, {filename: file + ":" + name});
 }
 
+test("app overflow opens All Apps while button overflow retains shortcuts", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        readOnly: false, message: "", globalGalleryRoute: true, buttons: false,
+        pendingGalleryRestore: true, originId: "carousel", galleryApps: [{id: "shortcut"}],
+        gallery: {open() { calls.push("shortcuts"); }},
+        allAppsRequested(origin) { calls.push(origin); },
+    });
+    method("PageAppCarousel.qml", "activate", scope);
+    scope.activate("__more__");
+    assert.deepEqual(calls, ["carousel"]);
+    assert.equal(scope.pendingGalleryRestore, false);
+    scope.buttons = true;
+    scope.activate("__more__");
+    assert.deepEqual(calls, ["carousel", "shortcuts"]);
+    assert.equal(scope.galleryId, "shortcut");
+});
+
 test("capture settings arrows change only the selected input row", () => {
     const calls = [], draft = {selectedInput: 1};
     const scope = vm.createContext({

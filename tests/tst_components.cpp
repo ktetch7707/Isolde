@@ -723,10 +723,15 @@ void ComponentTests::validatesContracts()
 void ComponentTests::compositionPersistenceAndValidation()
 {
     QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    AppDefinition galleryApp; galleryApp.id = "gallery-test"; galleryApp.name = "Gallery test"; galleryApp.type = "web";
+    QVERIFY(registry.addApp(galleryApp));
     writeFile(dir.filePath("default.json"), legacy);
     HomeLayout layout(&registry); QVERIFY(layout.load(dir.filePath("default.json"),dir.filePath("user.json")));
     const QVariantMap config{{"schemaVersion",1},{"enabled",true},{"columns",2},{"fit",true},
-        {"navigation",QVariantList{QVariantMap{{"id","home"},{"name","My Home"}},QVariantMap{{"id","films"},{"name","Films"},{"sections",QVariantList{"personal"}}}}}};
+        {"navigation",QVariantList{QVariantMap{{"id","home"},{"name","My Home"}},QVariantMap{{"id","films"},{"name","Films"},{"sections",QVariantList{"personal"}}}}},
+        {"appGallery",QVariantMap{{"layout","list"},{"columns",4},{"density","compact"},{"sort","favorites"},
+            {"showArtwork",false},{"showLabels",true},{"filterEnabled",true},{"favoritesEnabled",true},
+            {"favoriteIds",QVariantList{"gallery-test"}},{"title","Installed Apps"}}}};
     QVERIFY(layout.setComposition(config));
     QVERIFY(layout.setSectionPresentation("personal",{{"variant","media"},{"columns",3},{"height",250},{"span",1},{"subtitle","Keep watching"}}));
     QVERIFY(layout.setItemPresentation("my-folder",{{"progress",0.5},{"imageCrop",QVariantMap{{"x",0},{"y",1},{"width",100},{"height",90}}}}));
@@ -734,8 +739,30 @@ void ComponentTests::compositionPersistenceAndValidation()
     QCOMPARE(sections[0].toMap()["presentation"].toMap()["columns"].toInt(),3);
     HomeLayout restored(&registry); QVERIFY(restored.load(dir.filePath("default.json"),dir.filePath("user.json")));
     QCOMPARE(restored.composition(),config); QCOMPARE(restored.sections(),sections);
+    QVERIFY(layout.setGalleryFavorite("gallery-test", false));
+    QCOMPARE(layout.composition().value("appGallery").toMap().value("favoriteIds").toList(),QVariantList{});
+    QVERIFY(layout.setGalleryFavorite("gallery-test", true));
+    HomeLayout favoritesReloaded(&registry); QVERIFY(favoritesReloaded.load(dir.filePath("default.json"),dir.filePath("user.json")));
+    QCOMPARE(favoritesReloaded.composition().value("appGallery").toMap().value("favoriteIds").toList(),QVariantList{"gallery-test"});
+    auto invalidDocument = QJsonDocument::fromJson(readFile(dir.filePath("user.json"))).object();
+    auto invalidDocumentComposition = invalidDocument.value("composition").toObject();
+    auto invalidDocumentGallery = invalidDocumentComposition.value("appGallery").toObject();
+    invalidDocumentGallery["layout"] = "masonry";
+    invalidDocumentComposition["appGallery"] = invalidDocumentGallery;
+    invalidDocument["composition"] = invalidDocumentComposition;
+    const auto invalidDocumentBytes = QJsonDocument(invalidDocument).toJson();
+    const auto invalidUserPath = dir.filePath("invalid-gallery.json");
+    writeFile(invalidUserPath, invalidDocumentBytes);
+    HomeLayout fallbackGallery(&registry); QVERIFY(fallbackGallery.load(dir.filePath("default.json"),invalidUserPath));
+    QVERIFY(!fallbackGallery.composition().contains("appGallery"));
+    QCOMPARE(readFile(invalidUserPath),invalidDocumentBytes);
     const auto original = readFile(dir.filePath("user.json"));
     auto invalid = config; invalid["navigation"] = QVariantList{QVariantMap{{"id","same"},{"name","A"}},QVariantMap{{"id","same"},{"name","B"}}};
+    QVERIFY(!layout.setComposition(invalid));
+    invalid = config; invalid["appGallery"] = QVariantMap{{"layout","masonry"}};
+    QVERIFY(!layout.setComposition(invalid));
+    invalid = config; auto invalidGallery = config.value("appGallery").toMap();
+    invalidGallery["favoriteIds"] = QVariantList{"gallery-test","gallery-test"}; invalid["appGallery"] = invalidGallery;
     QVERIFY(!layout.setComposition(invalid));
     invalid = config; invalid["navigation"] = QVariantList{QVariantMap{{"id","bad"},{"name","Bad"},{"action",QVariantMap{{"type","shell"}}}}};
     QVERIFY(!layout.setComposition(invalid));
@@ -959,7 +986,14 @@ void ComponentTests::dispatchesValidatedActionsAndOrigins()
         QSignalSpy rejected(&dispatcher, &ActionDispatcher::rejected), focus(&dispatcher, &ActionDispatcher::restoreFocusRequested);
         QSignalSpy library(&dispatcher, &ActionDispatcher::libraryRequested), settings(&dispatcher, &ActionDispatcher::settingsRequested);
         QSignalSpy drawer(&dispatcher, &ActionDispatcher::drawerRequested);
+        QSignalSpy allApps(&dispatcher, &ActionDispatcher::allAppsRequested);
+        QSignalSpy search(&dispatcher, &ActionDispatcher::searchRequested);
         QVERIFY(dispatcher.dispatch({{"type","app-drawer"}},"more-apps")); QCOMPARE(drawer.size(),1);
+        QCOMPARE(allApps.size(),1); QCOMPARE(allApps.last().at(0).toString(),QString("more-apps"));
+        QVERIFY(dispatcher.dispatch({{"type","open-apps"}},"apps-card"));
+        QCOMPARE(allApps.size(),2); QCOMPARE(allApps.last().at(0).toString(),QString("apps-card"));
+        QVERIFY(dispatcher.dispatch({{"type","open-search"}},"search-card"));
+        QCOMPARE(search.size(),1); QCOMPARE(search.last().at(0).toString(),QString("search-card"));
         QVERIFY(!dispatcher.dispatch({{"type", "shell"}, {"target", "bad"}}));
         QVERIFY(!dispatcher.dispatch({{"type", "launch-app"}, {"appId", "missing"}}));
         QVERIFY(!dispatcher.dispatch({{"type", "open-folder"}, {"target", "/media/movies"}, {"openWith", "settings"}}));
@@ -1841,19 +1875,24 @@ void ComponentTests::studioHeaderValidationAndDraftRollback()
     const auto otherHeader=other.composition().value("header");
     QVERIFY(!home.studioOptions().value("headerDefaults").toMap().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto before=session->draft();
-    QVERIFY(session->previewCommand("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    const QVariantMap gallery{{"layout","list"},{"columns",4},{"density","spacious"},{"sort","favorites"},
+        {"showArtwork",false},{"showLabels",true},{"filterEnabled",true},{"favoritesEnabled",true},{"title","Installed Apps"}};
+    const QVariantMap pageComposition{{"headerMode","identity"},{"header",style},{"appGallery",gallery}};
+    QVERIFY(session->previewCommand("pagePatch",{{"scope","composition"},{"value",pageComposition}}));
     QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),0);QVERIFY(!QFile::exists(path));
     session->cancelPreview();QCOMPARE(session->draft(),before);
-    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",pageComposition}}));
     QCOMPARE(session->changeCount(),1);const auto valid=session->draft();
     QVERIFY(!session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"header",QVariantMap{{"schemaVersion",2}}}}}}));
+    QVERIFY(!session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"appGallery",QVariantMap{{"columns",1}}}}}}));
     QCOMPARE(session->draft(),valid);QCOMPARE(session->changeCount(),1);QVERIFY(!QFile::exists(path));
     QVERIFY(session->undo());QCOMPARE(session->draft(),before);
-    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",pageComposition}}));
     QVERIFY(session->apply(QString()));
     QCOMPARE(readFile(otherPath),otherBytes);QCOMPARE(other.composition().value("header"),otherHeader);
     HomeLayout reopened(&registry);QVERIFY(reopened.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
     QCOMPARE(reopened.composition().value("header").toMap(),style);
+    QCOMPARE(reopened.composition().value("appGallery").toMap(),gallery);
     const auto skin=reopened.saveSkin("Bottom header");QVERIFY(!skin.isEmpty());
     auto changed=reopened.composition();changed["header"]=QVariantMap{{"schemaVersion",1},{"position","top"}};
     QVERIFY(reopened.setComposition(changed));QVERIFY(reopened.applySkin(skin));

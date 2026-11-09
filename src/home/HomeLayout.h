@@ -166,6 +166,7 @@ public:
     Q_INVOKABLE void releaseArtworkAnimation(const QString &owner);
     Q_INVOKABLE bool setWallpaper(const QString &sourceUrl);
     Q_INVOKABLE bool setComposition(const QVariantMap &value);
+    Q_INVOKABLE bool setGalleryFavorite(const QString &appId, bool favorite);
 
     // T16 Studio bridge: committed bytes + atomic draft apply + focus recap.
     // committedDocument() exposes the current bytes for session.open();

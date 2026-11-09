@@ -28,6 +28,8 @@
 #include <QtTest>
 #include <QScopeGuard>
 #include <QStandardPaths>
+#include <QSet>
+#include <algorithm>
 
 class CountingStoreProvider final : public StoreProvider {
 public:
@@ -53,6 +55,46 @@ class IsoldeTests final : public QObject {
     Q_OBJECT
 
 private slots:
+    void allAppsProjectionContainsOnlyRegisteredLaunchables() {
+        QTemporaryDir temp;
+        AppRegistry registry;
+        QVERIFY(registry.load(QFINDTESTDATA("../config/apps.json")));
+        AppCatalog catalog(&registry);
+        QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),
+            temp.filePath("catalog-state.json"), temp.filePath("installed")),
+            qPrintable(catalog.errorString()));
+        const auto galleryPresentation = catalog.galleryPresentation();
+        QCOMPARE(galleryPresentation.value("sort").toString(), QString("name"));
+        QVERIFY(galleryPresentation.value("filterEnabled").toBool());
+        QVERIFY(galleryPresentation.value("favoritesEnabled").toBool());
+        auto gallery = catalog.galleryEntries();
+        QSet<QString> ids;
+        for (const auto &value : gallery) {
+            const auto app = value.toMap();
+            const auto id = app.value("id").toString();
+            QVERIFY(!id.isEmpty());
+            QVERIFY(!ids.contains(id));
+            ids.insert(id);
+            QVERIFY(app.value("installed").toBool());
+            QVERIFY(app.value("registered").toBool());
+            QVERIFY(QStringList{"web", "desktop", "android"}.contains(app.value("type").toString()));
+        }
+        QVERIFY(ids.contains("youtube"));
+        QVERIFY(!ids.contains("settings"));
+        QVERIFY(!ids.contains("app-store"));
+        QVERIFY(!ids.contains("movies"));
+        for (const auto &value : catalog.allEntries()) {
+            const auto entry = value.toMap();
+            if (!entry.value("installed").toBool())
+                QVERIFY(!ids.contains(entry.value("id").toString()));
+        }
+        QVERIFY(registry.removeApp("youtube"));
+        gallery = catalog.galleryEntries();
+        QVERIFY(std::none_of(gallery.cbegin(), gallery.cend(), [](const QVariant &value) {
+            return value.toMap().value("id").toString() == "youtube";
+        }));
+    }
+
     void fdroidBrowsingStaysOfflineUntilOptInAndDropsLateResults() {
         FdroidProvider live;
         QVERIFY(live.results().isEmpty());QVERIFY(live.status().isEmpty());
@@ -787,6 +829,8 @@ void IsoldeTests::catalogPersistsInstallLifecycle()
     QVERIFY(restoredRegistry.find("weather"));
     QVERIFY(restored.uninstall("weather"));
     QVERIFY(!restoredRegistry.find("weather"));
+    projected = restored.galleryEntries();
+    QVERIFY(std::none_of(projected.cbegin(),projected.cend(),[](const QVariant &entry){return entry.toMap().value("id").toString()=="weather";}));
     QVERIFY(!QDir(installRoot).exists("weather"));
 }
 
@@ -814,14 +858,18 @@ void IsoldeTests::catalogTracksSetupAndFailureState()
     QCOMPARE(catalog.entries().first().toMap().value("state").toString(), QString("available"));
     QCOMPARE(catalog.entries().first().toMap().value("setupRequired").toBool(), true);
     QVERIFY(catalog.entries().first().toMap().value("setupPrompt").toString().contains(QStringLiteral("media source")));
+    QVERIFY(catalog.galleryEntries().isEmpty());
     QVERIFY(catalog.install("kodi"));
     QCOMPARE(catalog.packageState("kodi"), QString("needs-setup"));
     QCOMPARE(catalog.entries().first().toMap().value("state").toString(), QString("needs-setup"));
+    QCOMPARE(catalog.galleryEntries().first().toMap().value("state").toString(), QString("needs-setup"));
     QVERIFY(catalog.completeSetup("kodi"));
     QCOMPARE(catalog.packageState("kodi"), QString("ready"));
+    QCOMPARE(catalog.galleryEntries().first().toMap().value("state").toString(), QString("ready"));
     QVERIFY(catalog.markFailed("kodi", "Desktop entry was not found."));
     QCOMPARE(catalog.packageState("kodi"), QString("failed"));
     QVERIFY(catalog.entries().first().toMap().value("failureReason").toString().contains(QStringLiteral("Desktop entry")));
+    QCOMPARE(catalog.galleryEntries().first().toMap().value("failureReason").toString(), QString("Desktop entry was not found."));
 
     AppRegistry restoredRegistry;
     QVERIFY(restoredRegistry.loadFromData(config));
@@ -830,6 +878,9 @@ void IsoldeTests::catalogTracksSetupAndFailureState()
     QCOMPARE(restored.packageState("kodi"), QString("failed"));
     QVERIFY(restored.completeSetup("kodi"));
     QCOMPARE(restored.packageState("kodi"), QString("ready"));
+    QCOMPARE(restored.galleryEntries().first().toMap().value("state").toString(), QString("ready"));
+    QVERIFY(restored.uninstall("kodi"));
+    QVERIFY(restored.galleryEntries().isEmpty());
 }
 
 void IsoldeTests::catalogRejectsInvalidManifest()

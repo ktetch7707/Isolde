@@ -12,7 +12,7 @@ Rectangle {
     property bool typing: false
     property var editField: ({})
     property string message: ""
-    readonly property var scopes: ["Dashboard", "Section", "Card", "Navigation tab"]
+    readonly property var scopes: ["Dashboard", "Section", "Card", "Navigation tab", "All Apps"]
     readonly property var config: layoutModel.composition
     readonly property var targets: scope === 1 ? layoutModel.categories : scope === 2 ? layoutModel.items : scope === 3 ? config.navigation || [] : []
     readonly property var current: targets[target] || ({})
@@ -28,6 +28,11 @@ Rectangle {
     function toggle(key, label, fallback) { return {key:key,label:label,toggle:true,fallback:fallback} }
     function enumeration(key, label, choices) { return {key:key,label:label,choices:choices} }
     readonly property var fields: {
+        if (scope === 4) return [enumeration("layout","Grid or list",["grid","list"]),number("columns","Grid columns",2,8,1,5),
+            enumeration("density","Density",["compact","standard","spacious"]),enumeration("sort","Sort order",["name","favorites"]),
+            toggle("showArtwork","Show app artwork",true),toggle("showLabels","Show app labels",true),
+            toggle("filterEnabled","Enable local filter",true),toggle("favoritesEnabled","Enable favorites",true),
+            text("title","Gallery title")]
         if (scope === 0) return [toggle("enabled","Composed Home",false), number("columns","Dashboard columns",1,2,1,1),
             number("margin","Outer margin",0,100,2,40),number("gap","Section gap",0,100,1,20),toggle("fit","Fit sections on screen",true),
             number("designHeight","Design height",480,1440,10,800),toggle("showProfile","Profile label",false),
@@ -36,7 +41,7 @@ Rectangle {
             enumeration("initialTab","Starting tab",(config.navigation || []).map(t => t.id)),
             {key:"wallpaper",label:"Choose wallpaper",command:true},{key:"removeWallpaper",label:"Remove wallpaper",command:true}].filter(f => layoutModel.isPage || ["pageNavigation","sidebarWidth"].indexOf(f.key)<0)
         if (scope === 3) return [text("name","Tab name"),text("sections","Visible sections (IDs separated by commas; empty shows all)"),
-            enumeration("action.type","Tab action",["none","open-page","app-drawer","settings","launch-app","open-collection","desktop-mode","open-url","open-folder","open-file","open-disc","play-movie"]),
+            enumeration("action.type","Tab action",["none","open-page","open-apps","open-search","settings","launch-app","open-collection","desktop-mode","open-url","open-folder","open-file","open-disc","play-movie"]),
             text("action.pageId","Destination page ID"),text("action.appId","Action app ID"),text("action.collectionId","Action collection ID"),text("action.target","Action target"),text("action.openWith","Open with app ID"),
             number("action.section","Settings section (-1 = overview)",-1,5,1,-1),number("action.movieId","Kodi movie ID",1,2147483647,1,1),
             {key:"addTab",label:"Add navigation tab",command:true},{key:"removeTab",label:"Remove this tab",command:true}]
@@ -53,9 +58,9 @@ Rectangle {
             toggle("showHeading","Show heading",true),number("headingSize","Heading size",0,400,1,24),toggle("headingBold","Bold heading",false),
             text("headingColor","Heading color"),text("panelColor","Panel tint"),number("panelOpacity","Panel opacity",0,1,0.05,0),number("blur","Panel blur",0,1,0.05,0),
             number("padding","Panel padding",0,400,1,0),text("trailingLabel","Section link label"),
-            enumeration("trailingAction.type","Section link action",["none","open-page","app-drawer","settings","launch-app","open-collection"]),
+            enumeration("trailingAction.type","Section link action",["none","open-page","open-apps","open-search","settings","launch-app","open-collection"]),
             text("trailingAction.pageId","Link page ID"),text("trailingAction.appId","Link app ID"),text("trailingAction.collectionId","Link collection ID"),number("trailingAction.section","Link Settings section",-1,5,1,-1)].concat(result)
-        else result = result.concat([text("cardName","Card name"),enumeration("action.type","Card action",["open-page","app-drawer","settings","launch-app","open-collection","desktop-mode","open-url","open-folder","open-file","open-disc","play-movie"]),text("action.pageId","Destination page ID"),text("action.appId","App ID"),text("action.collectionId","Collection ID"),text("action.target","Target"),text("action.openWith","Open with app ID"),number("action.section","Settings section",-1,5,1,-1),number("action.movieId","Kodi movie ID",1,2147483647,1,1),number("progress","Progress",0,1,0.01,0),number("imageCrop.x","Crop left",0,16384,1,0),number("imageCrop.y","Crop top",0,16384,1,0),
+        else result = result.concat([text("cardName","Card name"),enumeration("action.type","Card action",["open-page","open-apps","open-search","settings","launch-app","open-collection","desktop-mode","open-url","open-folder","open-file","open-disc","play-movie"]),text("action.pageId","Destination page ID"),text("action.appId","App ID"),text("action.collectionId","Collection ID"),text("action.target","Target"),text("action.openWith","Open with app ID"),number("action.section","Settings section",-1,5,1,-1),number("action.movieId","Kodi movie ID",1,2147483647,1,1),number("progress","Progress",0,1,0.01,0),number("imageCrop.x","Crop left",0,16384,1,0),number("imageCrop.y","Crop top",0,16384,1,0),
             number("imageCrop.width","Crop width",1,16384,1,100),number("imageCrop.height","Crop height",1,16384,1,100),{key:"cardArtwork",label:"Choose card artwork",command:true},
             {key:"removeArtwork",label:"Remove card artwork",command:true},{key:"removeCrop",label:"Use full artwork",command:true}])
         if(scope===2 && current.kind==="widget")result=result.filter(f=>!f.key.startsWith("action."))
@@ -64,7 +69,7 @@ Rectangle {
     color: "#101014"; visible: open
     function begin() { scope = 0; target = 0; selected = 0; typing = false; message = ""; open = true }
     function value(field) {
-        let source = scope === 0 ? config : scope === 3 ? current : scope === 2 ? Object.assign({},inheritedStyle,style) : style
+        let source = scope === 0 ? config : scope === 4 ? config.appGallery || ({}) : scope === 3 ? current : scope === 2 ? Object.assign({},inheritedStyle,style) : style
         if (field.key === "sectionName" || field.key === "cardName") return current.name
         if(scope === 2 && field.key.startsWith("action.")) return (current.action || {})[field.key.split(".")[1]] || field.fallback || ""
         const path = field.key.split(".")
@@ -76,7 +81,7 @@ Rectangle {
     function store(field, value) {
         if (field.key === "cardName") { if(!layoutModel.setItemName(current.id,value)) message=layoutModel.errorString; return }
         if (field.key === "sectionName") { if (!layoutModel.renameCategory(current.id,value)) message = layoutModel.errorString; return }
-        let source = Object.assign({}, scope === 0 ? config : scope === 3 ? current : style)
+        let source = Object.assign({}, scope === 0 ? config : scope === 4 ? config.appGallery || ({}) : scope === 3 ? current : style)
         if(scope === 2 && field.key.startsWith("action.")) source.action=Object.assign({},current.action || {})
         const path = field.key.split(".")
         if (path.length > 1) {
@@ -103,15 +108,16 @@ Rectangle {
         if(scope === 2 && field.key.startsWith("action.")){message=layoutModel.setItemAction(current.id,source.action)?"Saved":layoutModel.errorString;return}
         let ok
         if (scope === 0) { source.schemaVersion = 1; ok = layoutModel.setComposition(source) }
+        else if (scope === 4) { let next = Object.assign({},config); next.appGallery = source; ok = layoutModel.setComposition(next) }
         else if (scope === 3) { let next = Object.assign({},config); let tabs = (next.navigation || []).slice(); tabs[target] = source; next.navigation = tabs; ok = layoutModel.setComposition(next) }
         else ok = scope === 1 ? layoutModel.setSectionPresentation(current.id,source) : layoutModel.setItemPresentation(current.id,source)
         message = ok ? "Saved" : layoutModel.errorString
     }
     function activate(direction) {
-        if (selected === 0) { scope = (scope + direction + 4) % 4; target = 0; return }
+        if (selected === 0) { scope = (scope + direction + 5) % 5; target = 0; return }
         if (selected === 1) { target = Math.max(0,Math.min(targets.length-1,target+direction)); return }
         const field = fields[selected-2]; if (!field) return
-        if (scope !== 0 && !current.id && field.key !== "addTab") { message = "Add a section, card or navigation tab first."; return }
+        if (scope !== 0 && scope !== 4 && !current.id && field.key !== "addTab") { message = "Add a section, card or navigation tab first."; return }
         if (field.command) {
             if (field.key === "wallpaper") wallpaper.open()
             else if (field.key === "cardArtwork") cardArtwork.open()

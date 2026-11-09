@@ -77,6 +77,8 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 
 ## Current checkpoint summary
 
+- 2026-11-09: **T26 integration; VM acceptance deferred.** The T26 gallery branch is integrated with T10; app-carousel overflow opens All Apps while button-carousel overflow retains its shortcuts, and the two gallery navigation tests are registered with CTest. Coding remains 50%: dedicated end-to-end QML contracts for gallery launch/failure/retry, exact origin and scroll restoration, and selected-app removal are still missing. Native/installed VM tests, the remote journey and visual reference acceptance are deferred; no acceptance percentages change.
+
 - 2026-11-07: **T25 native policy/storage20%.** [Evidence](t25-sources-2026-11-07.md): C sources2/2 passes; T25.1.a/T25.5.a independently credited. No final group/installed acceptance. Sum1568, Overall58%; continue T25 remote policy/actions and contained source families, then T26.
 
 - 2026-11-07: **Automatic VM test maintenance verified (harness only).** [Runner record](vm-auto-cleanup-2026-11-07.md): normal Test automatically handles low guest space with verified backup receipts, bounded cleanup and requested-candidate retention; CTest stops at first failure. Final `vm-auto-cleanup-20261107-c` passes92/92 runner checks and1/1 focused component test; prior B reclaims292,745,216 bytes without a separate maintenance call. No application acceptance/full-suite claim or percentage change: sum1548, Overall57%.

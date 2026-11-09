@@ -18,6 +18,7 @@
 #include <QtMath>
 #include <QCryptographicHash>
 #include <QMap>
+#include <algorithm>
 
 namespace {
 
@@ -329,6 +330,26 @@ bool HomeLayout::setComposition(const QVariantMap &value)
     if (!save()) { m_composition = previous; return false; }
     emit layoutChanged(); return true;
 }
+bool HomeLayout::setGalleryFavorite(const QString &appId, bool favorite)
+{
+    const auto *app = m_registry ? m_registry->find(appId) : nullptr;
+    if (!app || (app->type != "web" && app->type != "desktop" && app->type != "android")) {
+        setError(tr("Choose an installed registered app to favorite."));
+        return false;
+    }
+    auto composition = m_composition;
+    auto gallery = composition.value("appGallery").toMap();
+    QStringList favorites;
+    for (const auto &value : gallery.value("favoriteIds").toList()) favorites.append(value.toString());
+    favorites.removeAll(appId);
+    if (favorite) favorites.append(appId);
+    std::sort(favorites.begin(), favorites.end(), [](const QString &a, const QString &b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
+    QVariantList favoriteValues;
+    for (const auto &id : favorites) favoriteValues.append(id);
+    gallery.insert("favoriteIds", favoriteValues);
+    composition.insert("appGallery", gallery);
+    return setComposition(composition);
+}
 QVariantMap HomeLayout::grid() const
 {
     return ComponentSchema::normalizedGrid(m_composition.value("grid").toMap());
@@ -448,7 +469,7 @@ QVariantMap HomeLayout::studioOptions() const
     }
     const auto actionCategories=object["actionCategories"].toArray();
     if(!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size()>12)return {};
-    const QStringList pickerTypes{"none","media-picker","root-page","open-page","launch-app","app-drawer","open-collection","open-guide","play-movie","open-show","switch-input","settings","desktop-mode","open-file","open-folder","open-url","open-disc"};
+    const QStringList pickerTypes{"none","media-picker","root-page","open-page","launch-app","open-apps","open-search","app-drawer","open-collection","open-guide","play-movie","open-show","switch-input","settings","desktop-mode","open-file","open-folder","open-url","open-disc"};
     for(const auto &value:actionCategories) {
         const auto category=value.toObject();
         if(category.size()!=2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() || category["name"].toString().size()>80 || !category["types"].isArray() || category["types"].toArray().size()>pickerTypes.size())return {};
@@ -779,7 +800,12 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         setError(tr("The designated Home page does not exist."));return false;
     }
     const auto theme = object.value("theme").toObject();
-    const auto composition = object.value("composition").toObject().toVariantMap();
+    auto composition = object.value("composition").toObject().toVariantMap();
+    if (composition.contains("appGallery") && !ComponentSchema::validComposition(composition)) {
+        auto fallbackComposition = composition;
+        fallbackComposition.remove("appGallery");
+        if (ComponentSchema::validComposition(fallbackComposition)) composition = fallbackComposition;
+    }
     if ((object.contains("composition") && !object["composition"].isObject()) || !ComponentSchema::validComposition(composition)) {
         setError(tr("Home composition is invalid.")); return false;
     }
