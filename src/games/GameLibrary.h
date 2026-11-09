@@ -62,8 +62,11 @@ public:
     Q_INVOKABLE QVariantList collections();
     Q_INVOKABLE QString createCollection(const QString &name, const QString &kind,
                                          const QString &filterType = {}, const QString &filterValue = {});
+    Q_INVOKABLE bool updateCollection(const QString &collectionId, const QString &name,
+                                      const QString &filterType = {}, const QString &filterValue = {});
     Q_INVOKABLE bool removeCollection(const QString &collectionId);
     Q_INVOKABLE bool setCollectionMember(const QString &collectionId, const QString &gameId, bool member);
+    Q_INVOKABLE bool moveCollectionMember(const QString &collectionId, const QString &gameId, int direction);
     Q_INVOKABLE bool collectionContains(const QString &collectionId, const QString &gameId);
     Q_INVOKABLE QVariantList pageCollection(const QString &collectionId, int offset = 0);
     Q_INVOKABLE bool exportCatalog(const QString &destination);

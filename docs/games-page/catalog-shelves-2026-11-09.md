@@ -9,9 +9,9 @@ This change extends the profile-owned Games catalog and its shared library widge
 - Added an explicit, transactional catalog schema v3 write on the first successful return. Existing v1/v2 catalogs are not migrated at startup; older catalogs continue to work until a completed session creates the new activity table. Removing a game cascades only its profile-local activity record.
 - Limited distinct platform categories to 128; imports remain atomic and existing metadata/source entries are preserved on refusal.
 - Added profile-local franchise/tags with bounded validation, remote editing and local search across title/franchise/tags.
-- Added v4 organization tables, manual collections with ordered membership and declarative smart collections matching platform, Favorites, or title text. The remote can create, browse, remove collections and add/remove game membership. Removing catalog records cascades only their organization/activity rows.
+- Added v4 organization tables, manual collections with ordered membership and declarative smart collections matching platform, Favorites, or title text. The remote can create, browse, rename/edit smart rules, remove collections, add/remove game membership and reorder manual entries. Collection counts reflect current rule matches. Removing catalog records cascades only their organization/activity rows.
 - Added profile-local JSON catalog export and explicit-confirmation restore. Archives are byte/record bounded and validated before replacement; imports retain media-folder grants, verify identity/collection references, preserve a private SQLite recovery copy, and transactionally replace only catalog data.
-- Added native/offscreen regression coverage for case-insensitive filters, Favorites, Continue views, metadata validation/search, smart and manual collection behavior, archive rejection/restore and remote platform selection.
+- Added native/offscreen regression coverage for case-insensitive filters, Favorites, Continue views, metadata validation/search, smart and manual collection edits/order, archive rejection/restore and remote platform selection.
 
 ## Not delivered / verification boundary
 

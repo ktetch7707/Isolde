@@ -430,7 +430,15 @@ QVariantList GameLibrary::collections() {
     if(!m_ready)return result;
     if(!m_hasCollections)return result;
     QSqlQuery query(m_db);
-    if(!query.exec("SELECT c.id,c.name,c.kind,c.filter_type,c.filter_value,count(m.game_id) FROM game_collections c LEFT JOIN game_collection_members m ON m.collection_id=c.id GROUP BY c.id ORDER BY c.name COLLATE NOCASE,c.id")){
+    const auto smartPlatform=m_hasEditions
+        ?QString("(SELECT count(*) FROM games g WHERE lower(g.platform)=lower(c.filter_value) OR EXISTS(SELECT 1 FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(c.filter_value)))")
+        :QString("(SELECT count(*) FROM games g WHERE lower(g.platform)=lower(c.filter_value))");
+    const auto countExpression="CASE WHEN c.kind='manual' THEN count(m.game_id) "
+        "WHEN c.filter_type='favorite' THEN (SELECT count(*) FROM games g WHERE g.favorite=1) "
+        "WHEN c.filter_type='title' THEN (SELECT count(*) FROM games g WHERE instr(lower(g.title),lower(c.filter_value))>0) "
+        "WHEN c.filter_type='platform' THEN "+smartPlatform+" ELSE 0 END";
+    if(!query.exec("SELECT c.id,c.name,c.kind,c.filter_type,c.filter_value,"+countExpression
+        +" FROM game_collections c LEFT JOIN game_collection_members m ON m.collection_id=c.id GROUP BY c.id ORDER BY c.name COLLATE NOCASE,c.id")){
         fail(query.lastError().text());return {};
     }
     while(query.next())result.append(QVariantMap{{"id",query.value(0)},{"name",query.value(1)},
@@ -460,6 +468,33 @@ QString GameLibrary::createCollection(const QString &name,const QString &kind,co
     if(!query.exec()){fail(tr("Collection was not created. Its name may already be in use. %1").arg(query.lastError().text()));return {};}
     m_error.clear();emit errorChanged();emit changed();return id;
 }
+bool GameLibrary::updateCollection(const QString &id,const QString &name,const QString &filterType,const QString &filterValue) {
+    const auto clean=name.trimmed();
+    if(!m_ready || !m_hasCollections || !ComponentSchema::safeId(id)
+        || clean.isEmpty() || clean!=name || clean.size()>80 || clean.contains(QChar::Null))
+        return fail(tr("Choose a collection name of up to 80 characters."));
+    QSqlQuery current(m_db);current.prepare("SELECT kind FROM game_collections WHERE id=?");current.addBindValue(id);
+    if(!current.exec() || !current.next())return fail(tr("Collection not found in this profile."));
+    const auto kind=current.value(0).toString();
+    current.finish();
+    if(kind=="manual"){
+        if(!filterType.isEmpty() || !filterValue.isEmpty())return fail(tr("Manual collections do not accept executable filters."));
+    }else if(kind=="smart"){
+        if(!QStringList{"platform","favorite","title"}.contains(filterType)
+            || filterValue.size()>80 || filterValue.contains(QChar::Null)
+            || (filterType!="favorite" && filterValue.trimmed().isEmpty())
+            || (filterType=="favorite" && !filterValue.isEmpty()))
+            return fail(tr("Choose one supported declarative smart collection rule."));
+    }else return fail(tr("Collection type is invalid."));
+    if(!m_db.transaction())return fail(m_db.lastError().text());
+    QSqlQuery query(m_db);query.prepare("UPDATE game_collections SET name=?,filter_type=?,filter_value=? WHERE id=?");
+    query.addBindValue(clean);query.addBindValue(filterType);query.addBindValue(filterValue);query.addBindValue(id);
+    if(!query.exec() || query.numRowsAffected()!=1 || !m_db.commit()){
+        const auto error=query.lastError().text();m_db.rollback();
+        return fail(tr("Collection was not updated. Its previous settings were preserved. %1").arg(error));
+    }
+    m_error.clear();emit errorChanged();emit changed();return true;
+}
 bool GameLibrary::removeCollection(const QString &id) {
     if(!m_ready || !m_hasCollections || !ComponentSchema::safeId(id))return fail(tr("Collection not found in this profile."));
     QSqlQuery query(m_db);query.prepare("DELETE FROM game_collections WHERE id=?");query.addBindValue(id);
@@ -483,6 +518,40 @@ bool GameLibrary::setCollectionMember(const QString &collectionId,const QString 
         query.addBindValue(collectionId);query.addBindValue(gameId);
     }
     if(!query.exec() || !m_db.commit()){const auto error=query.lastError().text();m_db.rollback();return fail(tr("Collection membership was not changed. %1").arg(error));}
+    m_error.clear();emit errorChanged();emit changed();return true;
+}
+bool GameLibrary::moveCollectionMember(const QString &collectionId,const QString &gameId,int direction) {
+    if(!m_ready || !m_hasCollections || !ComponentSchema::safeId(collectionId)
+        || !ComponentSchema::safeId(gameId) || (direction!=-1 && direction!=1))
+        return fail(tr("Choose a valid manual collection and game."));
+    QSqlQuery kind(m_db);kind.prepare("SELECT kind FROM game_collections WHERE id=?");kind.addBindValue(collectionId);
+    if(!kind.exec() || !kind.next() || kind.value(0).toString()!="manual")
+        return fail(tr("Only manual collection order can be changed."));
+    kind.finish();
+    QSqlQuery query(m_db);query.prepare("SELECT game_id,position FROM game_collection_members WHERE collection_id=? ORDER BY position,game_id");
+    query.addBindValue(collectionId);if(!query.exec())return fail(query.lastError().text());
+    QList<QPair<QString,int>> members;
+    while(query.next())members.append({query.value(0).toString(),query.value(1).toInt()});
+    query.finish();
+    auto index=-1;
+    for(qsizetype i=0;i<members.size();++i)if(members.at(i).first==gameId){index=int(i);break;}
+    const auto target=qsizetype(index)+direction;
+    if(index<0)return fail(tr("Game is not in this collection."));
+    if(target<0 || target>=members.size()){m_error.clear();emit errorChanged();return true;}
+    if(!m_db.transaction())return fail(m_db.lastError().text());
+    query.prepare("UPDATE game_collection_members SET position=-1 WHERE collection_id=? AND game_id=?");
+    query.addBindValue(collectionId);query.addBindValue(gameId);
+    bool ok=query.exec();
+    query.prepare("UPDATE game_collection_members SET position=? WHERE collection_id=? AND game_id=?");
+    query.addBindValue(members.at(index).second);query.addBindValue(collectionId);query.addBindValue(members.at(target).first);
+    ok=ok && query.exec();
+    query.prepare("UPDATE game_collection_members SET position=? WHERE collection_id=? AND game_id=?");
+    query.addBindValue(members.at(target).second);query.addBindValue(collectionId);query.addBindValue(gameId);
+    ok=ok && query.exec();
+    if(!ok || !m_db.commit()){
+        const auto error=query.lastError().text();m_db.rollback();
+        return fail(tr("Collection order was not changed. %1").arg(error));
+    }
     m_error.clear();emit errorChanged();emit changed();return true;
 }
 bool GameLibrary::collectionContains(const QString &collectionId,const QString &gameId) {
