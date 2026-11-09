@@ -262,31 +262,35 @@ void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers(){
     };
     const auto finishTag=[](QByteArray descriptor){
         quint16 crc=0;
-        for(int i=16;i<descriptor.size();++i){
-            crc^=quint16(quint8(descriptor.at(i)))<<8;
+        const auto crcLength=quint8(descriptor.at(10))|(quint16(quint8(descriptor.at(11)))<<8);
+        for(int i=0;i<crcLength;++i){
+            crc^=quint16(quint8(descriptor.at(16+i)))<<8;
             for(int bit=0;bit<8;++bit)crc=crc&0x8000?quint16((crc<<1)^0x1021):quint16(crc<<1);
         }
         descriptor[8]=char(crc&0xff);descriptor[9]=char((crc>>8)&0xff);
         unsigned checksum=0;for(int i=0;i<16;++i)if(i!=4)checksum=(checksum+quint8(descriptor.at(i)))&0xff;
         descriptor[4]=char(checksum);return descriptor;
     };
-    const auto makeTag=[&](quint16 id){
-        QByteArray descriptor(2048,'\0');put16(descriptor,0,id);descriptor[2]=2;descriptor[6]=1;
-        put16(descriptor,10,2032);put32(descriptor,12,256);return descriptor;
+    const auto makeTag=[&](quint16 id,quint32 location){
+        QByteArray descriptor(2048,'\0');put16(descriptor,0,id);put16(descriptor,2,2);descriptor[6]=1;
+        put16(descriptor,10,2032);put32(descriptor,12,location);return descriptor;
     };
     const auto fixture=[&](int number,const QByteArray &setName){
-        auto primary=makeTag(1);primary.replace(24,7,"VOLUME1");
+        auto primary=makeTag(1,300);
+        QByteArray volumeId(32,'\0');volumeId[0]=8;volumeId.replace(1,7,"VOLUME1");volumeId[31]=8;
+        primary.replace(24,32,volumeId);
         put16(primary,56,quint16(number));put16(primary,58,2);
         QByteArray encodedSet(128,'\0');encodedSet[0]=8;encodedSet.replace(1,setName.size(),setName);
+        encodedSet[127]=char(setName.size()+1);
         primary.replace(72,128,encodedSet);
-        auto logical=makeTag(6);auto terminator=makeTag(8);
-        auto anchor=makeTag(2);put32(anchor,20,3*2048);put32(anchor,24,300);
+        auto logical=makeTag(6,301);auto terminator=makeTag(8,302);
+        auto anchor=makeTag(2,256);put32(anchor,16,3*2048);put32(anchor,20,300);
         QByteArray sequence=finishTag(primary)+finishTag(logical)+finishTag(terminator);
         return qMakePair(finishTag(anchor),sequence);
     };
     const auto first=fixture(1,"ISOLDE-SET"),second=fixture(2,"ISOLDE-SET");
-    const auto firstDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second);
-    const auto secondDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(second.first,second.second);
+    const auto firstDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second,300);
+    const auto secondDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(second.first,second.second,300);
     QVERIFY(!firstDescriptor.isEmpty());QVERIFY(!secondDescriptor.isEmpty());
     QCOMPARE(firstDescriptor.value("mediaSetId"),secondDescriptor.value("mediaSetId"));
     QCOMPARE(firstDescriptor.value("discNumber").toInt(),1);QCOMPARE(secondDescriptor.value("discNumber").toInt(),2);
@@ -299,14 +303,36 @@ void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers(){
         {{ "mediaId",secondMedia.value("mediaId")},{"mediaSetId",secondMedia.value("mediaSetId")},
          {"discNumber",2},{"discCount",2},{"state","mounted"}}).value("state").toString(),QString("wrong-disc"));
     const auto unrelated=fixture(1,"OTHER-SET");
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(unrelated.first,unrelated.second)
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(unrelated.first,unrelated.second,300)
         .value("mediaSetId")!=firstDescriptor.value("mediaSetId"));
     auto corrupt=first.first;corrupt[100]=char(1);
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(corrupt,first.second).isEmpty());
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second.left(2048)).isEmpty());
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(corrupt,first.second,300).isEmpty());
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second.left(2048),300).isEmpty());
     auto invalidCount=fixture(1,"ISOLDE-SET");
     put16(invalidCount.second,58,100);invalidCount.second.replace(0,2048,finishTag(invalidCount.second.left(2048)));
-    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(invalidCount.first,invalidCount.second).isEmpty());
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(invalidCount.first,invalidCount.second,300).isEmpty());
+    auto wrongLocation=first.second;put32(wrongLocation,12,299);
+    wrongLocation.replace(0,2048,finishTag(wrongLocation.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,wrongLocation,300).isEmpty());
+    auto shortCrc=first.second;put16(shortCrc,10,0);shortCrc.replace(0,2048,finishTag(shortCrc.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,shortCrc,300).isEmpty());
+    auto invalidDstring=first.second;invalidDstring[72]=char(16);
+    invalidDstring.replace(0,2048,finishTag(invalidDstring.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,invalidDstring,300).isEmpty());
+    auto shortAnchorCrc=first.first;put16(shortAnchorCrc,10,0);
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(finishTag(shortAnchorCrc),first.second,300).isEmpty());
+    auto wrongAnchorLocation=first.first;put32(wrongAnchorLocation,12,255);
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(finishTag(wrongAnchorLocation),first.second,300).isEmpty());
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second,301).isEmpty());
+    auto blankSet=first.second;blankSet[72]=8;blankSet[73]=' ';blankSet[199]=2;
+    blankSet.replace(0,2048,finishTag(blankSet.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,blankSet,300).isEmpty());
+    QVariantMap iso{{"mediaSetId",QString("iso-set")},{"discNumber",1}};
+    const auto selectedIso=OpticalDiscAdapter::descriptorForFilesystem("iso9660",iso,firstDescriptor);
+    const auto selectedUdf=OpticalDiscAdapter::descriptorForFilesystem("udf",iso,firstDescriptor);
+    QCOMPARE(selectedIso.value("mediaSetId").toString(),QString("iso-set"));
+    QCOMPARE(selectedUdf.value("mediaSetId"),firstDescriptor.value("mediaSetId"));
+    QVERIFY(OpticalDiscAdapter::descriptorForFilesystem("udf",iso,{}).isEmpty());
 }
 void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable(){
     QStandardPaths::setTestModeEnabled(true);
