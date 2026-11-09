@@ -393,9 +393,14 @@ void DesktopSession::launch()
     connect(&m_launcher, &QProcess::readyReadStandardError, this, [this] {
         const auto output=m_launcher.readAllStandardError();
         m_diagnostics = (m_diagnostics + output).right(8192);
-        if(m_steamOutput && state()==State::Created && m_steamOutput->consume(output)) {
-            m_steamObserved=true;
-            setState(State::Running);
+        if(m_steamOutput) {
+            const bool observed=m_steamOutput->consume(output);
+            const auto providerState=m_steamOutput->takeState();
+            if(!providerState.isEmpty())emit steamProviderStateChanged(providerState);
+            if(observed && state()==State::Created) {
+                m_steamObserved=true;
+                setState(State::Running);
+            }
         }
     });
     connect(&m_launcher, &QProcess::readyReadStandardOutput, this, [this] { m_launcher.readAllStandardOutput(); });

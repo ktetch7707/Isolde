@@ -1,5 +1,8 @@
 """Steam adapter contracts with inert manifests/processes, not owned gameplay."""
 import importlib.util
+import contextlib
+import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -80,14 +83,13 @@ class SteamGamesTests(unittest.TestCase):
         elapsed=[0]
         def sleep(seconds):elapsed[0]+=seconds
         launcher=Mock();launcher.poll.return_value=0
-        def processes(identity):return [100] if elapsed[0]>=1 else []
-        steam.wait_for_game("42",launcher,timeout=2,clock=lambda:elapsed[0],sleep=sleep,processes=processes)
-        self.assertGreaterEqual(elapsed[0],1)
-        with self.assertRaisesRegex(RuntimeError,"did not start"):
-            steam.wait_for_game("42",launcher,timeout=1,clock=lambda:elapsed[0],sleep=sleep,processes=lambda _:[])
-        launcher.poll.return_value=1
-        with self.assertRaisesRegex(RuntimeError,"could not start"):
-            steam.wait_for_game("42",launcher,clock=lambda:0,processes=lambda _:[])
+        provider=steam.SteamProcessProvider("42","token",launcher)
+        with patch.object(steam,"game_processes",return_value=[]):
+            with self.assertRaisesRegex(RuntimeError,"did not start"):
+                steam.supervise_provider(provider,lambda *_:None,timeout=1,clock=lambda:elapsed[0],sleep=sleep)
+            launcher.poll.return_value=1
+            with self.assertRaisesRegex(RuntimeError,"could not start"):
+                steam.supervise_provider(provider,lambda *_:None,timeout=1,clock=lambda:elapsed[0],sleep=sleep)
 
     def test_process_identity_requires_launch_token_and_ignores_client(self):
         proc=self.home.parent/"proc";proc.mkdir()
@@ -104,13 +106,89 @@ class SteamGamesTests(unittest.TestCase):
         process(105,"game","SteamAppId=42","ISOLDE_STEAM_SESSION=ours",state="Z")
         self.assertEqual(steam.game_processes("42",proc,token="ours"),[100,101])
 
-    def test_grace_period_tolerates_launcher_handoff_and_retries(self):
+    def test_process_provider_never_infers_account_offline_or_save_facts(self):
+        launcher=Mock();launcher.poll.return_value=0
+        provider=steam.SteamProcessProvider("42","token",launcher)
+        with patch.object(steam,"game_processes",return_value=[123]) as probe:
+            facts=provider.observe()
+        probe.assert_called_once_with("42",token="token")
+        self.assertEqual(facts["process"],"observed")
+        for field in ("account","ownership","connection","offline","exit","local_save","cloud_save"):
+            self.assertEqual(facts[field],"unknown")
+        self.assertEqual(facts["error"],"none")
+
+    def test_controlled_provider_distinguishes_denial_offline_crash_and_saves(self):
+        def facts(**changes): return dict(steam.UNKNOWN_FACTS,**changes)
+        def run(script):
+            elapsed=[0.0]; events=[]
+            provider=Mock()
+            provider.observe.side_effect=lambda: script[min(int(elapsed[0]*4),len(script)-1)]
+            def sleep(seconds): elapsed[0]+=seconds
+            result=steam.supervise_provider(provider,lambda phase,state:events.append((phase,state)),
+                timeout=1,clock=lambda:elapsed[0],sleep=sleep)
+            return result,events
+        for error, text in (("ownership_denied","ownership"),("auth_required","sign-in"),
+                            ("offline_unavailable","unavailable offline"),("launch_failed","could not start")):
+            with self.subTest(error=error), self.assertRaisesRegex(RuntimeError,text):
+                run([facts(error=error)])
+        online=facts(process="observed",account="signed_in",ownership="owned",connection="online")
+        offline=facts(process="observed",ownership="owned",connection="offline",offline="ready")
+        ended=facts(process="gone",ownership="owned",connection="offline",offline="ready",
+                    exit="exited",local_save="flushed",cloud_save="pending")
+        result,events=run([online,offline,ended])
+        self.assertEqual(result["cloud_save"],"pending")
+        self.assertEqual(result["local_save"],"flushed")
+        self.assertEqual(events[-1][0],"ended")
+        self.assertEqual(events[1][1]["connection"],"offline")
+        reconnected=dict(ended,connection="online",cloud_save="synced")
+        result,events=run([offline,online,reconnected])
+        self.assertEqual(result["cloud_save"],"synced")
+        self.assertEqual([event[1]["connection"] for event in events[:3]],["offline","online","online"])
+        for changes, text in (({"exit":"crashed"},"crashed"),({"local_save":"failed"},"could not save"),
+                              ({"cloud_save":"failed"},"Cloud sync failed")):
+            with self.subTest(changes=changes), self.assertRaisesRegex(RuntimeError,text):
+                run([online,facts(process="gone",**changes)])
+        result,_=run([facts(process="observed"),facts(process="gone")])
+        self.assertEqual((result["exit"],result["local_save"],result["cloud_save"]),("unknown",)*3)
+        with self.assertRaisesRegex(RuntimeError,"did not start"):
+            run([facts(ownership="owned",connection="offline",offline="ready")])
+
+    def test_provider_observations_are_closed_and_bounded(self):
+        for value in (None, {}, dict(steam.UNKNOWN_FACTS,account="guess"), dict(steam.UNKNOWN_FACTS,extra="credential")):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError,"provider observation"):
+                steam.validated_facts(value)
+
+    def test_launch_uses_controlled_provider_for_denial_retry_and_offline_return(self):
         elapsed=[0.0]
         def sleep(seconds): elapsed[0]+=seconds
-        launcher=Mock();launcher.poll.return_value=0
-        with self.assertRaisesRegex(RuntimeError,"did not start"):
-            steam.wait_for_game("42",launcher,timeout=1,clock=lambda:elapsed[0],sleep=sleep,processes=lambda _:[])
-        steam.wait_for_game("42",launcher,timeout=1,clock=lambda:elapsed[0],sleep=sleep,processes=lambda _: [42])
+        denied=dict(steam.UNKNOWN_FACTS,error="ownership_denied",ownership="not_owned")
+        observed=dict(steam.UNKNOWN_FACTS,process="observed",ownership="owned",connection="offline",offline="ready")
+        ended=dict(observed,process="gone",exit="exited",local_save="flushed",cloud_save="pending")
+        provider=Mock()
+        output=io.StringIO()
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), \
+             patch.object(Path,"is_file",return_value=True), \
+             patch.object(steam.os,"access",return_value=True), \
+             patch.object(steam.subprocess,"Popen",return_value=Mock(poll=lambda:0)), \
+             patch.object(steam,"SteamProcessProvider",return_value=provider), \
+             patch.object(steam,"stop_owned_session"), \
+             patch.object(steam.time,"monotonic",side_effect=lambda:elapsed[0]), \
+             patch.object(steam.time,"sleep",side_effect=sleep), \
+             contextlib.redirect_stderr(output):
+            provider.observe.return_value=denied
+            with self.assertRaisesRegex(RuntimeError,"ownership"): steam.launch("42")
+            self.assertNotIn("STEAM_GAME_PROCESS_OBSERVED",output.getvalue())
+            output.seek(0);output.truncate()
+            provider.observe.side_effect=lambda: observed if elapsed[0]<.5 else ended
+            steam.launch("42")
+        records=[json.loads(line.split(" ",1)[1]) for line in output.getvalue().splitlines()
+                 if line.startswith("STEAM_PROVIDER_STATE ")]
+        self.assertEqual(records[-1]["phase"],"ended")
+        self.assertEqual(records[-1]["connection"],"offline")
+        self.assertEqual(records[-1]["local_save"],"flushed")
+        self.assertEqual(records[-1]["cloud_save"],"pending")
+        self.assertEqual(set(records[-1]),set(steam.FACT_VALUES)|{"version","appId","phase"})
 
     def test_cancel_stops_game_before_client_and_preserves_profile_save(self):
         save=self.home/"save.dat";save.write_bytes(b"local save")
@@ -121,7 +199,7 @@ class SteamGamesTests(unittest.TestCase):
              patch.object(Path,"is_file",return_value=True), \
              patch.object(steam.os,"access",return_value=True), \
              patch.object(steam.subprocess,"Popen",return_value=Mock()) as start, \
-             patch.object(steam,"wait_for_game",side_effect=cancel), \
+             patch.object(steam,"supervise_provider",side_effect=cancel), \
              patch.object(steam,"game_processes",return_value=[123]), \
              patch.object(steam,"signal_owned_processes",side_effect=lambda p,t: events.append(("game",p,t))), \
              patch.object(steam,"wait_until_gone",side_effect=lambda p,t: events.append(("wait",t)) or True), \
@@ -138,7 +216,7 @@ class SteamGamesTests(unittest.TestCase):
              patch.object(Path,"is_file",return_value=True), \
              patch.object(steam.os,"access",return_value=True), \
              patch.object(steam.subprocess,"Popen",return_value=Mock()), \
-             patch.object(steam,"wait_for_game",side_effect=RuntimeError("Check sign-in and ownership")), \
+             patch.object(steam,"supervise_provider",side_effect=RuntimeError("Check sign-in and ownership")), \
              patch.object(steam,"stop_owned_session") as stop, \
              patch.object(steam.time,"sleep") as sleep:
             with self.assertRaisesRegex(RuntimeError,"ownership"): steam.launch("42")
@@ -175,7 +253,7 @@ class SteamGamesTests(unittest.TestCase):
              patch.object(Path,"is_file",return_value=True), \
              patch.object(steam.os,"access",return_value=True), \
              patch.object(steam.subprocess,"Popen",return_value=Mock()), \
-             patch.object(steam,"wait_for_game",side_effect=steam.SessionCanceled()), \
+             patch.object(steam,"supervise_provider",side_effect=steam.SessionCanceled()), \
              patch.object(steam,"game_processes",return_value=[123]), \
              patch.object(steam,"signal_owned_processes"), \
              patch.object(steam,"wait_until_gone",return_value=False), \
@@ -211,7 +289,7 @@ class SteamGamesTests(unittest.TestCase):
                  patch.object(Path,"is_file",return_value=True), \
                  patch.object(steam.os,"access",return_value=True), \
                  patch.object(steam.subprocess,"Popen",side_effect=start), \
-                 patch.object(steam,"wait_for_game",side_effect=cancel):
+                 patch.object(steam,"supervise_provider",side_effect=cancel):
                 steam.launch("42")
             children[0].wait(timeout=3)
             self.assertEqual(save.read_text(),"saved")

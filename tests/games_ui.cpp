@@ -259,6 +259,22 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     QCOMPARE(dispatch.lastAction.value("type").toString(),QString("launch-game"));QCOMPARE(dispatch.origin,QString("steam-origin"));
     QCOMPARE(library.resolveLaunch(dispatch.lastAction.value("gameId").toString()).value("steamAppId").toString(),QString("42"));
+    const QVariantMap status{{"appId","42"},{"phase","ended"},{"account","unknown"},{"ownership","unknown"},{"offline","unknown"},{"exit","unknown"},{"local_save","unknown"},{"cloud_save","unknown"}};
+    QVERIFY(widget->setProperty("providerStatus",status));
+    QVERIFY(QMetaObject::invokeMethod(widget.data(),"openDetails"));
+    const auto statusText=widget->findChild<QObject *>("steamProviderStatus");QVERIFY(statusText);
+    QVERIFY(statusText->property("text").toString().contains("Ownership: unknown"));
+    QVERIFY(statusText->property("text").toString().contains("Cloud: unknown"));
+    auto other=status;other["appId"]="43";QVERIFY(widget->setProperty("providerStatus",other));
+    QVERIFY(widget->property("steamStatus").toString().isEmpty());
+    const auto gameId=dispatch.lastAction.value("gameId").toString();
+    auto edition=library.registration(gameId);edition["target"]="43";edition["title"]="Other edition";
+    QVERIFY(!library.addEdition(gameId,edition).isEmpty());
+    QVERIFY(library.steamGameContainsAppId(gameId,"43"));
+    QVERIFY(!library.steamGameContainsAppId(gameId,"043"));
+    // Reassign to notify QML after the catalog update.
+    QVERIFY(widget->setProperty("providerStatus",QVariantMap{}));QVERIFY(widget->setProperty("providerStatus",other));
+    QVERIFY(widget->property("steamStatus").toString().contains("Steam App 43"));
     qApp->setProperty("isoldeProfile",QVariant());QVERIFY(QDir(parent).removeRecursively());
 }
 void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){

@@ -87,6 +87,10 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     if(m_launchPreparation && !m_launchPreparation(definition)){
         return true;
     }
+    if(definition.launchConfiguration.contains("steamGameId")){
+        m_steamProviderState.clear();
+        emit steamProviderStateChanged();
+    }
     m_previousFocusId = definition.id;
     emit launching(definition.id);
     emit previousFocusIdChanged();
@@ -94,6 +98,11 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     else if (definition.type == "android") m_session = std::make_unique<AndroidSession>(definition);
     else m_session = std::make_unique<MockSession>(definition);
     auto *session = m_session.get();
+    connect(session,&AppSession::steamProviderStateChanged,this,[this,session](const QVariantMap &state){
+        if(m_session.get()!=session)return;
+        m_steamProviderState=state;
+        emit steamProviderStateChanged();
+    });
     const auto appId = definition.id;
     connect(session, &AppSession::stateChanged, this, [this, session, appId, opened=false](AppSession::State state) mutable {
         if(state==AppSession::State::Running && m_session.get()==session && !opened) {

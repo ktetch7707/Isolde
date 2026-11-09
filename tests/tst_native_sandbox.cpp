@@ -40,9 +40,27 @@ void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
     QVERIFY(!parser.consume("ERVED 43\nSTEAM_GAME_PROCESS_OBSERVED 42"));
     QVERIFY(parser.consume("\n"));
     QVERIFY(!parser.consume("prefix STEAM_GAME_PROCESS_OBSERVED 42\n"));
-    QVERIFY(!parser.consume(QByteArray(300,'x')+"STEAM_GAME_PROCESS_OBSERVED 42\n"));
+    QVERIFY(!parser.consume(QByteArray(2100,'x')+"STEAM_GAME_PROCESS_OBSERVED 42\n"));
     QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBSERVED 42x\n"));
     QVERIFY(parser.consume("noise\nSTEAM_GAME_PROCESS_OBSERVED 42\n"));
+    const QByteArray state=R"({"account":"unknown","appId":"42","cloud_save":"unknown","connection":"unknown","error":"none","exit":"unknown","local_save":"unknown","offline":"unknown","ownership":"unknown","phase":"ended","process":"gone","version":1})";
+    QVERIFY(!parser.consume("STEAM_PROVIDER_STATE "+state.left(50)));
+    QVERIFY(parser.takeState().isEmpty());
+    QVERIFY(!parser.consume(state.mid(50)+"\n"));
+    const auto parsed=parser.takeState();
+    QCOMPARE(parsed.value("phase").toString(),QString("ended"));
+    QCOMPARE(parsed.value("local_save").toString(),QString("unknown"));
+    auto other=state;other.replace("\"appId\":\"42\"","\"appId\":\"43\"");
+    parser.consume("STEAM_PROVIDER_STATE "+other+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+    auto invalid=state;invalid.replace("\"exit\":\"unknown\"","\"exit\":\"guessed\"");
+    parser.consume("STEAM_PROVIDER_STATE "+invalid+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+    auto duplicate=state;duplicate.replace("\"exit\":\"unknown\"","\"exit\":\"unknown\",\"exit\":\"crashed\"");
+    parser.consume("STEAM_PROVIDER_STATE "+duplicate+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+    parser.consume("STEAM_PROVIDER_STATE "+QByteArray(2050,'x')+"\n");
+    QVERIFY(parser.takeState().isEmpty());
 }
 
 static QByteArray run(const NativeSandboxPlan &plan, const QString &script, const QStringList &extra = {})

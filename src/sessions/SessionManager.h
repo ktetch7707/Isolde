@@ -20,6 +20,7 @@ class SessionManager final : public QObject {
     Q_PROPERTY(QString currentLaunchUrl READ currentLaunchUrl NOTIFY currentAppChanged)
     Q_PROPERTY(QStringList currentAllowedOrigins READ currentAllowedOrigins NOTIFY currentAppChanged)
     Q_PROPERTY(QString previousFocusId READ previousFocusId NOTIFY previousFocusIdChanged)
+    Q_PROPERTY(QVariantMap steamProviderState READ steamProviderState NOTIFY steamProviderStateChanged)
 
 public:
     explicit SessionManager(AppRegistry *registry, QObject *parent = nullptr);
@@ -37,6 +38,7 @@ public:
     [[nodiscard]] QString currentLaunchUrl() const;
     [[nodiscard]] QStringList currentAllowedOrigins() const;
     [[nodiscard]] QString previousFocusId() const;
+    [[nodiscard]] QVariantMap steamProviderState() const { return m_steamProviderState; }
 
     Q_INVOKABLE bool launch(const QString &appId);
     Q_INVOKABLE bool launchAction(const QVariantMap &action);
@@ -52,6 +54,7 @@ signals:
     void launching(const QString &appId);
     void appOpened(const QString &appId);
     void steamGameProcessObserved(const QString &steamAppId);
+    void steamProviderStateChanged();
     void activeChanged();
     void currentAppChanged();
     void previousFocusIdChanged();
@@ -69,6 +72,7 @@ private:
     AppRegistry *m_registry;
     std::unique_ptr<AppSession> m_session;
     QString m_previousFocusId;
+    QVariantMap m_steamProviderState;
     bool m_intentionalExit = false;
     bool m_sessionCall = false;
     bool m_resumingPrepared=false;
