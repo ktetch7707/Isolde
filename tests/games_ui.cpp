@@ -57,6 +57,7 @@ private slots:
     void organizationAndManualSmartCollectionsStayProfileLocal();
     void remoteSmartCollectionRulesAreDpadSelectable();
     void catalogExportRestoreIsBoundedAndTransactional();
+    void catalogProvenanceIsImmutableAndConflictSafe();
 };
 static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
@@ -601,6 +602,7 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QJsonParseError parse;const auto exportedObject=QJsonDocument::fromJson(exported.readAll(),&parse).object();exported.close();
     QCOMPARE(parse.error,QJsonParseError::NoError);
     auto versionTwo=exportedObject;versionTwo["schemaVersion"]=2;
+    versionTwo.remove("provenance");
     QJsonArray versionTwoGames;
     for(const auto &entry:versionTwo.value("games").toArray()){
         auto gameObject=entry.toObject();gameObject.remove("artwork");versionTwoGames.append(gameObject);
@@ -613,6 +615,7 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(library.details(game).value("summary").toString(),QString("Archive summary"));
     QVERIFY(library.details(game).value("artwork").toString().isEmpty());
     auto legacy=exportedObject;legacy["schemaVersion"]=1;
+    legacy.remove("provenance");
     QJsonArray legacyGames;
     for(const auto &entry:legacy.value("games").toArray()){
         auto gameObject=entry.toObject();gameObject.remove("aliases");gameObject.remove("summary");gameObject.remove("artwork");legacyGames.append(gameObject);
@@ -630,6 +633,50 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(reopened.pageCollection(tagCollection).size(),1);
     QCOMPARE(reopened.pageCollection(recentCollection).size(),1);
     QCOMPARE(reopened.details(game).value("sourceReference").toString(),QString());
+}
+void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
+    QTemporaryDir dir;QVERIFY(dir.isValid());
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previousProfile=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);
+    auto cleanup=qScopeGuard([&]{qApp->setProperty("isoldeProfile",previousProfile);MediaGrants::save(profile,{});});
+    QVERIFY2(MediaGrants::save(profile,{dir.path()}).isEmpty(),"Test export folder grant could not be prepared.");
+    AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    const auto database=dir.filePath("profile/games.sqlite");
+    GameLibrary library(database,&apps);
+    QVariantMap registration{{"schemaVersion",1},{"title","Source fixture"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}};
+    const auto game=library.addGame(registration);QVERIFY2(!game.isEmpty(),qPrintable(library.errorString()));
+    auto provenance=library.details(game).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());
+    QCOMPARE(provenance.value("sourceKind").toString(),QString("runtime-entry"));
+    QCOMPARE(provenance.value("origin").toString(),QString("manual-registration"));
+    QCOMPARE(provenance.value("sourceFingerprint").toString().size(),64);
+    registration["title"]="Corrected metadata";
+    QVERIFY2(library.updateGame(game,registration),qPrintable(library.errorString()));
+    QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
+
+    const auto connection="games-provenance-immutability-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(database);QVERIFY(db.open());
+    QSqlQuery query(db);query.prepare("UPDATE game_provenance SET origin='steam-import' WHERE entity_id=?");
+    query.addBindValue(game);QVERIFY(!query.exec());
+    query.prepare("DELETE FROM game_provenance WHERE entity_id=?");query.addBindValue(game);QVERIFY(!query.exec());
+    query=QSqlQuery();db.close();db=QSqlDatabase();QSqlDatabase::removeDatabase(connection);
+
+    const auto backup=dir.filePath("provenance-backup.json");
+    QVERIFY2(library.exportCatalog(backup),qPrintable(library.errorString()));
+    QFile input(backup);QVERIFY(input.open(QIODevice::ReadOnly));
+    auto archive=QJsonDocument::fromJson(input.readAll()).object();input.close();
+    auto records=archive.value("provenance").toArray();QCOMPARE(records.size(),1);
+    auto tampered=records.at(0).toObject();tampered["sourceFingerprint"]=QString(64,'f');
+    records[0]=tampered;archive["provenance"]=records;
+    const auto conflictPath=dir.filePath("provenance-conflict.json");QFile conflict(conflictPath);
+    QVERIFY(conflict.open(QIODevice::WriteOnly));
+    QVERIFY(conflict.write(QJsonDocument(archive).toJson(QJsonDocument::Compact))>0);conflict.close();
+    QVERIFY(!library.restoreCatalog(conflictPath,true));
+    QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
+    QVERIFY2(library.restoreCatalog(backup,true),qPrintable(library.errorString()));
+    QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
 }
 void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));

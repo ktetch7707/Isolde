@@ -132,11 +132,16 @@ private:
     bool m_hasRichMetadata = false;
     bool m_hasArtwork = false;
     bool m_hasCollections = false;
+    bool m_hasProvenance = false;
     bool installationExists(const QString &runtime, const QString &root, const QString &target);
     bool platformAvailable(const QString &platform);
     bool ensureOrganizationSchema();
     bool ensureRichMetadataSchema();
     bool ensureArtworkSchema();
+    bool ensureProvenanceSchema();
+    bool recordProvenance(const QString &entityId, const QString &entityType,
+                          const QString &runtime, const QString &root, const QString &target,
+                          const QString &origin = {});
     QString artworkDirectory() const;
     void scanStep();
     QTimer m_scanTimer;

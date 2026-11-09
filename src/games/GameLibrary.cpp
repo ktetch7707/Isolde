@@ -38,6 +38,7 @@ constexpr int MaxGames = 50000;
 constexpr int PageSize = 50;
 constexpr int MaxPlatforms = 128;
 constexpr int MaxCollections = 256;
+constexpr int MaxProvenanceRecords = MaxGames * 32;
 constexpr int MaxTags = 32;
 constexpr qsizetype MaxCatalogArchiveBytes = 32 * 1024 * 1024;
 constexpr qsizetype MaxArtworkSourceBytes = 16 * 1024 * 1024;
@@ -139,6 +140,26 @@ QString sourceKind(const QString &runtime,const QString &root,const QString &pro
     if(ManagedGamePaths::isInstallRoot(profile,root,false))return "isolde-managed-install";
     if(!root.isEmpty())return "external-folder";
     return "runtime-entry";
+}
+QVariantMap sourceProvenance(const QString &runtime,const QString &root,const QString &target,
+                            const QString &profile,const QString &originOverride={}) {
+    const auto kind=sourceKind(runtime,root,profile);
+    QString origin="manual-registration";
+    if(kind=="steam-app")origin="steam-import";
+    else if(kind=="optical-media")origin="optical-registration";
+    else if(kind=="isolde-managed-install")origin="portable-install";
+    const auto identity=runtime+"\n"+root+"\n"+target;
+    if(!originOverride.isEmpty())origin=originOverride;
+    QString reference=target;
+    if(kind=="steam-app")
+        reference=target;
+    else if(OpticalDiscAdapter::isRootReference(root))
+        reference=OpticalDiscAdapter::mediaIdFromRoot(root);
+    else if(!root.isEmpty())
+        reference=QDir(root).filePath(target);
+    return {{"sourceKind",kind},{"origin",origin},
+        {"sourceReference",reference},
+        {"sourceFingerprint",QString::fromLatin1(QCryptographicHash::hash(identity.toUtf8(),QCryptographicHash::Sha256).toHex())}};
 }
 }
 
@@ -302,7 +323,7 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     if (!query.exec("PRAGMA user_version") || !query.next()) { fail(tr("Cannot read the games catalog version.")); return; }
     const int version = query.value(0).toInt(); query.finish();
     // Never migrate, replace or repair an unknown existing catalog on read.
-    if (exists && version != 1 && version != 2 && version != 3 && version != 4 && version != 5 && version != 6) { fail(tr("Unsupported games catalog version. Original data was preserved.")); return; }
+    if (exists && version != 1 && version != 2 && version != 3 && version != 4 && version != 5 && version != 6 && version != 7) { fail(tr("Unsupported games catalog version. Original data was preserved.")); return; }
     if (!query.exec("PRAGMA foreign_keys=ON") || !query.exec("PRAGMA synchronous=FULL")) { fail(query.lastError().text()); return; }
     if (!exists) {
         if (!m_db.transaction()) { fail(m_db.lastError().text()); return; }
@@ -316,7 +337,7 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
         if(!query.exec("SELECT id,game_id,title,platform,runtime,root,target FROM game_editions LIMIT 0")){fail(tr("Invalid edition catalog. Original data was preserved."));return;}
         m_hasEditions=true;
     }
-    if(version==3 || version==4 || version==5 || version==6){
+    if(version>=3){
         if(!query.exec("SELECT game_id,last_played FROM game_activity LIMIT 0")){fail(tr("Invalid game activity catalog. Original data was preserved."));return;}
         m_hasActivity=true;
         if(!query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='game_editions'")){fail(tr("Cannot inspect the editions catalog."));return;}
@@ -325,7 +346,7 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
             m_hasEditions=true;
         }
     }
-    if(version==4 || version==5 || version==6){
+    if(version>=4){
         if(!query.exec("SELECT game_id,franchise,tags FROM game_metadata LIMIT 0")
             || !query.exec("SELECT id,name,kind,filter_type,filter_value FROM game_collections LIMIT 0")
             || !query.exec("SELECT collection_id,game_id,position FROM game_collection_members LIMIT 0")){
@@ -333,17 +354,29 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
         }
         m_hasMetadata=true;m_hasCollections=true;
     }
-    if(version==5 || version==6){
+    if(version>=5){
         if(!query.exec("SELECT aliases,summary FROM game_metadata LIMIT 0")){
             fail(tr("Invalid rich game metadata catalog. Original data was preserved."));return;
         }
         m_hasRichMetadata=true;
     }
-    if(version==6){
+    if(version>=6){
         if(!query.exec("SELECT artwork_hash FROM game_metadata LIMIT 0")){
             fail(tr("Invalid managed artwork catalog. Original data was preserved."));return;
         }
         m_hasArtwork=true;
+    }
+    if(!query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='game_provenance'")){
+        fail(tr("Cannot inspect catalog provenance."));return;
+    }
+    if(query.next()){
+        if(!query.exec("SELECT entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at FROM game_provenance LIMIT 0")
+            || !query.exec("SELECT name FROM sqlite_master WHERE type='trigger' AND name IN ('game_provenance_no_update','game_provenance_no_delete')")){
+            fail(tr("Invalid immutable catalog provenance. Original data was preserved."));return;
+        }
+        int triggers=0;while(query.next())++triggers;
+        if(triggers!=2){fail(tr("Catalog provenance immutability guards are missing. Original data was preserved."));return;}
+        m_hasProvenance=true;
     }
     m_ready = true;
     for(const auto &disc:OpticalDiscAdapter::mountedDiscs())
@@ -473,6 +506,7 @@ QString GameLibrary::addGame(const QVariantMap &input) {
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("Choose an installed compatible game runtime.")); return {}; }
     if (!root.isEmpty() && checkedTarget(root,target).isEmpty()) return {};
     if(m_hasEditions && installationExists(runtime,root,target)){fail(tr("This installation already belongs to a game or edition."));return {};}
+    if(!ensureProvenanceSchema())return {};
     QSqlQuery query(m_db);
     query.prepare("SELECT id FROM games WHERE runtime=? AND root=? AND target=?");
     query.addBindValue(runtime); query.addBindValue(root); query.addBindValue(target);
@@ -487,7 +521,11 @@ QString GameLibrary::addGame(const QVariantMap &input) {
     const auto id = "game-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,unixepoch())");
     for (const auto &value : QStringList{id,registration.value("title").toString(),registration.value("platform").toString(),runtime,root,target}) query.addBindValue(value);
-    if (!query.exec() || !m_db.commit()) { const auto error = query.lastError().text(); m_db.rollback(); fail(tr("Could not save the game: %1").arg(error)); return {}; }
+    if (!query.exec() || !recordProvenance(id,"game",runtime,root,target) || !m_db.commit()) {
+        const auto error = query.lastError().text(); m_db.rollback();
+        if(m_error.isEmpty())fail(tr("Could not save the game: %1").arg(error));
+        return {};
+    }
     m_error.clear(); emit changed(); return id;
 }
 QVariantList GameLibrary::page(const QString &view, const QString &search, int offset, const QString &platform) {
@@ -575,6 +613,54 @@ bool GameLibrary::ensureArtworkSchema() {
         return fail(tr("Managed artwork could not be initialized. Existing catalog data was preserved. %1").arg(error));
     }
     m_hasArtwork=true;return true;
+}
+bool GameLibrary::ensureProvenanceSchema() {
+    if(m_hasProvenance)return true;
+    if(!m_db.transaction())return fail(tr("Could not begin the immutable provenance update."));
+    QSqlQuery query(m_db);
+    const bool created=query.exec("CREATE TABLE game_provenance("
+            "entity_id TEXT PRIMARY KEY,entity_type TEXT NOT NULL CHECK(entity_type IN ('game','edition')),"
+            "source_kind TEXT NOT NULL CHECK(source_kind IN ('steam-app','optical-media','isolde-managed-install','external-folder','runtime-entry')),"
+            "origin TEXT NOT NULL CHECK(origin IN ('steam-import','folder-import','optical-registration','portable-install','manual-registration')),"
+            "source_reference TEXT NOT NULL CHECK(length(source_reference)<=4096),"
+            "source_fingerprint TEXT NOT NULL CHECK(length(source_fingerprint)=64),recorded_at INTEGER NOT NULL,"
+            "CHECK((source_kind='steam-app' AND origin='steam-import') OR "
+            "(source_kind='optical-media' AND origin='optical-registration') OR "
+            "(source_kind='isolde-managed-install' AND origin='portable-install') OR "
+            "(source_kind='external-folder' AND origin IN ('folder-import','manual-registration')) OR "
+            "(source_kind='runtime-entry' AND origin='manual-registration')))")
+        && query.exec("CREATE INDEX game_provenance_recorded ON game_provenance(recorded_at,entity_id)")
+        && query.exec("CREATE TRIGGER game_provenance_no_update BEFORE UPDATE ON game_provenance BEGIN SELECT RAISE(ABORT,'game provenance is immutable'); END")
+        && query.exec("CREATE TRIGGER game_provenance_no_delete BEFORE DELETE ON game_provenance BEGIN SELECT RAISE(ABORT,'game provenance is immutable'); END");
+    if(!created || !m_db.commit()){
+        const auto error=query.lastError().text();m_db.rollback();
+        return fail(tr("Immutable provenance could not be initialized. Existing catalog data was preserved. %1").arg(error));
+    }
+    m_hasProvenance=true;return true;
+}
+bool GameLibrary::recordProvenance(const QString &entityId,const QString &entityType,
+                                   const QString &runtime,const QString &root,const QString &target,
+                                   const QString &origin) {
+    if(!m_hasProvenance || !ComponentSchema::safeId(entityId)
+        || !QStringList{"game","edition"}.contains(entityType))
+        return fail(tr("Invalid acquisition provenance identity."));
+    QSqlQuery count(m_db);
+    if(!count.exec("SELECT count(*) FROM game_provenance") || !count.next()
+        || count.value(0).toInt()>=MaxProvenanceRecords)
+        return fail(tr("The catalog reached its immutable provenance record bound."));
+    const auto value=sourceProvenance(runtime,root,target,m_emulatorProfile,origin);
+    const auto kind=value.value("sourceKind").toString(),recordedOrigin=value.value("origin").toString();
+    const auto expectedOrigin=kind=="steam-app"?QString("steam-import"):
+        kind=="optical-media"?QString("optical-registration"):
+        kind=="isolde-managed-install"?QString("portable-install"):QString("manual-registration");
+    if(recordedOrigin!=expectedOrigin && !(recordedOrigin=="folder-import" && kind=="external-folder"))
+        return fail(tr("Acquisition provenance source and origin do not match."));
+    QSqlQuery query(m_db);query.prepare("INSERT INTO game_provenance(entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at) VALUES(?,?,?,?,?,?,unixepoch())");
+    query.addBindValue(entityId);query.addBindValue(entityType);query.addBindValue(value.value("sourceKind"));
+    query.addBindValue(value.value("origin"));query.addBindValue(value.value("sourceReference"));
+    query.addBindValue(value.value("sourceFingerprint"));
+    if(!query.exec())return fail(tr("Acquisition provenance could not be recorded. Catalog transaction was rolled back. %1").arg(query.lastError().text()));
+    return true;
 }
 bool GameLibrary::setArtwork(const QString &id,const QString &source) {
     if(!m_ready || details(id).isEmpty())return fail(tr("Game not found in this profile."));
@@ -717,6 +803,19 @@ QVariantMap GameLibrary::details(const QString &id) {
     result["sourceKind"]=sourceKind(query.value(3).toString(),query.value(10).toString(),m_emulatorProfile);
     result["sourceReference"]=OpticalDiscAdapter::isRootReference(query.value(10).toString())
         ?OpticalDiscAdapter::mediaIdFromRoot(query.value(10).toString()):query.value(11).toString();
+    result["acquisitionProvenance"]=QVariantMap{{"recorded",false},{"sourceKind","not-recorded"},
+        {"origin","unknown"},{"sourceReference",QString()},{"sourceFingerprint",QString()},
+        {"recordedAt",QVariant::fromValue<qlonglong>(0)}};
+    if(m_hasProvenance){
+        QSqlQuery provenance(m_db);provenance.prepare("SELECT entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at FROM game_provenance WHERE entity_id=?");
+        provenance.addBindValue(id);
+        if(provenance.exec() && provenance.next()){
+            result["acquisitionProvenance"]=QVariantMap{{"recorded",true},{"entityType",provenance.value(0)},
+                {"sourceKind",provenance.value(1)},{"origin",provenance.value(2)},
+                {"sourceReference",provenance.value(3)},{"sourceFingerprint",provenance.value(4)},
+                {"recordedAt",provenance.value(5).toLongLong()}};
+        }
+    }
     return result;
 }
 bool GameLibrary::setOrganization(const QString &id,const QString &franchise,const QStringList &inputTags,
@@ -930,8 +1029,8 @@ bool GameLibrary::exportCatalog(const QString &destination) {
         return fail(tr("Approve this media folder for the active profile before exporting."));
     if(QFileInfo::exists(destination) && (!QFileInfo(destination).isFile() || QFileInfo(destination).canonicalFilePath()!=destination))
         return fail(tr("The catalog export target is not a regular file. Nothing was replaced."));
-    QJsonObject archive{{"schemaVersion",3}};
-    QJsonArray games,editionsArray,collectionArray;
+    QJsonObject archive{{"schemaVersion",4}};
+    QJsonArray games,editionsArray,collectionArray,provenanceArray;
     qsizetype estimatedArchiveBytes=256;
     QSqlQuery query(m_db);
     const QString gameSql="SELECT g.id,g.title,g.platform,g.runtime,g.root,g.target,g.favorite,g.added,"
@@ -1031,7 +1130,25 @@ bool GameLibrary::exportCatalog(const QString &destination) {
             collectionArray.append(collectionRecord);
         }
     }
-    archive.insert("games",games);archive.insert("editions",editionsArray);archive.insert("collections",collectionArray);
+    if(m_hasProvenance){
+        if(!query.exec("SELECT entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at FROM game_provenance ORDER BY entity_id"))
+            return fail(tr("Cannot read immutable acquisition provenance for export."));
+        while(query.next()){
+            if(provenanceArray.size()>=MaxProvenanceRecords)
+                return fail(tr("Acquisition provenance exceeds the export record bound."));
+            const QJsonObject record{{"entityId",query.value(0).toString()},{"entityType",query.value(1).toString()},
+                {"sourceKind",query.value(2).toString()},{"origin",query.value(3).toString()},
+                {"sourceReference",query.value(4).toString()},{"sourceFingerprint",query.value(5).toString()},
+                {"recordedAt",query.value(6).toLongLong()}};
+            estimatedArchiveBytes+=QJsonDocument(record).toJson(QJsonDocument::Compact).size()+1;
+            if(estimatedArchiveBytes>MaxCatalogArchiveBytes)
+                return fail(tr("Catalog export exceeds the 32 MiB size limit."));
+            provenanceArray.append(record);
+        }
+        query.finish();
+    }
+    archive.insert("games",games);archive.insert("editions",editionsArray);
+    archive.insert("collections",collectionArray);archive.insert("provenance",provenanceArray);
     const auto bytes=QJsonDocument(archive).toJson(QJsonDocument::Compact);
     if(bytes.size()>MaxCatalogArchiveBytes)return fail(tr("Catalog export exceeds the 32 MiB size limit."));
     QSaveFile file(destination);file.setDirectWriteFallback(false);
@@ -1056,15 +1173,20 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
     if(parse.error!=QJsonParseError::NoError || !document.isObject())return fail(tr("Invalid Games backup JSON."));
     const auto archive=document.object();
     const auto archiveVersion=archive.value("schemaVersion").toInt(-1);
-    if(!exactKeys(archive,{"schemaVersion","games","editions","collections"})
+    const auto archiveKeys=archiveVersion==4
+        ?QStringList{"schemaVersion","games","editions","collections","provenance"}
+        :QStringList{"schemaVersion","games","editions","collections"};
+    if(!exactKeys(archive,archiveKeys)
         || !archive.value("schemaVersion").isDouble() || archive.value("schemaVersion").toDouble()!=archiveVersion
-        || (archiveVersion!=1 && archiveVersion!=2 && archiveVersion!=3)
+        || (archiveVersion!=1 && archiveVersion!=2 && archiveVersion!=3 && archiveVersion!=4)
         || !archive.value("games").isArray() || archive.value("games").toArray().size()>MaxGames
         || !archive.value("editions").isArray() || archive.value("editions").toArray().size()>MaxGames
-        || !archive.value("collections").isArray() || archive.value("collections").toArray().size()>MaxCollections)
+        || !archive.value("collections").isArray() || archive.value("collections").toArray().size()>MaxCollections
+        || (archiveVersion==4 && (!archive.value("provenance").isArray()
+            || archive.value("provenance").toArray().size()>MaxProvenanceRecords)))
         return fail(tr("Unsupported Games backup version or catalog bounds."));
 
-    QList<QVariantMap> games,editionsData,collectionsData;
+    QList<QVariantMap> games,editionsData,collectionsData,provenanceData;
     QSet<QString> ids,gameIds,platforms,names,installations;
     QMap<QString,int> editionCounts;
     qint64 restoreArtworkBytes=0;
@@ -1086,7 +1208,7 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
                 || !object.value("summary").isString() || object.value("summary").toString().size()>4096
                 || object.value("summary").toString().contains(QChar::Null))))
             return fail(tr("Invalid or duplicate game identity or organization metadata in backup."));
-        if(archiveVersion==3 && (!object.value("artwork").isString()
+        if(archiveVersion>=3 && (!object.value("artwork").isString()
             || object.value("artwork").toString().size()>((MaxManagedArtworkBytes+2)/3)*4))
             return fail(tr("Invalid or oversized artwork in backup."));
         const auto gameId=object.value("id").toString(),platform=object.value("platform").toString();
@@ -1128,7 +1250,7 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
         QVariantList archiveAliasValues;for(const auto &alias:archiveAliases)archiveAliasValues.append(alias.toString());
         value["aliases"]=archiveAliasValues;value["summary"]=archiveVersion>=2?object.value("summary").toString():QString();
         QByteArray artworkBytes;
-        if(archiveVersion==3){
+        if(archiveVersion>=3){
             const auto encoded=object.value("artwork").toString().toLatin1();
             if(!encoded.isEmpty()){
                 const auto decoded=QByteArray::fromBase64(encoded,QByteArray::AbortOnBase64DecodingErrors);
@@ -1203,6 +1325,52 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
         collectionsData.append({{"id",object.value("id").toString()},{"name",name},{"kind",kind},
             {"filterType",filterType},{"filterValue",filterValue},{"members",object.value("members").toArray().toVariantList()}});
     }
+    if(archiveVersion==4){
+        QSet<QString> provenanceIds;
+        const QSet<QString> sourceKinds{"steam-app","optical-media","isolde-managed-install","external-folder","runtime-entry"};
+        const QSet<QString> origins{"steam-import","folder-import","optical-registration","portable-install","manual-registration"};
+        for(const auto &entry:archive.value("provenance").toArray()){
+            if(!entry.isObject())return fail(tr("Invalid acquisition provenance record in backup."));
+            const auto object=entry.toObject();
+            if(!exactKeys(object,{"entityId","entityType","sourceKind","origin","sourceReference","sourceFingerprint","recordedAt"})
+                || !object.value("entityId").isString() || !ComponentSchema::safeId(object.value("entityId").toString())
+                || !object.value("entityType").isString() || !QStringList{"game","edition"}.contains(object.value("entityType").toString())
+                || !object.value("sourceKind").isString() || !sourceKinds.contains(object.value("sourceKind").toString())
+                || !object.value("origin").isString() || !origins.contains(object.value("origin").toString())
+                || !object.value("sourceReference").isString() || object.value("sourceReference").toString().size()>4096
+                || object.value("sourceReference").toString().contains(QChar::Null)
+                || !object.value("sourceFingerprint").isString()
+                || !QRegularExpression("^[0-9a-f]{64}$").match(object.value("sourceFingerprint").toString()).hasMatch())
+                return fail(tr("Invalid acquisition provenance identity in backup."));
+            const auto kind=object.value("sourceKind").toString(),origin=object.value("origin").toString();
+            const auto expectedOrigin=kind=="steam-app"?QString("steam-import"):
+                kind=="optical-media"?QString("optical-registration"):
+                kind=="isolde-managed-install"?QString("portable-install"):QString("manual-registration");
+            qint64 recordedAt=0;
+            if((origin!=expectedOrigin && !(origin=="folder-import" && kind=="external-folder"))
+                || !archiveInteger(object.value("recordedAt"),&recordedAt) || recordedAt==0
+                || provenanceIds.contains(object.value("entityId").toString()))
+                return fail(tr("Acquisition provenance is inconsistent or duplicated in backup."));
+            provenanceIds.insert(object.value("entityId").toString());
+            provenanceData.append({{"entityId",object.value("entityId").toString()},
+                {"entityType",object.value("entityType").toString()},{"sourceKind",kind},{"origin",origin},
+                {"sourceReference",object.value("sourceReference").toString()},
+                {"sourceFingerprint",object.value("sourceFingerprint").toString()},{"recordedAt",recordedAt}});
+        }
+        if(!ensureProvenanceSchema())return false;
+        for(const auto &record:provenanceData){
+            QSqlQuery existing(m_db);existing.prepare("SELECT entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at FROM game_provenance WHERE entity_id=?");
+            existing.addBindValue(record.value("entityId"));
+            if(!existing.exec())return fail(tr("Could not verify existing immutable provenance."));
+            if(existing.next()){
+                for(int index=0;index<6;++index){
+                    const auto key=QStringList{"entityType","sourceKind","origin","sourceReference","sourceFingerprint","recordedAt"}.at(index);
+                    if(existing.value(index).toString()!=record.value(key).toString())
+                        return fail(tr("Backup conflicts with immutable acquisition provenance. No catalog data was replaced."));
+                }
+            }
+        }
+    }
     if(!ensureArtworkSchema())return false;
     for(auto &game:games){
         const auto bytes=game.value("artworkBytes").toByteArray();
@@ -1265,6 +1433,17 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
             query.addBindValue(collection.value("id"));query.addBindValue(members.at(position));query.addBindValue(position);
             ok=query.exec();
         }
+    }
+    for(const auto &record:provenanceData){
+        if(!ok)break;
+        query.prepare("INSERT OR IGNORE INTO game_provenance(entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at) VALUES(?,?,?,?,?,?,?)");
+        for(const auto &key:QStringList{"entityId","entityType","sourceKind","origin","sourceReference","sourceFingerprint","recordedAt"})
+            query.addBindValue(record.value(key));
+        ok=query.exec();
+    }
+    if(ok && m_hasProvenance){
+        if(!query.exec("SELECT count(*) FROM game_provenance") || !query.next()
+            || query.value(0).toInt()>MaxProvenanceRecords)ok=false;
     }
     ok=ok && query.exec("PRAGMA user_version=6");
     if(!ok || !m_db.commit()){
@@ -1402,6 +1581,7 @@ QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
     if(!root.isEmpty() && checkedTarget(root,target).isEmpty())return {};
     if(editions(id).size()>=32){fail(tr("A game supports up to 32 editions."));return {};}
     if(installationExists(runtime,root,target)){fail(tr("This installation already belongs to a game or edition."));return {};}
+    if(!ensureProvenanceSchema())return {};
     QSqlQuery query(m_db);
     if(!m_hasEditions){
         // User-confirmed first edition edit is the upgrade boundary, never startup.
@@ -1417,7 +1597,9 @@ QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
     const auto edition="edition-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     query.prepare("INSERT INTO game_editions(id,game_id,title,platform,runtime,root,target) VALUES(?,?,?,?,?,?,?)");query.addBindValue(edition);query.addBindValue(id);
     for(const auto &key:QStringList{"title","platform","runtimeId","root","target"})query.addBindValue(value.value(key));
-    if(!query.exec() || !m_db.commit()){m_db.rollback();fail(tr("Edition could not be saved; the previous catalog was preserved."));return {};}
+    if(!query.exec() || !recordProvenance(edition,"edition",runtime,root,target) || !m_db.commit()){
+        m_db.rollback();if(m_error.isEmpty())fail(tr("Edition could not be saved; the previous catalog was preserved."));return {};
+    }
     m_hasEditions=true;m_error.clear();emit errorChanged();emit changed();return edition;
 }
 void GameLibrary::cancelImport() {
@@ -1670,6 +1852,7 @@ bool GameLibrary::commitImport() {
     if(!m_ready || scanning() || !m_importReady)return fail(tr("Wait for the import preview before confirming."));
     const bool steam=m_importRuntime=="steam";
     if(!compatibleRuntime(m_importRuntime,!steam))return fail(tr("The selected runtime is no longer installed."));
+    if(!ensureProvenanceSchema())return false;
     if(!m_db.transaction())return fail(m_db.lastError().text());
     QSqlQuery query(m_db);
     if(!query.exec("SELECT count(*) FROM games") || !query.next()){m_db.rollback();return fail(tr("Cannot read the games catalog."));}
@@ -1690,10 +1873,14 @@ bool GameLibrary::commitImport() {
             if(!platformAvailable(value.value("platform").toString())){m_db.rollback();return fail(tr("The Games catalog supports up to 128 distinct platforms. Nothing was imported."));}
         }
         if(++count>MaxGames){m_db.rollback();return fail(tr("Import would exceed the catalog limit. Nothing was imported."));}
+        const auto id="game-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
         query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,unixepoch())");
-        query.addBindValue("game-"+QUuid::createUuid().toString(QUuid::WithoutBraces));
+        query.addBindValue(id);
         for(const auto &key:QStringList{"title","platform","runtimeId","root","target"})query.addBindValue(value.value(key));
-        if(!query.exec()){const auto reason=query.lastError().text();m_db.rollback();return fail(reason);}
+        if(!query.exec() || !recordProvenance(id,"game",m_importRuntime,m_importRoot,value.value("target").toString(),
+                steam?"steam-import":"folder-import")){
+            const auto reason=query.lastError().text();m_db.rollback();if(m_error.isEmpty())fail(reason);return false;
+        }
     }
     if(!m_db.commit()){m_db.rollback();return fail(tr("Import could not be saved. Previous data was preserved."));}
     cancelImport();m_error.clear();emit errorChanged();emit changed();return true;
