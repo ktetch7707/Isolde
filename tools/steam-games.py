@@ -19,6 +19,8 @@ import uuid
 MAX_GAMES = 5000
 FACT_VALUES = {
     "process": {"waiting", "observed", "gone"},
+    "installation": {"unknown", "verified", "unavailable"},
+    "client": {"unknown", "available", "unavailable"},
     "ownership": {"unknown", "owned", "not_owned"},
     "account": {"unknown", "signed_in", "signed_out"},
     "connection": {"unknown", "online", "offline"},
@@ -27,7 +29,7 @@ FACT_VALUES = {
     "local_save": {"unknown", "flushed", "failed"},
     "cloud_save": {"unknown", "synced", "pending", "failed"},
     "error": {"none", "bootstrap_failed", "ownership_denied", "auth_required",
-              "offline_unavailable", "launch_failed"},
+              "offline_unavailable", "launch_failed", "install_check_failed", "client_unavailable"},
 }
 UNKNOWN_FACTS = {key: ("waiting" if key == "process" else "none" if key == "error" else "unknown")
                  for key in FACT_VALUES}
@@ -277,11 +279,12 @@ def stop_owned_session(token):
 
 class SteamProcessProvider:
     """Local process boundary; it has no authenticated Steam account API."""
-    def __init__(self, identity, token, launcher):
+    def __init__(self, identity, token, launcher, preflight=None):
         self.identity, self.token, self.launcher = identity, token, launcher
+        self.preflight = dict(preflight or UNKNOWN_FACTS)
 
     def observe(self):
-        facts = dict(UNKNOWN_FACTS)
+        facts = dict(self.preflight)
         facts["process"] = "observed" if game_processes(self.identity, token=self.token) else "gone"
         if self.launcher.poll() not in (None, 0): facts["error"] = "bootstrap_failed"
         return facts
@@ -302,6 +305,8 @@ def provider_message(error):
         "auth_required": "Steam requires account sign-in before this game can start. Open Steam and sign in, then retry",
         "offline_unavailable": "Steam reported that this game is unavailable offline. Reconnect in Steam and prepare the game for offline use, then retry",
         "launch_failed": "Steam reported that this game could not start. Check installation and compatibility in Steam, then retry",
+        "install_check_failed": "The Steam installation could not be verified. Check the game and library access in Steam, then retry",
+        "client_unavailable": "Install or repair Steam in the Isolde Store",
     }[error]
 
 
@@ -349,10 +354,25 @@ def publish_provider_state(identity, phase, facts):
 def launch(identity, external=()):
     app_id(identity)
     if os.environ.get("ISOLDE_NATIVE_NAMESPACE") != "1": raise ValueError("Steam games require an isolated Isolde session")
+    preflight = dict(UNKNOWN_FACTS)
+    publish_provider_state(identity, "starting", preflight)
     home = Path.home()
-    verify_installed(home, identity, external)
+    try:
+        verify_installed(home, identity, external)
+    except (OSError, ValueError):
+        preflight["installation"] = "unavailable"
+        preflight["error"] = "install_check_failed"
+        publish_provider_state(identity, "failed", preflight)
+        raise
+    preflight["installation"] = "verified"
     binary = Path("/usr/games/steam")
-    if not binary.is_file() or not os.access(binary, os.X_OK): raise ValueError("Install or repair Steam in the Isolde Store")
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        preflight["client"] = "unavailable"
+        preflight["error"] = "client_unavailable"
+        publish_provider_state(identity, "failed", preflight)
+        raise ValueError("Install or repair Steam in the Isolde Store")
+    preflight["client"] = "available"
+    publish_provider_state(identity, "starting", preflight)
     # HOME, /tmp, IPC, PID view and bus all belong to NativeSandbox.
     def stopped(signum, frame): raise SessionCanceled()
     previous_term = signal.signal(signal.SIGTERM, stopped)
@@ -362,7 +382,7 @@ def launch(identity, external=()):
     started = False
     canceled = False
     clean_game_exit = True
-    last_facts = dict(UNKNOWN_FACTS)
+    last_facts = dict(preflight)
     failed = False
     def publish(phase, facts):
         nonlocal started, last_facts
@@ -372,10 +392,9 @@ def launch(identity, external=()):
             print("STEAM_GAME_PROCESS_OBSERVED "+identity, file=sys.stderr, flush=True)
         publish_provider_state(identity, phase, facts)
     try:
-        publish("starting", last_facts)
         launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                     env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
-        supervise_provider(SteamProcessProvider(identity, token, launcher), publish)
+        supervise_provider(SteamProcessProvider(identity, token, launcher, preflight), publish)
     except SessionCanceled:
         canceled = True
     except (OSError, ValueError, RuntimeError):

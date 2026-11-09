@@ -130,7 +130,7 @@ void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
     QVERIFY(!parser.consume(QByteArray(2100,'x')+"STEAM_GAME_PROCESS_OBSERVED 42\n"));
     QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBSERVED 42x\n"));
     QVERIFY(parser.consume("noise\nSTEAM_GAME_PROCESS_OBSERVED 42\n"));
-    const QByteArray state=R"({"account":"unknown","appId":"42","cloud_save":"unknown","connection":"unknown","error":"none","exit":"unknown","local_save":"unknown","offline":"unknown","ownership":"unknown","phase":"ended","process":"gone","version":1})";
+    const QByteArray state=R"({"account":"unknown","appId":"42","client":"available","cloud_save":"unknown","connection":"unknown","error":"none","exit":"unknown","installation":"verified","local_save":"unknown","offline":"unknown","ownership":"unknown","phase":"ended","process":"gone","version":1})";
     QVERIFY(!parser.consume("STEAM_PROVIDER_STATE "+state.left(50)));
     QVERIFY(parser.takeState().isEmpty());
     QVERIFY(!parser.consume(state.mid(50)+"\n"));

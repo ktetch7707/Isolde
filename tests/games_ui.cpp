@@ -416,7 +416,7 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QVERIFY(statusText->property("text").toString().contains("Ownership: unknown"));
     QVERIFY(statusText->property("text").toString().contains("Cloud: unknown"));
     auto other=status;other["appId"]="43";QVERIFY(widget->setProperty("providerStatus",other));
-    QVERIFY(widget->property("steamStatus").toString().isEmpty());
+    QVERIFY(widget->property("steamStatus").toString().contains("Steam checks account ownership"));
     const auto gameId=dispatch.lastAction.value("gameId").toString();
     auto edition=library.registration(gameId);edition["target"]="43";edition["title"]="Other edition";
     QVERIFY(!library.addEdition(gameId,edition).isEmpty());
@@ -425,6 +425,20 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     // Reassign to notify QML after the catalog update.
     QVERIFY(widget->setProperty("providerStatus",QVariantMap{}));QVERIFY(widget->setProperty("providerStatus",other));
     QVERIFY(widget->property("steamStatus").toString().contains("Steam App 43"));
+    const auto actions=widget->property("detailActions");
+    const auto choices=actions.metaType()==QMetaType::fromType<QJSValue>()?actions.value<QJSValue>().toVariant().toList():actions.toList();
+    int setup=-1;
+    for(int i=0;i<choices.size();++i)if(choices[i].toString().startsWith("Open Steam"))setup=i;
+    QVERIFY(setup>=0);
+    QVERIFY(widget->setProperty("choice",setup));command(widget.data(),InputManager::Confirm);
+    QCOMPARE(dispatch.lastAction.value("type").toString(),QString("launch-app"));
+    QCOMPARE(dispatch.lastAction.value("appId").toString(),QString("steam"));
+    QCOMPARE(dispatch.origin,QString("steam-origin"));
+    QCOMPARE(widget->property("mode").toString(),QString("details"));
+    QVERIFY(widget->setProperty("mode","catalogTools"));QVERIFY(widget->setProperty("choice",5));
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(dispatch.lastAction.value("appId").toString(),QString("steam"));
+    QCOMPARE(widget->property("mode").toString(),QString("catalogTools"));
     qApp->setProperty("isoldeProfile",QVariant());QVERIFY(QDir(parent).removeRecursively());
 }
 void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
