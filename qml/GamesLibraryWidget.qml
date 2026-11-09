@@ -47,7 +47,7 @@ Item {
     readonly property var runtimes:library?library.runtimes:[]
     readonly property var tools:["Add game","All","Favorites","Recent","Platforms","Search","Previous","Next","Emulator setup","Import folder","Continue","Collections","Catalog backup"]
     readonly property var importActions:["Import all reviewed games","Cancel · save nothing","Previous preview page","Next preview page"].concat(importItems.map(g=>g.title+" · "+g.target))
-    readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Add edition / version","Collections","Organize tags / franchise"].concat(collectionIsManual()?["Move earlier in collection","Move later in collection"]:[]).concat(["Back"]):[]
+    readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Add edition / version","Collections","Edit metadata, aliases & summary"].concat(collectionIsManual()?["Move earlier in collection","Move later in collection"]:[]).concat(["Back"]):[]
     readonly property int columns:style.libraryLayout==="list"?1:Math.max(1,style.libraryColumns || 4)
     readonly property real scale:appearance.typographyScale || 1
     readonly property string foreground:appearance.textColor || "#F5F1F3"
@@ -100,7 +100,7 @@ Item {
         if(!runtimes.length){message="No compatible game runtime is installed. Game runtimes must be provisioned before a game can be added.";return}
         importing=!!asImport;editingId="";editionGameId="";draft=({schemaVersion:1,title:"",platform:"PC",runtimeId:"",root:"",target:""});choice=0;mode="runtime";message="Choose the installed game or runtime. Nothing is saved until review is confirmed."
     }
-    function beginField(index){field=index;mode="keyboard";keyboard.selectedIndex=0;keyboard.value=index===4?search:index===0?draft.title:index===1?draft.platform:index===2?draft.root:index===3?draft.target:index===6?draft.franchise:index===7?draft.tags:""}
+    function beginField(index){field=index;mode="keyboard";keyboard.selectedIndex=0;keyboard.value=index===4?search:index===0?draft.title:index===1?draft.platform:index===2?draft.root:index===3?draft.target:index===6?draft.franchise:index===7?draft.tags:index===13?draft.summary:index===14?draft.aliases:""}
     function activateTool(){
         message=""
         const tool=tools[toolbar]
@@ -239,7 +239,7 @@ Item {
             else if(choice===3){importing=false;editionGameId="";editingId=detail.id;draft=library.registration(editingId);detail=null;message="Edit this game or relink its folder. Review confirms the complete change; Back cancels.";choice=0;mode="runtime"}
             else if(choice===4){const game=detail.id;beginAdd(false);if(mode==="runtime"){editionGameId=game;message="Add a version to this game. Its launch settings remain separate. Confirming the first edition backs up and upgrades this catalog."}}
             else if(choice===5){collectionChoices=library.collections().filter(c=>c.kind==="manual");mode="collectionMembers";choice=0;message="Choose a manual collection to add/remove this game. Smart shelves are read-only rules."}
-            else if(choice===6){draft={franchise:detail.franchise || "",tags:(detail.tags || []).join(", ")};beginField(6)}
+            else if(choice===6){draft={franchise:detail.franchise || "",tags:(detail.tags || []).join(", "),summary:detail.summary || "",aliases:(detail.aliases || []).join("; ")};beginField(6)}
             else if(choice===7 && collectionIsManual()){
                 if(!library.moveCollectionMember(activeCollectionId,detail.id,-1))message=library.errorString
                 reload();mode="details"
@@ -324,7 +324,7 @@ Item {
         Column {
             anchors.fill:parent;anchors.margins:20;spacing:12;visible:root.mode!=="keyboard"
             Text {id:reviewTitle;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="details" && root.detail?root.detail.title:root.mode==="runtime"?"Choose game runtime":root.mode==="remove"?"Remove library entry":root.mode==="emulators"?"Emulator setup":root.mode==="emulatorSettings"?"Console settings":root.mode==="emulatorInstallReview"?"Install emulators":root.mode==="emulatorInstallStatus"?"Emulator installation":root.mode==="restoreReview"?"Replace Games catalog?":root.mode==="catalogTools"?"Games catalog backup":"Review game";color:root.foreground;font.pixelSize:24*root.scale}
-            Text {id:reviewSummary;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="review"?root.draft.title+" · "+root.draft.platform+"\n"+(root.draft.root?"Allow this game runtime to read: "+root.draft.root+"\nFile: "+root.draft.target:"Installed game: "+root.draft.runtimeId):root.mode==="restoreReview"?"This replaces Games titles, editions, organization and collections for the active profile. It does not delete game files or saves. A private database recovery copy is created first.\n"+root.backupPath:root.message;color:root.muted;font.pixelSize:17*root.scale}
+            Text {id:reviewSummary;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.mode==="details" && root.detail?(root.detail.platform+" · "+(root.detail.franchise || "No franchise")+"\n"+((root.detail.aliases || []).length?"Also known as: "+root.detail.aliases.join(", ")+"\n":"")+(root.detail.summary || "")):root.mode==="review"?root.draft.title+" · "+root.draft.platform+"\n"+(root.draft.root?"Allow this game runtime to read: "+root.draft.root+"\nFile: "+root.draft.target:"Installed game: "+root.draft.runtimeId):root.mode==="restoreReview"?"This replaces Games titles, editions, organization and collections for the active profile. It does not delete game files or saves. A private database recovery copy is created first.\n"+root.backupPath:root.message;color:root.muted;font.pixelSize:17*root.scale}
             ListView {
                 objectName:"gamesReviewChoices"
                 width:parent.width;height:Math.max(0,parent.height-reviewTitle.height-reviewSummary.height-2*parent.spacing);clip:true;currentIndex:root.choice;highlightMoveDuration:0
@@ -341,14 +341,19 @@ Item {
     }
     OnScreenKeyboard {
         id:keyboard;anchors.fill:parent;visible:root.mode==="keyboard";appearance:root.appearance
-        hint:root.field===5?"Your absolute PS2 firmware path · Save setup confirms copying it into this profile":root.field===6?"Franchise or series name":root.field===7?"Comma-separated tags · up to 32 (commas separate tags)":root.field===8?(root.collectionCreateType==="title"?"Collection name · smart rule matches this text in game titles":"Collection name"):root.field===9?"Absolute JSON export path inside a granted media folder":root.field===10?"Absolute JSON backup path inside a granted media folder":root.field===11?"Collection name":root.field===12?"Platform or title text for the smart collection":""
-        onCanceled:{if(root.field===5){root.mode="emulatorSettings";return}if(root.field===6 || root.field===7){root.mode="details";return}if(root.field===8){root.mode="collectionChooser";return}if(root.field===11 || root.field===12){root.mode=root.editingCollectionId?"collectionActions":"collectionChooser";root.editingCollectionId="";return}if(root.field===9 || root.field===10){root.mode="catalogTools";return}root.draft=({});root.mode="browse"}
+        hint:root.field===5?"Your absolute PS2 firmware path · Save setup confirms copying it into this profile":root.field===6?"Franchise or series name":root.field===7?"Comma-separated tags · up to 32 (commas separate tags)":root.field===13?"Game summary · up to 4096 characters":root.field===14?"Alternate titles separated by semicolons · up to 32":root.field===8?(root.collectionCreateType==="title"?"Collection name · smart rule matches this text in game titles":"Collection name"):root.field===9?"Absolute JSON export path inside a granted media folder":root.field===10?"Absolute JSON backup path inside a granted media folder":root.field===11?"Collection name":root.field===12?"Platform or title text for the smart collection":""
+        onCanceled:{if(root.field===5){root.mode="emulatorSettings";return}if(root.field===6 || root.field===7 || root.field===13 || root.field===14){root.mode="details";return}if(root.field===8){root.mode="collectionChooser";return}if(root.field===11 || root.field===12){root.mode=root.editingCollectionId?"collectionActions":"collectionChooser";root.editingCollectionId="";return}if(root.field===9 || root.field===10){root.mode="catalogTools";return}root.draft=({});root.mode="browse"}
         onAccepted:text=>{
             if(root.field===5){root.firmwareDraft=text;root.mode="emulatorSettings";return}
             if(root.field===6){root.draft=Object.assign({},root.draft,{franchise:text});root.beginField(7);return}
             if(root.field===7){
-                const tags=text.split(",").map(tag=>tag.trim()).filter(tag=>tag.length>0)
-                if(!root.library.setOrganization(root.detail.id,root.draft.franchise || "",tags)){root.message=root.library.errorString;root.mode="details";return}
+                root.draft=Object.assign({},root.draft,{tags:text.split(",").map(tag=>tag.trim()).filter(tag=>tag.length>0)})
+                root.beginField(13);return
+            }
+            if(root.field===13){root.draft=Object.assign({},root.draft,{summary:text});root.beginField(14);return}
+            if(root.field===14){
+                const aliases=text.split(";").map(alias=>alias.trim()).filter(alias=>alias.length>0)
+                if(!root.library.setOrganization(root.detail.id,root.draft.franchise || "",root.draft.tags || [],aliases,root.draft.summary || "")){root.message=root.library.errorString;root.mode="details";return}
                 root.detail=root.library.details(root.detail.id);root.mode="details";root.choice=5;return
             }
             if(root.field===8){

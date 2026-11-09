@@ -14,6 +14,9 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QScopeGuard>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -156,12 +159,18 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     const auto second=library.addGame({{"schemaVersion",1},{"title","Second title"},{"platform","PC"},
         {"runtimeId","other-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
     QVERIFY(!second.isEmpty());
-    QVERIFY(library.setOrganization(id,"Example Saga",{"Puzzle","Co-op"}));
+    QVERIFY(library.setOrganization(id,"Example Saga",{"Puzzle","Co-op"},{"Alternate title"},"A searchable summary."));
     QCOMPARE(library.details(id).value("franchise").toString(),QString("Example Saga"));
     QCOMPARE(library.details(id).value("tags").toStringList(),QStringList({"Puzzle","Co-op"}));
+    QCOMPARE(library.details(id).value("aliases").toStringList(),QStringList({"Alternate title"}));
+    QCOMPARE(library.details(id).value("summary").toString(),QString("A searchable summary."));
     QCOMPARE(library.page("search","saga").size(),1);
     QCOMPARE(library.page("search","co-op").size(),1);
+    QCOMPARE(library.page("search","alternate title").size(),1);
+    QCOMPARE(library.page("search","searchable summary").size(),1);
     QVERIFY(!library.setOrganization(id,"",{"same","SAME"}));
+    QVERIFY(!library.setOrganization(id,"",{},{"duplicate","DUPLICATE"}));
+    QVERIFY(!library.setOrganization(id,"",{}, {},QString(4097,'x')));
     QCOMPARE(library.details(id).value("franchise").toString(),QString("Example Saga"));
 
     const auto manual=library.createCollection("Favorites to play","manual");
@@ -224,7 +233,7 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     const auto game=library.addGame(registration);QVERIFY(!game.isEmpty());
     registration["title"]="Alternate edition";registration["platform"]="PSP";registration["runtimeId"]="other-test";
     const auto edition=library.addEdition(game,registration);QVERIFY(!edition.isEmpty());
-    QVERIFY(library.setOrganization(game,"Fixture series",{"Puzzle"}));
+    QVERIFY(library.setOrganization(game,"Fixture series",{"Puzzle"},{"Portable fixture alt"},"Archive summary"));
     QVERIFY(library.setFavorite(game,true));QVERIFY(library.recordCompletedSession(game));
     const auto collection=library.createCollection("Export set","manual");QVERIFY(!collection.isEmpty());
     QVERIFY(library.setCollectionMember(collection,game,true));
@@ -241,9 +250,24 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY2(library.restoreCatalog(backup,true),qPrintable(library.errorString()));
     QCOMPARE(library.details(game).value("franchise").toString(),QString("Fixture series"));
     QCOMPARE(library.details(game).value("tags").toStringList(),QStringList({"Puzzle"}));
+    QCOMPARE(library.details(game).value("aliases").toStringList(),QStringList({"Portable fixture alt"}));
+    QCOMPARE(library.details(game).value("summary").toString(),QString("Archive summary"));
     QCOMPARE(library.editions(game).size(),2);QCOMPARE(library.page("continue").size(),1);
     QCOMPARE(library.pageCollection(collection).size(),1);QVERIFY(library.collectionContains(collection,game));
-    QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),1);
+    QFile exported(backup);QVERIFY(exported.open(QIODevice::ReadOnly));
+    QJsonParseError parse;auto legacy=QJsonDocument::fromJson(exported.readAll(),&parse).object();exported.close();
+    QCOMPARE(parse.error,QJsonParseError::NoError);legacy["schemaVersion"]=1;
+    QJsonArray legacyGames;
+    for(const auto &entry:legacy.value("games").toArray()){
+        auto gameObject=entry.toObject();gameObject.remove("aliases");gameObject.remove("summary");legacyGames.append(gameObject);
+    }
+    legacy["games"]=legacyGames;
+    const auto legacyPath=dir.filePath("legacy-backup.json");QFile legacyFile(legacyPath);
+    QVERIFY(legacyFile.open(QIODevice::WriteOnly));QVERIFY(legacyFile.write(QJsonDocument(legacy).toJson(QJsonDocument::Compact))>0);legacyFile.close();
+    QVERIFY2(library.restoreCatalog(legacyPath,true),qPrintable(library.errorString()));
+    QVERIFY(library.details(game).value("aliases").toStringList().isEmpty());
+    QVERIFY(library.details(game).value("summary").toString().isEmpty());
+    QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),2);
     GameLibrary reopened(database,&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
     QCOMPARE(reopened.pageCollection(collection).size(),1);QCOMPARE(reopened.editions(game).size(),2);
 }
