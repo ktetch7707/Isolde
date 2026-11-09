@@ -464,6 +464,14 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     QVERIFY(library.removeGame(id));
     QCOMPARE(library.pageCollection(manual).size(),1);
     QCOMPARE(library.collections().size(),8);
+    GameLibrary otherProfile(dir.filePath("other-profile/games.sqlite"),&apps);
+    const auto otherGame=otherProfile.addGame({{"schemaVersion",1},{"title","Example title"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
+    QVERIFY(!otherGame.isEmpty());
+    const auto otherShelf=otherProfile.createCollection("Other profile matches","smart","title","example");
+    QVERIFY(!otherShelf.isEmpty());
+    QCOMPARE(otherProfile.pageCollection(otherShelf).size(),1);
+    QCOMPARE(library.collections().size(),8);
 
     GameLibrary reopened(dir.filePath("profile/games.sqlite"),&apps);
     QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
