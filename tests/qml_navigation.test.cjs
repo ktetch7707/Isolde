@@ -56,6 +56,8 @@ test("direct browse filters use the remote chooser and the same next-page query"
 });
 
 test("DS and Virtual Boy setup exposes controller limitations remotely", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../qml/GamesLibraryWidget.qml"), "utf8");
+    const actions = source.match(/readonly property var emulatorActions:(.*)/)[1];
     for (const [id, hint, controls] of [
         ["retroarch-ds", /right stick moves the stylus/i, /right trigger touches/i],
         ["retroarch-vb", /second D-pad/i, /right trigger left/i],
@@ -69,9 +71,13 @@ test("DS and Virtual Boy setup exposes controller limitations remotely", () => {
         scope.activateChoice();
         assert.equal(scope.mode, "emulatorSettings");
         assert.match(scope.message, hint);
+        const label=vm.runInContext(actions, scope)[1];
+        assert.match(label, id==="retroarch-ds"?/Controller help: Xbox · DS/:/Controller help: Xbox · Virtual Boy/);
+        assert.doesNotMatch(label,/Wii/);
         scope.choice = 1;
         scope.activateChoice();
         assert.match(scope.message, controls);
+        assert.equal(scope.emulatorDraft.controller,"xbox");
     }
 });
 

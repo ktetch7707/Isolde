@@ -64,7 +64,7 @@ Item {
     property var emulatorDraft:({})
     property string firmwareDraft:""
     readonly property var emulators:library?library.emulators:[]
-    readonly property var emulatorActions:["Video: "+(emulatorDraft.video || "automatic"),"Controller: "+(emulatorDraft.controller==="xbox-wii-classic"?"Xbox · Wii Classic":"Xbox · Wii Remote + Nunchuk / standard pad"), emulatorId==="pcsx2"?"Import PS2 firmware: "+(firmwareDraft || (emulatorDraft.firmware?"Saved private copy":"None selected")):"Firmware: not required for this route","Save setup","Cancel · save nothing"]
+    readonly property var emulatorActions:["Video: "+(emulatorDraft.video || "automatic"),emulatorId==="dolphin"?"Controller: "+(emulatorDraft.controller==="xbox-wii-classic"?"Xbox · Wii Classic":"Xbox · Wii Remote + Nunchuk"):"Controller help: "+(emulatorId==="retroarch-ds"?"Xbox · DS stylus / microphone":emulatorId==="retroarch-vb"?"Xbox · Virtual Boy dual D-pad":"Xbox · standard pad"), emulatorId==="pcsx2"?"Import PS2 firmware: "+(firmwareDraft || (emulatorDraft.firmware?"Saved private copy":"None selected")):"Firmware: not required for this route","Save setup","Cancel · save nothing"]
     property int field:0
     readonly property var runtimes:library?library.runtimes:[]
     readonly property var tools:["Add game","All","Favorites","Recent","Filters","Search","Previous",canNextPage?"Next":"End","Emulator setup","Import folder","Continue","Collections","Catalog backup"]
