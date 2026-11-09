@@ -12,7 +12,7 @@ Rectangle {
     property bool typing: false
     property var editField: ({})
     property string message: ""
-    readonly property var scopes: ["Dashboard", "Section", "Card", "Navigation tab"]
+    readonly property var scopes: ["Dashboard", "Section", "Card", "Navigation tab", "All Apps"]
     readonly property var config: layoutModel.composition
     readonly property var targets: scope === 1 ? layoutModel.categories : scope === 2 ? layoutModel.items : scope === 3 ? config.navigation || [] : []
     readonly property var current: targets[target] || ({})
@@ -28,6 +28,11 @@ Rectangle {
     function toggle(key, label, fallback) { return {key:key,label:label,toggle:true,fallback:fallback} }
     function enumeration(key, label, choices) { return {key:key,label:label,choices:choices} }
     readonly property var fields: {
+        if (scope === 4) return [enumeration("layout","Grid or list",["grid","list"]),number("columns","Grid columns",2,8,1,5),
+            enumeration("density","Density",["compact","standard","spacious"]),enumeration("sort","Sort order",["name","favorites"]),
+            toggle("showArtwork","Show app artwork",true),toggle("showLabels","Show app labels",true),
+            toggle("filterEnabled","Enable local filter",true),toggle("favoritesEnabled","Enable favorites",true),
+            text("title","Gallery title")]
         if (scope === 0) return [toggle("enabled","Composed Home",false), number("columns","Dashboard columns",1,2,1,1),
             number("margin","Outer margin",0,100,2,40),number("gap","Section gap",0,100,1,20),toggle("fit","Fit sections on screen",true),
             number("designHeight","Design height",480,1440,10,800),toggle("showProfile","Profile label",false),
@@ -64,7 +69,7 @@ Rectangle {
     color: "#101014"; visible: open
     function begin() { scope = 0; target = 0; selected = 0; typing = false; message = ""; open = true }
     function value(field) {
-        let source = scope === 0 ? config : scope === 3 ? current : scope === 2 ? Object.assign({},inheritedStyle,style) : style
+        let source = scope === 0 ? config : scope === 4 ? config.appGallery || ({}) : scope === 3 ? current : scope === 2 ? Object.assign({},inheritedStyle,style) : style
         if (field.key === "sectionName" || field.key === "cardName") return current.name
         if(scope === 2 && field.key.startsWith("action.")) return (current.action || {})[field.key.split(".")[1]] || field.fallback || ""
         const path = field.key.split(".")
@@ -76,7 +81,7 @@ Rectangle {
     function store(field, value) {
         if (field.key === "cardName") { if(!layoutModel.setItemName(current.id,value)) message=layoutModel.errorString; return }
         if (field.key === "sectionName") { if (!layoutModel.renameCategory(current.id,value)) message = layoutModel.errorString; return }
-        let source = Object.assign({}, scope === 0 ? config : scope === 3 ? current : style)
+        let source = Object.assign({}, scope === 0 ? config : scope === 4 ? config.appGallery || ({}) : scope === 3 ? current : style)
         if(scope === 2 && field.key.startsWith("action.")) source.action=Object.assign({},current.action || {})
         const path = field.key.split(".")
         if (path.length > 1) {
@@ -103,15 +108,16 @@ Rectangle {
         if(scope === 2 && field.key.startsWith("action.")){message=layoutModel.setItemAction(current.id,source.action)?"Saved":layoutModel.errorString;return}
         let ok
         if (scope === 0) { source.schemaVersion = 1; ok = layoutModel.setComposition(source) }
+        else if (scope === 4) { let next = Object.assign({},config); next.appGallery = source; ok = layoutModel.setComposition(next) }
         else if (scope === 3) { let next = Object.assign({},config); let tabs = (next.navigation || []).slice(); tabs[target] = source; next.navigation = tabs; ok = layoutModel.setComposition(next) }
         else ok = scope === 1 ? layoutModel.setSectionPresentation(current.id,source) : layoutModel.setItemPresentation(current.id,source)
         message = ok ? "Saved" : layoutModel.errorString
     }
     function activate(direction) {
-        if (selected === 0) { scope = (scope + direction + 4) % 4; target = 0; return }
+        if (selected === 0) { scope = (scope + direction + 5) % 5; target = 0; return }
         if (selected === 1) { target = Math.max(0,Math.min(targets.length-1,target+direction)); return }
         const field = fields[selected-2]; if (!field) return
-        if (scope !== 0 && !current.id && field.key !== "addTab") { message = "Add a section, card or navigation tab first."; return }
+        if (scope !== 0 && scope !== 4 && !current.id && field.key !== "addTab") { message = "Add a section, card or navigation tab first."; return }
         if (field.command) {
             if (field.key === "wallpaper") wallpaper.open()
             else if (field.key === "cardArtwork") cardArtwork.open()

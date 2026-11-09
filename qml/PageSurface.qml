@@ -31,6 +31,7 @@ Item {
     property bool localNetworkAvailable:true
     signal closed(string origin)
     signal searchRequested()
+    signal allAppsRequested(string originId)
     signal settingsRequested(int section)
     signal navigationRejected(string reason)
     function showPage(id,origin,replace){
@@ -45,8 +46,22 @@ Item {
         return true
     }
     function closeAll(){const origin=homeOrigin;content.resetNavigationState();activeId="";history=[];editing=false;closed(origin)}
-    function restoreOrigin(origin){
-        if(!content.widgetActive || Object.prototype.hasOwnProperty.call(content.appCollectionFocus,origin))content.restoreFocus(origin)
+    function restoreOrigin(origin,force){
+        if(force || !content.widgetActive || Object.prototype.hasOwnProperty.call(content.appCollectionFocus,origin))content.restoreFocus(origin)
+    }
+    function allAppsOriginState(){
+        return {pageId:activeId,history:history.slice(),homeOrigin:homeOrigin,navigation:content.navigationState()}
+    }
+    function restoreAllAppsOrigin(state,origin){
+        if(!state || !layoutModel.pageAllowed(state.pageId) || !layoutModel.pageModel(state.pageId))return false
+        const pageChanged=activeId!==state.pageId
+        activeId=state.pageId
+        history=state.history || []
+        homeOrigin=state.homeOrigin || ""
+        editing=false
+        if(pageChanged)Qt.callLater(()=>{if(activeId===state.pageId){content.resetNavigationState(state.navigation || {});content.restoreFocus(origin)}})
+        else {content.resetNavigationState(state.navigation || {});content.restoreFocus(origin)}
+        return true
     }
     function beginEditing() {
         if (editing || !model) return
@@ -103,6 +118,7 @@ Item {
         internetAvailable:root.internetAvailable;localNetworkAvailable:root.localNetworkAvailable;hasContextualSources:false
         onActionActivated:(action,origin)=>actionDispatcher.dispatch(action,origin)
         onSearchRequested:root.searchRequested()
+        onAllAppsRequested:origin=>root.allAppsRequested(origin)
         onSettingsRequested:section=>{if(section===1)root.beginEditing();else root.settingsRequested(section)}
     }
     CustomizeHomeView {

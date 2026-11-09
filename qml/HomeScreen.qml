@@ -207,6 +207,7 @@ Item {
     signal actionActivated(var action, string originId)
     signal settingsRequested(int section)
     signal searchRequested()
+    signal allAppsRequested(string originId)
     signal keepSourceRequested(var source)
     signal hideSourceRequested(string sourceId)
     property int focusedIndex: 0

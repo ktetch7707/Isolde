@@ -323,8 +323,36 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary", "appGallery"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
+    if (value.contains("appGallery")) {
+        const auto gallery = value.value("appGallery").toMap();
+        if (value.value("appGallery").metaType().id() != QMetaType::QVariantMap || gallery.size() > 10) return false;
+        const QSet<QString> galleryKeys{"layout", "columns", "density", "sort", "showArtwork", "showLabels", "filterEnabled", "favoritesEnabled", "favoriteIds", "title"};
+        for (auto it = gallery.cbegin(); it != gallery.cend(); ++it) {
+            if (!galleryKeys.contains(it.key())) return false;
+            if (it.key() == "layout" && (it.value().metaType().id() != QMetaType::QString || !QStringList{"grid", "list"}.contains(it.value().toString()))) return false;
+            if (it.key() == "density" && (it.value().metaType().id() != QMetaType::QString || !QStringList{"compact", "standard", "spacious"}.contains(it.value().toString()))) return false;
+            if (it.key() == "sort" && (it.value().metaType().id() != QMetaType::QString || !QStringList{"name", "favorites"}.contains(it.value().toString()))) return false;
+            if (it.key() == "columns") {
+                bool ok = false;
+                const double columns = it.value().toDouble(&ok);
+                if (!ok || it.value().metaType().id() == QMetaType::Bool || !std::isfinite(columns)
+                    || std::floor(columns) != columns || columns < 2 || columns > 8) return false;
+            }
+            if (QStringList{"showArtwork", "showLabels", "filterEnabled", "favoritesEnabled"}.contains(it.key()) && it.value().metaType().id() != QMetaType::Bool) return false;
+            if (it.key() == "title" && (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty() || it.value().toString().size() > 48 || it.value().toString().contains(QChar::Null))) return false;
+            if (it.key() == "favoriteIds") {
+                if (it.value().metaType().id() != QMetaType::QVariantList || it.value().toList().size() > 256) return false;
+                QSet<QString> ids;
+                const QRegularExpression idPattern("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$");
+                for (const auto &idValue : it.value().toList()) {
+                    if (idValue.metaType().id() != QMetaType::QString || !idPattern.match(idValue.toString()).hasMatch() || ids.contains(idValue.toString())) return false;
+                    ids.insert(idValue.toString());
+                }
+            }
+        }
+    }
     if (value.contains("designLibrary") && (value["designLibrary"].metaType().id()!=QMetaType::QVariantMap || !DesignSystem::valid(value["designLibrary"].toMap()))) return false;
     if(value.contains("header")) {
         if(value["header"].metaType().id()!=QMetaType::QVariantMap)return false;

@@ -20,6 +20,8 @@ Window {
     property bool ambientActive: false
     readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !allApps.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
     property bool galleryLaunchPending: false
+    property var galleryReturnPageState: null
+    property bool searchFromGallery: false
     property string launchErrorText: ""
     property string launchErrorAppId: ""
     property bool launchErrorVpn: false
@@ -55,6 +57,7 @@ Window {
     }
 
     function openSearchFromPage() {
+        searchFromGallery = allApps.open
         allApps.open = false
         const onPage = pageSurface.open && pageSurface.model
         commandCenter.themeOrigin = onPage ? pageSurface.activeId : ""
@@ -63,8 +66,25 @@ Window {
         commandCenter.open = true
     }
 
+    function openAllAppsFromOrigin(originId) {
+        if (!actionDispatcher.dispatch({type:"open-apps"}, originId || "")) {
+            galleryReturnPageState = null
+            window.launchErrorText = "All Apps could not open."
+        }
+    }
+
+    function closeAllAppsToOrigin(originId) {
+        allApps.open = false
+        const pageState = galleryReturnPageState
+        galleryReturnPageState = null
+        if (pageState && pageSurface.restoreAllAppsOrigin(pageState, originId)) return
+        else home.restoreFocus(originId)
+    }
+
     function showDesignatedHome() {
         guideSearchReturn=null
+        galleryReturnPageState = null
+        searchFromGallery = false
         allApps.open=false
         kodiLibrary.open=false
         commandCenter.open=false
@@ -256,6 +276,7 @@ Window {
                 onActionActivated: (action, originId) => { if (setupState.complete) actionDispatcher.dispatch(action, originId) }
                 onSettingsRequested: section => actionDispatcher.dispatch({ type: "settings", section: section }, "")
                 onSearchRequested: window.openSearchFromPage()
+                onAllAppsRequested: origin => window.openAllAppsFromOrigin(origin)
                 onKeepSourceRequested: source => {
                     if (source) sourceManager.promoteSource(source.id)
                 }
@@ -329,6 +350,7 @@ Window {
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}
                 onSearchRequested:window.openSearchFromPage()
+                onAllAppsRequested:origin=>window.openAllAppsFromOrigin(origin)
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
                 onNavigationRejected:reason=>{window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
             }
@@ -339,10 +361,17 @@ Window {
                 z: 60
                 visible: open && !sessionManager.active
                 entries: appCatalog.galleryEntries
-                galleryPresentation: appCatalog.galleryPresentation
+                galleryPresentation: Object.assign({}, appCatalog.galleryPresentation,
+                    homeLayout.composition.appGallery || {},
+                    (pageSurface.open && pageSurface.model && pageSurface.model.composition.appGallery) || {},
+                    {favoriteIds: (homeLayout.composition.appGallery || {}).favoriteIds || []})
                 appearance: window.shellAppearance("apps", pageSurface.open ? pageSurface.activeId : "")
                 internetAvailable: networkSettings.internetAvailable
                 localNetworkAvailable: networkSettings.localNetworkAvailable
+                onFavoriteChanged: (appId, favorite) => {
+                    if (!homeLayout.setGalleryFavorite(appId, favorite)) allApps.feedback = homeLayout.errorString
+                    else allApps.feedback = ""
+                }
                 onLaunchRequested: appId => {
                     galleryLaunchPending = true
                     if (actionDispatcher.dispatch({type:"launch-app",appId:appId},"all-apps"))
@@ -365,10 +394,8 @@ Window {
                         galleryLaunchPending = false
                 }
                 onCloseRequested: origin => {
-                    allApps.open = false
                     if (!origin) window.showDesignatedHome()
-                    else if (pageSurface.open) pageSurface.restoreOrigin(origin)
-                    else home.restoreFocus(origin)
+                    else window.closeAllAppsToOrigin(origin)
                 }
                 onSearchRequested: window.openSearchFromPage()
             }
@@ -538,7 +565,13 @@ Window {
             actionDispatcher.dispatch(action,"")
             window.pendingGuideSearchReturn=null
         }
-        onCloseRequested: open = false
+        onCloseRequested: {
+            open = false
+            if (window.searchFromGallery) {
+                window.searchFromGallery = false
+                allApps.resumeAfterApp()
+            }
+        }
         onLaunchApp: appId => { kodiLibrary.open = false; window.launchAppFromShell(appId) }
         onInstallPackage: packageId => {
             kodiLibrary.open = false
@@ -627,6 +660,7 @@ Window {
         target: actionDispatcher
         function onAllAppsRequested(originId) {
             commandCenter.open = false
+            galleryReturnPageState = pageSurface.open ? pageSurface.allAppsOriginState() : null
             allApps.showForOrigin(originId)
         }
         function onSearchRequested(originId) { window.openSearchFromPage() }

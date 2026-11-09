@@ -84,25 +84,25 @@ static QVariantMap readGalleryPresentation()
 {
     const QVariantMap fallback{{"schemaVersion", 1}, {"title", "All Apps"}, {"layout", "grid"},
         {"columns", 5}, {"density", "standard"}, {"sort", "name"}, {"showArtwork", true},
-        {"showLabels", true}, {"filterEnabled", true}};
+        {"showLabels", true}, {"filterEnabled", true}, {"favoritesEnabled", true}};
     QFile file(QStringLiteral(":/config/app-gallery.json"));
     if (!file.open(QIODevice::ReadOnly)) return fallback;
     QJsonParseError error;
     const auto document = QJsonDocument::fromJson(file.readAll(), &error);
     if (error.error != QJsonParseError::NoError || !document.isObject()) return fallback;
     const auto value = document.object();
-    const QStringList keys{"schemaVersion","title","layout","columns","density","sort","showArtwork","showLabels","filterEnabled"};
+    const QStringList keys{"schemaVersion","title","layout","columns","density","sort","showArtwork","showLabels","filterEnabled","favoritesEnabled"};
     if (value.size() != keys.size()) return fallback;
     for (const auto &key : keys) if (!value.contains(key)) return fallback;
     const auto columns = value.value("columns").toDouble(-1);
     const auto title = value.value("title").toString().trimmed();
-    if (value.value("schemaVersion").toInt() != 1 || title.isEmpty() || title.size() > 80
+    if (value.value("schemaVersion").toInt() != 1 || title.isEmpty() || title.size() > 48
         || !QStringList{"grid","list"}.contains(value.value("layout").toString())
-        || columns < 4 || columns > 16 || std::floor(columns) != columns
+        || columns < 2 || columns > 8 || std::floor(columns) != columns
         || !QStringList{"compact","standard","spacious"}.contains(value.value("density").toString())
-        || value.value("sort").toString() != "name"
+        || !QStringList{"name","favorites"}.contains(value.value("sort").toString())
         || !value.value("showArtwork").isBool() || !value.value("showLabels").isBool()
-        || !value.value("filterEnabled").isBool()) return fallback;
+        || !value.value("filterEnabled").isBool() || !value.value("favoritesEnabled").isBool()) return fallback;
     return value.toVariantMap();
 }
 

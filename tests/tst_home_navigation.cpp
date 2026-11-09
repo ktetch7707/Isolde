@@ -85,6 +85,8 @@ void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
     QSignalSpy launch(gallery.get(), SIGNAL(launchRequested(QString)));
     QSignalSpy closed(gallery.get(), SIGNAL(closeRequested(QString)));
     QSignalSpy search(gallery.get(), SIGNAL(searchRequested()));
+    QSignalSpy favorite(gallery.get(), SIGNAL(favoriteChanged(QString,bool)));
+    gallery->setProperty("galleryPresentation", QVariantMap{{"favoritesEnabled",true},{"favoriteIds",QVariantList{}},{"sort","name"}});
     QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("home-card"))));
     QVERIFY(gallery->property("open").toBool());
     QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
@@ -100,6 +102,18 @@ void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
     gallery->setProperty("filterText", QString("alpha"));
     QCoreApplication::processEvents();
     QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QCOMPARE(gallery->property("visibleEntries").toList().size(), 1);
+    gallery->setProperty("favoritesOnly", false);
+    gallery->setProperty("filterText", QString());
+    QCoreApplication::processEvents();
+    QVERIFY(command(InputManager::Menu));
+    QCOMPARE(favorite.size(), 1);
+    QCOMPARE(favorite.last().at(0).toString(), QString("alpha"));
+    QCOMPARE(favorite.last().at(1).toBool(), true);
+    gallery->setProperty("galleryPresentation", QVariantMap{{"favoritesEnabled",true},{"favoriteIds",QVariantList{"alpha"}},{"sort","name"}});
+    gallery->setProperty("focusArea", QString("favorites"));
+    QVERIFY(command(InputManager::Confirm));
+    QVERIFY(gallery->property("favoritesOnly").toBool());
     QCOMPARE(gallery->property("visibleEntries").toList().size(), 1);
     QVERIFY(command(InputManager::Search));
     QCOMPARE(search.size(), 1);

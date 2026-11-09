@@ -7,5 +7,6 @@
   "sort": "name",
   "showArtwork": true,
   "showLabels": true,
-  "filterEnabled": true
+  "filterEnabled": true,
+  "favoritesEnabled": true
 }

@@ -93,6 +93,11 @@ Item {
         SignalSpy {id:menuHomeSpy;signalName:"actionActivated"}
         QtObject {id:fakeRegistry;property var apps:[]}
         Component {id:carouselComponent;App.PageAppCarousel {width:900;height:160;registry:fakeRegistry;appearance:({textColor:"#514b67",surfaceColor:"#f7edff",focusColor:"#bd8198"});style:({variant:"orb",layout:{visibleColumns:2}})}}
+        Component {id:globalCarouselComponent;App.PageAppCarousel {
+            width:900;height:160;registry:fakeRegistry;originId:"page-apps";globalGalleryRoute:true;collection:({mode:"all"})
+            style:({layout:{visibleColumns:2}});property string requestedOrigin:""
+            onAllAppsRequested:origin=>requestedOrigin=origin
+        }}
         SignalSpy {id:launchSpy;signalName:"launch"}
         QtObject {
             id:historyClientFixture
@@ -135,6 +140,13 @@ Item {
             carousel.style={layout:{mode:"grid",columns:2,rows:2},moreLabel:"More buttons"};carousel.selectedId="button-0"
             verify(carousel.handleCommand(inputManager.navigateDown));compare(carousel.selectedId,"button-2");compare(carousel.cards.length,4)
             carousel.buttonItems=[{id:"unassigned",name:"Unassigned"}];carousel.activate("unassigned");compare(launchSpy.count,1);verify(carousel.message.length>0)
+        }
+        function test_more_apps_uses_global_destination_when_hosted(){
+            const carousel=createTemporaryObject(globalCarouselComponent,parent,{registry:{apps:[{id:"one",name:"One",type:"web"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"web"}]}});verify(carousel!==null)
+            compare(carousel.cards[carousel.cards.length-1].id,"__more__")
+            carousel.activate("__more__")
+            compare(carousel.requestedOrigin,"page-apps")
+            verify(!findChild(carousel,"appCarouselGallery").opened)
         }
         QtObject {
             id:storeCatalog

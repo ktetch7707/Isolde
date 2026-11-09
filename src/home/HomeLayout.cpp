@@ -18,6 +18,7 @@
 #include <QtMath>
 #include <QCryptographicHash>
 #include <QMap>
+#include <algorithm>
 
 namespace {
 
@@ -328,6 +329,26 @@ bool HomeLayout::setComposition(const QVariantMap &value)
     const auto previous = m_composition; m_composition = value;
     if (!save()) { m_composition = previous; return false; }
     emit layoutChanged(); return true;
+}
+bool HomeLayout::setGalleryFavorite(const QString &appId, bool favorite)
+{
+    const auto *app = m_registry ? m_registry->find(appId) : nullptr;
+    if (!app || (app->type != "web" && app->type != "desktop" && app->type != "android")) {
+        setError(tr("Choose an installed registered app to favorite."));
+        return false;
+    }
+    auto composition = m_composition;
+    auto gallery = composition.value("appGallery").toMap();
+    QStringList favorites;
+    for (const auto &value : gallery.value("favoriteIds").toList()) favorites.append(value.toString());
+    favorites.removeAll(appId);
+    if (favorite) favorites.append(appId);
+    std::sort(favorites.begin(), favorites.end(), [](const QString &a, const QString &b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
+    QVariantList favoriteValues;
+    for (const auto &id : favorites) favoriteValues.append(id);
+    gallery.insert("favoriteIds", favoriteValues);
+    composition.insert("appGallery", gallery);
+    return setComposition(composition);
 }
 QVariantMap HomeLayout::grid() const
 {
@@ -779,7 +800,12 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         setError(tr("The designated Home page does not exist."));return false;
     }
     const auto theme = object.value("theme").toObject();
-    const auto composition = object.value("composition").toObject().toVariantMap();
+    auto composition = object.value("composition").toObject().toVariantMap();
+    if (composition.contains("appGallery") && !ComponentSchema::validComposition(composition)) {
+        auto fallbackComposition = composition;
+        fallbackComposition.remove("appGallery");
+        if (ComponentSchema::validComposition(fallbackComposition)) composition = fallbackComposition;
+    }
     if ((object.contains("composition") && !object["composition"].isObject()) || !ComponentSchema::validComposition(composition)) {
         setError(tr("Home composition is invalid.")); return false;
     }

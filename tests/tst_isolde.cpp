@@ -63,6 +63,10 @@ private slots:
         QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),
             temp.filePath("catalog-state.json"), temp.filePath("installed")),
             qPrintable(catalog.errorString()));
+        const auto galleryPresentation = catalog.galleryPresentation();
+        QCOMPARE(galleryPresentation.value("sort").toString(), QString("name"));
+        QVERIFY(galleryPresentation.value("filterEnabled").toBool());
+        QVERIFY(galleryPresentation.value("favoritesEnabled").toBool());
         auto gallery = catalog.galleryEntries();
         QSet<QString> ids;
         for (const auto &value : gallery) {
@@ -825,6 +829,8 @@ void IsoldeTests::catalogPersistsInstallLifecycle()
     QVERIFY(restoredRegistry.find("weather"));
     QVERIFY(restored.uninstall("weather"));
     QVERIFY(!restoredRegistry.find("weather"));
+    projected = restored.galleryEntries();
+    QVERIFY(std::none_of(projected.cbegin(),projected.cend(),[](const QVariant &entry){return entry.toMap().value("id").toString()=="weather";}));
     QVERIFY(!QDir(installRoot).exists("weather"));
 }
 
@@ -852,14 +858,18 @@ void IsoldeTests::catalogTracksSetupAndFailureState()
     QCOMPARE(catalog.entries().first().toMap().value("state").toString(), QString("available"));
     QCOMPARE(catalog.entries().first().toMap().value("setupRequired").toBool(), true);
     QVERIFY(catalog.entries().first().toMap().value("setupPrompt").toString().contains(QStringLiteral("media source")));
+    QVERIFY(catalog.galleryEntries().isEmpty());
     QVERIFY(catalog.install("kodi"));
     QCOMPARE(catalog.packageState("kodi"), QString("needs-setup"));
     QCOMPARE(catalog.entries().first().toMap().value("state").toString(), QString("needs-setup"));
+    QCOMPARE(catalog.galleryEntries().first().toMap().value("state").toString(), QString("needs-setup"));
     QVERIFY(catalog.completeSetup("kodi"));
     QCOMPARE(catalog.packageState("kodi"), QString("ready"));
+    QCOMPARE(catalog.galleryEntries().first().toMap().value("state").toString(), QString("ready"));
     QVERIFY(catalog.markFailed("kodi", "Desktop entry was not found."));
     QCOMPARE(catalog.packageState("kodi"), QString("failed"));
     QVERIFY(catalog.entries().first().toMap().value("failureReason").toString().contains(QStringLiteral("Desktop entry")));
+    QCOMPARE(catalog.galleryEntries().first().toMap().value("failureReason").toString(), QString("Desktop entry was not found."));
 
     AppRegistry restoredRegistry;
     QVERIFY(restoredRegistry.loadFromData(config));
@@ -868,6 +878,9 @@ void IsoldeTests::catalogTracksSetupAndFailureState()
     QCOMPARE(restored.packageState("kodi"), QString("failed"));
     QVERIFY(restored.completeSetup("kodi"));
     QCOMPARE(restored.packageState("kodi"), QString("ready"));
+    QCOMPARE(restored.galleryEntries().first().toMap().value("state").toString(), QString("ready"));
+    QVERIFY(restored.uninstall("kodi"));
+    QVERIFY(restored.galleryEntries().isEmpty());
 }
 
 void IsoldeTests::catalogRejectsInvalidManifest()

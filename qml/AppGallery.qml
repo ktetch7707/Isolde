@@ -6,7 +6,7 @@ Item {
     property bool open: false
     property var entries: []
     property var appearance: ({})
-    property var galleryPresentation: ({layout:"grid",columns:5,density:"standard",sort:"name",showArtwork:true,showLabels:true,filterEnabled:true,title:"All Apps"})
+    property var galleryPresentation: ({layout:"grid",columns:5,density:"standard",sort:"name",showArtwork:true,showLabels:true,filterEnabled:true,favoritesEnabled:true,title:"All Apps"})
     property bool internetAvailable: false
     property bool localNetworkAvailable: false
     property string originId: ""
@@ -15,14 +15,19 @@ Item {
     property string filterText: ""
     property string focusArea: "grid"
     property bool keyboardOpen: false
+    property bool favoritesOnly: false
+    property string feedback: ""
+    readonly property var favoriteIds: galleryPresentation.favoriteIds || []
     readonly property int columns: galleryPresentation.columns || 5
     readonly property string layoutMode: galleryPresentation.layout || "grid"
     readonly property var visibleEntries: {
         const query = filterText.trim().toLowerCase()
-        return (entries || []).filter(app => !query
+        return (entries || []).filter(app => (!favoritesOnly || favoriteIds.includes(app.id)) && (!query
             || String(app.name || "").toLowerCase().includes(query)
-            || String(app.section || "").toLowerCase().includes(query))
-            .slice().sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")) || String(a.id).localeCompare(String(b.id)))
+            || String(app.section || "").toLowerCase().includes(query)))
+            .slice().sort((a, b) => (galleryPresentation.sort === "favorites"
+                ? (Number(favoriteIds.includes(b.id)) - Number(favoriteIds.includes(a.id))) : 0)
+                || String(a.name || "").localeCompare(String(b.name || "")) || String(a.id).localeCompare(String(b.id)))
     }
     readonly property int selectedIndex: visibleEntries.findIndex(app => app.id === selectedId)
     SurfacePalette { id: theme; appearance: root.appearance }
@@ -32,11 +37,13 @@ Item {
     signal settingsRequested()
     signal closeRequested(string originId)
     signal searchRequested()
+    signal favoriteChanged(string appId, bool favorite)
 
     function showForOrigin(origin) {
         if (originId !== origin) {
             selectedId = ""
             filterText = ""
+            favoritesOnly = false
         }
         originId = origin
         open = true
@@ -61,6 +68,20 @@ Item {
             selectedId = ""
     }
 
+    function toggleFavorite(appId) {
+        if (!galleryPresentation.favoritesEnabled || !appId) return
+        const next = favoriteIds.slice()
+        const index = next.indexOf(appId)
+        if (index >= 0) next.splice(index, 1)
+        else next.push(appId)
+        favoriteChanged(appId, index < 0)
+    }
+
+    function firstControlArea() {
+        return galleryPresentation.filterEnabled !== false ? "filter"
+            : galleryPresentation.favoritesEnabled ? "favorites" : "store"
+    }
+
     function handleCommand(command) {
         if (!open) return false
         if (keyboardOpen) {
@@ -81,9 +102,10 @@ Item {
             searchRequested()
             return true
         }
-        if (focusArea === "filter" || focusArea === "store" || focusArea === "settings") {
+        if (focusArea === "filter" || focusArea === "favorites" || focusArea === "store" || focusArea === "settings") {
             if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
-                const controls = ["filter", "store", "settings"]
+                const controls = (galleryPresentation.filterEnabled === false ? [] : ["filter"])
+                    .concat(galleryPresentation.favoritesEnabled ? ["favorites"] : [], ["store", "settings"])
                 const index = controls.indexOf(focusArea)
                 focusArea = controls[Math.max(0, Math.min(controls.length - 1,
                     index + (command === inputManager.navigateRight ? 1 : -1)))]
@@ -99,6 +121,9 @@ Item {
                     keyboard.value = filterText
                     keyboard.selectedIndex = 0
                     keyboardOpen = true
+                } else if (focusArea === "favorites") {
+                    favoritesOnly = !favoritesOnly
+                    if (favoritesOnly && !visibleEntries.some(app => app.id === selectedId)) selectedId = visibleEntries.length ? visibleEntries[0].id : ""
                 } else if (focusArea === "store") {
                     storeRequested()
                 } else {
@@ -110,7 +135,7 @@ Item {
         }
         if (command === inputManager.navigateUp) {
             const index = selectedIndex
-            if (index < 0 || index < columns) focusArea = "filter"
+            if (index < 0 || index < columns) focusArea = firstControlArea()
             else selectAt(index - columns)
             return true
         }
@@ -135,11 +160,13 @@ Item {
             return true
         }
         if (command === inputManager.menu) {
-            if (!galleryPresentation.filterEnabled) return true
-            focusArea = "filter"
-            keyboard.value = filterText
-            keyboard.selectedIndex = 0
-            keyboardOpen = true
+            if (galleryPresentation.favoritesEnabled) toggleFavorite(selectedId)
+            else if (galleryPresentation.filterEnabled) {
+                focusArea = "filter"
+                keyboard.value = filterText
+                keyboard.selectedIndex = 0
+                keyboardOpen = true
+            }
             return true
         }
         return true
@@ -150,14 +177,14 @@ Item {
             lastSelectedIndex = Math.max(0, Math.min(index, visibleEntries.length - 1))
             selectedId = visibleEntries[lastSelectedIndex].id
         }
+    }
 
-        function stateLabel(app) {
-            if (app.state === "needs-setup") return "Needs setup"
-            if (app.state === "failed") return "Failed"
-            if (app.networkRequirement === "internet" && !internetAvailable) return "Unavailable offline"
-            if (app.networkRequirement === "local-network" && !localNetworkAvailable) return "Local network unavailable"
-            return "Ready" + (app.section ? " · " + app.section : "")
-        }
+    function stateLabel(app) {
+        if (app.state === "needs-setup") return "Needs setup" + (app.setupPrompt ? " · " + app.setupPrompt : "")
+        if (app.state === "failed") return "Failed" + (app.failureReason ? " · " + app.failureReason : "")
+        if (app.networkRequirement === "internet" && !internetAvailable) return "Unavailable offline"
+        if (app.networkRequirement === "local-network" && !localNetworkAvailable) return "Local network unavailable"
+        return "Ready" + (app.section ? " · " + app.section : "")
     }
 
     onSelectedIdChanged: {
@@ -181,7 +208,7 @@ Item {
             height: 74
             spacing: 18
             Text {
-                width: parent.width * 0.42
+                width: parent.width * 0.30
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.galleryPresentation.title || "All Apps"
                 color: theme.text
@@ -190,7 +217,7 @@ Item {
                 font.weight: Font.DemiBold
             }
             Rectangle {
-                width: parent.width * 0.28
+                width: parent.width * 0.25
                 height: 56
                 anchors.verticalCenter: parent.verticalCenter
                 radius: theme.radius
@@ -207,6 +234,17 @@ Item {
                     color: theme.text
                     font.pixelSize: 19 * theme.textScale
                 }
+            }
+            Rectangle {
+                width: parent.width * 0.12
+                height: 56
+                anchors.verticalCenter: parent.verticalCenter
+                radius: theme.radius
+                visible: root.galleryPresentation.favoritesEnabled === true
+                color: root.focusArea === "favorites" ? theme.selected : theme.surface
+                border.width: root.focusArea === "favorites" ? 3 : 1
+                border.color: root.focusArea === "favorites" ? theme.focus : theme.outline
+                Text { anchors.centerIn: parent; text: "Favorites" + (root.favoritesOnly ? " · On" : ""); color: theme.text; font.pixelSize: 16 * theme.textScale }
             }
             Rectangle {
                 width: parent.width * 0.12
@@ -232,8 +270,9 @@ Item {
         Text {
             width: parent.width
             text: root.visibleEntries.length
-                ? "Installed · " + root.visibleEntries.length + "    ·    OK open    Menu filter    Back return"
-                : "No installed apps match. Open Store to find apps or Settings to manage this device."
+                ? root.feedback || ("Installed · " + root.visibleEntries.length + "    ·    OK open    Menu favorite    Back return")
+                : root.favoritesOnly ? "No favorite apps match. Select an app and press Menu to mark it favorite."
+                    : "No installed apps match. Open Store to find apps or Settings to manage this device."
             color: theme.muted
             font.pixelSize: 18 * theme.textScale
         }
@@ -245,8 +284,8 @@ Item {
             clip: true
             cellWidth: root.layoutMode === "list" ? width : root.width / root.columns
             cellHeight: root.layoutMode === "list" ? 82 : Math.min(
-                210 * (root.galleryPresentation.density === "compact" ? 0.82 : root.galleryPresentation.density === "spacious" ? 1.15 : 1),
-                height / Math.max(1, Math.ceil(count / root.columns)))
+                height,
+                210 * (root.galleryPresentation.density === "compact" ? 0.82 : root.galleryPresentation.density === "spacious" ? 1.15 : 1))
             model: root.visibleEntries
             currentIndex: root.selectedIndex
             highlightMoveDuration: 0
@@ -257,7 +296,7 @@ Item {
                 item: ({
                     name: modelData.name,
                     showTitle: root.galleryPresentation.showLabels !== false,
-                    unavailableReason: modelData.state === "failed" ? modelData.failureReason : "",
+                    unavailableReason: "",
                     logoSource: root.galleryPresentation.showArtwork ? modelData.logoSource || "" : "",
                     appSymbol: modelData.symbol || modelData.name.slice(0, 1),
                     presentation: ({
