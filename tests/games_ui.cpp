@@ -22,6 +22,8 @@
 #include <QImage>
 #include <QRegularExpression>
 #include <QSqlQuery>
+#include <QDBusObjectPath>
+#include <QDBusVariant>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -41,6 +43,7 @@ private slots:
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void opticalIdentityAndMultiDiscReferencesAreDurable();
     void opticalApprovalsAreProfileScopedAndRevocable();
+    void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
@@ -110,6 +113,32 @@ void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable(){
     QVERIFY(OpticalDiscGrants::approved(alice,identity));QVERIFY(!OpticalDiscGrants::approved(bob,identity));
     QVERIFY(OpticalDiscGrants::revoke(alice,identity).isEmpty());QVERIFY(!OpticalDiscGrants::approved(alice,identity));
     QVERIFY(!OpticalDiscGrants::authorize(alice,"not-an-identity").isEmpty());
+}
+void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces(){
+    QStringList calls;
+    const OpticalDiscAdapter::DbusCall busy=[&calls](const QString &service,const QString &path,
+        const QString &interface,const QString &method,const QVariantList &){
+        calls.append(method);return QDBusMessage::createMethodCall(service,path,interface,method)
+            .createErrorReply("org.freedesktop.DBus.Error.Busy","busy");
+    };
+    QString error;
+    QVERIFY(!OpticalDiscAdapter::ejectUsing("/dev/sr0",true,busy,&error));
+    QCOMPARE(calls,QStringList{"Unmount"});
+    QVERIFY(error.contains("in use"));
+    calls.clear();
+    const OpticalDiscAdapter::DbusCall success=[&calls](const QString &service,const QString &path,
+        const QString &interface,const QString &method,const QVariantList &){
+        calls.append(method);
+        const auto request=QDBusMessage::createMethodCall(service,path,interface,method);
+        if(method=="Get")return request.createReply({QVariant::fromValue(
+            QDBusVariant(QVariant::fromValue(QDBusObjectPath("/org/freedesktop/UDisks2/drives/drive0"))))});
+        return request.createReply();
+    };
+    QVERIFY(OpticalDiscAdapter::ejectUsing("/dev/sr0",true,success,&error));
+    QCOMPARE(calls,QStringList({"Unmount","Get","Eject"}));
+    QVERIFY(!calls.contains("ForceEject"));
+    QVERIFY(!OpticalDiscAdapter::ejectUsing("/dev/sr9999",false,success,&error));
+    QCOMPARE(error,QString("Invalid optical device."));
 }
 static void command(QObject *widget,int value) {
     QVariant result;QVERIFY(QMetaObject::invokeMethod(widget,"handleCommand",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,value)));

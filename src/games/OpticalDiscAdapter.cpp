@@ -223,26 +223,40 @@ bool OpticalDiscAdapter::mountReadOnly(const QString &device,QString *error)
 
 bool OpticalDiscAdapter::eject(const QString &device,QString *error)
 {
+    bool mounted=false;
+    for(const auto &volume:QStorageInfo::mountedVolumes())
+        mounted|=volume.isValid() && volume.isReady() && QString::fromLatin1(volume.device())==device;
+    const auto call=[](const QString &service,const QString &path,const QString &interface,
+                       const QString &method,const QVariantList &arguments){
+        QDBusInterface object(service,path,interface,QDBusConnection::systemBus());
+        return object.callWithArgumentList(QDBus::Block,method,arguments);
+    };
+    return ejectUsing(device,mounted,call,error);
+}
+
+bool OpticalDiscAdapter::ejectUsing(const QString &device,bool mounted,const DbusCall &call,QString *error)
+{
     if(error)error->clear();
     if(!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch()){
         if(error)*error="Invalid optical device.";
         return false;
     }
+    if(!call){
+        if(error)*error="Safe eject is unavailable; the optical drive service is not responding.";
+        return false;
+    }
     const auto name=device.mid(QString("/dev/").size());
     const auto object="/org/freedesktop/UDisks2/block_devices/"+name;
-    bool mounted=false;
-    for(const auto &volume:QStorageInfo::mountedVolumes())
-        mounted|=volume.isValid() && volume.isReady() && QString::fromLatin1(volume.device())==device;
     if(mounted){
-        QDBusInterface filesystem("org.freedesktop.UDisks2",object,"org.freedesktop.UDisks2.Filesystem",QDBusConnection::systemBus());
-        const auto reply=filesystem.call("Unmount",QVariantMap{});
+        const auto reply=call("org.freedesktop.UDisks2",object,"org.freedesktop.UDisks2.Filesystem",
+                              "Unmount",{QVariantMap{}});
         if(reply.type()==QDBusMessage::ErrorMessage){
             if(error)*error="The disc is in use and could not be safely unmounted. Close the game or operation and retry.";
             return false;
         }
     }
-    QDBusInterface blockProperties("org.freedesktop.UDisks2",object,"org.freedesktop.DBus.Properties",QDBusConnection::systemBus());
-    const auto driveReply=blockProperties.call("Get",QString("org.freedesktop.UDisks2.Block"),QString("Drive"));
+    const auto driveReply=call("org.freedesktop.UDisks2",object,"org.freedesktop.DBus.Properties",
+                               "Get",{QString("org.freedesktop.UDisks2.Block"),QString("Drive")});
     if(driveReply.type()==QDBusMessage::ErrorMessage || driveReply.arguments().isEmpty()){
         if(error)*error="Safe eject is unavailable; the optical drive service is not responding.";
         return false;
@@ -252,8 +266,7 @@ bool OpticalDiscAdapter::eject(const QString &device,QString *error)
         if(error)*error="Safe eject is unavailable; the optical drive identity is incomplete.";
         return false;
     }
-    QDBusInterface drive("org.freedesktop.UDisks2",drivePath,"org.freedesktop.UDisks2.Drive",QDBusConnection::systemBus());
-    const auto reply=drive.call("Eject",QVariantMap{});
+    const auto reply=call("org.freedesktop.UDisks2",drivePath,"org.freedesktop.UDisks2.Drive","Eject",{QVariantMap{}});
     if(reply.type()==QDBusMessage::ErrorMessage){
         if(error)*error="The drive refused safe eject because media is busy or unavailable. Nothing was force-ejected.";
         return false;
