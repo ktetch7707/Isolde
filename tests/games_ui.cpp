@@ -1,4 +1,5 @@
 #include "games/GameLibrary.h"
+#include <QSqlError>
 #include "games/GameEmulators.h"
 #include "games/OpticalDiscAdapter.h"
 #include "games/OpticalDiscGrants.h"
@@ -310,8 +311,8 @@ void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers(){
     QVERIFY(firstMedia.value("mediaId")!=secondMedia.value("mediaId"));
     QCOMPARE(firstMedia.value("mediaSetId"),secondMedia.value("mediaSetId"));
     QCOMPARE(OpticalDiscAdapter::classifyRootReference(OpticalDiscAdapter::rootReference(firstMedia),
-        {{ "mediaId",secondMedia.value("mediaId")},{"mediaSetId",secondMedia.value("mediaSetId")},
-         {"discNumber",2},{"discCount",2},{"state","mounted"}}).value("state").toString(),QString("wrong-disc"));
+        {QVariantMap{{ "mediaId",secondMedia.value("mediaId")},{"mediaSetId",secondMedia.value("mediaSetId")},
+         {"discNumber",2},{"discCount",2},{"state","mounted"}}}).value("state").toString(),QString("wrong-disc"));
     const auto unrelated=fixture(1,"OTHER-SET");
     QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(unrelated.first,unrelated.second,300)
         .value("mediaSetId")!=firstDescriptor.value("mediaSetId"));
@@ -400,7 +401,7 @@ void GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller(){
         const QString &interface,const QString &method,const QVariantList &arguments){
         ++calls;serviceSeen=service;pathSeen=path;interfaceSeen=interface;
         methodSeen=method;argumentsSeen=arguments;
-        return QDBusMessage::createMethodCall(service,path,interface,method).createReply({"/media/disc"});
+        return QDBusMessage::createMethodCall(service,path,interface,method).createReply(QVariantList{QString("/media/disc")});
     };
     QVERIFY(OpticalDiscAdapter::mountUsing("/dev/sr0",true,mount,&mountPoint,&error));
     QCOMPARE(calls,1);QCOMPARE(mountPoint,QString("/media/disc"));QVERIFY(error.isEmpty());
@@ -423,7 +424,7 @@ void GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller(){
     QVERIFY(error.contains("could not be mounted read-only"));
     const OpticalDiscAdapter::DbusCall invalidPoint=[](const QString &service,const QString &path,
         const QString &interface,const QString &method,const QVariantList &){
-        return QDBusMessage::createMethodCall(service,path,interface,method).createReply({"relative"});
+        return QDBusMessage::createMethodCall(service,path,interface,method).createReply(QVariantList{QString("relative")});
     };
     QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0",true,invalidPoint,&mountPoint,&error));
     QVERIFY(error.contains("invalid mountpoint"));

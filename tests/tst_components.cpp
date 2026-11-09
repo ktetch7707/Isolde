@@ -489,11 +489,11 @@ void ComponentTests::gamesContractsRejectExecutableData() {
     QVERIFY(!error.isEmpty());
     QVariantMap shelf{{"schemaVersion",1},{"id","games-shelf"},{"kind","widget"},{"widgetType","library"},{"componentType","library"},
         {"name","Games"},{"presentation",QVariantMap{{"libraryKind","games"},{"libraryView","continue"}}}};
-    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    QVERIFY(!ComponentSchema::component(shelf,false,&error).isEmpty());
     shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","favorites"}};
-    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    QVERIFY(!ComponentSchema::component(shelf,false,&error).isEmpty());
     shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue","PSP"}};
-    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    QVERIFY(!ComponentSchema::component(shelf,false,&error).isEmpty());
     shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue",""}};
     QVERIFY(ComponentSchema::component(shelf,false,&error).isEmpty());QVERIFY(!error.isEmpty());
 }
