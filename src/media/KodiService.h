@@ -25,14 +25,6 @@ public:
     Q_INVOKABLE void setAlwaysPlayLocally(bool value);
     Q_INVOKABLE void resetAlwaysPlayLocally();
     void setAlwaysPlayLocallyNoNotify(bool value) { m_alAlwaysPlayLocally = value; }
-    void markReady();
-signals:
-    void changed();
-    void probeRequested();
-    void ready();
-    void unavailable(const QString &reason);
-    void alwaysPlayLocallyChanged();
-private:
     explicit KodiService(const QString &profile, QObject *parent = nullptr);
     ~KodiService() override;
     bool enabled() const { return m_enabled; }
@@ -58,6 +50,7 @@ private:
     void suspend(bool suspended);
     void markReady();
 signals:
+    void alwaysPlayLocallyChanged();
     void changed();
     void probeRequested();
     void ready();

@@ -166,6 +166,7 @@ void KodiService::suspend(bool suspended)
     if (suspended) { stop(); m_status = "Kodi is open as an app."; emit changed(); }
     else start();
 }
+void KodiService::retry() { if (!switching()) { stop(); start(); } }
 void KodiService::setAlwaysPlayLocally(bool value)
 {
     if (m_alAlwaysPlayLocally == value) return;
