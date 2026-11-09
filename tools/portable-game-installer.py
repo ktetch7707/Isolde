@@ -35,8 +35,7 @@ def open_bundle(stream, archive_format):
     stream.seek(0)
     if archive_format == "zip":
         return zipfile.ZipFile(stream)
-    modes = {"ustar": "r:", "ustar-gzip": "r:gz", "ustar-bzip2": "r:bz2",
-             "ustar-xz": "r:xz"}
+    modes = {"ustar": "r:", "ustar-gzip": "r:gz", "ustar-bzip2": "r:bz2"}
     return tarfile.open(fileobj=stream, mode=modes[archive_format],
                         tarinfo=StrictTarInfo)
 
@@ -50,18 +49,17 @@ def bundle_format(stream):
         stream.seek(0)
         return "ustar-gzip"
     stream.seek(0)
-    if stream.read(3).startswith(b"BZh"):
+    if stream.read(3) == b"BZh":
         stream.seek(0)
         return "ustar-bzip2"
     stream.seek(0)
     if stream.read(6) == b"\xfd7zXZ\x00":
-        stream.seek(0)
-        return "ustar-xz"
+        raise ValueError("XZ-compressed USTAR bundles are unsupported because their decoder memory cannot be safely bounded.")
     stream.seek(257)
     if stream.read(5) == b"ustar":
         stream.seek(0)
         return "ustar"
-    raise ValueError("Choose a native x86-64 Linux ELF or ZIP, USTAR, gzip-, bzip2- or xz-compressed USTAR game bundle.")
+    raise ValueError("Choose a native x86-64 Linux ELF or ZIP, USTAR, gzip- or bzip2-compressed USTAR game bundle.")
 
 
 def bundle_members(archive, archive_format):
