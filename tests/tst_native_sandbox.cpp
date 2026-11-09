@@ -34,6 +34,7 @@ private slots:
     void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
     void externalSteamGrantsAreProfileScopedAndFailClosed();
     void gamepadCapabilityRecognitionIsBoundedAndExact();
+    void gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot();
     void gameSessionsAcrossSourcesRequestGamepadAccess();
 };
 
@@ -63,6 +64,32 @@ void NativeSandboxTests::gameSessionsAcrossSourcesRequestGamepadAccess()
     QVERIFY(NativeSandbox::isGameSession({}, {}, {}, "/private/install", {}));
     QVERIFY(NativeSandbox::isGameSession({}, {}, {}, {}, QString(64,'a')));
 
+}
+void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
+{
+    QTemporaryDir root;QVERIFY(root.isValid());
+    const auto sys=root.filePath("sys"),devices=root.filePath("dev");
+    QVERIFY(QDir().mkpath(devices));
+    const auto addNode=[&](const QString &name,const QString &bitmap){
+        const auto capability=sys+"/"+name+"/device/capabilities/key";
+        QVERIFY(QDir().mkpath(QFileInfo(capability).absolutePath()));
+        QFile file(capability);QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(bitmap.toLatin1()),qint64(bitmap.toLatin1().size()));file.close();
+        QFile device(devices+"/"+name);QVERIFY(device.open(QIODevice::WriteOnly));device.close();
+    };
+    addNode("event0","0 0 0 0 1000000000000"); // BTN_GAMEPAD, not ordinary keys.
+    addNode("event1","40000000 0 0 0 0"); // Keyboard key.
+    addNode("js0","0 0 0 0 1000000000000");
+    addNode("event1000","0 0 0 0 1000000000000"); // Outside the node grammar.
+    QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
+             QStringList({devices+"/event0",devices+"/js0"}));
+
+    addNode("event2","0 0 0 0 1000000000000"); // Plugged in after the first snapshot.
+    QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
+             QStringList({devices+"/event0",devices+"/event2",devices+"/js0"}));
+    QVERIFY(QFile::remove(devices+"/event0"));
+    QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
+             QStringList({devices+"/event2",devices+"/js0"}));
 }
 
 void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()

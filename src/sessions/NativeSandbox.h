@@ -19,6 +19,8 @@ public:
                               const QString &gameSourceRoot, const QString &managedGameRoot,
                               const QString &opticalMediaId);
     static bool hasGamepadKeyCapabilities(const QString &bitmap);
+    static QStringList gamepadDeviceNodes(const QString &sysInputDirectory = "/sys/class/input",
+                                          const QString &deviceDirectory = "/dev/input");
     static NativeSandboxPlan prepare(const QString &profileId, const QString &appId,
                                     const QString &executable, const QProcessEnvironment &host,
                                     const QString &actionTarget = {}, const QString &storageRoot = {},

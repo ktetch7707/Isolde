@@ -62,6 +62,26 @@ bool NativeSandbox::hasGamepadKeyCapabilities(const QString &bitmap)
     }
     return false;
 }
+QStringList NativeSandbox::gamepadDeviceNodes(const QString &sysInputDirectory,const QString &deviceDirectory)
+{
+    const QDir sys(sysInputDirectory),devices(deviceDirectory);
+    auto nodes=sys.entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot,QDir::Name);
+    QStringList result;
+    for(const auto &node:nodes){
+        if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(node).hasMatch())continue;
+        const auto capabilityPath=sys.filePath(node+"/device/capabilities/key");
+        QFile capabilities(capabilityPath);
+        if(!capabilities.open(QIODevice::ReadOnly))continue;
+        const auto bitmap=QString::fromLatin1(capabilities.read(4097));
+        if(bitmap.size()>4096 || !hasGamepadKeyCapabilities(bitmap.trimmed()))continue;
+        const auto device=devices.filePath(node);
+        const QFileInfo info(device);
+        if(info.isSymLink() || !info.exists() || info.canonicalFilePath()!=QDir::cleanPath(device))continue;
+        result.append(device);
+        if(result.size()>32)break;
+    }
+    return result;
+}
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
@@ -208,17 +228,11 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
     if(isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId)){
         // Give game sessions gamepad nodes only. Do not expose keyboard, mouse
-        // or the entire host input directory to an application session.
-        const auto nodes=QDir("/sys/class/input").entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot);
-        int granted=0;
-        for(const auto &node:nodes){
-            if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(node).hasMatch())continue;
-            QFile capabilities("/sys/class/input/"+node+"/device/capabilities/key");
-            if(!capabilities.open(QIODevice::ReadOnly))continue;
-            const auto bitmap=QString::fromLatin1(capabilities.read(4096)).trimmed().split(' ',Qt::SkipEmptyParts);
-            const auto device="/dev/input/"+node;
-            if(hasGamepadKeyCapabilities(bitmap.join(' ')) && QFileInfo::exists(device)){if(++granted>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}bind(device,device,"--dev-bind");}
-        }
+        // or the entire host input directory to an application session. This
+        // is a launch-time snapshot; newly attached controllers require relaunch.
+        const auto nodes=gamepadDeviceNodes();
+        if(nodes.size()>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}
+        for(const auto &device:nodes)bind(device,device,"--dev-bind");
     }
     if (QFileInfo::exists("/sys")) bind("/sys", "/sys");
     // resolv.conf is often a symlink into /run, which otherwise stays private.

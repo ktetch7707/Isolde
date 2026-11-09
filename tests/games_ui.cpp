@@ -802,6 +802,8 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     auto cleanup=qScopeGuard([&]{qApp->setProperty("isoldeProfile",previousProfile);MediaGrants::save(profile,{});});
     QVERIFY2(MediaGrants::save(profile,{dir.path()}).isEmpty(),"Test export folder grant could not be prepared.");
     AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    auto steamRuntime=runtime();steamRuntime.id="steam";steamRuntime.presentationMode="game-hub";
+    steamRuntime.launchConfiguration={{"desktopId","isolde-steam"}};QVERIFY(apps.addApp(steamRuntime));
     const auto database=dir.filePath("profile/games.sqlite");
     GameLibrary library(database,&apps);
     QVariantMap registration{{"schemaVersion",1},{"title","Source fixture"},{"platform","PC"},
@@ -815,6 +817,12 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     registration["title"]="Corrected metadata";
     QVERIFY2(library.updateGame(game,registration),qPrintable(library.errorString()));
     QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
+    auto steamRegistration=registration;steamRegistration["title"]="Manually registered Steam entry";
+    steamRegistration["runtimeId"]="steam";steamRegistration["target"]="42";
+    const auto steamGame=library.addGame(steamRegistration);QVERIFY2(!steamGame.isEmpty(),qPrintable(library.errorString()));
+    const auto steamProvenance=library.details(steamGame).value("acquisitionProvenance").toMap();
+    QCOMPARE(steamProvenance.value("sourceKind").toString(),QString("steam-app"));
+    QCOMPARE(steamProvenance.value("origin").toString(),QString("manual-registration"));
 
     const auto connection="games-provenance-immutability-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(database);QVERIFY(db.open());
@@ -827,9 +835,12 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QVERIFY2(library.exportCatalog(backup),qPrintable(library.errorString()));
     QFile input(backup);QVERIFY(input.open(QIODevice::ReadOnly));
     auto archive=QJsonDocument::fromJson(input.readAll()).object();input.close();
-    auto records=archive.value("provenance").toArray();QCOMPARE(records.size(),1);
-    auto tampered=records.at(0).toObject();tampered["sourceFingerprint"]=QString(64,'f');
-    records[0]=tampered;archive["provenance"]=records;
+    auto records=archive.value("provenance").toArray();QCOMPARE(records.size(),2);
+    for(qsizetype index=0;index<records.size();++index){
+        auto item=records.at(index).toObject();
+        if(item.value("entityId").toString()==game){item["sourceFingerprint"]=QString(64,'f');records[index]=item;}
+    }
+    archive["provenance"]=records;
     const auto conflictPath=dir.filePath("provenance-conflict.json");QFile conflict(conflictPath);
     QVERIFY(conflict.open(QIODevice::WriteOnly));
     QVERIFY(conflict.write(QJsonDocument(archive).toJson(QJsonDocument::Compact))>0);conflict.close();

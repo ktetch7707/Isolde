@@ -147,9 +147,6 @@ QVariantMap sourceProvenance(const QString &runtime,const QString &root,const QS
                             const QString &profile,const QString &originOverride={}) {
     const auto kind=sourceKind(runtime,root,profile);
     QString origin="manual-registration";
-    if(kind=="steam-app")origin="steam-import";
-    else if(kind=="optical-media")origin="optical-registration";
-    else if(kind=="isolde-managed-install")origin="portable-install";
     const auto identity=runtime+"\n"+root+"\n"+target;
     if(!originOverride.isEmpty())origin=originOverride;
     QString reference=target;
@@ -335,9 +332,9 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
                 m_portableInstallStatus="Installed package failed private destination verification; it was not added to Games.";
                 m_portablePhase.clear();emit portableInstallChanged();return;
             }
-            const auto id=addGame({{"schemaVersion",1},{"title",metadata.value("title")},
+            const auto id=addGameWithOrigin({{"schemaVersion",1},{"title",metadata.value("title")},
                 {"platform",metadata.value("platform")},{"runtimeId",m_portableRuntime},
-                {"root",root},{"target",metadata.value("entrypoint")}});
+                {"root",root},{"target",metadata.value("entrypoint")}},"portable-install");
             m_portableInstallStatus=id.isEmpty()?"Package installed but catalog registration failed. Preserve the private recovery folder and retry from Games.":"Installed, verified and added to Games. Launch uses an isolated session; setup scripts are never executed.";
             m_portablePhase.clear();m_portableInstallPreview.clear();emit portableInstallChanged();return;
         }
@@ -557,6 +554,9 @@ QString GameLibrary::checkedTarget(const QString &root, const QString &relative)
     return path;
 }
 QString GameLibrary::addGame(const QVariantMap &input) {
+    return addGameWithOrigin(input,"manual-registration");
+}
+QString GameLibrary::addGameWithOrigin(const QVariantMap &input,const QString &origin) {
     if (!m_ready) { fail(tr("The games catalog is unavailable.")); return {}; }
     if(m_portablePhase.startsWith("uninstall")){fail(tr("Wait for the managed uninstall to finish before changing game sources."));return {};}
     QString error; const auto registration = ComponentSchema::gameRegistration(input,&error);
@@ -585,7 +585,7 @@ QString GameLibrary::addGame(const QVariantMap &input) {
     const auto id = "game-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
     query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,unixepoch())");
     for (const auto &value : QStringList{id,registration.value("title").toString(),registration.value("platform").toString(),runtime,root,target}) query.addBindValue(value);
-    if (!query.exec() || !recordProvenance(id,"game",runtime,root,target) || !m_db.commit()) {
+    if (!query.exec() || !recordProvenance(id,"game",runtime,root,target,origin) || !m_db.commit()) {
         const auto error = query.lastError().text(); m_db.rollback();
         if(m_error.isEmpty())fail(tr("Could not save the game: %1").arg(error));
         return {};
@@ -688,11 +688,11 @@ bool GameLibrary::ensureProvenanceSchema() {
             "origin TEXT NOT NULL CHECK(origin IN ('steam-import','folder-import','optical-registration','portable-install','manual-registration')),"
             "source_reference TEXT NOT NULL CHECK(length(source_reference)<=4096),"
             "source_fingerprint TEXT NOT NULL CHECK(length(source_fingerprint)=64),recorded_at INTEGER NOT NULL,"
-            "CHECK((source_kind='steam-app' AND origin='steam-import') OR "
+            "CHECK(origin='manual-registration' OR "
+            "(source_kind='steam-app' AND origin='steam-import') OR "
+            "(source_kind IN ('external-folder','isolde-managed-install') AND origin='folder-import') OR "
             "(source_kind='optical-media' AND origin='optical-registration') OR "
-            "(source_kind='isolde-managed-install' AND origin='portable-install') OR "
-            "(source_kind='external-folder' AND origin IN ('folder-import','manual-registration')) OR "
-            "(source_kind='runtime-entry' AND origin='manual-registration')))")
+            "(source_kind='isolde-managed-install' AND origin='portable-install')))")
         && query.exec("CREATE INDEX game_provenance_recorded ON game_provenance(recorded_at,entity_id)")
         && query.exec("CREATE TRIGGER game_provenance_no_update BEFORE UPDATE ON game_provenance BEGIN SELECT RAISE(ABORT,'game provenance is immutable'); END")
         && query.exec("CREATE TRIGGER game_provenance_no_delete BEFORE DELETE ON game_provenance BEGIN SELECT RAISE(ABORT,'game provenance is immutable'); END");
@@ -716,8 +716,10 @@ bool GameLibrary::recordProvenance(const QString &entityId,const QString &entity
     const auto kind=value.value("sourceKind").toString(),recordedOrigin=value.value("origin").toString();
     const auto expectedOrigin=kind=="steam-app"?QString("steam-import"):
         kind=="optical-media"?QString("optical-registration"):
-        kind=="isolde-managed-install"?QString("portable-install"):QString("manual-registration");
-    if(recordedOrigin!=expectedOrigin && !(recordedOrigin=="folder-import" && kind=="external-folder"))
+        kind=="isolde-managed-install"?QString("portable-install"):
+        kind=="external-folder"?QString("folder-import"):QString("manual-registration");
+    if(recordedOrigin!="manual-registration" && recordedOrigin!=expectedOrigin
+        && !(recordedOrigin=="folder-import" && kind=="isolde-managed-install"))
         return fail(tr("Acquisition provenance source and origin do not match."));
     QSqlQuery query(m_db);query.prepare("INSERT INTO game_provenance(entity_id,entity_type,source_kind,origin,source_reference,source_fingerprint,recorded_at) VALUES(?,?,?,?,?,?,unixepoch())");
     query.addBindValue(entityId);query.addBindValue(entityType);query.addBindValue(value.value("sourceKind"));
@@ -1411,9 +1413,11 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
             const auto kind=object.value("sourceKind").toString(),origin=object.value("origin").toString();
             const auto expectedOrigin=kind=="steam-app"?QString("steam-import"):
                 kind=="optical-media"?QString("optical-registration"):
-                kind=="isolde-managed-install"?QString("portable-install"):QString("manual-registration");
+                kind=="isolde-managed-install"?QString("portable-install"):
+                kind=="external-folder"?QString("folder-import"):QString("manual-registration");
             qint64 recordedAt=0;
-            if((origin!=expectedOrigin && !(origin=="folder-import" && kind=="external-folder"))
+            if((origin!="manual-registration" && origin!=expectedOrigin
+                    && !(origin=="folder-import" && kind=="isolde-managed-install"))
                 || !archiveInteger(object.value("recordedAt"),&recordedAt) || recordedAt==0
                 || provenanceIds.contains(object.value("entityId").toString()))
                 return fail(tr("Acquisition provenance is inconsistent or duplicated in backup."));
@@ -1706,6 +1710,9 @@ bool GameLibrary::steamGameContainsAppId(const QString &id,const QString &identi
     return query.exec() && query.next();
 }
 QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
+    return addEditionWithOrigin(id,input,"manual-registration");
+}
+QString GameLibrary::addEditionWithOrigin(const QString &id,const QVariantMap &input,const QString &origin) {
     if(m_portablePhase.startsWith("uninstall")){fail(tr("Wait for the managed uninstall to finish before changing game sources."));return {};}
     if(!m_ready || registration(id).isEmpty()){fail(tr("Game not found in this profile."));return {};}
     QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
@@ -1732,7 +1739,7 @@ QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
     const auto edition="edition-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     query.prepare("INSERT INTO game_editions(id,game_id,title,platform,runtime,root,target) VALUES(?,?,?,?,?,?,?)");query.addBindValue(edition);query.addBindValue(id);
     for(const auto &key:QStringList{"title","platform","runtimeId","root","target"})query.addBindValue(value.value(key));
-    if(!query.exec() || !recordProvenance(edition,"edition",runtime,root,target) || !m_db.commit()){
+    if(!query.exec() || !recordProvenance(edition,"edition",runtime,root,target,origin) || !m_db.commit()){
         m_db.rollback();if(m_error.isEmpty())fail(tr("Edition could not be saved; the previous catalog was preserved."));return {};
     }
     m_hasEditions=true;m_error.clear();emit errorChanged();emit changed();return edition;
@@ -1833,9 +1840,9 @@ QString GameLibrary::registerOpticalGame(const QString &title,const QString &run
     if(!related.exec()){fail(related.lastError().text());return {};}
     if(related.next()){
         const auto gameId=related.value(0).toString();related.finish();
-        return addEdition(gameId,registration).isEmpty()?QString():gameId;
+        return addEditionWithOrigin(gameId,registration,"optical-registration").isEmpty()?QString():gameId;
     }
-    return addGame(registration);
+    return addGameWithOrigin(registration,"optical-registration");
 }
 bool GameLibrary::approveOpticalMedia(const QString &observationId,const QString &device){
     if(!m_ready)return fail(tr("Games is unavailable."));

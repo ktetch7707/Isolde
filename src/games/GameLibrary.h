@@ -152,6 +152,9 @@ private:
     bool recordProvenance(const QString &entityId, const QString &entityType,
                           const QString &runtime, const QString &root, const QString &target,
                           const QString &origin = {});
+    QString addGameWithOrigin(const QVariantMap &registration, const QString &origin);
+    QString addEditionWithOrigin(const QString &gameId, const QVariantMap &registration,
+                                 const QString &origin);
     QString artworkDirectory() const;
     void scanStep();
     QTimer m_scanTimer;
