@@ -118,6 +118,28 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.assertFalse(destination.exists())
         self.assertEqual(source.joinpath("bin/game").read_bytes(),original["bin/game"])
 
+    def test_directory_title_is_trimmed_for_catalog_registration(self):
+        source=self.game_directory_fixture()
+        renamed=source.with_name("  Sample Linux Game  ")
+        source.rename(renamed)
+        preview=installer.inspect_directory(renamed,"bin/game")
+        self.assertEqual(preview["title"],"Sample Linux Game")
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install_directory(renamed,destination,"bin/game",preview["archiveSha256"])
+        self.assertEqual(installer.inspect_installed(destination)["title"],preview["title"])
+
+    def test_bundle_metadata_respects_qt_utf16_catalog_limits(self):
+        for field,value in (("title","\U0001f3ae"*129),("platform","\U0001f3ae"*41),
+                            ("title","\ud800")):
+            with self.subTest(field=field):
+                self.package(manifest={**self.manifest,field:value})
+                with self.assertRaisesRegex(ValueError,"invalid fields"):
+                    installer.inspect(self.archive)
+        self.package(manifest={**self.manifest,"title":"\U0001f3ae"*128})
+        self.assertEqual(installer.inspect(self.archive)["title"],"\U0001f3ae"*128)
+        with self.assertRaisesRegex(ValueError,"filename"):
+            installer.inspect(self.native_fixture(),title_hint="\U0001f3ae"*129)
+
     def test_directory_copy_refuses_changed_content_after_review(self):
         source=self.game_directory_fixture()
         preview=installer.inspect_directory(source,"bin/game")

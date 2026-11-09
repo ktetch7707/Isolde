@@ -73,6 +73,13 @@ test("standalone portable install requires remote review and confirmation", () =
     assert.equal(scope.mode, "installerInstalling");
 });
 
+test("portable file preflight and confirmation use the same profile media grant", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../src/games/GameLibrary.cpp"), "utf8");
+    const begin = source.slice(source.indexOf("bool GameLibrary::beginPortableInstall("),
+                               source.indexOf("bool GameLibrary::beginPortableDirectoryInstall("));
+    assert.match(begin, /opticalObservationId\.isEmpty\(\)\s*&&\s*!approvedMediaDirectory\(m_emulatorProfile,file\.absolutePath\(\)\)/);
+});
+
 test("optical portable confirmation uses disc identity rather than media-folder grants", () => {
     const source = fs.readFileSync(path.join(__dirname, "../src/games/GameLibrary.cpp"), "utf8");
     const start = source.indexOf("bool GameLibrary::confirmPortableInstall()");

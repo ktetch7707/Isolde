@@ -2017,7 +2017,7 @@ bool GameLibrary::beginPortableInstall(const QString &source,const QString &runt
         return fail(tr("Optical media identity is incomplete."));
     if(!file.isFile() || file.isSymLink() || file.canonicalFilePath()!=file.absoluteFilePath()
         || file.size()<1 || file.size()>512LL*1024*1024
-        || (opticalObservationId.isEmpty() && !MediaGrants::validate(file.absolutePath()).isEmpty()))
+        || (opticalObservationId.isEmpty() && !approvedMediaDirectory(m_emulatorProfile,file.absolutePath())))
         return fail(tr("Choose a regular native Linux ELF executable or ZIP, USTAR, gzip- or bzip2-compressed USTAR bundle inside an approved media folder."));
     if(!opticalObservationId.isEmpty()){
         const auto media=revalidateOpticalDisc(opticalObservationId,opticalDevice);

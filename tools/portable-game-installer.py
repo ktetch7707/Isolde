@@ -201,6 +201,13 @@ def validate_native_executable(stream, size):
         raise ValueError("The ELF entry point is not in an executable load segment.")
 
 
+def catalog_text(value, maximum):
+    if (not isinstance(value,str) or not value.strip()
+            or any(ord(char)<32 or 0xd800<=ord(char)<=0xdfff for char in value)):
+        return False
+    return len(value.encode("utf-16-le"))//2<=maximum
+
+
 def inspect(source, title_hint=None):
     source = Path(source)
     if source.is_symlink():
@@ -224,9 +231,7 @@ def inspect(source, title_hint=None):
         if header.startswith(b"\x7fELF"):
             validate_native_executable(stream,before.st_size)
             title=title_hint if title_hint is not None else source.name
-            if (not isinstance(title,str) or not title.strip() or len(title)>256
-                    or any(ord(char)<32 or 0xd800<=ord(char)<=0xdfff for char in title)
-                    or "/" in title or "\\" in title):
+            if (not catalog_text(title,256) or "/" in title or "\\" in title):
                 raise ValueError("The executable filename cannot be used as a game title.")
             after=os.fstat(stream.fileno())
             identity=lambda value: (value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns,value.st_ctime_ns)
@@ -255,11 +260,8 @@ def inspect(source, title_hint=None):
                 raise ValueError("Bundle must contain a valid isolde-game.json manifest.") from None
             if (not isinstance(manifest, dict) or set(manifest) != {"schemaVersion", "title", "platform", "entrypoint"}
                     or type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != 1
-                    or not isinstance(manifest["title"], str) or not manifest["title"].strip()
-                    or len(manifest["title"]) > 256 or any(ord(c) < 32 for c in manifest["title"])
-                    or not isinstance(manifest["platform"], str) or not manifest["platform"].strip()
-                    or len(manifest["platform"]) > 80
-                    or any(ord(c)<32 for c in manifest["platform"])
+                    or not catalog_text(manifest["title"],256)
+                    or not catalog_text(manifest["platform"],80)
                     or not isinstance(manifest["entrypoint"], str)):
                 raise ValueError("Portable game manifest has invalid fields.")
             entry = PurePosixPath(manifest["entrypoint"])
@@ -477,9 +479,9 @@ def inspect_directory(source, entrypoint):
             os.close(current_fd)
         os.close(root_fd)
     title = root.name
-    if (not title or len(title) > 256 or any(ord(char) < 32 or 0xD800 <= ord(char) <= 0xDFFF for char in title)):
+    if not catalog_text(title,256):
         raise ValueError("The selected game directory name cannot be used as a title.")
-    return {"schemaVersion": 1, "title": title, "platform": "PC",
+    return {"schemaVersion": 1, "title": title.strip(), "platform": "PC",
             "entrypoint": relative.as_posix(), "entrySize": selected["size"],
             "archiveEntries": inventory["archiveEntries"], "unpackedBytes": inventory["total"],
             "archiveSha256": inventory["archiveSha256"], "archiveFormat": "directory-copy"}
