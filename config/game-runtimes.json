@@ -7,8 +7,36 @@
     "supportBoundary": "Managed integration only; game, controller, performance and firmware compatibility are title-specific and not implied by runtime availability."
   },
   "generationCoverage": {
-    "integratedPlatforms": ["PSP", "GameCube", "Wii", "PlayStation", "PlayStation 2", "NES", "Game Boy", "Game Boy Color", "Game Boy Advance", "SNES", "Nintendo DS", "Virtual Boy"],
-    "notIntegrated": ["PlayStation 3", "PlayStation 4", "PlayStation 5", "PS Vita", "Nintendo 64", "Nintendo DSi", "Nintendo 3DS", "Wii U", "Nintendo Switch", "Nintendo Switch 2", "Original Xbox", "Xbox 360", "Xbox One", "Xbox Series X|S"]
+    "integratedPlatforms": ["PSP", "GameCube", "Wii", "PlayStation", "PlayStation 2", "NES", "Game Boy", "Game Boy Color", "Game Boy Advance", "SNES", "Nintendo DS", "Virtual Boy", "PlayStation 3", "PlayStation 4", "PS Vita", "Original Xbox", "Xbox 360", "Wii U"],
+    "notIntegrated": ["PlayStation 5", "Nintendo 64", "Nintendo DSi", "Nintendo 3DS", "Nintendo Switch", "Nintendo Switch 2", "Xbox One", "Xbox Series X|S"]
+  },
+  "generations": {
+    "PSP": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["sdl2","libzip"],"budget":{"diskMiB":2048,"ramMiB":512},"firmwareRequired":false},
+    "GameCube": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libevdev"],"budget":{"diskMiB":2048,"ramMiB":512},"firmwareRequired":false},
+    "Wii": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libevdev","libudev"],"budget":{"diskMiB":2048,"ramMiB":512},"firmwareRequired":false},
+    "PlayStation": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-beetle-psx"],"budget":{"diskMiB":1024,"ramMiB":256},"firmwareRequired":true},
+    "PlayStation 2": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libsdl2"],"budget":{"diskMiB":2048,"ramMiB":512},"firmwareRequired":true},
+    "NES": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-nestopia"],"budget":{"diskMiB":256,"ramMiB":64},"firmwareRequired":false},
+    "Game Boy": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-gambatte"],"budget":{"diskMiB":256,"ramMiB":64},"firmwareRequired":false},
+    "Game Boy Color": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-gambatte"],"budget":{"diskMiB":256,"ramMiB":64},"firmwareRequired":false},
+    "Game Boy Advance": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-mgba"],"budget":{"diskMiB":256,"ramMiB":64},"firmwareRequired":false},
+    "SNES": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-bsnes-mercury-balanced"],"budget":{"diskMiB":256,"ramMiB":64},"firmwareRequired":false},
+    "Nintendo DS": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-desmume"],"budget":{"diskMiB":512,"ramMiB":128},"firmwareRequired":false},
+    "Virtual Boy": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["libretro-beetle-vb"],"budget":{"diskMiB":256,"ramMiB":64},"firmwareRequired":false},
+    "PlayStation 3": {"architecture":"amd64","installer":"apt","account":"optional","save":"profile-private","dependency":["rpcs3","libssl3"],"budget":{"diskMiB":4096,"ramMiB":1024},"firmwareRequired":false},
+    "PlayStation 4": {"architecture":"amd64","installer":"apt","account":"optional","save":"profile-private","dependency":["shadps4","libvulkan1"],"budget":{"diskMiB":4096,"ramMiB":1024},"firmwareRequired":false},
+    "PS Vita": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["vita3k"],"budget":{"diskMiB":2048,"ramMiB":512},"firmwareRequired":true},
+    "Original Xbox": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["xemu","libsdl2"],"budget":{"diskMiB":4096,"ramMiB":512},"firmwareRequired":true},
+    "Xbox 360": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["xenia","libvulkan1"],"budget":{"diskMiB":4096,"ramMiB":1024},"firmwareRequired":false},
+    "Wii U": {"architecture":"amd64","installer":"apt","account":"none","save":"profile-private","dependency":["cemu","libsdl2"],"budget":{"diskMiB":4096,"ramMiB":1024},"firmwareRequired":true},
+    "PlayStation 5": {"architecture":"amd64","installer":"none","account":"required","save":"cloud","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No verified Linux emulator route; requires owned console or PC edition"},
+    "Nintendo 64": {"architecture":"amd64","installer":"none","account":"none","save":"profile-private","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No authenticated Ubuntu 26.04 amd64 core package identified"},
+    "Nintendo DSi": {"architecture":"amd64","installer":"none","account":"none","save":"profile-private","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No pinned Linux runtime or dual-screen input workflow identified"},
+    "Nintendo 3DS": {"architecture":"amd64","installer":"none","account":"none","save":"profile-private","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No pinned Linux runtime or dual-screen/touch input workflow identified"},
+    "Nintendo Switch": {"architecture":"amd64","installer":"none","account":"required","save":"cloud","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No verified Linux emulator route; requires owned console or PC edition"},
+    "Nintendo Switch 2": {"architecture":"amd64","installer":"none","account":"required","save":"cloud","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No verified Linux emulator route; requires owned console or PC edition"},
+    "Xbox One": {"architecture":"amd64","installer":"none","account":"required","save":"cloud","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No verified Linux emulator route; requires owned console or PC edition"},
+    "Xbox Series X|S": {"architecture":"amd64","installer":"none","account":"required","save":"cloud","dependency":[],"budget":{"diskMiB":0,"ramMiB":0},"firmwareRequired":false,"unsupportedReason":"No verified Linux emulator route; requires owned console or PC edition"}
   },
   "runtimes": [
     {"id":"ppsspp","name":"PPSSPP · PSP","engine":"ppsspp","platforms":["PSP"],"formats":["iso","cso","chd","pbp","elf"],"binary":"/usr/bin/PPSSPPSDL","packages":["isolde-ppsspp"],"firmwareRequired":false},
@@ -20,6 +48,12 @@
     {"id":"retroarch-snes","name":"RetroArch · SNES (bsnes balanced)","engine":"retroarch","platforms":["SNES"],"formats":["sfc","smc"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/bsnes_mercury_balanced_libretro.so","packages":["retroarch","libretro-bsnes-mercury-balanced"],"firmwareRequired":false},
     {"id":"retroarch-psx","name":"RetroArch · PlayStation (Beetle PSX)","engine":"retroarch","platforms":["PlayStation"],"formats":["chd"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so","packages":["retroarch","libretro-beetle-psx"],"firmwareRequired":true},
     {"id":"retroarch-ds","name":"RetroArch · Nintendo DS (DeSmuME)","engine":"retroarch","platforms":["Nintendo DS"],"formats":["nds"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/desmume_libretro.so","packages":["retroarch","libretro-desmume"],"firmwareRequired":false},
-    {"id":"retroarch-vb","name":"RetroArch · Virtual Boy (Beetle VB)","engine":"retroarch","platforms":["Virtual Boy"],"formats":["vb","vboy"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/mednafen_vb_libretro.so","packages":["retroarch","libretro-beetle-vb"],"firmwareRequired":false}
+    {"id":"retroarch-vb","name":"RetroArch · Virtual Boy (Beetle VB)","engine":"retroarch","platforms":["Virtual Boy"],"formats":["vb","vboy"],"binary":"/usr/bin/retroarch","core":"/usr/lib/x86_64-linux-gnu/libretro/mednafen_vb_libretro.so","packages":["retroarch","libretro-beetle-vb"],"firmwareRequired":false},
+    {"id":"rpcs3","name":"RPCS3 · PlayStation 3","engine":"rpcs3","platforms":["PlayStation 3"],"formats":["iso","pkg","elf","self"],"binary":"/usr/games/rpcs3","packages":["rpcs3"],"firmwareRequired":false},
+    {"id":"shadps4","name":"shadPS4 · PlayStation 4","engine":"shadps4","platforms":["PlayStation 4"],"formats":["iso","pkg","elf"],"binary":"/usr/games/shadps4","packages":["shadps4"],"firmwareRequired":false},
+    {"id":"vita3k","name":"Vita3K · PS Vita","engine":"vita3k","platforms":["PS Vita"],"formats":["vpk","elf"],"binary":"/usr/games/vita3k","packages":["vita3k"],"firmwareRequired":true},
+    {"id":"xemu","name":"xemu · Original Xbox","engine":"xemu","platforms":["Original Xbox"],"formats":["iso","elf","xbe"],"binary":"/usr/games/xemu","packages":["xemu"],"firmwareRequired":true},
+    {"id":"xenia","name":"Xenia · Xbox 360","engine":"xenia","platforms":["Xbox 360"],"formats":["iso","elf","xex"],"binary":"/usr/games/xenia","packages":["xenia"],"firmwareRequired":false},
+    {"id":"cemu","name":"Cemu · Wii U","engine":"cemu","platforms":["Wii U"],"formats":["wud","wux","iso","elf","rpx"],"binary":"/usr/games/cemu","packages":["cemu"],"firmwareRequired":true}
   ]
 }

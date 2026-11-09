@@ -404,6 +404,48 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
             m_portablePhase.clear();m_portableDirectoryCopy=false;m_portableDirectoryEntrypoint.clear();m_portableInstallPreview.clear();emit portableInstallChanged();return;
         }
     });
+    m_windowsInstallDeadline.setSingleShot(true);m_windowsInstallDeadline.setInterval(900000);
+    connect(&m_windowsInstallDeadline,&QTimer::timeout,this,&GameLibrary::cancelWindowsInstall);
+    connect(&m_windowsInstall,&QProcess::readyReadStandardOutput,this,[this]{
+        m_portableInstallOutput+=m_windowsInstall.readAllStandardOutput();
+        if(m_portableInstallOutput.size()>65536)cancelWindowsInstall();
+    });
+    connect(&m_windowsInstall,&QProcess::readyReadStandardError,this,[this]{
+        m_portableInstallError=(m_portableInstallError+m_windowsInstall.readAllStandardError()).right(8192);
+    });
+    connect(&m_windowsInstall,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){
+        if(error==QProcess::FailedToStart){
+            m_windowsInstallStatus="Windows installer helper could not start.";
+            m_portablePhase.clear();emit windowsInstallChanged();
+        }
+    });
+    connect(&m_windowsInstall,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus status){
+        m_windowsInstallDeadline.stop();
+        if(!m_ready || m_portablePhase!="windows-install")return;
+        if(code!=0 || status!=QProcess::NormalExit){
+            const auto reason=QString::fromUtf8(m_portableInstallError).right(1000);
+            m_windowsInstallStatus="Windows installer stopped or failed. No files were installed. "+reason;
+            m_portablePhase.clear();emit windowsInstallChanged();return;
+        }
+        m_portableInstallOutput+=m_windowsInstall.readAllStandardOutput();
+        QJsonParseError parse;const auto metadata=QJsonDocument::fromJson(m_portableInstallOutput,&parse).toVariant().toMap();
+        if(parse.error!=QJsonParseError::NoError || metadata.value("schemaVersion").toInt()!=1
+            || metadata.value("title").toString().isEmpty() || metadata.value("platform").toString().isEmpty()
+            || metadata.value("entrypoint").toString().isEmpty()
+            || !QRegularExpression("^[0-9a-f]{64}$").match(metadata.value("archiveSha256").toString()).hasMatch()){
+            m_windowsInstallStatus="Invalid Windows install adapter response. Nothing was added to Games.";
+            m_portablePhase.clear();emit windowsInstallChanged();return;
+        }
+        const auto root=metadata.value("root").toString();
+        const auto id=addGameWithOrigin({{"schemaVersion",1},{"title",metadata.value("title")},
+            {"platform",metadata.value("platform")},{"runtimeId",m_portableRuntime},
+            {"root",root},{"target",metadata.value("entrypoint")}},"windows-install");
+        m_windowsInstallStatus=id.isEmpty()
+            ?"Package installed but catalog registration failed. Preserve the private recovery folder and retry from Games."
+            :"Installed, verified and added to Games. Launch uses an isolated session.";
+        m_windowsInstallPreview=metadata;
+        m_portablePhase.clear();m_portableInstallPreview.clear();emit windowsInstallChanged();return;
+    });
     m_opticalRefreshTimer.setInterval(2500);
     connect(&m_opticalRefreshTimer,&QTimer::timeout,this,[this]{
         if(!m_ready)return;
@@ -2105,6 +2147,40 @@ bool GameLibrary::inspectWindowsInstaller(const QString &source){
     m_portableInstallStatus="Inspecting the executable without executing it. No files will be installed.";
     m_portableInstall.start(python,{helper,"--inspect-windows","--source",file.canonicalFilePath()});
     m_portableInstallDeadline.start();m_error.clear();emit errorChanged();emit portableInstallChanged();return true;
+}
+bool GameLibrary::beginWindowsInstall(const QString &source){
+    if(!m_ready || portableInstallBusy() || !m_portablePhase.isEmpty())
+        return fail(tr("Finish or cancel the current game operation first."));
+    const QFileInfo file(source);
+    if(!file.isFile() || file.isSymLink() || file.canonicalFilePath()!=file.absoluteFilePath()
+        || file.size()<64 || file.size()>512LL*1024*1024
+        || !approvedMediaDirectory(m_emulatorProfile,file.absolutePath()))
+        return fail(tr("Choose a regular Windows executable under an approved media folder, up to 512 MiB."));
+    const auto wine=CompatibilityRuntime::discover();
+    if(wine.value("state").toString()!="available" || !wine.value("supported").toBool())
+        return fail(tr("Windows compatibility runtime is not available. No installer will be executed."));
+    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/portable-game-installer.py";
+    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde installer helper."));
+    m_portableInstallOutput.clear();m_portableInstallError.clear();m_windowsInstallPreview.clear();
+    m_portableOpticalObservationId.clear();m_portableOpticalDevice.clear();
+    m_portableDirectoryCopy=false;m_portableDirectoryEntrypoint.clear();
+    m_portableCanceled=false;m_portablePhase="windows-install";
+    m_windowsInstallStatus="Running the Windows installer under Wine. Files will be copied into a new private profile folder.";
+    m_windowsInstall.start(python,{helper,"--install-windows","--source",file.canonicalFilePath()});
+    m_windowsInstallDeadline.start();m_error.clear();emit errorChanged();emit windowsInstallChanged();return true;
+}
+void GameLibrary::cancelWindowsInstall(){
+    m_windowsInstallDeadline.stop();
+    if(m_portablePhase!="windows-install")return;
+    m_portableCanceled=true;
+    if(m_windowsInstall.state()!=QProcess::NotRunning){
+        m_windowsInstall.terminate();
+        if(!m_windowsInstall.waitForFinished(2000)){m_windowsInstall.kill();m_windowsInstall.waitForFinished(2000);}
+    }
+    m_portablePhase.clear();m_windowsInstallStatus="Windows installation canceled. Existing files and saves were preserved.";
+    emit windowsInstallChanged();
 }
 bool GameLibrary::confirmPortableInstall(){
     if(!m_ready || m_portablePhase!="review" || portableInstallBusy())return fail(tr("No portable game package is awaiting confirmation."));

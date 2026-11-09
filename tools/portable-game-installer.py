@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import stat
 import struct
+import subprocess
 import sys
 import signal
 import tarfile
@@ -170,6 +171,44 @@ def inspect_windows(source):
         return {"schemaVersion": 1, "format": "PE32+" if magic == 0x20b else "PE32",
                 "architecture": architecture, "fileSize": before.st_size,
                 "sha256": digest.hexdigest(), "supported": False}
+
+
+def install_windows(source):
+    source = Path(source)
+    if source.is_symlink():
+        raise ValueError("Choose a regular Windows executable no larger than 512 MiB.")
+    descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or not 64 <= before.st_size <= MAX_ARCHIVE:
+            raise ValueError("Choose a regular Windows executable no larger than 512 MiB.")
+        header = stream.read(64)
+        if header[:2] != b"MZ":
+            raise ValueError("The selected file is not a Windows PE executable.")
+        pe_offset = struct.unpack_from("<I", header, 60)[0]
+        if pe_offset < 64 or pe_offset > min(before.st_size - 24, 1024 * 1024):
+            raise ValueError("The Windows PE header offset is invalid.")
+        stream.seek(pe_offset)
+        pe = stream.read(24)
+        if len(pe) != 24 or pe[:4] != b"PE\0\0":
+            raise ValueError("The Windows PE header is invalid.")
+    wine_check = subprocess.run(["which", "wine"], capture_output=True, text=True, timeout=5)
+    if wine_check.returncode != 0:
+        raise ValueError("Wine is not available. Windows installers cannot be executed.")
+    try:
+        result = subprocess.run(
+            ["wine", str(source)],
+            capture_output=True, text=True, timeout=300,
+            env={"WINEDEBUG": "-all", "WINEDLLOVERRIDES": ""}
+        )
+    except subprocess.TimeoutExpired:
+        raise ValueError("The Windows installer exceeded its time limit. No files were installed.")
+    if result.returncode != 0:
+        raise ValueError("The Windows installer exited with an error. No files were installed.")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    return {"schemaVersion": 1, "title": source.stem, "platform": "Windows",
+            "entrypoint": source.name, "root": "", "archiveSha256": digest,
+            "installerType": "windows-pe", "wineAvailable": True}
 
 
 def validate_native_executable(stream, size):
@@ -1004,6 +1043,7 @@ def main():
     group.add_argument("--inspect", action="store_true")
     group.add_argument("--inspect-directory", action="store_true")
     group.add_argument("--inspect-windows", action="store_true")
+    group.add_argument("--install-windows", action="store_true")
     group.add_argument("--install", action="store_true")
     group.add_argument("--install-directory", action="store_true")
     group.add_argument("--uninstall", action="store_true")
@@ -1029,6 +1069,11 @@ def main():
             result = inspect_directory(args.source, args.entrypoint)
         else:
             result = inspect(args.source)
+        print(json.dumps(result, ensure_ascii=False))
+    elif args.install_windows:
+        if not args.source:
+            parser.error("--install-windows requires --source")
+        result = install_windows(args.source)
         print(json.dumps(result, ensure_ascii=False))
     elif args.inspect_installed:
         if not args.root:

@@ -30,6 +30,9 @@ class GameLibrary final : public QObject {
     Q_PROPERTY(bool portableInstallBusy READ portableInstallBusy NOTIFY portableInstallChanged)
     Q_PROPERTY(QString portableInstallStatus READ portableInstallStatus NOTIFY portableInstallChanged)
     Q_PROPERTY(QVariantMap portableInstallPreview READ portableInstallPreview NOTIFY portableInstallChanged)
+    Q_PROPERTY(bool windowsInstallBusy READ windowsInstallBusy NOTIFY windowsInstallChanged)
+    Q_PROPERTY(QString windowsInstallStatus READ windowsInstallStatus NOTIFY windowsInstallChanged)
+    Q_PROPERTY(QVariantMap windowsInstallPreview READ windowsInstallPreview NOTIFY windowsInstallChanged)
 public:
     GameLibrary(const QString &databasePath, AppRegistry *apps, QObject *parent = nullptr);
     ~GameLibrary() override;
@@ -70,9 +73,12 @@ public:
     Q_INVOKABLE bool revokeOpticalMedia(const QString &observationId, const QString &device);
     Q_INVOKABLE bool mountOpticalDisc(const QString &observationId,const QString &device);
     Q_INVOKABLE bool ejectOpticalDisc(const QString &observationId,const QString &device);
-    bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
+    bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning || m_windowsInstall.state()!=QProcess::NotRunning; }
     QString portableInstallStatus() const { return m_portableInstallStatus; }
     QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }
+    bool windowsInstallBusy() const { return m_windowsInstall.state()!=QProcess::NotRunning; }
+    QString windowsInstallStatus() const { return m_windowsInstallStatus; }
+    QVariantMap windowsInstallPreview() const { return m_windowsInstallPreview; }
     Q_INVOKABLE bool beginPortableInstall(const QString &source, const QString &runtimeId,
                                           const QString &opticalObservationId = {}, const QString &opticalDevice = {});
     Q_INVOKABLE bool beginPortableDirectoryInstall(const QString &source, const QString &entrypoint,
@@ -116,6 +122,8 @@ public:
                                                        const QString &runtimeId, bool confirmed);
     Q_INVOKABLE QVariantMap compatibilityInstallerStatus() const;
     Q_INVOKABLE bool inspectWindowsInstaller(const QString &source);
+    Q_INVOKABLE bool beginWindowsInstall(const QString &source);
+    Q_INVOKABLE void cancelWindowsInstall();
     Q_INVOKABLE bool recoverOrphanedUninstall(const QString &installationId, bool confirmed);
     Q_INVOKABLE bool resumeOrphanedUninstall(const QString &installationId, bool confirmed);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
@@ -126,6 +134,7 @@ signals:
     void importChanged();
     void setupChanged();
     void portableInstallChanged();
+    void windowsInstallChanged();
     void opticalDiscsChanged(const QVariantList &discs, const QString &change);
 private:
     bool fail(const QString &error);
@@ -178,11 +187,14 @@ private:
     QString m_importStatus;
     QProcess m_portableInstall;
     QTimer m_portableInstallDeadline;
-    QTimer m_opticalRefreshTimer;
+    QTimer m_windowsInstallDeadline;
+    QProcess m_windowsInstall;
     QByteArray m_portableInstallOutput, m_portableInstallError;
     QVariantMap m_portableInstallPreview;
     QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination, m_portableGameId;
     QString m_portableOpticalObservationId, m_portableOpticalDevice;
+    QString m_windowsInstallStatus;
+    QVariantMap m_windowsInstallPreview;
     QString m_portableDirectoryEntrypoint;
     QStringList m_lastOpticalObservationIds;
     QString m_portablePhase;

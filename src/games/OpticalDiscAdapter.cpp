@@ -594,6 +594,11 @@ bool OpticalDiscAdapter::eject(const QString &device,QString *error)
     bool mounted=false;
     for(const auto &volume:QStorageInfo::mountedVolumes())
         mounted|=volume.isValid() && volume.isReady() && QString::fromLatin1(volume.device())==device;
+    const auto arbitration=opticalSessionArbitration(device);
+    if(arbitration.value("state").toString()=="blocked"){
+        if(error)*error="The disc is in use by an active game session. Stop the session or return Home before ejecting.";
+        return false;
+    }
     const auto call=[](const QString &service,const QString &path,const QString &interface,
                        const QString &method,const QVariantList &arguments){
         QDBusInterface object(service,path,interface,QDBusConnection::systemBus());
@@ -656,4 +661,147 @@ QVariantMap OpticalDiscAdapter::classifyRevalidation(const QString &observationI
             return {{"schemaVersion",1},{"state","replaced"},{"disc",disc}};
     }
     return {{"schemaVersion",1},{"state","missing"}};
+}
+
+namespace {
+struct SwapSession {
+    int expectedDiscNumber=0;
+    QString expectedMediaSetId;
+    QString state; // "awaiting-swap", "swapped", "completed"
+};
+QMap<QString,SwapSession> &swapSessions() {
+    static QMap<QString,SwapSession> sessions;
+    return sessions;
+}
+}
+QVariantMap OpticalDiscAdapter::requestDiscSwap(const QString &sessionId, int expectedDiscNumber,
+                                                const QString &expectedMediaSetId){
+    if(sessionId.isEmpty() || expectedDiscNumber<1 || expectedMediaSetId.isEmpty())return {{"state","invalid"}};
+    auto &sessions=swapSessions();
+    sessions.insert(sessionId,{expectedDiscNumber,expectedMediaSetId,"awaiting-swap"});
+    return {{"schemaVersion",1},{"state","awaiting-swap"},{"sessionId",sessionId},
+        {"expectedDisc",expectedDiscNumber},{"discCount",0}};
+}
+QVariantMap OpticalDiscAdapter::completeDiscSwap(const QString &sessionId, const QString &observationId,
+                                                 const QString &device){
+    auto &sessions=swapSessions();
+    auto it=sessions.find(sessionId);
+    if(it==sessions.end())return {{"state","invalid"}};
+    const auto &session=it.value();
+    if(session.state!="awaiting-swap")return {{"state","invalid"}};
+    const auto current=mountedDiscs();
+    for(const auto &item:current){
+        const auto disc=item.toMap();
+        if(disc.value("state")!="mounted")continue;
+        if(disc.value("observationId")==observationId && disc.value("device")==device){
+            const auto mediaSetId=disc.value("mediaSetId").toString();
+            const auto discNumber=disc.value("discNumber").toInt();
+            if(mediaSetId==session.expectedMediaSetId && discNumber==session.expectedDiscNumber){
+                SwapSession updated=session;updated.state="swapped";
+                sessions.insert(sessionId,updated);
+                return {{"schemaVersion",1},{"state","swapped"},{"sessionId",sessionId},
+                    {"disc",disc}};
+            }
+            return {{"schemaVersion",1},{"state","wrong-disc"},{"sessionId",sessionId},
+                {"expectedDisc",session.expectedDiscNumber},{"gotDisc",discNumber}};
+        }
+    }
+    return {{"schemaVersion",1},{"state","missing"},{"sessionId",sessionId},
+        {"expectedDisc",session.expectedDiscNumber}};
+}
+QVariantMap OpticalDiscAdapter::swapSessionState(const QString &sessionId){
+    auto &sessions=swapSessions();
+    auto it=sessions.find(sessionId);
+    if(it==sessions.end())return {{"state","invalid"}};
+    return {{"schemaVersion",1},{"state",it.value().state},{"sessionId",sessionId}};
+}
+
+namespace {
+struct OpticalSession {
+    QString mediaId;
+    QString device;
+    QString state; // "active"
+};
+QMap<QString,OpticalSession> &opticalSessions() {
+    static QMap<QString,OpticalSession> sessions;
+    return sessions;
+}
+}
+QString OpticalDiscAdapter::registerOpticalSession(const QString &sessionId, const QString &mediaId,
+                                                   const QString &device){
+    if(sessionId.isEmpty() || mediaId.isEmpty() || device.isEmpty())return {};
+    auto &sessions=opticalSessions();
+    sessions.insert(sessionId,{mediaId,device,"active"});
+    return sessionId;
+}
+void OpticalDiscAdapter::releaseOpticalSession(const QString &sessionId){
+    auto &sessions=opticalSessions();
+    sessions.remove(sessionId);
+}
+QVariantMap OpticalDiscAdapter::opticalSessionArbitration(const QString &device){
+    if(device.isEmpty())return {{"state","invalid"}};
+    QVariantList blocking;
+    for(const auto &key:opticalSessions().keys()){
+        const auto &session=opticalSessions().value(key);
+        if(session.device==device){
+            blocking.append(QVariantMap{{"sessionId",key},{"mediaId",session.mediaId},
+                {"state",session.state}});
+        }
+    }
+    if(blocking.isEmpty())return {{"schemaVersion",1},{"state","clear"},{"device",device}};
+    return {{"schemaVersion",1},{"state","blocked"},{"device",device},{"blockingSessions",blocking}};
+}
+
+QVariantMap OpticalDiscAdapter::deviceDiagnostics(const QString &device){
+    if(!QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
+        return {{"schemaVersion",1},{"state","invalid"},{"device",device}};
+    QFileInfo block(device);
+    QVariantMap result={{"schemaVersion",1},{"device",device},{"state","unknown"}};
+    if(!block.exists()){
+        result["state"]="absent";
+        result["reason"]="The optical device does not exist on this system.";
+        return result;
+    }
+    if(!block.isReadable()){
+        result["state"]="unreadable";
+        result["reason"]="The optical device cannot be read. Check permissions and hardware.";
+        return result;
+    }
+    bool mounted=false;
+    QString mountRoot,filesystem,volumeLabel;
+    for(const auto &storage:QStorageInfo::mountedVolumes()){
+        if(!storage.isValid() || !storage.isReady())continue;
+        if(QString::fromLatin1(storage.device())!=device)continue;
+        mounted=true;
+        mountRoot=storage.rootPath();
+        filesystem=QString::fromLatin1(storage.fileSystemType()).toLower();
+        volumeLabel=storage.name();
+        break;
+    }
+    if(mounted){
+        result["state"]="mounted";
+        result["mountRoot"]=mountRoot;
+        result["filesystem"]=filesystem;
+        result["volumeLabel"]=volumeLabel;
+        result["readOnly"]=true;
+        const auto content=contentIdentity(device);
+        result["hashState"]=content.value("hashState");
+        result["diskSequence"]=content.value("diskSequence");
+        result["contentId"]=content.value("contentId");
+    }else{
+        result["state"]="unmounted";
+        result["reason"]="No media is mounted in this drive. Insert a disc and refresh.";
+        QFile sizeFile("/sys/class/block/"+device.mid(QString("/dev/").size())+"/size");
+        if(sizeFile.open(QIODevice::ReadOnly)){
+            bool sizeOk=false;
+            const auto sectors=sizeFile.read(64).trimmed().toULongLong(&sizeOk);
+            if(sizeOk && sectors>0){
+                result["mediaPresent"]=true;
+                result["mediaSizeSectors"]=sectors;
+            }else{
+                result["mediaPresent"]=false;
+            }
+        }
+    }
+    return result;
 }

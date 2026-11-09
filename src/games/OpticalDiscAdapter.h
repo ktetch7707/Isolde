@@ -45,4 +45,14 @@ public:
     static bool ejectUsing(const QString &device, bool mounted, const DbusCall &call,
                            QString *error = nullptr);
     static bool eject(const QString &device, QString *error = nullptr);
+    static QVariantMap requestDiscSwap(const QString &sessionId, int expectedDiscNumber,
+                                       const QString &expectedMediaSetId);
+    static QVariantMap completeDiscSwap(const QString &sessionId, const QString &observationId,
+                                        const QString &device);
+    static QVariantMap swapSessionState(const QString &sessionId);
+    static QString registerOpticalSession(const QString &sessionId, const QString &mediaId,
+                                          const QString &device);
+    static void releaseOpticalSession(const QString &sessionId);
+    static QVariantMap opticalSessionArbitration(const QString &device);
+    static QVariantMap deviceDiagnostics(const QString &device);
 };
