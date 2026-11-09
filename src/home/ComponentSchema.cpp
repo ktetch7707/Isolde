@@ -572,7 +572,7 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
         const auto id=input.value("pageId").toString();
         if(!safeId(id))return reject(error,"Choose a valid page.");
         result["pageId"]=id;
-    } else if (type == "app-drawer" || type == "root-page") {
+    } else if (type == "app-drawer" || type == "open-apps" || type == "open-search" || type == "root-page") {
         // Shell-owned drawer, never a command or provider URL.
     } else if (type == "settings") {
         const double section = input.value("section", MinSettingsSection).toDouble();
@@ -730,7 +730,8 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
 QString ComponentSchema::unavailable(const QVariantMap &value, const AppRegistry *apps, const QVariantList &collections)
 {
     const auto type = value.value("type").toString();
-    if(type=="open-page")return {}; // Page existence belongs to the shell dispatcher, never an Open With app.
+    if(QStringList{"open-page","open-apps","open-search","app-drawer","root-page"}.contains(type))
+        return {}; // Shell routes never require an Open With app.
     if (type == "launch-app") return apps->find(value.value("appId").toString()) ? QString() : "App missing · repair source";
     if (type == "open-collection" || type == "play-movie" || type == "open-show") {
         for (const auto &entry : collections) {

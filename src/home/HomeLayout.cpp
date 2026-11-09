@@ -448,7 +448,7 @@ QVariantMap HomeLayout::studioOptions() const
     }
     const auto actionCategories=object["actionCategories"].toArray();
     if(!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size()>12)return {};
-    const QStringList pickerTypes{"none","media-picker","root-page","open-page","launch-app","app-drawer","open-collection","open-guide","play-movie","open-show","switch-input","settings","desktop-mode","open-file","open-folder","open-url","open-disc"};
+    const QStringList pickerTypes{"none","media-picker","root-page","open-page","launch-app","open-apps","open-search","app-drawer","open-collection","open-guide","play-movie","open-show","switch-input","settings","desktop-mode","open-file","open-folder","open-url","open-disc"};
     for(const auto &value:actionCategories) {
         const auto category=value.toObject();
         if(category.size()!=2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() || category["name"].toString().size()>80 || !category["types"].isArray() || category["types"].toArray().size()>pickerTypes.size())return {};

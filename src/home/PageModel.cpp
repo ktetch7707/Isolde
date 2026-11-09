@@ -504,7 +504,7 @@ bool PageModel::addButton()
     if (!m_owner) return false;
     QString id = QStringLiteral("button-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
     QJsonObject item{{"kind", "action"}, {"id", id}, {"name", QCoreApplication::translate("PageModel", "Button")},
-                     {"action", QJsonObject{{"type", "app-drawer"}}}};
+                     {"action", QJsonObject{{"type", "open-apps"}}}};
     const auto previous = m_pageDocument;
     QJsonArray components;
     if (m_pageDocument.contains("components")) components = m_pageDocument.value("components").toArray();

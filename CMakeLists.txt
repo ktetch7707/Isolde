@@ -153,6 +153,7 @@ qt_add_qml_module(isolde
         qml/SetupWizard.qml
         qml/HomeScreen.qml
         qml/AppTile.qml
+        qml/AppGallery.qml
         qml/MockSessionView.qml
         qml/OnScreenKeyboard.qml
         qml/SurfacePalette.qml
@@ -211,6 +212,7 @@ qt_add_resources(isolde "isolde_config"
     PREFIX "/"
     FILES
         config/apps.json
+        config/app-gallery.json
         config/app-icons/youtube.svg
         config/art-packs.json
         config/catalog.json
@@ -261,6 +263,7 @@ qt_add_resources(isolde "isolde_store_web"
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/config")
 configure_file(config/native-session-bus.conf "${CMAKE_CURRENT_BINARY_DIR}/config/native-session-bus.conf" COPYONLY)
 configure_file(config/apps.json "${CMAKE_CURRENT_BINARY_DIR}/config/apps.json" COPYONLY)
+configure_file(config/app-gallery.json "${CMAKE_CURRENT_BINARY_DIR}/config/app-gallery.json" COPYONLY)
 configure_file(config/art-packs.json "${CMAKE_CURRENT_BINARY_DIR}/config/art-packs.json" COPYONLY)
 configure_file(config/default-apps.json "${CMAKE_CURRENT_BINARY_DIR}/config/default-apps.json" COPYONLY)
 configure_file(config/catalog.json "${CMAKE_CURRENT_BINARY_DIR}/config/catalog.json" COPYONLY)
@@ -336,6 +339,7 @@ configure_file(tools/component-health.py ${CMAKE_CURRENT_BINARY_DIR}/share/isold
 install(TARGETS isolde-recovery RUNTIME DESTINATION bin)
 install(TARGETS isolde-native-host RUNTIME DESTINATION bin)
 install(FILES config/apps.json DESTINATION bin/config)
+install(FILES config/app-gallery.json DESTINATION bin/config)
 install(FILES config/native-session-bus.conf DESTINATION bin/config)
 install(FILES config/art-packs.json DESTINATION bin/config)
 install(FILES config/default-apps.json DESTINATION bin/config)
@@ -475,6 +479,7 @@ if(BUILD_TESTING)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE REFERENCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/visual/home-reference")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE LIBRARY_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/KodiLibraryView.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE COMMAND_CENTER_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CommandCenter.qml")
+    target_compile_definitions(isolde_home_navigation_tests PRIVATE APP_GALLERY_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/AppGallery.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE KODI_SETTINGS_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/KodiSettingsView.qml")
     set(ISOLDE_RUNTIME_NAVIGATION_CASES
         retainsExactOriginAndRecoversWithoutHomeButton repairsSourceWithRemoteAndCanCancel

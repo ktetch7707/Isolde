@@ -28,6 +28,8 @@
 #include <QtTest>
 #include <QScopeGuard>
 #include <QStandardPaths>
+#include <QSet>
+#include <algorithm>
 
 class CountingStoreProvider final : public StoreProvider {
 public:
@@ -53,6 +55,42 @@ class IsoldeTests final : public QObject {
     Q_OBJECT
 
 private slots:
+    void allAppsProjectionContainsOnlyRegisteredLaunchables() {
+        QTemporaryDir temp;
+        AppRegistry registry;
+        QVERIFY(registry.load(QFINDTESTDATA("../config/apps.json")));
+        AppCatalog catalog(&registry);
+        QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),
+            temp.filePath("catalog-state.json"), temp.filePath("installed")),
+            qPrintable(catalog.errorString()));
+        auto gallery = catalog.galleryEntries();
+        QSet<QString> ids;
+        for (const auto &value : gallery) {
+            const auto app = value.toMap();
+            const auto id = app.value("id").toString();
+            QVERIFY(!id.isEmpty());
+            QVERIFY(!ids.contains(id));
+            ids.insert(id);
+            QVERIFY(app.value("installed").toBool());
+            QVERIFY(app.value("registered").toBool());
+            QVERIFY(QStringList{"web", "desktop", "android"}.contains(app.value("type").toString()));
+        }
+        QVERIFY(ids.contains("youtube"));
+        QVERIFY(!ids.contains("settings"));
+        QVERIFY(!ids.contains("app-store"));
+        QVERIFY(!ids.contains("movies"));
+        for (const auto &value : catalog.allEntries()) {
+            const auto entry = value.toMap();
+            if (!entry.value("installed").toBool())
+                QVERIFY(!ids.contains(entry.value("id").toString()));
+        }
+        QVERIFY(registry.removeApp("youtube"));
+        gallery = catalog.galleryEntries();
+        QVERIFY(std::none_of(gallery.cbegin(), gallery.cend(), [](const QVariant &value) {
+            return value.toMap().value("id").toString() == "youtube";
+        }));
+    }
+
     void fdroidBrowsingStaysOfflineUntilOptInAndDropsLateResults() {
         FdroidProvider live;
         QVERIFY(live.results().isEmpty());QVERIFY(live.status().isEmpty());

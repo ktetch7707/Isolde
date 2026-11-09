@@ -18,10 +18,12 @@ Window {
         store.themeOrigin = ""
     })
     property bool ambientActive: false
-    readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
+    readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !allApps.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
+    property bool galleryLaunchPending: false
     property string launchErrorText: ""
     property string launchErrorAppId: ""
     property bool launchErrorVpn: false
+    property bool launchErrorReturnToGallery: false
     property bool desktopHidden:false
     property int desktopRestoreVisibility:Window.FullScreen
     DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
@@ -53,6 +55,7 @@ Window {
     }
 
     function openSearchFromPage() {
+        allApps.open = false
         const onPage = pageSurface.open && pageSurface.model
         commandCenter.themeOrigin = onPage ? pageSurface.activeId : ""
         commandCenter.pageId = onPage ? pageSurface.activeId : ""
@@ -62,6 +65,7 @@ Window {
 
     function showDesignatedHome() {
         guideSearchReturn=null
+        allApps.open=false
         kodiLibrary.open=false
         commandCenter.open=false
         if(tvGuide.open){guideController.cancel();tvGuide.open=false}
@@ -125,6 +129,7 @@ Window {
         }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
         if(launchErrorOverlay.visible){launchErrorOverlay.handleCommand(command);return}
+        if(allApps.open){allApps.handleCommand(command);return}
         // Editor cancellation must run before the global Home route tears down
         // its session; a dirty draft always gets the ordinary exit choice.
         if(sessionManager.active && sessionManager.currentAppType === "settings" && settings.homeEditing){settings.handleCommand(command);return}
@@ -189,7 +194,7 @@ Window {
         running: setupState.complete && ambientSettings.enabled && !window.ambientActive
         repeat: false
         interval: ambientSettings.timeoutMinutes * 60000
-        onTriggered: if (!sessionManager.active && !captureSession.open && !commandCenter.open && !kodiLibrary.open && !kodiMedia.playbackActive) window.ambientActive = true
+        onTriggered:         if (!sessionManager.active && !captureSession.open && !commandCenter.open && !allApps.open && !kodiLibrary.open && !kodiMedia.playbackActive) window.ambientActive = true
     }
 
     Item {
@@ -328,6 +333,46 @@ Window {
                 onNavigationRejected:reason=>{window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
             }
 
+            AppGallery {
+                id: allApps
+                anchors.fill: parent
+                z: 60
+                visible: open && !sessionManager.active
+                entries: appCatalog.galleryEntries
+                galleryPresentation: appCatalog.galleryPresentation
+                appearance: window.shellAppearance("apps", pageSurface.open ? pageSurface.activeId : "")
+                internetAvailable: networkSettings.internetAvailable
+                localNetworkAvailable: networkSettings.localNetworkAvailable
+                onLaunchRequested: appId => {
+                    galleryLaunchPending = true
+                    if (actionDispatcher.dispatch({type:"launch-app",appId:appId},"all-apps"))
+                        allApps.open = false
+                    else
+                        galleryLaunchPending = false
+                }
+                onStoreRequested: {
+                    galleryLaunchPending = true
+                    if (actionDispatcher.dispatch({type:"launch-app",appId:"app-store"},"all-apps"))
+                        allApps.open = false
+                    else
+                        galleryLaunchPending = false
+                }
+                onSettingsRequested: {
+                    galleryLaunchPending = true
+                    if (actionDispatcher.dispatch({type:"settings",section:-1},"all-apps"))
+                        allApps.open = false
+                    else
+                        galleryLaunchPending = false
+                }
+                onCloseRequested: origin => {
+                    allApps.open = false
+                    if (!origin) window.showDesignatedHome()
+                    else if (pageSurface.open) pageSurface.restoreOrigin(origin)
+                    else home.restoreFocus(origin)
+                }
+                onSearchRequested: window.openSearchFromPage()
+            }
+
             AmbientOverlay {
                 id: ambientScreen
                 scaleFactor: window.uiScaleFactor
@@ -347,16 +392,35 @@ Window {
                     if (command === inputManager.back || command === inputManager.home) {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
+                        if(window.launchErrorReturnToGallery && command === inputManager.home)window.showDesignatedHome()
+                        window.launchErrorReturnToGallery = false
                     } else if (command === inputManager.confirm && window.launchErrorAppId.length) {
                         const retryId = window.launchErrorAppId
+                        const retryFromGallery = window.launchErrorReturnToGallery
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
-                        sessionManager.launch(retryId)
+                        if (retryFromGallery) {
+                            window.galleryLaunchPending = true
+                            if (actionDispatcher.dispatch({type:"launch-app",appId:retryId},"all-apps"))
+                                allApps.open = false
+                            else
+                                window.galleryLaunchPending = false
+                        } else sessionManager.launch(retryId)
                     } else if (command === inputManager.navigateRight && (window.launchErrorAppId.length || window.launchErrorVpn)) {
+                        const returnToGallery = window.launchErrorReturnToGallery
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
-                        sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")
-                        if(window.launchErrorVpn)settings.openSection(6)
+                        if(returnToGallery && !window.launchErrorVpn) {
+                            window.galleryLaunchPending = true
+                            if(actionDispatcher.dispatch({type:"launch-app",appId:"app-store"},"all-apps"))
+                                allApps.open = false
+                            else
+                                window.galleryLaunchPending = false
+                        } else {
+                            sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")
+                            if(window.launchErrorVpn)settings.openSection(6)
+                        }
+                        window.launchErrorReturnToGallery = false
                     } else if (!window.launchErrorVpn && command === inputManager.navigateLeft && window.launchErrorAppId.length && appCatalog.isInstalled(window.launchErrorAppId)) {
                         appCatalog.uninstall(window.launchErrorAppId)
                         window.launchErrorText = ""
@@ -544,6 +608,11 @@ Window {
                 appCatalog.markFailed(appId, reason)
             window.launchErrorAppId = appId
             window.launchErrorText = reason
+            if (window.galleryLaunchPending) {
+                window.galleryLaunchPending = false
+                window.launchErrorReturnToGallery = true
+                allApps.resumeAfterApp()
+            }
         }
     }
     Connections {
@@ -556,12 +625,17 @@ Window {
     }
     Connections {
         target: actionDispatcher
-        function onDrawerRequested() { commandCenter.themeOrigin = pageSurface.open ? pageSurface.activeId : ""; commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
+        function onAllAppsRequested(originId) {
+            commandCenter.open = false
+            allApps.showForOrigin(originId)
+        }
+        function onSearchRequested(originId) { window.openSearchFromPage() }
         function onGuideRequested(origin,presentation,focusChannelId){window.guideSearchReturn=window.pendingGuideSearchReturn;commandCenter.open=false;if((presentation.guideSurface || homeLayout.studioOptions.guide.surface)!=="overlay")kodiLibrary.open=false;tvGuide.showFocused(origin,presentation,focusChannelId)}
         function onRestoreFocusRequested(originId) {
             if(tvGuide.open)return
             if (kodiLibrary.returnToSearchAfterPlayback) return
-            if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
+            if(originId==="all-apps") {galleryLaunchPending=false;allApps.resumeAfterApp()}
+            else if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
         }
         function onPageRequested(id,originId) {commandCenter.open=false;if(id)pageSurface.showPage(id,originId,false);else{sessionManager.goHome();pageSurface.closeAll();home.restoreFocus(originId)}}
         function onRejected(reason) { window.launchErrorAppId = ""; window.launchErrorText = reason }

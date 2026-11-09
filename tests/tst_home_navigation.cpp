@@ -51,6 +51,7 @@ private slots:
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
+    void allAppsGalleryUsesLocalFilterAndRestoresOrigin();
     void searchHeaderSwitchRemoteFocusAndStableResults();
     void searchPreferenceProfileIsolationAndWriteFailure();
     void appSuppliedIconsUseManagedArtwork();
@@ -65,6 +66,48 @@ private slots:
     void studioNestedGroupCanvasAndRemoteScope();
     void studioCatalogAndContextualInspector();
 };
+
+void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
+{
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(APP_GALLERY_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    const QVariantList apps{
+        QVariantMap{{"id","alpha"},{"name","Alpha"},{"section","Apps"},{"type","web"},{"state","ready"},{"symbol","A"}},
+        QVariantMap{{"id","beta"},{"name","Beta"},{"section","Tools"},{"type","desktop"},{"state","needs-setup"},{"symbol","B"}}
+    };
+    std::unique_ptr<QObject> gallery(component.createWithInitialProperties({
+        {"entries", apps}, {"width", 1280}, {"height", 720}
+    }));
+    QVERIFY2(gallery, qPrintable(component.errorString()));
+    QSignalSpy launch(gallery.get(), SIGNAL(launchRequested(QString)));
+    QSignalSpy closed(gallery.get(), SIGNAL(closeRequested(QString)));
+    QSignalSpy search(gallery.get(), SIGNAL(searchRequested()));
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("home-card"))));
+    QVERIFY(gallery->property("open").toBool());
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QVERIFY(!gallery->property("keyboardOpen").toBool());
+    auto command = [&](int value) {
+        return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
+    };
+    QVERIFY(command(InputManager::NavigateRight));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
+    QVERIFY(command(InputManager::Confirm));
+    QCOMPARE(launch.size(), 1);
+    QCOMPARE(launch.last().at(0).toString(), QString("beta"));
+    gallery->setProperty("filterText", QString("alpha"));
+    QCoreApplication::processEvents();
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QCOMPARE(gallery->property("visibleEntries").toList().size(), 1);
+    QVERIFY(command(InputManager::Search));
+    QCOMPARE(search.size(), 1);
+    QVERIFY(!gallery->property("keyboardOpen").toBool());
+    QVERIFY(command(InputManager::Back));
+    QCOMPARE(closed.size(), 1);
+    QCOMPARE(closed.last().at(0).toString(), QString("home-card"));
+}
 void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);InputManager input;

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "title": "All Apps",
+  "layout": "grid",
+  "columns": 5,
+  "density": "standard",
+  "sort": "name",
+  "showArtwork": true,
+  "showLabels": true,
+  "filterEnabled": true
+}

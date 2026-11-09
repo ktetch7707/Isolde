@@ -24,6 +24,8 @@ class AppCatalog final : public QObject {
     Q_PROPERTY(bool onlineStoreSearch READ onlineStoreSearch NOTIFY onlineStoreSearchChanged)
     Q_PROPERTY(QVariantList providerResults READ providerResults NOTIFY providerResultsChanged)
     Q_PROPERTY(QVariantList allEntries READ allEntries NOTIFY entriesChanged)
+    Q_PROPERTY(QVariantList galleryEntries READ galleryEntries NOTIFY entriesChanged)
+    Q_PROPERTY(QVariantMap galleryPresentation READ galleryPresentation CONSTANT)
     Q_PROPERTY(QString downloadProgress READ downloadProgress NOTIFY downloadProgressChanged)
     Q_PROPERTY(QString storeSourceName READ storeSourceName NOTIFY entriesChanged)
     Q_PROPERTY(QString storeStatus READ storeStatus NOTIFY entriesChanged)
@@ -67,6 +69,8 @@ public:
     Q_INVOKABLE bool completeSetup(const QString &id);
     Q_INVOKABLE bool markFailed(const QString &id, const QString &reason);
     Q_INVOKABLE QVariantList allEntries() const;
+    Q_INVOKABLE QVariantList galleryEntries() const;
+    QVariantMap galleryPresentation() const { return m_galleryPresentation; }
     Q_INVOKABLE bool downloadAndInstall(const QString &storeId);
     Q_INVOKABLE QString addWebApp(const QString &name,const QString &url,const QString &backend);
     [[nodiscard]] QString downloadProgress() const { return m_downloadProgress; }
@@ -124,6 +128,7 @@ private:
     QString m_errorString;
     QString m_legacyInstallRoot;
     QVariantMap m_storeOptions;
+    QVariantMap m_galleryPresentation;
     QProcess m_androidProcess;
     QString m_operationId;
     QString m_operation;

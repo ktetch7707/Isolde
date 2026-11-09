@@ -959,7 +959,14 @@ void ComponentTests::dispatchesValidatedActionsAndOrigins()
         QSignalSpy rejected(&dispatcher, &ActionDispatcher::rejected), focus(&dispatcher, &ActionDispatcher::restoreFocusRequested);
         QSignalSpy library(&dispatcher, &ActionDispatcher::libraryRequested), settings(&dispatcher, &ActionDispatcher::settingsRequested);
         QSignalSpy drawer(&dispatcher, &ActionDispatcher::drawerRequested);
+        QSignalSpy allApps(&dispatcher, &ActionDispatcher::allAppsRequested);
+        QSignalSpy search(&dispatcher, &ActionDispatcher::searchRequested);
         QVERIFY(dispatcher.dispatch({{"type","app-drawer"}},"more-apps")); QCOMPARE(drawer.size(),1);
+        QCOMPARE(allApps.size(),1); QCOMPARE(allApps.last().at(0).toString(),QString("more-apps"));
+        QVERIFY(dispatcher.dispatch({{"type","open-apps"}},"apps-card"));
+        QCOMPARE(allApps.size(),2); QCOMPARE(allApps.last().at(0).toString(),QString("apps-card"));
+        QVERIFY(dispatcher.dispatch({{"type","open-search"}},"search-card"));
+        QCOMPARE(search.size(),1); QCOMPARE(search.last().at(0).toString(),QString("search-card"));
         QVERIFY(!dispatcher.dispatch({{"type", "shell"}, {"target", "bad"}}));
         QVERIFY(!dispatcher.dispatch({{"type", "launch-app"}, {"appId", "missing"}}));
         QVERIFY(!dispatcher.dispatch({{"type", "open-folder"}, {"target", "/media/movies"}, {"openWith", "settings"}}));
