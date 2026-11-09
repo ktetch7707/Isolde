@@ -4,6 +4,7 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 spec=importlib.util.spec_from_file_location("portable_game_installer",Path(__file__).parents[1]/"tools/portable-game-installer.py")
@@ -46,6 +47,16 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.assertFalse(installed.exists())
         self.assertFalse(installed.with_name(installed.name+".staging").exists())
         self.assertFalse(installed.with_name(installed.name+".staging-source").exists())
+
+    def test_write_failure_removes_unpublished_staging_data(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        with mock.patch.object(installer.os,"replace",side_effect=OSError("simulated publication failure")):
+            with self.assertRaisesRegex(OSError,"publication failure"):
+                installer.install(self.archive,destination)
+        self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name(destination.name+".staging").exists())
+        self.assertFalse(destination.with_name(destination.name+".staging-source").exists())
 
     def test_rejects_traversal_symlinks_duplicates_non_elf_and_bad_manifest(self):
         self.package(extra=[("../escape",b"unsafe")])

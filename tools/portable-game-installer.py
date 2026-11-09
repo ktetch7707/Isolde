@@ -155,11 +155,27 @@ def install(source, destination, expected_sha256=None):
                     os.fsync(output.fileno())
                 if mode:target.chmod(0o700)
         entry = stage.joinpath(*PurePosixPath(metadata["entrypoint"]).parts)
+        if (entry.is_symlink() or not entry.is_file()
+                or entry.resolve(strict=True) != entry.absolute()
+                or entry.stat().st_size != archive.getinfo(metadata["entrypoint"]).file_size):
+            raise ValueError("Installed entry point failed destination verification.")
         entry.chmod(0o700)
+        with entry.open("rb") as installed_entry:
+            if installed_entry.read(20)[:4] != b"\x7fELF":
+                raise ValueError("Installed entry point failed ELF verification.")
         marker = stage / ".isolde-install.json"
-        marker.write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
+        with marker.open("w",encoding="utf-8") as marker_file:
+            marker_file.write(json.dumps(metadata, ensure_ascii=False))
+            marker_file.flush();os.fsync(marker_file.fileno())
         os.chmod(marker, 0o600)
+        for directory in sorted((path for path in stage.rglob("*") if path.is_dir()),key=lambda path:len(path.parts),reverse=True)+[stage]:
+            descriptor=os.open(directory,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+            try:os.fsync(descriptor)
+            finally:os.close(descriptor)
         os.replace(stage, destination)
+        descriptor=os.open(destination.parent,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
+        try:os.fsync(descriptor)
+        finally:os.close(descriptor)
     except Exception:
         shutil.rmtree(stage, ignore_errors=True)
         raise
