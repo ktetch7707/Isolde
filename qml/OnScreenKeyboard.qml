@@ -133,6 +133,7 @@ Item {
                             color: root.selectedIndex === index ? shell.selectedText : shell.text
                             font.pixelSize: 18 * (modelData === "Shift" ? 0.85 : 1)
                             font.weight: Font.DemiBold
+                            elide: Text.ElideRight
                         }
                     }
                 }
