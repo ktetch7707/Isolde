@@ -8,18 +8,15 @@ Item {
     property bool chooseInput: false
     property bool pendingSwitchConfirmation: true
     property bool selectionPending: false
-    property int artworkInput: 0
-    property string artworkSource: ""
+    property var artworkResolver: null
     property var originRect: null
     readonly property bool motionAllowed: !displaySettings.reduceMotion && captureController.sessionTransition !== "instant"
     readonly property int animationDuration: motionAllowed ? captureController.transitionDuration : 0
     signal returned(string originId)
     signal configureRequested(string originId)
 
-    function openSession(input, origin, artwork, geometry) {
+    function openSession(input, origin, geometry) {
         originId = origin || ""
-        artworkInput = input
-        artworkSource = artwork || ""
         originRect = geometry || null
         chooseInput = input < 1 || input > 8
         pendingSwitchConfirmation = true
@@ -119,7 +116,8 @@ Item {
         anchors.centerIn: parent
         width: Math.min(parent.width * 0.55, 800); height: Math.min(parent.height * 0.55, 500)
         fillMode: Image.PreserveAspectFit; asynchronous: true
-        source: !root.videoReady() && captureController.selectedInput === root.artworkInput ? root.artworkSource : ""
+        source: !root.videoReady() && root.artworkResolver
+            ? root.artworkResolver(captureController.selectedInput, root.originId) : ""
         visible: source.toString() !== ""
     }
     VideoOutput {

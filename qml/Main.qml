@@ -627,6 +627,7 @@ Window {
     CaptureSessionView {
         id: captureSession
         anchors.fill: parent
+        artworkResolver: window.captureFallbackArtwork
         onReturned: originId => { if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId) }
         onConfigureRequested: originId => {
             if (actionDispatcher.dispatch({type: "settings", section: 4}, originId))
@@ -635,14 +636,21 @@ Window {
     }
 
     function captureFallbackArtwork(input, originId) {
-        const items = homeLayout.components
-        for (let i = 0; i < items.length; ++i) {
-            const item = items[i]
-            if (item.id === originId && item.action && item.action.type === "switch-input"
-                    && item.action.input === input && item.customLogo)
-                return homeLayout.resolveArtwork(item.customLogo)
+        const models = pageSurface.open && pageSurface.model ? [pageSurface.model, homeLayout] : [homeLayout]
+        let fallback = ""
+        for (let m = 0; m < models.length; ++m) {
+            const model = models[m], items = model.components
+            for (let i = 0; i < items.length; ++i) {
+                const item = items[i]
+                if (!item.action || item.action.type !== "switch-input"
+                        || item.action.input !== input || !item.customLogo) continue
+                const resolved = model.resolveArtwork(item.customLogo)
+                if (!resolved) continue
+                if (item.id === originId) return resolved
+                if (!fallback) fallback = resolved
+            }
         }
-        return ""
+        return fallback
     }
 
     function captureOriginRect(originId) {
@@ -731,7 +739,7 @@ Window {
         }
         function onCaptureSessionRequested(input, originId) {
             commandCenter.open = false
-            captureSession.openSession(input, originId, window.captureFallbackArtwork(input, originId), window.captureOriginRect(originId))
+            captureSession.openSession(input, originId, window.captureOriginRect(originId))
         }
         function onSettingsRequested(section) { if (section < 0) settings.inPage = false; else settings.openSection(section) }
     }

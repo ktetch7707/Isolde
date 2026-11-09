@@ -258,15 +258,23 @@ test("capture session appearance choices are staged and cancel restores saved ch
 
 test("capture fallback art belongs only to the matching HDMI shortcut", () => {
     const scope = vm.createContext({
+        pageSurface: {open: false},
         homeLayout: {
-            components: [{id: "tile", action: {type: "switch-input", input: 2}, customLogo: "artwork/a.png"}],
+            components: [{id: "tile", action: {type: "switch-input", input: 2}, customLogo: "artwork/a.png"},
+                {id: "other", action: {type: "switch-input", input: 3}, customLogo: "artwork/b.png"}],
             resolveArtwork: asset => "managed:" + asset,
         },
     });
     method("Main.qml", "captureFallbackArtwork", scope);
     assert.equal(scope.captureFallbackArtwork(2, "tile"), "managed:artwork/a.png");
-    assert.equal(scope.captureFallbackArtwork(3, "tile"), "");
-    assert.equal(scope.captureFallbackArtwork(2, "other"), "");
+    assert.equal(scope.captureFallbackArtwork(3, "tile"), "managed:artwork/b.png");
+    assert.equal(scope.captureFallbackArtwork(4, "tile"), "");
+    scope.pageSurface = {open: true, model: {
+        components: [{id: "page", action: {type: "switch-input", input: 2}, customLogo: "artwork/page.png"}],
+        resolveArtwork: asset => "page:" + asset,
+    }};
+    assert.equal(scope.captureFallbackArtwork(2, "page"), "page:artwork/page.png");
+    assert.equal(scope.captureFallbackArtwork(2, "tile"), "managed:artwork/a.png");
 });
 
 test("capture expand uses the originating home or page rectangle when available", () => {
