@@ -1,17 +1,49 @@
 #include "media/CaptureController.h"
 #include "media/AudioCaptureAdapter.h"
+#include "media/VideoCaptureAdapter.h"
+#include <QMediaCaptureSession>
 #include <QtTest>
 
 class FakeAudioAdapter final : public AudioCaptureAdapter {
 public:
     QVariantList available;
     int stops = 0;
+    QString current;
     QVariantList devices() const override { return available; }
     bool monitoringSupported() const override { return true; }
     QString name() const override { return "fixture audio"; }
-    bool configure(QMediaCaptureSession *, const QString &) override { return true; }
+    bool configure(QMediaCaptureSession *, const QString &id) override {
+        current = id;
+        if (id.isEmpty()) return true;
+        for (const auto &entry : available)
+            if (entry.toMap().value("id").toString() == id) return true;
+        return false;
+    }
     void stop(QMediaCaptureSession *) override { ++stops; }
     void publish() { emit devicesChanged(); }
+};
+
+class FakeVideoAdapter final : public VideoCaptureAdapter {
+public:
+    QVariantList available;
+    QVariantList formatList;
+    QMediaCaptureSession session;
+    int starts = 0;
+    int stops = 0;
+    bool failStart = false;
+    QObject *output = nullptr;
+    QVariantList devices() const override { return available; }
+    QVariantList formats(const QString &id) const override {
+        return id == "fixture-video" && !available.isEmpty() ? formatList : QVariantList{};
+    }
+    QString name() const override { return "fixture video"; }
+    void setOutput(QObject *value) override { output = value; }
+    bool start(const QString &, const QString &) override { ++starts; return !failStart; }
+    void stop() override { ++stops; }
+    QMediaCaptureSession *audioSession() override { return &session; }
+    void publish() { emit devicesChanged(); }
+    void frame() { emit frameReceived(); }
+    void fail() { emit errorOccurred("fixture failure"); }
 };
 
 class CaptureTests final : public QObject {
@@ -21,6 +53,7 @@ private slots:
     void rejectsUnsafeOrAmbiguousCommands();
     void validatesInputLabels();
     void injectedAudioDiscoveryAndHotplug();
+    void injectablePreviewLifecycle();
 };
 
 void CaptureTests::encodesSwitchCommands()
@@ -78,6 +111,67 @@ void CaptureTests::injectedAudioDiscoveryAndHotplug()
         controller.stopPreview();
         QVERIFY(audio.stops > 0);
     }
+}
+
+void CaptureTests::injectablePreviewLifecycle()
+{
+    FakeVideoAdapter video;
+    FakeAudioAdapter audio;
+    video.available = {QVariantMap{{"id", "fixture-video"}, {"name", "Fixture video"}}};
+    video.formatList = {QVariantMap{{"key", "fixture-format"}, {"name", "Fixture format"}}};
+    audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
+    CaptureController controller(&video, &audio, nullptr);
+    const auto savedVideo = controller.captureDeviceId();
+    const auto savedAudio = controller.audioDeviceId();
+    QObject surface;
+    controller.setVideoOutput(&surface);
+    QCOMPARE(controller.capabilities().value("captureAdapter").toString(), QString("fixture video"));
+    QVERIFY(!controller.startPreviewFor("fixture-video", "invalid-format", "fixture-a"));
+    QCOMPARE(video.starts, 0);
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "missing"));
+    QCOMPARE(video.starts, 0);
+    QVERIFY(controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.current, QString("fixture-a"));
+    QCOMPARE(video.starts, 1);
+    QCOMPARE(controller.captureDeviceId(), savedVideo);
+    QCOMPARE(controller.audioDeviceId(), savedAudio);
+    QCOMPARE(controller.state(), QString("awaiting-frames"));
+    video.frame();
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "missing"));
+    QVERIFY(controller.previewActive());
+    QCOMPARE(video.starts, 1);
+    audio.available.clear();
+    audio.publish();
+    QCOMPARE(controller.state(), QString("audio-missing"));
+    audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
+    audio.publish();
+    QCOMPARE(audio.current, QString("fixture-a"));
+    video.frame();
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    controller.stopPreview();
+    QVERIFY(!controller.previewActive());
+    video.frame();
+    QVERIFY(controller.state() != "receiving-frames");
+    QVERIFY(controller.startPreviewFor("fixture-video", "", ""));
+    video.fail();
+    QVERIFY(!controller.previewActive());
+    QCOMPARE(controller.state(), QString("error"));
+    QVERIFY(controller.startPreviewFor("fixture-video", "", ""));
+    video.available.clear();
+    video.publish();
+    QVERIFY(!controller.previewActive());
+    QCOMPARE(controller.state(), QString("device-missing"));
+    video.available = {QVariantMap{{"id", "fixture-video"}, {"name", "Fixture video"}}};
+    video.publish();
+    video.failStart = true;
+    QVERIFY(!controller.startPreviewFor("fixture-video", "", ""));
+    QVERIFY(!controller.previewActive());
+    video.failStart = false;
+    QVERIFY(controller.startPreviewFor("fixture-video", "", ""));
+    controller.setVideoOutput(nullptr);
+    QVERIFY(!controller.previewActive());
+    QVERIFY(video.output == nullptr);
 }
 
 QTEST_GUILESS_MAIN(CaptureTests)

@@ -1,10 +1,6 @@
 #pragma once
 
-#include <QCamera>
-#include <QCameraDevice>
 #include <QElapsedTimer>
-#include <QMediaCaptureSession>
-#include <QMediaDevices>
 #include <QMap>
 #include <QObject>
 #include <QPointer>
@@ -12,10 +8,10 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QVideoSink>
 #include "SerialCommandWriter.h"
 
 class AudioCaptureAdapter;
+class VideoCaptureAdapter;
 
 class CaptureController final : public QObject {
     Q_OBJECT
@@ -48,6 +44,7 @@ public:
     explicit CaptureController(QObject *parent = nullptr);
     // Injected adapters must outlive the controller.
     CaptureController(AudioCaptureAdapter *audioAdapter, QObject *parent);
+    CaptureController(VideoCaptureAdapter *videoAdapter, AudioCaptureAdapter *audioAdapter, QObject *parent);
     ~CaptureController() override;
 
     QVariantList videoDevices() const;
@@ -108,16 +105,13 @@ private:
     void updateStatusForConfiguration();
     bool configureAudio();
     QString inputLabel(int input) const;
-    QString formatKey(const QCameraFormat &format) const;
+    bool hasVideoFormat(const QString &deviceId, const QString &key) const;
     void setStatus(const QString &state, const QString &message);
     void serialWriteFailed(const QString &message);
 
-    QMediaDevices m_mediaDevices;
-    QMediaCaptureSession m_captureSession;
-    QCamera *m_camera = nullptr;
+    VideoCaptureAdapter *m_videoAdapter = nullptr;
     AudioCaptureAdapter *m_audioAdapter = nullptr;
     QPointer<QObject> m_videoOutput;
-    QMetaObject::Connection m_frameConnection;
     QMetaObject::Connection m_outputDestroyedConnection;
     QSerialPort m_serial;
     SerialCommandWriter m_serialWriter;
@@ -127,7 +121,7 @@ private:
     QElapsedTimer m_lastFrameClock;
     QElapsedTimer m_switchClock;
     QElapsedTimer m_frameRateClock;
-    QList<QCameraDevice> m_videoDevices;
+    QVariantList m_videoDevices;
     QVariantList m_audioDevices;
     QStringList m_serialPortNames;
     QString m_captureDeviceId;

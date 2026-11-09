@@ -1,12 +1,10 @@
 #include "CaptureController.h"
 #include "QtAudioCaptureAdapter.h"
+#include "QtVideoCaptureAdapter.h"
 
-#include <QCameraFormat>
-#include <QMediaDevices>
 #include <QMetaType>
 #include <QSerialPortInfo>
 #include <QSettings>
-#include <QVideoFrame>
 #include <QtGlobal>
 #include <cmath>
 #include <limits>
@@ -15,7 +13,7 @@ namespace {
 constexpr int MaxCommandBytes = 128;
 const QList<int> SupportedBaudRates{9600, 19200, 38400, 57600, 115200};
 
-bool hasAudioDevice(const QVariantList &devices, const QString &id)
+bool hasDevice(const QVariantList &devices, const QString &id)
 {
     if (id.isEmpty()) return true;
     for (const auto &device : devices)
@@ -29,10 +27,14 @@ QSettings captureSettings()
 }
 }
 
-CaptureController::CaptureController(QObject *parent) : CaptureController(nullptr, parent) {}
+CaptureController::CaptureController(QObject *parent) : CaptureController(nullptr, nullptr, parent) {}
 
-CaptureController::CaptureController(AudioCaptureAdapter *audioAdapter, QObject *parent) : QObject(parent),
-    m_camera(new QCamera(this)), m_audioAdapter(audioAdapter ? audioAdapter : new QtAudioCaptureAdapter(this))
+CaptureController::CaptureController(AudioCaptureAdapter *audioAdapter, QObject *parent)
+    : CaptureController(nullptr, audioAdapter, parent) {}
+
+CaptureController::CaptureController(VideoCaptureAdapter *videoAdapter, AudioCaptureAdapter *audioAdapter, QObject *parent)
+    : QObject(parent), m_videoAdapter(videoAdapter ? videoAdapter : new QtVideoCaptureAdapter(this)),
+      m_audioAdapter(audioAdapter ? audioAdapter : new QtAudioCaptureAdapter(this))
 {
     loadSettings();
     m_frameWatchdog.setInterval(1000);
@@ -53,16 +55,39 @@ CaptureController::CaptureController(AudioCaptureAdapter *audioAdapter, QObject 
         emit changed();
     });
     m_serialDevicePoll.start();
-    connect(&m_mediaDevices, &QMediaDevices::videoInputsChanged, this, &CaptureController::refreshDevices);
+    connect(m_videoAdapter, &VideoCaptureAdapter::devicesChanged, this, &CaptureController::refreshDevices);
     connect(m_audioAdapter, &AudioCaptureAdapter::devicesChanged, this, &CaptureController::refreshDevices);
     connect(m_audioAdapter, &AudioCaptureAdapter::errorOccurred, this, [this](const QString &message) {
         if (m_previewRequested) setStatus("audio-error", "Capture audio error: " + message);
     });
-    connect(m_camera, &QCamera::errorOccurred, this, [this](QCamera::Error, const QString &message) {
+    connect(m_videoAdapter, &VideoCaptureAdapter::errorOccurred, this, [this](const QString &message) {
         if (m_previewRequested) {
             stopPreview();
             setStatus("error", "Capture card error: " + message + " Retry preview after checking the device.");
         }
+    });
+    connect(m_videoAdapter, &VideoCaptureAdapter::frameReceived, this, [this] {
+        if (!m_previewRequested) return;
+        m_receivedFrame = true;
+        bool metricsChanged = false;
+        if (m_switchClock.isValid()) {
+            m_firstFrameCallbackLatencyMs = m_switchClock.elapsed();
+            m_switchClock.invalidate();
+            metricsChanged = true;
+        }
+        if (m_lastFrameClock.isValid()) m_maxFrameGapMs = qMax(m_maxFrameGapMs, m_lastFrameClock.elapsed());
+        m_lastFrameClock.restart();
+        if (!m_frameRateClock.isValid()) m_frameRateClock.start();
+        ++m_framesInWindow;
+        if (m_frameRateClock.elapsed() >= 1000) {
+            m_previewFrameRate = m_framesInWindow * 1000.0 / m_frameRateClock.elapsed();
+            m_framesInWindow = 0;
+            m_frameRateClock.restart();
+            metricsChanged = true;
+        }
+        if (m_state != "receiving-frames")
+            setStatus("receiving-frames", "Video frames are arriving. Check that the picture matches the selected HDMI source.");
+        else if (metricsChanged) emit changed();
     });
     connect(&m_serialWriter, &SerialCommandWriter::completed, this, [this](qint64 elapsed) {
         m_serial.close();
@@ -144,19 +169,7 @@ bool CaptureController::saveValues(const QMap<QString, QVariant> &values)
 
 QVariantList CaptureController::videoDevices() const
 {
-    QVariantList result;
-    for (const auto &device : m_videoDevices) {
-        QStringList formats;
-        for (const auto &format : device.videoFormats()) {
-            const auto size = format.resolution();
-            formats.append(QString("%1 × %2, %3–%4 fps").arg(size.width()).arg(size.height())
-                .arg(format.minFrameRate(), 0, 'f', 0).arg(format.maxFrameRate(), 0, 'f', 0));
-        }
-        formats.removeDuplicates();
-        result.append(QVariantMap{{"id", QString::fromLatin1(device.id())}, {"name", device.description()},
-            {"formats", formats.mid(0, 8).join(" · ")}});
-    }
-    return result;
+    return m_videoDevices;
 }
 
 QVariantList CaptureController::videoFormats() const
@@ -166,20 +179,11 @@ QVariantList CaptureController::videoFormats() const
 
 QVariantList CaptureController::videoFormatsFor(const QString &deviceId) const
 {
-    QVariantList result;
-    for (const auto &device : m_videoDevices) {
-        if (QString::fromLatin1(device.id()) != deviceId) continue;
-        for (const auto &format : device.videoFormats()) {
-            const auto size = format.resolution();
-            const auto key = formatKey(format);
-            const auto label = QString("%1 × %2 · %3–%4 fps · format %5")
-                .arg(size.width()).arg(size.height()).arg(format.minFrameRate(), 0, 'f', 0)
-                .arg(format.maxFrameRate(), 0, 'f', 0).arg(static_cast<int>(format.pixelFormat()));
-            bool duplicate = false;
-            for (const auto &entry : result) duplicate |= entry.toMap().value("key").toString() == key;
-            if (!duplicate) result.append(QVariantMap{{"key", key}, {"name", label}, {"selected", key == m_videoFormatKey}});
-        }
-        break;
+    QVariantList result = m_videoAdapter->formats(deviceId);
+    for (auto &entry : result) {
+        auto value = entry.toMap();
+        value.insert("selected", value.value("key").toString() == m_videoFormatKey);
+        entry = value;
     }
     return result;
 }
@@ -191,15 +195,13 @@ QVariantList CaptureController::audioDevices() const
 
 QVariantMap CaptureController::capabilities() const
 {
-    bool captureConnected = false;
-    for (const auto &device : m_videoDevices)
-        captureConnected |= QString::fromLatin1(device.id()) == m_captureDeviceId;
-    const bool audioConnected = !m_audioDeviceId.isEmpty() && hasAudioDevice(m_audioDevices, m_audioDeviceId);
-    const bool previewAudioConnected = !m_previewAudioId.isEmpty() && hasAudioDevice(m_audioDevices, m_previewAudioId);
+    const bool captureConnected = !m_captureDeviceId.isEmpty() && hasDevice(m_videoDevices, m_captureDeviceId);
+    const bool audioConnected = !m_audioDeviceId.isEmpty() && hasDevice(m_audioDevices, m_audioDeviceId);
+    const bool previewAudioConnected = !m_previewAudioId.isEmpty() && hasDevice(m_audioDevices, m_previewAudioId);
     const bool serialConnected = !m_serialPortName.isEmpty() && m_serialPortNames.contains(m_serialPortName);
     const bool audioMonitoringSupported = m_audioAdapter->monitoringSupported();
     return {
-        {"captureAdapter", "Qt Multimedia"},
+        {"captureAdapter", m_videoAdapter->name()},
         {"captureConnected", captureConnected},
         {"previewSurfaceAvailable", !m_videoOutput.isNull()},
         {"audioAdapter", m_audioAdapter->name()},
@@ -232,28 +234,27 @@ QString CaptureController::inputLabel(int input) const
     return m_inputLabels.value(input, QString("HDMI %1").arg(input));
 }
 
-QString CaptureController::formatKey(const QCameraFormat &format) const
+bool CaptureController::hasVideoFormat(const QString &deviceId, const QString &key) const
 {
-    const auto size = format.resolution();
-    return QString("%1x%2@%3-%4#%5").arg(size.width()).arg(size.height())
-        .arg(format.minFrameRate(), 0, 'f', 2).arg(format.maxFrameRate(), 0, 'f', 2)
-        .arg(static_cast<int>(format.pixelFormat()));
+    if (key.isEmpty()) return true;
+    for (const auto &format : m_videoAdapter->formats(deviceId))
+        if (format.toMap().value("key").toString() == key) return true;
+    return false;
 }
 
 void CaptureController::refreshDevices()
 {
     const auto audioId = m_previewRequested ? m_previewAudioId : m_audioDeviceId;
-    const bool selectedAudioWasPresent = hasAudioDevice(m_audioDevices, audioId);
-    m_videoDevices = QMediaDevices::videoInputs();
+    const bool selectedAudioWasPresent = hasDevice(m_audioDevices, audioId);
+    m_videoDevices = m_videoAdapter->devices();
     m_audioDevices = m_audioAdapter->devices();
     m_serialPortNames.clear();
     for (const auto &port : QSerialPortInfo::availablePorts()) m_serialPortNames.append(port.portName());
-    const bool selectedAudioIsPresent = hasAudioDevice(m_audioDevices, audioId);
+    const bool selectedAudioIsPresent = hasDevice(m_audioDevices, audioId);
     if (m_previewRequested && selectedAudioWasPresent != selectedAudioIsPresent)
         configureAudio();
     if (m_previewRequested) {
-        bool present = false;
-        for (const auto &device : m_videoDevices) present |= QString::fromLatin1(device.id()) == m_previewCaptureId;
+        const bool present = hasDevice(m_videoDevices, m_previewCaptureId);
         if (!present) {
             stopPreview();
             setStatus("device-missing", "Capture card disconnected. Reconnect it, then choose it again.");
@@ -269,13 +270,9 @@ void CaptureController::updateStatusForConfiguration()
     // Configuration changes must not turn a live signal state into "ready":
     // the session uses that state to gate source confirmation.
     if (m_previewRequested) return;
-    bool videoPresent = m_captureDeviceId.isEmpty();
-    bool formatPresent = m_videoFormatKey.isEmpty();
-    const bool audioPresent = hasAudioDevice(m_audioDevices, m_audioDeviceId);
-    for (const auto &device : m_videoDevices) if (QString::fromLatin1(device.id()) == m_captureDeviceId) {
-        videoPresent = true;
-        for (const auto &format : device.videoFormats()) formatPresent |= formatKey(format) == m_videoFormatKey;
-    }
+    const bool videoPresent = hasDevice(m_videoDevices, m_captureDeviceId);
+    const bool formatPresent = hasVideoFormat(m_captureDeviceId, m_videoFormatKey);
+    const bool audioPresent = hasDevice(m_audioDevices, m_audioDeviceId);
     if (m_captureDeviceId.isEmpty()) setStatus("needs-capture-card", "Connect and choose the HDMI capture card.");
     else if (!videoPresent) setStatus("device-missing", "The saved capture card is not connected. Reconnect it or choose another card.");
     else if (!formatPresent) setStatus("format-missing", "The saved video format is no longer supported. Choose another format or use the card default.");
@@ -293,39 +290,13 @@ void CaptureController::updateStatusForConfiguration()
 void CaptureController::setVideoOutput(QObject *output)
 {
     if (m_videoOutput == output) return;
-    if (m_frameConnection) disconnect(m_frameConnection);
     if (m_outputDestroyedConnection) disconnect(m_outputDestroyedConnection);
     m_videoOutput = output;
-    m_captureSession.setVideoOutput(output);
+    m_videoAdapter->setOutput(output);
     if (output) {
-        auto *sink = m_captureSession.videoSink();
-        m_frameConnection = connect(sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
-            if (!m_previewRequested || !frame.isValid()) return;
-            m_receivedFrame = true;
-            bool metricsChanged = false;
-            if (m_switchClock.isValid()) {
-                m_firstFrameCallbackLatencyMs = m_switchClock.elapsed();
-                m_switchClock.invalidate();
-                metricsChanged = true;
-            }
-            if (m_lastFrameClock.isValid())
-                m_maxFrameGapMs = qMax(m_maxFrameGapMs, m_lastFrameClock.elapsed());
-            m_lastFrameClock.restart();
-            if (!m_frameRateClock.isValid()) m_frameRateClock.start();
-            ++m_framesInWindow;
-            if (m_frameRateClock.elapsed() >= 1000) {
-                m_previewFrameRate = m_framesInWindow * 1000.0 / m_frameRateClock.elapsed();
-                m_framesInWindow = 0;
-                m_frameRateClock.restart();
-                metricsChanged = true;
-            }
-            if (m_state != "receiving-frames")
-                setStatus("receiving-frames", "Video frames are arriving. Check that the picture matches the selected HDMI source.");
-            else if (metricsChanged) emit changed();
-        });
         m_outputDestroyedConnection = connect(output, &QObject::destroyed, this, [this] {
             m_videoOutput = nullptr;
-            m_captureSession.setVideoOutput(nullptr);
+            m_videoAdapter->setOutput(nullptr);
             stopPreview();
         });
     } else stopPreview();
@@ -333,13 +304,10 @@ void CaptureController::setVideoOutput(QObject *output)
 
 bool CaptureController::setCaptureDevice(const QString &id)
 {
-    bool found = id.isEmpty();
-    for (const auto &device : m_videoDevices) found |= QString::fromLatin1(device.id()) == id;
+    const bool found = hasDevice(m_videoDevices, id);
     if (!found) return false;
     QString nextFormat = m_videoFormatKey;
-    bool formatAvailable = false;
-    for (const auto &device : m_videoDevices) if (QString::fromLatin1(device.id()) == id)
-        for (const auto &format : device.videoFormats()) formatAvailable |= formatKey(format) == nextFormat;
+    const bool formatAvailable = hasVideoFormat(id, nextFormat);
     if (!formatAvailable) nextFormat.clear();
     if (!saveValues({{"capture/device", id}, {"capture/format", nextFormat}})) return false;
     stopPreview();
@@ -352,23 +320,19 @@ bool CaptureController::setCaptureDevice(const QString &id)
 
 bool CaptureController::setVideoFormat(const QString &key)
 {
-    bool found = key.isEmpty();
-    QCameraFormat selected;
-    for (const auto &device : m_videoDevices) if (QString::fromLatin1(device.id()) == m_captureDeviceId)
-        for (const auto &format : device.videoFormats()) if (formatKey(format) == key) { found = true; selected = format; }
+    const bool found = hasVideoFormat(m_captureDeviceId, key);
     if (!found || (key.isEmpty() && m_captureDeviceId.isEmpty())) return false;
     if (!saveValue("capture/format", key)) return false;
     const bool restart = m_previewRequested;
     if (restart) stopPreview();
     m_videoFormatKey = key;
-    if (!key.isEmpty()) m_camera->setCameraFormat(selected);
     emit changed();
     return !restart || startPreview();
 }
 
 bool CaptureController::setAudioDevice(const QString &id)
 {
-    const bool found = hasAudioDevice(m_audioDevices, id);
+    const bool found = hasDevice(m_audioDevices, id);
     if (!found) return false;
     if (!saveValue("capture/audio", id)) return false;
     m_audioDeviceId = id;
@@ -532,16 +496,10 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
         && exactInt(configuration.value("transitionDuration"), &duration);
     const auto labels = configuration.value("inputLabels").toMap();
 
-    bool captureFound = captureId.isEmpty();
-    bool formatFound = format.isEmpty();
-    const bool audioFound = hasAudioDevice(m_audioDevices, audioId);
+    const bool captureFound = hasDevice(m_videoDevices, captureId);
+    const bool formatFound = hasVideoFormat(captureId, format);
+    const bool audioFound = hasDevice(m_audioDevices, audioId);
     bool portFound = portName.isEmpty();
-    for (const auto &device : m_videoDevices) {
-        if (QString::fromLatin1(device.id()) != captureId) continue;
-        captureFound = true;
-        for (const auto &candidate : device.videoFormats())
-            formatFound |= formatKey(candidate) == format;
-    }
     portFound |= m_serialPortNames.contains(portName);
     QString commandError;
     const bool commandValid = commandTemplate.isEmpty()
@@ -614,12 +572,8 @@ bool CaptureController::canSwitchInput(int input) const
 {
     if (input < 1 || input > 8 || m_captureDeviceId.isEmpty() || m_serialPortName.isEmpty()
         || !m_serialPortNames.contains(m_serialPortName)) return false;
-    bool videoPresent = false;
-    bool formatPresent = m_videoFormatKey.isEmpty();
-    for (const auto &device : m_videoDevices) if (QString::fromLatin1(device.id()) == m_captureDeviceId) {
-        videoPresent = true;
-        for (const auto &format : device.videoFormats()) formatPresent |= formatKey(format) == m_videoFormatKey;
-    }
+    const bool videoPresent = hasDevice(m_videoDevices, m_captureDeviceId);
+    const bool formatPresent = hasVideoFormat(m_captureDeviceId, m_videoFormatKey);
     if (!videoPresent || !formatPresent) return false;
     const auto command = commandForInput(m_commandTemplate, input);
     return !command.isEmpty() && m_baudRate > 0;
@@ -627,7 +581,7 @@ bool CaptureController::canSwitchInput(int input) const
 
 bool CaptureController::configureAudio()
 {
-    if (!m_audioAdapter->configure(&m_captureSession, m_previewAudioId)) {
+    if (!m_audioAdapter->configure(m_videoAdapter->audioSession(), m_previewAudioId)) {
         setStatus("audio-missing", "The selected capture audio input is no longer available.");
         return false;
     }
@@ -654,28 +608,15 @@ bool CaptureController::startPreviewFor(const QString &captureId, const QString 
         setStatus("needs-preview-surface", "Open the preview screen before starting capture.");
         return false;
     }
-    QCameraDevice selected;
-    for (const auto &device : m_videoDevices)
-        if (QString::fromLatin1(device.id()) == captureId) selected = device;
-    if (selected.isNull()) {
+    if (!hasDevice(m_videoDevices, captureId)) {
         setStatus("device-missing", "Capture card is not connected. Reconnect it, then refresh devices.");
         return false;
     }
-    QCameraFormat selectedFormat;
-    if (!formatKeyValue.isEmpty()) {
-        bool formatFound = false;
-        for (const auto &format : selected.videoFormats())
-            if (formatKey(format) == formatKeyValue) {
-                selectedFormat = format;
-                formatFound = true;
-                break;
-            }
-        if (!formatFound) {
-            setStatus("format-missing", "The saved video format is no longer supported. Choose another format or use the card default.");
-            return false;
-        }
+    if (!hasVideoFormat(captureId, formatKeyValue)) {
+        setStatus("format-missing", "The saved video format is no longer supported. Choose another format or use the card default.");
+        return false;
     }
-    const bool audioFound = hasAudioDevice(m_audioDevices, audioId);
+    const bool audioFound = hasDevice(m_audioDevices, audioId);
     if (!audioFound) {
         setStatus("audio-missing", "The selected capture audio input is no longer available.");
         return false;
@@ -686,9 +627,6 @@ bool CaptureController::startPreviewFor(const QString &captureId, const QString 
     m_previewCaptureId = captureId;
     m_previewFormatKey = formatKeyValue;
     m_previewAudioId = audioId;
-    m_camera->setCameraDevice(selected);
-    m_camera->setCameraFormat(selectedFormat);
-    m_captureSession.setCamera(m_camera);
     if (!configureAudio()) {
         stopPreview();
         setStatus("audio-missing", "The selected capture audio input is no longer available.");
@@ -707,7 +645,11 @@ bool CaptureController::startPreviewFor(const QString &captureId, const QString 
     if (!audioId.isEmpty() && !m_audioAdapter->monitoringSupported())
         startupStatus += " Audio monitoring is unavailable; video preview only on this system.";
     setStatus("awaiting-frames", startupStatus);
-    m_camera->start();
+    if (!m_videoAdapter->start(captureId, formatKeyValue)) {
+        stopPreview();
+        setStatus("device-missing", "The capture card or video format is no longer available.");
+        return false;
+    }
     return m_previewRequested;
 }
 
@@ -719,8 +661,8 @@ void CaptureController::stopPreview()
     m_switchClock.invalidate();
     m_frameRateClock.invalidate();
     m_framesInWindow = 0;
-    if (m_camera->isActive()) m_camera->stop();
-    m_audioAdapter->stop(&m_captureSession);
+    m_videoAdapter->stop();
+    m_audioAdapter->stop(m_videoAdapter->audioSession());
     m_previewCaptureId.clear();
     m_previewFormatKey.clear();
     m_previewAudioId.clear();
