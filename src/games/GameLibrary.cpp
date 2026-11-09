@@ -136,8 +136,8 @@ QVariantMap row(const QSqlQuery &query,const QString &artworkDirectory) {
 QString sourceKind(const QString &runtime,const QString &root,const QString &profile) {
     if(runtime=="steam")return "steam-app";
     if(OpticalDiscAdapter::isRootReference(root))return "optical-media";
-    if(ManagedGamePaths::isInstallRoot(profile,root))return "isolde-managed-install";
-    if(!root.isEmpty())return "approved-folder";
+    if(ManagedGamePaths::isInstallRoot(profile,root,false))return "isolde-managed-install";
+    if(!root.isEmpty())return "external-folder";
     return "runtime-entry";
 }
 }
