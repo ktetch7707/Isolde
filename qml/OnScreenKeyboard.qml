@@ -79,10 +79,17 @@ Item {
         border.width: 2
         border.color: shell.focus
 
-        Column {
+        Flickable {
+            id: keyboardFlickable
             anchors.fill: parent
             anchors.margins: 18
-            spacing: 14 * shell.gapScale
+            contentHeight: keyboardContent.height
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            Column {
+                id: keyboardContent
+                width: parent.width
+                spacing: 14 * shell.gapScale
 
             Rectangle {
                 width: parent.width
@@ -164,6 +171,7 @@ Item {
                 color: shell.muted
                 font.pixelSize: 15 * shell.textScale
             }
+        }
         }
     }
 }
