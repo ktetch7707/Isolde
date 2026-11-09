@@ -24,4 +24,6 @@ Not supported by this installer: arbitrary `.exe`/Windows installers, scripts, s
 
 The catalog tools' Windows installer availability view probes only `/usr/bin/wine`, checks its resolved executable and root-owned non-writable ancestry, and never executes it. Missing, unsafe and unverified candidates all remain unsupported. A separately provisioned pinned, verified runtime plus a private-prefix, bounded installer/session adapter and explicit consent are required before advertising this route; system Wine presence alone does not establish support.
 
+The same view offers an optional, read-only Windows PE preflight for a regular file up to 512 MiB in a profile-approved media folder. It checks bounded PE headers and reports architecture and full-file SHA-256 without executing or installing anything. It does not identify a vendor, validate signatures or ownership, prove safety, establish that a PE file is an installer, or enable compatibility installation.
+
 Focused executable validation: `python3 tests/test_portable_game_installer.py`, plus the existing Games provisioning and Steam adapter tests. Native C++/QML integration still requires the repository's Qt/CMake test environment.

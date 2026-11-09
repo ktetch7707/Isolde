@@ -105,6 +105,7 @@ public:
     Q_INVOKABLE bool uninstallManagedGame(const QString &gameId, bool confirmed);
     Q_INVOKABLE QVariantList pendingUninstallRecovery();
     Q_INVOKABLE QVariantMap compatibilityInstallerStatus() const;
+    Q_INVOKABLE bool inspectWindowsInstaller(const QString &source);
     Q_INVOKABLE bool recoverOrphanedUninstall(const QString &installationId, bool confirmed);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
     void invalidate();
