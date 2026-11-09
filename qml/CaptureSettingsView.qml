@@ -28,7 +28,7 @@ Item {
         { name: "Input to test", value: inputName(draft.selectedInput) },
         { name: "Rename this input", value: draft.inputLabels ? draft.inputLabels[String(draft.selectedInput)] : "" },
         { name: "Send test switch", value: "Switch to " + inputName(draft.selectedInput) },
-        { name: "Start video preview", value: captureController.previewActive ? "Preview running" : "Preview only; no switch command" },
+        { name: "Preview staged devices", value: captureController.previewActive ? "Update preview to staged devices" : "Preview only; no switch command" },
         { name: "Stop preview", value: captureController.previewActive ? "Release capture card" : "Already stopped" },
         { name: "Apply capture changes", value: draftDirty ? "Save all staged settings" : "No pending changes" },
         { name: "Cancel capture changes", value: draftDirty ? "Discard staged settings" : "Restore saved settings" },
@@ -160,7 +160,10 @@ Item {
                 type: "capture-switch-input", input: draft.selectedInput
             })
         }
-        else if (selectedIndex === 10) actionDispatcher.dispatchEditorAction({type: "capture-preview-start"})
+        else if (selectedIndex === 10) actionDispatcher.dispatchEditorAction({
+            type: "capture-preview-draft", captureDeviceId: draft.captureDeviceId,
+            videoFormatKey: draft.videoFormatKey, audioDeviceId: draft.audioDeviceId
+        })
         else if (selectedIndex === 11) actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"})
         else if (selectedIndex === 12) applyDraft()
         else if (selectedIndex === 13) cancelDraft()
@@ -237,14 +240,14 @@ Item {
                     anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
                     height: 48; color: "#D2080C14"
                     Text { anchors.centerIn: parent; width: parent.width - 20; horizontalAlignment: Text.AlignHCenter
-                        text: "Preview uses saved settings; apply the draft to use these choices"
+                        text: "Preview shows the last requested devices. Apply saves the draft; choose Preview again after changes."
                         color: "#FFFFFF"; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap
                     }
                 }
                 Text { font.family: shell.fontFamily;
                     anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
                     visible: !captureController.previewActive
-                    text: "Preview is off\n\nChoose Start video preview to test the capture card without sending an RS-232 command."
+                    text: "Preview is off\n\nChoose Preview staged devices to test the capture card without sending an RS-232 command."
                     color: shell.muted; font.pixelSize: 19 * shell.textScale
                 }
             }

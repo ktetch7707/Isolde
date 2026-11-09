@@ -9,6 +9,7 @@ Item {
     property bool pendingSwitchConfirmation: true
     property bool selectionPending: false
     signal returned(string originId)
+    signal configureRequested(string originId)
 
     function openSession(input, origin) {
         originId = origin || ""
@@ -43,6 +44,12 @@ Item {
     }
     function handleCommand(command) {
         if (command === inputManager.back || command === inputManager.home) { closeSession(); return }
+        if (command === inputManager.menu) {
+            const origin = originId
+            closeSession()
+            configureRequested(origin)
+            return
+        }
         if (chooseInput) {
             if (command === inputManager.navigateUp || command === inputManager.navigateLeft)
                 captureController.selectInput((captureController.selectedInput + 6) % 8 + 1)
@@ -102,11 +109,12 @@ Item {
     Rectangle {
         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
         height: 66; color: "#D2080C14"
-        Text { anchors.centerIn: parent; text: root.selectionPending ? "OK Switch to selected input     Back / Home Return"
+        Text { anchors.centerIn: parent; text: (root.selectionPending ? "OK Switch to selected input     Back / Home Return"
             : root.pendingSwitchConfirmation && captureController.switchState === "error" ? "OK Retry switch     ‹ / › choose another input     Back / Home Return"
             : root.pendingSwitchConfirmation && captureController.switchState === "sending" ? "Sending switch command     ‹ / › choose another input     Back / Home Return"
             : root.pendingSwitchConfirmation ? "Check the picture, then OK confirm     ‹ / › choose another input     Back / Home Return"
-            : "‹ / › Choose input     OK Switch     Back / Home Return"; color: "#FFFFFF"; font.pixelSize: 18 }
+            : "‹ / › Choose input     OK Switch     Back / Home Return")
+            + "     Menu Configure"; color: "#FFFFFF"; font.pixelSize: 18 }
     }
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.NoButton }
     Rectangle {

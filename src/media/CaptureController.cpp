@@ -180,8 +180,12 @@ QVariantMap CaptureController::capabilities() const
     for (const auto &device : m_videoDevices)
         captureConnected |= QString::fromLatin1(device.id()) == m_captureDeviceId;
     bool audioConnected = false;
+    bool previewAudioConnected = false;
     for (const auto &device : m_audioDevices)
+    {
         audioConnected |= QString::fromLatin1(device.id()) == m_audioDeviceId;
+        previewAudioConnected |= QString::fromLatin1(device.id()) == m_previewAudioId;
+    }
     const bool serialConnected = !m_serialPortName.isEmpty() && m_serialPortNames.contains(m_serialPortName);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     constexpr bool audioMonitoringSupported = true;
@@ -195,7 +199,7 @@ QVariantMap CaptureController::capabilities() const
         {"audioAdapter", "Qt Multimedia capture-session routing"},
         {"audioInputSelected", audioConnected},
         {"audioMonitoringSupported", audioMonitoringSupported},
-        {"audioMonitoringConfigured", audioMonitoringSupported && m_previewRequested && audioConnected},
+        {"audioMonitoringConfigured", audioMonitoringSupported && m_previewRequested && previewAudioConnected},
         {"serialAdapter", "Qt SerialPort"},
         {"serialConnected", serialConnected},
         {"switchConfigured", canSwitchInput(m_selectedInput)}
@@ -232,21 +236,22 @@ QString CaptureController::formatKey(const QCameraFormat &format) const
 
 void CaptureController::refreshDevices()
 {
-    bool selectedAudioWasPresent = m_audioDeviceId.isEmpty();
+    const auto audioId = m_previewRequested ? m_previewAudioId : m_audioDeviceId;
+    bool selectedAudioWasPresent = audioId.isEmpty();
     for (const auto &device : m_audioDevices)
-        selectedAudioWasPresent |= QString::fromLatin1(device.id()) == m_audioDeviceId;
+        selectedAudioWasPresent |= QString::fromLatin1(device.id()) == audioId;
     m_videoDevices = QMediaDevices::videoInputs();
     m_audioDevices = QMediaDevices::audioInputs();
     m_serialPortNames.clear();
     for (const auto &port : QSerialPortInfo::availablePorts()) m_serialPortNames.append(port.portName());
-    bool selectedAudioIsPresent = m_audioDeviceId.isEmpty();
+    bool selectedAudioIsPresent = audioId.isEmpty();
     for (const auto &device : m_audioDevices)
-        selectedAudioIsPresent |= QString::fromLatin1(device.id()) == m_audioDeviceId;
+        selectedAudioIsPresent |= QString::fromLatin1(device.id()) == audioId;
     if (m_previewRequested && selectedAudioWasPresent != selectedAudioIsPresent)
         configureAudio();
     if (m_previewRequested) {
         bool present = false;
-        for (const auto &device : m_videoDevices) present |= QString::fromLatin1(device.id()) == m_captureDeviceId;
+        for (const auto &device : m_videoDevices) present |= QString::fromLatin1(device.id()) == m_previewCaptureId;
         if (!present) {
             stopPreview();
             setStatus("device-missing", "Capture card disconnected. Reconnect it, then choose it again.");
@@ -368,7 +373,10 @@ bool CaptureController::setAudioDevice(const QString &id)
     if (!found) return false;
     if (!saveValue("capture/audio", id)) return false;
     m_audioDeviceId = id;
-    if (m_previewRequested) configureAudio();
+    if (m_previewRequested) {
+        m_previewAudioId = id;
+        configureAudio();
+    }
     emit changed();
     return true;
 }
@@ -576,9 +584,8 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
                       labels.value(QString::number(input)).toString().trimmed());
     if (!saveValues(values)) return false;
 
-    const bool captureChanged = m_captureDeviceId != captureId || m_videoFormatKey != format;
-    const bool audioChanged = m_audioDeviceId != audioId;
-    if (captureChanged) stopPreview();
+    if (m_previewRequested && (m_previewCaptureId != captureId
+        || m_previewFormatKey != format || m_previewAudioId != audioId)) stopPreview();
     if (m_serial.isOpen()) m_serial.close();
     m_captureDeviceId = captureId;
     m_videoFormatKey = format;
@@ -589,7 +596,6 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
     m_selectedInput = selectedInput;
     for (int input = 1; input <= 8; ++input)
         m_inputLabels.insert(input, labels.value(QString::number(input)).toString().trimmed());
-    if (m_previewRequested && audioChanged) configureAudio();
     m_switchState = "idle";
     m_switchStatus = commandTemplate.isEmpty()
         ? "No switch command is configured."
@@ -618,7 +624,7 @@ void CaptureController::configureAudio()
 {
     QAudioDevice selected;
     for (const auto &device : m_audioDevices)
-        if (QString::fromLatin1(device.id()) == m_audioDeviceId) selected = device;
+        if (QString::fromLatin1(device.id()) == m_previewAudioId) selected = device;
     if (selected.isNull()) {
         m_captureSession.setAudioInput(nullptr);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
@@ -638,8 +644,17 @@ void CaptureController::configureAudio()
 
 bool CaptureController::startPreview()
 {
-    if (m_previewRequested) return true;
-    if (m_captureDeviceId.isEmpty()) {
+    return startPreviewFor(m_captureDeviceId, m_videoFormatKey, m_audioDeviceId);
+}
+
+bool CaptureController::startPreviewFor(const QString &captureId, const QString &formatKeyValue, const QString &audioId)
+{
+    if (m_serialWriter.isSending() && (m_previewRequested || captureId != m_captureDeviceId
+        || formatKeyValue != m_videoFormatKey || audioId != m_audioDeviceId)) {
+        setStatus("error", "Wait for the current switch command before changing the capture preview.");
+        return false;
+    }
+    if (captureId.isEmpty()) {
         setStatus("needs-capture-card", "Choose the HDMI capture card before starting preview.");
         return false;
     }
@@ -649,17 +664,17 @@ bool CaptureController::startPreview()
     }
     QCameraDevice selected;
     for (const auto &device : m_videoDevices)
-        if (QString::fromLatin1(device.id()) == m_captureDeviceId) selected = device;
+        if (QString::fromLatin1(device.id()) == captureId) selected = device;
     if (selected.isNull()) {
         setStatus("device-missing", "Capture card is not connected. Reconnect it, then refresh devices.");
         return false;
     }
-    m_camera->setCameraDevice(selected);
-    if (!m_videoFormatKey.isEmpty()) {
+    QCameraFormat selectedFormat;
+    if (!formatKeyValue.isEmpty()) {
         bool formatFound = false;
         for (const auto &format : selected.videoFormats())
-            if (formatKey(format) == m_videoFormatKey) {
-                m_camera->setCameraFormat(format);
+            if (formatKey(format) == formatKeyValue) {
+                selectedFormat = format;
                 formatFound = true;
                 break;
             }
@@ -668,6 +683,21 @@ bool CaptureController::startPreview()
             return false;
         }
     }
+    bool audioFound = audioId.isEmpty();
+    for (const auto &device : m_audioDevices)
+        audioFound |= QString::fromLatin1(device.id()) == audioId;
+    if (!audioFound) {
+        setStatus("audio-missing", "The selected capture audio input is no longer available.");
+        return false;
+    }
+    if (m_previewRequested && m_previewCaptureId == captureId
+        && m_previewFormatKey == formatKeyValue && m_previewAudioId == audioId) return true;
+    if (m_previewRequested) stopPreview();
+    m_previewCaptureId = captureId;
+    m_previewFormatKey = formatKeyValue;
+    m_previewAudioId = audioId;
+    m_camera->setCameraDevice(selected);
+    m_camera->setCameraFormat(selectedFormat);
     m_captureSession.setCamera(m_camera);
     configureAudio();
     m_previewRequested = true;
@@ -681,7 +711,7 @@ bool CaptureController::startPreview()
     m_frameWatchdog.start();
     QString startupStatus = "Starting capture card. Waiting for video frames…";
 #if QT_VERSION < QT_VERSION_CHECK(6, 8, 0)
-    if (!m_audioDeviceId.isEmpty()) startupStatus += " Audio monitoring needs Qt 6.8 or newer; video preview only on this system.";
+    if (!audioId.isEmpty()) startupStatus += " Audio monitoring needs Qt 6.8 or newer; video preview only on this system.";
 #endif
     setStatus("awaiting-frames", startupStatus);
     m_camera->start();
@@ -701,6 +731,9 @@ void CaptureController::stopPreview()
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     m_captureSession.setAudioOutput(nullptr);
 #endif
+    m_previewCaptureId.clear();
+    m_previewFormatKey.clear();
+    m_previewAudioId.clear();
     updateStatusForConfiguration();
 }
 

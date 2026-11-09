@@ -749,6 +749,15 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
             || number.toDouble() < MinHdmiInput || number.toDouble() > MaxHdmiInput)
             return reject(error, "Choose an HDMI input from 1 to 8.");
         result.insert("input", number.toInt());
+    } else if (type == "capture-preview-draft") {
+        if (!exactKeys({"schemaVersion", "type", "captureDeviceId", "videoFormatKey", "audioDeviceId"})) return {};
+        for (const auto &key : QStringList{"captureDeviceId", "videoFormatKey", "audioDeviceId"}) {
+            const auto field = input.value(key);
+            if (field.metaType().id() != QMetaType::QString || field.toString().size() > 512
+                || field.toString().contains(QChar::Null))
+                return reject(error, "Choose valid capture preview devices and format.");
+            result.insert(key, field.toString());
+        }
     } else if (QStringList{"capture-preview-start", "capture-preview-stop", "capture-switch-cancel", "capture-refresh"}.contains(type)) {
         if (!exactKeys({"schemaVersion", "type"})) return {};
     } else if (type == "audio-output-select") {

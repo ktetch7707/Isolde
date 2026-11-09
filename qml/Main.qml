@@ -628,6 +628,10 @@ Window {
         id: captureSession
         anchors.fill: parent
         onReturned: originId => { if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId) }
+        onConfigureRequested: originId => {
+            if (actionDispatcher.dispatch({type: "settings", section: 4}, originId))
+                settings.openCaptureSettings()
+        }
     }
 
     Connections {

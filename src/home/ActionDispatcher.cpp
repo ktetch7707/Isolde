@@ -221,6 +221,9 @@ bool ActionDispatcher::dispatchEditorAction(const QVariantMap &input)
             else accepted = m_capture->switchInput(input);
         } else if (type == "capture-preview-start") {
             accepted = m_capture->startPreview();
+        } else if (type == "capture-preview-draft") {
+            accepted = m_capture->startPreviewFor(value.value("captureDeviceId").toString(),
+                value.value("videoFormatKey").toString(), value.value("audioDeviceId").toString());
         } else if (type == "capture-preview-stop") {
             m_capture->stopPreview();
             accepted = true;
@@ -235,7 +238,7 @@ bool ActionDispatcher::dispatchEditorAction(const QVariantMap &input)
 
     if (!accepted) {
         if (error.isEmpty()) {
-            if (type == "capture-preview-start" && m_capture)
+            if ((type == "capture-preview-start" || type == "capture-preview-draft") && m_capture)
                 error = m_capture->status();
             else if (type.startsWith("capture-") && m_capture)
                 error = m_capture->switchStatus().isEmpty() ? m_capture->status() : m_capture->switchStatus();

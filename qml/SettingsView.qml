@@ -30,6 +30,10 @@ Item {
         selectedSection = Math.max(0, Math.min(sections.length - 1, index))
         inPage = true
     }
+    function openCaptureSettings() {
+        openSection(4)
+        systemPage.activePage = 8
+    }
 
     function handleCommand(command) {
         if (inPage && selectedSection === 2 && sourcePage.editing) { sourcePage.handleCommand(command); return }

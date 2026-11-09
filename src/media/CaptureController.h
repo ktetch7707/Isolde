@@ -85,6 +85,7 @@ public:
     Q_INVOKABLE bool applyConfiguration(const QVariantMap &configuration);
     Q_INVOKABLE bool canSwitchInput(int input) const;
     Q_INVOKABLE bool startPreview();
+    bool startPreviewFor(const QString &captureId, const QString &formatKey, const QString &audioId);
     Q_INVOKABLE void stopPreview();
     Q_INVOKABLE bool switchInput(int input);
     Q_INVOKABLE void cancelSwitch();
@@ -130,6 +131,9 @@ private:
     QString m_audioDeviceId;
     QString m_serialPortName;
     QString m_commandTemplate;
+    QString m_previewCaptureId;
+    QString m_previewFormatKey;
+    QString m_previewAudioId;
     QMap<int, QString> m_inputLabels;
     QString m_status = "Connect a USB HDMI capture card, then choose it here.";
     QString m_switchStatus = "Choose an input to test the RS-232 switch.";

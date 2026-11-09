@@ -186,6 +186,10 @@ void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
     QVERIFY2(!apply.isEmpty(), qPrintable(error));
     QCOMPARE(apply.value("configuration").toMap().size(), 8);
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-start"}}).contains("type"));
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-draft"}, {"captureDeviceId", "video"},
+        {"videoFormatKey", ""}, {"audioDeviceId", "audio"}}).contains("captureDeviceId"));
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-draft"}, {"captureDeviceId", 42},
+        {"videoFormatKey", ""}, {"audioDeviceId", ""}}).isEmpty());
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-switch-input"}, {"input", 8}}).contains("input"));
     QVERIFY(ComponentSchema::editorAction({{"type", "audio-output-select"}, {"outputId", "alsa_output.usb-01"}}).contains("outputId"));
     QVERIFY(ComponentSchema::action({{"type", "capture-apply"}, {"configuration", configuration}}).isEmpty());
@@ -216,6 +220,13 @@ void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
     QCOMPARE(rejected.size(), 1);
     QVERIFY(!dispatcher.dispatchEditorAction({{"type", "audio-output-select"}, {"outputId", "alsa_output.usb-01"}}));
     QCOMPARE(rejected.size(), 2);
+    const auto savedCapture = capture.captureDeviceId();
+    const auto savedAudio = capture.audioDeviceId();
+    QVERIFY(!dispatcher.dispatchEditorAction({{"type", "capture-preview-draft"},
+        {"captureDeviceId", ""}, {"videoFormatKey", ""}, {"audioDeviceId", ""}}));
+    QCOMPARE(capture.captureDeviceId(), savedCapture);
+    QCOMPARE(capture.audioDeviceId(), savedAudio);
+    QCOMPARE(rejected.size(), 3);
 }
 void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCoreApplication::setApplicationVersion("0.0.1.2");

@@ -176,13 +176,16 @@ test("capture editor routes apply, test, preview, refresh, and cancel through ty
     assert.equal(actions[1].input, 2);
     scope.selectedIndex = 10;
     scope.activateSelected();
+    assert.equal(actions[2].captureDeviceId, "card");
+    assert.equal(actions[2].videoFormatKey, "");
+    assert.equal(actions[2].audioDeviceId, "");
     scope.selectedIndex = 11;
     scope.activateSelected();
     scope.selectedIndex = 14;
     scope.activateSelected();
     scope.cancelDraft();
     assert.deepEqual(actions.slice(2).map(action => action.type), [
-        "capture-preview-start", "capture-preview-stop", "capture-refresh", "capture-preview-stop",
+        "capture-preview-draft", "capture-preview-stop", "capture-refresh", "capture-preview-stop",
     ]);
 });
 
@@ -307,6 +310,23 @@ test("closing capture session cancels pending serial output before releasing pre
     scope.closeSession();
     assert.equal(scope.open, false);
     assert.deepEqual(calls, ["cancel", "stop", "home:tile:hdmi"]);
+});
+
+test("capture session Menu releases capture before opening configuration", () => {
+    const calls = [], inputManager = {back: 1, home: 2, menu: 3};
+    const scope = vm.createContext({
+        inputManager, open: true, originId: "source", chooseInput: false,
+        captureController: {
+            cancelSwitch() { calls.push("cancel"); },
+            stopPreview() { calls.push("stop"); },
+        },
+        returned: origin => calls.push(origin),
+        configureRequested: origin => calls.push("configure:" + origin),
+    });
+    method("CaptureSessionView.qml", "closeSession", scope);
+    method("CaptureSessionView.qml", "handleCommand", scope);
+    scope.handleCommand(inputManager.menu);
+    assert.deepEqual(calls, ["cancel", "stop", "source", "configure:source"]);
 });
 
 test("audio output arrows preview a route, Back cancels, and Confirm applies", () => {
