@@ -260,6 +260,14 @@ def command(runtime, target, home):
             "joypad_autoconfig_dir":"/usr/share/libretro/autoconfig", "menu_show_online_updater":"false",
             "network_cmd_enable":"false", "stdin_cmd_enable":"false", "menu_mouse_enable":"false",
             "input_exit_emulator":"escape", "savestate_auto_save":"false", "savestate_auto_load":"false"}
+        if runtime["id"] == "retroarch-ds":
+            core_options = base/"desmume-options.cfg"
+            core_values = {"desmume_screens_layout":"top/bottom", "desmume_pointer_mouse":"disable",
+                "desmume_pointer_device":"r-stick", "desmume_mic_force_enable":"no",
+                "desmume_mic_mode":"internal"}
+            atomic(core_options, "".join(k+' = '+json.dumps(v)+'\n' for k,v in core_values.items()).encode())
+            values.update({"core_options_path":str(core_options), "global_core_options":"true",
+                "game_specific_options":"false", "auto_overrides_enable":"false", "auto_remaps_enable":"false"})
         if options["video"]=="software": values["video_driver"]="sdl2"
         atomic(config, "".join(k+' = '+json.dumps(v)+'\n' for k,v in values.items()).encode())
         return [str(binary), "--fullscreen", "--config", str(config), "--libretro", str(core), str(game)]

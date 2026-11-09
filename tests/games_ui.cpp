@@ -578,6 +578,9 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulators"));
     const auto coverage=library.emulatorCoverage();
     QVERIFY(coverage.value("integratedPlatforms").toList().contains("PSP"));
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("Nintendo DS"));
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("Virtual Boy"));
+    QVERIFY(coverage.value("notIntegrated").toList().contains("Nintendo DSi"));
     QVERIFY(coverage.value("notIntegrated").toList().contains("Xbox 360"));
     const auto budgets=coverage.value("budgets").toMap();
     QCOMPARE(budgets.value("catalogEntries").toInt(),50000);
@@ -601,6 +604,18 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown);
     command(widget.data(),InputManager::Confirm);QCOMPARE(library.emulatorSettings("ppsspp").value("video").toString(),QString("software"));
     QVERIFY(!library.installEmulators(false));QVERIFY(!library.setupBusy());
+    const auto emulators=library.emulators();
+    for(const auto &id:QStringList{"retroarch-ds","retroarch-vb"}){
+        int index=-1;
+        for(int i=0;i<emulators.size();++i)if(emulators[i].toMap().value("id")==id)index=i;
+        QVERIFY(index>=0);
+        QVERIFY(widget->setProperty("mode","emulators"));QVERIFY(widget->setProperty("choice",index));
+        command(widget.data(),InputManager::Confirm);
+        QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));
+        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"stylus":"second D-pad"));
+        QVERIFY(widget->setProperty("choice",1));command(widget.data(),InputManager::Confirm);
+        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"right trigger":"right trigger left"));
+    }
     QVERIFY(QDir(QFileInfo(GameEmulators::home(profile,"ppsspp")).absolutePath()).removeRecursively());
     qApp->setProperty("isoldeProfile",QVariant());
 }

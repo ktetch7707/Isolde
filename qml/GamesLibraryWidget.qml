@@ -64,7 +64,7 @@ Item {
     property var emulatorDraft:({})
     property string firmwareDraft:""
     readonly property var emulators:library?library.emulators:[]
-    readonly property var emulatorActions:["Video: "+(emulatorDraft.video || "automatic"),"Controller: "+(emulatorDraft.controller==="xbox-wii-classic"?"Xbox · Wii Classic":"Xbox · Wii Remote + Nunchuk / standard pad"), "Import PS2 firmware: "+(firmwareDraft || (emulatorDraft.firmware?"Saved private copy":"None selected")),"Save setup","Cancel · save nothing"]
+    readonly property var emulatorActions:["Video: "+(emulatorDraft.video || "automatic"),"Controller: "+(emulatorDraft.controller==="xbox-wii-classic"?"Xbox · Wii Classic":"Xbox · Wii Remote + Nunchuk / standard pad"), emulatorId==="pcsx2"?"Import PS2 firmware: "+(firmwareDraft || (emulatorDraft.firmware?"Saved private copy":"None selected")):"Firmware: not required for this route","Save setup","Cancel · save nothing"]
     property int field:0
     readonly property var runtimes:library?library.runtimes:[]
     readonly property var tools:["Add game","All","Favorites","Recent","Filters","Search","Previous",canNextPage?"Next":"End","Emulator setup","Import folder","Continue","Collections","Catalog backup"]
@@ -245,7 +245,7 @@ Item {
             const emulator=emulators[choice];if(!emulator)return
             emulatorId=emulator.id;emulatorDraft=library.emulatorSettings(emulatorId);firmwareDraft=""
             if(!emulatorDraft.schemaVersion){message=library.errorString;return}
-            mode="emulatorSettings";choice=4;message=emulator.name+" · "+(emulator.installed?"Runtime installed":"Runtime installation required")+" · "+(emulator.registered?"Available for Games":"Use Install / repair emulators to make this runtime available")+". Integration status is not a gameplay or physical-controller claim."+(emulator.firmwareRequired?" Import your own compatible firmware; Isolde will store a private copy and never download it.":"")
+            mode="emulatorSettings";choice=4;message=emulator.name+" · "+(emulator.installed?"Runtime installed":"Runtime installation required")+" · "+(emulator.registered?"Available for Games":"Use Install / repair emulators to make this runtime available")+". Integration status is not a gameplay or physical-controller claim."+(emulator.firmwareRequired?" Import your own compatible firmware; Isolde will store a private copy and never download it.":"")+(emulatorId==="retroarch-ds"?" DS: right stick moves the stylus, right trigger touches, left stick click simulates microphone noise and left trigger closes the lid. Both screens are shown; DSi is not supported.":emulatorId==="retroarch-vb"?" Virtual Boy: the second D-pad uses triggers and stick clicks. Individual game compatibility is not guaranteed.":"")
             return
         }
         if(mode==="emulatorInstallReview"){
@@ -262,7 +262,7 @@ Item {
             if(choice===0){emulatorDraft=Object.assign({},emulatorDraft,{video:emulatorDraft.video==="automatic"?"software":"automatic"});return}
             if(choice===1){
                 if(emulatorId==="dolphin")emulatorDraft=Object.assign({},emulatorDraft,{controller:emulatorDraft.controller==="xbox"?"xbox-wii-classic":"xbox"})
-                message="Xbox buttons and sticks use SDL mappings. Dolphin offers Wii Remote + Nunchuk or Classic; GameCube keeps its own pad mapping. Wii motion-dependent games require individual compatibility checks.";return
+                message=emulatorId==="retroarch-ds"?"DS: right stick moves the stylus; right trigger touches; left stick click simulates microphone noise; left trigger closes the lid.":emulatorId==="retroarch-vb"?"Virtual Boy second D-pad: left trigger up, right trigger left, left stick click down, right stick click right.":"Xbox buttons and sticks use SDL mappings. Dolphin offers Wii Remote + Nunchuk or Classic; GameCube keeps its own pad mapping. Wii motion-dependent games require individual compatibility checks.";return
             }
             if(choice===2){
                 const emulator=emulators.find(e=>e.id===emulatorId)

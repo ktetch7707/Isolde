@@ -15,8 +15,22 @@ The version-2 `config/game-runtimes.json` manifest is the source of truth for th
 | RetroArch / Gambatte | Game Boy, Game Boy Color | GB, GBC | RetroArch + Gambatte |
 | RetroArch / mGBA | Game Boy Advance | GBA | RetroArch + mGBA |
 | RetroArch / bsnes-mercury-balanced | SNES | SFC, SMC | RetroArch + bsnes-mercury-balanced |
+| RetroArch / DeSmuME | Nintendo DS (not DSi) | NDS | RetroArch + DeSmuME |
+| RetroArch / Beetle VB | Virtual Boy | VB, VBOY | RetroArch + Beetle VB |
 
-The managed provisioning target is Ubuntu 26.04 amd64 only. PlayStation, PS3/4/5, Vita, N64, DS/3DS, Wii U, Switch generations, Original Xbox, Xbox 360 and Xbox One/Series are explicitly not integrated; no generic frontend or candidate emulator is presented as support for them. Extending the matrix requires a separately pinned runtime/core and formats, bounded remote setup, safe firmware/input/session contracts, and focused tests.
+The managed provisioning target is Ubuntu 26.04 amd64 only. PlayStation, PS3/4/5, Vita, N64, DSi/3DS, Wii U, Switch generations, Original Xbox, Xbox 360 and Xbox One/Series are explicitly not integrated; no generic frontend or candidate emulator is presented as support for them. Extending the matrix requires a separately pinned runtime/core and formats, bounded remote setup, safe firmware/input/session contracts, and focused tests.
+
+## Verified DS and Virtual Boy package selection
+
+On 2026-11-09, the [Ubuntu resolute release InRelease](https://archive.ubuntu.com/ubuntu/dists/resolute/InRelease) was verified with the locally installed Ubuntu archive keyring: `gpgv` reported a good signature by Ubuntu Archive Automatic Signing Key (2018), fingerprint `F6ECB3762474EDA9D21B7022871920D1991BC93C`. Its signed SHA-256 for [universe amd64 Packages.xz](https://archive.ubuntu.com/ubuntu/dists/resolute/universe/binary-amd64/Packages.xz) is `1587be86d66d38542325215e0e109f75bd695c8f24d793ace2762038a6ad581e`; the downloaded index matched. The signed release source index also matched SHA-256 `9c732321580ae2824f7d8cb936e12cca435a60a252d0654b8cc2a0011dc82903`. This is release-pocket evidence, not a claim about all updates or every package in the archive.
+
+The [resolute-updates InRelease](https://archive.ubuntu.com/ubuntu/dists/resolute-updates/InRelease) dated 2026-11-09 also verified with that key; its universe amd64 index matched signed SHA-256 `22492d94a328f31ab0b9e7129d58aa780dd3b7963cb539c59067ac67a0e368f7` and contained no `libretro-*` packages. Other pockets and separately sourced runtimes were not surveyed.
+
+The index pins `libretro-desmume` `0.9.11+git20160819+dfsg1-2build2` (deb SHA-256 `7f239fdeacdd991fee8871541f5bb6fc0504dc6e67e2593a280710e57bbf9d18`) and `libretro-beetle-vb` `0.9.36.1+git20160623-2build2` (deb SHA-256 `b31190250cbd86117372b52c691ab5a8cebae3586f54881e9ea67492ae02fa47`). Downloaded debs matched those hashes; their file lists establish the exact core paths in the manifest and their copyright files identify GPL-2.0-or-later licensing. The normal provisioner resolves the complete dependency closure using authenticated target indexes, binds it into the signed offline bundle, and refuses a missing or changed pin; this research did not install the packages or construct a bundle.
+
+The packages include components under additional terms; distributors must review the full `/usr/share/doc/libretro-desmume/copyright` and `/usr/share/doc/libretro-beetle-vb/copyright`, rather than treating the primary GPL label as exhaustive.
+
+Source archives authenticated through the release source index were inspected for the exact core version. DeSmuME creates dummy firmware, accepts NDS, and maps the right analog stick to the stylus when `desmume_pointer_device = "r-stick"`; R2 presses it, L3 enables internal microphone noise and L2 closes the lid. Isolde writes these options and top/bottom screen layout to profile-private generated configuration, disabling automatic game overrides/remaps for this route. Some titles require unsupported microphone behavior or precise touch interactions. Beetle VB accepts VB/VBOY; its second D-pad uses L2 (up), R2 (left), L3 (down) and R3 (right). Those mappings are disclosed in remote setup, but have not been tested with a controller or gameplay. Both routes use the existing private save/session boundaries; neither route claims full title compatibility, physical input or VM acceptance. Games are user-supplied.
 
 ## Production contracts added
 
@@ -35,4 +49,4 @@ The managed provisioning target is Ubuntu 26.04 amd64 only. PlayStation, PS3/4/5
 
 Native C++/QML tests could not run in this environment because CMake/Qt tooling is unavailable. VM acceptance is intentionally deferred. Actual controller gameplay, per-runtime gameplay/return, save-flush/relaunch/crash behavior, disconnected cold boot, and end-to-end package-update rollback remain unverified. The bounded dependency closure and signature paths have fixture coverage, but still need an end-to-end Ubuntu 26.04 bundle build/install/update and a disconnected appliance test. No route outside the matrix is claimed.
 
-The requested additional Nintendo 64 route was not added: this checkout has no authenticated Ubuntu 26.04 package-index or signed bundle evidence for an N64 core, and network access to the official package archive was unavailable. No package name, version, path, firmware, or compatibility claim has been inferred. N64 remains explicitly not integrated pending that verification and the associated input/save/session tests.
+The requested additional Nintendo 64 route was not added: the authenticated Ubuntu 26.04 release and updates universe amd64 indexes inspected above contain no N64 libretro core. Other pockets and separately sourced runtimes were not established by this check. No package name, version, path, firmware, or compatibility claim has been inferred. N64 remains explicitly not integrated pending a verified runtime and its input/save/session implementation.

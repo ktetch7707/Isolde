@@ -22,11 +22,12 @@ Every delivered route must support TV-remote selection/setup/launch, Xbox-contro
 | Nintendo | Wii U | [Cemu](https://cemu.info/) candidate. GamePad second screen/touch/gyro need a controller-only design and title-specific acceptance before support can be claimed. |
 | Nintendo | Switch; Switch 2 | Separate current runtime/format/firmware/key/compatibility assessment remains open. No unverified emulator or universal support claim is added. An owned-console route also needs verified input bridging. |
 | Nintendo | Game Boy; Game Boy Color; Game Boy Advance | RetroArch Gambatte and mGBA routes in this batch; actual platform fixtures and gameplay/save/offline acceptance remain open. |
-| Nintendo | DS / DSi; 3DS | Separate runtimes, firmware and dual-screen/touch/microphone/controller-only workflows remain open. [melonDS](https://melonds.kuribo64.net/) is a DS candidate, not a 3DS implementation. |
+| Nintendo | DS / DSi; 3DS | DS has a DeSmuME route with both screens, controller stylus and simulated microphone; actual gameplay/input/save acceptance remains open. DSi and 3DS remain separate, not integrated routes. |
+| Nintendo | Virtual Boy | Beetle VB route with two controller D-pad mappings; actual gameplay/input/save acceptance remains open. |
 
 The project must not mark this expanded target complete while required generations have no verified route. Modern-console integration may depend on hardware, owned software/firmware and capabilities outside Isolde's control. Record those constraints explicitly; do not silently reduce the target to the currently integrated systems or imply that every commercial title works.
 
-The N64 route remains excluded until the exact Ubuntu 26.04 core package/version, authenticated package metadata, installed core path, and lawful gameplay/input fixture are verified. The current development environment had no network access to the official package archive, so this change deliberately does not guess or add an unverified dependency.
+The N64 route remains excluded until an exact Ubuntu 26.04 core package/version, authenticated package metadata and installed core path are identified and its integration is implemented. The authenticated release index inspected below contains no N64 libretro core; that does not prove a package is unavailable in other pockets or a different verified runtime cannot be used.
 
 ## Expanded Sony and Nintendo implementation blockers — 2026-11-09
 
@@ -36,24 +37,25 @@ routes above do not implicitly supply any of these systems.
 
 | Route | Concrete work before declaring an integrated route |
 | --- | --- |
-| PlayStation | Select and verify a Linux runtime and its pinned artifact/package, dependencies and redistribution terms; implement its own disc formats, any required user-supplied firmware preflight, private saves, controller mapping and session adapter. |
+| PlayStation | Ubuntu's signed release index and downloaded deb identify `libretro-beetle-psx` `0.9.38.6+git20260227-1`, SHA-256 `f6bfa15de69ae45c50210ddf7bb82b749fd2a0dd00866282c023fa3e87df1df1`, and `/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so`. Its packaged metadata names three mandatory regional firmware files. Implement and verify regional user-owned firmware import/preflight, safe multi-file disc formats or a bounded single-file route, private saves, controller mapping and session adapter; review dependencies and redistribution terms before selecting it. |
 | PlayStation 3 | Verify a pinned Linux runtime and dependencies; implement firmware setup and safe directory/package import, private storage, controller and session handling. Compatibility and renderer constraints are title-specific. |
 | PlayStation 4 | Establish a supportable Linux runtime artifact and dependencies and a bounded title/format/input/storage contract before adding an adapter; upstream compatibility information alone is not an appliance integration. |
 | PlayStation 5 | No runtime or owned-console control route has been selected. A console route also needs an Xbox-controller bridge and launch/return design; capture alone is insufficient. |
 | PS Vita | Verify a pinned Linux artifact and dependencies; implement firmware/font setup, safe archive installation, private storage, and a controller-only touch/input workflow. |
 | Nintendo 64 | Verify an exact core package version and installed core path against authenticated Ubuntu 26.04 amd64 metadata; add the pinned core, format/controller profile, private saves and tests. The installed RetroArch frontend by itself does not provide this route. |
-| DS / DSi | Select and verify a pinned runtime/core and dependencies; define each supported system's firmware and formats and implement dual-screen layout, touch and microphone alternatives, private saves and controller/session handling. A DS candidate does not establish DSi support. |
+| DSi | Select and verify a pinned runtime/core and dependencies, firmware and formats; implement dual-screen layout, touch and microphone alternatives, private saves and controller/session handling. The DS route does not establish DSi support. |
 | 3DS | Select and verify a separate pinned runtime and dependencies; implement its firmware/format requirements, dual-screen/touch input, private storage and session handling. |
 | Wii U | Verify a pinned Linux runtime and dependencies; implement format/import and private storage plus a controller-only GamePad second-screen/touch/gyro workflow with explicit title limitations. |
 | Switch / Switch 2 | No verified runtime or owned-console route is selected. Each generation needs its own lawful content/firmware and input/session assessment; neither a candidate for one nor HDMI capture establishes the other. |
 
-This checkout contains no authenticated Ubuntu 26.04 package index, signed
-runtime bundle, or package artifact for an additional route. In the isolated
-development environment the host is Ubuntu 24.04 amd64 and its apt lists have
-no package-index files; querying its cache therefore cannot establish a 26.04
-package name, version or path. This observation does not establish that an
-official package is unavailable. No network request or installation was made
-for this assessment.
+The isolated development host is Ubuntu 24.04 amd64 and has no cached apt
+package-index files; its apt cache cannot establish a 26.04 package pin. On
+2026-11-09 the official Ubuntu 26.04 release index was subsequently fetched
+read-only and authenticated, enabling the DS and Virtual Boy routes documented
+in [the emulator contract](emulator-runtime-contract-2026-11-09.md). The
+same index contains a Beetle PSX package; this is candidate evidence, not an
+implemented PlayStation route. Its firmware and safe disc import contracts
+still need work. No host package was installed.
 
 To unblock an apt-based route, obtain authenticated **target-release and
 architecture** index metadata from the configured Ubuntu archive and verify

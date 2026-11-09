@@ -55,6 +55,26 @@ test("direct browse filters use the remote chooser and the same next-page query"
     assert.deepEqual(calls.slice(-2), [["tag", "Puzzle", 0, ""], ["tag", "Puzzle", 50, ""]]);
 });
 
+test("DS and Virtual Boy setup exposes controller limitations remotely", () => {
+    for (const [id, hint, controls] of [
+        ["retroarch-ds", /right stick moves the stylus/i, /right trigger touches/i],
+        ["retroarch-vb", /second D-pad/i, /right trigger left/i],
+    ]) {
+        const scope = vm.createContext({
+            mode: "emulators", choice: 0, message: "", emulatorId: "",
+            emulators: [{id, name: id, installed: false, registered: false, firmwareRequired: false}],
+            library: {emulatorSettings() { return {schemaVersion: 1, video: "automatic", controller: "xbox"}; }},
+        });
+        method("GamesLibraryWidget.qml", "activateChoice", scope);
+        scope.activateChoice();
+        assert.equal(scope.mode, "emulatorSettings");
+        assert.match(scope.message, hint);
+        scope.choice = 1;
+        scope.activateChoice();
+        assert.match(scope.message, controls);
+    }
+});
+
 test("pending uninstall cleanup requires the separate remote confirmation", () => {
     const calls = [];
     const inputManager = {back: 1, navigateDown: 2, navigateRight: 3, navigateUp: 4, navigateLeft: 5, confirm: 6};

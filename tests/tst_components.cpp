@@ -291,7 +291,7 @@ void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     HomeLayout home(&apps);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
     const auto originalHome=home.committedDocument();QSignalSpy homeChanges(&home,&HomeLayout::layoutChanged);
     connect(&catalog,&AppCatalog::packageInstalled,&home,&HomeLayout::addAppTile);
-    const QStringList runtimeIds{"dolphin","pcsx2","ppsspp","retroarch-nes","retroarch-gb","retroarch-gba","retroarch-snes","supertux"};
+    const QStringList runtimeIds{"dolphin","pcsx2","ppsspp","retroarch-nes","retroarch-gb","retroarch-gba","retroarch-snes","retroarch-ds","retroarch-vb","supertux"};
     for(const auto &id:runtimeIds){
         QVERIFY2(catalog.install(id),qPrintable(catalog.errorString()));
         if(id!="supertux"){QCOMPARE(home.committedDocument(),originalHome);QCOMPARE(homeChanges.count(),0);}

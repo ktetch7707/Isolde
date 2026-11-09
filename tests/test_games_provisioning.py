@@ -93,7 +93,7 @@ except games.ProvisioningCancelled:
             root=Path(directory);state,manifest,routes=self.launcher_receipt(root)
             with patch.object(games,"runtime_manifest",return_value=(manifest,routes)):
                 written=games.register_launchers(state,root)
-                self.assertEqual(len(written),8)
+                self.assertEqual(len(written),len(routes)+1)
                 original={p:Path(p).read_bytes() for p in written}
                 games.register_launchers(state,root)
                 self.assertEqual(original,{p:Path(p).read_bytes() for p in written})
@@ -109,7 +109,7 @@ except games.ProvisioningCancelled:
             root=Path(directory);state,manifest,routes=self.launcher_receipt(root)
             with patch.object(games,"runtime_manifest",return_value=(manifest,routes)):
                 written=games.register_launchers(state)
-                self.assertEqual(len(written),8)
+                self.assertEqual(len(written),len(routes)+1)
                 self.assertTrue(all(Path(path).parent==root/"applications" for path in written))
 
 
@@ -471,6 +471,59 @@ class EmulatorAdapterTests(unittest.TestCase):
         config=(self.home/".config/isolde-emulator/generated/retroarch.cfg").read_text()
         self.assertIn('config_save_on_exit = "false"',config)
         self.assertIn(str(self.home/"saves"),config)
+
+    def test_ds_and_virtual_boy_are_pinned_catalog_routes(self):
+        root=Path(__file__).parents[1]
+        catalog=json.loads((root/"config/catalog.json").read_text())
+        expected={
+            "retroarch-ds":("Nintendo DS",["nds"],"libretro-desmume",
+                "0.9.11+git20160819+dfsg1-2build2","desmume_libretro.so"),
+            "retroarch-vb":("Virtual Boy",["vb","vboy"],"libretro-beetle-vb",
+                "0.9.36.1+git20160623-2build2","mednafen_vb_libretro.so"),
+        }
+        for identity,(platform,formats,package,version,core) in expected.items():
+            with self.subTest(identity=identity):
+                route=self.runtime_definitions[identity]
+                self.assertEqual(route["platforms"],[platform])
+                self.assertEqual(route["formats"],formats)
+                self.assertEqual(route["packages"],["retroarch",package])
+                self.assertEqual(games.PACKAGES[package],(version,route["core"]))
+                self.assertEqual(Path(route["core"]).name,core)
+                self.assertFalse(route["firmwareRequired"])
+                manifest_path="packages/"+identity+"/manifest.json"
+                self.assertIn(manifest_path,catalog["packages"])
+                app=json.loads((root/"config"/manifest_path).read_text())["app"]
+                self.assertEqual(app["emulatorRuntime"],identity)
+                self.assertEqual(app["gameFormats"],formats)
+                runtime,target=self.runtime(identity,formats[0])
+                argv=adapter.command(runtime,target,self.home)
+                self.assertEqual(argv[-3:],["--libretro",runtime["core"],target])
+                Path(target).rename(Path(target).with_suffix(".bad"))
+                with self.assertRaisesRegex(ValueError,"format"):
+                    adapter.command(runtime,str(Path(target).with_suffix(".bad")),self.home)
+        coverage=json.loads((root/"config/game-runtimes.json").read_text())["generationCoverage"]
+        self.assertIn("Nintendo DSi",coverage["notIntegrated"])
+        self.assertNotIn("Nintendo DS",coverage["notIntegrated"])
+
+    def test_ds_controller_options_are_private_and_recreated(self):
+        runtime,target=self.runtime("retroarch-ds","nds")
+        (self.home/"saves").mkdir();save=self.home/"saves/game.dsv";save.write_bytes(b"save")
+        adapter.command(runtime,target,self.home)
+        base=self.home/".config/isolde-emulator/generated"
+        config=(base/"retroarch.cfg").read_text()
+        core=base/"desmume-options.cfg"
+        self.assertIn('core_options_path = '+json.dumps(str(core)),config)
+        self.assertIn('game_specific_options = "false"',config)
+        self.assertIn('global_core_options = "true"',config)
+        for value in ('desmume_screens_layout = "top/bottom"',
+                      'desmume_pointer_device = "r-stick"',
+                      'desmume_pointer_mouse = "disable"',
+                      'desmume_mic_mode = "internal"'):
+            self.assertIn(value,core.read_text())
+        core.write_text('desmume_pointer_device = "none"\n')
+        adapter.command(runtime,target,self.home)
+        self.assertIn('desmume_pointer_device = "r-stick"',core.read_text())
+        self.assertEqual(save.read_bytes(),b"save")
 
     def test_manifest_matrix_is_explicit_and_runtime_packages_are_bound(self):
         manifest=Path(__file__).parents[1]/"config/game-runtimes.json"
