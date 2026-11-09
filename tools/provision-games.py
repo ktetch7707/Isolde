@@ -10,10 +10,12 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import shutil
 import subprocess
 import tempfile
 import importlib.util
+import time
 
 PACKAGES = {
     "isolde-ppsspp": ("1.20.4-1", "/usr/bin/PPSSPPSDL"),
@@ -27,9 +29,75 @@ PACKAGES = {
     "libretro-bsnes-mercury-balanced": ("094+git20220807-8build2", "/usr/lib/x86_64-linux-gnu/libretro/bsnes_mercury_balanced_libretro.so"),
 }
 
+_CANCEL_REQUESTED = False
+
+
+class ProvisioningCancelled(RuntimeError):
+    pass
+
+
+def _request_cancel(_signal, _frame):
+    global _CANCEL_REQUESTED
+    _CANCEL_REQUESTED = True
+
+
+def install_cancellation_handlers():
+    import signal
+    signal.signal(signal.SIGINT, _request_cancel)
+    signal.signal(signal.SIGTERM, _request_cancel)
+
+
+def check_cancelled():
+    if _CANCEL_REQUESTED:
+        raise ProvisioningCancelled("Stopped at a safe package-operation boundary.")
+
 
 def run(*args, **options):
-    return subprocess.run(args, check=True, timeout=options.pop("timeout", 60), **options)
+    global _CANCEL_REQUESTED
+    check_cancelled()
+    timeout=options.pop("timeout",60)
+    transaction=options.pop("transaction",False)
+    check=options.pop("check",True)
+    capture_output=options.pop("capture_output",False)
+    text=options.pop("text",False)
+    options.setdefault("start_new_session",True)
+    if capture_output:
+        options.setdefault("stdout",subprocess.PIPE);options.setdefault("stderr",subprocess.PIPE)
+    process=subprocess.Popen(args,text=text,**options)
+    deadline=time.monotonic()+timeout
+    while True:
+        try:
+            output,error=process.communicate(timeout=min(1,max(.01,deadline-time.monotonic())))
+            break
+        except subprocess.TimeoutExpired as expired:
+            timed_out=time.monotonic()>=deadline
+            if _CANCEL_REQUESTED and not transaction:
+                _stop_process_group(process)
+                raise ProvisioningCancelled("Stopped the active download safely.")
+            if timed_out and transaction:
+                _CANCEL_REQUESTED=True
+                output,error=process.communicate()
+                if process.returncode and check:
+                    raise subprocess.CalledProcessError(process.returncode,args,output,error)
+                raise ProvisioningCancelled("The package operation exceeded its deadline but finished safely.")
+            if timed_out:
+                _stop_process_group(process)
+                raise expired
+    result=subprocess.CompletedProcess(args,process.returncode,output,error)
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode,args,output,error)
+    check_cancelled()
+    return result
+
+
+def _stop_process_group(process):
+    try:os.killpg(process.pid,signal.SIGTERM)
+    except ProcessLookupError:return
+    try:process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:os.killpg(process.pid,signal.SIGKILL)
+        except ProcessLookupError:pass
+        process.communicate()
 
 
 def platform():
@@ -95,7 +163,7 @@ def inspect(packages):
     result = {}
     for name in packages:
         expected, executable = PACKAGES[name]
-        query = subprocess.run(["dpkg-query", "-W", "-f=${Status}\n${Version}", name], capture_output=True, text=True, timeout=10)
+        query = run("dpkg-query", "-W", "-f=${Status}\n${Version}", name, capture_output=True, text=True, timeout=10,check=False)
         lines = query.stdout.splitlines()
         installed = query.returncode == 0 and len(lines) == 2 and lines[0] == "install ok installed"
         # Use the package's file list, never an untrusted PATH wrapper.
@@ -205,16 +273,21 @@ def provision(packages, install=False):
         spec=importlib.util.spec_from_file_location("ppsspp_builder",Path(__file__).with_name("build-ppsspp.py"))
         builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(builder)
         payload=builder.build(Path.home()/".cache/isolde-emulators/ppsspp-1.20.4")
-        run("sudo","-n","/usr/bin/apt-get","install","--no-remove","--no-install-recommends","-y",str(payload),timeout=180)
+        check_cancelled()
+        run("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","install","--no-remove","--no-upgrade","--no-install-recommends",
+            "--option=Acquire::Retries=1","--option=Acquire::http::Timeout=60","--option=Acquire::https::Timeout=60",
+            "-y",str(payload),timeout=900,transaction=True)
         missing.remove("isolde-ppsspp")
     if install and missing:
         if shutil.disk_usage(Path.home()).free < 2 * 1024**3:
             raise RuntimeError("At least 2 GiB guest space required before runtime installation")
         # Signed Ubuntu repository metadata supplies dependency and payload trust.
         # Refuse silent downgrades or removal; a changed pin needs a new manifest.
-        run("sudo", "-n", "/usr/bin/apt-get", "update", timeout=180)
-        run("sudo", "-n", "/usr/bin/apt-get", "install", "--no-remove", "--no-install-recommends", "-y",
-            *[p + "=" + PACKAGES[p][0] for p in missing], timeout=900)
+        run("sudo", "-n","env","DEBIAN_FRONTEND=noninteractive", "/usr/bin/apt-get", "update","--option=Acquire::Retries=1",
+            "--option=Acquire::http::Timeout=60","--option=Acquire::https::Timeout=60",timeout=180)
+        run("sudo", "-n","env","DEBIAN_FRONTEND=noninteractive", "/usr/bin/apt-get", "install", "--no-remove", "--no-upgrade", "--no-install-recommends", "-y",
+            "--option=Acquire::Retries=1","--option=Acquire::http::Timeout=60","--option=Acquire::https::Timeout=60",
+            *[p + "=" + PACKAGES[p][0] for p in missing], timeout=900,transaction=True)
     after = inspect(packages)
     manifest_hash,runtime_state=inspect_runtimes(after)
     package_ready=all(value["ready"] for value in after.values())
@@ -227,6 +300,7 @@ def provision(packages, install=False):
 
 
 def main():
+    install_cancellation_handlers()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--install", action="store_true")
     parser.add_argument("--fixture", action="store_true")
@@ -244,4 +318,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ProvisioningCancelled as error:
+        print(str(error),file=sys.stderr)
+        raise SystemExit(130)

@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 import json
 import os
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -49,6 +51,7 @@ class GamesProvisioningTests(unittest.TestCase):
             command=run.call_args.args
             self.assertIn("pcsx2="+games.PACKAGES["pcsx2"][0],command)
             self.assertIn("--no-remove",command)
+            self.assertIn("--no-upgrade",command)
 
     def test_changed_installed_runtime_is_preserved_instead_of_silently_downgraded(self):
         state={"pcsx2":{"ready":False,"installedVersion":"2.5.0"}}
@@ -56,6 +59,27 @@ class GamesProvisioningTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,"Preserve it"):
                 games.provision(["pcsx2"],True)
             run.assert_not_called()
+
+    @unittest.skipUnless(os.name=="posix","Bounded package-operation signal contract")
+    def test_cancel_finishes_active_package_command_before_stopping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);marker=root/"completed"
+            script="""
+import importlib.util,os,signal,sys,threading
+spec=importlib.util.spec_from_file_location('games',sys.argv[1])
+games=importlib.util.module_from_spec(spec);spec.loader.exec_module(games)
+games.install_cancellation_handlers()
+threading.Timer(.05,lambda:os.kill(os.getpid(),signal.SIGTERM)).start()
+try:
+    games.run(sys.executable,'-c','import pathlib,sys,time; time.sleep(.25); pathlib.Path(sys.argv[1]).write_text("done")',sys.argv[2],timeout=3,transaction=True)
+except games.ProvisioningCancelled:
+    print('stopped-at-boundary')
+"""
+            result=subprocess.run([sys.executable,"-c",script,str(Path(__file__).parents[1]/"tools/provision-games.py"),str(marker)],
+                capture_output=True,text=True,timeout=5)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(result.stdout.strip(),"stopped-at-boundary")
+            self.assertEqual(marker.read_text(),"done")
 
     def test_unknown_package_and_redirected_receipt_refused(self):
         with patch.object(games,"platform"):
@@ -248,6 +272,27 @@ class GameFixtureTests(unittest.TestCase):
                 if time.monotonic()>=deadline:
                     self.fail("Timed-out builder left a live descendant: "+child_state)
                 time.sleep(.02)
+
+    @unittest.skipUnless(os.name=="posix","Bounded PSP build cancellation contract")
+    def test_builder_cancel_stops_fetch_or_compile_process_group(self):
+        spec=importlib.util.spec_from_file_location("psp_timeout",Path(__file__).parents[1]/"tools/build-ppsspp.py")
+        builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(builder)
+        script="""
+import importlib.util,os,signal,sys,threading
+base=sys.argv[1]
+game_spec=importlib.util.spec_from_file_location('games',base+'/tools/provision-games.py')
+games=importlib.util.module_from_spec(game_spec);game_spec.loader.exec_module(games)
+build_spec=importlib.util.spec_from_file_location('builder',base+'/tools/build-ppsspp.py')
+builder=importlib.util.module_from_spec(build_spec);build_spec.loader.exec_module(builder)
+games.install_cancellation_handlers();builder._cancel_check=games.check_cancelled
+threading.Timer(.05,lambda:os.kill(os.getpid(),signal.SIGTERM)).start()
+try:builder.run(sys.executable,'-c','import time; time.sleep(30)',timeout=60)
+except games.ProvisioningCancelled:print('build-stopped')
+"""
+        result=subprocess.run([sys.executable,"-c",script,str(Path(__file__).parents[1])],
+            capture_output=True,text=True,timeout=5)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),"build-stopped")
 
     def test_archive_pin_and_traversal_refused_without_extraction(self):
         spec=importlib.util.spec_from_file_location("fixture_fetch",Path(__file__).parents[1]/"tools/fetch-game-fixtures.py")

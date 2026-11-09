@@ -175,8 +175,14 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     });
     m_setupDeadline.setSingleShot(true);m_setupDeadline.setInterval(2400000);
     connect(&m_setupDeadline,&QTimer::timeout,this,&GameLibrary::cancelEmulatorSetup);
-    connect(&m_setup,&QProcess::readyReadStandardOutput,this,[this]{m_setupOutput=(m_setupOutput+m_setup.readAllStandardOutput()).right(8192);});
-    connect(&m_setup,&QProcess::readyReadStandardError,this,[this]{m_setupOutput=(m_setupOutput+m_setup.readAllStandardError()).right(8192);});
+    const auto setupProgress=[this](const QByteArray &output){
+        m_setupOutput=(m_setupOutput+output).right(8192);
+        const auto lines=QString::fromLocal8Bit(output).split('\n',Qt::SkipEmptyParts);
+        if(!lines.isEmpty())m_setupStatus=tr("Installing verified runtimes · %1").arg(lines.constLast().trimmed().left(160));
+        emit setupChanged();
+    };
+    connect(&m_setup,&QProcess::readyReadStandardOutput,this,[this,setupProgress]{setupProgress(m_setup.readAllStandardOutput());});
+    connect(&m_setup,&QProcess::readyReadStandardError,this,[this,setupProgress]{setupProgress(m_setup.readAllStandardError());});
     connect(&m_setup,&QProcess::errorOccurred,this,[this](QProcess::ProcessError){m_setupStatus="Emulator setup could not start. "+m_setup.errorString();emit setupChanged();});
     connect(&m_setup,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus status){
         m_setupDeadline.stop();
@@ -414,11 +420,11 @@ bool GameLibrary::installEmulators(bool consent){
 void GameLibrary::cancelEmulatorSetup(){
     if(!setupBusy())return;m_setupCanceled=true;
 #ifdef Q_OS_UNIX
-    if(m_setup.processId()>0)::kill(-pid_t(m_setup.processId()),SIGINT);
+    if(m_setup.processId()>0)::kill(pid_t(m_setup.processId()),SIGTERM);
 #else
     m_setup.terminate();
 #endif
-    m_setupStatus="Stopping emulator setup safely. Wait before retrying.";emit setupChanged();
+    m_setupStatus="Finishing the current package operation safely. Wait before retrying; existing games and saves are untouched.";emit setupChanged();
 }
 QString GameLibrary::checkedTarget(const QString &root, const QString &relative) {
     QString validatedRoot=root;
