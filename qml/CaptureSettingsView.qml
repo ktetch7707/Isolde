@@ -243,11 +243,11 @@ Item {
             Text { font.family: shell.fontFamily; width: parent.width; text: captureController.status + "\n" + captureController.switchStatus; color: captureController.state === "error" || captureController.state === "no-signal" || captureController.state === "device-missing" || captureController.state === "audio-missing" || captureController.state === "format-missing" || captureController.state === "serial-missing" || captureController.switchState === "error" ? shell.error : shell.text; font.pixelSize: 17 * shell.textScale; wrapMode: Text.WordWrap }
             Text { font.family: shell.fontFamily;
                 width: parent.width
-                text: "Saved adapters: " + (captureController.capabilities.captureConnected ? "capture connected" : "capture unavailable")
-                    + " · " + (captureController.capabilities.serialConnected ? "serial connected" : "serial unavailable")
-                    + " · switch " + (captureController.capabilities.switchConfigured ? "ready" : "not configured")
+                text: "Saved adapters: " + (captureController.capabilities.captureConnected ? "capture device detected" : "capture device unavailable")
+                    + " · " + (captureController.capabilities.serialConnected ? "serial port detected" : "serial port unavailable")
+                    + " · switch " + (captureController.capabilities.switchConfigured ? "configured to test" : "not configured")
                     + " · capture audio " + (!captureController.audioDeviceId ? "not selected"
-                        : captureController.capabilities.audioInputSelected ? "connected" : "unavailable")
+                        : captureController.capabilities.audioInputSelected ? "device detected" : "unavailable")
                     + " · audio monitoring " + (!captureController.audioDeviceId ? "not selected"
                         : !captureController.capabilities.audioInputSelected ? "input unavailable"
                         : !captureController.capabilities.audioMonitoringSupported ? "video only on this Qt build"

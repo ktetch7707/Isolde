@@ -275,7 +275,7 @@ void CaptureController::updateStatusForConfiguration()
             : "Saved switch command is invalid. Enter the exact command from the switch manual.";
         setStatus("needs-protocol", "Capture card and serial port are selected. Configure a valid command from the switch manual.");
     }
-    else setStatus("ready", "Capture card is ready. Send a test switch command or preview the current HDMI signal.");
+    else setStatus("ready", "Capture settings are complete. Preview the card and test the switch; source correctness is not verified.");
 }
 
 void CaptureController::setVideoOutput(QObject *output)
