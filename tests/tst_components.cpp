@@ -57,6 +57,7 @@ private slots:
     void gamesContractsRejectExecutableData();
     void gamesRelinkPreservesIdentityAndRollsBack();
     void gamesFolderImportIsReviewedAtomicAndCancelable();
+    void gamesFolderImportPreservesManualInstallation();
     void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
     void gamesCuratedPackagesBindThroughRealCatalog();
     void emulatorManifestIsBoundedAndVersioned();
@@ -307,6 +308,22 @@ void ComponentTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
     QCOMPARE(library.details(id).value("acquisitionProvenance").toMap(),provenance);
     QVERIFY(library.beginImport(root,"psp-test","PSP"));library.invalidate();QVERIFY(!library.scanning());QVERIFY(!library.commitImport());
     QCOMPARE(readFile(root+"/a.iso"),QByteArray("a"));QCOMPARE(readFile(root+"/nested/b.iso"),QByteArray("b"));
+}
+void ComponentTests::gamesFolderImportPreservesManualInstallation() {
+    QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));
+    writeFile(root+"/a.iso","a");
+    AppRegistry apps;auto runtime=gamesRuntime();runtime.launchConfiguration["gameFormats"]=QVariantList{"iso"};QVERIFY(apps.addApp(runtime));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    auto registration=gameRegistration(root,"a.iso");registration["title"]="My manual title";
+    const auto id=library.addGame(registration);QVERIFY(!id.isEmpty());QVERIFY(library.setFavorite(id,true));
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("origin").toString(),QString("manual-registration"));
+    QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);
+    QCOMPARE(library.importPage(0).size(),1);QVERIFY(library.commitImport());
+    QCOMPARE(library.page().size(),1);QCOMPARE(library.page()[0].toMap().value("id").toString(),id);
+    const auto details=library.details(id);QCOMPARE(details.value("title").toString(),QString("My manual title"));
+    QVERIFY(details.value("favorite").toBool());
+    QCOMPARE(details.value("acquisitionProvenance").toMap(),provenance);
 }
 void ComponentTests::gamesRelinkPreservesIdentityAndRollsBack() {
     QTemporaryDir dir;const auto oldRoot=dir.filePath("original"),newRoot=dir.filePath("moved");
