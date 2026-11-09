@@ -226,13 +226,17 @@ void KodiMedia::reorderPlaylist(const QString &name, const QVariantList &order) 
     if(m_busy || m_playbackActive || !validPlaylistName(name) || order.isEmpty()){
         m_playlistStatus="Cannot reorder this playlist. Choose a valid playlist and order, then retry.";emit changed();return;
     }
-    QVariantList ints;
+    QJsonArray ints;
     for (const auto &v : order) {
         if (!v.canConvert<int>()) { m_playlistStatus="Playlist order must be whole-number indices.";emit changed();return; }
         ints.append(v.toInt());
     }
     QSet<int> seen;
-    for (int i : ints) { if (!seen.insert(i).second) { m_playlistStatus="Playlist order contains duplicate indices.";emit changed();return; } }
+    for (const auto &value : ints) {
+        const int i=value.toInt();
+        if (seen.contains(i)) { m_playlistStatus="Playlist order contains duplicate indices.";emit changed();return; }
+        seen.insert(i);
+    }
     ++m_generation;m_busy=true;m_stage=12;m_playlistStatus="Reordering Kodi playlist…";emit changed();
     request("Isolde.ReorderPlaylist",{{"name",name.trimmed()},{"order",ints}});
 }
