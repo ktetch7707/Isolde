@@ -63,9 +63,9 @@ QStringList NativeSandbox::gamepadDeviceNodes(const QString &sysInputDirectory,c
         QFile deviceNumber(devicePath);
         if(!capabilities.open(QIODevice::ReadOnly) || !deviceNumber.open(QIODevice::ReadOnly))continue;
         const auto bitmap=QString::fromLatin1(capabilities.read(4097));
-        const auto device=QString::fromLatin1(deviceNumber.read(32));
-        if(bitmap.size()>4096 || device.size()>=32
-            || !GamepadTopology::verifiedGamepadNode(node,bitmap.trimmed(),device.trimmed()))continue;
+        const auto sysDeviceNumber=QString::fromLatin1(deviceNumber.read(32));
+        if(bitmap.size()>4096 || sysDeviceNumber.size()>=32
+            || !GamepadTopology::verifiedGamepadNode(node,bitmap.trimmed(),sysDeviceNumber.trimmed()))continue;
         const auto device=devices.filePath(node);
         const QFileInfo info(device);
         if(info.isSymLink() || !info.exists() || info.canonicalFilePath()!=QDir::cleanPath(device))continue;
