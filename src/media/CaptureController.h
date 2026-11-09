@@ -116,6 +116,7 @@ private:
     QSerialPort m_serial;
     QTimer m_frameWatchdog;
     QTimer m_serialWatchdog;
+    QTimer m_serialDevicePoll;
     QElapsedTimer m_previewClock;
     QElapsedTimer m_lastFrameClock;
     QElapsedTimer m_switchClock;

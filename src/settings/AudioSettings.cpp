@@ -427,7 +427,8 @@ void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status)
         }
         appendOutput();
         m_outputs = outputs;
-        m_outputStatus = outputs.isEmpty() ? "No audio outputs detected."
+        m_outputStatus = !m_requestedOutput.isEmpty() ? "Switching output…"
+            : outputs.isEmpty() ? "No audio outputs detected."
             : "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
         emit changed();
     } else if (command == "get-default-sink") {

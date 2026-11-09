@@ -181,6 +181,7 @@ test("audio output arrows preview a route, Back cancels, and Confirm applies", (
     };
     const scope = vm.createContext({
         inputManager, audioSettings, selectedIndex: 10, outputDraftId: "", outputDraftActive: false,
+        outputApplyPending: false,
     });
     Object.defineProperty(scope, "candidateOutput", {get: () => scope.findOutput(scope.outputDraftId)});
     for (const name of ["findOutput", "beginOutputDraft", "adjustOutputDraft", "cancelOutputDraft",
@@ -196,6 +197,10 @@ test("audio output arrows preview a route, Back cancels, and Confirm applies", (
     scope.handleCommand(inputManager.confirm);
     assert.equal(audioSettings.requested, "11");
     assert.equal(scope.outputDraftActive, true);
+    assert.equal(scope.outputApplyPending, true);
+    scope.handleCommand(inputManager.back);
+    assert.equal(scope.outputDraftActive, true);
+    assert.equal(scope.outputDraftId, "11");
     audioSettings.outputs[0].active = false;
     audioSettings.outputs[1].active = true;
     audioSettings.outputStatus = "Choose with arrows, Enter applies.";

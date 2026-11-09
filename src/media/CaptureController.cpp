@@ -37,6 +37,16 @@ CaptureController::CaptureController(QObject *parent) : QObject(parent),
     connect(&m_serialWatchdog, &QTimer::timeout, this, [this] {
         if (m_serialBytesPending > 0) serialWriteFailed("The serial switch did not accept the command in time.");
     });
+    m_serialDevicePoll.setInterval(2000);
+    connect(&m_serialDevicePoll, &QTimer::timeout, this, [this] {
+        QStringList ports;
+        for (const auto &port : QSerialPortInfo::availablePorts()) ports.append(port.portName());
+        if (ports == m_serialPortNames) return;
+        m_serialPortNames = ports;
+        updateStatusForConfiguration();
+        emit changed();
+    });
+    m_serialDevicePoll.start();
     connect(&m_mediaDevices, &QMediaDevices::videoInputsChanged, this, &CaptureController::refreshDevices);
     connect(&m_mediaDevices, &QMediaDevices::audioInputsChanged, this, &CaptureController::refreshDevices);
     connect(m_camera, &QCamera::errorOccurred, this, [this](QCamera::Error, const QString &message) {

@@ -8,6 +8,7 @@ Item {
     property int selectedIndex: 0
     property string outputDraftId: ""
     property bool outputDraftActive: false
+    property bool outputApplyPending: false
     onVisibleChanged: if (!visible) audioSettings.stopTestSound()
     readonly property var candidateOutput: findOutput(outputDraftId)
     readonly property string startupLabel: audioSettings.startupPolicy === "fixed" ? "Fixed at " + audioSettings.startupVolume + "%" : audioSettings.startupPolicy === "muted" ? "Start muted" : "Remember last"
@@ -51,19 +52,20 @@ Item {
         if (audioSettings.outputs.length) outputDraftId = audioSettings.outputs[next].id
     }
     function cancelOutputDraft() {
+        if (outputApplyPending) return
         outputDraftActive = false
         outputDraftId = ""
         for (let i = 0; i < audioSettings.outputs.length; ++i)
             if (audioSettings.outputs[i].active) outputDraftId = audioSettings.outputs[i].id
     }
     function reconcileOutputDraft() {
-        if (outputDraftActive && candidateOutput && candidateOutput.active
-            && audioSettings.outputStatus !== "Switching output…")
-            outputDraftActive = false
+        if (!outputApplyPending || audioSettings.outputStatus === "Switching output…") return
+        outputApplyPending = false
+        if (candidateOutput && candidateOutput.active) outputDraftActive = false
     }
     function handleCommand(command) {
         if (command === inputManager.back) {
-            if (outputDraftActive) cancelOutputDraft()
+            if (outputDraftActive && !outputApplyPending) cancelOutputDraft()
         } else if (command === inputManager.navigateUp)
             selectedIndex = Math.max(0, selectedIndex - 1)
         else if (command === inputManager.navigateDown)
@@ -86,7 +88,7 @@ Item {
             else if (selectedIndex === 9) audioSettings.reset()
             else if (selectedIndex === 10 && candidateOutput) {
                 if (!outputDraftActive) beginOutputDraft()
-                else audioSettings.selectOutput(candidateOutput.id)
+                else outputApplyPending = audioSettings.selectOutput(candidateOutput.id)
             }
             else if (selectedIndex === 11) audioSettings.refreshBackend()
             else if (selectedIndex === 12) {
