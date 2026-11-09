@@ -40,7 +40,9 @@ add_library(isolde_core STATIC
     src/media/KodiMedia.cpp
     src/media/KodiMedia.h
     src/media/OnlineDiscovery.cpp
+    src/media/OnlineSubtitleRepository.cpp
     src/media/OnlineDiscovery.h
+    src/media/OnlineSubtitleRepository.h
     src/media/SubtitleService.cpp
     src/media/SubtitleService.h
     src/media/CaptureController.cpp
@@ -132,6 +134,7 @@ target_link_libraries(isolde-native-host PRIVATE Qt6::Core)
 target_include_directories(isolde-native-host PRIVATE src)
 qt_add_resources(isolde-native-host "native_remote" PREFIX "/isolde" BASE src/input FILES src/input/web-remote.js)
 qt_add_resources(isolde "embedded_remote" PREFIX "/isolde" BASE src/input FILES src/input/web-remote.js)
+qt_add_resources(isolde "tmdb_attribution" PREFIX "/isolde" BASE assets FILES assets/tmdb-logo.svg)
 add_dependencies(isolde isolde-native-host)
 target_link_libraries(isolde PRIVATE isolde_core Qt6::Qml Qt6::Quick Qt6::WebEngineQuick Qt6::WebChannel)
 target_compile_definitions(isolde PRIVATE ISOLDE_VERSION="${PROJECT_VERSION}")
@@ -169,6 +172,8 @@ qt_add_qml_module(isolde
         qml/ClockWidget.qml
         qml/CommandCenter.qml
         qml/SubtitleQueue.qml
+        qml/SubtitleTrackPicker.qml
+        qml/TMDBAttributionView.qml
         qml/CustomizeHomeView.qml
         qml/ComposedHome.qml
         qml/HomeCard.qml
@@ -423,7 +428,9 @@ if(BUILD_TESTING)
     target_link_libraries(isolde_tests PRIVATE isolde_core Qt6::Test)
     qt_add_executable(isolde_t14_tests tests/tst_t14.cpp)
     target_link_libraries(isolde_t14_tests PRIVATE isolde_core Qt6::Test Qt6::Network Qt6::Qml Qt6::Quick)
-    target_compile_definitions(isolde_t14_tests PRIVATE T14_SUBTITLE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/SubtitleQueue.qml")
+    target_compile_definitions(isolde_t14_tests PRIVATE
+        T14_SUBTITLE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/SubtitleQueue.qml"
+        T14_SUBTITLE_TRACK_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/SubtitleTrackPicker.qml")
     add_test(NAME t14_discovery_subtitles COMMAND isolde_t14_tests)
     set_tests_properties(t14_discovery_subtitles PROPERTIES TIMEOUT 60 LABELS "t14;media;offline"
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")

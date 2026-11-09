@@ -5,13 +5,16 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QTimer>
 #include <QUuid>
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -39,13 +42,20 @@ QString safeError(const QString &text)
 }
 }
 
-SubtitleService::SubtitleService(QObject *parent, const QString &cacheRoot)
+SubtitleService::SubtitleService(QObject *parent, const QString &cacheRoot, const QString &localPythonExecutable)
     : QObject(parent), m_cacheRoot(cacheRoot.isEmpty()
           ? (QStandardPaths::writableLocation(QStandardPaths::CacheLocation).isEmpty()
                 ? QString() : QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath(QStringLiteral("subtitles")))
-          : cacheRoot)
+          : cacheRoot),
+      m_pythonExecutable(localPythonExecutable.isEmpty() ? QString() : QFileInfo(localPythonExecutable).absoluteFilePath())
 {
     m_processTimeout.setSingleShot(true);
+    m_languagePackTimeout.setSingleShot(true);
+    connect(&m_languagePackTimeout, &QTimer::timeout, this, [this] {
+        if (m_languageProcess.state() == QProcess::NotRunning) return;
+        m_languagePackTimedOut = true;
+        m_languageProcess.kill();
+    });
     connect(&m_processTimeout, &QTimer::timeout, this, [this] {
         if (m_process.state() != QProcess::NotRunning) {
             m_timeoutPending = true;
@@ -64,6 +74,17 @@ SubtitleService::SubtitleService(QObject *parent, const QString &cacheRoot)
         if (m_active < 0 || error != QProcess::FailedToStart) return;
         failCurrent(QStringLiteral("Required local subtitle tool could not start: %1").arg(m_process.errorString()));
     });
+    connect(&m_languageProcess, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, &SubtitleService::finishLanguagePackProcess);
+    connect(&m_languageProcess, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart || m_languagePackAction.isEmpty()) return;
+        m_languagePackTimeout.stop();
+        m_languagePackStatus = QStringLiteral("The local Argos language-pack helper could not start: %1")
+            .arg(m_languageProcess.errorString());
+        m_languagePackAction.clear();
+        emit changed();
+    });
+    refreshLanguagePacks();
 }
 
 SubtitleService::~SubtitleService()
@@ -71,6 +92,11 @@ SubtitleService::~SubtitleService()
     if (m_process.state() != QProcess::NotRunning) {
         m_process.kill();
         m_process.waitForFinished(1000);
+    }
+    if (m_languageProcess.state() != QProcess::NotRunning) {
+        m_languagePackTimeout.stop();
+        m_languageProcess.kill();
+        m_languageProcess.waitForFinished(1000);
     }
     for (const auto &job : std::as_const(m_jobs)) cleanStaging(job);
 }
@@ -92,7 +118,8 @@ QVariantList SubtitleService::jobs() const
             {QStringLiteral("state"), job.state},
             {QStringLiteral("progress"), percent},
             {QStringLiteral("error"), job.error},
-            {QStringLiteral("provenance"), job.provenance}
+            {QStringLiteral("provenance"), job.provenance},
+            {QStringLiteral("qualityReport"), job.qualityReport}
         });
     }
     return result;
@@ -186,13 +213,25 @@ QString SubtitleService::outputPath(const QString &sourcePath, const QString &ta
 
 bool SubtitleService::writeOutput(Job &job, const QString &srtText, QString *error) const
 {
-    if (job.output.isEmpty() || QFileInfo::exists(job.output)) {
+    if (job.output.isEmpty() || QFileInfo::exists(job.output) ||
+        QFileInfo::exists(job.output + QStringLiteral(".isolde.json"))) {
         if (error) *error = QStringLiteral("A subtitle already exists at the selected output path; no file was overwritten.");
         return false;
     }
     const QFileInfo outputInfo(job.output);
     if (!QDir().mkpath(outputInfo.absolutePath())) {
         if (error) *error = QStringLiteral("Could not create the subtitle output directory.");
+        return false;
+    }
+    QFile reservation(job.output + QStringLiteral(".isolde-reserve"));
+    if (!reservation.open(QIODevice::WriteOnly | QIODevice::NewOnly)) {
+        if (error) *error = QStringLiteral("Another subtitle operation is using this output path; nothing was overwritten.");
+        return false;
+    }
+    reservation.close();
+    [[maybe_unused]] const auto releaseReservation = qScopeGuard([&reservation] { QFile::remove(reservation.fileName()); });
+    if (QFileInfo::exists(job.output) || QFileInfo::exists(job.output + QStringLiteral(".isolde.json"))) {
+        if (error) *error = QStringLiteral("A subtitle already exists at the selected output path; no file was overwritten.");
         return false;
     }
     QSaveFile subtitle(job.output);
@@ -210,8 +249,10 @@ bool SubtitleService::writeOutput(Job &job, const QString &srtText, QString *err
         {QStringLiteral("sourceLanguage"), job.sourceLanguage},
         {QStringLiteral("targetLanguage"), job.targetLanguage},
         {QStringLiteral("createdAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-        {QStringLiteral("offlineOnly"), true},
-        {QStringLiteral("reviewRequired"), true}
+        {QStringLiteral("offlineOnly"), job.mode != QStringLiteral("download")},
+        {QStringLiteral("repository"), job.mode == QStringLiteral("download") ? QStringLiteral("OpenSubtitles.com") : QString()},
+        {QStringLiteral("reviewRequired"), true},
+        {QStringLiteral("qualityReport"), QJsonObject::fromVariantMap(job.qualityReport)}
     };
     QSaveFile sidecar(metadataPath);
     const auto bytes = QJsonDocument(provenance).toJson(QJsonDocument::Indented);
@@ -221,6 +262,56 @@ bool SubtitleService::writeOutput(Job &job, const QString &srtText, QString *err
         return false;
     }
     return true;
+}
+
+QVariantMap SubtitleService::evaluateQuality(const Job &job, const QVector<Cue> &outputCues) const
+{
+    const bool compareTimestamps = job.mode == QStringLiteral("translate");
+    int emptyCues = 0;
+    for (const auto &cue : outputCues)
+        if (cue.text.trimmed().isEmpty()) ++emptyCues;
+
+    int unchangedCues = 0;
+    int shortCues = 0;
+    bool timestampsPreserved = compareTimestamps && job.cues.size() == outputCues.size();
+    if (compareTimestamps) {
+        const auto count = std::min(job.cues.size(), outputCues.size());
+        for (qsizetype i = 0; i < count; ++i) {
+            if (job.cues.at(i).header != outputCues.at(i).header)
+                timestampsPreserved = false;
+            const auto sourceText = job.cues.at(i).text.simplified();
+            const auto targetText = outputCues.at(i).text.simplified();
+            if (!sourceText.isEmpty() && sourceText.compare(targetText, Qt::CaseInsensitive) == 0)
+                ++unchangedCues;
+            if (sourceText.size() >= 8 && targetText.size() < 3)
+                ++shortCues;
+        }
+    }
+
+    QStringList warnings;
+    if (emptyCues) warnings.append(QStringLiteral("empty-cues"));
+    if (compareTimestamps && !timestampsPreserved)
+        warnings.append(QStringLiteral("cue-timing-or-count-changed"));
+    if (unchangedCues) warnings.append(QStringLiteral("possible-untranslated-cues"));
+    if (shortCues) warnings.append(QStringLiteral("suspiciously-short-cues"));
+    const auto unchangedPercent = job.mode == QStringLiteral("translate") && !job.cues.isEmpty()
+        ? unchangedCues * 100 / job.cues.size() : 0;
+    return {
+        {QStringLiteral("assessment"), QStringLiteral("Structural and heuristic checks only; language quality is not certified.")},
+        {QStringLiteral("reviewRequired"), true},
+        {QStringLiteral("languageQualityCertified"), false},
+        {QStringLiteral("sourceCueCount"), job.mode == QStringLiteral("translate") ? job.cues.size() : -1},
+        {QStringLiteral("outputCueCount"), outputCues.size()},
+        {QStringLiteral("emptyCueCount"), emptyCues},
+        {QStringLiteral("unchangedCueCount"), unchangedCues},
+        {QStringLiteral("unchangedCuePercent"), unchangedPercent},
+        {QStringLiteral("shortOutputCueCount"), shortCues},
+        {QStringLiteral("timestampsCompared"), compareTimestamps},
+        {QStringLiteral("timestampsPreserved"), timestampsPreserved},
+        {QStringLiteral("timestampCheck"), !compareTimestamps ? QStringLiteral("not-applicable")
+            : timestampsPreserved ? QStringLiteral("passed") : QStringLiteral("failed")},
+        {QStringLiteral("warnings"), warnings}
+    };
 }
 
 QString SubtitleService::queueTranslation(const QString &sourceSrt, const QString &sourceLanguage,
@@ -489,6 +580,7 @@ void SubtitleService::finishCurrent(const QString &srtText)
         failCurrent(QStringLiteral("Generated output is not a valid bounded SRT: %1").arg(validationError));
         return;
     }
+    job.qualityReport = evaluateQuality(job, validatedCues);
     QString error;
     if (!writeOutput(job, srtText, &error)) {
         const auto originalOutput = job.output;
@@ -599,10 +691,57 @@ bool SubtitleService::saveReview(const QString &jobId, const QString &srtText)
         emit changed();
         return false;
     }
+    QFile originalFile(m_jobs[index].output);
+    if (!originalFile.open(QIODevice::ReadOnly) || originalFile.size() > MaxSubtitleBytes) {
+        m_error = QStringLiteral("Could not preserve the current subtitle before saving the review.");
+        emit changed();
+        return false;
+    }
+    const auto originalBytes = originalFile.readAll();
+    originalFile.close();
+    QFile provenanceFile(m_jobs[index].output + QStringLiteral(".isolde.json"));
+    if (!provenanceFile.open(QIODevice::ReadOnly) || provenanceFile.size() > 64 * 1024) {
+        m_error = QStringLiteral("Could not read the subtitle provenance before saving the review.");
+        emit changed();
+        return false;
+    }
+    QJsonParseError provenanceError;
+    auto provenanceDocument = QJsonDocument::fromJson(provenanceFile.readAll(), &provenanceError);
+    provenanceFile.close();
+    if (provenanceError.error != QJsonParseError::NoError || !provenanceDocument.isObject()) {
+        m_error = QStringLiteral("Subtitle provenance is invalid; the reviewed output was not changed.");
+        emit changed();
+        return false;
+    }
+    auto reviewJob = m_jobs[index];
+    reviewJob.mode = QStringLiteral("review");
+    const auto previousQuality = m_jobs[index].qualityReport;
+    auto reviewQuality = evaluateQuality(reviewJob, cues);
+    reviewQuality.insert(QStringLiteral("reviewedByUser"), true);
+    m_jobs[index].qualityReport = reviewQuality;
+    auto provenance = provenanceDocument.object();
+    provenance.insert(QStringLiteral("reviewedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+    provenance.insert(QStringLiteral("qualityReport"), QJsonObject::fromVariantMap(reviewQuality));
     QSaveFile file(m_jobs[index].output);
     const auto bytes = srtText.toUtf8();
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+        m_jobs[index].qualityReport = previousQuality;
         m_error = QStringLiteral("Could not save subtitle edits atomically: %1").arg(file.errorString());
+        emit changed();
+        return false;
+    }
+    const auto provenanceBytes = QJsonDocument(provenance).toJson(QJsonDocument::Indented);
+    QSaveFile updatedProvenance(m_jobs[index].output + QStringLiteral(".isolde.json"));
+    if (!updatedProvenance.open(QIODevice::WriteOnly) ||
+        updatedProvenance.write(provenanceBytes) != provenanceBytes.size() ||
+        !updatedProvenance.commit()) {
+        QSaveFile rollback(m_jobs[index].output);
+        const bool restored = rollback.open(QIODevice::WriteOnly) &&
+            rollback.write(originalBytes) == originalBytes.size() && rollback.commit();
+        m_error = restored
+            ? QStringLiteral("Could not persist review provenance; subtitle edits were rolled back.")
+            : QStringLiteral("Could not persist review provenance or restore the original subtitle. Check storage before using this file.");
+        m_jobs[index].qualityReport = previousQuality;
         emit changed();
         return false;
     }
@@ -612,8 +751,211 @@ bool SubtitleService::saveReview(const QString &jobId, const QString &srtText)
     return true;
 }
 
+QString SubtitleService::importOnlineSubtitle(const QString &title, const QString &language,
+                                             const QString &srtText, int repositoryFileId)
+{
+    if (m_jobs.size() >= MaxQueuedJobs) {
+        m_error = QStringLiteral("Subtitle queue is full (maximum 16 jobs). Complete or forget a finished job before importing another.");
+        emit changed();
+        return {};
+    }
+    m_error.clear();
+    const auto normalizedTitle = title.trimmed();
+    const auto normalizedLanguage = language.trimmed().toLower();
+    const auto bytes = srtText.toUtf8();
+    QVector<Cue> cues;
+    QString validationError;
+    if (normalizedTitle.isEmpty() || normalizedTitle.size() > 200 ||
+        !validLanguage(normalizedLanguage) || repositoryFileId <= 0 ||
+        bytes.isEmpty() || bytes.size() > MaxSubtitleBytes ||
+        QString::fromUtf8(bytes).toUtf8() != bytes || !parseSrt(srtText, &cues, &validationError)) {
+        m_error = validationError.isEmpty()
+            ? QStringLiteral("Downloaded subtitle metadata or UTF-8 SRT is invalid.")
+            : validationError;
+        emit changed();
+        return {};
+    }
+    if (m_cacheRoot.isEmpty()) {
+        m_error = QStringLiteral("No managed local cache is available to store the downloaded subtitle.");
+        emit changed();
+        return {};
+    }
+    QString safeTitle = normalizedTitle;
+    safeTitle.replace(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}._-]+")), QStringLiteral("-"));
+    safeTitle.remove(QRegularExpression(QStringLiteral("^\\.+")));
+    if (safeTitle.size() > 64) safeTitle.truncate(64);
+    if (safeTitle.isEmpty()) safeTitle = QStringLiteral("subtitle");
+    const auto directory = QDir(m_cacheRoot).filePath(QStringLiteral("online-subtitles"));
+    if (!QDir().mkpath(directory)) {
+        m_error = QStringLiteral("Could not create the managed online subtitle cache.");
+        emit changed();
+        return {};
+    }
+    const auto base = safeTitle + QLatin1Char('.') + normalizedLanguage;
+    QString output = QDir(directory).filePath(base + QStringLiteral(".srt"));
+    for (int version = 1; QFileInfo::exists(output) || QFileInfo::exists(output + QStringLiteral(".isolde.json")); ++version) {
+        if (version > 10000) {
+            m_error = QStringLiteral("Could not find a non-overwriting name for the downloaded subtitle.");
+            emit changed();
+            return {};
+        }
+        output = QDir(directory).filePath(base + QStringLiteral(".isolde-%1.srt").arg(version));
+    }
+    Job job;
+    job.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    job.mode = QStringLiteral("download");
+    job.source = QStringLiteral("OpenSubtitles.com file %1 · %2").arg(repositoryFileId).arg(normalizedTitle);
+    job.sourceLanguage = normalizedLanguage;
+    job.targetLanguage = normalizedLanguage;
+    job.output = output;
+    job.sourceHash = QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
+    job.provenance = QStringLiteral("User-requested OpenSubtitles.com API download; local review required");
+    job.qualityReport = evaluateQuality(job, cues);
+    QString writeError;
+    if (!writeOutput(job, srtText, &writeError)) {
+        m_error = writeError;
+        m_status = QStringLiteral("Downloaded subtitle was not stored; existing files were left unchanged.");
+        emit changed();
+        return {};
+    }
+    job.state = QStringLiteral("Ready for review");
+    m_jobs.append(job);
+    m_error.clear();
+    m_status = QStringLiteral("OpenSubtitles download saved in Isolde's managed cache. Review it before loading in Kodi.");
+    emit changed();
+    return job.id;
+}
+
 void SubtitleService::cleanStaging(const Job &job) const
 {
     if (!job.stagingDirectory.isEmpty() && job.stagingDirectory.startsWith(QDir(m_cacheRoot).absolutePath() + QDir::separator()))
         QDir(job.stagingDirectory).removeRecursively();
+}
+
+void SubtitleService::refreshLanguagePacks()
+{
+    if (m_languageProcess.state() != QProcess::NotRunning) return;
+    const auto python = m_pythonExecutable.isEmpty()
+        ? QStandardPaths::findExecutable(QStringLiteral("python3")) : m_pythonExecutable;
+    if (python.isEmpty()) {
+        m_languagePackStatus = QStringLiteral("Python 3 is unavailable; installed Argos language packs could not be inspected.");
+        emit changed();
+        return;
+    }
+    static const QString script = QStringLiteral(
+        "import json\n"
+        "import argostranslate.translate as t\n"
+        "langs=t.get_installed_languages()\n"
+        "pairs=[]\n"
+        "for source in langs:\n"
+        " for target in langs:\n"
+        "  if source.code != target.code and source.get_translation(target) is not None:\n"
+        "   pairs.append({'source':source.code,'target':target.code})\n"
+        "print(json.dumps({'pairs':pairs},ensure_ascii=False))\n");
+    m_languagePackAction = QStringLiteral("refresh");
+    m_languagePackTimedOut = false;
+    m_languagePackStatus = QStringLiteral("Checking locally installed Argos language pairs…");
+    m_languageProcess.start(python, {QStringLiteral("-c"), script});
+    m_languagePackTimeout.start(30000);
+    emit changed();
+}
+
+bool SubtitleService::installLanguagePack(const QString &localPackagePath)
+{
+    const QFileInfo package(localPackagePath);
+    if (!package.isFile() || package.isSymLink() ||
+        package.suffix().compare(QStringLiteral("argosmodel"), Qt::CaseInsensitive) != 0 ||
+        package.size() < 4 || package.size() > 512LL * 1024 * 1024) {
+        m_languagePackStatus = QStringLiteral("Select a local .argosmodel package between 4 bytes and 512 MiB. Downloads are not supported.");
+        emit changed();
+        return false;
+    }
+    if (m_languageProcess.state() != QProcess::NotRunning) {
+        m_languagePackStatus = QStringLiteral("Wait for the current local language-pack operation to finish.");
+        emit changed();
+        return false;
+    }
+    QFile input(package.absoluteFilePath());
+    if (!input.open(QIODevice::ReadOnly) || input.read(4) != QByteArrayLiteral("PK\003\004")) {
+        m_languagePackStatus = QStringLiteral("The selected file is not a readable local Argos package archive.");
+        emit changed();
+        return false;
+    }
+    const auto python = m_pythonExecutable.isEmpty()
+        ? QStandardPaths::findExecutable(QStringLiteral("python3")) : m_pythonExecutable;
+    if (python.isEmpty()) {
+        m_languagePackStatus = QStringLiteral("Python 3 is unavailable; the local Argos package was not installed.");
+        emit changed();
+        return false;
+    }
+    static const QString script = QStringLiteral(
+        "import sys\n"
+        "import argostranslate.package as p\n"
+        "p.install_from_path(sys.argv[1])\n");
+    m_languagePackAction = QStringLiteral("install");
+    m_languagePackTimedOut = false;
+    m_languagePackStatus = QStringLiteral("Installing the explicitly selected local Argos language package; no network access is used.");
+    m_languageProcess.start(python, {QStringLiteral("-c"), script, package.absoluteFilePath()});
+    m_languagePackTimeout.start(10 * 60 * 1000);
+    emit changed();
+    return true;
+}
+
+void SubtitleService::finishLanguagePackProcess(int exitCode, QProcess::ExitStatus exitStatus)
+{
+    m_languagePackTimeout.stop();
+    const auto action = m_languagePackAction;
+    m_languagePackAction.clear();
+    if (m_languagePackTimedOut) {
+        m_languagePackTimedOut = false;
+        m_languagePackStatus = QStringLiteral("Local Argos language-pack operation timed out; no network request was made.");
+        emit changed();
+        return;
+    }
+    if (exitStatus != QProcess::NormalExit || exitCode != 0) {
+        auto detail = QString::fromUtf8(m_languageProcess.readAllStandardError()).trimmed();
+        if (detail.size() > 512) detail = detail.left(512);
+        m_languagePackStatus = action == QStringLiteral("install")
+            ? QStringLiteral("Local Argos package installation failed; no network request was made. %1").arg(safeError(detail))
+            : QStringLiteral("Could not inspect installed local Argos language packs. %1").arg(safeError(detail));
+        emit changed();
+        return;
+    }
+    if (action == QStringLiteral("install")) {
+        m_languagePackStatus = QStringLiteral("Local Argos language package installed. Refreshing available offline translation pairs…");
+        emit changed();
+        refreshLanguagePacks();
+        return;
+    }
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(m_languageProcess.readAllStandardOutput(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject() ||
+        !document.object().value(QStringLiteral("pairs")).isArray()) {
+        m_languagePackStatus = QStringLiteral("Argos returned an invalid installed-language response.");
+        emit changed();
+        return;
+    }
+    QVariantList pairs;
+    const auto array = document.object().value(QStringLiteral("pairs")).toArray();
+    if (array.size() > 512) {
+        m_languagePackStatus = QStringLiteral("Argos reported too many installed language pairs; results were refused.");
+        emit changed();
+        return;
+    }
+    for (const auto &value : array) {
+        if (!value.isObject()) continue;
+        const auto pair = value.toObject();
+        const auto source = pair.value(QStringLiteral("source")).toString();
+        const auto target = pair.value(QStringLiteral("target")).toString();
+        if (!validLanguage(source) || !validLanguage(target) || source == target) continue;
+        pairs.append(QVariantMap{
+            {QStringLiteral("source"), source},
+            {QStringLiteral("target"), target}
+        });
+    }
+    m_languagePacks = pairs;
+    m_languagePackStatus = pairs.isEmpty()
+        ? QStringLiteral("No installed Argos translation pairs found. Select and import a local .argosmodel package; this tool never downloads packs.")
+        : QStringLiteral("%1 installed offline Argos translation pair(s).").arg(pairs.size());
+    emit changed();
 }

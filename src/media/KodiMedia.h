@@ -22,6 +22,8 @@ class KodiMedia final : public QObject {
     Q_PROPERTY(bool hasNextPage READ hasNextPage NOTIFY changed)
     Q_PROPERTY(bool playbackActive READ playbackActive NOTIFY changed)
     Q_PROPERTY(QString playbackStatus READ playbackStatus NOTIFY changed)
+    Q_PROPERTY(QString subtitleStatus READ subtitleStatus NOTIFY changed)
+    Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY changed)
     Q_PROPERTY(bool playbackCanPause READ playbackCanPause NOTIFY changed)
     Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
@@ -57,6 +59,8 @@ public:
     Q_INVOKABLE void openShowResult(const QString &query, int tvShowId, int pageStart = 0);
     Q_INVOKABLE void playMedia(const QString &kind, int id, bool resume = true);
     Q_INVOKABLE void loadSubtitle(const QString &path);
+    Q_INVOKABLE void refreshSubtitleTracks();
+    Q_INVOKABLE void setSubtitleTrack(int trackId);
     // Guide coordinator only: explicit broadcast offset, never saved resume.
     bool playScheduled(const QString &kind, int id, int offsetSeconds);
     bool playPvr(int id,int clientId,int uniqueId);
@@ -74,6 +78,8 @@ public:
     Q_INVOKABLE void previousPage();
     bool playbackActive() const { return m_playbackActive; }
     QString playbackStatus() const { return m_playbackStatus; }
+    QString subtitleStatus() const { return m_subtitleStatus; }
+    QVariantList subtitleTracks() const { return m_subtitleTracks; }
     bool playbackCanPause() const { return m_playbackActive && m_playbackCanPause; }
     bool playbackCanSeek() const { return m_playbackActive && m_playbackCanSeek; }
     bool lastPlaybackNaturalEnd() const { return m_lastPlaybackNaturalEnd; }
@@ -158,6 +164,8 @@ private:
     QString m_scheduledKind;
     int m_scheduledId = 0;
     QString m_playbackStatus;
+    QString m_subtitleStatus = QStringLiteral("Subtitle track discovery is not active.");
+    QVariantList m_subtitleTracks;
     QString m_pendingControl;
     QString m_presentationError;
     QTimer m_playbackPoll;

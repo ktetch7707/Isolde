@@ -84,9 +84,14 @@ Window {
             else if(command===inputManager.back){actionDispatcher.cancelGuidePlayback();guideController.refresh()}
             if(command!==inputManager.volumeUp && command!==inputManager.volumeDown && command!==inputManager.mute)return
         }
+        if (subtitleTrackPicker.open) {
+            subtitleTrackPicker.handleCommand(command)
+            return
+        }
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
+            else if (command === inputManager.menu) subtitleTrackPicker.open = true
             else if (command === inputManager.playPause || command === inputManager.confirm) kodiMedia.playbackControl("pause")
             else if (command === inputManager.navigateLeft) kodiMedia.playbackControl("backward")
             else if (command === inputManager.navigateRight) kodiMedia.playbackControl("forward")
@@ -515,6 +520,8 @@ Window {
         anchors.fill: parent
         service: subtitleService
         kodiClient: kodiMedia
+        repository: onlineSubtitleRepository
+        webEnabled: searchPreferences.webEnabled
         appearance: window.shellAppearance("search", commandCenter.themeOrigin)
         onCloseRequested: {
             open = false
@@ -522,6 +529,13 @@ Window {
             commandCenter.open = true
             if(state)Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})
         }
+    }
+    SubtitleTrackPicker {
+        id: subtitleTrackPicker
+        anchors.fill: parent
+        kodiClient: kodiMedia
+        appearance: window.shellAppearance("kodi", "")
+        onCloseRequested: open = false
     }
     CaptureSessionView {
         id: captureSession

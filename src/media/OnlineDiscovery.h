@@ -37,7 +37,9 @@ public:
 
     Q_INVOKABLE void setRegion(const QString &region);
     Q_INVOKABLE void search(const QString &query);
-    Q_INVOKABLE void loadAvailability(const QString &mediaType, int id);
+    Q_INVOKABLE void loadAvailability(const QString &mediaType, int id, const QString &title);
+    Q_INVOKABLE QUrl providerLaunchUrl(int providerId) const;
+    Q_INVOKABLE bool launchProvider(int providerId);
     Q_INVOKABLE void cancel();
 
 signals:
@@ -55,6 +57,7 @@ private:
     QNetworkAccessManager *m_network = nullptr;
     QUrl m_apiBase;
     QString m_readToken, m_region = QStringLiteral("US"), m_status = QStringLiteral("Web discovery is off.");
+    QString m_requestedTitle;
     QVariantList m_results, m_availability;
     QList<QPointer<QNetworkReply>> m_replies;
     quint64 m_generation = 0;

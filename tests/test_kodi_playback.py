@@ -62,6 +62,12 @@ class PlaybackTests(unittest.TestCase):
         self.pausable = True
         self.pause_info = None
         self.pause_info_error = False
+        self.subtitle_tracks = [
+            {"index": 0, "name": "English", "language": "en", "isexternal": False},
+            {"index": 2, "name": "French", "language": "fr", "isexternal": True},
+        ]
+        self.subtitle_id = 0
+        self.subtitle_enabled = True
         self.now = 0
         self.calls, self.builtins = [], []
         self.player = module.Playback(self.execute, self.builtins.append, True, lambda: self.now)
@@ -87,6 +93,8 @@ class PlaybackTests(unittest.TestCase):
         elif method == "Player.GetProperties":
             values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
                     "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
+            values.update({"subtitles":self.subtitle_tracks, "subtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
+                           "subtitleenabled":self.subtitle_enabled})
             if set(params["properties"])-set(values):return json.dumps({"error":{"code":-32602,"message":"Invalid Player property"}})
             result={key:values[key] for key in params["properties"]}
         elif method == "XBMC.GetInfoBooleans":
@@ -94,6 +102,9 @@ class PlaybackTests(unittest.TestCase):
             if self.pause_info_error:return json.dumps({"error":{"code":-32602,"message":"Capability unavailable"}})
             result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
+        elif method == "Player.SetSubtitle":
+            self.subtitle_enabled = params["subtitle"] != "off"
+            if self.subtitle_enabled: self.subtitle_id = params["subtitle"]
         elif method == "Player.Stop": self.active = False
         return json.dumps({"result": result})
 
@@ -345,6 +356,25 @@ class PlaybackTests(unittest.TestCase):
         self.player.media_type = "song"
         with self.assertRaises(ValueError):
             self.player.handle("Isolde.LoadSubtitle", {"path": str(subtitle)})
+
+    def test_subtitle_track_discovery_and_selection_are_managed_player_scoped(self):
+        self.start()
+        tracks = self.player.handle("Isolde.GetSubtitleTracks", {})
+        self.assertEqual([track["id"] for track in tracks["tracks"]], [0, 2])
+        self.assertTrue(tracks["tracks"][0]["selected"])
+        self.assertTrue(tracks["tracks"][1]["external"])
+        selected = self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": 2})
+        self.assertEqual(selected["selectedId"], 2)
+        self.assertIn(("Player.SetSubtitle", {"playerid": 1, "subtitle": 2}), self.calls)
+        disabled = self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": "off"})
+        self.assertFalse(disabled["enabled"])
+        self.item = 8
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.GetSubtitleTracks", {})
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": 99})
+        with self.assertRaises(ValueError):
+            self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": True})
 
     def test_episode_resume_restart_and_type_scoped_ownership(self):
         self.kind = "episode"

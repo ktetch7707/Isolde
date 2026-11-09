@@ -69,6 +69,18 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(response["result"],{"loaded":True})
         self.assertEqual(playback.calls,[("Isolde.LoadSubtitle",params)])
 
+    def test_subtitle_track_operations_route_only_through_managed_playback(self):
+        class Playback:
+            def __init__(self): self.calls=[]
+            def handle(self, method, params):
+                self.calls.append((method,params))
+                return {"tracks":[],"enabled":False,"selectedId":-1}
+        playback=Playback()
+        for method,params in (("Isolde.GetSubtitleTracks",{}),("Isolde.SetSubtitleTrack",{"subtitleId":"off"})):
+            response=bridge.dispatch(self.request(method,params),lambda _:self.fail("Subtitle track control must not use raw Kodi RPC"),playback=playback)
+            self.assertIn("result",response)
+        self.assertEqual(playback.calls,[("Isolde.GetSubtitleTracks",{}),("Isolde.SetSubtitleTrack",{"subtitleId":"off"})])
+
     def test_pvr_broadcast_reads_are_bounded_and_read_only(self):
         calls=[]
         def execute(raw):

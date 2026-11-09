@@ -197,6 +197,7 @@ Item {
             for (let o = 0; o < onlineItems.length; ++o) {
                 const title = onlineItems[o]
                 result.push({ kind: "onlineTitle", id: title.identity, providerId: title.providerId,
+                    title: title.name,
                     mediaType: title.mediaType, name: title.name + (title.year ? " (" + title.year + ")" : ""),
                     description: "TMDB metadata · " + title.region + " · checked " + title.checkedAt + " · not endorsed by TMDB · availability is not entitlement",
                     action: "Check listings", accent: shell.accent, symbol: title.symbol })
@@ -204,9 +205,12 @@ Item {
             const providers = onlineDiscovery.availability || []
             for (let p = 0; p < providers.length; ++p) {
                 const listing = providers[p]
-                result.push({ kind: "onlineProvider", id: "provider-" + p, name: listing.name,
-                    description: "TMDB listing · " + listing.tier + " · " + listing.region + " · verify with service · no entitlement claim",
-                    action: "Provider listing", accent: shell.accent, symbol: "↗" })
+                result.push({ kind: "onlineProvider", id: "provider-" + listing.providerId,
+                    providerId: listing.providerId, name: listing.name,
+                    description: "TMDB listing · " + listing.tier + " · " + listing.region +
+                        (listing.routeSupported ? " · open official title search" : " · no supported direct search route") +
+                        " · no entitlement claim",
+                    action: listing.routeSupported ? "Open service search" : "Provider listing", accent: shell.accent, symbol: listing.routeSupported ? "↗" : "•" })
             }
         }
         return result
@@ -316,7 +320,9 @@ Item {
             if (item.action === "Next") client.nextPage()
             else client.previousPage()
         } else if (item.kind === "onlineTitle" && onlineDiscovery) {
-            onlineDiscovery.loadAvailability(item.mediaType, item.providerId)
+            onlineDiscovery.loadAvailability(item.mediaType, item.providerId, item.title)
+        } else if (item.kind === "onlineProvider" && onlineDiscovery) {
+            onlineDiscovery.launchProvider(item.providerId)
         }
     }
 

@@ -5,12 +5,16 @@ Item {
     id: root
     property var service: null
     property var kodiClient: null
+    property var repository: null
     property var appearance: ({})
+    property bool webEnabled: false
     property bool open: false
     property int selectedJob: -1
     property string focusArea: "source"
     property bool keyboardOpen: false
     property string editingField: ""
+    property int selectedRepositoryResult: 0
+    property string repositoryType: "movie"
     signal closeRequested()
     SurfacePalette { id: shell; appearance: root.appearance }
 
@@ -36,6 +40,17 @@ Item {
         if (job && service) reviewText.text = service.reviewText(job.id)
     }
 
+    function currentRepositoryResult() {
+        const values = repository ? repository.results : []
+        return selectedRepositoryResult >= 0 && selectedRepositoryResult < values.length
+            ? values[selectedRepositoryResult] : null
+    }
+
+    function importRepositoryResult() {
+        const result = currentRepositoryResult()
+        if (result && repository) repository.download(result.fileId)
+    }
+
     onOpenChanged: if (!open) keyboardOpen = false
 
     function handleCommand(command) {
@@ -43,15 +58,26 @@ Item {
         if (keyboardOpen) { keyboard.handleCommand(command); return }
         if (command === inputManager.back) { closeRequested(); return }
         const areas = ["source", "sourceLanguage", "targetLanguage", "queueTranslation",
-                       "media", "model", "generate", "jobs", "cancel", "review", "reviewText", "saveReview", "load", "forget"]
+                       "media", "model", "generate", "languagePackPath", "installPack", "refreshPacks",
+                       "onlineQuery", "onlineLanguage", "onlineType", "onlineSearch", "onlineResults", "onlineDownload",
+                       "jobs", "cancel", "review", "reviewText", "saveReview", "load", "forget"]
         let index = areas.indexOf(focusArea)
         if (command === inputManager.navigateDown) focusArea = areas[Math.min(areas.length - 1, index + 1)]
         else if (command === inputManager.navigateUp) focusArea = areas[Math.max(0, index - 1)]
         else if (command === inputManager.navigateLeft || command === inputManager.navigateRight) {
             if (focusArea === "jobs" && service && service.jobs.length)
                 selectedJob = Math.max(0, Math.min(service.jobs.length - 1, selectedJob + (command === inputManager.navigateRight ? 1 : -1)))
+            else if (focusArea === "onlineResults" && repository && repository.results.length)
+                selectedRepositoryResult = Math.max(0, Math.min(repository.results.length - 1,
+                    selectedRepositoryResult + (command === inputManager.navigateRight ? 1 : -1)))
+            else if (focusArea === "onlineType")
+                repositoryType = command === inputManager.navigateRight ? "episode" : "movie"
         } else if (command === inputManager.confirm) {
             if (focusArea === "queueTranslation") queueTranslation()
+            else if (focusArea === "onlineSearch") { if (repository && webEnabled) repository.search(onlineQuery.text, onlineLanguage.text, repositoryType) }
+            else if (focusArea === "onlineDownload") importRepositoryResult()
+            else if (focusArea === "installPack") { if (service) service.installLanguagePack(languagePackPath.text) }
+            else if (focusArea === "refreshPacks") { if (service) service.refreshLanguagePacks() }
             else if (focusArea === "generate") generateFromAudio()
             else if (focusArea === "cancel") { const job = currentJob(); if (job && service) service.cancel(job.id) }
             else if (focusArea === "review") { const job = currentJob(); if (job && service) reviewText.text = service.reviewText(job.id) }
@@ -71,6 +97,9 @@ Item {
                 const field = focusArea === "source" ? sourcePath
                     : focusArea === "sourceLanguage" ? sourceLanguage
                     : focusArea === "targetLanguage" ? targetLanguage
+                    : focusArea === "languagePackPath" ? languagePackPath
+                    : focusArea === "onlineQuery" ? onlineQuery
+                    : focusArea === "onlineLanguage" ? onlineLanguage
                     : focusArea === "media" ? mediaPath : modelPath
                 editingField = focusArea
                 keyboard.value = field.text
@@ -107,7 +136,7 @@ Item {
                 wrapMode: Text.WordWrap
                 color: shell.muted
                 font.pixelSize: 15 * shell.textScale
-                text: service ? (service.errorString || service.status) + (kodiClient && kodiClient.playbackStatus ? " · Kodi: " + kodiClient.playbackStatus : "")
+                text: service ? (service.errorString || service.status) + " · " + service.languagePackStatus + (kodiClient && kodiClient.playbackStatus ? " · Kodi: " + kodiClient.playbackStatus : "")
                     : "Offline tools unavailable. No media or subtitle text is sent online."
             }
             Row {
@@ -138,7 +167,112 @@ Item {
             Text {
                 color: shell.muted
                 font.pixelSize: 13 * shell.textScale
-                text: "Only explicitly selected files are processed. Argos Translate and whisper.cpp models must already be installed; this screen never downloads models. Output never overwrites a subtitle and requires human review."
+                text: "Only selected files are processed. Import Argos .argosmodel packages from local storage; whisper.cpp and its multilingual model must already be installed. No downloads. Output never overwrites a subtitle and requires human review."
+            }
+            Row {
+                width: parent.width
+                spacing: 8
+                TextField {
+                    id: languagePackPath
+                    objectName: "linguistLanguagePackPath"
+                    width: parent.width * 0.62
+                    placeholderText: "Local .argosmodel package path"
+                    Accessible.name: "Explicit local Argos language package path"
+                    background: Rectangle { color:shell.input;border.width:root.focusArea==="languagePackPath"?3:1;border.color:root.focusArea==="languagePackPath"?shell.focus:shell.outline }
+                }
+                Button {
+                    objectName: "linguistInstallLanguagePack"
+                    text: "Import local pack"
+                    onClicked: if (root.service) root.service.installLanguagePack(languagePackPath.text)
+                    background: Rectangle { color:shell.surface;border.width:root.focusArea==="installPack"?3:1;border.color:root.focusArea==="installPack"?shell.focus:shell.outline;radius:8 }
+                }
+                Button {
+                    objectName: "linguistRefreshLanguagePacks"
+                    text: "Refresh"
+                    onClicked: if (root.service) root.service.refreshLanguagePacks()
+                    background: Rectangle { color:shell.surface;border.width:root.focusArea==="refreshPacks"?3:1;border.color:root.focusArea==="refreshPacks"?shell.focus:shell.outline;radius:8 }
+                }
+            }
+            Text {
+                width: parent.width
+                color: shell.muted
+                font.pixelSize: 13 * shell.textScale
+                elide: Text.ElideRight
+                text: service
+                    ? service.languagePackStatus + (service.languagePacks.length
+                        ? " · " + service.languagePacks.map(pair => pair.source.toUpperCase() + " → " + pair.target.toUpperCase()).join(", ")
+                        : "")
+                    : "Argos language pack manager unavailable."
+            }
+            Row {
+                width: parent.width
+                spacing: 8
+                TextField {
+                    id: onlineQuery
+                    objectName: "linguistRepositoryQuery"
+                    width: parent.width * 0.53
+                    placeholderText: "Search repository by title"
+                    Accessible.name: "OpenSubtitles title query; no media is uploaded"
+                    background: Rectangle { color:shell.input;border.width:root.focusArea==="onlineQuery"?3:1;border.color:root.focusArea==="onlineQuery"?shell.focus:shell.outline }
+                }
+                TextField {
+                    id: onlineLanguage
+                    objectName: "linguistRepositoryLanguage"
+                    width: 76
+                    text: "en"
+                    placeholderText: "Language"
+                    Accessible.name: "Subtitle language code"
+                    background: Rectangle { color:shell.input;border.width:root.focusArea==="onlineLanguage"?3:1;border.color:root.focusArea==="onlineLanguage"?shell.focus:shell.outline }
+                }
+                Button {
+                    objectName: "linguistRepositoryType"
+                    text: repositoryType
+                    Accessible.name: "Subtitle repository media type"
+                    onClicked: root.repositoryType = root.repositoryType === "movie" ? "episode" : "movie"
+                    background: Rectangle { color:shell.surface;border.width:root.focusArea==="onlineType"?3:1;border.color:root.focusArea==="onlineType"?shell.focus:shell.outline;radius:8 }
+                }
+                Button {
+                    objectName: "linguistRepositorySearch"
+                    text: "Search"
+                    enabled: root.webEnabled && root.repository && root.repository.configured && !root.repository.busy
+                    onClicked: if (root.repository && root.webEnabled) root.repository.search(onlineQuery.text, onlineLanguage.text, root.repositoryType)
+                    background: Rectangle { color:shell.surface;border.width:root.focusArea==="onlineSearch"?3:1;border.color:root.focusArea==="onlineSearch"?shell.focus:shell.outline;radius:8 }
+                }
+            }
+            Row {
+                width: parent.width
+                spacing: 8
+                Text {
+                    width: parent.width - 178
+                    height: 42
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    color: shell.muted
+                    font.pixelSize: 13 * shell.textScale
+                    text: {
+                        const result = root.currentRepositoryResult()
+                        if (!root.webEnabled) return "Web Off · no subtitle repository requests."
+                        if (!root.repository) return "OpenSubtitles adapter unavailable."
+                        if (!result) return root.repository.status
+                        return "OpenSubtitles · " + (root.selectedRepositoryResult + 1) + "/" +
+                            root.repository.results.length + " · " + result.title + " · " +
+                            result.language + " · " + result.fileName + " · " +
+                            result.downloads + " downloads · Enter downloads this result"
+                    }
+                }
+                Button {
+                    objectName: "linguistRepositoryDownload"
+                    text: "Download SRT"
+                    enabled: root.webEnabled && root.repository && !root.repository.busy && !!root.currentRepositoryResult()
+                    onClicked: root.importRepositoryResult()
+                    background: Rectangle { color:shell.surface;border.width:root.focusArea==="onlineDownload"?3:1;border.color:root.focusArea==="onlineDownload"?shell.focus:shell.outline;radius:8 }
+                }
+            }
+            Text {
+                width: parent.width
+                color: shell.muted
+                font.pixelSize: 12 * shell.textScale
+                text: "Repository downloads are explicit, bounded and stored for review. Only the title/language query is sent; media files and existing subtitles are never uploaded."
             }
             Row {
                 width: parent.width
@@ -152,7 +286,7 @@ Item {
             }
             Row {
                 width: parent.width
-                height: parent.height - 280
+                height: parent.height - 455
                 spacing: 12
                 Rectangle {
                     width: parent.width * 0.45
@@ -173,7 +307,7 @@ Item {
                             required property int index
                             required property var modelData
                             width: jobList.width
-                            height: 74
+                            height: 90
                             radius: 8
                             color: index === root.selectedJob ? shell.selected : shell.elevated
                             border.width: index === root.selectedJob ? 2 : 0
@@ -183,6 +317,15 @@ Item {
                                 anchors.margins: 8
                                 Text { width: parent.width; text: modelData.mode + " · " + modelData.state + " · " + modelData.progress + "%"; color: shell.text; elide: Text.ElideRight; font.pixelSize: 15 * shell.textScale }
                                 Text { width: parent.width; text: modelData.output || modelData.error; color: shell.muted; elide: Text.ElideMiddle; font.pixelSize: 12 * shell.textScale }
+                                Text {
+                                    width: parent.width
+                                    text: modelData.qualityReport && modelData.qualityReport.assessment
+                                        ? "Quality: structural/heuristic only · unchanged cues " + modelData.qualityReport.unchangedCuePercent + "% · human review required"
+                                        : "Quality evaluation pending"
+                                    color: shell.muted
+                                    elide: Text.ElideRight
+                                    font.pixelSize: 11 * shell.textScale
+                                }
                             }
                             MouseArea { anchors.fill: parent; onClicked: { root.selectedJob = index; root.focusArea = "jobs" } }
                         }
@@ -213,12 +356,29 @@ Item {
                     if (root.editingField === "source") sourcePath.text = text
                     else if (root.editingField === "sourceLanguage") sourceLanguage.text = text
                     else if (root.editingField === "targetLanguage") targetLanguage.text = text
+                    else if (root.editingField === "onlineQuery") onlineQuery.text = text
+                    else if (root.editingField === "onlineLanguage") onlineLanguage.text = text
                     else if (root.editingField === "media") mediaPath.text = text
                     else if (root.editingField === "model") modelPath.text = text
                     else if (root.editingField === "reviewText") reviewText.text = text
                     root.keyboardOpen = false
                 }
                 onCanceled: root.keyboardOpen = false
+            }
+            Connections {
+                target: root.repository
+                function onChanged() {
+                    const count = root.repository ? root.repository.results.length : 0
+                    root.selectedRepositoryResult = count ? Math.min(root.selectedRepositoryResult, count - 1) : 0
+                }
+                function onSubtitleDownloaded(title, language, srtText, repositoryName, fileId) {
+                    if (!root.service) return
+                    const id = root.service.importOnlineSubtitle(title, language, srtText, fileId)
+                    if (id) {
+                        root.selectedJob = root.service.jobs.length - 1
+                        root.focusArea = "jobs"
+                    }
+                }
             }
         }
     }

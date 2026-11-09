@@ -3,6 +3,7 @@
 #include "settings/SearchSettings.h"
 
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -12,6 +13,18 @@
 #include <QRegularExpression>
 #include <QTimer>
 #include <QUrlQuery>
+
+namespace {
+bool supportedProviderRoute(int providerId)
+{
+    switch (providerId) {
+    case 8: case 9: case 15: case 283: case 337: case 350: case 386: case 531: case 1899:
+        return true;
+    default:
+        return false;
+    }
+}
+}
 
 OnlineDiscovery::OnlineDiscovery(SearchSettings *settings, QObject *parent, const QUrl &apiBase, const QString &readToken)
     : QObject(parent), m_settings(settings), m_network(new QNetworkAccessManager(this)),
@@ -153,14 +166,16 @@ void OnlineDiscovery::search(const QString &query)
     emit changed();
 }
 
-void OnlineDiscovery::loadAvailability(const QString &mediaType, int id)
+void OnlineDiscovery::loadAvailability(const QString &mediaType, int id, const QString &title)
 {
     if (!enabled() || !configured()) {
         m_status = QStringLiteral("Provider availability is unavailable while Web is off or unconfigured.");
         emit changed();
         return;
     }
-    if ((mediaType != QStringLiteral("movie") && mediaType != QStringLiteral("tv")) || id <= 0) {
+    const auto normalizedTitle = title.trimmed();
+    if ((mediaType != QStringLiteral("movie") && mediaType != QStringLiteral("tv")) || id <= 0 ||
+        normalizedTitle.isEmpty() || normalizedTitle.size() > 200) {
         setError(QStringLiteral("Invalid TMDB title identity."));
         return;
     }
@@ -168,6 +183,7 @@ void OnlineDiscovery::loadAvailability(const QString &mediaType, int id)
     m_availability.clear();
     m_busy = true;
     const QString requestedRegion = m_region;
+    m_requestedTitle = normalizedTitle;
     const auto generation = m_generation;
     m_status = QStringLiteral("Checking TMDB provider listings for %1…").arg(requestedRegion);
     auto *reply = get(endpoint(QStringLiteral("%1/%2/watch/providers").arg(mediaType).arg(id)));
@@ -260,7 +276,9 @@ void OnlineDiscovery::parseAvailabilityReply(QNetworkReply *reply, quint64 gener
                 {QStringLiteral("name"), name},
                 {QStringLiteral("tier"), tier},
                 {QStringLiteral("providerId"), provider.value(QStringLiteral("provider_id")).toInt()},
+                {QStringLiteral("routeSupported"), supportedProviderRoute(provider.value(QStringLiteral("provider_id")).toInt())},
                 {QStringLiteral("region"), requestedRegion},
+                {QStringLiteral("title"), m_requestedTitle},
                 {QStringLiteral("attribution"), QStringLiteral("Listing by TMDB; verify with the service")},
                 {QStringLiteral("entitled"), false}
             });
@@ -271,6 +289,59 @@ void OnlineDiscovery::parseAvailabilityReply(QNetworkReply *reply, quint64 gener
         ? QStringLiteral("TMDB has no provider listing for %1. This does not confirm unavailability.").arg(requestedRegion)
         : QStringLiteral("%1 provider listing(s) for %2. Listings do not prove access or entitlement.").arg(providers.size()).arg(requestedRegion);
     emit changed();
+}
+
+QUrl OnlineDiscovery::providerLaunchUrl(int providerId) const
+{
+    if (!enabled() || providerId <= 0) return {};
+    for (const auto &entry : m_availability) {
+        const auto listing = entry.toMap();
+        if (listing.value(QStringLiteral("providerId")).toInt() != providerId) continue;
+        const auto title = listing.value(QStringLiteral("title")).toString().trimmed();
+        if (title.isEmpty() || !listing.value(QStringLiteral("routeSupported")).toBool()) return {};
+
+        QString host;
+        QString path;
+        QString parameter;
+        switch (providerId) {
+        case 8: host = QStringLiteral("www.netflix.com"); path = QStringLiteral("/search"); parameter = QStringLiteral("q"); break;
+        case 9: host = QStringLiteral("www.primevideo.com"); path = QStringLiteral("/search/ref=atv_nb_sr"); parameter = QStringLiteral("phrase"); break;
+        case 15: host = QStringLiteral("www.hulu.com"); path = QStringLiteral("/search"); parameter = QStringLiteral("q"); break;
+        case 283: host = QStringLiteral("www.crunchyroll.com"); path = QStringLiteral("/search"); parameter = QStringLiteral("q"); break;
+        case 337: host = QStringLiteral("www.disneyplus.com"); path = QStringLiteral("/search"); parameter = QStringLiteral("q"); break;
+        case 350: host = QStringLiteral("tv.apple.com"); path = QStringLiteral("/search"); parameter = QStringLiteral("term"); break;
+        case 386: host = QStringLiteral("www.peacocktv.com"); path = QStringLiteral("/search"); parameter = QStringLiteral("q"); break;
+        case 531: host = QStringLiteral("www.paramountplus.com"); path = QStringLiteral("/search/"); parameter = QStringLiteral("query"); break;
+        case 1899: host = QStringLiteral("www.max.com"); path = QStringLiteral("/search"); parameter = QStringLiteral("q"); break;
+        default: return {};
+        }
+
+        QUrl url;
+        url.setScheme(QStringLiteral("https"));
+        url.setHost(host);
+        url.setPath(path);
+        QUrlQuery query;
+        query.addQueryItem(parameter, title);
+        url.setQuery(query);
+        return url;
+    }
+    return {};
+}
+
+bool OnlineDiscovery::launchProvider(int providerId)
+{
+    const auto url = providerLaunchUrl(providerId);
+    if (!url.isValid() || url.scheme() != QStringLiteral("https") || !enabled()) {
+        setError(QStringLiteral("No supported official web search route is available for this provider."));
+        return false;
+    }
+    if (!QDesktopServices::openUrl(url)) {
+        setError(QStringLiteral("The system could not open this provider's official search route. Open the service manually."));
+        return false;
+    }
+    m_status = QStringLiteral("Opened the provider's official title-search route. Sign-in, availability and entitlement are determined by the service.");
+    emit changed();
+    return true;
 }
 
 void OnlineDiscovery::setError(const QString &message)
