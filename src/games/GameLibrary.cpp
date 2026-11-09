@@ -1511,6 +1511,12 @@ bool GameLibrary::removeSteamLibrary(const QString &path) {
 QVariantList GameLibrary::mountedOpticalDiscs() const {
     return m_ready ? OpticalDiscAdapter::mountedDiscs() : QVariantList{};
 }
+QVariantList GameLibrary::refreshOpticalDiscs() const {
+    if(!m_ready)return {};
+    for(const auto &item:OpticalDiscAdapter::mountedDiscs())
+        OpticalDiscAdapter::retryIdentity(item.toMap().value("device").toString());
+    return OpticalDiscAdapter::mountedDiscs();
+}
 QVariantMap GameLibrary::revalidateOpticalDisc(const QString &observationId,const QString &device) const {
     if(!m_ready || !QRegularExpression("^[0-9a-f]{64}$").match(observationId).hasMatch()
         || !QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
@@ -1527,7 +1533,7 @@ QString GameLibrary::registerOpticalGame(const QString &title,const QString &run
     const auto disc=media.value("disc").toMap();
     const auto root=OpticalDiscAdapter::rootReference(disc);
     if(root.isEmpty() || !disc.value("directPlaySupported").toBool()){
-        fail(tr("This disc has no readable ISO identity. Direct Play is supported only for identified ISO9660 discs."));return {};
+        fail(tr("The disc's full-content identity is not ready. Wait for verification or refresh to retry."));return {};
     }
     const auto grantError=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
     if(!grantError.isEmpty()){fail(grantError);return {};}
@@ -1556,7 +1562,7 @@ bool GameLibrary::approveOpticalMedia(const QString &observationId,const QString
     const auto media=revalidateOpticalDisc(observationId,device);
     const auto disc=media.value("disc").toMap();
     if(media.value("state")!="ready" || !disc.value("directPlaySupported").toBool())
-        return fail(tr("Only a currently mounted ISO9660 disc with a readable identity can be approved."));
+        return fail(tr("Only a mounted disc with a verified full-content identity can be approved. Wait or refresh to retry."));
     const auto error=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
     if(!error.isEmpty())return fail(error);
     m_error.clear();emit errorChanged();return true;

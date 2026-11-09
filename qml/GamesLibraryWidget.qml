@@ -212,8 +212,8 @@ Item {
             field=choice===0?9:10;mode="keyboard";keyboard.selectedIndex=0;keyboard.value="";return
         }
         if(mode==="opticalChooser"){
-            if(choice<opticalChoices.length){const disc=opticalChoices[choice];opticalSelectedDisc=disc;opticalObservationId=disc.observationId;opticalDevice=disc.device;mode="opticalDetails";choice=0;message=(disc.volumeLabel || "Unlabeled optical disc")+" · "+disc.filesystem+"\nDevice: "+disc.device+"\n"+(disc.state==="mounted"?"Mounted at: "+disc.mountRoot:"Media is present but not mounted.")+"\nMedia identity: "+(disc.mediaId || "unavailable")+"\n"+(disc.mediaSetId?"Disc "+disc.discNumber+" of "+disc.discCount+" in media set "+disc.mediaSetId:"Not a supported multidisc ISO set")+"\nOnly read-only, no-autorun operations are offered. The ISO descriptor fingerprint is not proof of ownership.";return}
-            if(choice===opticalChoices.length){opticalChoices=library.mountedOpticalDiscs();choice=0;message=opticalChoices.length?"Optical media list refreshed.":"No mounted or unmounted PC optical data media is available.";return}
+            if(choice<opticalChoices.length){const disc=opticalChoices[choice];opticalSelectedDisc=disc;opticalObservationId=disc.observationId;opticalDevice=disc.device;mode="opticalDetails";choice=0;message=(disc.volumeLabel || "Unlabeled optical disc")+" · "+disc.filesystem+"\nDevice: "+disc.device+"\n"+(disc.state==="mounted"?"Mounted at: "+disc.mountRoot:"Media is present but not mounted.")+"\nFull-disc verification: "+(disc.hashState || "unavailable")+"\nMedia identity: "+(disc.mediaId || "not ready")+"\n"+(disc.mediaSetId?"Disc "+disc.discNumber+" of "+disc.discCount+" in media set "+disc.mediaSetId:"No identified disc set")+"\nOnly read-only, no-autorun operations are offered. Content identity is not proof of ownership. Hashing may take several minutes; refresh to retry unreadable media.";return}
+            if(choice===opticalChoices.length){opticalChoices=library.refreshOpticalDiscs();choice=0;message=opticalChoices.length?"Optical media list refreshed.":"No mounted or unmounted PC optical data media is available.";return}
             mode="catalogTools";choice=3;return
         }
         if(mode==="opticalDetails"){
@@ -230,7 +230,7 @@ Item {
             if(choice===0){
                 const status=library.revalidateOpticalDisc(opticalObservationId,opticalDevice)
                 if(status.state!=="ready"){message=status.state==="replaced"?"The drive now reports different media. Refresh and review it again.":"The selected disc is no longer mounted. Insert it and refresh.";return}
-                if(!status.disc.directPlaySupported){message="This media has no readable ISO9660 identity; direct optical Play is unavailable. You may inspect it or eject safely.";return}
+                if(!status.disc.directPlaySupported){message="Full-disc verification is not ready. Wait or return to the disc list and refresh to retry; nothing will launch automatically.";return}
                 registeringOpticalGame=true;mode="installerRuntime";choice=0;message="Choose an installed native file runtime. Registration requires a relative executable path and title. Only directly executable Linux ELF files are supported; scripts/installers are never autorun.";return
             }
             if(choice===1){

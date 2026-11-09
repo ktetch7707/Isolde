@@ -25,6 +25,8 @@
 #include <QSqlQuery>
 #include <QDBusObjectPath>
 #include <QDBusVariant>
+#include <QBuffer>
+#include <QCryptographicHash>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -43,6 +45,7 @@ private slots:
     void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void opticalIdentityAndMultiDiscReferencesAreDurable();
+    void fullOpticalContentIdentityRejectsTruncationAndChanges();
     void opticalApprovalsAreProfileScopedAndRevocable();
     void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
     void ejectRefusesWhileSessionIsActive();
@@ -63,6 +66,29 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::fullOpticalContentIdentityRejectsTruncationAndChanges(){
+    QByteArray bytes(3*1024*1024,'x');
+    QBuffer source(&bytes);QVERIFY(source.open(QIODevice::ReadOnly));
+    const auto digest=OpticalDiscAdapter::hashContent(&source,bytes.size());
+    QCOMPARE(digest,QCryptographicHash::hash(bytes,QCryptographicHash::Sha256));
+    bytes[bytes.size()-1]='y';QVERIFY(source.seek(0));
+    const auto changed=OpticalDiscAdapter::hashContent(&source,bytes.size());
+    QVERIFY(changed!=digest);
+    QVERIFY(source.seek(0));QVERIFY(OpticalDiscAdapter::hashContent(&source,bytes.size()+1).isEmpty());
+    QVERIFY(source.seek(0));QVERIFY(OpticalDiscAdapter::hashContent(&source,0).isEmpty());
+    QVERIFY(OpticalDiscAdapter::hashContent(&source,16ULL*1024*1024*1024+1).isEmpty());
+    const auto id=QString::fromLatin1(digest.toHex());
+    const auto udf=OpticalDiscAdapter::identityForContent({},id);
+    QCOMPARE(udf.value("discNumber").toInt(),1);QCOMPARE(udf.value("discCount").toInt(),1);
+    QCOMPARE(udf.value("mediaSetId").toString(),id);
+    QVERIFY(OpticalDiscAdapter::isRootReference(OpticalDiscAdapter::rootReference(udf)));
+    QVERIFY(OpticalDiscAdapter::identityForContent({},"bad").isEmpty());
+    const QVariantMap set{{"mediaSetId",QString(64,'a')},{"discNumber",2},{"discCount",2}};
+    const auto iso=OpticalDiscAdapter::identityForContent(set,id);
+    QCOMPARE(iso.value("mediaId").toString(),id);
+    QCOMPARE(iso.value("mediaSetId").toString(),QString(64,'a'));
+    QCOMPARE(iso.value("discNumber").toInt(),2);
 }
 void GamesUiTests::catalogRecoversStagedUninstallOnReopen(){
     QStandardPaths::setTestModeEnabled(true);

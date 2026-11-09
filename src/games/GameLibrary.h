@@ -56,6 +56,7 @@ public:
     Q_INVOKABLE bool addSteamLibrary(const QString &path);
     Q_INVOKABLE bool removeSteamLibrary(const QString &path);
     Q_INVOKABLE QVariantList mountedOpticalDiscs() const;
+    Q_INVOKABLE QVariantList refreshOpticalDiscs() const;
     Q_INVOKABLE QVariantMap revalidateOpticalDisc(const QString &observationId, const QString &device) const;
     Q_INVOKABLE QString registerOpticalGame(const QString &title, const QString &runtimeId,
                                              const QString &relativeExecutable,
