@@ -36,6 +36,13 @@ bool privateDirectory(const QString &path)
     return QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 }
 }
+bool NativeSandbox::isGameSession(const QString &emulatorRuntime,const QString &steamGameId,
+                                  const QString &gameSourceRoot,const QString &managedGameRoot,
+                                  const QString &opticalMediaId)
+{
+    return !emulatorRuntime.isEmpty() || !steamGameId.isEmpty() || !gameSourceRoot.isEmpty()
+        || !managedGameRoot.isEmpty() || !opticalMediaId.isEmpty();
+}
 bool NativeSandbox::hasGamepadKeyCapabilities(const QString &bitmap)
 {
     if(bitmap.isEmpty() || bitmap.size()>4096)return false;
@@ -177,9 +184,9 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     }
     if (QFileInfo::exists(hostRuntime + "/pipewire-0")) bind(hostRuntime + "/pipewire-0", runtime + "/pipewire-0");
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
-    if(!emulatorRuntime.isEmpty() || !steamGameId.isEmpty()){
-        // Give managed emulators gamepad nodes only. Do not expose keyboard,
-        // mouse or the entire host input directory to a native game session.
+    if(isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId)){
+        // Give game sessions gamepad nodes only. Do not expose keyboard, mouse
+        // or the entire host input directory to an application session.
         const auto nodes=QDir("/sys/class/input").entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot);
         int granted=0;
         for(const auto &node:nodes){

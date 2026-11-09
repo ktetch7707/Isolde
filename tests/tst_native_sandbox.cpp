@@ -25,6 +25,7 @@ private slots:
     void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
     void externalSteamGrantsAreProfileScopedAndFailClosed();
     void gamepadCapabilityRecognitionIsBoundedAndExact();
+    void gameSessionsAcrossSourcesRequestGamepadAccess();
 };
 
 static const QString alice = "11111111-1111-4111-8111-111111111111";
@@ -43,6 +44,15 @@ void NativeSandboxTests::gamepadCapabilityRecognitionIsBoundedAndExact()
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x001e)));
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities("0 0 invalid 0 0"));
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(QString(4097,'0')));
+}
+void NativeSandboxTests::gameSessionsAcrossSourcesRequestGamepadAccess()
+{
+    QVERIFY(!NativeSandbox::isGameSession({}, {}, {}, {}, {}));
+    QVERIFY(NativeSandbox::isGameSession("ppsspp", {}, {}, {}, {}));
+    QVERIFY(NativeSandbox::isGameSession({}, "42", {}, {}, {}));
+    QVERIFY(NativeSandbox::isGameSession({}, {}, "/media/library", {}, {}));
+    QVERIFY(NativeSandbox::isGameSession({}, {}, {}, "/private/install", {}));
+    QVERIFY(NativeSandbox::isGameSession({}, {}, {}, {}, QString(64,'a')));
 }
 
 static QByteArray run(const NativeSandboxPlan &plan, const QString &script, const QStringList &extra = {})
