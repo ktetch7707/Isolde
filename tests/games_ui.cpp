@@ -913,6 +913,17 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
     QVERIFY2(library.restoreCatalog(backup,true),qPrintable(library.errorString()));
     QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
+    QVERIFY(library.removeGame(game));
+    QVERIFY(library.details(game).isEmpty());
+    const auto historyBackup=dir.filePath("provenance-after-removal.json");
+    QVERIFY2(library.exportCatalog(historyBackup),qPrintable(library.errorString()));
+    QFile historyInput(historyBackup);QVERIFY(historyInput.open(QIODevice::ReadOnly));
+    const auto historyArchive=QJsonDocument::fromJson(historyInput.readAll()).object();historyInput.close();
+    QCOMPARE(historyArchive.value("provenance").toArray().size(),3);
+    QVERIFY2(library.restoreCatalog(historyBackup,true),qPrintable(library.errorString()));
+    QVERIFY(library.details(game).isEmpty());
+    QVERIFY2(library.restoreCatalog(backup,true),qPrintable(library.errorString()));
+    QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
 }
 void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));
