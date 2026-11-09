@@ -39,6 +39,14 @@ bool archiveInteger(const QJsonValue &value,qint64 *result) {
         || value.toDouble()<0 || value.toDouble()>9007199254740991.0)return false;
     *result=qint64(value.toDouble());return true;
 }
+bool approvedMediaDirectory(const QString &profile,const QString &path) {
+    if(!MediaGrants::validate(path).isEmpty())return false;
+    for(const auto &grant:MediaGrants::folders(profile)){
+        if(!MediaGrants::validate(grant,false).isEmpty())continue;
+        if(path==grant || path.startsWith(grant+'/'))return true;
+    }
+    return false;
+}
 QVariantMap row(const QSqlQuery &query) {
     QStringList tags;
     const auto tagArray=QJsonDocument::fromJson(query.value(6).toByteArray()).array();
@@ -632,6 +640,8 @@ bool GameLibrary::exportCatalog(const QString &destination) {
     const auto parent=QFileInfo(destination).absolutePath();
     const auto grant=MediaGrants::validate(parent);
     if(!grant.isEmpty())return fail(grant);
+    if(!approvedMediaDirectory(m_emulatorProfile,parent))
+        return fail(tr("Approve this media folder for the active profile before exporting."));
     if(QFileInfo::exists(destination) && (!QFileInfo(destination).isFile() || QFileInfo(destination).canonicalFilePath()!=destination))
         return fail(tr("The catalog export target is not a regular file. Nothing was replaced."));
     QJsonObject archive{{"schemaVersion",2}};
@@ -727,6 +737,8 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
         return fail(tr("Review and confirm a readable Games JSON backup from an approved folder."));
     const auto grant=MediaGrants::validate(QFileInfo(source).absolutePath());
     if(!grant.isEmpty())return fail(grant);
+    if(!approvedMediaDirectory(m_emulatorProfile,QFileInfo(source).absolutePath()))
+        return fail(tr("Approve this media folder for the active profile before restoring."));
     QFile file(source);if(!file.open(QIODevice::ReadOnly))return fail(tr("Cannot read the selected Games backup."));
     QJsonParseError parse;const auto document=QJsonDocument::fromJson(file.readAll(),&parse);
     if(parse.error!=QJsonParseError::NoError || !document.isObject())return fail(tr("Invalid Games backup JSON."));

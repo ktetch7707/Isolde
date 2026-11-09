@@ -237,6 +237,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(library.setFavorite(game,true));QVERIFY(library.recordCompletedSession(game));
     const auto collection=library.createCollection("Export set","manual");QVERIFY(!collection.isEmpty());
     QVERIFY(library.setCollectionMember(collection,game,true));
+    QTemporaryDir ungranted;QVERIFY(ungranted.isValid());
+    QVERIFY(!library.exportCatalog(ungranted.filePath("unapproved.json")));
     const auto backup=dir.filePath("games-backup.json");
     QVERIFY2(library.exportCatalog(backup),qPrintable(library.errorString()));
     QVERIFY(QFileInfo(backup).size()>0);
