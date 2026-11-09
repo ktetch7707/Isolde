@@ -404,6 +404,9 @@ void DesktopSession::launch()
                 if (m_stopping) return;
                 if((exitStatus!=QProcess::NormalExit || exitCode!=0) && definition().launchConfiguration.contains("steamGameId") && m_diagnostics.contains("Steam game: ")){
                     setError(QString::fromUtf8(m_diagnostics).section("Steam game: ",-1).section('\n',0,0).left(400));
+                } else if((exitStatus!=QProcess::NormalExit || exitCode!=0)
+                    && definition().launchConfiguration.contains("opticalMediaId") && m_diagnostics.contains("Optical game: ")){
+                    setError(QString::fromUtf8(m_diagnostics).section("Optical game: ",-1).section('\n',0,0).left(400));
                 } else
                 if ((exitStatus != QProcess::NormalExit || exitCode != 0) && definition().launchConfiguration.contains("emulatorRuntime") && m_diagnostics.contains("Emulator setup: ")) {
                     const auto reason=QString::fromUtf8(m_diagnostics).section("Emulator setup: ",-1).section('\n',0,0).left(320);

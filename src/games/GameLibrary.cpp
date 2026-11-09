@@ -1540,7 +1540,8 @@ QString GameLibrary::registerOpticalGame(const QString &title,const QString &run
     const auto target=checkedTarget(root,relativeExecutable);
     if(target.isEmpty())return {};
     QFile executable(target);
-    if(!QFileInfo(target).isExecutable() || !executable.open(QIODevice::ReadOnly)
+    if(!(QFileInfo(target).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther))
+        || !executable.open(QIODevice::ReadOnly)
         || executable.read(20).left(4)!=QByteArray("\x7f""ELF",4)){
         fail(tr("Choose a native Linux ELF executable on the selected disc. Installers and scripts are not run."));return {};
     }

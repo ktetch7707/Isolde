@@ -162,7 +162,8 @@ bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sour
         || !nativeElf || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
         || !QStringList{"game","game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot+'/')
         || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target
-        || ((managed || optical) && !QFileInfo(target).isExecutable())){
+        || (managed && !QFileInfo(target).isExecutable())
+        || (optical && !(QFileInfo(target).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther)))){
         emit sessionRejected(tr("The reviewed game folder is missing, redirected or incompatible. Review its source and retry."));return false;
     }
     return launchFileAction(input,sourceRoot,optical?opticalMediaId:QString());

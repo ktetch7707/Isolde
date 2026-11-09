@@ -16,6 +16,7 @@
 #include <QSet>
 #ifdef Q_OS_LINUX
 #include <unistd.h>
+#include <sys/statvfs.h>
 #endif
 
 namespace {
@@ -91,7 +92,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             const auto disc=item.toMap();
             if(disc.value("mountRoot")==gameSourceRoot && disc.value("mediaId")==opticalMediaId
                 && disc.value("directPlaySupported").toBool() && inside(binary,gameSourceRoot)
-                && QFileInfo(binary).isExecutable())opticalExecutable=true;
+                && (QFileInfo(binary).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther)))opticalExecutable=true;
         }
     }
     const bool nativeGame=managedExecutable || opticalExecutable;
@@ -325,8 +326,27 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         bind(helper,"/run/emulator-session.py");bind(manifest,"/run/game-runtimes.json");
         // The packaged script accepts identities, never commands from a game.
     }
-    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--"
-         << (nativeGame ? plan.actionTarget : executable);
+    bool opticalNoExec=false;
+    if(opticalExecutable){
+        struct statvfs fs{};
+        const auto path=QFile::encodeName(binary);
+        if(::statvfs(path.constData(),&fs)!=0){
+            plan.error="Cannot inspect optical mount execution permissions. Refresh the disc and retry.";return plan;
+        }
+        opticalNoExec=fs.f_flag & ST_NOEXEC;
+    }
+    if(opticalNoExec){
+        auto helperRoot=QCoreApplication::applicationDirPath()+"/share/isolde";
+        if(!QFileInfo(helperRoot+"/optical-exec.py").isReadable())helperRoot=QCoreApplication::applicationDirPath()+"/../share/isolde";
+        const auto helper=helperRoot+"/optical-exec.py";
+        if(!QFileInfo(helper).isReadable() || !QFileInfo("/usr/bin/python3").isExecutable()){
+            plan.error="The optical no-exec adapter is unavailable. Repair Isolde and retry.";return plan;
+        }
+        bind(helper,"/run/isolde-optical-exec.py");
+    }
+    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--";
+    if(opticalNoExec)args << "/usr/bin/python3" << "/run/isolde-optical-exec.py" << plan.actionTarget;
+    else args << (nativeGame ? plan.actionTarget : executable);
     plan.environment.insert("PATH", "/usr/bin:/bin");
     plan.environment.insert("LANG", host.value("LANG", "C.UTF-8"));
     return plan;
