@@ -58,6 +58,8 @@ CaptureController::CaptureController(VideoCaptureAdapter *videoAdapter, AudioCap
     connect(m_videoAdapter, &VideoCaptureAdapter::devicesChanged, this, &CaptureController::refreshDevices);
     connect(m_audioAdapter, &AudioCaptureAdapter::devicesChanged, this, &CaptureController::refreshDevices);
     connect(m_audioAdapter, &AudioCaptureAdapter::errorOccurred, this, [this](const QString &message) {
+        ++m_audioErrorGeneration;
+        m_audioConfigured = false;
         if (m_previewRequested) setStatus("audio-error", "Capture audio error: " + message);
     });
     connect(m_videoAdapter, &VideoCaptureAdapter::errorOccurred, this, [this](const QString &message) {
@@ -207,7 +209,7 @@ QVariantMap CaptureController::capabilities() const
         {"audioAdapter", m_audioAdapter->name()},
         {"audioInputSelected", audioConnected},
         {"audioMonitoringSupported", audioMonitoringSupported},
-        {"audioMonitoringConfigured", audioMonitoringSupported && m_previewRequested && previewAudioConnected},
+        {"audioMonitoringConfigured", audioMonitoringSupported && m_audioConfigured && m_previewRequested && previewAudioConnected},
         {"serialAdapter", "Qt SerialPort"},
         {"serialConnected", serialConnected},
         {"switchConfigured", canSwitchInput(m_selectedInput)}
@@ -586,10 +588,14 @@ bool CaptureController::canSwitchInput(int input) const
 
 bool CaptureController::configureAudio()
 {
-    if (!m_audioAdapter->configure(m_videoAdapter->audioContext(), m_previewAudioId)) {
+    m_audioConfigured = false;
+    const auto generation = m_audioErrorGeneration;
+    if (!m_audioAdapter->configure(m_videoAdapter->audioContext(), m_previewAudioId)
+        || m_audioErrorGeneration != generation) {
         setStatus("audio-missing", "The capture audio input is unavailable or incompatible with the video adapter.");
         return false;
     }
+    m_audioConfigured = true;
     return true;
 }
 
@@ -668,6 +674,7 @@ void CaptureController::stopPreview()
     m_framesInWindow = 0;
     m_videoAdapter->stop();
     m_audioAdapter->stop(m_videoAdapter->audioContext());
+    m_audioConfigured = false;
     m_previewCaptureId.clear();
     m_previewFormatKey.clear();
     m_previewAudioId.clear();

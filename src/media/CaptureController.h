@@ -149,4 +149,6 @@ private:
     double m_previewFrameRate = 0.0;
     bool m_previewRequested = false;
     bool m_receivedFrame = false;
+    bool m_audioConfigured = false;
+    quint64 m_audioErrorGeneration = 0;
 };
