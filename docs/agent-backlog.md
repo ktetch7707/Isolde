@@ -1,11 +1,15 @@
 # Isolde Agent Backlog — first-product software completion
 Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
+## Current scope revision — 2026-11-09
+
+The user removed **T13 and T31** from the project completion requirement. Their rows and historical evidence are retained for reference, but neither task is selectable or included in project Coding% or acceptance averages. The remaining 25 tasks retain equal weight. Overall Coding% is **97%** (2415 / 25, rounded); Overall acceptance is **63%** (1563 / 25, rounded), without awarding any new task credit. The testing agent starts after the remaining project's Coding% reaches 100% and reports every bug found. Older references below to 27 active tasks, mandatory T13/T31 work, and their associated overall totals are historical and superseded.
+
 ## Current acceptance authority — VM-only software completion
 
 [VM software completion](vm-software-completion.md) is the latest user-approved definition for every task and linked requirement. **100% means reasonable belief that the software is done based entirely on VM-verifiable evidence.** Actual hardware/model/USB/firmware, independent participants, user approval, unavailable paid accounts/entitlement/regions and target-only runtime/performance checks are not T-task prerequisites. Use the prescribed production-boundary fixtures, virtual devices and agent task/guide walkthroughs; retain genuine software errors as blockers. H01–H05 and external-service/usability checks are a separate user-owned post-100% handoff. No formal hardware/release campaign is required by this software backlog. All conflicting historical wording below and in Entry docs is superseded.
 
-Acceptance redesign alone awarded no credit. Current verified evidence raises the sum to 1568; Overall is 58%. The 27 tasks and all original group/child weights are unchanged. Actual installed VM journeys, clean-VM install/recovery, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required at their proper evidence level.
+Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 1563; Overall is 63% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
 
 ## Continue command — operating plan, 2026-10-29
 
@@ -17,18 +21,17 @@ The [weighted milestone ledger](progress-milestones.md) credits independently ve
 
 User direction: reconcile current implementation/evidence and new plans, then finish **100% of first-product software before hardware qualification**. [Software scope and audit](first-product-software-scope.md) defines S1 (software complete), H1 (hardware qualified) and R1 (release accepted). This is a planning revision, not new product acceptance or an instruction to interrupt in-flight work.
 
-All approved software remains included: Studio/shell, full Kodi, VPN, default apps/Android/SmartTube, current Store/Chromium, Guide, capture/device software, appliance distribution, discovery/subtitles and unified Games/local-copy/disc/emulator requirements. T30 tracks Games; T31 adds final whole-product proof. Physical requirements remain in H01–H05 outside S1 math. Missing software/VM-runtime proof remains work; unavailable external accounts/hardware use the explicit VM substitutions and user handoff.
+In-scope software includes Studio/shell, Kodi, VPN, default apps/Android/SmartTube, Store/Chromium, Guide, capture/device software, discovery/subtitles and Games/local-copy/disc/emulator requirements. T13 appliance distribution and T31 final whole-product acceptance are excluded. Physical requirements remain in H01–H05 outside S1 math. Missing software/VM-runtime proof remains work where required by remaining tasks; unavailable external accounts/hardware use the explicit VM substitutions and user handoff.
 
 Sequencing: [implementation-order.md](implementation-order.md). Requirements/amendments: [scope crosswalk](first-product-software-scope.md#requirement-to-task-coverage), `docs/unified-master-plan.txt`, `docs/studio-builder.md`, `docs/master-roadmap.md`. Current amendments supersede older curation/Store/hardware-first editor wording. Kodi owns media; the separate games catalog is an explicit Games requirement.
 
 ## Completion math and evidence rules
 
-- ACTIVE: **T01,T03–T05,T09–T31 = 27 tasks**. T02/T06–T08 stay excluded. H01–H05 are a separate physical qualification ledger, not software credit.
-- Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each original group and task retains its weight. Overall = half-up round(sum of the 27 rounded task percentages / 27). Final acceptance remains separate; all linked requirements remain mandatory. Reproduce with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
-- Sum **1568**; Overall **58%**. T25 is **20%** (native policy/storage milestones; final acceptance open). T11 is **100% verified** (18/18 milestones; 3/3 final groups accepted). T31 is **5%** (inventory child only; 0/7 final groups accepted). Other values retain previous credit.
-- **S1 = 100% when all redesigned VM software groups and required checks pass, including final T31, with reasonable confidence the declared software is done.** Agent-reviewed runtime/visual evidence is sufficient; hardware, external account/region and participant approval never block S1. Do not round incomplete VM work to 100%.
-- Required documentation: T13.4 delivers an illustrated generic user installation/setup/recovery guide with actual product VM screens; T31.7 is an agent-run clean-VM artifact/guide walkthrough. No independent reader, actual-computer model or real USB/firmware action blocks S1. Developer build commands alone do not satisfy the product guide.
-- Reuse verified foundations with explicit source-applicability checks; T31 tests one final integrated candidate. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
+- ACTIVE: **T01,T03–T05,T09–T12,T14–T30 = 25 tasks**. T02/T06–T08/T13/T31 are excluded. H01–H05 remain a separate physical qualification ledger.
+- Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each remaining group and task retains its weight. Overall = half-up round(sum of the 25 rounded task percentages / 25), capped at 99% until every in-scope task reaches 100% in that metric. Acceptance remains separate from Coding%. Reproduce acceptance with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
+- Acceptance sum **1563**, Overall **63%**. Coding sum **2415**, Overall **97%**. No task percentage changed as a result of exclusion.
+- **S1 = 100% when all in-scope redesigned VM software groups and required checks pass.** T13/T31 are not prerequisites. Hardware, external account/region and participant approval remain outside S1.
+- Reuse verified foundations with explicit source-applicability checks. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
 - Standing software gates: both generic reference recreation/reset pairs; profile/account/data isolation where promised; atomic save/rollback/no rewrite on read; Kodi media/progress ownership; disconnected VM Generator Test; OFF-gated zero requests; reachable Settings/Edit recovery. Physical repetition is H1.
 - Before VM actions read `docs/vm-oracle.md`; use only the bounded runner and preserve unrelated work. This review launches no VM actions or application implementation.
 
@@ -40,7 +43,7 @@ T20's remaining visual gate needs T21.9. The existing authorized prerequisite ex
 
 The active user-authorized T29 Store/Chromium slice may finish independently, preserving unfinished Studio/media/VPN work. Its T01/T03 foundations are usable under the existing exception; final evidence still closes before S1. Do not take over another coder's work or restart a healthy build.
 
-After Studio/shell and the current exception, follow the table: evidence reconciliation → media/system/playback → capture software → Guide → online/subtitles → Games → appliance distribution → T31. Select the first eligible unfinished row, report real capability/provider/account blockers and retain required scope. T13 consumes preceding software; T31 consumes every other active task. S1 precedes the user's optional hardware/service testing; publication is a separate user decision.
+After Studio/shell and the current exception, follow the table: evidence reconciliation → media/system/playback → capture software → Guide → online/subtitles → Games. T13 and T31 are excluded. S1 precedes the user's optional hardware/service testing; publication is a separate user decision.
 
 ## Overall (update every edit)
 
@@ -71,9 +74,9 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
 | T14 | 24 | Online discovery and Linguist subtitles | 0% | 100% | provider and offline subtitle workflows implemented; VM/live acceptance deferred |
 | T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 15% | implementation integrated through T30 `6afdc3a`; 0/9 software acceptance gates, H02/H03 physical |
-| T13 | 26 | Appliance software, distribution and user setup guide | 0% | 35% | installer foundation; clean-VM/recovery and beginner guide open; appliance validation code added |
-| T31 | 27 | Frozen first-product software acceptance | 5% | 10% | tool inventory verified; 0/7 final groups accepted |
-| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **91%** | **1568 / 27 acceptance and 2460 / 27 coding rounded; S1 incomplete** |
+| T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
+| T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **63%** | **97%** | **1563 / 25 acceptance and 2415 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
@@ -516,6 +519,7 @@ Steam direct-launch checkpoint (2026-10-27, user-authorized T30.5): [implementat
 2026-11-09 coding integration checkpoint: T30 branch `6afdc3a` is merged into the isolated progress integration worktree, preserving the shared branch's existing T10/T14/T26 work. This imports profile-local catalog/provenance, runtime provisioning/update contracts, Steam/account preflight, optical workflows, portable installation, bounded in-session controller hotplug and validated recovery of orphaned managed installs. Focused Python suites pass: provisioning 32, portable installer 24, Steam 23 and optical 3; native C++/QML and VM acceptance were not run here. This is implementation evidence only; T30 remains at 0/9 software acceptance groups and 15% coding, with no acceptance or percentage credit recalculated.
 
 ## T13 — Appliance software and distribution (L, depends: T01,T03-T05,T09-T12,T14-T30)
+**Excluded; historical scope and evidence only.**
 Entry docs: `docs/install.md`, `docs/packages.md`, `docs/architecture.md` appliance, `docs/first-product-software-scope.md` S1/H1/R1.
 Entry files: `tests/test_appliance_install.py`, `tests/test_recovery.py`, `src/recovery/Recovery.qml`; follow existing installer/provisioner wiring as needed.
 Scope:
@@ -527,6 +531,7 @@ Done when: software appliance/distribution, offline recovery and the complete be
 Verify: appliance_install + appliance_recovery + full CTest and fresh-VM install/recovery/Generator logs through the bounded runner; guide link/version/screenshot/step checks and agent-run VM walkthrough evidence. Evidence: partial Ubuntu dev/pilot installer, wait-for-display, atomic releases and recovery foundations in `docs/install.md`; dedicated environment, signed/offline artifacts, onboarding, complete fresh-VM matrix and consumer guide remain open. The current developer install document does not satisfy T13.4. Android setup is T29 foundation, not completion of this task.
 
 ## T31 — Frozen first-product software acceptance (L, depends: every other ACTIVE task at 100%)
+**Excluded; historical scope and evidence only.**
 Entry docs: `docs/first-product-software-scope.md`, `docs/code-quality-strategy-2026-10-25.md`, this backlog, `docs/vm-oracle.md`, owning task evidence and both reference READMEs.
 Entry files: existing CMake/native/QML registration, bounded VM runner, installed acceptance/recovery tools; extend only as the acceptance matrix requires.
 Scope:

@@ -1,5 +1,7 @@
 # Product implementation order
 
+**Current scope revision:** T13 and T31 are excluded from project requirements; there are **25 ACTIVE software tasks**. The current [backlog](agent-backlog.md) owns totals. The testing agent starts after the remaining project's Coding% reaches 100% and reports every bug found. References below to T13/T31 as prerequisites and historical task counts are superseded.
+
 Latest acceptance authority: [vm-software-completion.md](vm-software-completion.md). S1/100% is reasonable software confidence from the VM; user/hardware/account/target-machine qualification is a separate post-100% handoff. It overrides conflicting physical, representative, unassisted-reader, real-provider and actual-computer prerequisites in all historical sections and task Entry docs. Keep software implementation order and fixed progress weights; verify redesigned VM checks before awarding credit.
 
 ## Continue workflow — 2026-10-29
