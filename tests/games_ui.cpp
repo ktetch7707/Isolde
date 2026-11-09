@@ -28,6 +28,7 @@
 #include <QDBusVariant>
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QUrl>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -68,6 +69,7 @@ private slots:
     void organizationAndManualSmartCollectionsStayProfileLocal();
     void remoteSmartCollectionRulesAreDpadSelectable();
     void catalogExportRestoreIsBoundedAndTransactional();
+    void catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans();
     void catalogProvenanceIsImmutableAndConflictSafe();
 };
 static AppDefinition runtime() {
@@ -772,6 +774,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(invalid.write("{\"schemaVersion\":1}")>0);invalid.close();
     QVERIFY(!library.restoreCatalog(invalidBackup,true));
     QCOMPARE(library.page().size(),1);
+    const auto originalArtworkPath=QUrl(library.details(game).value("artwork").toString()).toLocalFile();
+    QVERIFY(QFileInfo::exists(originalArtworkPath));
     const auto triggerConnection="games-restore-injection-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto triggerDb=QSqlDatabase::addDatabase("QSQLITE",triggerConnection);triggerDb.setDatabaseName(database);
     QVERIFY(triggerDb.open());
@@ -781,6 +785,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(!library.restoreCatalog(backup,true));
     QCOMPARE(library.page().size(),1);
     QCOMPARE(library.details(game).value("title").toString(),QString("Portable fixture"));
+    QCOMPARE(QUrl(library.details(game).value("artwork").toString()).toLocalFile(),originalArtworkPath);
+    QVERIFY(QFileInfo::exists(originalArtworkPath));
     const auto dropConnection="games-restore-cleanup-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto cleanupDb=QSqlDatabase::addDatabase("QSQLITE",dropConnection);cleanupDb.setDatabaseName(database);
     QVERIFY(cleanupDb.open());QSqlQuery cleanupQuery(cleanupDb);
@@ -833,6 +839,47 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(reopened.pageCollection(tagCollection).size(),1);
     QCOMPARE(reopened.pageCollection(recentCollection).size(),1);
     QCOMPARE(reopened.details(game).value("sourceReference").toString(),QString());
+}
+void GamesUiTests::catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans() {
+    QTemporaryDir dir;QVERIFY(dir.isValid());
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previousProfile=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);
+    auto cleanup=qScopeGuard([&]{qApp->setProperty("isoldeProfile",previousProfile);MediaGrants::save(profile,{});});
+    QVERIFY2(MediaGrants::save(profile,{dir.path()}).isEmpty(),"Test export folder grant could not be prepared.");
+    AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    const auto database=dir.filePath("profile/games.sqlite");
+    GameLibrary library(database,&apps);
+    QVariantMap registration{{"schemaVersion",1},{"title","Artwork recovery fixture"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}};
+    const auto game=library.addGame(registration);QVERIFY2(!game.isEmpty(),qPrintable(library.errorString()));
+    const auto artA=dir.filePath("cover-a.png"),artB=dir.filePath("cover-b.png");
+    QImage cover(48,64,QImage::Format_ARGB32);cover.fill(QColor("#3467a1"));QVERIFY(cover.save(artA,"PNG"));
+    cover.fill(QColor("#a14634"));QVERIFY(cover.save(artB,"PNG"));
+    QVERIFY2(library.setArtwork(game,artA),qPrintable(library.errorString()));
+    const auto backupA=dir.filePath("artwork-a.json");
+    QVERIFY2(library.exportCatalog(backupA),qPrintable(library.errorString()));
+    QVERIFY2(library.setArtwork(game,artB),qPrintable(library.errorString()));
+    const auto backupB=dir.filePath("artwork-b.json");
+    QVERIFY2(library.exportCatalog(backupB),qPrintable(library.errorString()));
+    QVERIFY2(library.restoreCatalog(backupA,true),qPrintable(library.errorString()));
+    QVERIFY2(library.setArtwork(game,artB),qPrintable(library.errorString()));
+    const auto retainedUrl=QUrl(library.details(game).value("artwork").toString());
+    const auto retainedPath=retainedUrl.toLocalFile();QVERIFY(QFileInfo::exists(retainedPath));
+    QVERIFY2(library.clearArtwork(game),qPrintable(library.errorString()));
+    QVERIFY2(QFileInfo::exists(retainedPath),"Artwork referenced by a pre-restore recovery copy was deleted.");
+
+    const QByteArray orphanBytes("interrupted artwork publication");
+    const auto orphanHash=QString::fromLatin1(QCryptographicHash::hash(orphanBytes,QCryptographicHash::Sha256).toHex());
+    const auto orphanPath=database+".artwork/"+orphanHash+".png";
+    QFile orphan(orphanPath);QVERIFY(orphan.open(QIODevice::WriteOnly));
+    QCOMPARE(orphan.write(orphanBytes),qint64(orphanBytes.size()));orphan.close();
+    {
+        GameLibrary reopened(database,&apps);
+        QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
+        QVERIFY(QFileInfo::exists(retainedPath));
+        QVERIFY(!QFileInfo::exists(orphanPath));
+    }
 }
 void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QTemporaryDir dir;QVERIFY(dir.isValid());

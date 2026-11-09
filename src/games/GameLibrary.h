@@ -153,6 +153,8 @@ private:
     bool ensureOrganizationSchema();
     bool ensureRichMetadataSchema();
     bool ensureArtworkSchema();
+    bool artworkReferences(const QString &hash) const;
+    void collectOrphanArtwork();
     bool ensureProvenanceSchema();
     bool recordProvenance(const QString &entityId, const QString &entityType,
                           const QString &runtime, const QString &root, const QString &target,
