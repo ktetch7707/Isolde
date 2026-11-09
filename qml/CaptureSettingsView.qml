@@ -10,9 +10,13 @@ Item {
     property int keyboardMode: 0
     property var draft: ({})
     property bool draftDirty: false
+    property int deviceListRevision: 0
     readonly property real leftColumnWidth: width * 0.46
     readonly property var baudRates: [9600, 19200, 38400, 57600, 115200]
-    readonly property var formatOptions: captureController.videoFormatsFor(draft.captureDeviceId || "")
+    readonly property var formatOptions: {
+        return deviceListRevision >= 0
+            ? captureController.videoFormatsFor(draft.captureDeviceId || "") : []
+    }
     readonly property var rows: [
         { name: "Capture card", value: deviceName(captureController.videoDevices, draft.captureDeviceId, "Choose a card") },
         { name: "Video format", value: selectedFormatName() },
@@ -177,6 +181,10 @@ Item {
         else captureController.stopPreview()
     }
     onSelectedIndexChanged: keepSelectedRowVisible()
+    Connections {
+        target: captureController
+        function onChanged() { root.deviceListRevision += 1 }
+    }
 
     Row {
         anchors.fill: parent
