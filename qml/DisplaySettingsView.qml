@@ -28,7 +28,7 @@ Item {
         } else if (command === inputManager.confirm) {
             if (selectedIndex === 4) displaySettings.reset()
             else if (selectedIndex === 2) displaySettings.toggleReduceMotion()
-            else if (selectedIndex === 5) appearance.contrast = (appearance.contrast === "high") ? "default" : "high"
+            else if (selectedIndex === 3) appearance.contrast = (appearance.contrast === "high") ? "default" : "high"
         }
     }
 
