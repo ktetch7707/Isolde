@@ -69,7 +69,7 @@ private slots:
     void organizationAndManualSmartCollectionsStayProfileLocal();
     void remoteSmartCollectionRulesAreDpadSelectable();
     void catalogExportRestoreIsBoundedAndTransactional();
-    void catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans();
+    void catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection();
     void catalogProvenanceIsImmutableAndConflictSafe();
 };
 static AppDefinition runtime() {
@@ -842,7 +842,7 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(reopened.pageCollection(recentCollection).size(),1);
     QCOMPARE(reopened.details(game).value("sourceReference").toString(),QString());
 }
-void GamesUiTests::catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans() {
+void GamesUiTests::catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection() {
     QTemporaryDir dir;QVERIFY(dir.isValid());
     QStandardPaths::setTestModeEnabled(true);
     const auto previousProfile=qApp->property("isoldeProfile");
@@ -861,7 +861,19 @@ void GamesUiTests::catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans() {
     QVERIFY2(library.setArtwork(game,artA),qPrintable(library.errorString()));
     const auto backupA=dir.filePath("artwork-a.json");
     QVERIFY2(library.exportCatalog(backupA),qPrintable(library.errorString()));
+    const auto legacySnapshot=database+".v1-backup.sqlite";
+    const auto snapshotConnection="games-artwork-v1-snapshot-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    {
+        auto snapshotDb=QSqlDatabase::addDatabase("QSQLITE",snapshotConnection);snapshotDb.setDatabaseName(database);
+        QVERIFY(snapshotDb.open());QSqlQuery snapshot(snapshotDb);snapshot.prepare("VACUUM main INTO ?");
+        snapshot.addBindValue(legacySnapshot);QVERIFY2(snapshot.exec(),qPrintable(snapshot.lastError().text()));
+        snapshotDb.close();
+    }
+    QSqlDatabase::removeDatabase(snapshotConnection);
+    const auto artworkA=QUrl(library.details(game).value("artwork").toString()).toLocalFile();
+    QVERIFY(QFileInfo::exists(artworkA));
     QVERIFY2(library.setArtwork(game,artB),qPrintable(library.errorString()));
+    QVERIFY2(QFileInfo::exists(artworkA),"Replacing artwork deleted a blob that another catalog snapshot may use.");
     const auto backupB=dir.filePath("artwork-b.json");
     QVERIFY2(library.exportCatalog(backupB),qPrintable(library.errorString()));
     QVERIFY2(library.restoreCatalog(backupA,true),qPrintable(library.errorString()));
@@ -869,7 +881,10 @@ void GamesUiTests::catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans() {
     const auto retainedUrl=QUrl(library.details(game).value("artwork").toString());
     const auto retainedPath=retainedUrl.toLocalFile();QVERIFY(QFileInfo::exists(retainedPath));
     QVERIFY2(library.clearArtwork(game),qPrintable(library.errorString()));
-    QVERIFY2(QFileInfo::exists(retainedPath),"Artwork referenced by a pre-restore recovery copy was deleted.");
+    QVERIFY2(QFileInfo::exists(retainedPath),"Artwork was deleted despite potentially concurrent backup references.");
+    QVERIFY2(QFileInfo::exists(artworkA),"Artwork referenced by the retained .v1-backup.sqlite snapshot was deleted.");
+    QVERIFY2(library.removeGame(game),qPrintable(library.errorString()));
+    QVERIFY(QFileInfo::exists(retainedPath));QVERIFY(QFileInfo::exists(artworkA));
 
     const QByteArray orphanBytes("interrupted artwork publication");
     const auto orphanHash=QString::fromLatin1(QCryptographicHash::hash(orphanBytes,QCryptographicHash::Sha256).toHex());
@@ -880,7 +895,8 @@ void GamesUiTests::catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans() {
         GameLibrary reopened(database,&apps);
         QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
         QVERIFY(QFileInfo::exists(retainedPath));
-        QVERIFY(!QFileInfo::exists(orphanPath));
+        QVERIFY(QFileInfo::exists(artworkA));
+        QVERIFY2(QFileInfo::exists(orphanPath),"Startup silently deleted an orphan without cross-process ownership.");
     }
 }
 void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {

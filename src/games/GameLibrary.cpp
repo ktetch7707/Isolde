@@ -84,51 +84,6 @@ QByteArray normalizeArtwork(const QByteArray &source) {
 QString artworkHash(const QByteArray &bytes) {
     return QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex());
 }
-bool addArtworkReferences(QSqlDatabase database,QSet<QString> *references) {
-    QSqlQuery table(database);
-    if(!table.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='game_metadata'"))return false;
-    if(!table.next())return true;
-    QSqlQuery columns(database);
-    if(!columns.exec("PRAGMA table_info(game_metadata)"))return false;
-    bool hasArtworkHash=false;
-    while(columns.next())if(columns.value(1).toString()=="artwork_hash")hasArtworkHash=true;
-    columns.finish();
-    if(!hasArtworkHash)return true;
-    QSqlQuery query(database);
-    if(!query.exec("SELECT artwork_hash FROM game_metadata WHERE artwork_hash<>''"))return false;
-    const QRegularExpression validHash("^[0-9a-f]{64}$");
-    while(query.next()){
-        const auto hash=query.value(0).toString();
-        if(!validHash.match(hash).hasMatch())return false;
-        references->insert(hash);
-    }
-    return true;
-}
-bool loadArtworkReferences(QSqlDatabase current,const QString &databasePath,QSet<QString> *references) {
-    if(!addArtworkReferences(current,references))return false;
-    const QFileInfo databaseInfo(databasePath);
-    const QDir directory(databaseInfo.absolutePath());
-    const auto pattern=databaseInfo.fileName()+".pre-restore-*.sqlite";
-    const auto snapshots=directory.entryInfoList({pattern},QDir::Files|QDir::Hidden|QDir::System,QDir::Name);
-    if(snapshots.size()>256)return false;
-    for(const auto &snapshotInfo:snapshots){
-        const auto snapshotPath=snapshotInfo.absoluteFilePath();
-        if(snapshotInfo.isSymLink() || !snapshotInfo.isFile()
-            || snapshotInfo.canonicalFilePath()!=snapshotPath)return false;
-        const auto connection="games-artwork-recovery-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
-        bool readable=false;
-        {
-            auto snapshot=QSqlDatabase::addDatabase("QSQLITE",connection);
-            snapshot.setDatabaseName(snapshotPath);
-            snapshot.setConnectOptions("QSQLITE_OPEN_READONLY;QSQLITE_BUSY_TIMEOUT=1000");
-            if(snapshot.open())readable=addArtworkReferences(snapshot,references);
-            snapshot.close();
-        }
-        QSqlDatabase::removeDatabase(connection);
-        if(!readable)return false;
-    }
-    return true;
-}
 bool persistArtwork(const QString &databasePath,const QByteArray &bytes,QString *hash,QString *error) {
     if(bytes.isEmpty() || bytes.size()>MaxManagedArtworkBytes){if(error)*error=QStringLiteral("Artwork exceeds the managed size limit.");return false;}
     const auto directory=databasePath+".artwork";
@@ -526,7 +481,6 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     }
     query.finish();
     m_ready = true;
-    collectOrphanArtwork();
     for(const auto &disc:OpticalDiscAdapter::mountedDiscs())
         m_lastOpticalObservationIds.append(disc.toMap().value("observationId").toString());
     m_lastOpticalObservationIds.sort();
@@ -770,39 +724,6 @@ bool GameLibrary::ensureArtworkSchema() {
     }
     m_hasArtwork=true;return true;
 }
-bool GameLibrary::artworkReferences(const QString &hash) const {
-    if(!QRegularExpression("^[0-9a-f]{64}$").match(hash).hasMatch())return true;
-    QSet<QString> references;
-    if(!loadArtworkReferences(m_db,m_db.databaseName(),&references))return true;
-    if(references.contains(hash))return true;
-    return false;
-}
-void GameLibrary::collectOrphanArtwork() {
-    const auto directory=artworkDirectory();
-    const QFileInfo directoryInfo(directory);
-    if(!directoryInfo.exists())return;
-    if(directoryInfo.isSymLink() || !directoryInfo.isDir()
-        || directoryInfo.canonicalFilePath()!=QDir::cleanPath(directory))return;
-    QSet<QString> references;
-    if(!loadArtworkReferences(m_db,m_db.databaseName(),&references))return;
-    QDir artworkDir(directory);
-    const auto files=artworkDir.entryInfoList({"*.png"},QDir::Files|QDir::Hidden|QDir::System,QDir::Name);
-    if(files.size()>MaxGames)return;
-    const QRegularExpression validName("^([0-9a-f]{64})\\.png$");
-    for(const auto &info:files){
-        const auto match=validName.match(info.fileName());
-        if(!match.hasMatch() || info.isSymLink() || !info.isFile()
-            || info.canonicalFilePath()!=info.absoluteFilePath()
-            || info.size()<1 || info.size()>MaxManagedArtworkBytes)continue;
-        const auto hash=match.captured(1);
-        if(references.contains(hash))continue;
-        QFile file(info.absoluteFilePath());
-        if(!file.open(QIODevice::ReadOnly))continue;
-        const auto bytes=file.read(MaxManagedArtworkBytes+1);
-        if(bytes.size()!=info.size() || artworkHash(bytes)!=hash)continue;
-        QFile::remove(info.absoluteFilePath());
-    }
-}
 bool GameLibrary::ensureProvenanceSchema() {
     if(m_hasProvenance)return true;
     if(!m_db.transaction())return fail(tr("Could not begin the immutable provenance update."));
@@ -873,20 +794,12 @@ bool GameLibrary::setArtwork(const QString &id,const QString &source) {
     if(!ensureArtworkSchema())return false;
     QString digest,error;
     if(!persistArtwork(m_db.databaseName(),bytes,&digest,&error))return fail(tr("%1 Nothing was changed in the game catalog.").arg(error));
-    QSqlQuery oldQuery(m_db);oldQuery.prepare("SELECT artwork_hash FROM game_metadata WHERE game_id=?");oldQuery.addBindValue(id);
-    if(!oldQuery.exec())return fail(oldQuery.lastError().text());
-    const QString oldHash=oldQuery.next()?oldQuery.value(0).toString():QString();
-    oldQuery.finish();
     if(!m_db.transaction())return fail(m_db.lastError().text());
     QSqlQuery query(m_db);query.prepare("INSERT INTO game_metadata(game_id,artwork_hash) VALUES(?,?) ON CONFLICT(game_id) DO UPDATE SET artwork_hash=excluded.artwork_hash");
     query.addBindValue(id);query.addBindValue(digest);
     if(!query.exec() || !m_db.commit()){
         const auto reason=query.lastError().text();m_db.rollback();
         return fail(tr("Artwork could not be assigned. Previous artwork was preserved. %1").arg(reason));
-    }
-    if(!oldHash.isEmpty() && oldHash!=digest){
-        const auto oldPath=artworkDirectory()+"/"+oldHash+".png";
-        if(!artworkReferences(oldHash))QFile::remove(oldPath);
     }
     m_error.clear();emit errorChanged();emit changed();return true;
 }
@@ -895,15 +808,13 @@ bool GameLibrary::clearArtwork(const QString &id) {
     if(!m_hasArtwork){m_error.clear();emit errorChanged();return true;}
     QSqlQuery oldQuery(m_db);oldQuery.prepare("SELECT artwork_hash FROM game_metadata WHERE game_id=?");oldQuery.addBindValue(id);
     if(!oldQuery.exec())return fail(oldQuery.lastError().text());
-    const QString oldHash=oldQuery.next()?oldQuery.value(0).toString():QString();oldQuery.finish();
-    if(oldHash.isEmpty()){m_error.clear();emit errorChanged();return true;}
+    const bool hasArtwork=oldQuery.next() && !oldQuery.value(0).toString().isEmpty();oldQuery.finish();
+    if(!hasArtwork){m_error.clear();emit errorChanged();return true;}
     if(!m_db.transaction())return fail(m_db.lastError().text());
     QSqlQuery query(m_db);query.prepare("UPDATE game_metadata SET artwork_hash='' WHERE game_id=?");query.addBindValue(id);
     if(!query.exec() || !m_db.commit()){
         const auto error=query.lastError().text();m_db.rollback();return fail(tr("Artwork reference was not removed. %1").arg(error));
     }
-    const auto oldPath=artworkDirectory()+"/"+oldHash+".png";
-    if(!artworkReferences(oldHash))QFile::remove(oldPath);
     m_error.clear();emit errorChanged();emit changed();return true;
 }
 QVariantList GameLibrary::platforms() {
@@ -1675,19 +1586,8 @@ bool GameLibrary::removeGame(const QString &id) {
     if(m_portablePhase=="uninstall" || m_portablePhase=="uninstall-finalize")
         return fail(tr("Wait for the managed uninstall to finish before changing the catalog."));
     if (!m_ready || details(id).isEmpty()) return fail(tr("Game not found in this profile."));
-    QString oldHash;
-    if(m_hasArtwork){
-        QSqlQuery artwork(m_db);artwork.prepare("SELECT artwork_hash FROM game_metadata WHERE game_id=?");artwork.addBindValue(id);
-        if(!artwork.exec())return fail(artwork.lastError().text());
-        if(artwork.next())oldHash=artwork.value(0).toString();
-        artwork.finish();
-    }
     QSqlQuery query(m_db); query.prepare("DELETE FROM games WHERE id=?"); query.addBindValue(id);
     if (!query.exec()) return fail(query.lastError().text());
-    if(!oldHash.isEmpty() && m_hasArtwork){
-        const auto path=artworkDirectory()+"/"+oldHash+".png";
-        if(!artworkReferences(oldHash))QFile::remove(path);
-    }
     // Catalog-only operation: deliberately never deletes game/runtime/save files.
     m_error.clear(); emit changed(); return true;
 }

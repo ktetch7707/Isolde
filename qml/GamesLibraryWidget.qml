@@ -429,7 +429,7 @@ Item {
                 if(editionChoices.length>1){mode="editions";choice=0;message="Choose the edition to play."}
                 else launchEdition("")
             }else if(choice===1){if(!library.setFavorite(detail.id,!detail.favorite))message=library.errorString}
-            else if(choice===2){mode="remove";choice=0;message=library.canUninstallManagedGame(detail.id)?"The complete managed-file manifest will be checked before deleting only this Isolde-owned install. Saves and runtime profiles are outside the install folder.":"Remove only this library entry? Game files and saves stay where they are."}
+            else if(choice===2){mode="remove";choice=0;message=library.canUninstallManagedGame(detail.id)?"The complete managed-file manifest will be checked before deleting only this Isolde-owned install. Saves, runtime profiles, and retained artwork blobs are outside the install folder.":"Remove only this library entry? Game files, saves, and managed artwork blobs stay where they are."}
             else if(choice===3){importing=false;editionGameId="";editingId=detail.id;draft=library.registration(editingId);detail=null;message="Edit this game or relink its folder. Review confirms the complete change; Back cancels.";choice=0;mode="runtime"}
             else if(choice===4){const game=detail.id;beginAdd(false);if(mode==="runtime"){editionGameId=game;message="Add a version to this game. Its launch settings remain separate. Confirming the first edition backs up and upgrades this catalog."}}
             else if(choice===5){collectionChoices=library.collections().filter(c=>c.kind==="manual");mode="collectionMembers";choice=0;message="Choose a manual collection to add/remove this game. Smart shelves are read-only rules."}
@@ -440,7 +440,7 @@ Item {
                 if(detail.artwork){
                     if(choice===index){
                         if(!library.clearArtwork(detail.id)){message=library.errorString;return}
-                        detail=library.details(detail.id);mode="details";choice=7;return
+                        detail=library.details(detail.id);mode="details";choice=7;message="Cover removed from this game. Managed artwork files are retained for backup and concurrent-write safety.";return
                     }
                     index++
                 }
@@ -594,7 +594,7 @@ Item {
             }
             if(root.field===15){
                 if(!root.library.setArtwork(root.detail.id,text)){root.message=root.library.errorString;root.mode="details";return}
-                root.detail=root.library.details(root.detail.id);root.message="Cover artwork was copied into this profile. The source image was not modified.";root.mode="details";root.choice=7;return
+                root.detail=root.library.details(root.detail.id);root.message="Cover artwork was copied into this profile. The source image was not modified; replaced managed artwork is retained for backup and concurrent-write safety.";root.mode="details";root.choice=7;return
             }
             if(root.field===8){
                 if(["platform","franchise","tag"].includes(root.collectionCreateType)){

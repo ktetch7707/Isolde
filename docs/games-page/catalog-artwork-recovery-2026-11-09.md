@@ -1,44 +1,46 @@
 # Games catalog and artwork recovery boundary — 2026-11-09
 
-This slice closes a specific managed-artwork data-loss gap. It does not complete
-T30.3 or establish installed-VM/crash-power-loss acceptance.
+This slice addresses managed-artwork data loss conservatively. It does not
+complete T30.3 or establish installed-VM/crash-power-loss acceptance.
 
-## Previous failure mode
+## Concurrency hazard and safe behavior
 
-Catalog restore creates a private SQLite `VACUUM INTO` recovery copy, while
-artwork is stored separately as content-addressed PNG files. Replacing or
-clearing artwork and removing a game previously garbage-collected a blob using
-only references in the live catalog. A later metadata cleanup could therefore
-delete artwork still referenced by a retained pre-restore database copy. A
-crash between atomic blob publication and catalog commit could also leave
-unreferenced artwork consuming the bounded store indefinitely.
+Catalog backups use SQLite snapshots while artwork blobs are published
+separately. A process can publish or reuse a content-addressed blob before its
+catalog transaction commits. Another process cannot safely conclude that an
+apparently unreferenced blob is disposable: it may be in the middle of a
+publication, a restore may be creating a snapshot, or a retained snapshot may
+use a different schema/version. Read-only inspection of current snapshots
+cannot establish exclusive ownership or close these races.
 
-## Implemented boundary
+Therefore Games does **not** automatically delete managed artwork blobs:
 
-- Artwork deletion checks the live catalog and every retained
-  `games.sqlite.pre-restore-*.sqlite` recovery copy. If any copy is unreadable,
-  unsafe, or cannot be queried, cleanup fails closed and leaves the blob in
-  place.
-- Catalog open scans managed content-addressed artwork for crash orphans.
-  Cleanup runs only after it has loaded all live and recovery-copy references;
-  it removes only regular, in-directory files whose bytes match their
-  64-character SHA-256 filename and which no catalog copy references.
-- Snapshot enumeration and the candidate list are bounded. Excessive snapshot
-  or artwork counts disable cleanup rather than risk deleting data. Symlinks,
-  malformed files, and hash mismatches are preserved for inspection.
-- The same reference check is used after a successful artwork replacement,
-  clear, or catalog-only game removal. JSON backups remain self-contained and
-  continue to embed validated artwork.
+- Replacing or clearing artwork changes catalog references only; prior blobs
+  are retained.
+- Removing a game remains catalog-only for files and artwork alike.
+- Opening the catalog performs no artwork garbage collection. Crashed
+  publication or restore may leave unused blobs; they are retained rather
+  than silently removed.
+- This preserves artwork referenced by any retained snapshot, including
+  `games.sqlite.v1-backup.sqlite`, `games.sqlite.pre-restore-*.sqlite`, and
+  other compatible or future snapshot files, without assuming that the list
+  or schema is complete.
+- Store exhaustion is reported by the existing bounded artwork importer. A
+  future reclamation feature requires a cross-process coordination protocol
+  covering publication, catalog commit, snapshot creation/retention, and
+  deletion; no such lock is implemented here.
+
+JSON backup export remains self-contained and continues to embed validated
+artwork.
 
 ## Regression coverage and limits
 
-`catalogArtworkSurvivesRecoveryAndReclaimsCrashOrphans` creates a pre-restore
-snapshot that references managed artwork, confirms later catalog changes do
-not delete it, then simulates an interrupted blob publication and verifies
-that reopening the catalog reclaims only the verified orphan.
+`catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection` verifies that
+artwork is retained after replace/clear, that artwork referenced by the legacy
+`.v1-backup.sqlite` snapshot survives, and that reopening does not silently
+delete an orphan left by interrupted publication.
 
 The Qt regression is added to `games_remote_ui`, but Qt/CMake are unavailable
-in this worktree, so it has not been compiled or run here. The test is not a
-power-cut simulation. Filesystem durability across sudden power loss, recovery
-copy retention/space policy, and full installed-VM catalog recovery remain
-open.
+in this worktree, so it has not been compiled or run here. The test does not
+simulate an inter-process race or sudden power loss. Broader catalog write
+failures, durable recovery, and installed-VM acceptance remain open.
