@@ -323,7 +323,7 @@ def install(source, destination, expected_sha256=None):
             descriptor=os.open(directory,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
             try:os.fsync(descriptor)
             finally:os.close(descriptor)
-        os.replace(stage, destination)
+        rename_without_replace(stage, destination)
         descriptor=os.open(destination.parent,os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
         try:os.fsync(descriptor)
         finally:os.close(descriptor)

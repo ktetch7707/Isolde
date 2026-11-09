@@ -127,10 +127,25 @@ class PortableGameInstallerTests(unittest.TestCase):
     def test_write_failure_removes_unpublished_staging_data(self):
         self.package()
         destination=self.root/"private"/"games"/"id"/"install"
-        with mock.patch.object(installer.os,"replace",side_effect=OSError("simulated publication failure")):
+        with mock.patch.object(installer,"rename_without_replace",side_effect=OSError("simulated publication failure")):
             with self.assertRaisesRegex(OSError,"publication failure"):
                 installer.install(self.archive,destination)
         self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name(destination.name+".staging").exists())
+        self.assertFalse(destination.with_name(destination.name+".staging-source").exists())
+
+    def test_publication_preserves_destination_created_after_preflight(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        publish=installer.rename_without_replace
+        def race(source, target):
+            destination.mkdir()
+            return publish(source,target)
+        with mock.patch.object(installer,"rename_without_replace",side_effect=race):
+            with self.assertRaises(OSError):
+                installer.install(self.archive,destination)
+        self.assertTrue(destination.is_dir())
+        self.assertEqual(list(destination.iterdir()),[])
         self.assertFalse(destination.with_name(destination.name+".staging").exists())
         self.assertFalse(destination.with_name(destination.name+".staging-source").exists())
 
