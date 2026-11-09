@@ -82,6 +82,7 @@ Item {
         if(!providerStatus || !providerStatus.appId || !library.steamGameContainsAppId(detail.id,providerStatus.appId))
             return steamDetail?"Steam checks account ownership and offline readiness. Open Steam to sign in, install or prepare offline mode.":""
         const phases={starting:"Starting",process_observed:"Tagged process observed",ended:"Tagged process disappeared",canceled:"Canceled",failed:"Failed"}
+        const process={unknown:"observation unavailable",waiting:"not observed",observed:"observed",gone:"no matching process"}
         const installation={unknown:"unknown",verified:"manifest and folder checked",unavailable:"check failed"}
         const client={unknown:"unknown",available:"executable present",unavailable:"unavailable"}
         const account={unknown:"unknown",signed_in:"signed in",signed_out:"signed out"}
@@ -92,8 +93,10 @@ Item {
         const local={unknown:"unknown",flushed:"reported flushed",failed:"reported failed"}
         const cloud={unknown:"unknown",synced:"reported synced",pending:"reported pending",failed:"reported failed"}
         const sessionEnd={unknown:"unconfirmed",normal:"reported normal process exit",canceled:"canceled",incomplete:"incomplete · check Steam and saves",recovery_required:"recovery required · check Steam and saves"}
+        const errors={none:"none",bootstrap_failed:"Steam bootstrap failed",ownership_denied:"Steam denied launch",auth_required:"Steam sign-in required",offline_unavailable:"Steam reported offline launch unavailable",launch_failed:"Steam reported launch failure",install_check_failed:"installation check failed",client_unavailable:"Steam client unavailable",process_observation_failed:"process visibility was incomplete"}
         return "Steam App "+providerStatus.appId+" · last Play: "+(phases[providerStatus.phase] || "unknown")+
             "\nInstall: "+(installation[providerStatus.installation] || "unknown")+" · Client: "+(client[providerStatus.client] || "unknown")+
+            "\nProcess observation: "+(process[providerStatus.process] || "unknown")+" · Provider result: "+(errors[providerStatus.error] || "unknown")+
             "\nAccount: "+(account[providerStatus.account] || "unknown")+" · Ownership: "+(ownership[providerStatus.ownership] || "unknown")+" · Connection: "+(connection[providerStatus.connection] || "unknown")+" · Offline readiness: "+(offline[providerStatus.offline] || "unknown")+
             "\nSession end: "+(sessionEnd[providerStatus.session_end] || "unconfirmed")+" · Exit: "+(exit[providerStatus.exit] || "unknown")+
             "\nLocal save: "+(local[providerStatus.local_save] || "unknown")+" · Cloud: "+(cloud[providerStatus.cloud_save] || "unknown")+

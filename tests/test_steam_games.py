@@ -120,6 +120,33 @@ class SteamGamesTests(unittest.TestCase):
             self.assertEqual(facts[field],"unknown")
         self.assertEqual(facts["error"],"none")
 
+    def test_incomplete_process_visibility_is_not_reported_as_game_exit(self):
+        launcher=Mock();launcher.poll.return_value=0
+        provider=steam.SteamProcessProvider("42","token",launcher)
+        with patch.object(steam,"game_processes",side_effect=steam.ProcessObservationError("denied")):
+            facts=provider.observe()
+        self.assertEqual(facts["process"],"unknown")
+        self.assertEqual(facts["error"],"process_observation_failed")
+        events=[]
+        with patch.object(steam,"game_processes",side_effect=steam.ProcessObservationError("denied")):
+            with self.assertRaisesRegex(RuntimeError,"could not reliably observe"):
+                steam.supervise_provider(provider,lambda phase,state:events.append((phase,state)),timeout=1)
+        self.assertEqual(events[-1][1]["process"],"unknown")
+        self.assertEqual(events[-1][1]["error"],"process_observation_failed")
+        incomplete=Mock()
+        incomplete.observe.return_value=dict(steam.UNKNOWN_FACTS,process="unknown")
+        with self.assertRaisesRegex(RuntimeError,"could not reliably observe"):
+            steam.supervise_provider(incomplete,lambda phase,state:events.append((phase,state)),timeout=1)
+        self.assertEqual(events[-1][1]["process"],"unknown")
+        self.assertEqual(events[-1][1]["error"],"process_observation_failed")
+
+    def test_proc_permission_failure_fails_closed_instead_of_skipping_process(self):
+        proc=self.home.parent/"proc";entry=proc/"1234"
+        entry.mkdir(parents=True)
+        with patch.object(Path,"open",side_effect=PermissionError("denied")):
+            with self.assertRaises(steam.ProcessObservationError):
+                steam.matching_processes("SteamAppId","42",proc,token="ours")
+
     def test_preflight_reports_install_and_client_without_claiming_ownership(self):
         output=io.StringIO()
         def records():
@@ -198,6 +225,33 @@ class SteamGamesTests(unittest.TestCase):
                         timeout=5,clock=lambda:elapsed[0],sleep=sleep)
                 self.assertEqual(events[-1][0],"failed")
                 self.assertEqual(events[-1][1]["session_end"],"recovery_required")
+
+    def test_unconfirmed_client_shutdown_marks_session_incomplete(self):
+        elapsed=[0.0]
+        output=io.StringIO()
+        observed=dict(steam.UNKNOWN_FACTS,process="observed")
+        ended=dict(observed,process="gone")
+        provider=Mock()
+        provider.observe.side_effect=lambda:observed if elapsed[0]<.25 else ended
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), \
+             patch.object(Path,"is_file",return_value=True), \
+             patch.object(steam.os,"access",return_value=True), \
+             patch.object(steam.subprocess,"Popen",return_value=Mock(poll=lambda:0)), \
+             patch.object(steam,"SteamProcessProvider",return_value=provider), \
+             patch.object(steam,"stop_owned_session",return_value=False), \
+             patch.object(steam.time,"monotonic",side_effect=lambda:elapsed[0]), \
+             patch.object(steam.time,"sleep",side_effect=lambda seconds:elapsed.__setitem__(0,elapsed[0]+seconds)), \
+             contextlib.redirect_stderr(output):
+            with self.assertRaisesRegex(RuntimeError,"could not be fully observed or stopped"):
+                steam.launch("42")
+        states=[json.loads(line.split(" ",1)[1]) for line in output.getvalue().splitlines()
+                if line.startswith("STEAM_PROVIDER_STATE ")]
+        self.assertEqual(states[-1]["phase"],"failed")
+        self.assertEqual(states[-1]["process"],"gone")
+        self.assertEqual(states[-1]["session_end"],"incomplete")
+        self.assertEqual(states[-1]["local_save"],"unknown")
+        self.assertEqual(states[-1]["cloud_save"],"unknown")
 
     def test_provider_observations_are_closed_and_bounded(self):
         for value in (None, {}, dict(steam.UNKNOWN_FACTS,account="guess"), dict(steam.UNKNOWN_FACTS,extra="credential")):
@@ -283,7 +337,7 @@ class SteamGamesTests(unittest.TestCase):
              patch.object(steam,"signal_owned_processes",side_effect=lambda p,t: events.append(("game",p,t))), \
              patch.object(steam,"wait_until_gone",side_effect=lambda p,t: events.append(("wait",t)) or True), \
              patch.object(steam.time,"sleep",side_effect=lambda t: events.append(("sync-grace",t))), \
-             patch.object(steam,"stop_owned_session",side_effect=lambda t: events.append(("client",t))):
+             patch.object(steam,"stop_owned_session",side_effect=lambda t: events.append(("client",t)) or True):
             steam.launch("42")
         token=start.call_args.kwargs["env"]["ISOLDE_STEAM_SESSION"]
         self.assertEqual(events,[("game",[123],token),("wait",5),("sync-grace",3),("client",token)])
@@ -306,7 +360,7 @@ class SteamGamesTests(unittest.TestCase):
              patch.object(steam,"signal_owned_processes",side_effect=lambda pids,token:events.append(("game",pids,token))), \
              patch.object(steam,"wait_until_gone",side_effect=lambda probe,timeout:events.append(("wait",timeout)) or True), \
              patch.object(steam.time,"sleep",side_effect=lambda seconds:events.append(("grace",seconds))), \
-             patch.object(steam,"stop_owned_session",side_effect=lambda token:events.append(("client",token))), \
+             patch.object(steam,"stop_owned_session",side_effect=lambda token:events.append(("client",token)) or True), \
              contextlib.redirect_stderr(output):
             with self.assertRaisesRegex(RuntimeError,"crashed"):steam.launch("42")
         token=start.call_args.kwargs["env"]["ISOLDE_STEAM_SESSION"]
@@ -344,7 +398,7 @@ class SteamGamesTests(unittest.TestCase):
              patch.object(steam,"game_processes",side_effect=processes), \
              patch.object(steam.time,"monotonic",side_effect=lambda:elapsed[0]), \
              patch.object(steam.time,"sleep",side_effect=sleep), \
-             patch.object(steam,"stop_owned_session",side_effect=lambda token: events.append(("client",token))):
+             patch.object(steam,"stop_owned_session",side_effect=lambda token: events.append(("client",token)) or True):
             steam.launch("42")
         token=start.call_args.kwargs["env"]["ISOLDE_STEAM_SESSION"]
         probes=[e for e in events if e[0]=="probe"]

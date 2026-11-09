@@ -54,6 +54,12 @@ Direct Play publishes separate bounded preflight observations: the manifest/inst
 
 Fixtures exercise missing-game and missing-client outcomes, retry after restoring a manifest with outbound socket creation denied, unchanged profile save bytes and unknown entitlement/offline/save state. They are controlled local-process fixtures, not Steam gameplay or provider account simulation. The Qt suite adds account-setup routing and profile isolation assertions; native Qt and installed-VM verification are deferred.
 
+## Fail-closed process observation and cleanup — 2026-11-09
+
+The shipped provider now distinguishes an observable absence from an incomplete `/proc` view. Process-list failures, permission errors, oversized process metadata and malformed state produce an explicit `process=unknown` / `process_observation_failed` status; a process that disappears during inspection is still treated as a normal enumeration race. Isolde does not report the game as gone based on an incomplete scan. The error stops launch supervision and keeps account, ownership, offline, exit, local-save and Cloud facts unknown.
+
+Shutdown rechecks launch-token ownership before signaling and confirms that token-owned processes have disappeared. If visibility or bounded shutdown cannot be confirmed, the final status is `session_end=incomplete`, return warns that saves or Cloud sync may be incomplete, and the isolated namespace remains the last containment boundary. A completed process scan or grace period still does not prove save durability or synchronization. Focused Python regressions cover permission-denied process inspection, explicit unknown status and unconfirmed client shutdown; native protocol and remote status regressions are added but require Qt/CMake to execute.
+
 ## Implementation and boundaries
 
 - The existing bounded `games`/edition tables store `runtime=steam`, an empty filesystem root and a validated positive uint32 Steam App ID in the provider target field. Existing catalog versions remain readable; no startup migration or rewrite is introduced. IDs, not commands/URIs/launch options, reach the dispatcher.

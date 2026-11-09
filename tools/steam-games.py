@@ -18,7 +18,7 @@ import uuid
 
 MAX_GAMES = 5000
 FACT_VALUES = {
-    "process": {"waiting", "observed", "gone"},
+    "process": {"unknown", "waiting", "observed", "gone"},
     "installation": {"unknown", "verified", "unavailable"},
     "client": {"unknown", "available", "unavailable"},
     "ownership": {"unknown", "owned", "not_owned"},
@@ -30,7 +30,8 @@ FACT_VALUES = {
     "cloud_save": {"unknown", "synced", "pending", "failed"},
     "session_end": {"unknown", "normal", "canceled", "incomplete", "recovery_required"},
     "error": {"none", "bootstrap_failed", "ownership_denied", "auth_required",
-              "offline_unavailable", "launch_failed", "install_check_failed", "client_unavailable"},
+              "offline_unavailable", "launch_failed", "install_check_failed", "client_unavailable",
+              "process_observation_failed"},
 }
 UNKNOWN_FACTS = {key: ("waiting" if key == "process" else "none" if key == "error" else "unknown")
                  for key in FACT_VALUES}
@@ -38,6 +39,10 @@ UNKNOWN_FACTS = {key: ("waiting" if key == "process" else "none" if key == "erro
 
 class SessionCanceled(Exception):
     pass
+
+
+class ProcessObservationError(RuntimeError):
+    """The private process view was incomplete; absence cannot be inferred."""
 
 
 def app_id(value):
@@ -220,22 +225,34 @@ def verify_installed(home, identity, external=()):
 def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_client=False):
     result = []
     entries = 0
-    for entry in proc.iterdir():
-        if not entry.name.isdigit() or int(entry.name) == os.getpid(): continue
-        entries += 1
-        if entries > 4096: raise RuntimeError("Steam session process limit exceeded")
-        try:
-            with (entry/"environ").open("rb") as stream: environment = stream.read(65537)
-            if len(environment) > 65536: continue
-            fields = environment.split(b"\0")
-            if token is not None and ("ISOLDE_STEAM_SESSION="+token).encode() not in fields: continue
-            if exclude_client:
-                executable = os.path.basename(os.readlink(entry/"exe")).lower()
-                if executable in ("steam", "steam.sh", "steamwebhelper", "steamservice", "steam-runtime-launcher-service"):
-                    continue
-            if (variable+"="+value).encode() in fields:
-                if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] != "Z": result.append(int(entry.name))
-        except (OSError, ValueError, IndexError): continue
+    try:
+        for entry in proc.iterdir():
+            if not entry.name.isdigit() or int(entry.name) == os.getpid(): continue
+            entries += 1
+            if entries > 4096: raise ProcessObservationError("Steam session process limit exceeded")
+            try:
+                with (entry/"environ").open("rb") as stream: environment = stream.read(65537)
+                if len(environment) > 65536:
+                    raise ProcessObservationError("Steam session process metadata is oversized")
+                fields = environment.split(b"\0")
+                if token is not None and ("ISOLDE_STEAM_SESSION="+token).encode() not in fields: continue
+                if exclude_client:
+                    executable = os.path.basename(os.readlink(entry/"exe")).lower()
+                    if executable in ("steam", "steam.sh", "steamwebhelper", "steamservice", "steam-runtime-launcher-service"):
+                        continue
+                if (variable+"="+value).encode() in fields:
+                    if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] != "Z": result.append(int(entry.name))
+            except (FileNotFoundError, ProcessLookupError):
+                # Processes can exit between /proc enumeration and inspection.
+                continue
+            except OSError as error:
+                raise ProcessObservationError("Steam session process state is not fully observable") from error
+            except (ValueError, IndexError) as error:
+                raise ProcessObservationError("Steam session process state is malformed") from error
+    except ProcessObservationError:
+        raise
+    except OSError as error:
+        raise ProcessObservationError("Steam session process list is not observable") from error
     return result
 
 
@@ -258,6 +275,8 @@ def signal_owned_processes(pids, token):
             if ("ISOLDE_STEAM_SESSION="+token).encode() in environment.split(b"\0"):
                 signal.pidfd_send_signal(descriptor,signal.SIGTERM)
         except (ProcessLookupError,FileNotFoundError): pass
+        except OSError as error:
+            raise ProcessObservationError("Steam session ownership could not be verified") from error
         finally:
             if descriptor is not None:os.close(descriptor)
 
@@ -271,11 +290,21 @@ def wait_until_gone(processes, timeout, clock=time.monotonic, sleep=time.sleep):
 
 
 def stop_owned_session(token):
-    signal_owned_processes(matching_processes("ISOLDE_STEAM_SESSION",token), token)
+    try:
+        signal_owned_processes(matching_processes("ISOLDE_STEAM_SESSION",token), token)
+    except ProcessObservationError:
+        return False
     deadline=time.monotonic()+3
     while time.monotonic()<deadline:
-        if not matching_processes("ISOLDE_STEAM_SESSION",token):return
+        try:
+            if not matching_processes("ISOLDE_STEAM_SESSION",token):return True
+        except ProcessObservationError:
+            return False
         time.sleep(.05)
+    try:
+        return not matching_processes("ISOLDE_STEAM_SESSION",token)
+    except ProcessObservationError:
+        return False
 
 
 class SteamProcessProvider:
@@ -286,7 +315,11 @@ class SteamProcessProvider:
 
     def observe(self):
         facts = dict(self.preflight)
-        facts["process"] = "observed" if game_processes(self.identity, token=self.token) else "gone"
+        try:
+            facts["process"] = "observed" if game_processes(self.identity, token=self.token) else "gone"
+        except ProcessObservationError:
+            facts["process"] = "unknown"
+            facts["error"] = "process_observation_failed"
         if self.launcher.poll() not in (None, 0): facts["error"] = "bootstrap_failed"
         return facts
 
@@ -308,6 +341,7 @@ def provider_message(error):
         "launch_failed": "Steam reported that this game could not start. Check installation and compatibility in Steam, then retry",
         "install_check_failed": "The Steam installation could not be verified. Check the game and library access in Steam, then retry",
         "client_unavailable": "Install or repair Steam in the Isolde Store",
+        "process_observation_failed": "Isolde could not reliably observe this Steam session. Return Home and check Steam and saves before retrying",
     }[error]
 
 
@@ -321,6 +355,8 @@ def supervise_provider(provider, publish, timeout=120, clock=None, sleep=None):
     last = None
     while True:
         facts = validated_facts(provider.observe())
+        if facts["process"] == "unknown" and facts["error"] == "none":
+            facts["error"] = "process_observation_failed"
         phase = "process_observed" if seen or facts["process"] == "observed" else "starting"
         if facts != last:
             publish(phase, facts)
@@ -392,6 +428,7 @@ def launch(identity, external=()):
     started = False
     canceled = False
     clean_game_exit = True
+    cleanup_complete = True
     last_facts = dict(preflight)
     failed = False
     def publish(phase, facts):
@@ -416,10 +453,14 @@ def launch(identity, external=()):
         try:
             game_was_running = started
             if canceled or failed:
-                owned_games=processes(identity)
-                game_was_running = game_was_running or bool(owned_games)
-                signal_owned_processes(owned_games, token)
-                clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
+                try:
+                    owned_games=processes(identity)
+                    game_was_running = game_was_running or bool(owned_games)
+                    signal_owned_processes(owned_games, token)
+                    clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
+                except ProcessObservationError:
+                    clean_game_exit = False
+                    cleanup_complete = False
                 stopped = clean_game_exit
             else:
                 stopped = started
@@ -427,23 +468,27 @@ def launch(identity, external=()):
             # ending its private client. This is not a cloud-sync confirmation.
             if stopped and game_was_running:
                 time.sleep(3)
-            stop_owned_session(token)
+            if not stop_owned_session(token):
+                cleanup_complete = False
             if canceled or failed:
                 if started and clean_game_exit:
                     last_facts["process"] = "gone"
-                if not clean_game_exit:
+                if not clean_game_exit or not cleanup_complete:
                     last_facts["session_end"] = "incomplete"
                 elif canceled:
                     last_facts["session_end"] = "canceled"
                 publish("failed" if failed or not clean_game_exit else "canceled", last_facts)
+            elif not cleanup_complete:
+                last_facts["session_end"] = "incomplete"
+                publish("failed", last_facts)
         finally:
             signal.signal(signal.SIGTERM, previous_term)
             signal.signal(signal.SIGINT, previous_int)
         # No global Steam IPC shutdown. NativeSandbox teardown is the final
         # boundary for descendants that discard the token. Cloud sync is not
         # promised by this direct-launch adapter.
-    if not clean_game_exit:
-        raise RuntimeError("The game did not exit normally. Recent saves or Steam Cloud sync may be incomplete; open Steam to check before retrying")
+    if not clean_game_exit or not cleanup_complete:
+        raise RuntimeError("The Steam game session could not be fully observed or stopped. Recent saves or Cloud sync may be incomplete; open Steam to check before retrying")
 
 
 def main():

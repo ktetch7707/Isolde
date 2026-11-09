@@ -528,7 +528,7 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     QCOMPARE(dispatch.lastAction.value("type").toString(),QString("launch-game"));QCOMPARE(dispatch.origin,QString("steam-origin"));
     QCOMPARE(library.resolveLaunch(dispatch.lastAction.value("gameId").toString()).value("steamAppId").toString(),QString("42"));
-    const QVariantMap status{{"appId","42"},{"phase","ended"},{"account","unknown"},{"ownership","unknown"},{"offline","unknown"},{"exit","unknown"},{"local_save","unknown"},{"cloud_save","unknown"},{"session_end","normal"}};
+    const QVariantMap status{{"appId","42"},{"phase","ended"},{"process","gone"},{"error","none"},{"account","unknown"},{"ownership","unknown"},{"offline","unknown"},{"exit","unknown"},{"local_save","unknown"},{"cloud_save","unknown"},{"session_end","normal"}};
     QVERIFY(widget->setProperty("providerStatus",status));
     QVERIFY(QMetaObject::invokeMethod(widget.data(),"openDetails"));
     const auto statusText=widget->findChild<QObject *>("steamProviderStatus");QVERIFY(statusText);
@@ -536,6 +536,11 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QVERIFY(statusText->property("text").toString().contains("Cloud: unknown"));
     QVERIFY(statusText->property("text").toString().contains("Session end: reported normal process exit"));
     QVERIFY(statusText->property("text").toString().contains("does not prove that saves were written"));
+    auto unknownProcess=status;unknownProcess["process"]="unknown";unknownProcess["error"]="process_observation_failed";unknownProcess["phase"]="failed";unknownProcess["session_end"]="incomplete";
+    QVERIFY(widget->setProperty("providerStatus",unknownProcess));
+    QVERIFY(statusText->property("text").toString().contains("Process observation: observation unavailable"));
+    QVERIFY(statusText->property("text").toString().contains("process visibility was incomplete"));
+    QVERIFY(statusText->property("text").toString().contains("Session end: incomplete"));
     auto other=status;other["appId"]="43";QVERIFY(widget->setProperty("providerStatus",other));
     QVERIFY(widget->property("steamStatus").toString().contains("Steam checks account ownership"));
     const auto gameId=dispatch.lastAction.value("gameId").toString();

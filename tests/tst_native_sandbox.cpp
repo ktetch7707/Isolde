@@ -164,6 +164,15 @@ void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
     QCOMPARE(parsed.value("phase").toString(),QString("ended"));
     QCOMPARE(parsed.value("local_save").toString(),QString("unknown"));
     QCOMPARE(parsed.value("session_end").toString(),QString("normal"));
+    auto unobservable=state;
+    unobservable.replace("\"process\":\"gone\"","\"process\":\"unknown\"");
+    unobservable.replace("\"error\":\"none\"","\"error\":\"process_observation_failed\"");
+    unobservable.replace("\"session_end\":\"normal\"","\"session_end\":\"incomplete\"");
+    parser.consume("STEAM_PROVIDER_STATE "+unobservable+"\n");
+    const auto unobservableState=parser.takeState();
+    QCOMPARE(unobservableState.value("process").toString(),QString("unknown"));
+    QCOMPARE(unobservableState.value("error").toString(),QString("process_observation_failed"));
+    QCOMPARE(unobservableState.value("session_end").toString(),QString("incomplete"));
     auto other=state;other.replace("\"appId\":\"42\"","\"appId\":\"43\"");
     parser.consume("STEAM_PROVIDER_STATE "+other+"\n");
     QVERIFY(parser.takeState().isEmpty());
