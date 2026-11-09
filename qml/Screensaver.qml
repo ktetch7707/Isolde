@@ -58,48 +58,51 @@ Item {
         color: shell.background || "#0B1020"
         z: 0
 
-        if (root.mode === "slideshow" && root.photos.length > 0) {
-            Image {
-                id: slideImage
-                anchors.fill: parent
-                source: root.photos[0]
-                fillMode: root.appearance.imageFit === "fit" ? Image.PreserveAspectFit : (root.appearance.imageFit === "stretch" ? Image.PreserveAspectFill : Image.Stretch)
-                smooth: true
-                cache: false
-                asynchronous: true
-                onLoaded: {
-                    root.imageLoaded()
-                    if (root.heroUrl.length > 0 && slideImage.source === root.heroUrl) {
-                        Image {
-                            anchors.fill: parent
-                            source: root.heroUrl
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            cache: false
-                            z: 1
-                        }
+        Image {
+            id: slideImage
+            visible: root.mode === "slideshow" && root.photos.length > 0
+            anchors.fill: parent
+            source: root.photos[0]
+            fillMode: root.appearance.imageFit === "fit" ? Image.PreserveAspectFit : (root.appearance.imageFit === "stretch" ? Image.PreserveAspectFill : Image.Stretch)
+            smooth: true
+            cache: false
+            asynchronous: true
+            onLoaded: {
+                root.imageLoaded()
+                if (root.heroUrl.length > 0 && slideImage.source === root.heroUrl) {
+                    Image {
+                        anchors.fill: parent
+                        source: root.heroUrl
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        cache: false
+                        z: 1
                     }
                 }
-                onSourceChanged: root.imageLoaded()
             }
-        } else if (root.mode === "gradient") {
-            Rectangle {
-                anchors.fill: parent
-                color: root.appearance.gradientStart || "#1a1a2e"
-                border.color: root.accentColor
-                border.width: 2
-            }
-        } else if (root.mode === "dim") {
-            Rectangle {
-                anchors.fill: parent
-                color: root.bgColor
-                opacity: 0.7
-                border.color: root.accentColor
-                border.width: 2
-            }
+            onSourceChanged: root.imageLoaded()
         }
 
-        if (root.mode === "clock") {
+        Rectangle {
+            visible: root.mode === "gradient"
+            anchors.fill: parent
+            color: root.appearance.gradientStart || "#1a1a2e"
+            border.color: root.accentColor
+            border.width: 2
+        }
+
+        Rectangle {
+            visible: root.mode === "dim"
+            anchors.fill: parent
+            color: root.bgColor
+            opacity: 0.7
+            border.color: root.accentColor
+            border.width: 2
+        }
+
+        Item {
+            visible: root.mode === "clock"
+            anchors.fill: parent
             Text {
                 id: clockText
                 anchors { left: parent.left; top: parent.top; margins: 30 }
@@ -151,14 +154,13 @@ Item {
             color: root.accentColor
         }
 
-        if (root.mode === "clock") {
-            Text {
-                anchors { centerIn: parent; top: parent.top; topMargin: 80; left: parent.left; leftMargin: 80 }
-                text: root.clockTime
-                color: "#FFFFFF"
-                font.pixelSize: 64 * root.textScale
-                font.weight: Font.DemiBold
-            }
+        Text {
+            visible: root.mode === "clock"
+            anchors { centerIn: parent; top: parent.top; topMargin: 80; left: parent.left; leftMargin: 80 }
+            text: root.clockTime
+            color: "#FFFFFF"
+            font.pixelSize: 64 * root.textScale
+            font.weight: Font.DemiBold
         }
 
         MouseArea {

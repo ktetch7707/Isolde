@@ -185,6 +185,7 @@ qt_add_qml_module(isolde
         qml/AmbientScreen.qml
         qml/AmbientOverlay.qml
         qml/AmbientSettingsView.qml
+        qml/Screensaver.qml
         qml/AudioSettingsView.qml
         qml/ClockWidget.qml
         qml/CommandCenter.qml
