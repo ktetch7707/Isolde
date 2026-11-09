@@ -13,7 +13,7 @@ Item {
     property var originRect: null
     readonly property bool motionAllowed: !displaySettings.reduceMotion && captureController.sessionTransition !== "instant"
     readonly property int animationDuration: motionAllowed ? captureController.transitionDuration : 0
-    signal returned(string originId)
+    signal returned(string originId, bool goHome)
     signal configureRequested(string originId)
 
     function openSession(input, origin, geometry) {
@@ -30,14 +30,14 @@ Item {
                 chooseInput = true
         }
     }
-    function closeSession() {
+    function closeSession(goHome) {
         const origin = originId
         open = false
         originId = ""
         chooseInput = false
         captureController.cancelSwitch()
         captureController.stopPreview()
-        returned(origin)
+        returned(origin, goHome === true)
     }
     function selectedInputName() {
         const inputs = captureController.inputs
@@ -49,7 +49,9 @@ Item {
             && (!pendingSwitchConfirmation || captureController.switchState === "sent")
     }
     function handleCommand(command) {
-        if (command === inputManager.back || command === inputManager.home) { closeSession(); return }
+        if (command === inputManager.back || command === inputManager.home) {
+            closeSession(command === inputManager.home || captureController.sessionReturn === "home"); return
+        }
         if (command === inputManager.menu) {
             const origin = originId
             closeSession()
@@ -67,6 +69,14 @@ Item {
                     pendingSwitchConfirmation = true
                 }
             }
+            return
+        }
+        if (command === inputManager.confirm && !selectionPending && captureController.switchState !== "sending"
+                && captureController.switchState !== "error"
+                && (captureController.state === "no-signal" || captureController.state === "error"
+                    || captureController.state === "device-missing" || captureController.state === "format-missing")) {
+            captureController.stopPreview()
+            captureController.startPreview()
             return
         }
         if (command === inputManager.navigateLeft) {
@@ -147,6 +157,7 @@ Item {
         Text { anchors.centerIn: parent; text: (root.selectionPending ? "OK Switch to selected input     Back / Home Return"
             : root.pendingSwitchConfirmation && captureController.switchState === "error" ? "OK Retry switch     ‹ / › choose another input     Back / Home Return"
             : root.pendingSwitchConfirmation && captureController.switchState === "sending" ? "Sending switch command     ‹ / › choose another input     Back / Home Return"
+            : captureController.state === "no-signal" || captureController.state === "error" || captureController.state === "device-missing" || captureController.state === "format-missing" ? "OK Retry preview     ‹ / › choose another input     Back / Home Return"
             : root.pendingSwitchConfirmation ? "Check the picture, then OK confirm     ‹ / › choose another input     Back / Home Return"
             : "‹ / › Choose input     OK Switch     Back / Home Return")
             + "     Menu Configure"; color: "#FFFFFF"; font.pixelSize: 18 }

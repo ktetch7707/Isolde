@@ -40,7 +40,9 @@ Item {
         { name: "Refresh devices", value: "Rescan capture, audio, and serial devices" },
         { name: "Session transition", value: draft.sessionTransition || "expand" },
         { name: "Transition duration", value: (draft.transitionDuration || 250) + " ms" },
-        { name: "Input fallback artwork", value: "Choose profile images for each HDMI input" }
+        { name: "Input fallback artwork", value: "Choose profile images for each HDMI input" },
+        { name: "Back returns to", value: draft.sessionReturn === "home" ? "Home" : "Launch location" },
+        { name: "Suggest connected devices", value: "Stage unambiguous single-device choices" }
     ]
 
     function setDraftValue(key, value) {
@@ -100,7 +102,8 @@ Item {
             selectedInput: captureController.selectedInput,
             inputLabels: labels,
             sessionTransition: captureController.sessionTransition,
-            transitionDuration: captureController.transitionDuration
+            transitionDuration: captureController.transitionDuration,
+            sessionReturn: captureController.sessionReturn
         }
         draftDirty = false
     }
@@ -115,7 +118,8 @@ Item {
             selectedInput: draft.selectedInput,
             inputLabels: draft.inputLabels,
             sessionTransition: draft.sessionTransition,
-            transitionDuration: draft.transitionDuration
+            transitionDuration: draft.transitionDuration,
+            sessionReturn: draft.sessionReturn
         }
     }
     function applyDraft() {
@@ -202,7 +206,17 @@ Item {
             const values = selectedIndex === 15 ? ["instant", "fade", "slide", "expand"] : [200, 250, 300, 350]
             const index = Math.max(0, values.indexOf(draft[key]))
             setDraftValue(key, values[(index + direction + values.length) % values.length])
+        } else if (selectedIndex === 18) {
+            setDraftValue("sessionReturn", draft.sessionReturn === "home" ? "origin" : "home")
         }
+    }
+    function suggestDevices() {
+        const video = captureController.videoDevices
+        const audio = captureController.audioDevices
+        const serial = captureController.serialPorts
+        if (video.length === 1) { setDraftValue("captureDeviceId", video[0].id); setDraftValue("videoFormatKey", "") }
+        if (audio.length === 1) setDraftValue("audioDeviceId", audio[0].id)
+        if (serial.length === 1) setDraftValue("serialPortName", serial[0].id)
     }
     function activateSelected() {
         if (selectedIndex <= 5) adjust(1)
@@ -223,6 +237,7 @@ Item {
         else if (selectedIndex === 13) cancelDraft()
         else if (selectedIndex === 14) actionDispatcher.dispatchEditorAction({type: "capture-refresh"})
         else if (selectedIndex === 17) openArtworkEditor()
+        else if (selectedIndex === 19) suggestDevices()
         else adjust(1)
     }
     function handleCommand(command) {

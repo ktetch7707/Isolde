@@ -42,6 +42,7 @@ class CaptureController final : public QObject {
     Q_PROPERTY(int baudRate READ baudRate NOTIFY changed)
     Q_PROPERTY(QString sessionTransition READ sessionTransition NOTIFY changed)
     Q_PROPERTY(int transitionDuration READ transitionDuration NOTIFY changed)
+    Q_PROPERTY(QString sessionReturn READ sessionReturn NOTIFY changed)
 public:
     explicit CaptureController(QObject *parent = nullptr);
     // Injected adapters must outlive the controller.
@@ -76,6 +77,7 @@ public:
     int baudRate() const { return m_baudRate; }
     QString sessionTransition() const { return m_sessionTransition; }
     int transitionDuration() const { return m_transitionDuration; }
+    QString sessionReturn() const { return m_sessionReturn; }
 
     Q_INVOKABLE void refreshDevices();
     Q_INVOKABLE QVariantList videoFormatsFor(const QString &deviceId) const;
@@ -136,6 +138,7 @@ private:
     QString m_serialPortName;
     QString m_commandTemplate;
     QString m_sessionTransition = "expand";
+    QString m_sessionReturn = "origin";
     QString m_previewCaptureId;
     QString m_previewFormatKey;
     QString m_previewAudioId;

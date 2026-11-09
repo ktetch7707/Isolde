@@ -141,6 +141,8 @@ void CaptureController::loadSettings()
     if (QStringList{"instant", "fade", "slide", "expand"}.contains(transition)) m_sessionTransition = transition;
     const auto duration = settings.value("session/duration", 250).toInt();
     if (QList<int>{200, 250, 300, 350}.contains(duration)) m_transitionDuration = duration;
+    const auto returnPolicy = settings.value("session/return", "origin").toString();
+    if (QStringList{"origin", "home"}.contains(returnPolicy)) m_sessionReturn = returnPolicy;
     m_switchStatus = m_commandTemplate.isEmpty() ? "No switch command is configured."
         : "Saved command loaded. Send a test and visually verify the selected source.";
     for (int input = 1; input <= 8; ++input) {
@@ -483,7 +485,7 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
 
     const QStringList expectedKeys{
         "audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
-        "inputLabels", "selectedInput", "serialPortName", "sessionTransition", "transitionDuration", "videoFormatKey"
+        "inputLabels", "selectedInput", "serialPortName", "sessionReturn", "sessionTransition", "transitionDuration", "videoFormatKey"
     };
     const auto captureId = configuration.value("captureDeviceId").toString();
     const auto format = configuration.value("videoFormatKey").toString();
@@ -506,6 +508,7 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
         return true;
     };
     const auto transition = configuration.value("sessionTransition").toString();
+    const auto returnPolicy = configuration.value("sessionReturn").toString();
     int baud = 0, selectedInput = 0, duration = 0;
     const bool integerTypesValid = exactInt(configuration.value("baudRate"), &baud)
         && exactInt(configuration.value("selectedInput"), &selectedInput)
@@ -531,12 +534,14 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
         && configuration.value("serialPortName").metaType().id() == QMetaType::QString
         && configuration.value("commandTemplate").metaType().id() == QMetaType::QString
         && configuration.value("sessionTransition").metaType().id() == QMetaType::QString
+        && configuration.value("sessionReturn").metaType().id() == QMetaType::QString
         && integerTypesValid
         && configuration.value("inputLabels").metaType().id() == QMetaType::QVariantMap;
     if (configuration.keys() != expectedKeys || !typesValid
         || !captureFound || !formatFound || !audioFound || !portFound
         || !SupportedBaudRates.contains(baud) || selectedInput < 1 || selectedInput > 8
         || !QStringList{"instant", "fade", "slide", "expand"}.contains(transition)
+        || !QStringList{"origin", "home"}.contains(returnPolicy)
         || !QList<int>{200, 250, 300, 350}.contains(duration)
         || !commandValid || !labelsValid) {
         m_switchState = "error";
@@ -554,7 +559,7 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
         {"switch/baud", baud},
         {"switch/commandTemplate", commandTemplate},
         {"inputs/selected", selectedInput},
-        {"session/transition", transition}, {"session/duration", duration}
+        {"session/transition", transition}, {"session/duration", duration}, {"session/return", returnPolicy}
     };
     for (int input = 1; input <= 8; ++input)
         values.insert(QString("inputs/%1/name").arg(input),
@@ -571,6 +576,7 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
     m_baudRate = baud;
     m_commandTemplate = commandTemplate;
     m_sessionTransition = transition;
+    m_sessionReturn = returnPolicy;
     m_transitionDuration = duration;
     m_selectedInput = selectedInput;
     for (int input = 1; input <= 8; ++input)

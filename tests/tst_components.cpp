@@ -179,13 +179,13 @@ void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
     const QVariantMap configuration{
         {"audioDeviceId", ""}, {"baudRate", 9600}, {"captureDeviceId", ""},
         {"commandTemplate", ""}, {"inputLabels", labels}, {"selectedInput", 1},
-        {"serialPortName", ""}, {"sessionTransition", "fade"}, {"transitionDuration", 250}, {"videoFormatKey", ""}
+        {"serialPortName", ""}, {"sessionReturn", "origin"}, {"sessionTransition", "fade"}, {"transitionDuration", 250}, {"videoFormatKey", ""}
     };
     QString error;
     const auto apply = ComponentSchema::editorAction(
         {{"type", "capture-apply"}, {"configuration", configuration}}, &error);
     QVERIFY2(!apply.isEmpty(), qPrintable(error));
-    QCOMPARE(apply.value("configuration").toMap().size(), 10);
+    QCOMPARE(apply.value("configuration").toMap().size(), 11);
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-start"}}).contains("type"));
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-draft"}, {"captureDeviceId", "video"},
         {"videoFormatKey", ""}, {"audioDeviceId", "audio"}}).contains("captureDeviceId"));
@@ -207,6 +207,9 @@ void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
     invalid = configuration;
     invalid.insert("transitionDuration", 225);
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+    invalid = configuration;
+    invalid.insert("sessionReturn", "elsewhere");
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
     invalid = configuration;
     labels.insert("9", "Out of range");

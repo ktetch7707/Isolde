@@ -664,7 +664,7 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
         }
         const auto configuration = value.toMap();
         const QStringList keys{"audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
-            "inputLabels", "selectedInput", "serialPortName", "sessionTransition", "transitionDuration", "videoFormatKey"};
+            "inputLabels", "selectedInput", "serialPortName", "sessionReturn", "sessionTransition", "transitionDuration", "videoFormatKey"};
         if (configuration.size() != keys.size()) {
             if (error) *error = "Capture settings must include every staged field exactly once.";
             return {};
@@ -688,7 +688,8 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
         };
         if (!stringField("audioDeviceId", 512) || !stringField("captureDeviceId", 512)
             || !stringField("serialPortName", 256) || !stringField("videoFormatKey", 256)
-            || !stringField("commandTemplate", 128) || !stringField("sessionTransition", 16))
+            || !stringField("commandTemplate", 128) || !stringField("sessionTransition", 16)
+            || !stringField("sessionReturn", 16))
             return {};
         const auto exactInteger = [&configuration, &normalized, error](const QString &key, int minimum, int maximum) {
             const auto value = configuration.value(key);
@@ -712,6 +713,7 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
             || !exactInteger("selectedInput", MinHdmiInput, MaxHdmiInput)
             || !exactInteger("transitionDuration", 200, 350)
             || !QList<int>{200, 250, 300, 350}.contains(normalized.value("transitionDuration").toInt())
+            || !QStringList{"origin", "home"}.contains(normalized.value("sessionReturn").toString())
             || !QStringList{"instant", "fade", "slide", "expand"}.contains(normalized.value("sessionTransition").toString())) {
             if (error && error->isEmpty()) *error = "Choose a supported serial speed and session transition.";
             return {};

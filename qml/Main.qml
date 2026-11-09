@@ -629,7 +629,11 @@ Window {
         anchors.fill: parent
         artworkResolver: window.captureFallbackArtwork
         artworkConfiguration: homeLayout.composition.captureInputArtwork || ({})
-        onReturned: originId => { if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId) }
+        onReturned: (originId, goHome) => {
+            if (goHome) { sessionManager.goHome(); if (pageSurface.open) pageSurface.closeAll(); else home.restoreFocus(originId) }
+            else if (pageSurface.open) pageSurface.restoreOrigin(originId)
+            else home.restoreFocus(originId)
+        }
         onConfigureRequested: originId => {
             if (actionDispatcher.dispatch({type: "settings", section: 4}, originId))
                 settings.openCaptureSettings()

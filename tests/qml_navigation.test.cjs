@@ -116,7 +116,7 @@ test("capture settings stage changes, apply together, and discard without saving
     const controller = {
         captureDeviceId: "card-a", videoFormatKey: "fmt-a", audioDeviceId: "audio-a",
         serialPortName: "serial-a", baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 1,
-        sessionTransition: "fade", transitionDuration: 250,
+        sessionTransition: "fade", transitionDuration: 250, sessionReturn: "origin",
         inputs: Array.from({length: 8}, (_, index) => ({number: index + 1, name: "HDMI " + (index + 1)})),
         result: false,
     };
@@ -150,7 +150,7 @@ test("capture settings stage changes, apply together, and discard without saving
     assert.equal(saved[2].configuration.commandTemplate, "HDMI {input}\\r");
     assert.deepEqual(Object.keys(saved[2].configuration).sort(), [
         "audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
-        "inputLabels", "selectedInput", "serialPortName", "sessionTransition", "transitionDuration", "videoFormatKey",
+        "inputLabels", "selectedInput", "serialPortName", "sessionReturn", "sessionTransition", "transitionDuration", "videoFormatKey",
     ]);
     assert.equal(Object.keys(saved[2].configuration.inputLabels).length, 8);
     assert.equal(scope.draftDirty, false);
@@ -162,10 +162,10 @@ test("capture editor routes apply, test, preview, refresh, and cancel through ty
         selectedIndex: 9, keyboardMode: 0, draftDirty: true,
         draft: {captureDeviceId: "card", videoFormatKey: "", audioDeviceId: "", serialPortName: "ttyUSB0",
             baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2, inputLabels: {"1":"HDMI 1"},
-            sessionTransition: "fade", transitionDuration: 250},
+            sessionTransition: "fade", transitionDuration: 250, sessionReturn: "origin"},
         captureController: {
             captureDeviceId: "card", videoFormatKey: "", audioDeviceId: "", serialPortName: "ttyUSB0",
-            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2, sessionTransition: "fade", transitionDuration: 250,
+            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2, sessionTransition: "fade", transitionDuration: 250, sessionReturn: "origin",
             inputs: Array.from({length: 8}, (_, index) => ({number: index + 1, name: "HDMI " + (index + 1)})),
         },
         actionDispatcher: {dispatchEditorAction: action => { actions.push(action); return true; }},
@@ -254,6 +254,51 @@ test("capture session appearance choices are staged and cancel restores saved ch
     assert.equal(scope.draft.sessionTransition, "fade");
     assert.equal(scope.draft.transitionDuration, 250);
     assert.equal(scope.draftDirty, false);
+});
+
+test("capture auto-suggest stages only unambiguous devices without saving", () => {
+    const scope = vm.createContext({
+        draft: {captureDeviceId: "old", videoFormatKey: "old-format", audioDeviceId: "", serialPortName: ""},
+        draftDirty: false,
+        captureController: {videoDevices: [{id: "camera"}], audioDevices: [{id: "a"}, {id: "b"}],
+            serialPorts: [{id: "serial"}]},
+    });
+    for (const name of ["setDraftValue", "suggestDevices"]) method("CaptureSettingsView.qml", name, scope);
+    scope.suggestDevices();
+    assert.equal(scope.draft.captureDeviceId, "camera");
+    assert.equal(scope.draft.videoFormatKey, "");
+    assert.equal(scope.draft.audioDeviceId, "");
+    assert.equal(scope.draft.serialPortName, "serial");
+    assert.equal(scope.draftDirty, true);
+});
+
+test("capture session Back honors return policy and Home always returns Home", () => {
+    const calls = [], inputManager = {back: 1, home: 2};
+    const scope = vm.createContext({
+        inputManager, captureController: {sessionReturn: "origin"},
+        closeSession: home => calls.push(home),
+    });
+    method("CaptureSessionView.qml", "handleCommand", scope);
+    scope.handleCommand(inputManager.back);
+    scope.captureController.sessionReturn = "home";
+    scope.handleCommand(inputManager.back);
+    scope.captureController.sessionReturn = "origin";
+    scope.handleCommand(inputManager.home);
+    assert.deepEqual(calls, [false, true, true]);
+});
+
+test("capture session retries missing signal without sending another switch command", () => {
+    const calls = [], inputManager = {back: 1, home: 2, menu: 3, confirm: 4};
+    const scope = vm.createContext({
+        inputManager, chooseInput: false, selectionPending: false, pendingSwitchConfirmation: true,
+        captureController: {state: "no-signal", switchState: "sent",
+            stopPreview: () => calls.push("stop"), startPreview: () => calls.push("start"),
+            switchInput: () => calls.push("switch")},
+    });
+    method("CaptureSessionView.qml", "handleCommand", scope);
+    scope.handleCommand(inputManager.confirm);
+    assert.deepEqual(calls, ["stop", "start"]);
+    assert.equal(scope.pendingSwitchConfirmation, true);
 });
 
 test("capture fallback art belongs only to the matching HDMI shortcut", () => {
