@@ -27,6 +27,7 @@
 #include <QQmlComponent>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <cmath>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QJSValue>
@@ -53,6 +54,7 @@ private slots:
     void universalLocalSearchRemoteFlow();
     void allAppsGalleryUsesLocalFilterAndRestoresOrigin();
     void allAppsListNavigationUsesSingleRowStep();
+    void allAppsGridColumnsMatchRemoteNavigationStep();
     void searchHeaderSwitchRemoteFocusAndStableResults();
     void searchPreferenceProfileIsolationAndWriteFailure();
     void appSuppliedIconsUseManagedArtwork();
@@ -157,6 +159,45 @@ void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
     QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
     QVERIFY(command(InputManager::NavigateUp));
     QCOMPARE(gallery->property("focusArea").toString(), QString("filter"));
+}
+void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
+{
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(APP_GALLERY_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QVariantList apps;
+    for (int i = 0; i < 10; ++i) {
+        const auto id = QString("app-%1").arg(i);
+        apps.append(QVariantMap{{"id",id},{"name",QString("App %1").arg(i)},{"type","web"}});
+    }
+    QQuickWindow window;
+    window.resize(1280,720);
+    std::unique_ptr<QObject> gallery(component.createWithInitialProperties({
+        {"entries", apps},
+        {"galleryPresentation", QVariantMap{{"layout","grid"},{"columns",5},{"filterEnabled",true}}},
+        {"width",1280},{"height",720}
+    }));
+    QVERIFY2(gallery, qPrintable(component.errorString()));
+    qobject_cast<QQuickItem *>(gallery.get())->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("page-apps"))));
+    auto *grid = gallery->findChild<QObject *>("allAppsGrid");
+    QVERIFY(grid);
+    QTRY_VERIFY(grid->property("width").toReal() > 0);
+    QTRY_VERIFY(grid->property("cellWidth").toReal() > 0);
+    const double gridWidth = grid->property("width").toReal();
+    const double cellWidth = grid->property("cellWidth").toReal();
+    QCOMPARE(static_cast<int>(std::floor(gridWidth / cellWidth + 0.00001)), 5);
+    auto command = [&](int value) {
+        return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
+    };
+    QCOMPARE(gallery->property("selectedId").toString(), QString("app-0"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("app-5"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("app-0"));
 }
 void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 {

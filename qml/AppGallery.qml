@@ -287,7 +287,7 @@ Item {
             width: parent.width
             height: parent.height - 120
             clip: true
-            cellWidth: root.layoutMode === "list" ? width : root.width / root.columns
+            cellWidth: root.layoutMode === "list" ? width : width / root.columns
             cellHeight: root.layoutMode === "list" ? 82 : Math.min(
                 height,
                 210 * (root.galleryPresentation.density === "compact" ? 0.82 : root.galleryPresentation.density === "spacious" ? 1.15 : 1))

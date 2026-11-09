@@ -505,7 +505,7 @@ if(BUILD_TESTING)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE APP_GALLERY_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/AppGallery.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE KODI_SETTINGS_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/KodiSettingsView.qml")
     set(ISOLDE_RUNTIME_NAVIGATION_CASES
-        allAppsGalleryUsesLocalFilterAndRestoresOrigin allAppsListNavigationUsesSingleRowStep
+        allAppsGalleryUsesLocalFilterAndRestoresOrigin allAppsListNavigationUsesSingleRowStep allAppsGridColumnsMatchRemoteNavigationStep
         retainsExactOriginAndRecoversWithoutHomeButton repairsSourceWithRemoteAndCanCancel
         televisionLibraryRemoteFlow universalLocalSearchRemoteFlow pageScopedSourcesAppearInSearch
         searchHeaderSwitchRemoteFocusAndStableResults searchPreferenceProfileIsolationAndWriteFailure

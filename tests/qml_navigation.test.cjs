@@ -39,6 +39,23 @@ test("app overflow opens All Apps while button overflow retains shortcuts", () =
     assert.equal(scope.galleryId, "shortcut");
 });
 
+test("app overflow saves carousel focus before opening All Apps", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../qml/PlacedComponents.qml"), "utf8");
+    const match = source.match(/onAllAppsRequested:origin=>(\{[^\n]+\})/);
+    assert.ok(match, "carousel gallery handler exists");
+    const calls = [], saved = {selectedId: "__more__", galleryOpen: false};
+    const scope = vm.createContext({
+        node: {modelData: {item: {id: "carousel"}}},
+        focusState: () => saved,
+        surface: {host: {
+            rememberAppFocus(id, state) { calls.push(["save", id, state]); },
+            allAppsRequested(origin) { calls.push(["open", origin]); },
+        }},
+    });
+    vm.runInContext("(origin => " + match[1] + ")", scope)("carousel");
+    assert.deepEqual(calls, [["save", "carousel", saved], ["open", "carousel"]]);
+});
+
 test("capture settings arrows change only the selected input row", () => {
     const calls = [], draft = {selectedInput: 1};
     const scope = vm.createContext({
