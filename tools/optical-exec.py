@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Execute a reviewed optical ELF from a sealed anonymous memory file."""
+"""Execute a reviewed optical ELF from a private temporary staging tree."""
 import fcntl
 import os
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
+import shutil
 import stat
 import sys
+import tempfile
 
 MAX_EXECUTABLE = 512 * 1024 * 1024
+MAX_DIRECTORY_ENTRIES = 4096
+MAX_PATH_DEPTH = 32
 
 
 def stage_executable(path):
@@ -54,12 +58,51 @@ def stage_executable(path):
             os.close(memory)
 
 
-def execute(path):
-    descriptor = stage_executable(path)
+def execute(path, disc_root="/media/games"):
+    root = Path(disc_root)
+    target = Path(path)
+    if not root.is_absolute() or not target.is_absolute():
+        raise ValueError("The optical executable and disc root must be absolute.")
     try:
-        os.execve("/proc/self/fd/" + str(descriptor), [path], os.environ)
-    finally:
+        parts = target.relative_to(root).parts
+    except ValueError:
+        raise ValueError("The optical executable is outside the reviewed disc.") from None
+    if (not parts or len(parts) > MAX_PATH_DEPTH or ".." in parts
+            or os.path.realpath(root) != str(root) or os.path.realpath(target) != str(target)):
+        raise ValueError("The optical executable path is not a canonical disc path.")
+
+    descriptor = stage_executable(path)
+    staging = None
+    try:
+        staging = tempfile.mkdtemp(prefix="isolde-optical-")
+        source = root
+        destination = Path(staging)
+        remaining_entries = MAX_DIRECTORY_ENTRIES
+        for index, component in enumerate(parts):
+            with os.scandir(source) as entries:
+                for entry in entries:
+                    remaining_entries -= 1
+                    if remaining_entries < 0:
+                        raise ValueError("The optical game directory contains too many entries to stage safely.")
+                    if entry.name != component:
+                        os.symlink(str(source / entry.name), destination / entry.name)
+            source = source / component
+            destination = destination / component
+            if index < len(parts) - 1:
+                os.mkdir(destination, 0o700)
+
+        with os.fdopen(os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o500), "wb") as staged:
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            with os.fdopen(os.dup(descriptor), "rb") as sealed:
+                shutil.copyfileobj(sealed, staged, 1024 * 1024)
         os.close(descriptor)
+        descriptor = None
+        os.execve(str(destination), [path], os.environ)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if staging is not None:
+            shutil.rmtree(staging)
 
 
 def main():
