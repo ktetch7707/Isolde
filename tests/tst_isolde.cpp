@@ -77,7 +77,7 @@ private slots:
             ids.insert(id);
             QVERIFY(app.value("installed").toBool());
             QVERIFY(app.value("registered").toBool());
-            QVERIFY(QStringList{"web", "desktop", "android"}.contains(app.value("type").toString()));
+            QVERIFY((QStringList{"web", "desktop", "android"}.contains(app.value("type").toString())));
         }
         QVERIFY(ids.contains("youtube"));
         QVERIFY(!ids.contains("settings"));
@@ -849,7 +849,7 @@ void IsoldeTests::catalogPersistsInstallLifecycle()
     QVERIFY(restoredRegistry.find("weather"));
     QVERIFY(restored.uninstall("weather"));
     QVERIFY(!restoredRegistry.find("weather"));
-    projected = restored.galleryEntries();
+    const auto projected = restored.galleryEntries();
     QVERIFY(std::none_of(projected.cbegin(),projected.cend(),[](const QVariant &entry){return entry.toMap().value("id").toString()=="weather";}));
     QVERIFY(!QDir(installRoot).exists("weather"));
 }
