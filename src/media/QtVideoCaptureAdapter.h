@@ -15,7 +15,7 @@ public:
     void setOutput(QObject *output) override;
     bool start(const QString &deviceId, const QString &formatKey) override;
     void stop() override;
-    QMediaCaptureSession *audioSession() override { return &m_session; }
+    QObject *audioContext() override { return &m_session; }
 private:
     QMediaDevices m_devices;
     QMediaCaptureSession m_session;

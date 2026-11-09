@@ -32,10 +32,12 @@ QString QtAudioCaptureAdapter::name() const
     return QStringLiteral("Qt Multimedia capture-session routing");
 }
 
-bool QtAudioCaptureAdapter::configure(QMediaCaptureSession *session, const QString &id)
+bool QtAudioCaptureAdapter::configure(QObject *captureContext, const QString &id)
 {
-    stop(session);
-    if (id.isEmpty()) return true;
+    if (id.isEmpty()) { stop(captureContext); return true; }
+    auto *session = qobject_cast<QMediaCaptureSession *>(captureContext);
+    if (!session) return false;
+    stop(captureContext);
     for (const auto &device : QMediaDevices::audioInputs()) {
         if (QString::fromLatin1(device.id()) != id) continue;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
@@ -49,8 +51,10 @@ bool QtAudioCaptureAdapter::configure(QMediaCaptureSession *session, const QStri
     return false;
 }
 
-void QtAudioCaptureAdapter::stop(QMediaCaptureSession *session)
+void QtAudioCaptureAdapter::stop(QObject *captureContext)
 {
+    auto *session = qobject_cast<QMediaCaptureSession *>(captureContext);
+    if (!session) return;
     session->setAudioInput(nullptr);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
     session->setAudioOutput(nullptr);

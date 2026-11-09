@@ -3,8 +3,6 @@
 #include <QObject>
 #include <QVariantList>
 
-class QMediaCaptureSession;
-
 class VideoCaptureAdapter : public QObject {
     Q_OBJECT
 public:
@@ -15,7 +13,8 @@ public:
     virtual void setOutput(QObject *output) = 0;
     virtual bool start(const QString &deviceId, const QString &formatKey) = 0;
     virtual void stop() = 0;
-    virtual QMediaCaptureSession *audioSession() = 0;
+    // Opaque backend-owned bridge; compatible audio adapters interpret its type.
+    virtual QObject *audioContext() = 0;
 signals:
     void devicesChanged();
     void frameReceived();

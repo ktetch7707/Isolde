@@ -1,7 +1,6 @@
 #include "media/CaptureController.h"
 #include "media/AudioCaptureAdapter.h"
 #include "media/VideoCaptureAdapter.h"
-#include <QMediaCaptureSession>
 #include <QtTest>
 
 class FakeAudioAdapter final : public AudioCaptureAdapter {
@@ -12,14 +11,14 @@ public:
     QVariantList devices() const override { return available; }
     bool monitoringSupported() const override { return true; }
     QString name() const override { return "fixture audio"; }
-    bool configure(QMediaCaptureSession *, const QString &id) override {
+    bool configure(QObject *, const QString &id) override {
         current = id;
         if (id.isEmpty()) return true;
         for (const auto &entry : available)
             if (entry.toMap().value("id").toString() == id) return true;
         return false;
     }
-    void stop(QMediaCaptureSession *) override { ++stops; }
+    void stop(QObject *) override { ++stops; }
     void publish() { emit devicesChanged(); }
 };
 
@@ -27,7 +26,7 @@ class FakeVideoAdapter final : public VideoCaptureAdapter {
 public:
     QVariantList available;
     QVariantList formatList;
-    QMediaCaptureSession session;
+    QObject audioBridge;
     int starts = 0;
     int stops = 0;
     bool failStart = false;
@@ -40,7 +39,7 @@ public:
     void setOutput(QObject *value) override { output = value; }
     bool start(const QString &, const QString &) override { ++starts; return !failStart; }
     void stop() override { ++stops; }
-    QMediaCaptureSession *audioSession() override { return &session; }
+    QObject *audioContext() override { return &audioBridge; }
     void publish() { emit devicesChanged(); }
     void frame() { emit frameReceived(); }
     void fail() { emit errorOccurred("fixture failure"); }
@@ -149,6 +148,13 @@ void CaptureTests::injectablePreviewLifecycle()
     QCOMPARE(audio.current, QString("fixture-a"));
     video.frame();
     QCOMPARE(controller.state(), QString("receiving-frames"));
+    video.formatList.clear();
+    video.publish();
+    QVERIFY(!controller.previewActive());
+    QCOMPARE(controller.state(), QString("format-missing"));
+    video.formatList = {QVariantMap{{"key", "fixture-format"}, {"name", "Fixture format"}}};
+    video.publish();
+    QVERIFY(controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
     controller.stopPreview();
     QVERIFY(!controller.previewActive());
     video.frame();

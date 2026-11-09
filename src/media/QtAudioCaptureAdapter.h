@@ -12,8 +12,8 @@ public:
     QVariantList devices() const override;
     bool monitoringSupported() const override;
     QString name() const override;
-    bool configure(QMediaCaptureSession *session, const QString &id) override;
-    void stop(QMediaCaptureSession *session) override;
+    bool configure(QObject *captureContext, const QString &id) override;
+    void stop(QObject *captureContext) override;
 private:
     QMediaDevices m_devices;
     QAudioInput m_input;

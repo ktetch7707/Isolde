@@ -260,6 +260,11 @@ void CaptureController::refreshDevices()
             setStatus("device-missing", "Capture card disconnected. Reconnect it, then choose it again.");
             return;
         }
+        if (!hasVideoFormat(m_previewCaptureId, m_previewFormatKey)) {
+            stopPreview();
+            setStatus("format-missing", "The active capture format is no longer available. Choose another format and retry preview.");
+            return;
+        }
     }
     updateStatusForConfiguration();
     emit changed();
@@ -581,8 +586,8 @@ bool CaptureController::canSwitchInput(int input) const
 
 bool CaptureController::configureAudio()
 {
-    if (!m_audioAdapter->configure(m_videoAdapter->audioSession(), m_previewAudioId)) {
-        setStatus("audio-missing", "The selected capture audio input is no longer available.");
+    if (!m_audioAdapter->configure(m_videoAdapter->audioContext(), m_previewAudioId)) {
+        setStatus("audio-missing", "The capture audio input is unavailable or incompatible with the video adapter.");
         return false;
     }
     return true;
@@ -629,7 +634,7 @@ bool CaptureController::startPreviewFor(const QString &captureId, const QString 
     m_previewAudioId = audioId;
     if (!configureAudio()) {
         stopPreview();
-        setStatus("audio-missing", "The selected capture audio input is no longer available.");
+        setStatus("audio-missing", "The capture audio input is unavailable or incompatible with the video adapter.");
         return false;
     }
     m_previewRequested = true;
@@ -662,7 +667,7 @@ void CaptureController::stopPreview()
     m_frameRateClock.invalidate();
     m_framesInWindow = 0;
     m_videoAdapter->stop();
-    m_audioAdapter->stop(m_videoAdapter->audioSession());
+    m_audioAdapter->stop(m_videoAdapter->audioContext());
     m_previewCaptureId.clear();
     m_previewFormatKey.clear();
     m_previewAudioId.clear();
