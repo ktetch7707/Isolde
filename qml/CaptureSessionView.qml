@@ -132,12 +132,13 @@ Item {
     }
     Rectangle {
         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-        height: 122; color: "#D2080C14"
+        height: captureController.audioStatus ? 154 : 122; color: "#D2080C14"
         Column {
             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
             anchors.margins: 30; spacing: 8
             Text { text: root.inputHeading; color: "#FFFFFF"; font.pixelSize: 27; font.weight: Font.DemiBold }
             Text { width: parent.width; text: captureController.status + " · " + captureController.switchStatus; color: "#D5DCE8"; font.pixelSize: 17; wrapMode: Text.WordWrap; elide: Text.ElideRight }
+            Text { visible: !!captureController.audioStatus; width: parent.width; text: captureController.audioStatus; color: captureController.audioState === "error" || captureController.audioState === "missing" ? "#FFB4AB" : "#D5DCE8"; font.pixelSize: 17; wrapMode: Text.WordWrap }
         }
     }
     Rectangle {

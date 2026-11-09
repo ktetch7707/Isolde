@@ -3,6 +3,7 @@
 #include "QtVideoCaptureAdapter.h"
 
 #include <QMetaType>
+#include <QScopedValueRollback>
 #include <QSerialPortInfo>
 #include <QSettings>
 #include <QtGlobal>
@@ -58,9 +59,10 @@ CaptureController::CaptureController(VideoCaptureAdapter *videoAdapter, AudioCap
     connect(m_videoAdapter, &VideoCaptureAdapter::devicesChanged, this, &CaptureController::refreshDevices);
     connect(m_audioAdapter, &AudioCaptureAdapter::devicesChanged, this, &CaptureController::refreshDevices);
     connect(m_audioAdapter, &AudioCaptureAdapter::errorOccurred, this, [this](const QString &message) {
+        if (!m_previewRequested && !m_configuringAudio) return;
         ++m_audioErrorGeneration;
         m_audioConfigured = false;
-        if (m_previewRequested) setStatus("audio-error", "Capture audio error: " + message);
+        setAudioStatus("error", "Capture audio error: " + message);
     });
     connect(m_videoAdapter, &VideoCaptureAdapter::errorOccurred, this, [this](const QString &message) {
         if (m_previewRequested) {
@@ -268,8 +270,17 @@ void CaptureController::refreshDevices()
             return;
         }
     }
+    if (!m_previewRequested) updateIdleAudioStatus();
     updateStatusForConfiguration();
     emit changed();
+}
+
+void CaptureController::updateIdleAudioStatus()
+{
+    if (m_previewRequested || m_audioState == "error") return;
+    if (!m_audioDeviceId.isEmpty() && !hasDevice(m_audioDevices, m_audioDeviceId))
+        setAudioStatus("missing", "The saved capture audio input is not connected. Reconnect it or choose another input.");
+    else setAudioStatus("idle", "");
 }
 
 void CaptureController::updateStatusForConfiguration()
@@ -279,11 +290,9 @@ void CaptureController::updateStatusForConfiguration()
     if (m_previewRequested) return;
     const bool videoPresent = hasDevice(m_videoDevices, m_captureDeviceId);
     const bool formatPresent = hasVideoFormat(m_captureDeviceId, m_videoFormatKey);
-    const bool audioPresent = hasDevice(m_audioDevices, m_audioDeviceId);
     if (m_captureDeviceId.isEmpty()) setStatus("needs-capture-card", "Connect and choose the HDMI capture card.");
     else if (!videoPresent) setStatus("device-missing", "The saved capture card is not connected. Reconnect it or choose another card.");
     else if (!formatPresent) setStatus("format-missing", "The saved video format is no longer supported. Choose another format or use the card default.");
-    else if (!audioPresent) setStatus("audio-missing", "The saved capture audio input is not connected. Reconnect it, choose another input, or clear the optional audio selection.");
     else if (m_serialPortName.isEmpty()) setStatus("needs-switch", "Capture card found. Choose the RS-232 switch or preview the card directly.");
     else if (!m_serialPortNames.contains(m_serialPortName)) setStatus("serial-missing", "The saved RS-232 port is not connected. Reconnect the switch or choose another port.");
     else if (m_commandTemplate.isEmpty() || commandForInput(m_commandTemplate, 1).isEmpty()) {
@@ -346,7 +355,7 @@ bool CaptureController::setAudioDevice(const QString &id)
     if (m_previewRequested) {
         m_previewAudioId = id;
         configureAudio();
-    }
+    } else { setAudioStatus("idle", ""); updateIdleAudioStatus(); }
     emit changed();
     return true;
 }
@@ -590,12 +599,21 @@ bool CaptureController::configureAudio()
 {
     m_audioConfigured = false;
     const auto generation = m_audioErrorGeneration;
-    if (!m_audioAdapter->configure(m_videoAdapter->audioContext(), m_previewAudioId)
-        || m_audioErrorGeneration != generation) {
-        setStatus("audio-missing", "The capture audio input is unavailable or incompatible with the video adapter.");
+    const QScopedValueRollback<bool> configuring(m_configuringAudio, true);
+    const bool configured = m_audioAdapter->configure(m_videoAdapter->audioContext(), m_previewAudioId);
+    if (m_audioErrorGeneration != generation) return false;
+    if (!configured) {
+        const bool present = hasDevice(m_audioDevices, m_previewAudioId);
+        setAudioStatus(present ? "error" : "missing",
+            present ? "Capture audio could not be configured. Retry preview or check the audio adapter."
+                    : "The selected capture audio input is no longer available. Reconnect it or choose another input.");
         return false;
     }
     m_audioConfigured = true;
+    if (m_previewAudioId.isEmpty()) setAudioStatus("idle", "");
+    else if (!m_audioAdapter->monitoringSupported())
+        setAudioStatus("unsupported", "Audio monitoring is unavailable on this system; video preview only.");
+    else setAudioStatus("ready", "Capture audio monitoring is configured.");
     return true;
 }
 
@@ -629,18 +647,21 @@ bool CaptureController::startPreviewFor(const QString &captureId, const QString 
     }
     const bool audioFound = hasDevice(m_audioDevices, audioId);
     if (!audioFound) {
-        setStatus("audio-missing", "The selected capture audio input is no longer available.");
+        setAudioStatus("missing", "The selected capture audio input is no longer available. Reconnect it or choose another input.");
         return false;
     }
     if (m_previewRequested && m_previewCaptureId == captureId
-        && m_previewFormatKey == formatKeyValue && m_previewAudioId == audioId) return true;
+        && m_previewFormatKey == formatKeyValue && m_previewAudioId == audioId)
+        return (m_audioConfigured && m_audioState != "error" && m_audioState != "missing") || configureAudio();
     if (m_previewRequested) stopPreview();
     m_previewCaptureId = captureId;
     m_previewFormatKey = formatKeyValue;
     m_previewAudioId = audioId;
     if (!configureAudio()) {
+        const auto audioState = m_audioState;
+        const auto audioStatus = m_audioStatus;
         stopPreview();
-        setStatus("audio-missing", "The capture audio input is unavailable or incompatible with the video adapter.");
+        setAudioStatus(audioState, audioStatus);
         return false;
     }
     m_previewRequested = true;
@@ -652,10 +673,7 @@ bool CaptureController::startPreviewFor(const QString &captureId, const QString 
     m_previewClock.restart();
     m_lastFrameClock.invalidate();
     m_frameWatchdog.start();
-    QString startupStatus = "Starting capture card. Waiting for video frames…";
-    if (!audioId.isEmpty() && !m_audioAdapter->monitoringSupported())
-        startupStatus += " Audio monitoring is unavailable; video preview only on this system.";
-    setStatus("awaiting-frames", startupStatus);
+    setStatus("awaiting-frames", "Starting capture card. Waiting for video frames…");
     if (!m_videoAdapter->start(captureId, formatKeyValue)) {
         stopPreview();
         setStatus("device-missing", "The capture card or video format is no longer available.");
@@ -675,9 +693,11 @@ void CaptureController::stopPreview()
     m_videoAdapter->stop();
     m_audioAdapter->stop(m_videoAdapter->audioContext());
     m_audioConfigured = false;
+    setAudioStatus("idle", "");
     m_previewCaptureId.clear();
     m_previewFormatKey.clear();
     m_previewAudioId.clear();
+    updateIdleAudioStatus();
     updateStatusForConfiguration();
 }
 
@@ -770,5 +790,13 @@ void CaptureController::setStatus(const QString &state, const QString &message)
     if (m_state == state && m_status == message) return;
     m_state = state;
     m_status = message;
+    emit changed();
+}
+
+void CaptureController::setAudioStatus(const QString &state, const QString &message)
+{
+    if (m_audioState == state && m_audioStatus == message) return;
+    m_audioState = state;
+    m_audioStatus = message;
     emit changed();
 }

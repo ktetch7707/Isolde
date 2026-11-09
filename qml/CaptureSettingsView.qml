@@ -351,7 +351,7 @@ Item {
                     color: shell.muted; font.pixelSize: 19 * shell.textScale
                 }
             }
-            Text { font.family: shell.fontFamily; width: parent.width; text: captureController.status + "\n" + captureController.switchStatus; color: captureController.state === "error" || captureController.state === "no-signal" || captureController.state === "device-missing" || captureController.state === "audio-missing" || captureController.state === "format-missing" || captureController.state === "serial-missing" || captureController.switchState === "error" ? shell.error : shell.text; font.pixelSize: 17 * shell.textScale; wrapMode: Text.WordWrap }
+            Text { font.family: shell.fontFamily; width: parent.width; text: captureController.status + (captureController.audioStatus ? "\n" + captureController.audioStatus : "") + "\n" + captureController.switchStatus; color: captureController.state === "error" || captureController.state === "no-signal" || captureController.state === "device-missing" || captureController.state === "format-missing" || captureController.state === "serial-missing" || captureController.audioState === "error" || captureController.audioState === "missing" || captureController.switchState === "error" ? shell.error : shell.text; font.pixelSize: 17 * shell.textScale; wrapMode: Text.WordWrap }
             Text { font.family: shell.fontFamily;
                 width: parent.width
                 text: "Saved adapters: " + (captureController.capabilities.captureConnected ? "capture device detected" : "capture device unavailable")

@@ -27,6 +27,8 @@ class CaptureController final : public QObject {
     Q_PROPERTY(QString serialPortName READ serialPortName NOTIFY changed)
     Q_PROPERTY(QString commandTemplate READ commandTemplate NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
+    Q_PROPERTY(QString audioState READ audioState NOTIFY changed)
+    Q_PROPERTY(QString audioStatus READ audioStatus NOTIFY changed)
     Q_PROPERTY(QString switchStatus READ switchStatus NOTIFY changed)
     Q_PROPERTY(QString switchState READ switchState NOTIFY changed)
     Q_PROPERTY(qint64 serialWriteLatencyMs READ serialWriteLatencyMs NOTIFY changed)
@@ -59,6 +61,8 @@ public:
     QString serialPortName() const { return m_serialPortName; }
     QString commandTemplate() const { return m_commandTemplate; }
     QString status() const { return m_status; }
+    QString audioState() const { return m_audioState; }
+    QString audioStatus() const { return m_audioStatus; }
     QString switchStatus() const { return m_switchStatus; }
     QString switchState() const { return m_switchState; }
     qint64 serialWriteLatencyMs() const { return m_serialWriteLatencyMs; }
@@ -103,10 +107,12 @@ private:
     bool saveValue(const QString &key, const QVariant &value);
     bool saveValues(const QMap<QString, QVariant> &values);
     void updateStatusForConfiguration();
+    void updateIdleAudioStatus();
     bool configureAudio();
     QString inputLabel(int input) const;
     bool hasVideoFormat(const QString &deviceId, const QString &key) const;
     void setStatus(const QString &state, const QString &message);
+    void setAudioStatus(const QString &state, const QString &message);
     void serialWriteFailed(const QString &message);
 
     VideoCaptureAdapter *m_videoAdapter = nullptr;
@@ -135,6 +141,8 @@ private:
     QString m_previewAudioId;
     QMap<int, QString> m_inputLabels;
     QString m_status = "Connect a USB HDMI capture card, then choose it here.";
+    QString m_audioState = "idle";
+    QString m_audioStatus;
     QString m_switchStatus = "Choose an input to test the RS-232 switch.";
     QString m_switchState = "idle";
     QString m_state = "needs-setup";
@@ -150,5 +158,6 @@ private:
     bool m_previewRequested = false;
     bool m_receivedFrame = false;
     bool m_audioConfigured = false;
+    bool m_configuringAudio = false;
     quint64 m_audioErrorGeneration = 0;
 };

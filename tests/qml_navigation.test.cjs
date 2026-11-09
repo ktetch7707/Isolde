@@ -395,6 +395,14 @@ test("capture session masks the picture until post-write frames are available", 
     scope.captureController.state = "receiving-frames";
     scope.pendingSwitchConfirmation = false;
     assert.equal(scope.videoReady(), true);
+    scope.captureController.audioState = "error";
+    scope.captureController.audioStatus = "Capture audio error";
+    assert.equal(scope.videoReady(), true);
+    for (const file of ["CaptureSessionView.qml", "CaptureSettingsView.qml"]) {
+        const source = fs.readFileSync(path.join(__dirname, "../qml", file), "utf8");
+        assert.match(source, /captureController\.audioStatus/);
+        assert.match(source, /captureController\.audioState/);
+    }
 });
 
 test("closing capture session cancels pending serial output before releasing preview", () => {

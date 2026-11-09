@@ -245,7 +245,8 @@ bool ActionDispatcher::dispatchEditorAction(const QVariantMap &input)
     if (!accepted) {
         if (error.isEmpty()) {
             if ((type == "capture-preview-start" || type == "capture-preview-draft") && m_capture)
-                error = m_capture->status();
+                error = (m_capture->audioState() == "error" || m_capture->audioState() == "missing")
+                    ? m_capture->audioStatus() : m_capture->status();
             else if (type.startsWith("capture-") && m_capture)
                 error = m_capture->switchStatus().isEmpty() ? m_capture->status() : m_capture->switchStatus();
             else if (m_audio) error = m_audio->outputStatus();

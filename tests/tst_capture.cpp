@@ -7,13 +7,17 @@ class FakeAudioAdapter final : public AudioCaptureAdapter {
 public:
     QVariantList available;
     int stops = 0;
+    int configurations = 0;
     QString current;
     bool failConfigure = false;
+    bool emitConfigureError = false;
     QVariantList devices() const override { return available; }
     bool monitoringSupported() const override { return true; }
     QString name() const override { return "fixture audio"; }
     bool configure(QObject *, const QString &id) override {
+        ++configurations;
         current = id;
+        if (emitConfigureError) emit errorOccurred("synchronous fixture failure");
         if (failConfigure) return false;
         if (id.isEmpty()) return true;
         for (const auto &entry : available)
@@ -146,17 +150,49 @@ void CaptureTests::injectablePreviewLifecycle()
     QCOMPARE(video.starts, 1);
     audio.available.clear();
     audio.publish();
-    QCOMPARE(controller.state(), QString("audio-missing"));
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    QCOMPARE(controller.audioState(), QString("missing"));
     QVERIFY(!controller.capabilities().value("audioMonitoringConfigured").toBool());
+    video.frame();
+    QCOMPARE(controller.audioState(), QString("missing"));
     audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
     audio.publish();
     QCOMPARE(audio.current, QString("fixture-a"));
+    QCOMPARE(controller.audioState(), QString("ready"));
     QVERIFY(controller.capabilities().value("audioMonitoringConfigured").toBool());
     audio.fail();
-    QCOMPARE(controller.state(), QString("audio-error"));
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    QCOMPARE(controller.audioState(), QString("error"));
+    const auto audioFailure = controller.audioStatus();
+    QVERIFY(audioFailure.contains("fixture audio failure"));
     QVERIFY(!controller.capabilities().value("audioMonitoringConfigured").toBool());
     video.frame();
     QCOMPARE(controller.state(), QString("receiving-frames"));
+    QCOMPARE(controller.audioState(), QString("error"));
+    QCOMPARE(controller.audioStatus(), audioFailure);
+    const int priorConfigurations = audio.configurations;
+    const int priorStarts = video.starts;
+    audio.failConfigure = true;
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.configurations, priorConfigurations + 1);
+    QCOMPARE(video.starts, priorStarts);
+    QCOMPARE(controller.audioState(), QString("error"));
+    QVERIFY(controller.previewActive());
+    video.frame();
+    QCOMPARE(controller.audioState(), QString("error"));
+    audio.failConfigure = false;
+    audio.emitConfigureError = true;
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.configurations, priorConfigurations + 2);
+    QVERIFY(controller.audioStatus().contains("synchronous fixture failure"));
+    video.frame();
+    QVERIFY(controller.audioStatus().contains("synchronous fixture failure"));
+    audio.emitConfigureError = false;
+    QVERIFY(controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.configurations, priorConfigurations + 3);
+    QCOMPARE(video.starts, priorStarts);
+    QCOMPARE(controller.audioState(), QString("ready"));
+    QVERIFY(controller.capabilities().value("audioMonitoringConfigured").toBool());
     video.formatList.clear();
     video.publish();
     QVERIFY(!controller.previewActive());
@@ -168,6 +204,11 @@ void CaptureTests::injectablePreviewLifecycle()
     QVERIFY(!controller.previewActive());
     video.frame();
     QVERIFY(controller.state() != "receiving-frames");
+    const auto stoppedAudioState = controller.audioState();
+    const auto stoppedAudioStatus = controller.audioStatus();
+    audio.fail();
+    QCOMPARE(controller.audioState(), stoppedAudioState);
+    QCOMPARE(controller.audioStatus(), stoppedAudioStatus);
     QVERIFY(controller.startPreviewFor("fixture-video", "", ""));
     video.fail();
     QVERIFY(!controller.previewActive());
