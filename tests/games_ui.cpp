@@ -4,6 +4,7 @@
 #include <QUuid>
 #include "app/AppRegistry.h"
 #include "input/InputManager.h"
+#include "media/MediaGrants.h"
 #include <QtTest>
 #include <QQmlEngine>
 #include <QQmlContext>
@@ -12,6 +13,7 @@
 #include <QQuickItem>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QScopeGuard>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -32,6 +34,8 @@ private slots:
     void remoteEditionChooserDispatchesOwnedVersion();
     void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
     void platformShelvesFilterCanonicalGamesRemotely();
+    void organizationAndManualSmartCollectionsStayProfileLocal();
+    void catalogExportRestoreIsBoundedAndTransactional();
 };
 static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
@@ -122,7 +126,7 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
     QScopedPointer<QObject> widget(component.createWithInitialProperties({
         {"library",QVariant::fromValue(&library)},{"width",1000},{"height",600},{"engaged",true}}));
     QVERIFY2(widget,qPrintable(component.errorString()));
-    for(int i=0;i<5;++i)command(widget.data(),InputManager::NavigateRight); // Platforms
+    for(int i=0;i<4;++i)command(widget.data(),InputManager::NavigateRight); // Platforms
     command(widget.data(),InputManager::Confirm);
     QCOMPARE(widget->property("mode").toString(),QString("platformChooser"));
     command(widget.data(),InputManager::NavigateDown);
@@ -142,6 +146,85 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
     const auto continued=continueWidget->property("items");
     const auto continueItems=continued.metaType()==QMetaType::fromType<QJSValue>()?continued.value<QJSValue>().toVariant().toList():continued.toList();
     QCOMPARE(continueItems.size(),1);QCOMPARE(continueItems.first().toMap().value("id").toString(),psp);
+}
+void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    const auto id=library.addGame({{"schemaVersion",1},{"title","Example title"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
+    QVERIFY(!id.isEmpty());
+    QVERIFY(library.setOrganization(id,"Example Saga",{"Puzzle","Co-op"}));
+    QCOMPARE(library.details(id).value("franchise").toString(),QString("Example Saga"));
+    QCOMPARE(library.details(id).value("tags").toStringList(),QStringList({"Puzzle","Co-op"}));
+    QCOMPARE(library.page("search","saga").size(),1);
+    QCOMPARE(library.page("search","co-op").size(),1);
+    QVERIFY(!library.setOrganization(id,"",{"same","SAME"}));
+    QCOMPARE(library.details(id).value("franchise").toString(),QString("Example Saga"));
+
+    const auto manual=library.createCollection("Favorites to play","manual");
+    const auto smart=library.createCollection("Puzzle games","smart","title","example");
+    const auto favorites=library.createCollection("My favorites","smart","favorite");
+    const auto literal=library.createCollection("Literal query","smart","title","x' OR 1=1 --");
+    QVERIFY(!manual.isEmpty());QVERIFY(!smart.isEmpty());QVERIFY(!favorites.isEmpty());QVERIFY(!literal.isEmpty());
+    QVERIFY(library.setCollectionMember(manual,id,true));
+    QVERIFY(library.collectionContains(manual,id));
+    QCOMPARE(library.pageCollection(manual).size(),1);
+    QCOMPARE(library.pageCollection(smart).size(),1);
+    QVERIFY(library.setFavorite(id,true));
+    QCOMPARE(library.pageCollection(favorites).size(),1);
+    QCOMPARE(library.pageCollection(literal).size(),0);
+    QVERIFY(!library.setCollectionMember(smart,id,true));
+    QVERIFY(library.setCollectionMember(manual,id,false));
+    QVERIFY(!library.collectionContains(manual,id));
+    QVERIFY(library.setCollectionMember(manual,id,true));
+    QVERIFY(library.removeGame(id));
+    QCOMPARE(library.pageCollection(manual).size(),0);
+    QCOMPARE(library.collections().size(),4);
+
+    GameLibrary reopened(dir.filePath("profile/games.sqlite"),&apps);
+    QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
+    QCOMPARE(reopened.collections().size(),4);
+    QCOMPARE(reopened.pageCollection(smart).size(),0);
+    QVERIFY(reopened.removeCollection(manual));
+    QCOMPARE(reopened.collections().size(),3);
+}
+void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
+    QTemporaryDir dir;QVERIFY(dir.isValid());
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previousProfile=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);
+    auto cleanup=qScopeGuard([&]{qApp->setProperty("isoldeProfile",previousProfile);MediaGrants::save(profile,{});});
+    QVERIFY2(MediaGrants::save(profile,{dir.path()}).isEmpty(),"Test export folder grant could not be prepared.");
+    AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto second=runtime();second.id="other-test";QVERIFY(apps.addApp(second));
+    const auto database=dir.filePath("profile/games.sqlite");
+    GameLibrary library(database,&apps);
+    QVariantMap registration{{"schemaVersion",1},{"title","Portable fixture"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}};
+    const auto game=library.addGame(registration);QVERIFY(!game.isEmpty());
+    registration["title"]="Alternate edition";registration["platform"]="PSP";registration["runtimeId"]="other-test";
+    const auto edition=library.addEdition(game,registration);QVERIFY(!edition.isEmpty());
+    QVERIFY(library.setOrganization(game,"Fixture series",{"Puzzle"}));
+    QVERIFY(library.setFavorite(game,true));QVERIFY(library.recordCompletedSession(game));
+    const auto collection=library.createCollection("Export set","manual");QVERIFY(!collection.isEmpty());
+    QVERIFY(library.setCollectionMember(collection,game,true));
+    const auto backup=dir.filePath("games-backup.json");
+    QVERIFY2(library.exportCatalog(backup),qPrintable(library.errorString()));
+    QVERIFY(QFileInfo(backup).size()>0);
+    QVERIFY(!library.restoreCatalog(backup,false));
+    const auto invalidBackup=dir.filePath("invalid-backup.json");
+    QFile invalid(invalidBackup);QVERIFY(invalid.open(QIODevice::WriteOnly));
+    QVERIFY(invalid.write("{\"schemaVersion\":1}")>0);invalid.close();
+    QVERIFY(!library.restoreCatalog(invalidBackup,true));
+    QCOMPARE(library.page().size(),1);
+    QVERIFY(library.removeGame(game));QVERIFY(library.page().isEmpty());
+    QVERIFY2(library.restoreCatalog(backup,true),qPrintable(library.errorString()));
+    QCOMPARE(library.details(game).value("franchise").toString(),QString("Fixture series"));
+    QCOMPARE(library.details(game).value("tags").toStringList(),QStringList({"Puzzle"}));
+    QCOMPARE(library.editions(game).size(),2);QCOMPARE(library.page("continue").size(),1);
+    QCOMPARE(library.pageCollection(collection).size(),1);QVERIFY(library.collectionContains(collection,game));
+    QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),1);
+    GameLibrary reopened(database,&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
+    QCOMPARE(reopened.pageCollection(collection).size(),1);QCOMPARE(reopened.editions(game).size(),2);
 }
 void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));

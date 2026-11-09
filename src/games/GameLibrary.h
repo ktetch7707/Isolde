@@ -58,6 +58,16 @@ public:
                                   const QString &platform = {});
     Q_INVOKABLE QVariantList platforms();
     bool recordCompletedSession(const QString &gameId);
+    Q_INVOKABLE bool setOrganization(const QString &gameId, const QString &franchise, const QStringList &tags);
+    Q_INVOKABLE QVariantList collections();
+    Q_INVOKABLE QString createCollection(const QString &name, const QString &kind,
+                                         const QString &filterType = {}, const QString &filterValue = {});
+    Q_INVOKABLE bool removeCollection(const QString &collectionId);
+    Q_INVOKABLE bool setCollectionMember(const QString &collectionId, const QString &gameId, bool member);
+    Q_INVOKABLE bool collectionContains(const QString &collectionId, const QString &gameId);
+    Q_INVOKABLE QVariantList pageCollection(const QString &collectionId, int offset = 0);
+    Q_INVOKABLE bool exportCatalog(const QString &destination);
+    Q_INVOKABLE bool restoreCatalog(const QString &source, bool confirmed);
     Q_INVOKABLE QVariantMap details(const QString &gameId);
     Q_INVOKABLE bool removeGame(const QString &gameId);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
@@ -84,8 +94,11 @@ private:
     bool m_ready = false;
     bool m_hasEditions = false;
     bool m_hasActivity = false;
+    bool m_hasMetadata = false;
+    bool m_hasCollections = false;
     bool installationExists(const QString &runtime, const QString &root, const QString &target);
     bool platformAvailable(const QString &platform);
+    bool ensureOrganizationSchema();
     void scanStep();
     QTimer m_scanTimer;
     std::unique_ptr<QDirIterator> m_scan;
