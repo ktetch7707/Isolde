@@ -36,6 +36,7 @@ private slots:
     void externalSteamGrantsAreProfileScopedAndFailClosed();
     void gamepadCapabilityRecognitionIsBoundedAndExact();
     void gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot();
+    void gamepadCharacterDeviceNumbersAreExactAndBounded();
     void gamepadTopologyReportsAttachDetachAndReconnect();
     void gameSessionsAcrossSourcesRequestGamepadAccess();
 };
@@ -93,6 +94,19 @@ void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
     QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
              QStringList({devices+"/event2",devices+"/js0"}));
 }
+void NativeSandboxTests::gamepadCharacterDeviceNumbersAreExactAndBounded()
+{
+    uint major=0,minor=0;
+    QVERIFY(GamepadTopology::deviceNumber("event0","13:64",&major,&minor));
+    QCOMPARE(major,13u);QCOMPARE(minor,64u);
+    QVERIFY(GamepadTopology::deviceNumber("event191","13:255",&major,&minor));
+    QVERIFY(GamepadTopology::deviceNumber("js0","13:0",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event192","13:256",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event0","13:65",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event0","8:64",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event1000","13:64",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event0","13:64:1",&major,&minor));
+}
 void NativeSandboxTests::gamepadTopologyReportsAttachDetachAndReconnect()
 {
     const QSet<QString> launchBound{"event0"};
@@ -108,15 +122,15 @@ void NativeSandboxTests::gamepadTopologyReportsAttachDetachAndReconnect()
     QCOMPARE(status.value("new").toInt(),1);
     QCOMPARE(status.value("missing").toInt(),0);
 
-    status=GamepadTopology::summarize(QSet<QString>{"event2"},launchBound);
+    status=GamepadTopology::summarize(QSet<QString>{"event2"},launchBound,QSet<QString>{"event2"});
     QCOMPARE(status.value("connected").toInt(),1);
-    QCOMPARE(status.value("available").toInt(),0);
+    QCOMPARE(status.value("available").toInt(),1);
     QCOMPARE(status.value("new").toInt(),1);
     QCOMPARE(status.value("missing").toInt(),1);
 
-    status=GamepadTopology::summarize(QSet<QString>{"event0"},launchBound);
-    QCOMPARE(status.value("available").toInt(),1);
-    QCOMPARE(status.value("new").toInt(),0);
+    status=GamepadTopology::summarize(QSet<QString>{"event0","event2"},launchBound,QSet<QString>{"event2"});
+    QCOMPARE(status.value("available").toInt(),2);
+    QCOMPARE(status.value("new").toInt(),1);
     QCOMPARE(status.value("missing").toInt(),0);
 }
 

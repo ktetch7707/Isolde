@@ -51,11 +51,13 @@ Window {
         Window {
             id:gamepadSessionNotice
             readonly property var status:sessionManager.gamepadSessionStatus
-            readonly property string notice:status.new>0
-                ?"A controller was connected after this game started. This session cannot attach it; save if possible, return to Games and relaunch."
-                :status.missing>0
-                    ?"A controller this game started with disconnected. Reconnect it or return to Games and relaunch."
-                    :""
+            readonly property string notice:status.new>0 && status.available<status.connected
+                ?"A controller was detected but could not be added to this game session. Save if possible, return to Games and relaunch."
+                :status.new>0
+                    ?"A new controller endpoint was added to the isolated session. The game/runtime must support rescanning hotplugged devices; if it is not recognized, save and relaunch."
+                    :status.missing>0
+                        ?"A controller this game started with disconnected. Reconnect it or return to Games and relaunch."
+                        :""
             width:Math.min(Screen.width*0.8,760*window.uiScaleFactor)
             height:gamepadNoticeText.implicitHeight+32*window.uiScaleFactor
             x:(Screen.width-width)/2

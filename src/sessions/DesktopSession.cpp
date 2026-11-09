@@ -465,8 +465,7 @@ void DesktopSession::readDiagnostics()
             status.insert(key,value.toInt());
         }
         if(status.isEmpty() || status.value("available").toInt()>status.value("connected").toInt()
-            || status.value("new").toInt()+status.value("available").toInt()!=status.value("connected").toInt()
-            || status.value("missing").toInt()+status.value("available").toInt()>32)continue;
+            || status.value("new").toInt()>status.value("connected").toInt())continue;
         if(status!=m_gamepadStatus){m_gamepadStatus=status;emit gamepadSessionStatusChanged(status);}
     }
     if(!m_steamOutput)return;

@@ -177,8 +177,10 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     const auto runtime = QStringLiteral("/run/user/%1").arg(getuid());
     const auto hostRuntime = host.value("XDG_RUNTIME_DIR", runtime);
     auto &args = plan.arguments;
+    const bool gameSession=isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId);
     args = {"--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts",
             "--die-with-parent", "--new-session", "--cap-drop", "ALL", "--clearenv"};
+    if(gameSession)args << "--cap-add" << "CAP_MKNOD";
     const auto bind = [&](const QString &source, const QString &destination, const QString &mode = "--ro-bind") {
         args << mode << source << destination;
     };
@@ -186,6 +188,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         if (QFileInfo::exists(path)) bind(path, path);
     args << "--proc" << "/proc" << "--dev" << "/dev" << "--tmpfs" << "/tmp"
          << "--dir" << "/run" << "--perms" << "0700" << "--dir" << runtime;
+    if(gameSession)args << "--dir" << "/dev/input";
     bind(plan.homeDirectory, userHome, "--bind");
     args << "--chdir" << userHome;
     const auto setenv = [&](const QString &key, const QString &value) { args << "--setenv" << key << value; };
@@ -226,7 +229,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     }
     if (QFileInfo::exists(hostRuntime + "/pipewire-0")) bind(hostRuntime + "/pipewire-0", runtime + "/pipewire-0");
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
-    if(isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId)){
+    if(gameSession){
         // Give game sessions gamepad nodes only. Do not expose keyboard, mouse
         // or the entire host input directory to an application session.
         const auto nodes=gamepadDeviceNodes();
@@ -386,7 +389,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         bind(helper,"/run/isolde-optical-exec.py");
     }
     args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host";
-    if(isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId))
+    if(gameSession)
         args << "--game-session";
     if(!steamGameId.isEmpty()) args << "--steam-session";
     args << "--";
