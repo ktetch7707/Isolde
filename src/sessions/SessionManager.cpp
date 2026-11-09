@@ -117,6 +117,10 @@ bool SessionManager::launchDefinition(AppDefinition definition)
         return true;
     }
     m_previousFocusId = definition.id;
+    if(!m_gamepadSessionStatus.isEmpty()){
+        m_gamepadSessionStatus.clear();
+        emit gamepadSessionStatusChanged();
+    }
     emit launching(definition.id);
     emit previousFocusIdChanged();
     if (definition.type == QStringLiteral("desktop")) m_session = std::make_unique<DesktopSession>(definition);
@@ -127,6 +131,12 @@ bool SessionManager::launchDefinition(AppDefinition definition)
         if(m_session.get()!=session)return;
         m_steamProviderState=state;
         emit steamProviderStateChanged();
+    });
+    connect(session,&AppSession::gamepadSessionStatusChanged,this,[this,session](const QVariantMap &state){
+        if(m_session.get()!=session)return;
+        if(m_gamepadSessionStatus==state)return;
+        m_gamepadSessionStatus=state;
+        emit gamepadSessionStatusChanged();
     });
     const auto appId = definition.id;
     connect(session, &AppSession::stateChanged, this, [this, session, appId, opened=false](AppSession::State state) mutable {
@@ -168,6 +178,10 @@ void SessionManager::finishSession(AppSession *session)
     const bool normalDesktopExit=(session->definition().type=="desktop" || session->definition().type=="android") && failure.isEmpty();
     m_intentionalExit=false;
     m_session.reset();
+    if(!m_gamepadSessionStatus.isEmpty()){
+        m_gamepadSessionStatus.clear();
+        emit gamepadSessionStatusChanged();
+    }
     refreshOpticalSession();
     emit currentAppChanged();
     emit activeChanged();
@@ -298,6 +312,10 @@ void SessionManager::exitCurrent()
     }
     m_intentionalExit = false;
     m_session.reset();
+    if(!m_gamepadSessionStatus.isEmpty()){
+        m_gamepadSessionStatus.clear();
+        emit gamepadSessionStatusChanged();
+    }
     refreshOpticalSession();
     emit currentAppChanged();
     emit activeChanged();

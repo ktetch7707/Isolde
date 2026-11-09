@@ -228,11 +228,16 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
     if(isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId)){
         // Give game sessions gamepad nodes only. Do not expose keyboard, mouse
-        // or the entire host input directory to an application session. This
-        // is a launch-time snapshot; newly attached controllers require relaunch.
+        // or the entire host input directory to an application session.
         const auto nodes=gamepadDeviceNodes();
         if(nodes.size()>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}
         for(const auto &device:nodes)bind(device,device,"--dev-bind");
+        QStringList boundEventNodes;
+        for(const auto &device:nodes){
+            const auto name=QFileInfo(device).fileName();
+            if(name.startsWith("event"))boundEventNodes.append(name);
+        }
+        setenv("ISOLDE_GAMEPAD_BOUND_EVENTS",boundEventNodes.join(','));
     }
     if (QFileInfo::exists("/sys")) bind("/sys", "/sys");
     // resolv.conf is often a symlink into /run, which otherwise stays private.
@@ -381,6 +386,8 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         bind(helper,"/run/isolde-optical-exec.py");
     }
     args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host";
+    if(isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId))
+        args << "--game-session";
     if(!steamGameId.isEmpty()) args << "--steam-session";
     args << "--";
     if(opticalNoExec)args << "/usr/bin/python3" << "/run/isolde-optical-exec.py" << plan.actionTarget;

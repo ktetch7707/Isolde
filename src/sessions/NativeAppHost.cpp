@@ -5,14 +5,63 @@
 #include <QSocketNotifier>
 #include <QTimer>
 #include <QJsonDocument>
+#include <QFile>
 #include <QDir>
 #include <QFileInfo>
+#include <QRegularExpression>
+#include <QSet>
 #include "sessions/ChromiumRemotePipe.h"
+#include "sessions/GamepadTopology.h"
 #include <memory>
 #ifdef Q_OS_UNIX
 #include <signal.h>
 #include <unistd.h>
+#include <cstdio>
 #endif
+
+namespace {
+bool gamepadKeyBitmap(const QByteArray &bitmap)
+{
+    const auto words=QString::fromLatin1(bitmap).trimmed().split(' ',Qt::SkipEmptyParts);
+    if(words.isEmpty() || words.size()>512)return false;
+    for(int code=0x120;code<0x140;++code){
+        const auto word=words.size()-1-code/64;
+        if(word<0)continue;
+        bool ok=false;
+        const auto bits=words.at(word).toULongLong(&ok,16);
+        if(ok && (bits&(quint64(1)<<(code%64))))return true;
+    }
+    return false;
+}
+
+QSet<QString> connectedGamepadEvents()
+{
+    QSet<QString> result;
+    const QDir input("/sys/class/input");
+    for(const auto &name:input.entryList({"event*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot,QDir::Name)){
+        if(!QRegularExpression("^event[0-9]{1,3}$").match(name).hasMatch())continue;
+        QFile capabilities(input.filePath(name+"/device/capabilities/key"));
+        if(!capabilities.open(QIODevice::ReadOnly))continue;
+        const auto bitmap=capabilities.read(4097);
+        if(bitmap.size()<=4096 && gamepadKeyBitmap(bitmap)){
+            result.insert(name);
+            if(result.size()>=32)break;
+        }
+    }
+    return result;
+}
+
+void reportGamepadStatus(const QVariantMap &status)
+{
+#ifdef Q_OS_UNIX
+    const auto json=QJsonDocument::fromVariant(status).toJson(QJsonDocument::Compact);
+    std::fprintf(stderr,"ISOLDE_GAMEPAD_STATUS %s\n",json.constData());
+    std::fflush(stderr);
+#else
+    Q_UNUSED(status);
+#endif
+}
+}
 
 int main(int argc, char **argv)
 {
@@ -23,6 +72,8 @@ int main(int argc, char **argv)
     auto arguments = app.arguments();
     const bool steamSession = arguments.size()>1 && arguments.at(1)=="--steam-session";
     if(steamSession) arguments.removeAt(1);
+    const bool gameSession=arguments.size()>1 && arguments.at(1)=="--game-session";
+    if(gameSession)arguments.removeAt(1);
     QVariantMap remoteAppearance;
     if(arguments.size()>3 && arguments.at(1)=="--web-remote"){
         if(arguments.at(2).size()>16384)return 2;
@@ -41,6 +92,22 @@ int main(int argc, char **argv)
     bool stopping = false;
     bool remoteFailed=false;
     qint64 childGroup = 0;
+    QTimer gamepadTimer;
+    if(gameSession){
+        QSet<QString> boundAtLaunch;
+        const auto bound=qEnvironmentVariable("ISOLDE_GAMEPAD_BOUND_EVENTS").split(',',Qt::SkipEmptyParts);
+        for(const auto &name:bound)
+            if(QRegularExpression("^event[0-9]{1,3}$").match(name).hasMatch())boundAtLaunch.insert(name);
+        QVariantMap lastStatus;
+        const auto updateGamepads=[&]{
+            const auto status=GamepadTopology::summarize(connectedGamepadEvents(),boundAtLaunch);
+            if(status!=lastStatus){lastStatus=status;reportGamepadStatus(status);}
+        };
+        gamepadTimer.setInterval(1000);
+        QObject::connect(&gamepadTimer,&QTimer::timeout,&app,updateGamepads);
+        updateGamepads();
+        gamepadTimer.start();
+    }
     const auto stop = [&] {
         if (stopping) return;
         stopping = true;

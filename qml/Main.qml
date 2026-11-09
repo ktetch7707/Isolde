@@ -48,6 +48,33 @@ Window {
                 font.pixelSize:20*window.uiScaleFactor;textFormat:Text.PlainText
             }
         }
+        Window {
+            id:gamepadSessionNotice
+            readonly property var status:sessionManager.gamepadSessionStatus
+            readonly property string notice:status.new>0
+                ?"A controller was connected after this game started. This session cannot attach it; save if possible, return to Games and relaunch."
+                :status.missing>0
+                    ?"A controller this game started with disconnected. Reconnect it or return to Games and relaunch."
+                    :""
+            width:Math.min(Screen.width*0.8,760*window.uiScaleFactor)
+            height:gamepadNoticeText.implicitHeight+32*window.uiScaleFactor
+            x:(Screen.width-width)/2
+            y:window.safeAreaPixels+(opticalSessionNotice.visible?opticalSessionNotice.height+12*window.uiScaleFactor:0)
+            visible:desktopMode.active && desktopMode.nativeMode && sessionManager.active && notice.length>0
+            flags:Qt.Tool | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput
+            color:"transparent"
+            Rectangle {
+                anchors.fill:parent;color:homeLayout.homeAppearance.surfaceColor
+                border.width:2;border.color:homeLayout.homeAppearance.focusColor
+                radius:desktopMode.presentation.radius || 0
+                Text {
+                    id:gamepadNoticeText;anchors.left:parent.left;anchors.right:parent.right
+                    anchors.verticalCenter:parent.verticalCenter;anchors.margins:16*window.uiScaleFactor
+                    text:gamepadSessionNotice.notice;color:homeLayout.homeAppearance.textColor
+                    wrapMode:Text.WordWrap;font.pixelSize:20*window.uiScaleFactor;textFormat:Text.PlainText
+                }
+            }
+        }
     }
     Connections {
         target:desktopMode

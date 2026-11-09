@@ -1255,7 +1255,7 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
         return fail(tr("Unsupported Games backup version or catalog bounds."));
 
     QList<QVariantMap> games,editionsData,collectionsData,provenanceData;
-    QSet<QString> ids,gameIds,platforms,names,installations;
+    QSet<QString> ids,gameIds,editionIds,platforms,names,installations;
     QMap<QString,int> editionCounts;
     qint64 restoreArtworkBytes=0;
     for(const auto &entry:archive.value("games").toArray()){
@@ -1356,6 +1356,7 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
         const auto gameId=object.value("gameId").toString();
         if(++editionCounts[gameId]>=32)return fail(tr("A backup game has more than 31 additional editions."));
         ids.insert(object.value("id").toString());
+        editionIds.insert(object.value("id").toString());
         auto value=registration;value["id"]=object.value("id").toString();value["gameId"]=gameId;editionsData.append(value);
     }
     for(const auto &entry:archive.value("collections").toArray()){
@@ -1415,15 +1416,21 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
                 kind=="optical-media"?QString("optical-registration"):
                 kind=="isolde-managed-install"?QString("portable-install"):
                 kind=="external-folder"?QString("folder-import"):QString("manual-registration");
+            const auto entityId=object.value("entityId").toString();
+            const auto entityType=object.value("entityType").toString();
+            const bool knownGame=gameIds.contains(entityId);
+            const bool knownEdition=editionIds.contains(entityId);
             qint64 recordedAt=0;
             if((origin!="manual-registration" && origin!=expectedOrigin
                     && !(origin=="folder-import" && kind=="isolde-managed-install"))
                 || !archiveInteger(object.value("recordedAt"),&recordedAt) || recordedAt==0
-                || provenanceIds.contains(object.value("entityId").toString()))
+                || provenanceIds.contains(entityId)
+                || (knownGame && entityType!="game")
+                || (knownEdition && entityType!="edition"))
                 return fail(tr("Acquisition provenance is inconsistent or duplicated in backup."));
-            provenanceIds.insert(object.value("entityId").toString());
-            provenanceData.append({{"entityId",object.value("entityId").toString()},
-                {"entityType",object.value("entityType").toString()},{"sourceKind",kind},{"origin",origin},
+            provenanceIds.insert(entityId);
+            provenanceData.append({{"entityId",entityId},
+                {"entityType",entityType},{"sourceKind",kind},{"origin",origin},
                 {"sourceReference",object.value("sourceReference").toString()},
                 {"sourceFingerprint",object.value("sourceFingerprint").toString()},{"recordedAt",recordedAt}});
         }

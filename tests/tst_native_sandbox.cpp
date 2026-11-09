@@ -1,6 +1,7 @@
 #include "sessions/NativeSandbox.h"
 #include "sessions/DesktopSession.h"
 #include "sessions/SteamSessionOutput.h"
+#include "sessions/GamepadTopology.h"
 #include "media/MediaGrants.h"
 #include "games/SteamLibraryGrants.h"
 #include "games/ManagedGamePaths.h"
@@ -35,6 +36,7 @@ private slots:
     void externalSteamGrantsAreProfileScopedAndFailClosed();
     void gamepadCapabilityRecognitionIsBoundedAndExact();
     void gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot();
+    void gamepadTopologyReportsAttachDetachAndReconnect();
     void gameSessionsAcrossSourcesRequestGamepadAccess();
 };
 
@@ -90,6 +92,32 @@ void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
     QVERIFY(QFile::remove(devices+"/event0"));
     QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
              QStringList({devices+"/event2",devices+"/js0"}));
+}
+void NativeSandboxTests::gamepadTopologyReportsAttachDetachAndReconnect()
+{
+    const QSet<QString> launchBound{"event0"};
+    auto status=GamepadTopology::summarize(QSet<QString>{"event0"},launchBound);
+    QCOMPARE(status.value("connected").toInt(),1);
+    QCOMPARE(status.value("available").toInt(),1);
+    QCOMPARE(status.value("new").toInt(),0);
+    QCOMPARE(status.value("missing").toInt(),0);
+
+    status=GamepadTopology::summarize(QSet<QString>{"event0","event2"},launchBound);
+    QCOMPARE(status.value("connected").toInt(),2);
+    QCOMPARE(status.value("available").toInt(),1);
+    QCOMPARE(status.value("new").toInt(),1);
+    QCOMPARE(status.value("missing").toInt(),0);
+
+    status=GamepadTopology::summarize(QSet<QString>{"event2"},launchBound);
+    QCOMPARE(status.value("connected").toInt(),1);
+    QCOMPARE(status.value("available").toInt(),0);
+    QCOMPARE(status.value("new").toInt(),1);
+    QCOMPARE(status.value("missing").toInt(),1);
+
+    status=GamepadTopology::summarize(QSet<QString>{"event0"},launchBound);
+    QCOMPARE(status.value("available").toInt(),1);
+    QCOMPARE(status.value("new").toInt(),0);
+    QCOMPARE(status.value("missing").toInt(),0);
 }
 
 void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()

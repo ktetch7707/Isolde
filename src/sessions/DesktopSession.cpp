@@ -445,6 +445,30 @@ void DesktopSession::readDiagnostics()
 {
     const auto output=m_launcher.readAllStandardError();
     m_diagnostics=(m_diagnostics+output).right(8192);
+    m_protocolBuffer+=output;
+    if(m_protocolBuffer.size()>4096)m_protocolBuffer.clear();
+    int newline=-1;
+    while((newline=m_protocolBuffer.indexOf('\n'))>=0){
+        const auto line=m_protocolBuffer.left(newline).trimmed();
+        m_protocolBuffer.remove(0,newline+1);
+        constexpr auto prefix="ISOLDE_GAMEPAD_STATUS ";
+        if(!line.startsWith(prefix) || line.size()>512)continue;
+        const auto document=QJsonDocument::fromJson(line.mid(int(sizeof("ISOLDE_GAMEPAD_STATUS ")-1)));
+        if(!document.isObject())continue;
+        const auto object=document.object();
+        if(object.size()!=4 || !object.contains("connected") || !object.contains("available")
+            || !object.contains("new") || !object.contains("missing"))continue;
+        QVariantMap status;
+        for(const auto &key:QStringList{"connected","available","new","missing"}){
+            const auto value=object.value(key);
+            if(!value.isDouble() || value.toInt(-1)<0 || value.toInt()>32){status.clear();break;}
+            status.insert(key,value.toInt());
+        }
+        if(status.isEmpty() || status.value("available").toInt()>status.value("connected").toInt()
+            || status.value("new").toInt()+status.value("available").toInt()!=status.value("connected").toInt()
+            || status.value("missing").toInt()+status.value("available").toInt()>32)continue;
+        if(status!=m_gamepadStatus){m_gamepadStatus=status;emit gamepadSessionStatusChanged(status);}
+    }
     if(!m_steamOutput)return;
     const bool observed=m_steamOutput->consume(output);
     const auto providerState=m_steamOutput->takeState();

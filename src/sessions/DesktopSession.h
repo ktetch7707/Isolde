@@ -23,6 +23,8 @@ private:
     void readDiagnostics();
     bool m_stopping = false;
     QByteArray m_diagnostics;
+    QByteArray m_protocolBuffer;
+    QVariantMap m_gamepadStatus;
     std::unique_ptr<SteamSessionOutput> m_steamOutput;
     bool m_steamObserved = false;
     QProcess m_launcher;

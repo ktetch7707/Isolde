@@ -23,6 +23,7 @@ class SessionManager final : public QObject {
     Q_PROPERTY(QString previousFocusId READ previousFocusId NOTIFY previousFocusIdChanged)
     Q_PROPERTY(QVariantMap opticalSessionStatus READ opticalSessionStatus NOTIFY opticalSessionStatusChanged)
     Q_PROPERTY(QVariantMap steamProviderState READ steamProviderState NOTIFY steamProviderStateChanged)
+    Q_PROPERTY(QVariantMap gamepadSessionStatus READ gamepadSessionStatus NOTIFY gamepadSessionStatusChanged)
 
 public:
     explicit SessionManager(AppRegistry *registry, QObject *parent = nullptr);
@@ -43,6 +44,7 @@ public:
     [[nodiscard]] QString previousFocusId() const;
     [[nodiscard]] QVariantMap opticalSessionStatus() const { return m_opticalSessionStatus; }
     [[nodiscard]] QVariantMap steamProviderState() const { return m_steamProviderState; }
+    [[nodiscard]] QVariantMap gamepadSessionStatus() const { return m_gamepadSessionStatus; }
 
     Q_INVOKABLE bool launch(const QString &appId);
     Q_INVOKABLE bool launchAction(const QVariantMap &action);
@@ -67,6 +69,7 @@ signals:
     void steamGameFailed(const QString &steamAppId, const QString &reason);
     void returnedHome(const QString &focusId);
     void opticalSessionStatusChanged();
+    void gamepadSessionStatusChanged();
 
 private:
     bool launchFileAction(const QVariantMap &action, const QString &sourceRoot,
@@ -79,6 +82,7 @@ private:
     std::unique_ptr<AppSession> m_session;
     QString m_previousFocusId;
     QVariantMap m_steamProviderState;
+    QVariantMap m_gamepadSessionStatus;
     bool m_intentionalExit = false;
     bool m_sessionCall = false;
     bool m_resumingPrepared=false;

@@ -845,6 +845,18 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QFile input(backup);QVERIFY(input.open(QIODevice::ReadOnly));
     auto archive=QJsonDocument::fromJson(input.readAll()).object();input.close();
     auto records=archive.value("provenance").toArray();QCOMPARE(records.size(),2);
+    auto mismatchedType=archive;
+    auto typedRecords=mismatchedType.value("provenance").toArray();
+    for(qsizetype index=0;index<typedRecords.size();++index){
+        auto item=typedRecords.at(index).toObject();
+        if(item.value("entityId").toString()==game){item["entityType"]="edition";typedRecords[index]=item;}
+    }
+    mismatchedType["provenance"]=typedRecords;
+    const auto mismatchedPath=dir.filePath("provenance-type-mismatch.json");QFile mismatched(mismatchedPath);
+    QVERIFY(mismatched.open(QIODevice::WriteOnly));
+    QVERIFY(mismatched.write(QJsonDocument(mismatchedType).toJson(QJsonDocument::Compact))>0);mismatched.close();
+    QVERIFY(!library.restoreCatalog(mismatchedPath,true));
+    QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
     for(qsizetype index=0;index<records.size();++index){
         auto item=records.at(index).toObject();
         if(item.value("entityId").toString()==game){item["sourceFingerprint"]=QString(64,'f');records[index]=item;}
