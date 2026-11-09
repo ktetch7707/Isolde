@@ -3,6 +3,7 @@
 #include "SteamLibraryGrants.h"
 #include "OpticalDiscAdapter.h"
 #include "OpticalDiscGrants.h"
+#include "CompatibilityRuntime.h"
 #include "ManagedGamePaths.h"
 #include <QCoreApplication>
 #include "app/AppRegistry.h"
@@ -416,6 +417,9 @@ QVariantList GameLibrary::runtimes() const {
         const auto app = entry.toMap(); const auto id = app.value("id").toString();
         if (compatibleRuntime(id,true) || compatibleRuntime(id,false))
             result.append(QVariantMap{{"id",id},{"name",app.value("name")},{"file",compatibleRuntime(id,true)},{"provider",id=="steam"?"steam":"local"}});
+    }
+    QVariantMap GameLibrary::compatibilityInstallerStatus() const {
+        return CompatibilityRuntime::discover();
     }
     return result;
 }

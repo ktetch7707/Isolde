@@ -3,6 +3,7 @@
 #include "games/OpticalDiscAdapter.h"
 #include "games/OpticalDiscGrants.h"
 #include "games/ManagedGamePaths.h"
+#include "games/CompatibilityRuntime.h"
 #include <QStandardPaths>
 #include <QUuid>
 #include "app/AppRegistry.h"
@@ -51,6 +52,7 @@ private slots:
     void ejectRefusesWhileSessionIsActive();
     void catalogRecoversStagedUninstallOnReopen();
     void orphanedUninstallRecoveryPreservesRemainingFiles();
+    void compatibilityCandidatesNeverClaimInstallerSupport();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
@@ -67,6 +69,18 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::compatibilityCandidatesNeverClaimInstallerSupport(){
+    const auto missing=CompatibilityRuntime::classify(false,false);
+    const auto untrusted=CompatibilityRuntime::classify(true,false);
+    const auto candidate=CompatibilityRuntime::classify(true,true);
+    QCOMPARE(missing.value("state").toString(),QString("missing"));
+    QCOMPARE(untrusted.value("state").toString(),QString("unsafe"));
+    QCOMPARE(candidate.value("state").toString(),QString("unverified"));
+    for(const auto &status:{missing,untrusted,candidate}){
+        QVERIFY(!status.value("supported").toBool());
+        QVERIFY(status.value("requirements").toString().contains("verified"));
+    }
 }
 void GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles(){
     QStandardPaths::setTestModeEnabled(true);

@@ -18,4 +18,6 @@ The optical flow is not yet a full commercial disc-install lifecycle: no arbitra
 
 Not supported by this installer: arbitrary `.exe`/Windows installers, scripts, self-extracting installers, network installers, compatibility-runtime setup, dependency resolution, DRM/activation bypass, disk imaging, or automatic installer execution. A general third-party installer flow and original-disc install/play lifecycle remain T30.7/T30.8 coding gaps. No universal compatibility, gameplay, remote-only third-party setup, native build or physical-disc qualification is claimed here.
 
+The catalog tools' Windows installer availability view probes only `/usr/bin/wine`, checks its resolved executable and root-owned non-writable ancestry, and never executes it. Missing, unsafe and unverified candidates all remain unsupported. A separately provisioned pinned, verified runtime plus a private-prefix, bounded installer/session adapter and explicit consent are required before advertising this route; system Wine presence alone does not establish support.
+
 Focused executable validation: `python3 tests/test_portable_game_installer.py`, plus the existing Games provisioning and Steam adapter tests. Native C++/QML integration still requires the repository's Qt/CMake test environment.
