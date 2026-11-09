@@ -33,13 +33,14 @@ def read_json(path, limit=MAX_SETTINGS):
 
 def definitions(path):
     document = read_json(path, 65536)
-    if (set(document) != {"schemaVersion", "target", "generationCoverage", "runtimes"}
+    if (set(document) != {"schemaVersion", "target", "generationCoverage", "generations", "runtimes"}
             or type(document["schemaVersion"]) is not int or document["schemaVersion"] != 2
             or document["target"] != {
                 "os": "ubuntu", "version": "26.04", "architectures": ["amd64"],
                 "supportBoundary": "Managed integration only; game, controller, performance and firmware compatibility are title-specific and not implied by runtime availability."
             }
             or not isinstance(document["generationCoverage"], dict)
+            or not isinstance(document["generations"], dict)
             or not isinstance(document["runtimes"], list)):
         raise ValueError("Unsupported emulator manifest")
     result = {}
@@ -50,7 +51,7 @@ def definitions(path):
         if (set(item)-allowed or not (allowed-{"core"}).issubset(item)
                 or not isinstance(item.get("id"),str) or not re.fullmatch(r"[a-z0-9-]{1,48}", item.get("id", ""))
                 or item["id"] in result or not isinstance(item.get("engine"),str)
-                or item.get("engine") not in {"ppsspp", "dolphin", "pcsx2", "retroarch"}
+                or item.get("engine") not in {"ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"}
                 or not isinstance(item.get("name"), str) or not item["name"] or len(item["name"])>120
                 or not isinstance(item.get("platforms"), list) or not item["platforms"]
                 or any(not isinstance(value,str) or not value or len(value)>80 for value in item["platforms"])
@@ -71,6 +72,24 @@ def definitions(path):
             if ("core" not in item or "retroarch" not in packages
                     or len([name for name in packages if name.startswith("libretro-")]) != 1):
                 raise ValueError("RetroArch routes must bind one pinned libretro core")
+        elif item["engine"] == "rpcs3":
+            if ("core" in item or packages != {"rpcs3"}):
+                raise ValueError("Emulator route packages do not match its engine")
+        elif item["engine"] == "shadps4":
+            if ("core" in item or packages != {"shadps4"}):
+                raise ValueError("Emulator route packages do not match its engine")
+        elif item["engine"] == "vita3k":
+            if ("core" in item or packages != {"vita3k"}):
+                raise ValueError("Emulator route packages do not match its engine")
+        elif item["engine"] == "xemu":
+            if ("core" in item or packages != {"xemu"}):
+                raise ValueError("Emulator route packages do not match its engine")
+        elif item["engine"] == "xenia":
+            if ("core" in item or packages != {"xenia"}):
+                raise ValueError("Emulator route packages do not match its engine")
+        elif item["engine"] == "cemu":
+            if ("core" in item or packages != {"cemu"}):
+                raise ValueError("Emulator route packages do not match its engine")
         elif ("core" in item or packages != {
                 "ppsspp": {"isolde-ppsspp"},
                 "dolphin": {"dolphin-emu"},
@@ -306,6 +325,18 @@ def command(runtime, target, home):
         if options["video"]=="software": values["video_driver"]="sdl2"
         atomic(config, "".join(k+' = '+json.dumps(v)+'\n' for k,v in values.items()).encode())
         return [str(binary), "--fullscreen", "--config", str(config), "--libretro", str(core), str(game)]
+    if engine == "rpcs3":
+        return [str(binary), "--fullscreen", "--no-config", str(game)]
+    if engine == "shadps4":
+        return [str(binary), "--fullscreen", str(game)]
+    if engine == "vita3k":
+        return [str(binary), "--fullscreen", str(game)]
+    if engine == "xemu":
+        return [str(binary), "--fullscreen", str(game)]
+    if engine == "xenia":
+        return [str(binary), "--fullscreen", str(game)]
+    if engine == "cemu":
+        return [str(binary), "--fullscreen", str(game)]
     raise ValueError("Unsupported emulator engine")
 
 

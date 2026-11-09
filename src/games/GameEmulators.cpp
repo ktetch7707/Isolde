@@ -89,7 +89,7 @@ QVariantList GameEmulators::definitions(){
     if(!file.open(QIODevice::ReadOnly) || file.size()>65536)return {};
     const auto doc=QJsonDocument::fromJson(file.readAll()).toVariant().toMap();
     const auto documentKeys=doc.keys();
-    const QSet<QString> expectedKeys{"schemaVersion","target","generationCoverage","runtimes"};
+    const QSet<QString> expectedKeys{"schemaVersion","target","generationCoverage","generations","runtimes"};
     const auto schemaType=doc.value("schemaVersion").metaType().id();
     if(documentKeys.size()!=expectedKeys.size() || !std::all_of(documentKeys.cbegin(),documentKeys.cend(),[&expectedKeys](const QString &key){return expectedKeys.contains(key);})
         || (schemaType!=QMetaType::Int && schemaType!=QMetaType::LongLong && schemaType!=QMetaType::Double)
@@ -98,6 +98,18 @@ QVariantList GameEmulators::definitions(){
     if(target.value("os").toString()!="ubuntu" || target.value("version").toString()!="26.04"
         || target.value("architectures").toStringList()!=QStringList{"amd64"}
         || target.value("supportBoundary").toString().isEmpty())return {};
+    const auto generations=doc.value("generations").toMap();
+    if(generations.isEmpty())return {};
+    static const QSet<QString> generationKeys{"architecture","installer","account","save","dependency","budget","firmwareRequired","unsupportedReason"};
+    for(const auto &key:generations.keys()){
+        const auto value=generations.value(key).toMap();
+        if(!value.isEmpty()){
+            const QSet<QString> actualKeys(value.keys());
+            if(!std::all_of(actualKeys.cbegin(),actualKeys.cend(),[&generationKeys](const QString &k){return generationKeys.contains(k);}))return {};
+            const auto budget=value.value("budget").toMap();
+            if(!budget.isEmpty() && (!budget.value("diskMiB").isDouble() || !budget.value("ramMiB").isDouble()))return {};
+        }
+    }
     const auto runtimes=doc.value("runtimes").toList();
     const auto coverage=doc.value("generationCoverage").toMap();
     const auto integrated=coverage.value("integratedPlatforms").toStringList();
@@ -109,7 +121,7 @@ QVariantList GameEmulators::definitions(){
         const auto packages=item.value("packages").toStringList();
         const auto formats=item.value("formats").toStringList();
         const auto platforms=item.value("platforms").toStringList();
-        static const QSet<QString> engines{"ppsspp","dolphin","pcsx2","retroarch"};
+        static const QSet<QString> engines{"ppsspp","dolphin","pcsx2","retroarch","rpcs3","shadps4","vita3k","xemu","xenia","cemu"};
         if(item.isEmpty() || !QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch()
             || ids.contains(id) || !engines.contains(engine) || item.value("binary").toString().isEmpty()
             || !QDir::isAbsolutePath(item.value("binary").toString()) || packages.isEmpty()
@@ -120,6 +132,18 @@ QVariantList GameEmulators::definitions(){
             int corePackages=0;
             for(const auto &package:packages)if(package.startsWith("libretro-"))++corePackages;
             if(!item.contains("core") || !packageSet.contains("retroarch") || corePackages!=1)return {};
+        }else if(engine=="rpcs3"){
+            if(item.contains("core") || packageSet!=QSet<QString>{"rpcs3"})return {};
+        }else if(engine=="shadps4"){
+            if(item.contains("core") || packageSet!=QSet<QString>{"shadps4"})return {};
+        }else if(engine=="vita3k"){
+            if(item.contains("core") || packageSet!=QSet<QString>{"vita3k"})return {};
+        }else if(engine=="xemu"){
+            if(item.contains("core") || packageSet!=QSet<QString>{"xemu"})return {};
+        }else if(engine=="xenia"){
+            if(item.contains("core") || packageSet!=QSet<QString>{"xenia"})return {};
+        }else if(engine=="cemu"){
+            if(item.contains("core") || packageSet!=QSet<QString>{"cemu"})return {};
         }else{
             const QSet<QString> expectedPackage=engine=="ppsspp"?QSet<QString>{"isolde-ppsspp"}
                 :engine=="dolphin"?QSet<QString>{"dolphin-emu"}:QSet<QString>{"pcsx2"};
@@ -200,8 +224,12 @@ bool GameEmulators::configure(const QString &profile,const QString &id,const QVa
         const QFileInfo source(firmware);
         const auto grant=MediaGrants::validate(source.absolutePath());
         if(!grant.isEmpty() || !source.isFile() || !source.isReadable() || source.canonicalFilePath()!=firmware
-            || (id=="retroarch-psx"?source.size()!=512*1024:(source.size()!=4*1024*1024 && source.size()!=8*1024*1024))){
-            *error=id=="retroarch-psx"?"Choose your readable 512 KiB PlayStation firmware inside a game source folder.":"Choose your readable 4 or 8 MiB PS2 firmware file inside a game source folder.";return false;}
+            || (id=="retroarch-psx"?source.size()!=512*1024:(id=="vita3k"?source.size()!=4*1024*1024
+            :(source.size()!=4*1024*1024 && source.size()!=8*1024*1024)))){
+            if(id=="retroarch-psx"){*error="Choose your readable 512 KiB PlayStation firmware inside a game source folder.";return false;}
+            if(id=="vita3k"){*error="Choose your readable 4 MiB PS Vita firmware file inside a game source folder.";return false;}
+            *error=id=="xemu"||id=="xenia"?"Choose your readable 4 or 8 MiB Xbox firmware file inside a game source folder."
+                :"Choose your readable 4 or 8 MiB PS2 firmware file inside a game source folder.";return false;}
         QFile file(firmware);if(!file.open(QIODevice::ReadOnly)){*error="Cannot read selected firmware.";return false;}
         const auto bytes=file.read(8*1024*1024+1);
         if(bytes.size()!=source.size() || (id=="retroarch-psx"?!psxFirmware(bytes):(!bytes.contains("ROMDIR") || !bytes.contains("ROMVER")))){
