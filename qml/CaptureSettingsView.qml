@@ -33,7 +33,7 @@ Item {
         { name: "Apply capture changes", value: draftDirty ? "Save all staged settings" : "No pending changes" },
         { name: "Cancel capture changes", value: draftDirty ? "Discard staged settings" : "Restore saved settings" },
         { name: "Refresh devices", value: "Rescan capture, audio, and serial devices" },
-        { name: "Session transition", value: draft.sessionTransition || "fade" },
+        { name: "Session transition", value: draft.sessionTransition || "expand" },
         { name: "Transition duration", value: (draft.transitionDuration || 250) + " ms" }
     ]
 

@@ -103,6 +103,12 @@ Item {
     Connections { target:root.layoutModel;function onLayoutChanged(){if(root.activeId && !root.model && !root.editing)root.closeAll()} }
     Rectangle {anchors.fill:parent;color:root.model?root.model.backgroundEnd:"#101014"}
     PageBackdrop {id:wallpaper;anchors.fill:parent;source:root.model?root.model.wallpaperSource:"";config:root.config.background || {};startColor:root.model?root.model.backgroundStart:"transparent";endColor:root.model?root.model.backgroundEnd:"transparent"}
+    function sourceRect(id, target) {
+        const rect = content.editorRectFor(id)
+        if (!rect) return null
+        const point = content.mapToItem(target, rect.x, rect.y)
+        return {x: point.x, y: point.y, width: rect.width, height: rect.height}
+    }
     HomeScreen {
         id:content;objectName:"pageContent"
         artworkMotionAllowed:root.artworkMotionAllowed && !root.editing

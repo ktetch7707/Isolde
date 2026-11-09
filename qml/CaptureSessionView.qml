@@ -10,15 +10,17 @@ Item {
     property bool selectionPending: false
     property int artworkInput: 0
     property string artworkSource: ""
+    property var originRect: null
     readonly property bool motionAllowed: !displaySettings.reduceMotion && captureController.sessionTransition !== "instant"
     readonly property int animationDuration: motionAllowed ? captureController.transitionDuration : 0
     signal returned(string originId)
     signal configureRequested(string originId)
 
-    function openSession(input, origin, artwork) {
+    function openSession(input, origin, artwork, geometry) {
         originId = origin || ""
         artworkInput = input
         artworkSource = artwork || ""
+        originRect = geometry || null
         chooseInput = input < 1 || input > 8
         pendingSwitchConfirmation = true
         selectionPending = false
@@ -95,13 +97,23 @@ Item {
 
     visible: open || opacity > 0
     opacity: open ? 1 : 0
-    scale: open || captureController.sessionTransition !== "expand" || !motionAllowed ? 1 : 0.9
     transform: Translate { x: root.open || captureController.sessionTransition !== "slide" || !root.motionAllowed ? 0 : root.width * 0.08
         Behavior on x { NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
     }
     Behavior on opacity { NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
-    Behavior on scale { NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
     z: 1000
+    Item {
+    id: sessionSurface
+    readonly property bool collapsed: !root.open && root.motionAllowed && captureController.sessionTransition === "expand"
+    x: collapsed ? (root.originRect ? root.originRect.x : root.width * 0.05) : 0
+    y: collapsed ? (root.originRect ? root.originRect.y : root.height * 0.05) : 0
+    width: collapsed ? (root.originRect ? root.originRect.width : root.width * 0.9) : root.width
+    height: collapsed ? (root.originRect ? root.originRect.height : root.height * 0.9) : root.height
+    clip: true
+    Behavior on x { enabled: root.open || root.opacity > 0; NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
+    Behavior on y { enabled: root.open || root.opacity > 0; NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
+    Behavior on width { enabled: root.open || root.opacity > 0; NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
+    Behavior on height { enabled: root.open || root.opacity > 0; NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
     Rectangle { anchors.fill: parent; color: "#05080E" }
     Image {
         anchors.centerIn: parent
@@ -169,5 +181,6 @@ Item {
             }
             Text { text: "↑ ↓ Choose · OK Switch · Back Return to Home"; color: "#C8D3E5"; font.pixelSize: 15 }
         }
+    }
     }
 }

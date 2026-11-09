@@ -94,7 +94,7 @@ void CaptureController::loadSettings()
     m_baudRate = settings.value("switch/baud", 9600).toInt();
     if (!SupportedBaudRates.contains(m_baudRate)) m_baudRate = 9600;
     m_commandTemplate = settings.value("switch/commandTemplate").toString();
-    const auto transition = settings.value("session/transition", "fade").toString();
+    const auto transition = settings.value("session/transition", "expand").toString();
     if (QStringList{"instant", "fade", "slide", "expand"}.contains(transition)) m_sessionTransition = transition;
     const auto duration = settings.value("session/duration", 250).toInt();
     if (QList<int>{200, 250, 300, 350}.contains(duration)) m_transitionDuration = duration;

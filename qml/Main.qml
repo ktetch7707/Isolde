@@ -645,6 +645,14 @@ Window {
         return ""
     }
 
+    function captureOriginRect(originId) {
+        if (pageSurface.open) return pageSurface.sourceRect(originId, captureSession)
+        const rect = home.editorRectFor(originId)
+        if (!rect) return null
+        const point = home.mapToItem(captureSession, rect.x, rect.y)
+        return {x: point.x, y: point.y, width: rect.width, height: rect.height}
+    }
+
     Connections {
         target: appVpn
         function onFailed(appId,message){
@@ -723,7 +731,7 @@ Window {
         }
         function onCaptureSessionRequested(input, originId) {
             commandCenter.open = false
-            captureSession.openSession(input, originId, window.captureFallbackArtwork(input, originId))
+            captureSession.openSession(input, originId, window.captureFallbackArtwork(input, originId), window.captureOriginRect(originId))
         }
         function onSettingsRequested(section) { if (section < 0) settings.inPage = false; else settings.openSection(section) }
     }

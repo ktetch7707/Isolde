@@ -269,6 +269,23 @@ test("capture fallback art belongs only to the matching HDMI shortcut", () => {
     assert.equal(scope.captureFallbackArtwork(2, "other"), "");
 });
 
+test("capture expand uses the originating home or page rectangle when available", () => {
+    const calls = [], scope = vm.createContext({
+        pageSurface: {open: false, sourceRect: (id, target) => { calls.push(id); return {x: 4, y: 5, width: 40, height: 50}; }},
+        captureSession: {},
+        home: {
+            editorRectFor: id => id === "tile" ? {x: 10, y: 20, width: 100, height: 80} : null,
+            mapToItem: (_target, x, y) => ({x: x + 3, y: y + 4}),
+        },
+    });
+    method("Main.qml", "captureOriginRect", scope);
+    assert.equal(JSON.stringify(scope.captureOriginRect("tile")), JSON.stringify({x: 13, y: 24, width: 100, height: 80}));
+    assert.equal(scope.captureOriginRect("missing"), null);
+    scope.pageSurface.open = true;
+    assert.equal(scope.captureOriginRect("page-tile").width, 40);
+    assert.deepEqual(calls, ["page-tile"]);
+});
+
 test("capture session preserves selection for retry after a failed switch", () => {
     const calls = [], inputManager = {back: 1, home: 2, navigateLeft: 3, navigateRight: 4, confirm: 5};
     let succeeds = false;

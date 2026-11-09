@@ -135,7 +135,7 @@ private:
     QString m_audioDeviceId;
     QString m_serialPortName;
     QString m_commandTemplate;
-    QString m_sessionTransition = "fade";
+    QString m_sessionTransition = "expand";
     QString m_previewCaptureId;
     QString m_previewFormatKey;
     QString m_previewAudioId;
