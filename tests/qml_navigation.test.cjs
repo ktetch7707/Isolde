@@ -58,6 +58,32 @@ test("capture session preserves selection for retry after a failed switch", () =
     assert.deepEqual(calls, [4, 4]);
 });
 
+test("capture session retries an asynchronous switch failure and waits for serial completion", () => {
+    const calls = [], inputManager = {back: 1, home: 2, navigateLeft: 3, navigateRight: 4, confirm: 5};
+    const scope = vm.createContext({
+        inputManager, chooseInput: false, selectionPending: false, pendingSwitchConfirmation: true,
+        captureController: {
+            selectedInput: 4, state: "receiving-frames", switchState: "sending",
+            switchInput(input) { calls.push(input); this.switchState = "sending"; return true; },
+        },
+    });
+    method("CaptureSessionView.qml", "handleCommand", scope);
+    scope.handleCommand(inputManager.confirm);
+    assert.equal(scope.pendingSwitchConfirmation, true);
+    assert.deepEqual(calls, []);
+    scope.captureController.switchState = "error";
+    scope.handleCommand(inputManager.confirm);
+    assert.deepEqual(calls, [4]);
+    assert.equal(scope.pendingSwitchConfirmation, true);
+    scope.captureController.switchState = "sent";
+    scope.captureController.state = "awaiting-frames";
+    scope.handleCommand(inputManager.confirm);
+    assert.equal(scope.pendingSwitchConfirmation, true);
+    scope.captureController.state = "receiving-frames";
+    scope.handleCommand(inputManager.confirm);
+    assert.equal(scope.pendingSwitchConfirmation, false);
+});
+
 test("a failed direct capture launch opens the input picker for retry", () => {
     const calls = [];
     const scope = vm.createContext({

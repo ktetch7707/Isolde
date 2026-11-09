@@ -48,6 +48,7 @@ CaptureController::CaptureController(QObject *parent) : QObject(parent),
         if (m_serialBytesPending > 0) return;
         m_serialWatchdog.stop();
         m_serial.close();
+        m_switchState = "sent";
         if (m_activeInput > 0) {
             m_switchStatus = "Command sent for " + inputLabel(m_activeInput) + ". Confirm the preview shows that source.";
             emit changed();
@@ -89,8 +90,14 @@ void CaptureController::loadSettings()
 
 bool CaptureController::saveValue(const QString &key, const QVariant &value)
 {
+    return saveValues({{key, value}});
+}
+
+bool CaptureController::saveValues(const QMap<QString, QVariant> &values)
+{
     auto settings = captureSettings();
-    settings.setValue(key, value);
+    for (auto it = values.cbegin(); it != values.cend(); ++it)
+        settings.setValue(it.key(), it.value());
     settings.sync();
     if (settings.status() != QSettings::NoError) {
         setStatus("error", "Could not save capture settings. Check available storage and try again.");
@@ -246,8 +253,7 @@ bool CaptureController::setCaptureDevice(const QString &id)
     for (const auto &device : m_videoDevices) if (QString::fromLatin1(device.id()) == id)
         for (const auto &format : device.videoFormats()) formatAvailable |= formatKey(format) == nextFormat;
     if (!formatAvailable) nextFormat.clear();
-    if (!saveValue("capture/device", id)) return false;
-    if (nextFormat != m_videoFormatKey && !saveValue("capture/format", nextFormat)) return false;
+    if (!saveValues({{"capture/device", id}, {"capture/format", nextFormat}})) return false;
     stopPreview();
     m_captureDeviceId = id;
     m_videoFormatKey = nextFormat;
@@ -476,28 +482,27 @@ void CaptureController::stopPreview()
 
 bool CaptureController::switchInput(int input)
 {
-    if (input < 1 || input > 8) return false;
-    if (m_captureDeviceId.isEmpty()) {
-        m_switchStatus = "Choose the HDMI capture card before switching inputs.";
+    const auto fail = [this](const QString &message) {
+        m_switchState = "error";
+        m_switchStatus = message;
         emit changed();
         return false;
+    };
+    if (input < 1 || input > 8)
+        return fail("Choose an HDMI input from 1 to 8.");
+    if (m_captureDeviceId.isEmpty()) {
+        return fail("Choose the HDMI capture card before switching inputs.");
     }
     if (m_serialPortName.isEmpty() || !m_serialPortNames.contains(m_serialPortName)) {
-        m_switchStatus = "Connect and choose the RS-232 switch port before switching inputs.";
-        emit changed();
-        return false;
+        return fail("Connect and choose the RS-232 switch port before switching inputs.");
     }
     QString commandError;
     const auto command = commandForInput(m_commandTemplate, input, &commandError);
     if (command.isEmpty()) {
-        m_switchStatus = commandError.isEmpty() ? "Choose a switch command from the device manual." : commandError;
-        emit changed();
-        return false;
+        return fail(commandError.isEmpty() ? "Choose a switch command from the device manual." : commandError);
     }
     if (!canSwitchInput(input)) {
-        m_switchStatus = "Capture card, serial port, or saved video format is unavailable. Refresh devices and check the setup page.";
-        emit changed();
-        return false;
+        return fail("Capture card, serial port, or saved video format is unavailable. Refresh devices and check the setup page.");
     }
     if (m_serial.isOpen() || m_serialBytesPending > 0) {
         m_switchStatus = "The previous switch command is still being sent. Please wait.";
@@ -511,9 +516,7 @@ bool CaptureController::switchInput(int input)
     m_serial.setStopBits(QSerialPort::OneStop);
     m_serial.setFlowControl(QSerialPort::NoFlowControl);
     if (!m_serial.open(QIODevice::WriteOnly)) {
-        m_switchStatus = "Could not open the RS-232 switch: " + m_serial.errorString();
-        emit changed();
-        return false;
+        return fail("Could not open the RS-232 switch: " + m_serial.errorString());
     }
     const auto count = m_serial.write(command);
     if (count != command.size()) {
@@ -521,6 +524,7 @@ bool CaptureController::switchInput(int input)
         return false;
     }
     m_serialBytesPending = count;
+    m_switchState = "sending";
     m_activeInput = input;
     selectInput(input);
     m_serialWatchdog.start();
@@ -539,6 +543,7 @@ void CaptureController::serialWriteFailed(const QString &message)
     m_serialWatchdog.stop();
     m_serialBytesPending = 0;
     if (m_serial.isOpen()) m_serial.close();
+    m_switchState = "error";
     m_switchStatus = message;
     emit changed();
 }

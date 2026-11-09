@@ -58,18 +58,20 @@ Item {
             captureController.selectInput(captureController.selectedInput % 8 + 1)
             selectionPending = true
         } else if (command === inputManager.confirm) {
-            if (selectionPending) {
+            if (selectionPending || (pendingSwitchConfirmation && captureController.switchState === "error")) {
                 if (captureController.switchInput(captureController.selectedInput)) {
                     selectionPending = false
                     pendingSwitchConfirmation = true
                 }
-            } else if (pendingSwitchConfirmation && captureController.state === "receiving-frames") {
+            } else if (pendingSwitchConfirmation && captureController.switchState === "sent"
+                       && captureController.state === "receiving-frames") {
                 pendingSwitchConfirmation = false
             }
         }
     }
 
     readonly property string inputHeading: selectionPending ? "READY TO SWITCH · " + root.selectedInputName()
+        : pendingSwitchConfirmation && captureController.switchState === "error" ? "SWITCH FAILED · " + root.selectedInputName()
         : pendingSwitchConfirmation ? "VERIFYING INPUT · " + root.selectedInputName()
         : "HDMI INPUT · " + root.selectedInputName()
 
@@ -91,6 +93,8 @@ Item {
         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
         height: 66; color: "#D2080C14"
         Text { anchors.centerIn: parent; text: root.selectionPending ? "OK Switch to selected input     Back / Home Return"
+            : root.pendingSwitchConfirmation && captureController.switchState === "error" ? "OK Retry switch     ‹ / › choose another input     Back / Home Return"
+            : root.pendingSwitchConfirmation && captureController.switchState === "sending" ? "Sending switch command     ‹ / › choose another input     Back / Home Return"
             : root.pendingSwitchConfirmation ? "Check the picture, then OK confirm     ‹ / › choose another input     Back / Home Return"
             : "‹ / › Choose input     OK Switch     Back / Home Return"; color: "#FFFFFF"; font.pixelSize: 18 }
     }

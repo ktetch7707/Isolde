@@ -30,6 +30,7 @@ class CaptureController final : public QObject {
     Q_PROPERTY(QString commandTemplate READ commandTemplate NOTIFY changed)
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(QString switchStatus READ switchStatus NOTIFY changed)
+    Q_PROPERTY(QString switchState READ switchState NOTIFY changed)
     Q_PROPERTY(QString state READ state NOTIFY changed)
     Q_PROPERTY(bool previewActive READ previewActive NOTIFY changed)
     Q_PROPERTY(int selectedInput READ selectedInput NOTIFY changed)
@@ -51,6 +52,7 @@ public:
     QString commandTemplate() const { return m_commandTemplate; }
     QString status() const { return m_status; }
     QString switchStatus() const { return m_switchStatus; }
+    QString switchState() const { return m_switchState; }
     QString state() const { return m_state; }
     bool previewActive() const { return m_previewRequested; }
     int selectedInput() const { return m_selectedInput; }
@@ -80,6 +82,7 @@ signals:
 private:
     void loadSettings();
     bool saveValue(const QString &key, const QVariant &value);
+    bool saveValues(const QMap<QString, QVariant> &values);
     void updateStatusForConfiguration();
     void configureAudio();
     QString inputLabel(int input) const;
@@ -111,6 +114,7 @@ private:
     QMap<int, QString> m_inputLabels;
     QString m_status = "Connect a USB HDMI capture card, then choose it here.";
     QString m_switchStatus = "Choose an input to test the RS-232 switch.";
+    QString m_switchState = "idle";
     QString m_state = "needs-setup";
     int m_baudRate = 9600;
     int m_selectedInput = 1;

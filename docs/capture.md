@@ -32,6 +32,8 @@ On the default Home screen, HDMI 1 through HDMI 8 are visible but unavailable un
 
 From an available Home input tile, Isolde sends the configured command and opens the full-screen preview. Apps declared as capture surfaces open the same eight-input picker first, without guessing which physical input the app uses. Left/Right chooses another input in a direct session; OK sends that input's command. After a switch, the heading remains **Verifying input** until video frames arrive and the user confirms the visible picture with OK. Back or Home stops capture and restores focus to the originating tile.
 
+If the serial write fails or times out after it was queued, the session reports the failure and OK retries the selected input. Confirmation is unavailable until the serial write has completed and video frames are arriving; a completed write still does not prove that the switch changed inputs.
+
 Status distinguishes missing/unselected capture devices, a disconnected serial port, missing or invalid switch protocol, serial errors, waiting for video, arriving frames, and stopped preview. Video frames do not prove that the selected HDMI source is correct. The captured content is never labeled as the requested source until the user has visually checked it.
 
 ## Limits and hardware acceptance

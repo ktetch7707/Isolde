@@ -155,7 +155,7 @@ Item {
                     color: shell.muted; font.pixelSize: 19 * shell.textScale
                 }
             }
-            Text { font.family: shell.fontFamily; width: parent.width; text: captureController.status + "\n" + captureController.switchStatus; color: captureController.state === "error" || captureController.state === "no-signal" ? shell.error : shell.text; font.pixelSize: 17 * shell.textScale; wrapMode: Text.WordWrap }
+            Text { font.family: shell.fontFamily; width: parent.width; text: captureController.status + "\n" + captureController.switchStatus; color: captureController.state === "error" || captureController.state === "no-signal" || captureController.switchState === "error" ? shell.error : shell.text; font.pixelSize: 17 * shell.textScale; wrapMode: Text.WordWrap }
             Text { font.family: shell.fontFamily;
                 width: parent.width; text: "Generic command formats are examples, not guaranteed switch protocols. Use the exact command from your switch manual. A sent command is not confirmation that routing changed; visually verify the source.";
                 color: shell.warning; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap
