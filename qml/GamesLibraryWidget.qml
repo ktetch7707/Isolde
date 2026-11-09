@@ -96,7 +96,7 @@ Item {
         function onRejected(reason){if(root.engaged || root.mode==="details")root.message=reason}
     }
     function reload(){
-        if(!library){items=[];return}
+        if(!library){items=[];canNextPage=false;return}
         const remembered=selectedId
         items=queryView==="collection"?library.pageCollection(activeCollectionId,offset):library.page(queryView,search,offset,selectedPlatform)
         canNextPage=items.length===pageSize && offset+pageSize<catalogLimit
