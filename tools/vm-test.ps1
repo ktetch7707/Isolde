@@ -4,6 +4,8 @@ param(
     [ValidateSet('all','sources','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_safety','studio_selection','studio_artwork','studio_visuals','shell_appearance','studio_colors','studio_workflows','studio_cutover','studio_designs','studio_design_contracts','studio_reuse','studio_performance','studio_remaining','studio_closure_regressions','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
     [string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
+    [switch]$Diagnostic,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ResumeRunId,
     [string]$GuideReplayPlan,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ReuseFullRun,
     [switch]$Capture,
@@ -18,6 +20,8 @@ param(
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
+if ($Diagnostic -and ($Action -ne 'Visual' -or $Installed)) { throw 'Diagnostic visuals are staged-only; installation/deployment is prohibited.' }
+if ($ResumeRunId -and ($Action -ne 'Test' -or $Suite -ne 'all' -or $ReuseFullRun)) { throw 'Campaign resumption requires Test -Suite all, without coverage reuse.' }
 if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
 $validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')
 $Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })
@@ -68,7 +72,7 @@ try {
     }
     $guestFree = $homeResult.Lines | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1
     if (!$guestFree) { throw 'Could not determine guest free space.' }
-    if ($BackedUpSourceRunIds.Count -or ($Action -eq 'Test' -and [long]$guestFree -lt 3GB)) {
+    if ($BackedUpSourceRunIds.Count -or ($Action -eq 'Test' -and [long]$guestFree -lt $(if ($ResumeRunId) { 2GB } else { 3GB }))) {
         $backups = @(Get-OracleSourceBackups -Root (Join-Path $repo 'build/vm-oracle') -RunIds $BackedUpSourceRunIds)
         $receipt = Join-Path $local 'host-source-backups.json'
         ConvertTo-Json -InputObject @($backups) | Set-Content -LiteralPath $receipt -Encoding utf8NoBOM
@@ -123,7 +127,7 @@ try {
             }
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
-                -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -IdentityFile $IdentityFile `
+                -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -Diagnostic:$Diagnostic -IdentityFile $IdentityFile `
                 -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -ReferenceHelperDigest $referenceDigest -ReferenceCollectionsDigest $referenceCollectionsDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
         }
     } else {
@@ -133,6 +137,7 @@ try {
         if ($OrphanVisualPid) { $command += " --orphan-visual-pid $OrphanVisualPid" }
         if ($GuideDiagnostics) { $command += ' --guide-diagnostics' }
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
+        if ($ResumeRunId) { $command += " --resume-run-id $ResumeRunId" }
         if ($ReuseFullRun) { $command += " --reuse-full-run $ReuseFullRun" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }

@@ -755,6 +755,31 @@ def ctest_command(build, report):
             "--timeout", "120", "--output-junit", str(report)]
 
 
+def campaign_pending(registered, results):
+    if not registered or len(set(registered)) != len(registered):
+        raise RuntimeError('Invalid campaign registrations')
+    names=[item['name'] for item in results]
+    if len(set(names)) != len(names) or not set(names).issubset(registered):
+        raise RuntimeError('Unknown or repeated campaign test result')
+    return [name for name in registered if name not in names]
+
+
+def campaign_results(path):
+    cases=list(ET.parse(path).getroot().iter('testcase'))
+    return [{'name':case.get('name'), 'state':'failed' if case.find('failure') is not None or case.find('error') is not None
+             else 'skipped' if case.find('skipped') is not None or case.get('status') in {'notrun','disabled'} else 'passed'} for case in cases]
+
+
+def diagnostic_campaign_receipt(result, progress):
+    if result.get('acceptance') is not False or result.get('passed') is not False or result.get('fullSuite') is not False:
+        raise RuntimeError('Diagnostic receipt must retain failed/nonacceptance status')
+    if progress.get('acceptance') is not False or progress.get('pending') or campaign_pending(progress['registered'],progress['results']):
+        raise RuntimeError('Every registration must be attempted before diagnostic staging')
+    if result.get('sourceDigest')!=progress.get('sourceDigest') or result.get('runs')!=progress.get('runs') or not result.get('payload'):
+        raise RuntimeError('Diagnostic candidate identity mismatch')
+    return True
+
+
 class Oracle:
     def __init__(self, root, run_id):
         self.root = root
@@ -992,12 +1017,15 @@ class Oracle:
         android["resolverStatus"] = resolver_status()
         atomic_json(self.run/"android-capabilities.json", android)
 
-    def test(self, suite, reuse_full_run=None):
+    def test(self, suite, reuse_full_run=None, resume_run_id=None):
         if reuse_full_run and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', reuse_full_run):
             raise RuntimeError("Unsafe full-run reuse identity")
         self.maintenance_pins = {self.root / 'runs' / reuse_full_run} if reuse_full_run else set()
         source, entries = extract_snapshot(self.run)
         self.stage("oracle-self-test", ["python3", str(source / "tests/test_vm_oracle.py")], 90)
+        if resume_run_id:
+            self.resume_tests(entries, resume_run_id)
+            return
         self.automatic_test_cleanup()
         self.check()
         service_before, releases_before = self.state["service"], self.state["releases"]
@@ -1081,8 +1109,70 @@ class Oracle:
         atomic_json(self.run / "test-result.json", result)
         self.update(tests=len(cases), fullSuite=result["fullSuite"])
 
-    def tested_payload(self):
-        result = json.loads((self.run / "test-result.json").read_text())
+    def resume_tests(self, entries, previous_id):
+        """Diagnostic continuation only: retained failures can never earn a full pass."""
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', previous_id) or previous_id==self.run.name:
+            raise RuntimeError('Invalid campaign base')
+        previous=self.root/'runs'/previous_id
+        prior=manifest(previous/'files.sha256')
+        harness={'tools/vm-oracle.py','tools/vm-test.ps1','tools/test-all.ps1','tools/run-visual-acceptance.ps1','tests/test_vm_oracle.py'}
+        changed={name for name in set(entries)|set(prior) if entries.get(name)!=prior.get(name)}
+        if any(name not in harness and not name.startswith('docs/') for name in changed):
+            raise RuntimeError('Campaign application/test bytes changed; a new build is required')
+        progress_path=previous/'campaign-progress.json'
+        if progress_path.is_file():
+            progress=json.loads(progress_path.read_text())
+            chain=progress['runs'];results=progress['results']
+            origin=self.root/'runs'/chain[0]
+        else:
+            state=json.loads((previous/'status.json').read_text())
+            if state.get('suite')!='all' or state.get('stage')!='ctest' or state.get('state')!='failed':
+                raise RuntimeError('Campaign base must be a diagnosed failed full CTest run')
+            chain=[previous_id];results=campaign_results(previous/'ctest.xml');origin=previous
+        if len(chain)>128 or previous_id!=chain[-1] or self.run.name in chain or any(not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', item) for item in chain):
+            raise RuntimeError('Invalid campaign chain')
+        original=manifest(origin/'files.sha256');work=self.root/'work';build=work/'build'
+        self.maintenance_pins={origin,previous}
+        if shutil.disk_usage(self.root).free < 2*1024**3:
+            self.automatic_test_cleanup()
+        if shutil.disk_usage(self.root).free < 2*1024**3:
+            raise RuntimeError('Campaign continuation requires 2 GiB guest free space')
+        verify_tree(work/'source',original)
+        if json.loads((work/'manifest.json').read_text())!=original:
+            raise RuntimeError('Incremental cache no longer belongs to the campaign candidate')
+        inventory=subprocess.run(['ctest','--test-dir',str(build),'--show-only=json-v1'],capture_output=True,text=True,timeout=30,check=True)
+        registered=[item['name'] for item in json.loads(inventory.stdout)['tests']]
+        pending=campaign_pending(registered,results)
+        if not pending:raise RuntimeError('Campaign already attempted every registration; inspect retained failures')
+        before_service,before_links=self.service(),self.links()
+        self.update(suite='campaign-diagnostic',sourceDigest=digest(origin/'files.sha256'),campaignOrigin=chain[0])
+        command=ctest_command(build,self.run/'ctest.xml')+['-R','^('+'|'.join(re.escape(name) for name in pending)+')$']
+        try:
+            self.stage('ctest',command,900,dict(os.environ,QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',ISOLDE_TEST_ARTIFACTS=str(self.run)))
+        finally:
+            if (self.run/'ctest.xml').is_file():results+=campaign_results(self.run/'ctest.xml')
+            remaining=campaign_pending(registered,results)
+            verify_tree(work/'source',original)
+            service,links=self.service(),self.links()
+            if service!=before_service or links!=before_links:raise RuntimeError('Installed service/release changed during campaign continuation')
+            last=build/'Testing/Temporary/LastTest.log'
+            if last.is_file():shutil.copy2(last,self.run/'LastTest.log')
+            atomic_json(self.run/'campaign-progress.json',{'acceptance':False,'fullSuite':False,'runs':chain+[self.run.name],
+                'sourceDigest':digest(origin/'files.sha256'),'registered':registered,'results':results,'pending':remaining,
+                'serviceBefore':before_service,'serviceAfter':service,'releasesBefore':before_links,'releasesAfter':links})
+            if not remaining:
+                self.stage('stage-diagnostic-payload',['cmake','--install',str(build),'--prefix',str(self.run/'payload')],120)
+                atomic_json(self.run/'diagnostic-payload.json',{'acceptance':False,'passed':False,'fullSuite':False,
+                    'sourceDigest':digest(origin/'files.sha256'),'runs':chain+[self.run.name],'payload':payload_hashes(self.run/'payload')})
+        raise RuntimeError('Diagnostic campaign retained failures; inspect campaign-progress.json. No acceptance payload was produced.')
+
+    def tested_payload(self, diagnostic=False):
+        result = json.loads((self.run / ('diagnostic-payload.json' if diagnostic else 'test-result.json')).read_text())
+        if diagnostic:
+            diagnostic_campaign_receipt(result,json.loads((self.run/'campaign-progress.json').read_text()))
+            if payload_hashes(self.run/'payload')!=result['payload']:raise RuntimeError('Diagnostic payload changed')
+            verify_tree(self.run/'source',manifest(self.run/'files.sha256'))
+            return self.run/'payload'
         if not result.get("passed") or (not result.get("fullSuite") and not result.get('coverageReuse')):
             raise RuntimeError("This run has no passing full-suite payload; run Test -Suite all")
         if not result.get('fullSuite'):
@@ -1266,7 +1356,8 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None):
+    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None, diagnostic=False):
+        if diagnostic and installed:raise RuntimeError('Diagnostic payloads cannot be deployed or tested as installed')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
         if history_helper_digest and case not in ('history','pages'):raise RuntimeError('Library helper is history/pages-only')
@@ -1274,7 +1365,7 @@ class Oracle:
         if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
-        payload = self.tested_payload()
+        payload = self.tested_payload(diagnostic=diagnostic) if diagnostic else self.tested_payload()
         if installed:
             deployed = json.loads((self.run / "deploy-result.json").read_text())
             executable = Path(deployed["release"]) / "bin/isolde"
@@ -1333,7 +1424,7 @@ class Oracle:
             if case=="guide-lifecycle" or (case in {'guide-features','guide-surfaces'} and any((p/'guide-soak-ready.json').is_file() for p in evidence)):
                 write_soak_receipt(self.run,evidence,executable)
             self.update(visualCase=case, visualPassed=True, visualReview="pending",
-                        visualAcceptance="pending", semanticAcceptance="not_verified", executable=str(executable))
+                        visualAcceptance="diagnostic_only" if diagnostic else "pending", semanticAcceptance="not_verified", executable=str(executable))
         finally:
             # This guard also runs on timeouts/SIGHUP when a harness cannot reach its own finally.
             restored = self.restore(before)
@@ -1547,8 +1638,10 @@ def recover_visual_orphan(run, pid, proc_root=Path("/proc")):
     expected = (run / "payload/bin/isolde").resolve(strict=True)
     if executable != expected:
         raise RuntimeError("Visual child does not use this run's tested executable")
-    result = json.loads((run / "test-result.json").read_text())
-    if result.get("passed") is not True or result.get("payload", {}).get("bin/isolde") != digest(executable):
+    diagnostic=not (run/'test-result.json').is_file() and (run/'diagnostic-payload.json').is_file()
+    result = json.loads((run / ('diagnostic-payload.json' if diagnostic else 'test-result.json')).read_text())
+    if diagnostic:diagnostic_campaign_receipt(result,json.loads((run/'campaign-progress.json').read_text()))
+    if (not diagnostic and result.get("passed") is not True) or result.get("payload", {}).get("bin/isolde") != digest(executable):
         raise RuntimeError("Visual child executable lacks a matching tested payload")
     values = (proc / "environ").read_bytes().split(b"\0")
     config = next((value.partition(b"=")[2].decode() for value in values if value.startswith(b"XDG_CONFIG_HOME=")), "")
@@ -1758,11 +1851,13 @@ def main():
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--suite", choices=SUITES, default="all")
     parser.add_argument('--reuse-full-run')
+    parser.add_argument('--resume-run-id')
     parser.add_argument("--wait-seconds",type=int,default=0)
     parser.add_argument("--storage",action="store_true")
     parser.add_argument('--guide-diagnostics',action='store_true')
     parser.add_argument("--case", choices=CASES, default="studio")
     parser.add_argument("--installed", action="store_true")
+    parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
     parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","artifacts"],default="native")
     parser.add_argument("--maintenance-tests-digest")
@@ -1774,6 +1869,8 @@ def main():
     parser.add_argument('--reference-collections-digest')
     parser.add_argument("--orphan-visual-pid", type=int, default=0)
     args = parser.parse_args()
+    if args.diagnostic and (args.action!='visual' or args.installed):parser.error('Diagnostic visuals are staged-only')
+    if args.resume_run_id and (args.action!='test' or args.suite!='all' or args.reuse_full_run):parser.error('Campaign resumption requires a full Test without reuse')
     if args.orphan_visual_pid and (args.action != "recover" or not 1 < args.orphan_visual_pid < 2**31): parser.error("Visual orphan PID is Recover-only")
     if args.storage and args.action!="status":parser.error("Storage inventory is Status-only")
     if not 0<=args.wait_seconds<=900 or (args.wait_seconds and args.action not in {"test","configure","visual"}):
@@ -1866,9 +1963,9 @@ def main():
             if args.action == "check":
                 oracle.check()
             elif args.action == "test":
-                oracle.test(args.suite,args.reuse_full_run)
+                oracle.test(args.suite,args.reuse_full_run,args.resume_run_id)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest,args.reference_collections_digest)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest,args.reference_collections_digest,args.diagnostic)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":

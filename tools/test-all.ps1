@@ -5,6 +5,7 @@ param(
     [ValidateSet('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')]
     [string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$NativeOnly,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ResumeRunId,
     [switch]$ReportOnly,
     [switch]$NoOpen
 )
@@ -16,7 +17,9 @@ if (!$ReportOnly -and (Test-Path -LiteralPath $root)) { throw 'Run exists; use -
 $failure = $null
 try {
     if (!$ReportOnly) {
-        & "$PSScriptRoot/vm-test.ps1" Test -RunId $RunId -Suite all
+        $testArguments = @{ RunId=$RunId; Suite='all' }
+        if ($ResumeRunId) { $testArguments.ResumeRunId=$ResumeRunId }
+        & "$PSScriptRoot/vm-test.ps1" Test @testArguments
         if (!$NativeOnly) { & "$PSScriptRoot/vm-test.ps1" Visual -RunId $RunId -Cases $Cases }
     }
 } catch { $failure = $_.Exception.Message }

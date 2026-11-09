@@ -6,6 +6,7 @@ param(
     [string]$GuestRunner,
     [string]$RunId,
     [switch]$Installed,
+    [switch]$Diagnostic,
     [string]$GuideReplayPlan,
     [string]$ReopenHelperDigest,
     [string]$FeatureHelperDigest,
@@ -19,6 +20,7 @@ param(
     [string]$VmName = 'Isolde-Test'
 )
 $ErrorActionPreference = 'Stop'
+if ($Diagnostic -and $Installed) { throw 'Diagnostic visuals cannot use an installed release.' }
 $transportTimeout = $TimeoutSeconds + $WaitSeconds
 . "$PSScriptRoot/vm-process.ps1"
 if (!$GuestRunner) { throw 'Use tools/vm-test.ps1 Visual -RunId <passing-run>. Direct unguarded acceptance is retired.' }
@@ -38,6 +40,7 @@ $sshArgs = Get-OracleSshArguments $IdentityFile
 if ($GuestRunner) {
     if ($GuestRunner -notmatch '^/[A-Za-z0-9/_.-]+$' -or $RunId -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') { throw 'Invalid oracle runner/run ID.' }
     $command = "python3 $GuestRunner visual --run-id $RunId --case $Case" + $(if ($Installed) { ' --installed' } else { '' })
+    if ($Diagnostic) { $command += ' --diagnostic' }
     if ($ReopenHelperDigest) {
         if ($Case -ne 'guide-reopen' -or $ReopenHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid cold-reopen helper identity.' }
         $command += " --reopen-helper-digest $ReopenHelperDigest"
