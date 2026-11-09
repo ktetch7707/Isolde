@@ -51,7 +51,7 @@ def bundle_format(stream):
     if stream.read(5) == b"ustar":
         stream.seek(0)
         return "ustar"
-    raise ValueError("Choose a ZIP, USTAR or gzip-compressed USTAR game bundle.")
+    raise ValueError("Choose a native x86-64 Linux ELF or ZIP, USTAR or gzip-compressed USTAR game bundle.")
 
 
 def bundle_members(archive, archive_format):
@@ -161,7 +161,36 @@ def inspect_windows(source):
                 "sha256": digest.hexdigest(), "supported": False}
 
 
-def inspect(source):
+def validate_native_executable(stream, size):
+    stream.seek(0)
+    header=stream.read(64)
+    if (len(header)!=64 or header[:6]!=b"\x7fELF\x02\x01" or header[6]!=1
+            or struct.unpack_from("<H",header,16)[0] not in (2,3)
+            or struct.unpack_from("<H",header,18)[0]!=62
+            or struct.unpack_from("<I",header,20)[0]!=1):
+        raise ValueError("Choose a native x86-64 Linux ELF executable.")
+    if header[8:11] in (b"AI\x01",b"AI\x02"):
+        raise ValueError("AppImage files need a separate verified runtime and are not supported.")
+    entry,phoff=struct.unpack_from("<QQ",header,24)
+    ehsize,phentsize,phnum=struct.unpack_from("<HHH",header,52)
+    if (ehsize!=64 or phentsize!=56 or not 1<=phnum<=1024
+            or phoff<64 or phoff+phentsize*phnum>size or not entry):
+        raise ValueError("The ELF executable has an invalid program header.")
+    stream.seek(phoff)
+    executable_entry=False
+    for _ in range(phnum):
+        segment=stream.read(phentsize)
+        ptype,flags,offset,vaddr,_,filesz,memsz,_=struct.unpack("<IIQQQQQQ",segment)
+        if ptype==1:
+            if filesz>memsz or offset+filesz>size:
+                raise ValueError("The ELF executable has an invalid load segment.")
+            if flags&1 and vaddr<=entry<vaddr+filesz:
+                executable_entry=True
+    if not executable_entry:
+        raise ValueError("The ELF entry point is not in an executable load segment.")
+
+
+def inspect(source, title_hint=None):
     source = Path(source)
     if source.is_symlink():
         raise ValueError("Choose a regular portable game bundle no larger than 512 MiB.")
@@ -179,6 +208,22 @@ def inspect(source):
                 raise ValueError("The package changed during preflight. Review it again.")
             digest.update(chunk)
             remaining-=len(chunk)
+        stream.seek(0)
+        header=stream.read(4)
+        if header.startswith(b"\x7fELF"):
+            validate_native_executable(stream,before.st_size)
+            title=title_hint if title_hint is not None else source.name
+            if (not isinstance(title,str) or not title.strip() or len(title)>256
+                    or any(ord(char)<32 or 0xd800<=ord(char)<=0xdfff for char in title)
+                    or "/" in title or "\\" in title):
+                raise ValueError("The executable filename cannot be used as a game title.")
+            after=os.fstat(stream.fileno())
+            identity=lambda value: (value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns,value.st_ctime_ns)
+            if identity(before)!=identity(after):
+                raise ValueError("The executable changed during preflight. Review it again.")
+            return {"schemaVersion":1,"title":title.strip(),"platform":"PC","entrypoint":"bin/game",
+                    "entrySize":before.st_size,"archiveEntries":1,"unpackedBytes":before.st_size,
+                    "archiveSha256":digest.hexdigest(),"archiveFormat":"native-elf"}
         archive_format=bundle_format(stream)
         with open_bundle(stream,archive_format) as archive:
             members=bundle_members(archive,archive_format)
@@ -264,37 +309,45 @@ def install(source, destination, expected_sha256=None):
                 if copied_archive>MAX_ARCHIVE:raise ValueError("Choose a regular portable game bundle no larger than 512 MiB.")
                 saved.write(chunk)
             saved.flush();os.fsync(saved.fileno())
-        metadata=inspect(snapshot)
+        metadata=inspect(snapshot, title_hint=source.name)
         if expected_sha256 and metadata["archiveSha256"]!=expected_sha256:
             raise ValueError("The package changed after preflight. Review it again before installing.")
-        with snapshot.open("rb") as source_stream, open_bundle(source_stream,metadata["archiveFormat"]) as archive:
-            members=bundle_members(archive,metadata["archiveFormat"])
-            written=0
-            for member in members:
-                relative = PurePosixPath(member["name"])
-                target = stage.joinpath(*relative.parts)
-                if member["directory"]:
-                    target.mkdir(mode=0o700, parents=True, exist_ok=True)
-                    continue
-                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                if hasattr(os, "O_NOFOLLOW"):
-                    flags |= os.O_NOFOLLOW
-                descriptor = os.open(target, flags, 0o600)
-                copied=0
-                mode=member["mode"]&0o111
-                with os.fdopen(descriptor, "wb") as output, open_member(archive,member,metadata["archiveFormat"]) as input_file:
-                    while True:
-                        chunk=input_file.read(1024*1024)
-                        if not chunk:break
-                        copied+=len(chunk);written+=len(chunk)
-                        if copied>member["size"] or written>MAX_EXPANDED:
-                            raise ValueError("Portable game archive expanded beyond its declared size.")
-                        output.write(chunk)
-                    if copied!=member["size"]:raise ValueError("Portable game archive member size changed.")
-                    output.flush()
-                    os.fsync(output.fileno())
-                if mode:target.chmod(0o700)
+        if metadata["archiveFormat"]=="native-elf":
+            target=stage/"bin"/"game"
+            target.parent.mkdir(mode=0o700)
+            descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o700)
+            with os.fdopen(descriptor,"wb") as output, snapshot.open("rb") as input_file:
+                shutil.copyfileobj(input_file,output,1024*1024)
+                output.flush();os.fsync(output.fileno())
+        else:
+            with snapshot.open("rb") as source_stream, open_bundle(source_stream,metadata["archiveFormat"]) as archive:
+                members=bundle_members(archive,metadata["archiveFormat"])
+                written=0
+                for member in members:
+                    relative = PurePosixPath(member["name"])
+                    target = stage.joinpath(*relative.parts)
+                    if member["directory"]:
+                        target.mkdir(mode=0o700, parents=True, exist_ok=True)
+                        continue
+                    target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                    if hasattr(os, "O_NOFOLLOW"):
+                        flags |= os.O_NOFOLLOW
+                    descriptor = os.open(target, flags, 0o600)
+                    copied=0
+                    mode=member["mode"]&0o111
+                    with os.fdopen(descriptor, "wb") as output, open_member(archive,member,metadata["archiveFormat"]) as input_file:
+                        while True:
+                            chunk=input_file.read(1024*1024)
+                            if not chunk:break
+                            copied+=len(chunk);written+=len(chunk)
+                            if copied>member["size"] or written>MAX_EXPANDED:
+                                raise ValueError("Portable game archive expanded beyond its declared size.")
+                            output.write(chunk)
+                        if copied!=member["size"]:raise ValueError("Portable game archive member size changed.")
+                        output.flush()
+                        os.fsync(output.fileno())
+                    if mode:target.chmod(0o700)
         entry = stage.joinpath(*PurePosixPath(metadata["entrypoint"]).parts)
         if (entry.is_symlink() or not entry.is_file()
                 or entry.resolve(strict=True) != entry.absolute()

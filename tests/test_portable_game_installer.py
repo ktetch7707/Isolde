@@ -58,6 +58,97 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.archive.write_bytes(data)
         return data
 
+    def native_fixture(self):
+        source=self.root/"Independent game"
+        shutil.copyfile(Path(sys.executable).resolve(),source)
+        return source
+
+    def test_native_executable_cli_review_install_recovery_and_uninstall(self):
+        source=self.native_fixture()
+        original=source.read_bytes()
+        destination=self.root/"private"/"games"/"id"/"install"
+        helper=str(Path(__file__).parents[1]/"tools/portable-game-installer.py")
+        preview=json.loads(subprocess.run(
+            [sys.executable,helper,"--inspect","--source",str(source)],
+            check=True,capture_output=True,text=True).stdout)
+        self.assertEqual(preview["archiveFormat"],"native-elf")
+        self.assertEqual(preview["title"],source.name)
+        self.assertEqual(preview["entrypoint"],"bin/game")
+        installed=json.loads(subprocess.run(
+            [sys.executable,helper,"--install","--source",str(source),"--destination",str(destination),
+             "--expected-sha256",preview["archiveSha256"]],
+            check=True,capture_output=True,text=True).stdout)
+        self.assertEqual(installed,preview)
+        self.assertEqual((destination/"bin/game").read_bytes(),original)
+        self.assertTrue((destination/"bin/game").stat().st_mode & stat.S_IXUSR)
+        self.assertEqual(source.read_bytes(),original)
+        recovered=installer.inspect_installed(destination)
+        self.assertEqual(recovered["title"],preview["title"])
+        self.assertEqual(recovered["archiveSha256"],preview["archiveSha256"])
+        installer.prepare_uninstall(destination)
+        installer.recover_uninstall(destination)
+        installer.uninstall(destination)
+        self.assertFalse(destination.exists())
+        self.assertEqual(source.read_bytes(),original)
+
+    def test_native_executable_rejects_bad_headers_and_appimages(self):
+        source=self.native_fixture()
+        original=source.read_bytes()
+        variants=[]
+        for offset,replacement in ((4,b"\x01"),(5,b"\x02"),(16,struct.pack("<H",1)),
+                                   (18,struct.pack("<H",3)),(24,b"\0"*8),
+                                   (32,struct.pack("<Q",len(original))),
+                                   (8,b"AI\x02")):
+            data=bytearray(original);data[offset:offset+len(replacement)]=replacement
+            variants.append(data)
+        variants.append(original[:24])
+        for data in variants:
+            with self.subTest(header=data[:64]):
+                source.write_bytes(data)
+                with self.assertRaises(ValueError):
+                    installer.inspect(source)
+        source.write_bytes(original)
+        link=self.root/"linked-game";link.symlink_to(source)
+        with self.assertRaises(ValueError):installer.inspect(link)
+        with mock.patch.object(installer,"MAX_ARCHIVE",len(original)-1):
+            with self.assertRaises(ValueError):installer.inspect(source)
+        with self.assertRaises(ValueError):installer.inspect(source,title_hint="\udcff")
+
+    def test_native_install_preserves_destination_on_publication_failure(self):
+        source=self.native_fixture()
+        destination=self.root/"private"/"games"/"id"/"install"
+        def race(staging, target):
+            destination.mkdir()
+            (destination/"existing").write_bytes(b"keep")
+            return original_publish(staging,target)
+        original_publish=installer.rename_without_replace
+        with mock.patch.object(installer,"rename_without_replace",side_effect=race):
+            with self.assertRaises(OSError):
+                installer.install(source,destination,installer.inspect(source)["archiveSha256"])
+        self.assertEqual((destination/"existing").read_bytes(),b"keep")
+        self.assertFalse(destination.with_name("install.staging").exists())
+        self.assertFalse(destination.with_name("install.staging-source").exists())
+
+    def test_native_executable_changed_after_review_is_not_installed(self):
+        source=self.native_fixture()
+        preview=installer.inspect(source)
+        with source.open("ab") as output:output.write(b"changed")
+        destination=self.root/"private"/"games"/"id"/"install"
+        with self.assertRaisesRegex(ValueError,"changed after preflight"):
+            installer.install(source,destination,preview["archiveSha256"])
+        self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name("install.staging").exists())
+        self.assertFalse(destination.with_name("install.staging-source").exists())
+
+    def test_native_uninstall_preserves_modified_payload(self):
+        source=self.native_fixture()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(source,destination,installer.inspect(source)["archiveSha256"])
+        with (destination/"bin/game").open("ab") as output:output.write(b"changed")
+        with self.assertRaisesRegex(ValueError,"changed after installation"):
+            installer.uninstall(destination)
+        self.assertTrue((destination/"bin/game").exists())
+
     def test_windows_pe_preflight_is_inert_and_explicitly_unsupported(self):
         data=self.windows_fixture()
         result=installer.inspect_windows(self.archive)

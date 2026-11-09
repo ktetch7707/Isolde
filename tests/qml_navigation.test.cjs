@@ -44,6 +44,35 @@ test("pending uninstall cleanup requires the separate remote confirmation", () =
     assert.equal(scope.message, "Checking files");
 });
 
+test("standalone portable install requires remote review and confirmation", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        readOnly: false, mode: "catalogTools", choice: 4, message: "",
+        opticalObservationId: "old", opticalDevice: "old", registeringOpticalGame: true,
+        runtimes: [{id: "native", name: "Native", file: true}],
+        keyboard: {selectedIndex: -1, value: "old"},
+        library: {
+            confirmPortableInstall() { calls.push("install"); return true; },
+            portableInstallStatus: "Installing",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.equal(scope.mode, "installerRuntime");
+    assert.equal(scope.registeringOpticalGame, false);
+    assert.match(scope.message, /only the standalone file is copied/i);
+    scope.activateChoice();
+    assert.equal(scope.field, 17);
+    assert.equal(scope.mode, "keyboard");
+    assert.equal(scope.portableRuntimeId, "native");
+    assert.deepEqual(calls, []);
+    scope.mode = "installerReview";
+    scope.choice = 1;
+    scope.activateChoice();
+    assert.deepEqual(calls, ["install"]);
+    assert.equal(scope.mode, "installerInstalling");
+});
+
 test("app overflow opens All Apps while button overflow retains shortcuts", () => {
     const calls = [];
     const scope = vm.createContext({
