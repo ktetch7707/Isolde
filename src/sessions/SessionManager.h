@@ -59,7 +59,8 @@ signals:
     void returnedHome(const QString &focusId);
 
 private:
-    bool launchFileAction(const QVariantMap &action, const QString &sourceRoot);
+    bool launchFileAction(const QVariantMap &action, const QString &sourceRoot,
+                          const QString &opticalMediaId = {});
     bool launchDefinition(AppDefinition definition);
 
     AppRegistry *m_registry;

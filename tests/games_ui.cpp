@@ -1,6 +1,7 @@
 #include "games/GameLibrary.h"
 #include "games/GameEmulators.h"
 #include "games/OpticalDiscAdapter.h"
+#include "games/OpticalDiscGrants.h"
 #include <QStandardPaths>
 #include <QUuid>
 #include "app/AppRegistry.h"
@@ -37,6 +38,8 @@ private slots:
     void remoteExternalSteamAccessIsExplicitAndCancelable();
     void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
+    void opticalIdentityAndMultiDiscReferencesAreDurable();
+    void opticalApprovalsAreProfileScopedAndRevocable();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
@@ -60,6 +63,39 @@ void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval(){
     QCOMPARE(changed.value("state").toString(),QString("replaced"));
     QCOMPARE(changed.value("disc").toMap().value("observationId").toString(),replacement.value("observationId").toString());
     QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{}).value("state").toString(),QString("missing"));
+}
+void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable(){
+    auto descriptor=QByteArray(2048,'\0');
+    descriptor[0]=1;descriptor.replace(1,5,"CD001");descriptor[6]=1;
+    descriptor.replace(40,4,"DISC");
+    descriptor[80]=100;descriptor[120]=2;descriptor[124]=1;descriptor[128]=0;descriptor[129]=8;
+    descriptor.replace(190,8,"SET-1234");
+    const auto first=OpticalDiscAdapter::parseIsoVolumeDescriptor(descriptor);
+    QVERIFY(!first.isEmpty());QCOMPARE(first.value("discNumber").toInt(),1);QCOMPARE(first.value("discCount").toInt(),2);
+    const auto root=OpticalDiscAdapter::rootReference(first);
+    QVERIFY(OpticalDiscAdapter::isRootReference(root));
+    QCOMPARE(OpticalDiscAdapter::mediaIdFromRoot(root),first.value("mediaId").toString());
+    auto secondDescriptor=descriptor;secondDescriptor[124]=2;
+    const auto second=OpticalDiscAdapter::parseIsoVolumeDescriptor(secondDescriptor);
+    QCOMPARE(first.value("mediaSetId").toString(),second.value("mediaSetId").toString());
+    QVERIFY(first.value("mediaId").toString()!=second.value("mediaId").toString());
+    const auto secondRoot=OpticalDiscAdapter::rootReference(second);
+    const QVariantMap wrong{{"mediaId",second.value("mediaId")},{"mediaSetId",second.value("mediaSetId")},
+        {"discNumber",2},{"discCount",2},{"mountRoot","/media/test-disc-2"}};
+    const auto state=OpticalDiscAdapter::classifyRootReference(root,{wrong});
+    QCOMPARE(state.value("state").toString(),QString("wrong-disc"));
+    QCOMPARE(state.value("expectedDisc").toInt(),1);
+    QVERIFY(!OpticalDiscAdapter::parseIsoVolumeDescriptor(QByteArray(2048,'x')).size());
+    QVERIFY(!OpticalDiscAdapter::isRootReference(secondRoot+"/../bad"));
+}
+void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto alice=QUuid::createUuid().toString(QUuid::WithoutBraces),bob=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto identity=QString(64,'a');
+    QVERIFY(OpticalDiscGrants::authorize(alice,identity).isEmpty());
+    QVERIFY(OpticalDiscGrants::approved(alice,identity));QVERIFY(!OpticalDiscGrants::approved(bob,identity));
+    QVERIFY(OpticalDiscGrants::revoke(alice,identity).isEmpty());QVERIFY(!OpticalDiscGrants::approved(alice,identity));
+    QVERIFY(!OpticalDiscGrants::authorize(alice,"not-an-identity").isEmpty());
 }
 static void command(QObject *widget,int value) {
     QVariant result;QVERIFY(QMetaObject::invokeMethod(widget,"handleCommand",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,value)));
@@ -116,7 +152,8 @@ void GamesUiTests::remoteOpticalInspectionNeverStartsMedia(){
         command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
     }else{
         command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalDetails"));
-        command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
+        for(int i=0;i<5;++i)command(widget.data(),InputManager::NavigateDown);
+        command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
     }
     QVERIFY(dispatch.lastAction.isEmpty());
 }

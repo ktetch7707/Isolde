@@ -6,6 +6,7 @@
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
 #include "games/ManagedGamePaths.h"
+#include "games/OpticalDiscAdapter.h"
 #include <QFileInfo>
 #include <QCoreApplication>
 
@@ -144,13 +145,20 @@ bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sour
     const auto error=MediaGrants::validate(sourceRoot);
     const auto profile=qApp->property("isoldeProfile").toString();
     const bool managed=ManagedGamePaths::isInstallRoot(profile,sourceRoot);
-    if((!error.isEmpty() && !managed) || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
+    const auto opticalMediaId=input.value("opticalMediaId").toString();
+    bool optical=false;
+    for(const auto &item:OpticalDiscAdapter::mountedDiscs()){
+        const auto disc=item.toMap();
+        if(disc.value("mountRoot")==sourceRoot && disc.value("mediaId")==opticalMediaId
+            && disc.value("directPlaySupported").toBool())optical=true;
+    }
+    if((!error.isEmpty() && !managed && !optical) || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
         || !QStringList{"game","game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot+'/')
         || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target
-        || (managed && !QFileInfo(target).isExecutable())){
+        || ((managed || optical) && !QFileInfo(target).isExecutable())){
         emit sessionRejected(tr("The reviewed game folder is missing, redirected or incompatible. Review its source and retry."));return false;
     }
-    return launchFileAction(input,sourceRoot);
+    return launchFileAction(input,sourceRoot,optical?opticalMediaId:QString());
 }
 bool SessionManager::launchSteamGame(const QString &identity)
 {
@@ -163,7 +171,7 @@ bool SessionManager::launchSteamGame(const QString &identity)
     definition.launchConfiguration.remove("containment"); // Never fullscreen the Steam client instead of its game.
     return launchDefinition(definition);
 }
-bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot)
+bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot,const QString &opticalMediaId)
 {
     QString error;
     const auto action = ComponentSchema::action(input, &error);
@@ -195,6 +203,7 @@ bool SessionManager::launchFileAction(const QVariantMap &input,const QString &so
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionType"), type);
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionTarget"), target);
     if(!sourceRoot.isEmpty())actionDefinition.launchConfiguration.insert("gameSourceRoot",sourceRoot);
+    if(!opticalMediaId.isEmpty())actionDefinition.launchConfiguration.insert("opticalMediaId",opticalMediaId);
     if(ManagedGamePaths::isInstallRoot(qApp->property("isoldeProfile").toString(),sourceRoot)){
         actionDefinition.name=QFileInfo(target).completeBaseName();
         actionDefinition.launchConfiguration.insert("managedGameRoot",sourceRoot);

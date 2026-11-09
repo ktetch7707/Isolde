@@ -2,6 +2,7 @@
 #include "GameEmulators.h"
 #include "SteamLibraryGrants.h"
 #include "OpticalDiscAdapter.h"
+#include "OpticalDiscGrants.h"
 #include "ManagedGamePaths.h"
 #include <QCoreApplication>
 #include "app/AppRegistry.h"
@@ -406,15 +407,34 @@ void GameLibrary::cancelEmulatorSetup(){
     m_setupStatus="Stopping emulator setup safely. Wait before retrying.";emit setupChanged();
 }
 QString GameLibrary::checkedTarget(const QString &root, const QString &relative) {
+    QString validatedRoot=root;
+    const bool optical=OpticalDiscAdapter::isRootReference(root);
+    if(optical){
+        const auto mediaId=OpticalDiscAdapter::mediaIdFromRoot(root);
+        if(!OpticalDiscGrants::approved(m_emulatorProfile,mediaId)){
+            fail(tr("This profile has not approved that optical identity. Insert the disc and explicitly approve it in Games."));
+            return {};
+        }
+        const auto media=OpticalDiscAdapter::resolveRootReference(root);
+        const auto disc=media.value("disc").toMap();
+        if(media.value("state")!="ready"){
+            const auto number=media.value("expectedDisc").toInt();
+            fail(media.value("state")=="wrong-disc"
+                ?tr("Wrong optical disc. Insert disc %1 of %2, then retry.").arg(number).arg(media.value("discCount").toInt())
+                :tr("Insert optical disc %1 of %2, then retry.").arg(number).arg(media.value("discCount").toInt()));
+            return {};
+        }
+        validatedRoot=disc.value("mountRoot").toString();
+    }
     const auto grantError = MediaGrants::validate(root);
     const bool managed=ManagedGamePaths::isInstallRoot(m_emulatorProfile,root);
-    if (!grantError.isEmpty() && !managed) { fail(grantError); return {}; }
+    if (!optical && !grantError.isEmpty() && !managed) { fail(grantError); return {}; }
     if (relative.isEmpty() || QDir::isAbsolutePath(relative) || relative.contains('\\') || relative.contains(QChar::Null)
         || relative.size()>4096 || QDir::cleanPath(relative)!=relative || relative.split('/').contains("..")) {
         fail(tr("Choose a file inside the approved game folder.")); return {};
     }
-    const auto path = QDir(root).filePath(relative); const QFileInfo info(path);
-    if (!info.isFile() || !info.isReadable() || info.canonicalFilePath()!=path || !path.startsWith(root+'/')) {
+    const auto path = QDir(validatedRoot).filePath(relative); const QFileInfo info(path);
+    if (!info.isFile() || !info.isReadable() || info.canonicalFilePath()!=path || !path.startsWith(validatedRoot+'/')) {
         fail(tr("The game file is missing, unreadable or redirected. Reconnect its source and retry.")); return {};
     }
     return path;
@@ -1043,7 +1063,7 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
             {"root",object.value("root").toString()},{"target",object.value("target").toString()}};
         QString schemaError;if(ComponentSchema::gameRegistration(registration,&schemaError).isEmpty())return fail(schemaError);
         const auto root=registration.value("root").toString();
-        if(!root.isEmpty() && !MediaGrants::validate(root,false).isEmpty())return fail(tr("Backup refers to a game folder not authorized in this profile."));
+        if(!root.isEmpty() && !OpticalDiscAdapter::isRootReference(root) && !MediaGrants::validate(root,false).isEmpty())return fail(tr("Backup refers to a game folder not authorized in this profile."));
         if(object.value("franchise").toString()!=object.value("franchise").toString().trimmed())return fail(tr("Franchise names in the backup must be trimmed."));
         const auto installIdentity=registration.value("runtimeId").toString()+"\n"+root+"\n"+registration.value("target").toString();
         if(installations.contains(installIdentity))return fail(tr("Backup contains duplicate installation identities."));
@@ -1104,7 +1124,7 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
             {"root",object.value("root").toString()},{"target",object.value("target").toString()}};
         QString schemaError;if(ComponentSchema::gameRegistration(registration,&schemaError).isEmpty())return fail(schemaError);
         const auto root=registration.value("root").toString();
-        if(!root.isEmpty() && !MediaGrants::validate(root,false).isEmpty())return fail(tr("Backup edition refers to a game folder not authorized in this profile."));
+        if(!root.isEmpty() && !OpticalDiscAdapter::isRootReference(root) && !MediaGrants::validate(root,false).isEmpty())return fail(tr("Backup edition refers to a game folder not authorized in this profile."));
         const auto folded=registration.value("platform").toString().toCaseFolded();
         if(platforms.size()>=MaxPlatforms && !platforms.contains(folded))return fail(tr("Backup contains more than 128 platforms."));
         platforms.insert(folded);
@@ -1280,7 +1300,12 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionI
     }
     if (root.isEmpty()) return {{"type","launch-app"},{"appId",runtime}};
     const auto target=checkedTarget(root,relative); if (target.isEmpty()) return {};
-    return {{"type","open-file"},{"openWith",runtime},{"target",target},{"sourceRoot",root}};
+    const bool optical=OpticalDiscAdapter::isRootReference(root);
+    const auto media=optical?OpticalDiscAdapter::resolveRootReference(root).value("disc").toMap():QVariantMap{};
+    const auto sourceRoot=optical?media.value("mountRoot").toString():root;
+    QVariantMap action{{"type","open-file"},{"openWith",runtime},{"target",target},{"sourceRoot",sourceRoot}};
+    if(optical)action["opticalMediaId"]=media.value("mediaId");
+    return action;
 }
 bool GameLibrary::installationExists(const QString &runtime,const QString &root,const QString &target) {
     QSqlQuery query(m_db);
@@ -1384,6 +1409,65 @@ QVariantMap GameLibrary::revalidateOpticalDisc(const QString &observationId,cons
         || !QRegularExpression("^/dev/sr[0-9]{1,3}$").match(device).hasMatch())
         return {{"schemaVersion",1},{"state","invalid"}};
     return OpticalDiscAdapter::revalidate(observationId,device);
+}
+QString GameLibrary::registerOpticalGame(const QString &title,const QString &runtimeId,
+                                         const QString &relativeExecutable,const QString &observationId,
+                                         const QString &device){
+    if(!m_ready || !compatibleRuntime(runtimeId,true)){fail(tr("Choose an installed file-based game runtime."));return {};}
+    if(title.trimmed().isEmpty() || title!=title.trimmed() || title.size()>256){fail(tr("Enter a game title."));return {};}
+    const auto media=revalidateOpticalDisc(observationId,device);
+    if(media.value("state")!="ready"){fail(tr("Optical media changed. Refresh disc details and review it again."));return {};}
+    const auto disc=media.value("disc").toMap();
+    const auto root=OpticalDiscAdapter::rootReference(disc);
+    if(root.isEmpty() || !disc.value("directPlaySupported").toBool()){
+        fail(tr("This disc has no readable ISO identity. Direct Play is supported only for identified ISO9660 discs."));return {};
+    }
+    const auto grantError=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
+    if(!grantError.isEmpty()){fail(grantError);return {};}
+    const auto target=checkedTarget(root,relativeExecutable);
+    if(target.isEmpty())return {};
+    QFile executable(target);
+    if(!QFileInfo(target).isExecutable() || !executable.open(QIODevice::ReadOnly)
+        || executable.read(20).left(4)!=QByteArray("\x7f""ELF",4)){
+        fail(tr("Choose a native Linux ELF executable on the selected disc. Installers and scripts are not run."));return {};
+    }
+    const QVariantMap registration{{"schemaVersion",1},{"title",title},{"platform","PC Optical"},
+        {"runtimeId",runtimeId},{"root",root},{"target",relativeExecutable}};
+    QSqlQuery related(m_db);
+    related.prepare("SELECT id FROM games WHERE title=? AND root LIKE ?");
+    related.addBindValue(title);
+    related.addBindValue("/__isolde_optical__/%/"+disc.value("mediaSetId").toString()+"/%");
+    if(!related.exec()){fail(related.lastError().text());return {};}
+    if(related.next()){
+        const auto gameId=related.value(0).toString();related.finish();
+        return addEdition(gameId,registration).isEmpty()?QString():gameId;
+    }
+    return addGame(registration);
+}
+bool GameLibrary::approveOpticalMedia(const QString &observationId,const QString &device){
+    if(!m_ready)return fail(tr("Games is unavailable."));
+    const auto media=revalidateOpticalDisc(observationId,device);
+    const auto disc=media.value("disc").toMap();
+    if(media.value("state")!="ready" || !disc.value("directPlaySupported").toBool())
+        return fail(tr("Only a currently mounted ISO9660 disc with a readable identity can be approved."));
+    const auto error=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
+    if(!error.isEmpty())return fail(error);
+    m_error.clear();emit errorChanged();return true;
+}
+bool GameLibrary::revokeOpticalMedia(const QString &observationId,const QString &device){
+    if(!m_ready)return fail(tr("Games is unavailable."));
+    const auto media=revalidateOpticalDisc(observationId,device);
+    const auto disc=media.value("disc").toMap();
+    if(media.value("state")!="ready")return fail(tr("The disc changed. Refresh optical details before revoking its access."));
+    const auto error=OpticalDiscGrants::revoke(m_emulatorProfile,disc.value("mediaId").toString());
+    if(!error.isEmpty())return fail(error);
+    m_error.clear();emit errorChanged();return true;
+}
+bool GameLibrary::ejectOpticalDisc(const QString &device){
+    if(!m_ready)return fail(tr("Games is unavailable."));
+    QString error;
+    if(!OpticalDiscAdapter::eject(device,&error))return fail(error);
+    m_error.clear();emit errorChanged();return true;
 }
 bool GameLibrary::beginPortableInstall(const QString &source,const QString &runtimeId,
                                        const QString &opticalObservationId,const QString &opticalDevice){

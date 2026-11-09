@@ -19,5 +19,5 @@ public:
                                     const QString &executable, const QProcessEnvironment &host,
                                     const QString &actionTarget = {}, const QString &storageRoot = {},
                                     const QString &emulatorRuntime = {}, const QString &gameSourceRoot = {}, const QString &steamGameId = {},
-                                    const QString &managedGameRoot = {});
+                                    const QString &managedGameRoot = {}, const QString &opticalMediaId = {});
 };

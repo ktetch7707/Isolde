@@ -55,6 +55,12 @@ public:
     Q_INVOKABLE bool removeSteamLibrary(const QString &path);
     Q_INVOKABLE QVariantList mountedOpticalDiscs() const;
     Q_INVOKABLE QVariantMap revalidateOpticalDisc(const QString &observationId, const QString &device) const;
+    Q_INVOKABLE QString registerOpticalGame(const QString &title, const QString &runtimeId,
+                                             const QString &relativeExecutable,
+                                             const QString &observationId, const QString &device);
+    Q_INVOKABLE bool approveOpticalMedia(const QString &observationId, const QString &device);
+    Q_INVOKABLE bool revokeOpticalMedia(const QString &observationId, const QString &device);
+    Q_INVOKABLE bool ejectOpticalDisc(const QString &device);
     bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
     QString portableInstallStatus() const { return m_portableInstallStatus; }
     QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }

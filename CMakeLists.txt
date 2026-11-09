@@ -23,7 +23,9 @@ add_library(isolde_core STATIC
     src/games/GameLibrary.cpp
     src/games/SteamLibraryGrants.cpp
     src/games/OpticalDiscAdapter.cpp
+    src/games/OpticalDiscGrants.cpp
     src/games/ManagedGamePaths.cpp
+    src/games/OpticalDiscGrants.h
     src/games/GameLibrary.h
     src/games/GameEmulators.cpp
     src/games/GameEmulators.h

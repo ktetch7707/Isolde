@@ -1,4 +1,4 @@
-# Portable game installer support boundary
+# Portable game installer and optical workflow boundary
 
 The Games page supports one deliberately narrow independent local-install format: an inert ZIP bundle containing `isolde-game.json` with `schemaVersion`, `title`, `platform` and a relative `entrypoint`. The entry point must be a Linux ELF file. Preflight inspects metadata and the ELF header without executing archive contents. Install requires a separate confirmation showing the selected installed file runtime and new profile-private destination.
 
@@ -6,7 +6,11 @@ The helper enforces a 512 MiB archive limit, 10,000-member limit and 2 GiB total
 
 Play resolves the registered relative entry point through the selected installed native file runtime. The package tree is mounted read-only in the game session; profile storage remains isolated. The title still runs as user-supplied executable code after the explicit install and Play actions, so the user must trust its source.
 
-The optical page can now revalidate a selected mounted ISO9660/UDF observation and offer this same explicit bundle-install flow from a read-only optical mount. The installer snapshots the source to a private staging file and compares its SHA-256 with preflight before extraction; the mount is revalidated before the user confirms installation. Incomplete copies are rejected, while a fully verified private copy remains usable if the disc is removed afterward. This is not a general PC-disc workflow: direct disc Play, persistent media-set identity/association, missing-original-disc prompts, multi-disc progression, eject/busy handling and owned safe uninstall are still unimplemented.
+The optical page observes mounted read-only ISO9660/UDF volumes without autorun. ISO9660 primary volume descriptors provide a durable descriptor fingerprint and volume-set/disc sequence; changing mountpoint or drive does not change it. This is not a full-disc content hash or hardware serial and cannot distinguish bit-identical copies or detect arbitrary changes outside the descriptor. UDF remains inspection/eject only. Per-profile approvals are stored separately and can be explicitly revoked without deleting catalog entries or disc contents.
+
+An approved ISO can register an executable relative path for direct Play. Only executable native Linux ELF files are accepted; the exact media ID and profile grant are checked at catalog registration, Play resolution, session launch and sandbox preparation. The read-only disc tree is exposed only for the session. A same-set disc can be registered as another edition. If the expected disc is absent or another disc in the set is mounted, Play reports the expected number and requires the user to retry; no automatic launch or disc swap occurs. Eject requests a normal UDisks unmount/eject and never forces a busy drive. Removing an optical catalog entry leaves the disc and all saves untouched.
+
+The optical flow is not yet a full commercial disc-install lifecycle: no arbitrary vendor setup program, compatibility-runtime installer, DRM/activation bypass, in-game hot-swap continuation or UDF direct launch is claimed. If UDisks reports a busy mount, close the process using it and retry safe eject.
 
 Not supported by this installer: arbitrary `.exe`/Windows installers, scripts, self-extracting installers, network installers, compatibility-runtime setup, dependency resolution, DRM/activation bypass, disk imaging, or automatic installer execution. A general third-party installer flow and original-disc install/play lifecycle remain T30.7/T30.8 coding gaps. No universal compatibility, gameplay, remote-only third-party setup, native build or physical-disc qualification is claimed here.
 

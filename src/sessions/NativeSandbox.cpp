@@ -3,6 +3,7 @@
 #include "games/GameEmulators.h"
 #include "games/SteamLibraryGrants.h"
 #include "games/ManagedGamePaths.h"
+#include "games/OpticalDiscAdapter.h"
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -39,7 +40,8 @@ bool privateDirectory(const QString &path)
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
-                                        const QString &gameSourceRoot, const QString &steamGameId, const QString &managedGameRoot)
+                                        const QString &gameSourceRoot, const QString &steamGameId, const QString &managedGameRoot,
+                                        const QString &opticalMediaId)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -229,7 +231,13 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             if(!gameSourceRoot.isEmpty()){
                 const auto error=MediaGrants::validate(gameSourceRoot);
                 const bool managed=ManagedGamePaths::isInstallRoot(profileId,gameSourceRoot);
-                if((!error.isEmpty() && !managed) || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
+                bool optical=false;
+                for(const auto &disc:OpticalDiscAdapter::mountedDiscs()){
+                    const auto value=disc.toMap();
+                    if(value.value("mountRoot")==gameSourceRoot && value.value("mediaId")==opticalMediaId
+                        && value.value("directPlaySupported").toBool())optical=true;
+                }
+                if((!error.isEmpty() && !managed && !optical) || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
                     || (!managed && (inside(base,gameSourceRoot) || inside(gameSourceRoot,base)))){
                     plan.error="The reviewed game folder is unavailable or redirected. Review it in Games and retry.";return plan;
                 }

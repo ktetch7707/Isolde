@@ -348,7 +348,8 @@ void DesktopSession::launch()
         resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString(), {},
         definition().launchConfiguration.value("emulatorRuntime").toString(),
         definition().launchConfiguration.value("gameSourceRoot").toString(),steamGame,
-        definition().launchConfiguration.value("managedGameRoot").toString());
+        definition().launchConfiguration.value("managedGameRoot").toString(),
+        definition().launchConfiguration.value("opticalMediaId").toString());
     if (!sandbox.error.isEmpty()) {
         setError(sandbox.error);
         setState(State::Exited);
