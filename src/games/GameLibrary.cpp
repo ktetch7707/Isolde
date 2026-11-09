@@ -1,6 +1,7 @@
 #include "GameLibrary.h"
 #include "GameEmulators.h"
 #include "SteamLibraryGrants.h"
+#include "OpticalDiscAdapter.h"
 #include <QCoreApplication>
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
@@ -1291,6 +1292,9 @@ bool GameLibrary::removeSteamLibrary(const QString &path) {
     const auto error=SteamLibraryGrants::save(m_emulatorProfile,libraries);
     if(!error.isEmpty())return fail(error);
     m_error.clear();emit errorChanged();emit changed();return true;
+}
+QVariantList GameLibrary::mountedOpticalDiscs() const {
+    return m_ready ? OpticalDiscAdapter::mountedDiscs() : QVariantList{};
 }
 bool GameLibrary::beginImport(const QString &root,const QString &runtime,const QString &platform) {
     if(!m_ready || scanning() || m_importReady)return fail(tr("Finish or cancel the current import first."));

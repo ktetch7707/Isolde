@@ -18,6 +18,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QImage>
+#include <QRegularExpression>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -33,6 +34,8 @@ class GamesUiTests : public QObject {
 private slots:
     void remoteSteamImportCanCancelReviewAndPlay();
     void remoteExternalSteamAccessIsExplicitAndCancelable();
+    void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
+    void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
     void remoteEditCanCancelAndApplyWithoutMouse();
@@ -72,6 +75,39 @@ void GamesUiTests::remoteExternalSteamAccessIsExplicitAndCancelable(){
     command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);
     QCOMPARE(widget->property("mode").toString(),QString("catalogTools"));QVERIFY(library.steamLibraries().isEmpty());
     qApp->setProperty("isoldeProfile",QVariant());
+}
+void GamesUiTests::mountedOpticalDiscoveryUsesTypedReadOnlyObservations(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    const auto discs=library.mountedOpticalDiscs();QVERIFY(discs.size()<=4);
+    for(const auto &value:discs){
+        const auto disc=value.toMap();
+        QCOMPARE(disc.value("schemaVersion").toInt(),1);
+        QCOMPARE(disc.value("sourceType").toString(),QString("pc-optical-disc"));
+        QVERIFY(QRegularExpression("^[0-9a-f]{64}$").match(disc.value("observationId").toString()).hasMatch());
+        QVERIFY(disc.value("device").toString().startsWith("/dev/sr"));
+        QVERIFY(disc.value("mountRoot").toString().startsWith("/"));
+        QVERIFY(disc.value("readOnly").toBool());
+        QCOMPARE(disc.value("state").toString(),QString("mounted"));
+    }
+}
+void GamesUiTests::remoteOpticalInspectionNeverStartsMedia(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    for(int i=0;i<12;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("catalogTools"));
+    for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown);
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
+    QVERIFY(dispatch.lastAction.isEmpty());
+    const auto discs=library.mountedOpticalDiscs();
+    if(discs.isEmpty()){
+        command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
+    }else{
+        command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalDetails"));
+        command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
+    }
+    QVERIFY(dispatch.lastAction.isEmpty());
 }
 void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);

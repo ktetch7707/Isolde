@@ -14,11 +14,12 @@ This change extends the profile-owned Games catalog and its shared library widge
 - Added profile-local managed cover artwork (schema v6): remote import reads only a profile-approved PNG/JPEG, validates image size/dimensions, normalizes it to private content-addressed PNG, and renders it on the shared game cards. Clearing/replacing artwork never edits the source file.
 - Added profile-local JSON catalog export v3 with embedded artwork and explicit-confirmation restore (v1/v2 archives remain supported). Archives are byte/record bounded and validated before replacement; imports retain media-folder grants, verify identity/collection references, preserve a private SQLite recovery copy, and transactionally replace catalog references.
 - Added profile-local approval and remote management for up to eight external Steam libraries under `/media` or `/mnt`. Approved folders mount read-only in isolated Steam sessions; discovery and direct launch use only those grants, and revocation leaves files/catalog entries untouched.
+- Added a typed, bounded read-only observation list for mounted ISO9660/UDF PC optical volumes, surfaced through the remote Games tools. The observation hash is explicitly not a durable media-set identity; no autorun, install, play, or eject is implemented by this inspection-only slice.
 - Added native/offscreen regression coverage for case-insensitive filters, Favorites, Continue views, metadata validation/search, smart and manual collection edits/order, archive rejection/restore and remote platform selection.
 
 ## Not delivered / verification boundary
 
-The Games catalog now has a conservative external Steam library approval/mount path, but local installers, typed optical-disc handling, complete emulator/platform lifecycle guarantees, and the 5,000-entry installed VM matrix remain open. The Steam path and catalog code do not claim gameplay or hardware acceptance.
+The Games catalog now has a conservative external Steam library approval/mount path and an inspection-only optical volume observer. Local installers, typed optical-disc identity/install/play/eject workflows, complete emulator/platform lifecycle guarantees, and the 5,000-entry installed VM matrix remain open. These changes do not claim gameplay or hardware acceptance.
 
 The environment has no CMake/CTest, Qt, or C++ compiler, so the new C++/QML regression target could not be built or run here. Verify this code on the owning build before treating its focused regression as passing. This is deferred verification, not a coding blocker.
 

@@ -50,6 +50,7 @@ public:
     Q_INVOKABLE QStringList steamLibraries() const;
     Q_INVOKABLE bool addSteamLibrary(const QString &path);
     Q_INVOKABLE bool removeSteamLibrary(const QString &path);
+    Q_INVOKABLE QVariantList mountedOpticalDiscs() const;
     int importCount() const { return m_preview.size(); }
     bool importReady() const { return m_importReady; }
     Q_INVOKABLE bool beginImport(const QString &root, const QString &runtimeId, const QString &platform);
