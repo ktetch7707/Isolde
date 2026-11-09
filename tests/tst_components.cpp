@@ -134,6 +134,10 @@ void ComponentTests::steamGamesUseProviderIdentityAndReviewedImport(){
     QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),1);const auto id=library.page()[0].toMap().value("id").toString();
     auto registration=library.registration(id);QCOMPARE(registration.value("target").toString(),QString("42"));QVERIFY(registration.value("root").toString().isEmpty());
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("sourceKind").toString(),QString("steam-app"));
+    QCOMPARE(provenance.value("origin").toString(),QString("steam-import"));
+    QCOMPARE(provenance.value("sourceReference").toString(),QString("42"));
     QCOMPARE(library.resolveLaunch(id),QVariantMap({{"type","steam-game"},{"steamAppId","42"}}));
     QVERIFY(library.setFavorite(id,true));registration["title"]="My corrected title";QVERIFY(library.updateGame(id,registration));
     QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
@@ -295,8 +299,12 @@ void ComponentTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
     QVERIFY(QFile::remove(root+"/nested/b.iso"));QVERIFY(!library.commitImport());QVERIFY(library.page().isEmpty());
     writeFile(root+"/nested/b.iso","b");QVERIFY(library.commitImport());QCOMPARE(library.page().size(),2);
     const auto id=library.page()[0].toMap().value("id").toString();auto corrected=library.registration(id);corrected["title"]="Manual correction";QVERIFY(library.updateGame(id,corrected));
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("sourceKind").toString(),QString("external-folder"));
+    QCOMPARE(provenance.value("origin").toString(),QString("folder-import"));
     QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY(library.importReady());QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),2);QCOMPARE(library.details(id).value("title").toString(),QString("Manual correction"));
+    QCOMPARE(library.details(id).value("acquisitionProvenance").toMap(),provenance);
     QVERIFY(library.beginImport(root,"psp-test","PSP"));library.invalidate();QVERIFY(!library.scanning());QVERIFY(!library.commitImport());
     QCOMPARE(readFile(root+"/a.iso"),QByteArray("a"));QCOMPARE(readFile(root+"/nested/b.iso"),QByteArray("b"));
 }
