@@ -379,6 +379,7 @@ QVariantList GameLibrary::emulators() const {
         value["registered"]=compatibleRuntime(value.value("id").toString(),true);result.append(value);
     }return result;
 }
+QVariantMap GameLibrary::emulatorCoverage() const { return GameEmulators::coverage(); }
 QVariantMap GameLibrary::emulatorSettings(const QString &id){
     if(!m_ready){fail(tr("This games profile is no longer active."));return {};}
     QString error;const auto value=GameEmulators::settings(m_emulatorProfile,id,&error);if(value.isEmpty())fail(error);return value;

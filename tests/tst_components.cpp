@@ -19,6 +19,7 @@
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QSettings>
+#include <QSet>
 #include <QFile>
 #include <QDir>
 #include <QJsonDocument>
@@ -58,6 +59,7 @@ private slots:
     void gamesFolderImportIsReviewedAtomicAndCancelable();
     void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
     void gamesCuratedPackagesBindThroughRealCatalog();
+    void emulatorManifestIsBoundedAndVersioned();
     void emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData();
     void studioSafetyVersionsAreBoundedReversibleAndProfileScoped();
     void studioSafetyArchiveFailureRetainsDraftForRetry();
@@ -216,6 +218,20 @@ void ComponentTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData
     QVERIFY(GameEmulators::home("../other","ppsspp").isEmpty());QVERIFY(GameEmulators::home(first,"unknown").isEmpty());
     // This unique test profile is under Qt's test storage only.
     QVERIFY(QDir(QFileInfo(home).absolutePath()).removeRecursively());
+}
+void ComponentTests::emulatorManifestIsBoundedAndVersioned(){
+    const auto runtimes=GameEmulators::definitions();QCOMPARE(runtimes.size(),7);
+    QSet<QString> ids,platforms;
+    for(const auto &entry:runtimes){
+        const auto runtime=entry.toMap();const auto id=runtime.value("id").toString();
+        QVERIFY(!id.isEmpty());QVERIFY(!ids.contains(id));ids.insert(id);
+        QVERIFY(!runtime.value("packages").toStringList().isEmpty());
+        QVERIFY(!runtime.value("formats").toStringList().isEmpty());
+        for(const auto &platform:runtime.value("platforms").toStringList())platforms.insert(platform);
+    }
+    QCOMPARE(platforms,QSet<QString>({"PSP","GameCube","Wii","PlayStation 2","NES","Game Boy","Game Boy Color","Game Boy Advance","SNES"}));
+    QVERIFY(GameEmulators::definition("xbox-360").isEmpty());
+    QVERIFY(GameEmulators::definition("pcsx2").value("firmwareRequired").toBool());
 }
 void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");

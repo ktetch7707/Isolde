@@ -270,6 +270,9 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
     for(int i=0;i<8;++i)command(widget.data(),InputManager::NavigateRight);
     command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulators"));
+    QVERIFY(library.emulatorCoverage().value("integratedPlatforms").toList().contains("PSP"));
+    QVERIFY(library.emulatorCoverage().value("notIntegrated").toList().contains("Xbox 360"));
+    QVERIFY(widget->property("message").toString().contains("Xbox 360"));
     command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));
     const auto file=GameEmulators::home(profile,"ppsspp")+"/.config/isolde-emulator/settings.json";
     command(widget.data(),InputManager::Confirm);QVERIFY(!QFileInfo::exists(file)); // default Cancel

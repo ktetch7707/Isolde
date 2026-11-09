@@ -126,7 +126,7 @@ Item {
         message=""
         const tool=tools[toolbar]
         if(tool==="Add game"){beginAdd();return}
-        if(tool==="Emulator setup"){mode="emulators";choice=0;message="Choose a console runtime. Settings and saves belong only to this Isolde profile. Games and firmware are not downloaded.";return}
+        if(tool==="Emulator setup"){mode="emulators";choice=0;var coverage=library?library.emulatorCoverage:{};var target=coverage.target || ({});message="Integrated: "+(coverage.integratedPlatforms || []).join(", ")+". Not integrated: "+(coverage.notIntegrated || []).join(", ")+". Target: "+(target.os || "unknown")+" "+(target.version || "")+" "+(target.architectures || []).join(", ")+". Runtime availability does not guarantee game compatibility, controller mapping or performance. Settings and saves are profile-private; games and firmware are never downloaded.";return}
         if(tool==="Import folder"){beginAdd(true);return}
         if(tool==="Search"){beginField(4);return}
         if(tool==="Previous"){offset=Math.max(0,offset-50);selectedId="";selected=-1;reload();return}
@@ -139,11 +139,11 @@ Item {
     }
     function activateChoice(){
         if(mode==="emulators"){
-            if(choice===emulators.length){mode=library.setupBusy?"emulatorInstallStatus":"emulatorInstallReview";choice=0;message=library.setupBusy?library.setupStatus:"Install PPSSPP, Dolphin, PCSX2, RetroArch and the listed console cores? This downloads runtime software and uses appliance storage. No games or firmware are included. Existing saves are preserved.";return}
+            if(choice===emulators.length){mode=library.setupBusy?"emulatorInstallStatus":"emulatorInstallReview";choice=0;message=library.setupBusy?library.setupStatus:"Install the pinned runtimes and cores for the declared Ubuntu 26.04 amd64 integration matrix? This downloads runtime software and uses appliance storage. No game, account or firmware is included. Existing saves are preserved; installation does not certify game compatibility.";return}
             const emulator=emulators[choice];if(!emulator)return
             emulatorId=emulator.id;emulatorDraft=library.emulatorSettings(emulatorId);firmwareDraft=""
             if(!emulatorDraft.schemaVersion){message=library.errorString;return}
-            mode="emulatorSettings";choice=4;message=emulator.name+" · "+(emulator.installed?"Runtime installed":"Runtime installation required")+" · "+(emulator.registered?"Available for Games":"Use Install / repair emulators to make this runtime available")
+            mode="emulatorSettings";choice=4;message=emulator.name+" · "+(emulator.installed?"Runtime installed":"Runtime installation required")+" · "+(emulator.registered?"Available for Games":"Use Install / repair emulators to make this runtime available")+". Integration status is not a gameplay or physical-controller claim."+(emulator.firmwareRequired?" Import your own compatible firmware; Isolde will store a private copy and never download it.":"")
             return
         }
         if(mode==="emulatorInstallReview"){

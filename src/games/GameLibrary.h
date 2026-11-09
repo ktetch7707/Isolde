@@ -18,6 +18,7 @@ class GameLibrary final : public QObject {
     Q_PROPERTY(bool ready READ ready NOTIFY changed)
     Q_PROPERTY(QVariantList runtimes READ runtimes NOTIFY changed)
     Q_PROPERTY(QVariantList emulators READ emulators NOTIFY changed)
+    Q_PROPERTY(QVariantMap emulatorCoverage READ emulatorCoverage CONSTANT)
     Q_PROPERTY(bool setupBusy READ setupBusy NOTIFY setupChanged)
     Q_PROPERTY(QString setupStatus READ setupStatus NOTIFY setupChanged)
     Q_PROPERTY(bool scanning READ scanning NOTIFY importChanged)
@@ -34,6 +35,7 @@ public:
     QString errorString() const { return m_error; }
     QVariantList runtimes() const;
     QVariantList emulators() const;
+    QVariantMap emulatorCoverage() const;
     Q_INVOKABLE QVariantMap emulatorSettings(const QString &runtimeId);
     Q_INVOKABLE bool configureEmulator(const QString &runtimeId, const QVariantMap &options, const QString &firmware = {});
     void setCatalog(AppCatalog *catalog) { m_catalog=catalog; }
