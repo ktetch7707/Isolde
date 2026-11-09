@@ -19,6 +19,10 @@ import uuid
 MAX_GAMES = 5000
 
 
+class SessionCanceled(Exception):
+    pass
+
+
 def app_id(value):
     if not isinstance(value, str) or not re.fullmatch(r"[1-9][0-9]{0,9}", value) or int(value) > 4294967295:
         raise ValueError("Invalid Steam game identity")
@@ -196,7 +200,7 @@ def verify_installed(home, identity, external=()):
     return matches[0]
 
 
-def matching_processes(variable, value, proc=Path("/proc")):
+def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_client=False):
     result = []
     entries = 0
     for entry in proc.iterdir():
@@ -206,20 +210,29 @@ def matching_processes(variable, value, proc=Path("/proc")):
         try:
             with (entry/"environ").open("rb") as stream: environment = stream.read(65537)
             if len(environment) > 65536: continue
-            if (variable+"="+value).encode() in environment.split(b"\0"):
+            fields = environment.split(b"\0")
+            if token is not None and ("ISOLDE_STEAM_SESSION="+token).encode() not in fields: continue
+            if exclude_client:
+                executable = os.path.basename(os.readlink(entry/"exe")).lower()
+                if executable in ("steam", "steam.sh", "steamwebhelper", "steamservice", "steam-runtime-launcher-service"):
+                    continue
+            if (variable+"="+value).encode() in fields:
                 if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] != "Z": result.append(int(entry.name))
         except (OSError, ValueError, IndexError): continue
     return result
 
 
-def game_processes(identity, proc=Path("/proc")):
-    return matching_processes("SteamAppId",identity,proc)
+def game_processes(identity, proc=Path("/proc"), token=None):
+    # Both names occur in Steam/Proton environments. Neither is entitlement
+    # proof, and a tagged third-party launcher may still precede the game.
+    return sorted(set(matching_processes("SteamAppId",identity,proc,token,True)
+                      + matching_processes("SteamGameId",identity,proc,token,True)))
 
 
-def stop_owned_session(token):
+def signal_owned_processes(pids, token):
     # A unique inherited environment token, in addition to the private PID
     # namespace, prevents shutdown commands from reaching an existing client.
-    for pid in matching_processes("ISOLDE_STEAM_SESSION",token):
+    for pid in pids:
         if pid<=1: continue
         descriptor=None
         try:
@@ -230,7 +243,19 @@ def stop_owned_session(token):
         except (ProcessLookupError,FileNotFoundError): pass
         finally:
             if descriptor is not None:os.close(descriptor)
-    deadline=time.monotonic()+1.5
+
+
+def wait_until_gone(processes, timeout, clock=time.monotonic, sleep=time.sleep):
+    deadline=clock()+timeout
+    while clock()<deadline:
+        if not processes(): return True
+        sleep(.05)
+    return not processes()
+
+
+def stop_owned_session(token):
+    signal_owned_processes(matching_processes("ISOLDE_STEAM_SESSION",token), token)
+    deadline=time.monotonic()+3
     while time.monotonic()<deadline:
         if not matching_processes("ISOLDE_STEAM_SESSION",token):return
         time.sleep(.05)
@@ -240,9 +265,9 @@ def wait_for_game(identity, launcher, timeout=120, clock=time.monotonic, sleep=t
     deadline = clock()+timeout
     while clock() < deadline:
         if processes(identity): return
-        if launcher.poll() not in (None, 0): raise RuntimeError("Steam could not start this game. Check sign-in, ownership and updates in Steam")
+        if launcher.poll() not in (None, 0): raise RuntimeError("Steam could not start this game. Check the active account, ownership, connection and updates in Steam, then retry")
         sleep(.25)
-    raise RuntimeError("Steam did not start this game within two minutes. Check sign-in, installation and compatibility, then retry")
+    raise RuntimeError("Steam did not start this game within two minutes. Check the active account, offline availability, installation and compatibility in Steam, then retry")
 
 
 def launch(identity, external=()):
@@ -253,25 +278,44 @@ def launch(identity, external=()):
     binary = Path("/usr/games/steam")
     if not binary.is_file() or not os.access(binary, os.X_OK): raise ValueError("Install or repair Steam in the Isolde Store")
     # HOME, /tmp, IPC, PID view and bus all belong to NativeSandbox.
-    def stopped(signum, frame): raise InterruptedError("Steam game launch canceled")
-    signal.signal(signal.SIGTERM, stopped)
-    signal.signal(signal.SIGINT, stopped)
+    def stopped(signum, frame): raise SessionCanceled()
+    previous_term = signal.signal(signal.SIGTERM, stopped)
+    previous_int = signal.signal(signal.SIGINT, stopped)
     token=uuid.uuid4().hex
-    launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
+    processes = lambda game: game_processes(game, token=token)
+    started = False
+    canceled = False
     try:
-        wait_for_game(identity, launcher)
-        print("STEAM_GAME_STARTED "+identity, file=sys.stderr, flush=True)
+        launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
+        wait_for_game(identity, launcher, processes=processes)
+        started = True
+        print("STEAM_GAME_PROCESS_OBSERVED "+identity, file=sys.stderr, flush=True)
         missing = None
         while True:
-            if game_processes(identity): missing = None
+            if processes(identity): missing = None
             elif missing is None: missing = time.monotonic()
             elif time.monotonic()-missing >= 3: break
             time.sleep(.25)
+    except SessionCanceled:
+        canceled = True
     finally:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        stop_owned_session(token)
+        try:
+            if canceled:
+                signal_owned_processes(processes(identity), token)
+                stopped = wait_until_gone(lambda: processes(identity), 5)
+            else:
+                stopped = started
+            # Give Steam a bounded opportunity to process game exit and sync before
+            # ending its private client. This is not a cloud-sync confirmation.
+            if stopped:
+                time.sleep(3)
+            stop_owned_session(token)
+        finally:
+            signal.signal(signal.SIGTERM, previous_term)
+            signal.signal(signal.SIGINT, previous_int)
         # No global Steam IPC shutdown. NativeSandbox teardown is the final
         # boundary for descendants that discard the token. Cloud sync is not
         # promised by this direct-launch adapter.

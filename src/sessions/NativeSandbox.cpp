@@ -303,7 +303,9 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         bind(helper,"/run/emulator-session.py");bind(manifest,"/run/game-runtimes.json");
         // The packaged script accepts identities, never commands from a game.
     }
-    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--" << executable;
+    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host";
+    if(!steamGameId.isEmpty()) args << "--steam-session";
+    args << "--" << executable;
     plan.environment.insert("PATH", "/usr/bin:/bin");
     plan.environment.insert("LANG", host.value("LANG", "C.UTF-8"));
     return plan;

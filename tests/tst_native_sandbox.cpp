@@ -20,6 +20,7 @@ private slots:
     void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
     void processTreeDiesWithLauncher();
     void gracefulExitFlushesAppState();
+    void steamHostAllowsDelayedGracefulExit();
     void normalExitRemovesDetachedChildren();
     void invalidIdentityAndSymlinkAreRefused();
     void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
@@ -46,6 +47,13 @@ void NativeSandboxTests::steamAdapterCannotAttachToHostGameProcesses(){
     QProcess outside;auto outsideEnv=env;outsideEnv.insert("SteamAppId","42");outside.setProcessEnvironment(outsideEnv);
     outside.start("/usr/bin/python3",{"-c","import time; time.sleep(20)"});QVERIFY(outside.waitForStarted());
     const auto plan=NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");QVERIFY2(plan.error.isEmpty(),qPrintable(plan.error));
+    QVERIFY(plan.arguments.contains("--steam-session"));
+    const auto otherPlan=NativeSandbox::prepare(bob,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");
+    QVERIFY(otherPlan.error.isEmpty());
+    QVERIFY(otherPlan.homeDirectory!=plan.homeDirectory);
+    QFile profileSave(plan.homeDirectory+"/steam-save");
+    QVERIFY(profileSave.open(QIODevice::WriteOnly)); QCOMPARE(profileSave.write("private"),qint64(7)); profileSave.close();
+    QCOMPARE(run(otherPlan,"import pathlib; print(pathlib.Path.home().joinpath('steam-save').exists())"),QByteArray("False\n"));
     QCOMPARE(run(plan,"import runpy; m=runpy.run_path('/run/steam-games.py'); print(m['game_processes']('42'))"),QByteArray("[]\n"));
     QCOMPARE(run(plan,"import subprocess; p=subprocess.run(['/usr/bin/python3','/run/steam-games.py','--launch','42'],capture_output=True); assert p.returncode==2 and b'Steam game:' in p.stderr; print('missing-game-refused')"),QByteArray("missing-game-refused\n"));
     QVERIFY(outside.state()!=QProcess::NotRunning);outside.terminate();QVERIFY(outside.waitForFinished());
@@ -216,6 +224,28 @@ void NativeSandboxTests::gracefulExitFlushesAppState()
     QFile saved(plan.homeDirectory + "/saved");
     QVERIFY(saved.open(QIODevice::ReadOnly));
     QCOMPARE(saved.readAll(), QByteArray("saved"));
+}
+
+void NativeSandboxTests::steamHostAllowsDelayedGracefulExit()
+{
+    QTemporaryDir storage;
+    const auto ready=storage.filePath("ready");
+    const auto saved=storage.filePath("saved");
+    QProcess process;
+    process.start(QCoreApplication::applicationDirPath()+"/isolde-native-host",
+        {"--steam-session","--","/usr/bin/python3","-c",
+         "import pathlib,signal,sys,time\n"
+         "def stop(*args):\n time.sleep(2.5); pathlib.Path(sys.argv[2]).write_text('saved'); sys.exit(0)\n"
+         "signal.signal(signal.SIGTERM,stop)\n"
+         "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+         "while True: time.sleep(.1)\n",ready,saved});
+    QVERIFY(process.waitForStarted());
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(ready), 5000);
+    process.write("quit\n");
+    QVERIFY(process.waitForFinished(7000));
+    QCOMPARE(process.exitCode(),0);
+    QFile file(saved); QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(),QByteArray("saved"));
 }
 
 void NativeSandboxTests::normalExitRemovesDetachedChildren()

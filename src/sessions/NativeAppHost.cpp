@@ -21,6 +21,8 @@ int main(int argc, char **argv)
     ::signal(SIGPIPE,SIG_IGN);
     #endif
     auto arguments = app.arguments();
+    const bool steamSession = arguments.size()>1 && arguments.at(1)=="--steam-session";
+    if(steamSession) arguments.removeAt(1);
     QVariantMap remoteAppearance;
     if(arguments.size()>3 && arguments.at(1)=="--web-remote"){
         if(arguments.at(2).size()>16384)return 2;
@@ -48,7 +50,7 @@ int main(int argc, char **argv)
 #else
         child.terminate();
 #endif
-        QTimer::singleShot(2000, &app, [&] {
+        QTimer::singleShot(steamSession ? 14000 : 2000, &app, [&] {
 #ifdef Q_OS_UNIX
             if (child.state() != QProcess::NotRunning) ::kill(-pid_t(childGroup), SIGKILL);
 #else

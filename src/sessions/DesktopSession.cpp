@@ -441,7 +441,8 @@ void DesktopSession::stopProcess()
     if (m_launcher.state() != QProcess::NotRunning) {
         m_launcher.write("quit\n");
         m_launcher.waitForBytesWritten(500);
-        if (!m_launcher.waitForFinished(4000)) {
+        const auto timeout = definition().launchConfiguration.contains("steamGameId") ? 18000 : 4000;
+        if (!m_launcher.waitForFinished(timeout)) {
             m_launcher.kill();
             m_launcher.waitForFinished(3000);
         }

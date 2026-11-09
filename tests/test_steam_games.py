@@ -7,7 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 spec=importlib.util.spec_from_file_location("steam_games",Path(__file__).parents[1]/"tools/steam-games.py")
 steam=importlib.util.module_from_spec(spec);spec.loader.exec_module(steam)
@@ -88,6 +88,137 @@ class SteamGamesTests(unittest.TestCase):
         launcher.poll.return_value=1
         with self.assertRaisesRegex(RuntimeError,"could not start"):
             steam.wait_for_game("42",launcher,clock=lambda:0,processes=lambda _:[])
+
+    def test_process_identity_requires_launch_token_and_ignores_client(self):
+        proc=self.home.parent/"proc";proc.mkdir()
+        def process(pid, executable, *fields, state="S"):
+            entry=proc/str(pid);entry.mkdir()
+            (entry/"environ").write_bytes(b"\0".join(s.encode() for s in fields)+b"\0")
+            (entry/"stat").write_text(f"{pid} (fixture) {state} 0")
+            (entry/"exe").symlink_to("/fixture/"+executable)
+        process(100,"game","SteamAppId=42","ISOLDE_STEAM_SESSION=ours")
+        process(101,"launcher","SteamGameId=42","ISOLDE_STEAM_SESSION=ours")
+        process(102,"game","SteamAppId=42","ISOLDE_STEAM_SESSION=other")
+        process(103,"steamwebhelper","SteamAppId=42","ISOLDE_STEAM_SESSION=ours")
+        process(104,"game","SteamAppId=43","ISOLDE_STEAM_SESSION=ours")
+        process(105,"game","SteamAppId=42","ISOLDE_STEAM_SESSION=ours",state="Z")
+        self.assertEqual(steam.game_processes("42",proc,token="ours"),[100,101])
+
+    def test_grace_period_tolerates_launcher_handoff_and_retries(self):
+        elapsed=[0.0]
+        def sleep(seconds): elapsed[0]+=seconds
+        launcher=Mock();launcher.poll.return_value=0
+        with self.assertRaisesRegex(RuntimeError,"did not start"):
+            steam.wait_for_game("42",launcher,timeout=1,clock=lambda:elapsed[0],sleep=sleep,processes=lambda _:[])
+        steam.wait_for_game("42",launcher,timeout=1,clock=lambda:elapsed[0],sleep=sleep,processes=lambda _: [42])
+
+    def test_cancel_stops_game_before_client_and_preserves_profile_save(self):
+        save=self.home/"save.dat";save.write_bytes(b"local save")
+        events=[]
+        def cancel(*args, **kwargs): raise steam.SessionCanceled()
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), \
+             patch.object(Path,"is_file",return_value=True), \
+             patch.object(steam.os,"access",return_value=True), \
+             patch.object(steam.subprocess,"Popen",return_value=Mock()) as start, \
+             patch.object(steam,"wait_for_game",side_effect=cancel), \
+             patch.object(steam,"game_processes",return_value=[123]), \
+             patch.object(steam,"signal_owned_processes",side_effect=lambda p,t: events.append(("game",p,t))), \
+             patch.object(steam,"wait_until_gone",side_effect=lambda p,t: events.append(("wait",t)) or True), \
+             patch.object(steam.time,"sleep",side_effect=lambda t: events.append(("sync-grace",t))), \
+             patch.object(steam,"stop_owned_session",side_effect=lambda t: events.append(("client",t))):
+            steam.launch("42")
+        token=start.call_args.kwargs["env"]["ISOLDE_STEAM_SESSION"]
+        self.assertEqual(events,[("game",[123],token),("wait",5),("sync-grace",3),("client",token)])
+        self.assertEqual(save.read_bytes(),b"local save")
+
+    def test_denial_fails_and_does_not_claim_game_started(self):
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), \
+             patch.object(Path,"is_file",return_value=True), \
+             patch.object(steam.os,"access",return_value=True), \
+             patch.object(steam.subprocess,"Popen",return_value=Mock()), \
+             patch.object(steam,"wait_for_game",side_effect=RuntimeError("Check sign-in and ownership")), \
+             patch.object(steam,"stop_owned_session") as stop, \
+             patch.object(steam.time,"sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError,"ownership"): steam.launch("42")
+            stop.assert_called_once()
+            sleep.assert_not_called()
+
+    def test_running_session_survives_short_handoff_and_waits_for_client_sync(self):
+        elapsed=[0.0]; events=[]
+        def sleep(seconds): elapsed[0]+=seconds; events.append(("sleep",seconds))
+        def processes(identity, token=None):
+            events.append(("probe",round(elapsed[0],2),token))
+            return [123] if elapsed[0]<.5 or 2<=elapsed[0]<3 else []
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), \
+             patch.object(Path,"is_file",return_value=True), \
+             patch.object(steam.os,"access",return_value=True), \
+             patch.object(steam.subprocess,"Popen",return_value=Mock(poll=lambda:0)) as start, \
+             patch.object(steam,"game_processes",side_effect=processes), \
+             patch.object(steam.time,"monotonic",side_effect=lambda:elapsed[0]), \
+             patch.object(steam.time,"sleep",side_effect=sleep), \
+             patch.object(steam,"stop_owned_session",side_effect=lambda token: events.append(("client",token))):
+            steam.launch("42")
+        token=start.call_args.kwargs["env"]["ISOLDE_STEAM_SESSION"]
+        probes=[e for e in events if e[0]=="probe"]
+        self.assertTrue(any(e[1]>=3 for e in probes))
+        self.assertTrue(all(e[2]==token for e in probes))
+        self.assertGreaterEqual(elapsed[0],9)
+        self.assertEqual(events[-2:],[("sleep",3),("client",token)])
+
+    def test_unresponsive_game_does_not_receive_a_false_sync_grace(self):
+        events=[]
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), \
+             patch.object(Path,"is_file",return_value=True), \
+             patch.object(steam.os,"access",return_value=True), \
+             patch.object(steam.subprocess,"Popen",return_value=Mock()), \
+             patch.object(steam,"wait_for_game",side_effect=steam.SessionCanceled()), \
+             patch.object(steam,"game_processes",return_value=[123]), \
+             patch.object(steam,"signal_owned_processes"), \
+             patch.object(steam,"wait_until_gone",return_value=False), \
+             patch.object(steam.time,"sleep",side_effect=lambda t: events.append(t)), \
+             patch.object(steam,"stop_owned_session") as stop:
+            steam.launch("42")
+            self.assertEqual(events,[])
+            stop.assert_called_once()
+
+    @unittest.skipUnless(hasattr(os,"pidfd_open") and hasattr(steam.signal,"pidfd_send_signal"),"Linux pidfds")
+    def test_cancel_real_tagged_process_flushes_save_without_touching_other_session(self):
+        save=self.home/"saved"; ready=self.home/"ready"
+        script=("import pathlib,signal,time,sys\n"
+                "signal.signal(signal.SIGTERM,lambda *_: (pathlib.Path(sys.argv[1]).write_text('saved'),sys.exit(0)))\n"
+                "pathlib.Path(sys.argv[2]).write_text('ready')\n"
+                "while True: time.sleep(.05)\n")
+        real_popen=subprocess.Popen
+        unrelated=real_popen([sys.executable,"-c","import time; time.sleep(20)"],env=dict(os.environ,SteamAppId="42",ISOLDE_STEAM_SESSION="other"))
+        children=[]
+        def start(*args, **kwargs):
+            env=kwargs["env"];env["SteamAppId"]="42"
+            child=real_popen([sys.executable,"-c",script,str(save),str(ready)],env=env)
+            children.append(child);return child
+        def cancel(*args, **kwargs):
+            deadline=time.monotonic()+3
+            while not ready.exists() and time.monotonic()<deadline: time.sleep(.02)
+            self.assertTrue(ready.exists())
+            raise steam.SessionCanceled()
+        try:
+            with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+                 patch.object(Path,"home",return_value=self.home), \
+                 patch.object(Path,"is_file",return_value=True), \
+                 patch.object(steam.os,"access",return_value=True), \
+                 patch.object(steam.subprocess,"Popen",side_effect=start), \
+                 patch.object(steam,"wait_for_game",side_effect=cancel):
+                steam.launch("42")
+            children[0].wait(timeout=3)
+            self.assertEqual(save.read_text(),"saved")
+            self.assertIsNone(unrelated.poll())
+        finally:
+            for child in children+[unrelated]:
+                if child.poll() is None: child.terminate()
+                child.wait(timeout=3)
 
     @unittest.skipUnless(Path("/proc/self/environ").exists(),"Linux process environment")
     def test_process_probe_matches_only_requested_game_identity(self):
