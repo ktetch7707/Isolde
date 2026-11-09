@@ -22,6 +22,7 @@ private slots:
     void explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
     void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
     void managedExecutableUsesSandboxPathAndRejectsChangedContent();
+    void pendingManagedUninstallRecoveryPreservesConflicts();
     void processTreeDiesWithLauncher();
     void gracefulExitFlushesAppState();
     void normalExitRemovesDetachedChildren();
@@ -190,6 +191,21 @@ void NativeSandboxTests::managedExecutableUsesSandboxPathAndRejectsChangedConten
     QFile changed(target);QVERIFY(changed.open(QIODevice::WriteOnly|QIODevice::Truncate));changed.write("#!/bin/sh\n");changed.close();
     QVERIFY(!NativeSandbox::prepare(alice,"fixture",target,env,target,storage.path(),{},root,{},root).error.isEmpty());
     QVERIFY(!NativeSandbox::prepare(alice,"fixture","/usr/bin/true",env,{},storage.path(),{},root,{}, {},QString(64,'a')).error.isEmpty());
+    QVERIFY(QDir(parent).removeRecursively());
+    QStandardPaths::setTestModeEnabled(false);
+}
+
+void NativeSandboxTests::pendingManagedUninstallRecoveryPreservesConflicts(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto parent=ManagedGamePaths::gamesRoot(alice)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto root=parent+"/install",pending=root+".uninstall-pending";
+    QVERIFY(QDir().mkpath(pending));
+    QFile marker(pending+"/.isolde-install.json");QVERIFY(marker.open(QIODevice::WriteOnly));marker.write("{}");marker.close();
+    QVERIFY(ManagedGamePaths::recoverPendingUninstall(alice,root).isEmpty());
+    QVERIFY(QFileInfo::exists(root+"/.isolde-install.json"));QVERIFY(!QFileInfo::exists(pending));
+    QVERIFY(QDir().mkpath(pending));
+    QVERIFY(!ManagedGamePaths::recoverPendingUninstall(alice,root).isEmpty());
+    QVERIFY(QFileInfo::exists(root+"/.isolde-install.json"));QVERIFY(QFileInfo::exists(pending));
     QVERIFY(QDir(parent).removeRecursively());
     QStandardPaths::setTestModeEnabled(false);
 }

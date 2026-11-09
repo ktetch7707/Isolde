@@ -181,6 +181,45 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.assertTrue((destination/"bin/game").is_file())
         self.assertFalse(any(path.name.startswith(".isolde-uninstalling-") for path in destination.parent.iterdir()))
 
+    def test_prepared_uninstall_can_be_recovered_before_catalog_commit(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        self.assertFalse(destination.exists())
+        self.assertTrue((pending/"bin/game").is_file())
+        installer.recover_uninstall(destination)
+        self.assertTrue((destination/"bin/game").is_file())
+        self.assertFalse(pending.exists())
+
+    def test_staged_uninstall_refuses_conflicts_and_modified_contents(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        destination.mkdir()
+        (destination/"user-data").write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"still present"):
+            installer.finalize_uninstall(destination)
+        with self.assertRaisesRegex(ValueError,"existing installation"):
+            installer.recover_uninstall(destination)
+        self.assertEqual((destination/"user-data").read_bytes(),b"keep")
+        shutil.rmtree(destination)
+        (pending/"unowned").write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"unowned"):
+            installer.finalize_uninstall(destination)
+        self.assertEqual((pending/"unowned").read_bytes(),b"keep")
+
+    def test_atomic_no_replace_preserves_existing_destination(self):
+        source=self.root/"source";source.mkdir();(source/"data").write_bytes(b"source")
+        destination=self.root/"destination";destination.mkdir()
+        with self.assertRaises(OSError):
+            installer.rename_without_replace(source,destination)
+        self.assertEqual((source/"data").read_bytes(),b"source")
+        self.assertTrue(destination.is_dir())
+
     def test_rejects_traversal_symlinks_duplicates_non_elf_and_bad_manifest(self):
         self.package(extra=[("../escape",b"unsafe")])
         with self.assertRaises(ValueError):installer.inspect(self.archive)

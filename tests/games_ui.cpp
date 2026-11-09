@@ -2,6 +2,7 @@
 #include "games/GameEmulators.h"
 #include "games/OpticalDiscAdapter.h"
 #include "games/OpticalDiscGrants.h"
+#include "games/ManagedGamePaths.h"
 #include <QStandardPaths>
 #include <QUuid>
 #include "app/AppRegistry.h"
@@ -45,6 +46,7 @@ private slots:
     void opticalApprovalsAreProfileScopedAndRevocable();
     void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
     void ejectRefusesWhileSessionIsActive();
+    void catalogRecoversStagedUninstallOnReopen();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
@@ -61,6 +63,30 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::catalogRecoversStagedUninstallOnReopen(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previous=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    qApp->setProperty("isoldeProfile",profile);
+    const auto parent=ManagedGamePaths::gamesRoot(profile)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto cleanup=qScopeGuard([&]{QDir(parent).removeRecursively();qApp->setProperty("isoldeProfile",previous);QStandardPaths::setTestModeEnabled(false);});
+    const auto root=parent+"/install",pending=root+".uninstall-pending";
+    QVERIFY(QDir().mkpath(pending));
+    QFile marker(pending+"/.isolde-install.json");QVERIFY(marker.open(QIODevice::WriteOnly));marker.write("{}");marker.close();
+    QFile payload(pending+"/game");QVERIFY(payload.open(QIODevice::WriteOnly));payload.write("keep");payload.close();
+    QTemporaryDir dbdir;AppRegistry apps;const auto path=dbdir.filePath("games.sqlite");
+    {GameLibrary initial(path,&apps);QVERIFY(initial.ready());}
+    {
+        auto db=QSqlDatabase::addDatabase("QSQLITE","uninstall-recovery-test");db.setDatabaseName(path);QVERIFY(db.open());
+        QSqlQuery query(db);query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,0)");
+        for(const auto &value:QStringList{"game-test","Fixture","PC","local-test",root,"game"})query.addBindValue(value);
+        QVERIFY(query.exec());db.close();
+    }
+    QSqlDatabase::removeDatabase("uninstall-recovery-test");
+    {GameLibrary reopened(path,&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));}
+    QVERIFY(QFileInfo::exists(root+"/game"));QVERIFY(!QFileInfo::exists(pending));
+    QFile restored(root+"/game");QVERIFY(restored.open(QIODevice::ReadOnly));QCOMPARE(restored.readAll(),QByteArray("keep"));
 }
 void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval(){
     const QVariantMap old{{"schemaVersion",1},{"observationId",QString(64,'a')},{"device","/dev/sr0"},{"mountRoot","/media/disc-a"},{"state","mounted"}};

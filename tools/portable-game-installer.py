@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install bounded, inert Isolde portable-game bundles; never execute archive content."""
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -11,7 +12,6 @@ import sys
 import signal
 import tarfile
 import zipfile
-import uuid
 
 MAX_ENTRIES = 10000
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
@@ -284,13 +284,9 @@ def install(source, destination, expected_sha256=None):
     print(json.dumps(metadata, ensure_ascii=False))
 
 
-def uninstall(root):
-    def interrupted(signum, frame):
-        raise InterruptedError("Uninstallation canceled")
-    signal.signal(signal.SIGTERM, interrupted)
-    signal.signal(signal.SIGINT, interrupted)
+def verify_install(root, expected_name):
     root = Path(root)
-    if (root.name != "install" or root.is_symlink() or not root.is_dir()
+    if (root.name != expected_name or root.is_symlink() or not root.is_dir()
             or root.resolve(strict=True) != root.absolute()):
         raise ValueError("Choose a verified Isolde-managed install folder.")
     marker = root / ".isolde-install.json"
@@ -355,15 +351,73 @@ def uninstall(root):
             raise ValueError("An installed file changed after installation; nothing was deleted.")
     if ".isolde-install.json" not in {path.name for path in root.iterdir()}:
         raise ValueError("The install ownership marker changed; files were preserved.")
-    quarantine = root.with_name(".isolde-uninstalling-" + str(uuid.uuid4()))
-    os.replace(root, quarantine)
+
+
+def sync_directory(path):
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
-        shutil.rmtree(quarantine)
-    except Exception:
-        if not root.exists() and quarantine.exists():
-            os.replace(quarantine, root)
-        raise
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def rename_without_replace(source, destination):
+    libc = ctypes.CDLL(None, use_errno=True)
+    rename = getattr(libc, "renameat2", None)
+    if rename is None:
+        raise OSError("Atomic no-replace rename is unavailable; files were preserved.")
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    rename.restype = ctypes.c_int
+    if rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(destination))
+
+
+def prepare_uninstall(root, report=True):
+    root = Path(root)
+    pending = root.with_name("install.uninstall-pending")
+    if pending.exists() or pending.is_symlink():
+        raise ValueError("A previous uninstall needs recovery; existing files were preserved.")
+    verify_install(root, "install")
+    rename_without_replace(root, pending)
+    sync_directory(root.parent)
+    if report:
+        print(json.dumps({"schemaVersion": 1, "staged": True}))
+
+
+def recover_uninstall(root):
+    root = Path(root)
+    pending = root.with_name("install.uninstall-pending")
+    if root.name != "install" or root.exists() or root.is_symlink():
+        raise ValueError("Cannot restore over an existing installation.")
+    verify_install(pending, "install.uninstall-pending")
+    rename_without_replace(pending, root)
+    sync_directory(root.parent)
+    print(json.dumps({"schemaVersion": 1, "restored": True}))
+
+
+def finalize_uninstall(root):
+    root = Path(root)
+    if root.name != "install":
+        raise ValueError("Choose a verified Isolde-managed install folder.")
+    pending = root.with_name("install.uninstall-pending")
+    if root.exists() or root.is_symlink():
+        raise ValueError("The installation is still present; nothing was deleted.")
+    verify_install(pending, "install.uninstall-pending")
+    shutil.rmtree(pending)
+    sync_directory(root.parent)
     print(json.dumps({"schemaVersion": 1, "removed": True}))
+
+
+def uninstall(root):
+    prepare_uninstall(root, report=False)
+    try:
+        finalize_uninstall(root)
+    except Exception:
+        pending = Path(root).with_name("install.uninstall-pending")
+        if not Path(root).exists() and pending.exists():
+            rename_without_replace(pending, root)
+        raise
 
 
 def main():
@@ -372,6 +426,9 @@ def main():
     group.add_argument("--inspect", action="store_true")
     group.add_argument("--install", action="store_true")
     group.add_argument("--uninstall", action="store_true")
+    group.add_argument("--prepare-uninstall", action="store_true")
+    group.add_argument("--finalize-uninstall", action="store_true")
+    group.add_argument("--recover-uninstall", action="store_true")
     parser.add_argument("--source")
     parser.add_argument("--destination")
     parser.add_argument("--root")
@@ -382,10 +439,17 @@ def main():
             parser.error("--inspect requires --source")
         result = inspect(args.source)
         print(json.dumps(result, ensure_ascii=False))
-    elif args.uninstall:
+    elif args.uninstall or args.prepare_uninstall or args.finalize_uninstall or args.recover_uninstall:
         if not args.root:
             parser.error("--uninstall requires --root")
-        uninstall(args.root)
+        if args.prepare_uninstall:
+            prepare_uninstall(args.root)
+        elif args.finalize_uninstall:
+            finalize_uninstall(args.root)
+        elif args.recover_uninstall:
+            recover_uninstall(args.root)
+        else:
+            uninstall(args.root)
     else:
         if not args.destination or not args.source:
             parser.error("--install requires --source and --destination")
