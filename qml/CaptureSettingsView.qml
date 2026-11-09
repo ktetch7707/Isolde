@@ -72,6 +72,9 @@ Item {
         resetDraft()
         captureController.stopPreview()
     }
+    function keepSelectedRowVisible() {
+        optionList.positionViewAtIndex(selectedIndex, ListView.Contain)
+    }
     function deviceName(devices, id, fallback) {
         for (let i = 0; i < devices.length; ++i)
             if (devices[i].id === id) return devices[i].name + (devices[i].formats ? " · " + devices[i].formats : "")
@@ -173,6 +176,7 @@ Item {
         }
         else captureController.stopPreview()
     }
+    onSelectedIndexChanged: keepSelectedRowVisible()
 
     Row {
         anchors.fill: parent

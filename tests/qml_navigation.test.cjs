@@ -110,6 +110,16 @@ test("disconnected saved capture devices can be cleared or replaced", () => {
     assert.equal(scope.draft.serialPortName, "ttyUSB0");
 });
 
+test("capture settings keep remote focus on screen through the last editor rows", () => {
+    const calls = [], scope = vm.createContext({
+        selectedIndex: 14, ListView: {Contain: "contain"},
+        optionList: {positionViewAtIndex: (...args) => calls.push(args)},
+    });
+    method("CaptureSettingsView.qml", "keepSelectedRowVisible", scope);
+    scope.keepSelectedRowVisible();
+    assert.deepEqual(calls, [[14, "contain"]]);
+});
+
 test("capture session preserves selection for retry after a failed switch", () => {
     const calls = [], inputManager = {back: 1, home: 2, navigateLeft: 3, navigateRight: 4, confirm: 5};
     let succeeds = false;
