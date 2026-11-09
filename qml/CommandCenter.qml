@@ -81,14 +81,14 @@ Item {
         const text = query.trim()
         if (!open || text.length < 2) {
             invalidateMediaSearch()
-            if (onlineDiscovery) onlineDiscovery.cancel()
+            if (onlineDiscovery) onlineDiscovery.clearResults()
             return
         }
         if (!webSearchEnabled) {
             // T28.4: Network denial when web search is switched OFF —
             // cancel any provider-mediated search and remain on local results only.
             invalidateMediaSearch()
-            if (onlineDiscovery) onlineDiscovery.cancel()
+            if (onlineDiscovery) onlineDiscovery.clearResults()
             return
         }
         if (onlineDiscovery) onlineDiscovery.search(text)
@@ -231,12 +231,16 @@ Item {
             regionKeyboardOpen = false
             mediaSearchTimer.stop()
             invalidateMediaSearch()
-            if (onlineDiscovery) onlineDiscovery.cancel()
+            if (onlineDiscovery) onlineDiscovery.clearResults()
         }
     }
-    onQueryChanged: if (open) mediaSearchTimer.restart()
+    onQueryChanged: {
+        if (!open) return
+        if (query.trim().length < 2 && onlineDiscovery) onlineDiscovery.clearResults()
+        mediaSearchTimer.restart()
+    }
     onWebSearchEnabledChanged: {
-        if (!webSearchEnabled && onlineDiscovery) onlineDiscovery.cancel()
+        if (!webSearchEnabled && onlineDiscovery) onlineDiscovery.clearResults()
         else if (open) mediaSearchTimer.restart()
     }
 

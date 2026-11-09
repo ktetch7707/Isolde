@@ -41,6 +41,7 @@ public:
     Q_INVOKABLE QUrl providerLaunchUrl(int providerId) const;
     Q_INVOKABLE bool launchProvider(int providerId);
     Q_INVOKABLE void cancel();
+    Q_INVOKABLE void clearResults();
 
 signals:
     void changed();

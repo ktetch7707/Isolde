@@ -138,8 +138,7 @@ void OnlineDiscovery::search(const QString &query)
     }
     const QString term = query.trimmed();
     if (term.size() < 2 || term.size() > 200) {
-        cancel();
-        m_results.clear();
+        clearResults();
         m_status = term.size() > 200 ? QStringLiteral("Search is limited to 200 characters.")
                                      : QStringLiteral("Type at least 2 characters for online discovery.");
         emit changed();
@@ -359,4 +358,18 @@ void OnlineDiscovery::cancel()
     for (const auto &reply : pending)
         if (reply) reply->abort();
     m_busy = false;
+}
+
+void OnlineDiscovery::clearResults()
+{
+    cancel();
+    m_results.clear();
+    m_availability.clear();
+    if (!enabled())
+        m_status = QStringLiteral("Web search is off. Local results only.");
+    else if (!configured())
+        m_status = QStringLiteral("TMDB read token is not configured; no external request was sent.");
+    else
+        m_status = QStringLiteral("Online discovery results cleared.");
+    emit changed();
 }

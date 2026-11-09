@@ -262,14 +262,28 @@ void T14Tests::discoveryIsOptInRegionAwareAndDoesNotClaimEntitlement()
     QCOMPARE(QUrlQuery(serviceRoute).queryItemValue(QStringLiteral("q")), QStringLiteral("Dune"));
     QVERIFY(!discovery.providerLaunchUrl(999).isValid());
 
+    discovery.search(QStringLiteral("D"));
+    QVERIFY(discovery.results().isEmpty());
+    QVERIFY(discovery.availability().isEmpty());
+    QCOMPARE(requests, 2);
+    QVERIFY(discovery.status().contains(QStringLiteral("2 characters")));
+
     holdNext = true;
     discovery.search(QStringLiteral("Dune"));
     QTRY_COMPARE(requests, 3);
-    settings.setWebEnabled(false);
+    QVERIFY(discovery.busy());
+    discovery.clearResults();
     QVERIFY(!discovery.busy());
     QVERIFY(discovery.results().isEmpty());
     QVERIFY(discovery.availability().isEmpty());
     QTest::qWait(100);
+    QCOMPARE(requests, 3);
+
+    settings.setWebEnabled(false);
+    QVERIFY(!discovery.busy());
+    QVERIFY(discovery.results().isEmpty());
+    QVERIFY(discovery.availability().isEmpty());
+    QVERIFY(discovery.status().contains(QStringLiteral("Web search is off")));
     QCOMPARE(requests, 3);
     settings.setWebEnabled(true);
     OnlineDiscovery unconfigured(&settings, nullptr, api, {});
