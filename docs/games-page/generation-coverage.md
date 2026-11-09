@@ -26,6 +26,8 @@ Every delivered route must support TV-remote selection/setup/launch, Xbox-contro
 
 The project must not mark this expanded target complete while required generations have no verified route. Modern-console integration may depend on hardware, owned software/firmware and capabilities outside Isolde's control. Record those constraints explicitly; do not silently reduce the target to the currently integrated systems or imply that every commercial title works.
 
+The N64 route remains excluded until the exact Ubuntu 26.04 core package/version, authenticated package metadata, installed core path, and lawful gameplay/input fixture are verified. The current development environment had no network access to the official package archive, so this change deliberately does not guess or add an unverified dependency.
+
 ## Enforced catalog budgets
 
 The shared `GameResourceLimits.h` contract is surfaced through the Games emulator-coverage API and shown in the remote setup screen. Current bounds are 50,000 catalog entries, 50 entries per page, 128 platforms, 256 collections, 32 editions per game including its primary registration, 1,600,000 retained provenance rows, 32 MiB per catalog archive, 128 MiB of artwork expanded during one restore, and a 512 MiB profile artwork store. These are software/resource ceilings, not performance or target-machine acceptance claims. The catalog code and its tests consume the same constants so the visible matrix does not advertise separate, drift-prone numbers.

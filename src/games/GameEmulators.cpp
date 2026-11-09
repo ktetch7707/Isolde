@@ -90,6 +90,16 @@ QVariantList GameEmulators::definitions(){
             || !QDir::isAbsolutePath(item.value("binary").toString()) || packages.isEmpty()
             || platforms.isEmpty() || formats.isEmpty() || item.value("firmwareRequired").metaType().id()!=QMetaType::Bool
             || (item.contains("core") && !QDir::isAbsolutePath(item.value("core").toString())))return {};
+        const QSet<QString> packageSet(packages.cbegin(),packages.cend());
+        if(engine=="retroarch"){
+            int corePackages=0;
+            for(const auto &package:packages)if(package.startsWith("libretro-"))++corePackages;
+            if(!item.contains("core") || !packageSet.contains("retroarch") || corePackages!=1)return {};
+        }else{
+            const QSet<QString> expectedPackage=engine=="ppsspp"?QSet<QString>{"isolde-ppsspp"}
+                :engine=="dolphin"?QSet<QString>{"dolphin-emu"}:QSet<QString>{"pcsx2"};
+            if(item.contains("core") || packageSet!=expectedPackage)return {};
+        }
         ids.insert(id);
         for(const auto &package:packages)if(!QRegularExpression("^[a-z0-9][a-z0-9+.-]{0,80}$").match(package).hasMatch())return {};
         for(const auto &format:formats)if(!QRegularExpression("^[a-z0-9]{1,8}$").match(format).hasMatch())return {};

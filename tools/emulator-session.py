@@ -61,6 +61,17 @@ def definitions(path):
                 or not Path(item.get("binary", "")).is_absolute()
                 or ("core" in item and (not isinstance(item["core"],str) or not Path(item["core"]).is_absolute()))):
             raise ValueError("Invalid emulator capability entry")
+        packages = set(item["packages"])
+        if item["engine"] == "retroarch":
+            if ("core" not in item or "retroarch" not in packages
+                    or len([name for name in packages if name.startswith("libretro-")]) != 1):
+                raise ValueError("RetroArch routes must bind one pinned libretro core")
+        elif ("core" in item or packages != {
+                "ppsspp": {"isolde-ppsspp"},
+                "dolphin": {"dolphin-emu"},
+                "pcsx2": {"pcsx2"},
+            }[item["engine"]]):
+            raise ValueError("Emulator route packages do not match its engine")
         result[item["id"]] = item
     coverage = document["generationCoverage"]
     if (not isinstance(coverage,dict) or set(coverage) != {"integratedPlatforms", "notIntegrated"}

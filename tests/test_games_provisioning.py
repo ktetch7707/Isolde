@@ -479,6 +479,8 @@ class EmulatorAdapterTests(unittest.TestCase):
         self.assertIn("Original Xbox",document["generationCoverage"]["notIntegrated"])
         self.assertEqual(set(document["generationCoverage"]["integratedPlatforms"]),
             {platform for runtime in document["runtimes"] for platform in runtime["platforms"]})
+        declared={name for runtime in document["runtimes"] for name in runtime["packages"]}
+        self.assertEqual(declared,set(games.emulator_package_pins()))
         for runtime in document["runtimes"]:
             self.assertTrue(runtime["packages"])
             self.assertTrue(runtime["formats"])
@@ -494,6 +496,22 @@ class EmulatorAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"manifest.json";path.write_text(json.dumps(document))
             with self.assertRaisesRegex(ValueError,"capability entry"):adapter.definitions(path)
+
+    def test_manifest_requires_engine_specific_pinned_core_packages(self):
+        manifest=Path(__file__).parents[1]/"config/game-runtimes.json"
+        original=json.loads(manifest.read_text())
+        mutations=(
+            lambda doc: doc["runtimes"][3].pop("core"),
+            lambda doc: doc["runtimes"][3]["packages"].remove("libretro-nestopia"),
+            lambda doc: doc["runtimes"][0].update(core="/usr/lib/untrusted.so"),
+            lambda doc: doc["runtimes"][0]["packages"].append("unverified-emulator"),
+        )
+        for mutate in mutations:
+            document=json.loads(json.dumps(original));mutate(document)
+            with self.subTest(document=document["runtimes"][0]), tempfile.TemporaryDirectory() as directory:
+                path=Path(directory)/"manifest.json";path.write_text(json.dumps(document))
+                with self.assertRaisesRegex(ValueError,"route|core"):
+                    adapter.definitions(path)
 
     def test_provisioned_runtime_fingerprint_binds_manifest_executable_and_core(self):
         manifest_hash,routes=games.inspect_runtimes({name:{"ready":True} for name in games.PACKAGES})

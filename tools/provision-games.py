@@ -192,7 +192,12 @@ def runtime_manifest():
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     path=Path(__file__).with_name("game-runtimes.json")
     if not path.exists():path=Path(__file__).parents[1]/"config/game-runtimes.json"
-    return path,module.definitions(path)
+    runtimes=module.definitions(path)
+    declared={name for runtime in runtimes.values() for name in runtime["packages"]}
+    pinned=set(PACKAGES)-{"supertux"}
+    if declared!=pinned:
+        raise ValueError("Runtime manifest package set does not match the pinned provisioning set")
+    return path,runtimes
 
 
 def file_hash(path):
