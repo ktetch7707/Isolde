@@ -16,10 +16,10 @@ Window {
         commandCenter.themeOrigin = ""
         kodiLibrary.themeOrigin = ""
         store.themeOrigin = ""
+        allApps.clearLaunchAttempt()
     })
     property bool ambientActive: false
     readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !allApps.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
-    property bool galleryLaunchPending: false
     property var galleryReturnPageState: null
     property bool searchFromGallery: false
     property string launchErrorText: ""
@@ -74,6 +74,7 @@ Window {
     }
 
     function closeAllAppsToOrigin(originId) {
+        allApps.clearLaunchAttempt()
         allApps.open = false
         const pageState = galleryReturnPageState
         galleryReturnPageState = null
@@ -90,6 +91,8 @@ Window {
         commandCenter.open=false
         if(tvGuide.open){guideController.cancel();tvGuide.open=false}
         sessionManager.goHome()
+        allApps.clearLaunchAttempt()
+        allApps.open=false
         if(homeLayout.homePageId)pageSurface.showPage(homeLayout.homePageId,"",true)
         else if(pageSurface.open)pageSurface.closeAll()
     }
@@ -379,25 +382,13 @@ Window {
                     else allApps.feedback = ""
                 }
                 onLaunchRequested: appId => {
-                    galleryLaunchPending = true
-                    if (actionDispatcher.dispatch({type:"launch-app",appId:appId},"all-apps"))
-                        allApps.open = false
-                    else
-                        galleryLaunchPending = false
+                    allApps.dispatchFromGallery(actionDispatcher, {type:"launch-app",appId:appId})
                 }
                 onStoreRequested: {
-                    galleryLaunchPending = true
-                    if (actionDispatcher.dispatch({type:"launch-app",appId:"app-store"},"all-apps"))
-                        allApps.open = false
-                    else
-                        galleryLaunchPending = false
+                    allApps.dispatchFromGallery(actionDispatcher, {type:"launch-app",appId:"app-store"})
                 }
                 onSettingsRequested: {
-                    galleryLaunchPending = true
-                    if (actionDispatcher.dispatch({type:"settings",section:-1},"all-apps"))
-                        allApps.open = false
-                    else
-                        galleryLaunchPending = false
+                    allApps.dispatchFromGallery(actionDispatcher, {type:"settings",section:-1})
                 }
                 onCloseRequested: origin => {
                     if (!origin) window.showDesignatedHome()
@@ -427,33 +418,31 @@ Window {
                         window.launchErrorAppId = ""
                         if(window.launchErrorReturnToGallery && command === inputManager.home)window.showDesignatedHome()
                         window.launchErrorReturnToGallery = false
+                        window.launchErrorVpn = false
                     } else if (command === inputManager.confirm && window.launchErrorAppId.length) {
                         const retryId = window.launchErrorAppId
                         const retryFromGallery = window.launchErrorReturnToGallery
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
+                        window.launchErrorReturnToGallery = false
+                        window.launchErrorVpn = false
                         if (retryFromGallery) {
-                            window.galleryLaunchPending = true
-                            if (actionDispatcher.dispatch({type:"launch-app",appId:retryId},"all-apps"))
-                                allApps.open = false
-                            else
-                                window.galleryLaunchPending = false
+                            allApps.dispatchFromGallery(actionDispatcher, {type:"launch-app",appId:retryId})
                         } else sessionManager.launch(retryId)
                     } else if (command === inputManager.navigateRight && (window.launchErrorAppId.length || window.launchErrorVpn)) {
                         const returnToGallery = window.launchErrorReturnToGallery
+                        const vpnError = window.launchErrorVpn
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
-                        if(returnToGallery && !window.launchErrorVpn) {
-                            window.galleryLaunchPending = true
-                            if(actionDispatcher.dispatch({type:"launch-app",appId:"app-store"},"all-apps"))
-                                allApps.open = false
-                            else
-                                window.galleryLaunchPending = false
-                        } else {
-                            sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")
-                            if(window.launchErrorVpn)settings.openSection(6)
-                        }
                         window.launchErrorReturnToGallery = false
+                        window.launchErrorVpn = false
+                        if(returnToGallery) {
+                            allApps.dispatchFromGallery(actionDispatcher, vpnError
+                                ? {type:"settings",section:6} : {type:"launch-app",appId:"app-store"})
+                        } else {
+                            sessionManager.launch(vpnError ? "settings" : "app-store")
+                            if(vpnError)settings.openSection(6)
+                        }
                     } else if (!window.launchErrorVpn && command === inputManager.navigateLeft && window.launchErrorAppId.length && appCatalog.isInstalled(window.launchErrorAppId)) {
                         appCatalog.uninstall(window.launchErrorAppId)
                         window.launchErrorText = ""
@@ -489,7 +478,8 @@ Window {
                             width: parent.width
                         }
                         Text {
-                            text: window.launchErrorAppId.length ? "Isolde returned to Home instead of leaving you in the desktop. You can retry, open the App Store, or uninstall the package." : "The app was not started. Your installed package and configuration have not been changed."
+                            text: window.launchErrorVpn ? "The app was not opened. Retry or open VPN settings; your app and configuration are unchanged."
+                                : window.launchErrorAppId.length ? "The app did not start. You can retry, open the App Store, or uninstall the package." : "The app was not started. Your installed package and configuration have not been changed."
                             color: errorTheme.elevatedMuted
                             font.pixelSize: 17 * errorTheme.textScale
                             wrapMode: Text.WordWrap
@@ -642,7 +632,10 @@ Window {
 
     Connections {
         target: appVpn
-        function onFailed(appId,message){window.launchErrorVpn=true;window.launchErrorAppId=appId;window.launchErrorText=message}
+        function onFailed(appId,message){
+            window.launchErrorReturnToGallery = allApps.vpnLaunchFailed(appId)
+            window.launchErrorVpn=true;window.launchErrorAppId=appId;window.launchErrorText=message
+        }
     }
     Rectangle {
         anchors.fill:parent;z:1200
@@ -675,8 +668,8 @@ Window {
                 appCatalog.markFailed(appId, reason)
             window.launchErrorAppId = appId
             window.launchErrorText = reason
-            if (window.galleryLaunchPending) {
-                window.galleryLaunchPending = false
+            if (allApps.launchPending) {
+                allApps.launchPending = false
                 window.launchErrorReturnToGallery = true
                 allApps.resumeAfterApp()
             }
@@ -702,7 +695,7 @@ Window {
         function onRestoreFocusRequested(originId) {
             if(tvGuide.open)return
             if (kodiLibrary.returnToSearchAfterPlayback) return
-            if(originId==="all-apps") {galleryLaunchPending=false;allApps.resumeAfterApp()}
+            if(originId==="all-apps") allApps.restoreAfterAction()
             else if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
         }
         function onPageRequested(id,originId) {commandCenter.open=false;if(id)pageSurface.showPage(id,originId,false);else{sessionManager.goHome();pageSurface.closeAll();home.restoreFocus(originId)}}

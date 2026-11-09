@@ -56,6 +56,43 @@ test("app overflow saves carousel focus before opening All Apps", () => {
     assert.deepEqual(calls, [["save", "carousel", saved], ["open", "carousel"]]);
 });
 
+test("gallery survives synchronous and deferred VPN launch failure", () => {
+    const queue = [];
+    const scope = vm.createContext({
+        Qt: {callLater: fn => queue.push(fn)}, launchGeneration: 0,
+        launchPending: false, launchAttemptAppId: "", open: true,
+    });
+    scope.resumeAfterApp = () => { scope.open = true; };
+    for (const name of ["dispatchFromGallery", "clearLaunchAttempt", "restoreAfterAction", "vpnLaunchFailed"])
+        method("AppGallery.qml", name, scope);
+    const synchronous = {dispatch(action, origin) {
+        assert.equal(origin, "all-apps");
+        scope.restoreAfterAction();
+        assert.equal(scope.vpnLaunchFailed(action.appId), true);
+        return true;
+    }};
+    assert.equal(scope.dispatchFromGallery(synchronous, {appId: "sample"}), true);
+    assert.equal(scope.open, true);
+    const deferred = {dispatch: () => true};
+    scope.dispatchFromGallery(deferred, {appId: "sample"});
+    assert.equal(scope.open, false);
+    while (queue.length) queue.shift()();
+    assert.equal(scope.launchAttemptAppId, "sample");
+    scope.restoreAfterAction();
+    assert.equal(scope.vpnLaunchFailed("sample"), true);
+    assert.equal(scope.open, true);
+    scope.dispatchFromGallery(deferred, {appId: "sample"});
+    while (queue.length) queue.shift()();
+    assert.equal(scope.launchAttemptAppId, "sample");
+    scope.restoreAfterAction();
+    assert.equal(scope.vpnLaunchFailed("sample"), true);
+    scope.dispatchFromGallery(deferred, {type: "settings", section: 6});
+    scope.restoreAfterAction();
+    assert.equal(scope.open, true);
+    while (queue.length) queue.shift()();
+    assert.equal(scope.vpnLaunchFailed("sample"), false);
+});
+
 test("capture settings arrows change only the selected input row", () => {
     const calls = [], draft = {selectedInput: 1};
     const scope = vm.createContext({

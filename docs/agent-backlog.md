@@ -58,7 +58,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T24 | 10 | Installed Studio usability and cutover | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
 | T27 | 11 | Shared theme across shell surfaces | 100% | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
 | T25 | 12 | Contained configurable detected sources | 20% | 100% | native policy/isolated atomic storage verified; remote/containment/installed acceptance open |
-| T26 | 13 | Configurable All Apps destination | 0% | 50% | gallery/Store-return slices verified; broad scope open |
+| T26 | 13 | Configurable All Apps destination | 0% | 100% | gallery and return routing implemented; native and VM acceptance deferred |
 | T28 | 14 | Genuine Web search header toggle | 0% | 100% | implemented slices; complete combined acceptance open |
 | T29 | 15 | Verified Store, Android and Chromium remote | 13% | 100% | Android baseline accepted; source/bridge/playback/lifecycle open |
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
@@ -73,13 +73,13 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 15% | new plan mapped; software 0/9; H02/H03 physical |
 | T13 | 26 | Appliance software, distribution and user setup guide | 0% | 35% | installer foundation; clean-VM/recovery and beginner guide open; appliance validation code added |
 | T31 | 27 | Frozen first-product software acceptance | 5% | 10% | tool inventory verified; 0/7 final groups accepted |
-| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **88%** | **1568 / 27 acceptance and 2370 / 27 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **90%** | **1568 / 27 acceptance and 2420 / 27 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
 - 2026-11-09: **T14 coding integration; acceptance deferred.** The discovery and Linguist implementation and provider/model choices are documented in [T14 contracts](t14-provider-and-linguist-contracts.md). Focused Kodi bridge and playback Python suites passed (21 and 32 tests); native Qt tests and installed VM journeys remain unrun on this host. Live provider/account behavior and deployment licensing remain deferred. Coding is 100% with no known unfinished T14 code; acceptance percentages are unchanged.
 
-- 2026-11-09: **T26 integration; VM acceptance deferred.** The gallery grid now uses its actual viewport width for configured columns, and app-carousel overflow records its selection before opening All Apps. Gallery navigation tests are registered with CTest. Coding remains 50% because VPN-prepared gallery launches can lose the gallery return chain on failure, cancellation or retry; a fix is requested. Native/installed VM tests, the remote journey and visual reference acceptance are deferred; no acceptance percentages change.
+- 2026-11-09: **T26 coding integration; verification deferred.** The gallery grid uses its viewport width, app-carousel overflow records its selection, and VPN-prepared gallery launch failure, cancellation, retry and settings return preserve the gallery origin. Gallery navigation tests are registered with CTest. No known unfinished T26 implementation remains; Coding is 100%. Native/installed VM tests, the remote journey and visual reference acceptance are deferred; no acceptance percentages change.
 
 - 2026-11-07: **T25 native policy/storage20%.** [Evidence](t25-sources-2026-11-07.md): C sources2/2 passes; T25.1.a/T25.5.a independently credited. No final group/installed acceptance. Sum1568, Overall58%; continue T25 remote policy/actions and contained source families, then T26.
 

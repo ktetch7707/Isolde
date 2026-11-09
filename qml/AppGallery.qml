@@ -17,6 +17,9 @@ Item {
     property bool keyboardOpen: false
     property bool favoritesOnly: false
     property string feedback: ""
+    property bool launchPending: false
+    property string launchAttemptAppId: ""
+    property int launchGeneration: 0
     readonly property var favoriteIds: galleryPresentation.favoriteIds || []
     readonly property int columns: galleryPresentation.columns || 5
     readonly property string layoutMode: galleryPresentation.layout || "grid"
@@ -59,6 +62,44 @@ Item {
         focusArea = "grid"
         if (!visibleEntries.some(app => app.id === selectedId))
             selectedId = visibleEntries.length ? visibleEntries[0].id : ""
+    }
+
+    function dispatchFromGallery(dispatcher, action) {
+        const generation = ++launchGeneration
+        launchPending = true
+        launchAttemptAppId = action.appId || ""
+        const accepted = dispatcher.dispatch(action, "all-apps")
+        if (generation === launchGeneration) {
+            if (accepted && launchPending) open = false
+            else if (!accepted) {
+                launchPending = false
+                launchAttemptAppId = ""
+            }
+        }
+        return accepted
+    }
+
+    function clearLaunchAttempt() {
+        ++launchGeneration
+        launchPending = false
+        launchAttemptAppId = ""
+    }
+
+    function restoreAfterAction() {
+        launchPending = false
+        const generation = launchGeneration
+        // VPN failure is emitted after returnedHome in the same signal stack.
+        Qt.callLater(() => {
+            if (generation === launchGeneration && !launchPending) launchAttemptAppId = ""
+        })
+        resumeAfterApp()
+    }
+
+    function vpnLaunchFailed(appId) {
+        if (!appId || launchAttemptAppId !== appId) return false
+        clearLaunchAttempt()
+        resumeAfterApp()
+        return true
     }
 
     function selectNearest(oldIndex) {
