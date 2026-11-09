@@ -8,6 +8,7 @@ class KodiMedia;
 class KodiService;
 class HomeLayout;
 class CaptureController;
+class AudioSettings;
 class GameLibrary;
 class GuideController;
 
@@ -18,6 +19,8 @@ public:
     ActionDispatcher(AppRegistry *apps, SessionManager *sessions, KodiMedia *media,
         KodiService *service, AppCatalog *catalog = nullptr, CaptureController *capture = nullptr, QObject *parent = nullptr);
     Q_INVOKABLE bool dispatch(const QVariantMap &action, const QString &originId = {});
+    Q_INVOKABLE bool dispatchEditorAction(const QVariantMap &action);
+    void setAudioSettings(AudioSettings *audio) { m_audio = audio; }
     void setLayout(HomeLayout *layout) { m_layout=layout; }
     void setGames(GameLibrary *games) { m_games=games; }
     void setGuide(GuideController *guide);
@@ -44,6 +47,7 @@ private:
     KodiService *m_service;
     AppCatalog *m_catalog;
     CaptureController *m_capture;
+    AudioSettings *m_audio = nullptr;
     HomeLayout *m_layout = nullptr;
     GameLibrary *m_games = nullptr;
     GuideController *m_guide = nullptr;

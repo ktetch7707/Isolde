@@ -9,6 +9,7 @@
 #include "media/CaptureController.h"
 #include "media/KodiService.h"
 #include "media/GuideController.h"
+#include "settings/AudioSettings.h"
 #include <QScopedValueRollback>
 #include <QDateTime>
 #include <QTimer>
@@ -16,7 +17,8 @@
 
 ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, KodiMedia *media,
     KodiService *service, AppCatalog *catalog, CaptureController *capture, QObject *parent)
-    : QObject(parent), m_apps(apps), m_sessions(sessions), m_media(media), m_service(service), m_catalog(catalog), m_capture(capture)
+    : QObject(parent), m_apps(apps), m_sessions(sessions), m_media(media), m_service(service),
+      m_catalog(catalog), m_capture(capture)
 {
     connect(sessions, &SessionManager::launching, this, [this](const QString &) { if (!m_dispatching && !m_sessions->resumingPreparedLaunch()) m_origin.clear(); });
     connect(sessions, &SessionManager::returnedHome, this, [this](const QString &app) {
@@ -122,6 +124,7 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
     if (m_sessions->hasActiveSession() || m_media->playbackActive()) {
         emit rejected("Return to Home before starting another action."); return false;
     }
+
     if (!originId.isEmpty() && !ComponentSchema::safeId(originId)) { emit rejected("Invalid origin."); return false; }
     const auto type = value.value("type").toString();
     const auto destination = type == "open-page" ? value.value("pageId").toString()
@@ -186,5 +189,55 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         emit desktopRequested(originId);accepted=true;
     } else accepted = m_sessions->launchAction(value);
     if (!accepted) m_origin = previous;
+    return accepted;
+}
+
+bool ActionDispatcher::dispatchEditorAction(const QVariantMap &input)
+{
+    QString error;
+    const auto value = ComponentSchema::editorAction(input, &error);
+    if (value.isEmpty()) {
+        emit rejected(error);
+        return false;
+    }
+
+    const auto type = value.value("type").toString();
+    bool accepted = false;
+    if (type == "audio-output-select") {
+        if (!m_audio) error = tr("Audio output selection is unavailable.");
+        else accepted = m_audio->selectOutput(value.value("outputId").toString());
+    } else {
+        if (!m_capture) error = tr("Capture input support is unavailable.");
+        else if (type == "capture-apply") {
+            accepted = m_capture->applyConfiguration(value.value("configuration").toMap());
+        } else if (type == "capture-switch-input") {
+            const auto input = value.value("input").toInt();
+            if (!m_capture->canSwitchInput(input)) error = m_capture->switchStatus();
+            else accepted = m_capture->switchInput(input);
+        } else if (type == "capture-preview-start") {
+            accepted = m_capture->startPreview();
+        } else if (type == "capture-preview-stop") {
+            m_capture->stopPreview();
+            accepted = true;
+        } else if (type == "capture-switch-cancel") {
+            m_capture->cancelSwitch();
+            accepted = true;
+        } else if (type == "capture-refresh") {
+            m_capture->refreshDevices();
+            accepted = true;
+        }
+    }
+
+    if (!accepted) {
+        if (error.isEmpty()) {
+            if (type == "capture-preview-start" && m_capture)
+                error = m_capture->status();
+            else if (type.startsWith("capture-") && m_capture)
+                error = m_capture->switchStatus().isEmpty() ? m_capture->status() : m_capture->switchStatus();
+            else if (m_audio) error = m_audio->outputStatus();
+            if (error.isEmpty()) error = tr("The editor action could not be completed. Review the current device selection and retry.");
+        }
+        emit rejected(error);
+    }
     return accepted;
 }

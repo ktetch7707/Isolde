@@ -88,7 +88,9 @@ Item {
             else if (selectedIndex === 9) audioSettings.reset()
             else if (selectedIndex === 10 && candidateOutput) {
                 if (!outputDraftActive) beginOutputDraft()
-                else outputApplyPending = audioSettings.selectOutput(candidateOutput.id)
+                else outputApplyPending = actionDispatcher.dispatchEditorAction({
+                    type: "audio-output-select", outputId: candidateOutput.id
+                })
             }
             else if (selectedIndex === 11) audioSettings.refreshBackend()
             else if (selectedIndex === 12) {

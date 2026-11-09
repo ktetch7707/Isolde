@@ -45,15 +45,19 @@ test("capture settings stage changes, apply together, and discard without saving
         captureDeviceId: "card-a", videoFormatKey: "fmt-a", audioDeviceId: "audio-a",
         serialPortName: "serial-a", baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 1,
         inputs: Array.from({length: 8}, (_, index) => ({number: index + 1, name: "HDMI " + (index + 1)})),
-        applyConfiguration(configuration) { saved.push(configuration); return this.result; },
         result: false,
-        stopPreview() { this.stopped = true; },
     };
     const scope = vm.createContext({
         inputManager, selectedIndex: 0, keyboardMode: 0, draftDirty: false, draft: {},
         captureController: controller,
+        actionDispatcher: {
+            dispatchEditorAction(action) {
+                saved.push(action);
+                return action.type === "capture-preview-stop" || controller.result;
+            },
+        },
     });
-    for (const name of ["setDraftValue", "resetDraft", "applyDraft", "cancelDraft"])
+    for (const name of ["setDraftValue", "resetDraft", "configurationDraft", "applyDraft", "cancelDraft"])
         method("CaptureSettingsView.qml", name, scope);
     scope.resetDraft();
     scope.setDraftValue("serialPortName", "serial-b");
@@ -62,20 +66,52 @@ test("capture settings stage changes, apply together, and discard without saving
     scope.cancelDraft();
     assert.equal(scope.draft.serialPortName, "serial-a");
     assert.equal(scope.draftDirty, false);
-    assert.equal(controller.stopped, true);
+    assert.equal(JSON.stringify(saved[0]), JSON.stringify({type: "capture-preview-stop"}));
     scope.setDraftValue("commandTemplate", "HDMI {input}\\r");
     assert.equal(scope.applyDraft(), false);
     assert.equal(scope.draftDirty, true);
     controller.result = true;
     assert.equal(scope.applyDraft(), true);
-    assert.equal(saved.length, 2);
-    assert.equal(saved[1].commandTemplate, "HDMI {input}\\r");
-    assert.deepEqual(Object.keys(saved[1]).sort(), [
+    assert.equal(saved.length, 3);
+    assert.equal(saved[2].type, "capture-apply");
+    assert.equal(saved[2].configuration.commandTemplate, "HDMI {input}\\r");
+    assert.deepEqual(Object.keys(saved[2].configuration).sort(), [
         "audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
         "inputLabels", "selectedInput", "serialPortName", "videoFormatKey",
     ]);
-    assert.equal(Object.keys(saved[1].inputLabels).length, 8);
+    assert.equal(Object.keys(saved[2].configuration.inputLabels).length, 8);
     assert.equal(scope.draftDirty, false);
+});
+
+test("capture editor routes apply, test, preview, refresh, and cancel through typed actions", () => {
+    const actions = [], inputManager = {back: 1, navigateLeft: 2, navigateRight: 3, confirm: 4};
+    const scope = vm.createContext({
+        selectedIndex: 9, keyboardMode: 0, draftDirty: true,
+        draft: {captureDeviceId: "card", videoFormatKey: "", audioDeviceId: "", serialPortName: "ttyUSB0",
+            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2, inputLabels: {"1":"HDMI 1"}},
+        captureController: {
+            captureDeviceId: "card", videoFormatKey: "", audioDeviceId: "", serialPortName: "ttyUSB0",
+            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2,
+            inputs: Array.from({length: 8}, (_, index) => ({number: index + 1, name: "HDMI " + (index + 1)})),
+        },
+        actionDispatcher: {dispatchEditorAction: action => { actions.push(action); return true; }},
+        inputManager,
+    });
+    for (const name of ["configurationDraft", "resetDraft", "applyDraft", "cancelDraft", "activateSelected", "handleCommand"])
+        method("CaptureSettingsView.qml", name, scope);
+    scope.activateSelected();
+    assert.deepEqual(actions.map(action => action.type), ["capture-apply", "capture-switch-input"]);
+    assert.equal(actions[1].input, 2);
+    scope.selectedIndex = 10;
+    scope.activateSelected();
+    scope.selectedIndex = 11;
+    scope.activateSelected();
+    scope.selectedIndex = 14;
+    scope.activateSelected();
+    scope.cancelDraft();
+    assert.deepEqual(actions.slice(2).map(action => action.type), [
+        "capture-preview-start", "capture-preview-stop", "capture-refresh", "capture-preview-stop",
+    ]);
 });
 
 test("choosing a different capture card clears an incompatible staged format", () => {
@@ -184,14 +220,21 @@ test("closing capture session cancels pending serial output before releasing pre
 
 test("audio output arrows preview a route, Back cancels, and Confirm applies", () => {
     const inputManager = {back: 1, navigateLeft: 2, navigateRight: 3, confirm: 4};
+    const actions = [];
     const audioSettings = {
         outputs: [{id: "10", name: "TV", active: true}, {id: "11", name: "Speakers", active: false}],
         outputStatus: "Choose an output.",
-        selectOutput(id) { this.requested = id; this.outputStatus = "Switching output…"; return true; },
     };
     const scope = vm.createContext({
         inputManager, audioSettings, selectedIndex: 10, outputDraftId: "", outputDraftActive: false,
         outputApplyPending: false,
+        actionDispatcher: {
+            dispatchEditorAction(action) {
+                actions.push(action);
+                audioSettings.outputStatus = "Switching output…";
+                return true;
+            },
+        },
     });
     Object.defineProperty(scope, "candidateOutput", {get: () => scope.findOutput(scope.outputDraftId)});
     for (const name of ["findOutput", "beginOutputDraft", "adjustOutputDraft", "cancelOutputDraft",
@@ -205,7 +248,7 @@ test("audio output arrows preview a route, Back cancels, and Confirm applies", (
     assert.equal(scope.outputDraftId, "10");
     scope.handleCommand(inputManager.navigateRight);
     scope.handleCommand(inputManager.confirm);
-    assert.equal(audioSettings.requested, "11");
+    assert.equal(JSON.stringify(actions), JSON.stringify([{type: "audio-output-select", outputId: "11"}]));
     assert.equal(scope.outputDraftActive, true);
     assert.equal(scope.outputApplyPending, true);
     scope.handleCommand(inputManager.back);

@@ -600,6 +600,142 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
     } else return reject(error, "This action type is not supported.");
     return result;
 }
+
+QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *error)
+{
+    if (error) error->clear();
+    if (!versionOne(input)) return reject(error, "Unsupported editor action version.");
+
+    const auto typeValue = input.value("type");
+    if (typeValue.metaType().id() != QMetaType::QString)
+        return reject(error, "Choose a supported editor action.");
+    const auto type = typeValue.toString();
+    QVariantMap result{{"schemaVersion", 1}, {"type", type}};
+    const auto exactKeys = [&input, error](const QStringList &keys) {
+        for (auto it = input.cbegin(); it != input.cend(); ++it)
+            if (!keys.contains(it.key())) {
+                if (error) *error = "Editor actions contain only validated fields.";
+                return false;
+            }
+        return true;
+    };
+    const auto normalizeConfiguration = [error](const QVariant &value) -> QVariantMap {
+        if (value.metaType().id() != QMetaType::QVariantMap) {
+            if (error) *error = "Capture settings must be a configuration map.";
+            return {};
+        }
+        const auto configuration = value.toMap();
+        const QStringList keys{"audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
+            "inputLabels", "selectedInput", "serialPortName", "videoFormatKey"};
+        if (configuration.size() != keys.size()) {
+            if (error) *error = "Capture settings must include every staged field exactly once.";
+            return {};
+        }
+        for (const auto &key : keys) {
+            if (!configuration.contains(key)) {
+                if (error) *error = "Capture settings must include every staged field exactly once.";
+                return {};
+            }
+        }
+        QVariantMap normalized;
+        const auto stringField = [&configuration, &normalized, error](const QString &key, int maxLength) {
+            const auto value = configuration.value(key);
+            if (value.metaType().id() != QMetaType::QString || value.toString().size() > maxLength
+                || value.toString().contains(QChar::Null)) {
+                if (error) *error = "Capture settings contain an invalid device identity or command.";
+                return false;
+            }
+            normalized.insert(key, value.toString());
+            return true;
+        };
+        if (!stringField("audioDeviceId", 512) || !stringField("captureDeviceId", 512)
+            || !stringField("serialPortName", 256) || !stringField("videoFormatKey", 256)
+            || !stringField("commandTemplate", 128))
+            return {};
+        const auto exactInteger = [&configuration, &normalized, error](const QString &key, int minimum, int maximum) {
+            const auto value = configuration.value(key);
+            const auto metaType = value.metaType().id();
+            if (metaType != QMetaType::Int && metaType != QMetaType::Double) {
+                if (error) *error = "Capture baud rate and selected input must be whole numbers.";
+                return false;
+            }
+            bool ok = false;
+            const auto number = value.toDouble(&ok);
+            if (!ok || !std::isfinite(number) || std::floor(number) != number
+                || number < minimum || number > maximum) {
+                if (error) *error = "Capture baud rate or selected HDMI input is outside supported bounds.";
+                return false;
+            }
+            normalized.insert(key, static_cast<int>(number));
+            return true;
+        };
+        if (!exactInteger("baudRate", 9600, 115200)
+            || !QList<int>{9600, 19200, 38400, 57600, 115200}.contains(normalized.value("baudRate").toInt())
+            || !exactInteger("selectedInput", MinHdmiInput, MaxHdmiInput)) {
+            if (error && error->isEmpty()) *error = "Choose a supported serial speed.";
+            return {};
+        }
+        const auto labelsValue = configuration.value("inputLabels");
+        if (labelsValue.metaType().id() != QMetaType::QVariantMap) {
+            if (error) *error = "Capture input labels must name all eight HDMI inputs.";
+            return {};
+        }
+        const auto labels = labelsValue.toMap();
+        QVariantMap normalizedLabels;
+        if (labels.size() != MaxHdmiInput) {
+            if (error) *error = "Capture input labels must name all eight HDMI inputs.";
+            return {};
+        }
+        for (int input = MinHdmiInput; input <= MaxHdmiInput; ++input) {
+            const auto label = labels.value(QString::number(input));
+            const auto text = label.toString();
+            if (!labels.contains(QString::number(input)) || label.metaType().id() != QMetaType::QString
+                || text.trimmed().isEmpty() || text.size() > 40 || text.contains(QChar::Null)) {
+                if (error) *error = "Each HDMI input label must contain 1 to 40 safe characters.";
+                return {};
+            }
+            for (const auto character : text) {
+                const auto code = character.unicode();
+                if ((character.isSpace() && character != QLatin1Char(' '))
+                    || code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
+                    if (error) *error = "HDMI input labels cannot contain control characters.";
+                    return {};
+                }
+            }
+            normalizedLabels.insert(QString::number(input), text.trimmed());
+        }
+        normalized.insert("inputLabels", normalizedLabels);
+        return normalized;
+    };
+
+    if (type == "capture-apply") {
+        if (!exactKeys({"schemaVersion", "type", "configuration"})) return {};
+        const auto configuration = normalizeConfiguration(input.value("configuration"));
+        if (configuration.isEmpty()) return {};
+        result.insert("configuration", configuration);
+    } else if (type == "capture-switch-input") {
+        if (!exactKeys({"schemaVersion", "type", "input"})) return {};
+        const auto number = input.value("input");
+        if ((number.metaType().id() != QMetaType::Int && number.metaType().id() != QMetaType::Double)
+            || !std::isfinite(number.toDouble()) || std::floor(number.toDouble()) != number.toDouble()
+            || number.toDouble() < MinHdmiInput || number.toDouble() > MaxHdmiInput)
+            return reject(error, "Choose an HDMI input from 1 to 8.");
+        result.insert("input", number.toInt());
+    } else if (QStringList{"capture-preview-start", "capture-preview-stop", "capture-switch-cancel", "capture-refresh"}.contains(type)) {
+        if (!exactKeys({"schemaVersion", "type"})) return {};
+    } else if (type == "audio-output-select") {
+        if (!exactKeys({"schemaVersion", "type", "outputId"})) return {};
+        const auto id = input.value("outputId");
+        if (id.metaType().id() != QMetaType::QString || id.toString().size() > 256
+            || !QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id.toString()).hasMatch())
+            return reject(error, "Choose a valid available audio output.");
+        result.insert("outputId", id.toString());
+    } else {
+        return reject(error, "This editor action type is not supported.");
+    }
+    return result;
+}
+
 QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QString *error)
 {
     if (error) error->clear();

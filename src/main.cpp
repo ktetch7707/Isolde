@@ -86,6 +86,7 @@ struct ProfileRuntime {
 
     explicit ProfileRuntime(ProfileManager &profiles, bool initialLaunch, AudioSettings &audio, CaptureController &capture)
         : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()) {
+    actions.setAudioSettings(&audioSettings);
     catalog.setStoreProvider(&storeProvider);
     if (initialLaunch && QCoreApplication::arguments().contains("--setup")) setup.restart();
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);

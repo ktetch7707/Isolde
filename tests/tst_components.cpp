@@ -51,6 +51,7 @@ private slots:
     void sourceFamiliesUseGenericBoundedComposition();
     void steamGamesUseProviderIdentityAndReviewedImport();
     void guideActionsValidateIdentityAndAppearance();
+    void captureAndAudioEditorActionsValidateAndDispatch();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
     void gamesLaunchRejectsMissingAndRedirectedTargets();
     void gamesContractsRejectExecutableData();
@@ -162,6 +163,53 @@ void ComponentTests::guideActionsValidateIdentityAndAppearance() {
     for(const auto &id:QVariantList{true,123,QString("../other")}){
         QVERIFY(ComponentSchema::action({{"type","open-guide"},{"focusChannelId",id}}).isEmpty());
         QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId",id}}).isEmpty());
+    }
+    void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
+    {
+        QVariantMap labels;
+        for (int input = 1; input <= 8; ++input)
+            labels.insert(QString::number(input), QString("HDMI %1").arg(input));
+        const QVariantMap configuration{
+            {"audioDeviceId", ""}, {"baudRate", 9600}, {"captureDeviceId", ""},
+            {"commandTemplate", ""}, {"inputLabels", labels}, {"selectedInput", 1},
+            {"serialPortName", ""}, {"videoFormatKey", ""}
+        };
+        QString error;
+        const auto apply = ComponentSchema::editorAction(
+            {{"type", "capture-apply"}, {"configuration", configuration}}, &error);
+        QVERIFY2(!apply.isEmpty(), qPrintable(error));
+        QCOMPARE(apply.value("configuration").toMap().size(), 8);
+        QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-start"}}).contains("type"));
+        QVERIFY(ComponentSchema::editorAction({{"type", "capture-switch-input"}, {"input", 8}}).contains("input"));
+        QVERIFY(ComponentSchema::editorAction({{"type", "audio-output-select"}, {"outputId", "alsa_output.usb-01"}}).contains("outputId"));
+        QVERIFY(ComponentSchema::action({{"type", "capture-apply"}, {"configuration", configuration}}).isEmpty());
+
+        auto invalid = configuration;
+        invalid.insert("extra", "ignored?");
+        QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}, &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        invalid = configuration;
+        invalid.insert("selectedInput", 1.5);
+        QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+        invalid = configuration;
+        labels.insert("9", "Out of range");
+        invalid.insert("inputLabels", labels);
+        QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+        QVERIFY(ComponentSchema::editorAction({{"type", "audio-output-select"}, {"outputId", "../speaker"}}).isEmpty());
+        QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-stop"}, {"ignored", true}}).isEmpty());
+
+        AppRegistry registry;
+        SessionManager sessions(&registry);
+        KodiMedia media("editor-actions-test");
+        KodiService service("editor-actions-test");
+        CaptureController capture;
+        ActionDispatcher dispatcher(&registry, &sessions, &media, &service, nullptr, &capture);
+        QSignalSpy rejected(&dispatcher, &ActionDispatcher::rejected);
+        QVERIFY(dispatcher.dispatchEditorAction({{"type", "capture-preview-stop"}}));
+        QVERIFY(!dispatcher.dispatchEditorAction({{"type", "capture-apply"}, {"configuration", invalid}}));
+        QCOMPARE(rejected.size(), 1);
+        QVERIFY(!dispatcher.dispatchEditorAction({{"type", "audio-output-select"}, {"outputId", "alsa_output.usb-01"}}));
+        QCOMPARE(rejected.size(), 2);
     }
     QVERIFY(ComponentSchema::action({{"type","tune-channel"},{"channelId","station"},{"focusChannelId","station"}}).isEmpty());
     for(const auto &position:QStringList{"top-left","top-center","top-right","center-left","center","center-right","bottom-left","bottom-center","bottom-right"})QVERIFY(ComponentSchema::validPresentation({{"guideSurface","overlay"},{"guideOverlayPosition",position},{"guideOverlayWidth",65},{"guideOverlayHeight",100},{"guideOverlayRows",3}}));

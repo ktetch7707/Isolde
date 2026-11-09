@@ -16,6 +16,8 @@ Do not connect an HDMI output back into the switch input. Use the switch and cap
 
 Open **Settings → System → HDMI Inputs** with the remote. Device, format, audio input, serial port/rate, command, selected input, and input-name changes are staged locally. Left/Right previews choices without persisting them. **Apply capture changes** writes the complete validated configuration in one settings sync; **Cancel capture changes** or Back discards the draft. Sending a test switch applies the draft first. Starting preview while a draft is open previews the saved capture-card configuration; staged choices do not take effect until Apply.
 
+The editor submits versioned `capture-apply`, `capture-switch-input`, preview, cancel, and refresh commands through `ActionDispatcher`. `ComponentSchema::editorAction` rejects unknown fields, unsupported command variants, malformed labels, out-of-range HDMI inputs, and invalid serial settings before dispatch. The capture controller then checks discovered-device availability, protocol validity, and atomic persistence; schema acceptance alone never asserts that hardware is present or supported.
+
 1. Choose **Capture card**. Compare the device name and listed resolutions/frame rates with the label or manual for the card. A device appearing in this list is not proof that it is an HDMI capture device.
 2. Optionally choose **HDMI audio** if the card exposes a matching audio input. Audio monitoring requires a Qt Multimedia backend that supports capture-session audio output; older Qt builds remain video-only.
 3. Choose the **RS-232 switch port**. Disconnect other serial adapters first if their names are difficult to distinguish.

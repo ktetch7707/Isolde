@@ -57,9 +57,8 @@ Item {
         }
         draftDirty = false
     }
-    function applyDraft() {
-        if (!draftDirty) return true
-        const ok = captureController.applyConfiguration({
+    function configurationDraft() {
+        return {
             captureDeviceId: draft.captureDeviceId,
             videoFormatKey: draft.videoFormatKey,
             audioDeviceId: draft.audioDeviceId,
@@ -68,13 +67,20 @@ Item {
             commandTemplate: draft.commandTemplate,
             selectedInput: draft.selectedInput,
             inputLabels: draft.inputLabels
+        }
+    }
+    function applyDraft() {
+        if (!draftDirty) return true
+        const ok = actionDispatcher.dispatchEditorAction({
+            type: "capture-apply",
+            configuration: configurationDraft()
         })
         if (ok) resetDraft()
         return ok
     }
     function cancelDraft() {
         resetDraft()
-        captureController.stopPreview()
+        actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"})
     }
     function keepSelectedRowVisible() {
         optionList.positionViewAtIndex(selectedIndex, ListView.Contain)
@@ -150,20 +156,22 @@ Item {
         else if (selectedIndex === 7) setDraftValue("selectedInput", draft.selectedInput % 8 + 1)
         else if (selectedIndex === 8) editKeyboard(2)
         else if (selectedIndex === 9) {
-            if (applyDraft()) captureController.switchInput(draft.selectedInput)
+            if (applyDraft()) actionDispatcher.dispatchEditorAction({
+                type: "capture-switch-input", input: draft.selectedInput
+            })
         }
-        else if (selectedIndex === 10) captureController.startPreview()
-        else if (selectedIndex === 11) captureController.stopPreview()
+        else if (selectedIndex === 10) actionDispatcher.dispatchEditorAction({type: "capture-preview-start"})
+        else if (selectedIndex === 11) actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"})
         else if (selectedIndex === 12) applyDraft()
         else if (selectedIndex === 13) cancelDraft()
-        else captureController.refreshDevices()
+        else actionDispatcher.dispatchEditorAction({type: "capture-refresh"})
     }
     function handleCommand(command) {
         if (keyboardMode) { keyboard.handleCommand(command); return }
         if (command === inputManager.back) {
-            captureController.cancelSwitch()
+            actionDispatcher.dispatchEditorAction({type: "capture-switch-cancel"})
             if (draftDirty) cancelDraft()
-            else captureController.stopPreview()
+            else actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"})
             return
         }
         if (command === inputManager.navigateUp) selectedIndex = Math.max(0, selectedIndex - 1)
@@ -178,7 +186,7 @@ Item {
             captureController.setVideoOutput(previewOutput)
             resetDraft()
         }
-        else captureController.stopPreview()
+        else actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"})
     }
     onSelectedIndexChanged: keepSelectedRowVisible()
     Connections {
