@@ -19,6 +19,7 @@
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QSettings>
+#include <QSet>
 #include <QFile>
 #include <QDir>
 #include <QJsonDocument>
@@ -58,8 +59,10 @@ private slots:
     void gamesContractsRejectExecutableData();
     void gamesRelinkPreservesIdentityAndRollsBack();
     void gamesFolderImportIsReviewedAtomicAndCancelable();
+    void gamesFolderImportPreservesManualInstallation();
     void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
     void gamesCuratedPackagesBindThroughRealCatalog();
+    void emulatorManifestIsBoundedAndVersioned();
     void emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData();
     void studioSafetyVersionsAreBoundedReversibleAndProfileScoped();
     void studioSafetyArchiveFailureRetainsDraftForRetry();
@@ -134,10 +137,42 @@ void ComponentTests::steamGamesUseProviderIdentityAndReviewedImport(){
     QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),1);const auto id=library.page()[0].toMap().value("id").toString();
     auto registration=library.registration(id);QCOMPARE(registration.value("target").toString(),QString("42"));QVERIFY(registration.value("root").toString().isEmpty());
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("sourceKind").toString(),QString("steam-app"));
+    QCOMPARE(provenance.value("origin").toString(),QString("steam-import"));
+    QCOMPARE(provenance.value("sourceReference").toString(),QString("42"));
     QCOMPARE(library.resolveLaunch(id),QVariantMap({{"type","steam-game"},{"steamAppId","42"}}));
     QVERIFY(library.setFavorite(id,true));registration["title"]="My corrected title";QVERIFY(library.updateGame(id,registration));
     QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),1);QCOMPARE(library.details(id).value("title").toString(),QString("My corrected title"));QVERIFY(library.details(id).value("favorite").toBool());
+    {
+        SessionManager sessions(&apps);
+        KodiMedia media(profile,nullptr,dir.path()); KodiService service(profile);service.setEnabled(false);
+        CaptureController capture;
+        ActionDispatcher dispatcher(&apps,&sessions,&media,&service,nullptr,&capture);dispatcher.setGames(&library);
+        sessions.setLaunchPreparation([](const AppDefinition &){return false;});
+        QSignalSpy focus(&dispatcher,&ActionDispatcher::restoreFocusRequested);
+        const QVariantMap action{{"type","launch-game"},{"gameId",id}};
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));sessions.goHome();
+        QCOMPARE(focus.last().at(0).toString(),QString("steam-tile"));
+        QVERIFY(library.page("continue").isEmpty()); // Cancel before any game process.
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("43");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");
+        emit sessions.steamGameFailed("42","fixture denial");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");
+        qApp->setProperty("isoldeProfile","different-profile");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        qApp->setProperty("isoldeProfile",profile);
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");sessions.goHome();
+        QCOMPARE(library.page("continue").size(),1);
+        QCOMPARE(library.page("continue").first().toMap().value("id").toString(),id);
+    }
     for(const auto &bad:QStringList{"0","01","4294967296","42; touch x","steam://run/42","/tmp/game","42\n"}){auto invalid=registration;invalid["target"]=bad;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());}
     auto invalid=registration;invalid["root"]=steamapps;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());
     steam.launchConfiguration["steamGameId"]="42";QVERIFY(!steam.isValid());
@@ -273,6 +308,10 @@ void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCOMPARE(library.resolveLaunch(disc).value("sourceRoot").toString(),root);
     auto forged=gamesRuntime("forged");QVERIFY(forged.isValid());forged.launchConfiguration["gameSourceRoot"]=root;
     QVERIFY(!forged.isValid());QVERIFY(!apps.addApp(forged));
+    for(const auto &key:{"managedGameRoot","managedGameExecutable","opticalMediaId","opticalReference","opticalObservationId"}){
+        auto injected=gamesRuntime("injected");injected.launchConfiguration[key]=root;
+        QVERIFY(!injected.isValid());QVERIFY(!apps.addApp(injected));
+    }
     registration["runtimeId"]="supertux";registration["root"]=QStringLiteral("");registration["target"]=QStringLiteral("");registration["title"]="SuperTux";registration["platform"]="PC";
     const auto native=library.addGame(registration);QVERIFY2(!native.isEmpty(),qPrintable(library.errorString()));
     QCOMPARE(library.resolveLaunch(native).value("appId").toString(),QString("supertux"));
@@ -296,6 +335,20 @@ void ComponentTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData
     QVERIFY(GameEmulators::home("../other","ppsspp").isEmpty());QVERIFY(GameEmulators::home(first,"unknown").isEmpty());
     // This unique test profile is under Qt's test storage only.
     QVERIFY(QDir(QFileInfo(home).absolutePath()).removeRecursively());
+}
+void ComponentTests::emulatorManifestIsBoundedAndVersioned(){
+    const auto runtimes=GameEmulators::definitions();QCOMPARE(runtimes.size(),7);
+    QSet<QString> ids,platforms;
+    for(const auto &entry:runtimes){
+        const auto runtime=entry.toMap();const auto id=runtime.value("id").toString();
+        QVERIFY(!id.isEmpty());QVERIFY(!ids.contains(id));ids.insert(id);
+        QVERIFY(!runtime.value("packages").toStringList().isEmpty());
+        QVERIFY(!runtime.value("formats").toStringList().isEmpty());
+        for(const auto &platform:runtime.value("platforms").toStringList())platforms.insert(platform);
+    }
+    QCOMPARE(platforms,QSet<QString>({"PSP","GameCube","Wii","PlayStation 2","NES","Game Boy","Game Boy Color","Game Boy Advance","SNES"}));
+    QVERIFY(GameEmulators::definition("xbox-360").isEmpty());
+    QVERIFY(GameEmulators::definition("pcsx2").value("firmwareRequired").toBool());
 }
 void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");
@@ -327,10 +380,30 @@ void ComponentTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
     QVERIFY(QFile::remove(root+"/nested/b.iso"));QVERIFY(!library.commitImport());QVERIFY(library.page().isEmpty());
     writeFile(root+"/nested/b.iso","b");QVERIFY(library.commitImport());QCOMPARE(library.page().size(),2);
     const auto id=library.page()[0].toMap().value("id").toString();auto corrected=library.registration(id);corrected["title"]="Manual correction";QVERIFY(library.updateGame(id,corrected));
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("sourceKind").toString(),QString("external-folder"));
+    QCOMPARE(provenance.value("origin").toString(),QString("folder-import"));
     QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY(library.importReady());QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),2);QCOMPARE(library.details(id).value("title").toString(),QString("Manual correction"));
+    QCOMPARE(library.details(id).value("acquisitionProvenance").toMap(),provenance);
     QVERIFY(library.beginImport(root,"psp-test","PSP"));library.invalidate();QVERIFY(!library.scanning());QVERIFY(!library.commitImport());
     QCOMPARE(readFile(root+"/a.iso"),QByteArray("a"));QCOMPARE(readFile(root+"/nested/b.iso"),QByteArray("b"));
+}
+void ComponentTests::gamesFolderImportPreservesManualInstallation() {
+    QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));
+    writeFile(root+"/a.iso","a");
+    AppRegistry apps;auto runtime=gamesRuntime();runtime.launchConfiguration["gameFormats"]=QVariantList{"iso"};QVERIFY(apps.addApp(runtime));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    auto registration=gameRegistration(root,"a.iso");registration["title"]="My manual title";
+    const auto id=library.addGame(registration);QVERIFY(!id.isEmpty());QVERIFY(library.setFavorite(id,true));
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("origin").toString(),QString("manual-registration"));
+    QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);
+    QCOMPARE(library.importPage(0).size(),1);QVERIFY(library.commitImport());
+    QCOMPARE(library.page().size(),1);QCOMPARE(library.page()[0].toMap().value("id").toString(),id);
+    const auto details=library.details(id);QCOMPARE(details.value("title").toString(),QString("My manual title"));
+    QVERIFY(details.value("favorite").toBool());
+    QCOMPARE(details.value("acquisitionProvenance").toMap(),provenance);
 }
 void ComponentTests::gamesRelinkPreservesIdentityAndRollsBack() {
     QTemporaryDir dir;const auto oldRoot=dir.filePath("original"),newRoot=dir.filePath("moved");
@@ -362,6 +435,15 @@ void ComponentTests::gamesContractsRejectExecutableData() {
     QCOMPARE(ComponentSchema::action(action),action);
     action["arguments"]=QStringList{"--unsafe"};QVERIFY(ComponentSchema::action(action,&error).isEmpty());
     QVERIFY(!error.isEmpty());
+    QVariantMap shelf{{"schemaVersion",1},{"id","games-shelf"},{"kind","widget"},{"widgetType","library"},{"componentType","library"},
+        {"name","Games"},{"presentation",QVariantMap{{"libraryKind","games"},{"libraryView","continue"}}}};
+    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","favorites"}};
+    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue","PSP"}};
+    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue",""}};
+    QVERIFY(ComponentSchema::component(shelf,false,&error).isEmpty());QVERIFY(!error.isEmpty());
 }
 void ComponentTests::gamesCatalogIsBoundedAtomicAndProfileLocal() {
     QTemporaryDir dir;QVERIFY(dir.isValid());const auto root=dir.filePath("library");QVERIFY(QDir().mkpath(root));

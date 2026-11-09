@@ -248,7 +248,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
             if (key == "libraryKind" && !QStringList{"movies","shows","history","albums","channels","games"}.contains(it.value().toString())) return false;
-            if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection","playlist"}.contains(it.value().toString())) return false;
+            if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","favorites","platform","tag","genre","collection","playlist"}.contains(it.value().toString())) return false;
             if (key == "libraryLayout" && !QStringList{"grid","list","row"}.contains(it.value().toString())) return false;
             if (key == "libraryCardStyle" && !QStringList{"media","recent","orb","source","summary","banner"}.contains(it.value().toString())) return false;
             if (key == "libraryValue" && (it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>160)) return false;
@@ -881,7 +881,12 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(style.value("libraryKind")=="shows" && QStringList{"genre","tag"}.contains(style.value("libraryView").toString()))return reject(error,"This Kodi view is available for movies only.");
             if(style.value("libraryView")=="collection" && !safeId(style.value("libraryValue").toString()))return reject(error,"Choose a saved collection.");
             const bool games=style.value("libraryKind")=="games";
-            if(games && (!QStringList{"all","recent","search"}.contains(style.value("libraryView").toString())))return reject(error,"Choose a supported local Games view.");
+            if(games && (!QStringList{"all","recent","search","favorites","platform","continue"}.contains(style.value("libraryView").toString())))return reject(error,"Choose a supported local Games view.");
+            if(games && style.value("libraryView")=="platform"
+                && (style.value("libraryValue").metaType().id()!=QMetaType::QString
+                    || style.value("libraryValue").toString().trimmed().isEmpty()
+                    || style.value("libraryValue").toString().size()>80))
+                return reject(error,"Choose a platform name of up to 80 characters for this Games shelf.");
             source={{"schemaVersion",1},{"provider",games?"games":"kodi"},{"kind","library"},{"libraryKind",style.value("libraryKind")},{"libraryView",style.value("libraryView")},{"libraryValue",style.value("libraryValue","")}};
             if(history)source["kind"]="recently-viewed";
             if(music)source["kind"]="music";

@@ -132,6 +132,7 @@ struct ProfileRuntime {
     games=std::make_unique<GameLibrary>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("games.sqlite"), &registry);
     actions.setGames(games.get());
     games->setCatalog(&catalog);
+    games->setSessionActiveGuard([this]{ return sessions.hasActiveSession() || pendingLaunch || pendingNativeLaunch; });
     engine.rootContext()->setContextProperty(QStringLiteral("gameLibrary"), games.get());
     QObject::connect(&kodiService,&KodiService::unavailable,&pageData,&PageData::unavailable);
     homeLayout.setCollections(kodi.collections());

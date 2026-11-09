@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sessions/AppSession.h"
+#include "sessions/SteamSessionOutput.h"
 
 #include <QProcess>
 #include <QLockFile>
@@ -19,8 +20,13 @@ public:
 private:
     bool applyContainment();
     void stopProcess();
+    void readDiagnostics();
     bool m_stopping = false;
     QByteArray m_diagnostics;
+    QByteArray m_protocolBuffer;
+    QVariantMap m_gamepadStatus;
+    std::unique_ptr<SteamSessionOutput> m_steamOutput;
+    bool m_steamObserved = false;
     QProcess m_launcher;
     bool m_containmentMatched = false;
     std::unique_ptr<QLockFile> m_kodiLock;

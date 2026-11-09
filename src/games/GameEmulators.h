@@ -8,6 +8,7 @@
 namespace GameEmulators {
 QVariantList definitions();
 QVariantMap definition(const QString &id);
+QVariantMap coverage();
 QString home(const QString &profile, const QString &id);
 QVariantMap settings(const QString &profile, const QString &id, QString *error);
 bool configure(const QString &profile, const QString &id, const QVariantMap &options,

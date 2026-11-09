@@ -13,31 +13,57 @@ import shutil
 import signal
 import subprocess
 import tempfile
+import time
 
 COMMIT = "fa50bb1976065c4f8b1b47af227d367fe9771555"
 VERSION = "1.20.4-1"
 DEPENDENCIES = ["libsdl2-dev", "libgl-dev", "libglu1-mesa-dev", "libvulkan-dev", "libpng-dev", "zlib1g-dev", "libxt-dev"]
+_cancel_check = None
 
 
 def run(*arguments, **options):
     timeout = options.pop("timeout", 120)
-    # A timed-out cmake process can leave Ninja/compiler children running.
-    # Own the whole command group so a failed provisioning step releases it.
+    transaction = options.pop("transaction", False)
     capture = options.pop("capture_output", False)
     if capture:
         options.update(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    with subprocess.Popen(arguments, start_new_session=True, **options) as process:
+    process = subprocess.Popen(arguments, start_new_session=True, **options)
+    deadline = time.monotonic() + timeout
+    while True:
         try:
-            stdout, stderr = process.communicate(timeout=timeout)
-        except BaseException:
-            # Also forward user cancellation (SIGINT/KeyboardInterrupt).
-            try: os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError: pass
-            process.communicate()
-            raise
-        result = subprocess.CompletedProcess(arguments, process.returncode, stdout, stderr)
-        result.check_returncode()
-        return result
+            stdout, stderr = process.communicate(timeout=min(1, max(.01, deadline-time.monotonic())))
+            break
+        except subprocess.TimeoutExpired as expired:
+            cancelled = None
+            if _cancel_check:
+                try: _cancel_check()
+                except RuntimeError as error: cancelled = error
+            timed_out = time.monotonic() >= deadline
+            if cancelled and not transaction:
+                _stop_group(process)
+                raise cancelled
+            if timed_out and transaction:
+                stdout, stderr = process.communicate()
+                if process.returncode: raise subprocess.CalledProcessError(process.returncode, arguments, stdout, stderr)
+                if _cancel_check: _cancel_check()
+                raise RuntimeError("Package operation exceeded its deadline but finished safely.")
+            if timed_out:
+                _stop_group(process)
+                raise expired
+    result = subprocess.CompletedProcess(arguments, process.returncode, stdout, stderr)
+    result.check_returncode()
+    if _cancel_check: _cancel_check()
+    return result
+
+
+def _stop_group(process):
+    try: os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError: return
+    try: process.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        try: os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError: pass
+        process.communicate()
 
 
 def build(cache, provisioner=None):
@@ -47,6 +73,8 @@ def build(cache, provisioner=None):
         spec=importlib.util.spec_from_file_location("games",Path(__file__).with_name("provision-games.py"))
         games=importlib.util.module_from_spec(spec);spec.loader.exec_module(games)
     else:games=provisioner
+    global _cancel_check
+    _cancel_check=getattr(games,"check_cancelled",None)
     games.platform()
     cache=Path(cache).absolute()
     expected_cache=Path.home()/".cache/isolde-emulators/ppsspp-1.20.4"
@@ -62,7 +90,9 @@ def build(cache, provisioner=None):
         return package
     required=1.5 if (cache/"source/.git").is_dir() else 3
     if shutil.disk_usage(cache).free<required*1024**3:raise RuntimeError("PSP source build needs "+str(required)+" GiB free; preserve cache and review guest space")
-    run("sudo","-n","/usr/bin/apt-get","install","--no-remove","--no-install-recommends","-y",*DEPENDENCIES,timeout=300)
+    run("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","install","--no-remove","--no-upgrade","--no-install-recommends",
+        "--option=Acquire::Retries=1","--option=Acquire::http::Timeout=60","--option=Acquire::https::Timeout=60",
+        "-y",*DEPENDENCIES,timeout=300,transaction=True)
     source=cache/"source"
     if not source.exists():
         run("git","clone","--filter=blob:none","--no-checkout","https://github.com/hrydgard/ppsspp.git",str(source),timeout=240)
@@ -92,7 +122,7 @@ def build(cache, provisioner=None):
         shutil.copy2(source/"LICENSE.TXT",notices/"copyright")
         (notices/"source.json").write_text(json.dumps({"url":"https://github.com/hrydgard/ppsspp.git","commit":COMMIT,"submodules":submodules},indent=2))
         (tree/"DEBIAN").mkdir()
-        (tree/"DEBIAN/control").write_text("Package: isolde-ppsspp\nVersion: "+VERSION+"\nArchitecture: amd64\nMaintainer: Isolde\nDescription: Isolde pinned PPSSPP runtime, no games or firmware\nDepends: libsdl2-2.0-0, libgl1, libglu1-mesa, libvulkan1, libstdc++6, zlib1g\n")
+        (tree/"DEBIAN/control").write_text("Package: isolde-ppsspp\nVersion: "+VERSION+"\nArchitecture: amd64\nMaintainer: Isolde\nX-Isolde-Source-Commit: "+COMMIT+"\nDescription: Isolde pinned PPSSPP runtime, no games or firmware\nDepends: libsdl2-2.0-0, libgl1, libglu1-mesa, libvulkan1, libstdc++6, zlib1g\n")
         run("dpkg-deb","--build","--root-owner-group",str(tree),str(package),timeout=90)
     with package.open("rb") as stream:actual=hashlib.file_digest(stream,"sha256").hexdigest()
     games.atomic_receipt(receipt,{"schemaVersion":1,"sourceCommit":COMMIT,"submodules":submodules,"version":VERSION,"sha256":actual})

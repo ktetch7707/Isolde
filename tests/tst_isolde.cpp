@@ -281,6 +281,7 @@ private slots:
     void registryRejectsUnsafeWebUrl();
     void registryRejectsDuplicateIds();
     void sessionLifecycleRestoresFocus();
+    void synchronousDesktopFailureReturnsOnce();
     void secondLaunchIsRejected();
     void launchGuardRunsBeforeHandoff();
     void customizationSessionIsSupported();
@@ -752,6 +753,25 @@ void IsoldeTests::sessionLifecycleRestoresFocus()
     QCOMPARE(returned.takeFirst().at(0).toString(), QString("switch"));
     QCOMPARE(rejected.count(), 0);
     QCOMPARE(failed.count(), 0);
+}
+
+void IsoldeTests::synchronousDesktopFailureReturnsOnce()
+{
+    AppRegistry registry;
+    AppDefinition app;app.id="unavailable-desktop";app.name="Unavailable desktop";
+    app.type="desktop";app.section="Apps";app.accent=QColor("#556677");
+    app.launchConfiguration={{"desktopId","isolde-nonexistent-fixture-8392"}};
+    QVERIFY(registry.addApp(app));
+    SessionManager manager(&registry);
+    QSignalSpy rejected(&manager,&SessionManager::sessionRejected);
+    QSignalSpy failed(&manager,&SessionManager::sessionFailed);
+    QSignalSpy returned(&manager,&SessionManager::returnedHome);
+    QVERIFY(!manager.launch(app.id));
+    QVERIFY(!manager.hasActiveSession());
+    QCOMPARE(rejected.count(),1);
+    QCOMPARE(failed.count(),1);
+    QCOMPARE(returned.count(),1);
+    QCOMPARE(returned.first().first().toString(),app.id);
 }
 
 void IsoldeTests::secondLaunchIsRejected()

@@ -26,16 +26,69 @@ Window {
     property string launchErrorAppId: ""
     property bool launchErrorVpn: false
     property bool launchErrorReturnToGallery: false
+    property bool launchErrorSteamGame: false
     property bool desktopHidden:false
     property int desktopRestoreVisibility:Window.FullScreen
     DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
+    Window {
+        id:opticalSessionNotice
+        readonly property var status:sessionManager.opticalSessionStatus
+        width:Math.min(Screen.width*0.8,720*window.uiScaleFactor)
+        height:noticeText.implicitHeight+32*window.uiScaleFactor
+        x:(Screen.width-width)/2;y:window.safeAreaPixels
+        visible:desktopMode.active && desktopMode.nativeMode && sessionManager.active
+            && !!status.state && status.state!=="pinned"
+        flags:Qt.Tool | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput
+        color:"transparent"
+        Rectangle {
+            anchors.fill:parent;color:homeLayout.homeAppearance.surfaceColor
+            border.width:2;border.color:homeLayout.homeAppearance.focusColor
+            radius:desktopMode.presentation.radius || 0
+            Text {
+                id:noticeText;anchors.left:parent.left;anchors.right:parent.right
+                anchors.verticalCenter:parent.verticalCenter;anchors.margins:16*window.uiScaleFactor
+                text:opticalSessionNotice.status.recovery || ""
+                color:homeLayout.homeAppearance.textColor;wrapMode:Text.WordWrap
+                font.pixelSize:20*window.uiScaleFactor;textFormat:Text.PlainText
+            }
+        }
+        Window {
+            id:gamepadSessionNotice
+            readonly property var status:sessionManager.gamepadSessionStatus
+            readonly property string notice:status.new>0 && status.available<status.connected
+                ?"A controller was detected but could not be added to this game session. Save if possible, return to Games and relaunch."
+                :status.new>0
+                    ?"A new controller endpoint was added to the isolated session. The game/runtime must support rescanning hotplugged devices; if it is not recognized, save and relaunch."
+                    :status.missing>0
+                        ?"A controller this game started with disconnected. Reconnect it or return to Games and relaunch."
+                        :""
+            width:Math.min(Screen.width*0.8,760*window.uiScaleFactor)
+            height:gamepadNoticeText.implicitHeight+32*window.uiScaleFactor
+            x:(Screen.width-width)/2
+            y:window.safeAreaPixels+(opticalSessionNotice.visible?opticalSessionNotice.height+12*window.uiScaleFactor:0)
+            visible:desktopMode.active && desktopMode.nativeMode && sessionManager.active && notice.length>0
+            flags:Qt.Tool | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput
+            color:"transparent"
+            Rectangle {
+                anchors.fill:parent;color:homeLayout.homeAppearance.surfaceColor
+                border.width:2;border.color:homeLayout.homeAppearance.focusColor
+                radius:desktopMode.presentation.radius || 0
+                Text {
+                    id:gamepadNoticeText;anchors.left:parent.left;anchors.right:parent.right
+                    anchors.verticalCenter:parent.verticalCenter;anchors.margins:16*window.uiScaleFactor
+                    text:gamepadSessionNotice.notice;color:homeLayout.homeAppearance.textColor
+                    wrapMode:Text.WordWrap;font.pixelSize:20*window.uiScaleFactor;textFormat:Text.PlainText
+                }
+            }
+        }
+    }
     Connections {
         target:desktopMode
         function onChanged(){
             if(desktopMode.active && !desktopMode.nativeMode && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
             else if(!desktopMode.active && window.desktopHidden){window.desktopHidden=false;window.visibility=window.desktopRestoreVisibility;window.raise();window.requestActivate()}
             if(desktopMode.active || desktopMode.busy)idleTimer.stop();else idleTimer.restart()
-            if(desktopMode.errorString){window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
+            if(desktopMode.errorString){window.launchErrorSteamGame=false;window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
         }
         function onReturned(origin){window.raise();window.requestActivate();if(!desktopMode.nativeMode)Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
     }
@@ -361,7 +414,7 @@ Window {
                 onSearchRequested:window.openSearchFromPage()
                 onAllAppsRequested:origin=>window.openAllAppsFromOrigin(origin)
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
-                onNavigationRejected:reason=>{window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
+                onNavigationRejected:reason=>{window.launchErrorSteamGame=false;window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
             }
 
             AppGallery {
@@ -419,6 +472,7 @@ Window {
                         if(window.launchErrorReturnToGallery && command === inputManager.home)window.showDesignatedHome()
                         window.launchErrorReturnToGallery = false
                         window.launchErrorVpn = false
+                        window.launchErrorSteamGame = false
                     } else if (command === inputManager.confirm && window.launchErrorAppId.length) {
                         const retryId = window.launchErrorAppId
                         const retryFromGallery = window.launchErrorReturnToGallery
@@ -464,7 +518,7 @@ Window {
                         anchors.margins: 34
                         spacing: 18
                         Text {
-                            text: window.launchErrorAppId.length ? "APP DIDN'T START" : "ACTION NEEDED"
+                            text: window.launchErrorSteamGame ? "STEAM GAME" : window.launchErrorAppId.length ? "APP DIDN'T START" : "ACTION NEEDED"
                             color: errorTheme.error
                             font.pixelSize: 34 * errorTheme.textScale
                             font.weight: Font.DemiBold
@@ -479,7 +533,8 @@ Window {
                         }
                         Text {
                             text: window.launchErrorVpn ? "The app was not opened. Retry or open VPN settings; your app and configuration are unchanged."
-                                : window.launchErrorAppId.length ? "The app did not start. You can retry, open the App Store, or uninstall the package." : "The app was not started. Your installed package and configuration have not been changed."
+                                : window.launchErrorSteamGame ? "Close this message, check Steam if needed, then select Play from the game details to retry."
+                                : window.launchErrorAppId.length ? "Isolde returned to Home instead of leaving you in the desktop. You can retry, open the App Store, or uninstall the package." : "The app was not started. Your installed package and configuration have not been changed."
                             color: errorTheme.elevatedMuted
                             font.pixelSize: 17 * errorTheme.textScale
                             wrapMode: Text.WordWrap
@@ -692,16 +747,19 @@ Window {
             if(appId && store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
         }
         function onSessionRejected(reason) {
+            window.launchErrorSteamGame=false
             window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onLaunchDeferred(reason) {
+            window.launchErrorSteamGame=false
             window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onSessionFailed(appId, reason) {
+            window.launchErrorSteamGame=false
             window.launchErrorVpn=false
             if (appCatalog.isInstalled(appId))
                 appCatalog.markFailed(appId, reason)
@@ -712,6 +770,12 @@ Window {
                 window.launchErrorReturnToGallery = true
                 allApps.resumeAfterApp()
             }
+        }
+        function onSteamGameFailed(steamAppId, reason) {
+            window.launchErrorSteamGame=true
+            window.launchErrorVpn=false
+            window.launchErrorAppId=""
+            window.launchErrorText=reason
         }
     }
     Connections {
@@ -738,7 +802,7 @@ Window {
             else if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
         }
         function onPageRequested(id,originId) {commandCenter.open=false;if(id)pageSurface.showPage(id,originId,false);else{sessionManager.goHome();pageSurface.closeAll();home.restoreFocus(originId)}}
-        function onRejected(reason) { window.launchErrorAppId = ""; window.launchErrorText = reason }
+        function onRejected(reason) { window.launchErrorSteamGame=false; window.launchErrorAppId = ""; window.launchErrorText = reason }
         function onLibraryRequested(returnHome) {
             kodiLibrary.themeOrigin = commandCenter.open ? commandCenter.themeOrigin : pageSurface.open ? pageSurface.activeId : ""
             commandCenter.open = false
