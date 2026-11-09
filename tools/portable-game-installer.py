@@ -170,9 +170,15 @@ def inspect(source):
         os.close(descriptor)
         raise ValueError("Choose a regular portable game bundle no larger than 512 MiB.")
     with os.fdopen(descriptor,"rb") as stream:
+        before=os.fstat(stream.fileno())
         digest=hashlib.sha256()
-        for chunk in iter(lambda: stream.read(1024*1024), b""):
+        remaining=before.st_size
+        while remaining:
+            chunk=stream.read(min(1024*1024,remaining))
+            if not chunk:
+                raise ValueError("The package changed during preflight. Review it again.")
             digest.update(chunk)
+            remaining-=len(chunk)
         archive_format=bundle_format(stream)
         with open_bundle(stream,archive_format) as archive:
             members=bundle_members(archive,archive_format)
@@ -211,6 +217,10 @@ def inspect(source):
             with open_member(archive,entry_info,archive_format) as entry_stream:executable=entry_stream.read(20)
             if not executable.startswith(b"\x7fELF") or len(executable) < 20:
                 raise ValueError("Only native Linux ELF game entry points are supported by this installer.")
+            after=os.fstat(stream.fileno())
+            identity=lambda value: (value.st_dev,value.st_ino,value.st_size,value.st_mtime_ns,value.st_ctime_ns)
+            if identity(before)!=identity(after):
+                raise ValueError("The package changed during preflight. Review it again.")
             return {"schemaVersion": 1, "title": manifest["title"].strip(),
                     "platform": manifest["platform"].strip(), "entrypoint": manifest["entrypoint"],
                     "entrySize": entry_info["size"], "archiveEntries": len(members), "unpackedBytes": total,

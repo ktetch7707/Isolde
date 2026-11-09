@@ -124,6 +124,17 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.assertFalse(installed.with_name(installed.name+".staging").exists())
         self.assertFalse(installed.with_name(installed.name+".staging-source").exists())
 
+    def test_preflight_refuses_archive_modified_during_inspection(self):
+        self.package()
+        original=installer.open_bundle
+        def mutate(stream, archive_format):
+            with self.archive.open("ab") as output:
+                output.write(b"changed")
+            return original(stream,archive_format)
+        with mock.patch.object(installer,"open_bundle",side_effect=mutate):
+            with self.assertRaisesRegex(ValueError,"changed during preflight"):
+                installer.inspect(self.archive)
+
     def test_write_failure_removes_unpublished_staging_data(self):
         self.package()
         destination=self.root/"private"/"games"/"id"/"install"
