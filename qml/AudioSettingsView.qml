@@ -6,9 +6,10 @@ Item {
     Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
     property var appearance: ({})
     property int selectedIndex: 0
+    property string outputDraftId: ""
+    property bool outputDraftActive: false
     onVisibleChanged: if (!visible) audioSettings.stopTestSound()
-    property int outputIndex: 0
-    readonly property var candidateOutput: audioSettings.outputs.length > 0 ? audioSettings.outputs[Math.min(outputIndex, audioSettings.outputs.length - 1)] : null
+    readonly property var candidateOutput: findOutput(outputDraftId)
     readonly property string startupLabel: audioSettings.startupPolicy === "fixed" ? "Fixed at " + audioSettings.startupVolume + "%" : audioSettings.startupPolicy === "muted" ? "Start muted" : "Remember last"
     readonly property string volumeModeLabel: audioSettings.volumeMode === "cec" ? "TV / HDMI-CEC" : audioSettings.volumeMode === "hybrid" ? "Hybrid" : "Isolde output"
     readonly property var rows: [
@@ -22,13 +23,48 @@ Item {
         { name: "Night Mode", value: "Unavailable", help: "Audio compression is not implemented; this control does not change sound." },
         { name: "Lip Sync Delay", value: "Unavailable", help: "Playback delay processing is not implemented yet." },
         { name: "Reset Audio", value: "Defaults", help: "Restore Isolde's default audio policy." },
-        { name: "Sound Output", value: candidateOutput ? candidateOutput.name + (candidateOutput.active ? " (Active)" : "") : "Unavailable", help: audioSettings.outputStatus },
+        { name: "Sound Output", value: candidateOutput ? candidateOutput.name + (candidateOutput.active ? " (Active)" : outputDraftActive ? " (Preview)" : "") : "Unavailable", help: audioSettings.outputStatus },
         { name: "Refresh Outputs", value: "Scan", help: "Look for connected TV, speakers, USB audio, or paired Bluetooth outputs." },
         { name: "Test Sound", value: audioSettings.testPlaying ? "Stop" : "Play", help: audioSettings.testStatus }
     ]
 
+    function findOutput(id) {
+        for (let i = 0; i < audioSettings.outputs.length; ++i)
+            if (audioSettings.outputs[i].id === id) return audioSettings.outputs[i]
+        return null
+    }
+    function beginOutputDraft() {
+        if (outputDraftActive || !audioSettings.outputs.length) return
+        let active = null
+        for (let i = 0; i < audioSettings.outputs.length; ++i)
+            if (audioSettings.outputs[i].active) active = audioSettings.outputs[i]
+        if (!active && audioSettings.outputs.length) active = audioSettings.outputs[0]
+        outputDraftId = active ? active.id : ""
+        outputDraftActive = true
+    }
+    function adjustOutputDraft(direction) {
+        if (!outputDraftActive) beginOutputDraft()
+        const index = audioSettings.outputs.findIndex(item => item.id === outputDraftId)
+        const next = index < 0
+            ? (direction > 0 ? 0 : audioSettings.outputs.length - 1)
+            : (index + direction + audioSettings.outputs.length) % audioSettings.outputs.length
+        if (audioSettings.outputs.length) outputDraftId = audioSettings.outputs[next].id
+    }
+    function cancelOutputDraft() {
+        outputDraftActive = false
+        outputDraftId = ""
+        for (let i = 0; i < audioSettings.outputs.length; ++i)
+            if (audioSettings.outputs[i].active) outputDraftId = audioSettings.outputs[i].id
+    }
+    function reconcileOutputDraft() {
+        if (outputDraftActive && candidateOutput && candidateOutput.active
+            && audioSettings.outputStatus !== "Switching output…")
+            outputDraftActive = false
+    }
     function handleCommand(command) {
-        if (command === inputManager.navigateUp)
+        if (command === inputManager.back) {
+            if (outputDraftActive) cancelOutputDraft()
+        } else if (command === inputManager.navigateUp)
             selectedIndex = Math.max(0, selectedIndex - 1)
         else if (command === inputManager.navigateDown)
             selectedIndex = Math.min(rows.length - 1, selectedIndex + 1)
@@ -37,18 +73,21 @@ Item {
             else if (selectedIndex === 2) audioSettings.adjustVolume(-audioSettings.volumeStep)
             else if (selectedIndex === 5) audioSettings.adjustStartupVolume(-5)
             else if (selectedIndex === 6) audioSettings.adjustVolumeStep(-1)
-            else if (selectedIndex === 10) outputIndex = Math.max(0, outputIndex - 1)
+            else if (selectedIndex === 10) adjustOutputDraft(-1)
         } else if (command === inputManager.navigateRight) {
             if (selectedIndex === 1) audioSettings.adjustTvReferenceVolume(5)
             else if (selectedIndex === 2) audioSettings.adjustVolume(audioSettings.volumeStep)
             else if (selectedIndex === 5) audioSettings.adjustStartupVolume(5)
             else if (selectedIndex === 6) audioSettings.adjustVolumeStep(1)
-            else if (selectedIndex === 10) outputIndex = Math.min(Math.max(0, audioSettings.outputs.length - 1), outputIndex + 1)
+            else if (selectedIndex === 10) adjustOutputDraft(1)
         } else if (command === inputManager.confirm) {
             if (selectedIndex === 3) audioSettings.toggleMute()
             else if (selectedIndex === 4) audioSettings.nextStartupPolicy()
             else if (selectedIndex === 9) audioSettings.reset()
-            else if (selectedIndex === 10 && candidateOutput) audioSettings.selectOutput(candidateOutput.id)
+            else if (selectedIndex === 10 && candidateOutput) {
+                if (!outputDraftActive) beginOutputDraft()
+                else audioSettings.selectOutput(candidateOutput.id)
+            }
             else if (selectedIndex === 11) audioSettings.refreshBackend()
             else if (selectedIndex === 12) {
                 if (audioSettings.testPlaying) audioSettings.stopTestSound()
@@ -58,8 +97,13 @@ Item {
     }
 
     onSelectedIndexChanged: {
+        if (selectedIndex === 10 && !outputDraftActive) beginOutputDraft()
         const row = rowsRepeater.itemAt(selectedIndex)
         if (row) scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, row.y - 20))
+    }
+    Connections {
+        target: audioSettings
+        function onChanged() { root.reconcileOutputDraft() }
     }
     Flickable {
         id: scroll

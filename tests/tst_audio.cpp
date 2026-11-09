@@ -86,6 +86,24 @@ private slots:
         QTRY_COMPARE(audio.outputs().size(), 1);
         QVERIFY(!audio.selectOutput("77"));
     }
+    void pulseAudioRouteSelectionIsConfirmedAndBounded() {
+        QTemporaryDir dir; AudioSettings audio(nullptr, mixer(dir, "pactl"));
+        audio.refreshBackend(); QTRY_COMPARE(audio.outputs().size(), 2);
+        QCOMPARE(audio.outputs()[0].toMap().value("id").toString(), QString("isolde_tv_hdmi"));
+        QCOMPARE(audio.outputs()[0].toMap().value("name").toString(), QString("TV HDMI"));
+        QVERIFY(!audio.selectOutput("isolde_missing"));
+        QVERIFY(!audio.selectOutput("@DEFAULT_SINK@"));
+        QVERIFY(audio.selectOutput("isolde_usb_speakers"));
+        QTRY_VERIFY(audio.outputs()[1].toMap().value("active").toBool());
+        QCOMPARE(audio.outputStatus(), QString("Choose with ← →, Enter applies. Restart playback if it stays on the old output."));
+        write(dir.filePath("mode"), "ignore-selection");
+        QVERIFY(audio.selectOutput("isolde_tv_hdmi"));
+        QTRY_VERIFY(audio.outputStatus().contains("not confirmed"));
+        QVERIFY(audio.outputs()[1].toMap().value("active").toBool());
+        write(dir.filePath("mode"), "unplug");
+        audio.refreshBackend(); QTRY_COMPARE(audio.outputs().size(), 1);
+        QVERIFY(!audio.selectOutput("isolde_usb_speakers"));
+    }
     void startupWaitsForAudioService() {
         QSettings settings(QSettings::IniFormat, QSettings::UserScope, "Isolde", "AudioBackendTests");
         settings.setValue("audio/startupPolicy", "muted"); settings.sync();

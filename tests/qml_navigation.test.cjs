@@ -22,19 +22,92 @@ function method(file, name, context, anchor) {
 }
 
 test("capture settings arrows change only the selected input row", () => {
-    const calls = [];
+    const calls = [], draft = {selectedInput: 1};
     const scope = vm.createContext({
-        selectedIndex: 6,
-        captureController: {selectedInput: 1, selectInput: input => calls.push(input)},
+        selectedIndex: 6, draftDirty: false, draft,
+        captureController: {selectedInput: 1},
     });
+    method("CaptureSettingsView.qml", "setDraftValue", scope);
     method("CaptureSettingsView.qml", "adjust", scope);
     scope.adjust(1);
-    assert.deepEqual(calls, []);
+    assert.equal(scope.draft.selectedInput, 1);
     scope.selectedIndex = 7;
     scope.adjust(-1);
-    assert.deepEqual(calls, [8]);
+    assert.equal(scope.draft.selectedInput, 8);
     scope.adjust(1);
-    assert.deepEqual(calls, [8, 2]);
+    assert.equal(scope.draft.selectedInput, 1);
+    assert.deepEqual(calls, []);
+});
+
+test("capture settings stage changes, apply together, and discard without saving", () => {
+    const saved = [], inputManager = {back: 1, navigateLeft: 2, navigateRight: 3, confirm: 4};
+    const controller = {
+        captureDeviceId: "card-a", videoFormatKey: "fmt-a", audioDeviceId: "audio-a",
+        serialPortName: "serial-a", baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 1,
+        inputs: Array.from({length: 8}, (_, index) => ({number: index + 1, name: "HDMI " + (index + 1)})),
+        applyConfiguration(configuration) { saved.push(configuration); return this.result; },
+        result: false,
+        stopPreview() { this.stopped = true; },
+    };
+    const scope = vm.createContext({
+        inputManager, selectedIndex: 0, keyboardMode: 0, draftDirty: false, draft: {},
+        captureController: controller,
+    });
+    for (const name of ["setDraftValue", "resetDraft", "applyDraft", "cancelDraft"])
+        method("CaptureSettingsView.qml", name, scope);
+    scope.resetDraft();
+    scope.setDraftValue("serialPortName", "serial-b");
+    assert.equal(scope.draftDirty, true);
+    assert.equal(saved.length, 0);
+    scope.cancelDraft();
+    assert.equal(scope.draft.serialPortName, "serial-a");
+    assert.equal(scope.draftDirty, false);
+    assert.equal(controller.stopped, true);
+    scope.setDraftValue("commandTemplate", "HDMI {input}\\r");
+    assert.equal(scope.applyDraft(), false);
+    assert.equal(scope.draftDirty, true);
+    controller.result = true;
+    assert.equal(scope.applyDraft(), true);
+    assert.equal(saved.length, 2);
+    assert.equal(saved[1].commandTemplate, "HDMI {input}\\r");
+    assert.deepEqual(Object.keys(saved[1]).sort(), [
+        "audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
+        "inputLabels", "selectedInput", "serialPortName", "videoFormatKey",
+    ]);
+    assert.equal(Object.keys(saved[1].inputLabels).length, 8);
+    assert.equal(scope.draftDirty, false);
+});
+
+test("choosing a different capture card clears an incompatible staged format", () => {
+    const scope = vm.createContext({
+        selectedIndex: 0, draftDirty: false,
+        draft: {captureDeviceId: "card-a", videoFormatKey: "fmt-a"},
+        captureController: {
+            videoDevices: [{id: "card-a"}, {id: "card-b"}],
+            videoFormatsFor: id => id === "card-b" ? [{key: "fmt-b"}] : [{key: "fmt-a"}],
+        },
+    });
+    method("CaptureSettingsView.qml", "setDraftValue", scope);
+    method("CaptureSettingsView.qml", "cycleDevice", scope);
+    method("CaptureSettingsView.qml", "adjust", scope);
+    scope.adjust(1);
+    assert.equal(scope.draft.captureDeviceId, "card-b");
+    assert.equal(scope.draft.videoFormatKey, "");
+    assert.equal(scope.draftDirty, true);
+});
+
+test("disconnected saved capture devices can be cleared or replaced", () => {
+    const scope = vm.createContext({
+        selectedIndex: 3, draftDirty: false, draft: {serialPortName: "gone"},
+        captureController: {serialPorts: [{id: "ttyUSB0"}]},
+    });
+    method("CaptureSettingsView.qml", "setDraftValue", scope);
+    method("CaptureSettingsView.qml", "cycleDevice", scope);
+    method("CaptureSettingsView.qml", "adjust", scope);
+    scope.adjust(1);
+    assert.equal(scope.draft.serialPortName, "");
+    scope.adjust(-1);
+    assert.equal(scope.draft.serialPortName, "ttyUSB0");
 });
 
 test("capture session preserves selection for retry after a failed switch", () => {
@@ -82,6 +155,52 @@ test("capture session retries an asynchronous switch failure and waits for seria
     scope.captureController.state = "receiving-frames";
     scope.handleCommand(inputManager.confirm);
     assert.equal(scope.pendingSwitchConfirmation, false);
+});
+
+test("closing capture session cancels pending serial output before releasing preview", () => {
+    const calls = [], scope = vm.createContext({
+        open: true, originId: "home:tile:hdmi", chooseInput: false,
+        captureController: {
+            cancelSwitch() { calls.push("cancel"); },
+            stopPreview() { calls.push("stop"); },
+        },
+        returned: origin => calls.push(origin),
+    });
+    method("CaptureSessionView.qml", "closeSession", scope);
+    scope.closeSession();
+    assert.equal(scope.open, false);
+    assert.deepEqual(calls, ["cancel", "stop", "home:tile:hdmi"]);
+});
+
+test("audio output arrows preview a route, Back cancels, and Confirm applies", () => {
+    const inputManager = {back: 1, navigateLeft: 2, navigateRight: 3, confirm: 4};
+    const audioSettings = {
+        outputs: [{id: "10", name: "TV", active: true}, {id: "11", name: "Speakers", active: false}],
+        outputStatus: "Choose an output.",
+        selectOutput(id) { this.requested = id; this.outputStatus = "Switching output…"; return true; },
+    };
+    const scope = vm.createContext({
+        inputManager, audioSettings, selectedIndex: 10, outputDraftId: "", outputDraftActive: false,
+    });
+    Object.defineProperty(scope, "candidateOutput", {get: () => scope.findOutput(scope.outputDraftId)});
+    for (const name of ["findOutput", "beginOutputDraft", "adjustOutputDraft", "cancelOutputDraft",
+        "reconcileOutputDraft", "handleCommand"])
+        method("AudioSettingsView.qml", name, scope);
+    scope.handleCommand(inputManager.navigateRight);
+    assert.equal(scope.candidateOutput.id, "11");
+    assert.equal(scope.outputDraftActive, true);
+    scope.handleCommand(inputManager.back);
+    assert.equal(scope.outputDraftActive, false);
+    assert.equal(scope.outputDraftId, "10");
+    scope.handleCommand(inputManager.navigateRight);
+    scope.handleCommand(inputManager.confirm);
+    assert.equal(audioSettings.requested, "11");
+    assert.equal(scope.outputDraftActive, true);
+    audioSettings.outputs[0].active = false;
+    audioSettings.outputs[1].active = true;
+    audioSettings.outputStatus = "Choose with arrows, Enter applies.";
+    scope.reconcileOutputDraft();
+    assert.equal(scope.outputDraftActive, false);
 });
 
 test("a failed direct capture launch opens the input picker for retry", () => {

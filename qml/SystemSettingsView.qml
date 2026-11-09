@@ -26,7 +26,10 @@ Item {
             return
         }
         if (activePage === 8) {
-            if (command === inputManager.back) { capturePage.handleCommand(command); activePage = -1 }
+            if (command === inputManager.back) {
+                if (capturePage.draftDirty || capturePage.keyboardMode) capturePage.handleCommand(command)
+                else { capturePage.handleCommand(command); activePage = -1 }
+            }
             else capturePage.handleCommand(command)
             return
         }
@@ -45,7 +48,8 @@ Item {
         }
         if (activePage === 1) {
             if (command === inputManager.back) {
-                activePage = -1
+                if (audioPage.outputDraftActive) audioPage.handleCommand(command)
+                else activePage = -1
                 return
             }
             audioPage.handleCommand(command)

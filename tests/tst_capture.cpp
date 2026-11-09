@@ -6,6 +6,7 @@ class CaptureTests final : public QObject {
 private slots:
     void encodesSwitchCommands();
     void rejectsUnsafeOrAmbiguousCommands();
+    void validatesInputLabels();
 };
 
 void CaptureTests::encodesSwitchCommands()
@@ -27,6 +28,20 @@ void CaptureTests::rejectsUnsafeOrAmbiguousCommands()
     QVERIFY(CaptureController::commandForInput(QString(130, QLatin1Char('A')) + "{input}", 1).isEmpty());
     QVERIFY(CaptureController::commandForInput("{input}", 0).isEmpty());
     QVERIFY(CaptureController::commandForInput("{input}", 9).isEmpty());
+}
+
+void CaptureTests::validatesInputLabels()
+{
+    QVERIFY(CaptureController::isValidInputLabel("Living room console"));
+    QVERIFY(CaptureController::isValidInputLabel(QString(40, QLatin1Char('A'))));
+    QVERIFY(!CaptureController::isValidInputLabel(""));
+    QVERIFY(!CaptureController::isValidInputLabel("   "));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(41, QLatin1Char('A'))));
+    QVERIFY(!CaptureController::isValidInputLabel("Two\nlines"));
+    QVERIFY(!CaptureController::isValidInputLabel("Two\twords"));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(QChar::Null)));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(QChar(0x7f))));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(QChar(0x85))));
 }
 
 QTEST_APPLESS_MAIN(CaptureTests)

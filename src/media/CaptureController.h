@@ -14,6 +14,7 @@
 #include <QSerialPort>
 #include <QTimer>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QVideoSink>
 
 class CaptureController final : public QObject {
@@ -21,6 +22,7 @@ class CaptureController final : public QObject {
     Q_PROPERTY(QVariantList videoDevices READ videoDevices NOTIFY changed)
     Q_PROPERTY(QVariantList videoFormats READ videoFormats NOTIFY changed)
     Q_PROPERTY(QVariantList audioDevices READ audioDevices NOTIFY changed)
+    Q_PROPERTY(QVariantMap capabilities READ capabilities NOTIFY changed)
     Q_PROPERTY(QVariantList serialPorts READ serialPorts NOTIFY changed)
     Q_PROPERTY(QVariantList inputs READ inputs NOTIFY changed)
     Q_PROPERTY(QString captureDeviceId READ captureDeviceId NOTIFY changed)
@@ -31,6 +33,10 @@ class CaptureController final : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY changed)
     Q_PROPERTY(QString switchStatus READ switchStatus NOTIFY changed)
     Q_PROPERTY(QString switchState READ switchState NOTIFY changed)
+    Q_PROPERTY(qint64 serialWriteLatencyMs READ serialWriteLatencyMs NOTIFY changed)
+    Q_PROPERTY(qint64 firstFrameCallbackLatencyMs READ firstFrameCallbackLatencyMs NOTIFY changed)
+    Q_PROPERTY(double previewFrameRate READ previewFrameRate NOTIFY changed)
+    Q_PROPERTY(qint64 maxFrameGapMs READ maxFrameGapMs NOTIFY changed)
     Q_PROPERTY(QString state READ state NOTIFY changed)
     Q_PROPERTY(bool previewActive READ previewActive NOTIFY changed)
     Q_PROPERTY(int selectedInput READ selectedInput NOTIFY changed)
@@ -43,6 +49,7 @@ public:
     QVariantList videoDevices() const;
     QVariantList videoFormats() const;
     QVariantList audioDevices() const;
+    QVariantMap capabilities() const;
     QVariantList serialPorts() const;
     QVariantList inputs() const;
     QString captureDeviceId() const { return m_captureDeviceId; }
@@ -53,6 +60,10 @@ public:
     QString status() const { return m_status; }
     QString switchStatus() const { return m_switchStatus; }
     QString switchState() const { return m_switchState; }
+    qint64 serialWriteLatencyMs() const { return m_serialWriteLatencyMs; }
+    qint64 firstFrameCallbackLatencyMs() const { return m_firstFrameCallbackLatencyMs; }
+    double previewFrameRate() const { return m_previewFrameRate; }
+    qint64 maxFrameGapMs() const { return m_maxFrameGapMs; }
     QString state() const { return m_state; }
     bool previewActive() const { return m_previewRequested; }
     int selectedInput() const { return m_selectedInput; }
@@ -60,6 +71,7 @@ public:
     int baudRate() const { return m_baudRate; }
 
     Q_INVOKABLE void refreshDevices();
+    Q_INVOKABLE QVariantList videoFormatsFor(const QString &deviceId) const;
     Q_INVOKABLE void setVideoOutput(QObject *output);
     Q_INVOKABLE bool setCaptureDevice(const QString &id);
     Q_INVOKABLE bool setVideoFormat(const QString &key);
@@ -69,12 +81,15 @@ public:
     Q_INVOKABLE bool setCommandTemplate(const QString &value);
     Q_INVOKABLE bool setInputLabel(int input, const QString &label);
     Q_INVOKABLE void selectInput(int input);
+    Q_INVOKABLE bool applyConfiguration(const QVariantMap &configuration);
     Q_INVOKABLE bool canSwitchInput(int input) const;
     Q_INVOKABLE bool startPreview();
     Q_INVOKABLE void stopPreview();
     Q_INVOKABLE bool switchInput(int input);
+    Q_INVOKABLE void cancelSwitch();
 
     static QByteArray commandForInput(const QString &commandTemplate, int input, QString *error = nullptr);
+    static bool isValidInputLabel(const QString &label);
 
 signals:
     void changed();
@@ -103,6 +118,9 @@ private:
     QTimer m_serialWatchdog;
     QElapsedTimer m_previewClock;
     QElapsedTimer m_lastFrameClock;
+    QElapsedTimer m_switchClock;
+    QElapsedTimer m_serialClock;
+    QElapsedTimer m_frameRateClock;
     QList<QCameraDevice> m_videoDevices;
     QList<QAudioDevice> m_audioDevices;
     QStringList m_serialPortNames;
@@ -120,6 +138,11 @@ private:
     int m_selectedInput = 1;
     int m_activeInput = 0;
     qint64 m_serialBytesPending = 0;
+    qint64 m_serialWriteLatencyMs = -1;
+    qint64 m_firstFrameCallbackLatencyMs = -1;
+    qint64 m_maxFrameGapMs = -1;
+    qint64 m_framesInWindow = 0;
+    double m_previewFrameRate = 0.0;
     bool m_previewRequested = false;
     bool m_receivedFrame = false;
 };

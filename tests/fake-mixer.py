@@ -27,9 +27,18 @@ if command == 'status':
             continue
         print(f" │  {'*' if ident == active else ' '}   {ident}. {name} [vol: 0.50]")
     print(' ├─ Sources:\n │ * 88. Microphone [vol: 1.00]\nVideo\n ├─ Sinks:\n │ 99. Camera [vol: 1.00]')
+elif command == 'list' and sys.argv[2:] == ['sinks']:
+    print('Sink #55\n\tName: isolde_tv_hdmi\n\tDescription: TV HDMI')
+    if mode != 'unplug':
+        print('Sink #77\n\tName: isolde_usb_speakers\n\tDescription: USB Speakers')
+elif command == 'get-default-sink':
+    print(state.get('pulse_output', 'isolde_tv_hdmi'))
 elif command == 'set-default':
     if mode != 'ignore-selection':
         state['output'] = int(sys.argv[2])
+elif command == 'set-default-sink':
+    if mode != 'ignore-selection':
+        state['pulse_output'] = sys.argv[2]
 elif command in ('set-volume', 'set-sink-volume'):
     state['volume'] = int(sys.argv[3].rstrip('%'))
 elif command in ('set-mute', 'set-sink-mute'):
@@ -43,5 +52,5 @@ elif command == 'get-sink-mute':
 # Queries must not overwrite a newer external adjustment with the state they
 # read at process startup. The real mixer does not write volume on `status` or
 # `get-volume`; doing so here raced confirmedReadAndFailure's external update.
-if command in ('set-default', 'set-volume', 'set-sink-volume', 'set-mute', 'set-sink-mute'):
+if command in ('set-default', 'set-default-sink', 'set-volume', 'set-sink-volume', 'set-mute', 'set-sink-mute'):
     state_file.write_text(json.dumps(state))

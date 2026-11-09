@@ -28,6 +28,7 @@ Item {
         open = false
         originId = ""
         chooseInput = false
+        captureController.cancelSwitch()
         captureController.stopPreview()
         returned(origin)
     }

@@ -2,10 +2,13 @@
 
 #include <QCameraFormat>
 #include <QMediaDevices>
+#include <QMetaType>
 #include <QSerialPortInfo>
 #include <QSettings>
 #include <QVideoFrame>
 #include <QtGlobal>
+#include <cmath>
+#include <limits>
 
 namespace {
 constexpr int MaxCommandBytes = 128;
@@ -48,6 +51,8 @@ CaptureController::CaptureController(QObject *parent) : QObject(parent),
         if (m_serialBytesPending > 0) return;
         m_serialWatchdog.stop();
         m_serial.close();
+        m_serialWriteLatencyMs = m_serialClock.isValid() ? m_serialClock.elapsed() : -1;
+        m_serialClock.invalidate();
         m_switchState = "sent";
         if (m_activeInput > 0) {
             m_switchStatus = "Command sent for " + inputLabel(m_activeInput) + ". Confirm the preview shows that source.";
@@ -96,6 +101,7 @@ bool CaptureController::saveValue(const QString &key, const QVariant &value)
 bool CaptureController::saveValues(const QMap<QString, QVariant> &values)
 {
     auto settings = captureSettings();
+    settings.setAtomicSyncRequired(true);
     for (auto it = values.cbegin(); it != values.cend(); ++it)
         settings.setValue(it.key(), it.value());
     settings.sync();
@@ -125,9 +131,14 @@ QVariantList CaptureController::videoDevices() const
 
 QVariantList CaptureController::videoFormats() const
 {
+    return videoFormatsFor(m_captureDeviceId);
+}
+
+QVariantList CaptureController::videoFormatsFor(const QString &deviceId) const
+{
     QVariantList result;
     for (const auto &device : m_videoDevices) {
-        if (QString::fromLatin1(device.id()) != m_captureDeviceId) continue;
+        if (QString::fromLatin1(device.id()) != deviceId) continue;
         for (const auto &format : device.videoFormats()) {
             const auto size = format.resolution();
             const auto key = formatKey(format);
@@ -149,6 +160,34 @@ QVariantList CaptureController::audioDevices() const
     for (const auto &device : m_audioDevices)
         result.append(QVariantMap{{"id", QString::fromLatin1(device.id())}, {"name", device.description()}});
     return result;
+}
+
+QVariantMap CaptureController::capabilities() const
+{
+    bool captureConnected = false;
+    for (const auto &device : m_videoDevices)
+        captureConnected |= QString::fromLatin1(device.id()) == m_captureDeviceId;
+    bool audioConnected = false;
+    for (const auto &device : m_audioDevices)
+        audioConnected |= QString::fromLatin1(device.id()) == m_audioDeviceId;
+    const bool serialConnected = !m_serialPortName.isEmpty() && m_serialPortNames.contains(m_serialPortName);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    constexpr bool audioMonitoringSupported = true;
+#else
+    constexpr bool audioMonitoringSupported = false;
+#endif
+    return {
+        {"captureAdapter", "Qt Multimedia"},
+        {"captureConnected", captureConnected},
+        {"previewSurfaceAvailable", !m_videoOutput.isNull()},
+        {"audioAdapter", "Qt Multimedia capture-session routing"},
+        {"audioInputSelected", audioConnected},
+        {"audioMonitoringSupported", audioMonitoringSupported},
+        {"audioMonitoringConfigured", audioMonitoringSupported && m_previewRequested && audioConnected},
+        {"serialAdapter", "Qt SerialPort"},
+        {"serialConnected", serialConnected},
+        {"switchConfigured", canSwitchInput(m_selectedInput)}
+    };
 }
 
 QVariantList CaptureController::serialPorts() const
@@ -181,10 +220,18 @@ QString CaptureController::formatKey(const QCameraFormat &format) const
 
 void CaptureController::refreshDevices()
 {
+    bool selectedAudioWasPresent = m_audioDeviceId.isEmpty();
+    for (const auto &device : m_audioDevices)
+        selectedAudioWasPresent |= QString::fromLatin1(device.id()) == m_audioDeviceId;
     m_videoDevices = QMediaDevices::videoInputs();
     m_audioDevices = QMediaDevices::audioInputs();
     m_serialPortNames.clear();
     for (const auto &port : QSerialPortInfo::availablePorts()) m_serialPortNames.append(port.portName());
+    bool selectedAudioIsPresent = m_audioDeviceId.isEmpty();
+    for (const auto &device : m_audioDevices)
+        selectedAudioIsPresent |= QString::fromLatin1(device.id()) == m_audioDeviceId;
+    if (m_previewRequested && selectedAudioWasPresent != selectedAudioIsPresent)
+        configureAudio();
     if (m_previewRequested) {
         bool present = false;
         for (const auto &device : m_videoDevices) present |= QString::fromLatin1(device.id()) == m_captureDeviceId;
@@ -202,6 +249,7 @@ void CaptureController::updateStatusForConfiguration()
 {
     bool videoPresent = m_captureDeviceId.isEmpty();
     bool formatPresent = m_videoFormatKey.isEmpty();
+    bool audioPresent = m_audioDeviceId.isEmpty();
     for (const auto &device : m_videoDevices) if (QString::fromLatin1(device.id()) == m_captureDeviceId) {
         videoPresent = true;
         for (const auto &format : device.videoFormats()) formatPresent |= formatKey(format) == m_videoFormatKey;
@@ -209,6 +257,7 @@ void CaptureController::updateStatusForConfiguration()
     if (m_captureDeviceId.isEmpty()) setStatus("needs-capture-card", "Connect and choose the HDMI capture card.");
     else if (!videoPresent) setStatus("device-missing", "The saved capture card is not connected. Reconnect it or choose another card.");
     else if (!formatPresent) setStatus("format-missing", "The saved video format is no longer supported. Choose another format or use the card default.");
+    else if (!audioPresent) setStatus("audio-missing", "The saved capture audio input is not connected. Reconnect it, choose another input, or clear the optional audio selection.");
     else if (m_serialPortName.isEmpty()) setStatus("needs-switch", "Capture card found. Choose the RS-232 switch or preview the card directly.");
     else if (!m_serialPortNames.contains(m_serialPortName)) setStatus("serial-missing", "The saved RS-232 port is not connected. Reconnect the switch or choose another port.");
     else if (m_commandTemplate.isEmpty() || commandForInput(m_commandTemplate, 1).isEmpty()) {
@@ -231,9 +280,26 @@ void CaptureController::setVideoOutput(QObject *output)
         m_frameConnection = connect(sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
             if (!m_previewRequested || !frame.isValid()) return;
             m_receivedFrame = true;
+            bool metricsChanged = false;
+            if (m_switchClock.isValid()) {
+                m_firstFrameCallbackLatencyMs = m_switchClock.elapsed();
+                m_switchClock.invalidate();
+                metricsChanged = true;
+            }
+            if (m_lastFrameClock.isValid())
+                m_maxFrameGapMs = qMax(m_maxFrameGapMs, m_lastFrameClock.elapsed());
             m_lastFrameClock.restart();
+            if (!m_frameRateClock.isValid()) m_frameRateClock.start();
+            ++m_framesInWindow;
+            if (m_frameRateClock.elapsed() >= 1000) {
+                m_previewFrameRate = m_framesInWindow * 1000.0 / m_frameRateClock.elapsed();
+                m_framesInWindow = 0;
+                m_frameRateClock.restart();
+                metricsChanged = true;
+            }
             if (m_state != "receiving-frames")
                 setStatus("receiving-frames", "Video frames are arriving. Check that the picture matches the selected HDMI source.");
+            else if (metricsChanged) emit changed();
         });
         m_outputDestroyedConnection = connect(output, &QObject::destroyed, this, [this] {
             m_videoOutput = nullptr;
@@ -376,11 +442,22 @@ bool CaptureController::setCommandTemplate(const QString &value)
 bool CaptureController::setInputLabel(int input, const QString &label)
 {
     const auto clean = label.trimmed();
-    if (input < 1 || input > 8 || clean.isEmpty() || clean.size() > 40) return false;
-    for (const auto character : clean) if (character.isNull() || character.isSpace() && character != QLatin1Char(' ')) return false;
+    if (input < 1 || input > 8 || !isValidInputLabel(clean)) return false;
     if (!saveValue(QString("inputs/%1/name").arg(input), clean)) return false;
     m_inputLabels.insert(input, clean);
     emit changed();
+    return true;
+}
+
+bool CaptureController::isValidInputLabel(const QString &label)
+{
+    if (label.trimmed().isEmpty() || label.size() > 40) return false;
+    for (const auto character : label) {
+        const auto code = character.unicode();
+        if (character.isNull() || (character.isSpace() && character != QLatin1Char(' ')))
+            return false;
+        if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return false;
+    }
     return true;
 }
 
@@ -390,6 +467,119 @@ void CaptureController::selectInput(int input)
     if (!saveValue("inputs/selected", input)) return;
     m_selectedInput = input;
     emit changed();
+}
+
+bool CaptureController::applyConfiguration(const QVariantMap &configuration)
+{
+    if (m_serial.isOpen() || m_serialBytesPending > 0) {
+        m_switchStatus = "Wait for the current switch command to finish before applying capture settings.";
+        emit changed();
+        return false;
+    }
+
+    const QStringList expectedKeys{
+        "audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
+        "inputLabels", "selectedInput", "serialPortName", "videoFormatKey"
+    };
+    const auto captureId = configuration.value("captureDeviceId").toString();
+    const auto format = configuration.value("videoFormatKey").toString();
+    const auto audioId = configuration.value("audioDeviceId").toString();
+    const auto portName = configuration.value("serialPortName").toString();
+    const auto commandTemplate = configuration.value("commandTemplate").toString();
+    const auto exactInt = [](const QVariant &value, int *result) {
+        const auto type = value.metaType().id();
+        if (type == QMetaType::Int) {
+            *result = value.toInt();
+            return true;
+        }
+        if (type != QMetaType::Double) return false;
+        bool ok = false;
+        const auto number = value.toDouble(&ok);
+        if (!ok || !std::isfinite(number) || std::floor(number) != number
+            || number < std::numeric_limits<int>::min() || number > std::numeric_limits<int>::max())
+            return false;
+        *result = static_cast<int>(number);
+        return true;
+    };
+    int baud = 0, selectedInput = 0;
+    const bool integerTypesValid = exactInt(configuration.value("baudRate"), &baud)
+        && exactInt(configuration.value("selectedInput"), &selectedInput);
+    const auto labels = configuration.value("inputLabels").toMap();
+
+    bool captureFound = captureId.isEmpty();
+    bool formatFound = format.isEmpty();
+    bool audioFound = audioId.isEmpty();
+    bool portFound = portName.isEmpty();
+    for (const auto &device : m_videoDevices) {
+        if (QString::fromLatin1(device.id()) != captureId) continue;
+        captureFound = true;
+        for (const auto &candidate : device.videoFormats())
+            formatFound |= formatKey(candidate) == format;
+    }
+    for (const auto &device : m_audioDevices)
+        audioFound |= QString::fromLatin1(device.id()) == audioId;
+    portFound |= m_serialPortNames.contains(portName);
+    QString commandError;
+    const bool commandValid = commandTemplate.isEmpty()
+        || !commandForInput(commandTemplate, 1, &commandError).isEmpty();
+    bool labelsValid = labels.size() == 8;
+    for (int input = 1; input <= 8 && labelsValid; ++input) {
+        const auto label = labels.value(QString::number(input)).toString().trimmed();
+        labelsValid = isValidInputLabel(label);
+    }
+    const bool typesValid = configuration.value("captureDeviceId").metaType().id() == QMetaType::QString
+        && configuration.value("videoFormatKey").metaType().id() == QMetaType::QString
+        && configuration.value("audioDeviceId").metaType().id() == QMetaType::QString
+        && configuration.value("serialPortName").metaType().id() == QMetaType::QString
+        && configuration.value("commandTemplate").metaType().id() == QMetaType::QString
+        && integerTypesValid
+        && configuration.value("inputLabels").metaType().id() == QMetaType::QVariantMap;
+    if (configuration.keys() != expectedKeys || !typesValid
+        || !captureFound || !formatFound || !audioFound || !portFound
+        || !SupportedBaudRates.contains(baud) || selectedInput < 1 || selectedInput > 8
+        || !commandValid || !labelsValid) {
+        m_switchState = "error";
+        m_switchStatus = !commandValid && !commandError.isEmpty()
+            ? commandError : "Capture settings changed or are invalid. Refresh devices and review the draft.";
+        emit changed();
+        return false;
+    }
+
+    QMap<QString, QVariant> values{
+        {"capture/device", captureId},
+        {"capture/format", format},
+        {"capture/audio", audioId},
+        {"switch/port", portName},
+        {"switch/baud", baud},
+        {"switch/commandTemplate", commandTemplate},
+        {"inputs/selected", selectedInput}
+    };
+    for (int input = 1; input <= 8; ++input)
+        values.insert(QString("inputs/%1/name").arg(input),
+                      labels.value(QString::number(input)).toString().trimmed());
+    if (!saveValues(values)) return false;
+
+    const bool captureChanged = m_captureDeviceId != captureId || m_videoFormatKey != format;
+    const bool audioChanged = m_audioDeviceId != audioId;
+    if (captureChanged) stopPreview();
+    if (m_serial.isOpen()) m_serial.close();
+    m_captureDeviceId = captureId;
+    m_videoFormatKey = format;
+    m_audioDeviceId = audioId;
+    m_serialPortName = portName;
+    m_baudRate = baud;
+    m_commandTemplate = commandTemplate;
+    m_selectedInput = selectedInput;
+    for (int input = 1; input <= 8; ++input)
+        m_inputLabels.insert(input, labels.value(QString::number(input)).toString().trimmed());
+    if (m_previewRequested && audioChanged) configureAudio();
+    m_switchState = "idle";
+    m_switchStatus = commandTemplate.isEmpty()
+        ? "No switch command is configured."
+        : "Capture settings saved. Send a test and visually verify the selected source.";
+    updateStatusForConfiguration();
+    emit changed();
+    return true;
 }
 
 bool CaptureController::canSwitchInput(int input) const
@@ -402,6 +592,8 @@ bool CaptureController::canSwitchInput(int input) const
         videoPresent = true;
         for (const auto &format : device.videoFormats()) formatPresent |= formatKey(format) == m_videoFormatKey;
     }
+    for (const auto &device : m_audioDevices)
+        audioPresent |= QString::fromLatin1(device.id()) == m_audioDeviceId;
     if (!videoPresent || !formatPresent) return false;
     const auto command = commandForInput(m_commandTemplate, input);
     return !command.isEmpty() && m_baudRate > 0;
@@ -455,6 +647,10 @@ bool CaptureController::startPreview()
     configureAudio();
     m_previewRequested = true;
     m_receivedFrame = false;
+    m_framesInWindow = 0;
+    m_previewFrameRate = 0.0;
+    m_maxFrameGapMs = -1;
+    m_frameRateClock.invalidate();
     m_previewClock.restart();
     m_lastFrameClock.invalidate();
     m_frameWatchdog.start();
@@ -472,6 +668,9 @@ void CaptureController::stopPreview()
     m_frameWatchdog.stop();
     m_previewRequested = false;
     m_receivedFrame = false;
+    m_switchClock.invalidate();
+    m_frameRateClock.invalidate();
+    m_framesInWindow = 0;
     if (m_camera->isActive()) m_camera->stop();
     m_captureSession.setAudioInput(nullptr);
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
@@ -518,17 +717,21 @@ bool CaptureController::switchInput(int input)
     if (!m_serial.open(QIODevice::WriteOnly)) {
         return fail("Could not open the RS-232 switch: " + m_serial.errorString());
     }
+    m_serialBytesPending = command.size();
+    m_serialClock.restart();
+    m_serialWriteLatencyMs = -1;
+    m_firstFrameCallbackLatencyMs = -1;
+    m_switchClock.restart();
+    m_switchState = "sending";
+    m_activeInput = input;
+    m_switchStatus = "Sending the switch command for " + inputLabel(input) + ". Verify the picture after it arrives.";
+    selectInput(input);
+    m_serialWatchdog.start();
     const auto count = m_serial.write(command);
     if (count != command.size()) {
         serialWriteFailed("Could not queue the complete RS-232 command: " + m_serial.errorString());
         return false;
     }
-    m_serialBytesPending = count;
-    m_switchState = "sending";
-    m_activeInput = input;
-    selectInput(input);
-    m_serialWatchdog.start();
-    m_switchStatus = "Sending the switch command for " + inputLabel(input) + ". Verify the picture after it arrives.";
     m_receivedFrame = false;
     m_previewClock.restart();
     m_lastFrameClock.invalidate();
@@ -538,11 +741,33 @@ bool CaptureController::switchInput(int input)
     return true;
 }
 
+void CaptureController::cancelSwitch()
+{
+    if (m_serialBytesPending <= 0 && !m_serial.isOpen()) return;
+    m_serialWatchdog.stop();
+    m_serialBytesPending = 0;
+    if (m_serial.isOpen()) {
+        m_serial.clear(QSerialPort::Output);
+        m_serial.close();
+    }
+    m_switchClock.invalidate();
+    m_serialClock.invalidate();
+    m_serialWriteLatencyMs = -1;
+    m_firstFrameCallbackLatencyMs = -1;
+    m_switchState = "cancelled";
+    m_switchStatus = "Switch command cancelled before write completion; the switch may have received partial bytes. Verify its state before retrying.";
+    emit changed();
+}
+
 void CaptureController::serialWriteFailed(const QString &message)
 {
     m_serialWatchdog.stop();
     m_serialBytesPending = 0;
     if (m_serial.isOpen()) m_serial.close();
+    m_switchClock.invalidate();
+    m_serialClock.invalidate();
+    m_serialWriteLatencyMs = -1;
+    m_firstFrameCallbackLatencyMs = -1;
     m_switchState = "error";
     m_switchStatus = message;
     emit changed();
