@@ -26,7 +26,6 @@ bool SerialCommandWriter::start(QIODevice *device, const QByteArray &payload, in
     m_writeAccepted = false;
     m_state = QStringLiteral("sending");
     m_clock.start();
-    emit stateChanged();
     m_bytesConnection = connect(device, &QIODevice::bytesWritten, this, [this](qint64 count) {
         if (!isSending() || count <= 0) return;
         m_pendingBytes -= count;
@@ -39,7 +38,10 @@ bool SerialCommandWriter::start(QIODevice *device, const QByteArray &payload, in
         if (isSending()) fail("The serial device closed before the command was fully written.");
     });
     m_timeout.start(timeoutMs);
+    emit stateChanged();
+    if (!isSending()) return false;
     const auto written = device->write(payload);
+    if (!isSending()) return false;
     if (written != payload.size()) {
         fail("Could not queue the complete serial switch command.");
         return false;
@@ -52,7 +54,7 @@ bool SerialCommandWriter::start(QIODevice *device, const QByteArray &payload, in
 void SerialCommandWriter::cancel()
 {
     if (!isSending()) return;
-    auto *port = qobject_cast<QSerialPort *>(m_device.data());
+    QPointer<QSerialPort> port = qobject_cast<QSerialPort *>(m_device.data());
     finish("cancelled");
     if (port) port->clear(QSerialPort::Output);
 }

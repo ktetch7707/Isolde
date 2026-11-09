@@ -275,6 +275,25 @@ test("capture session retries an asynchronous switch failure and waits for seria
     assert.equal(scope.pendingSwitchConfirmation, false);
 });
 
+test("capture session masks the picture until post-write frames are available", () => {
+    const scope = vm.createContext({
+        pendingSwitchConfirmation: true,
+        captureController: {state: "receiving-frames", switchState: "sending"},
+    });
+    method("CaptureSessionView.qml", "videoReady", scope);
+    assert.equal(scope.videoReady(), false);
+    scope.captureController.switchState = "sent";
+    scope.captureController.state = "awaiting-frames";
+    assert.equal(scope.videoReady(), false);
+    scope.captureController.state = "receiving-frames";
+    assert.equal(scope.videoReady(), true);
+    scope.captureController.state = "no-signal";
+    assert.equal(scope.videoReady(), false);
+    scope.captureController.state = "receiving-frames";
+    scope.pendingSwitchConfirmation = false;
+    assert.equal(scope.videoReady(), true);
+});
+
 test("closing capture session cancels pending serial output before releasing preview", () => {
     const calls = [], scope = vm.createContext({
         open: true, originId: "home:tile:hdmi", chooseInput: false,

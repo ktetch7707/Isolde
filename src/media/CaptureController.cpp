@@ -53,13 +53,21 @@ CaptureController::CaptureController(QObject *parent) : QObject(parent),
     connect(&m_serialWriter, &SerialCommandWriter::completed, this, [this](qint64 elapsed) {
         m_serial.close();
         m_serialWriteLatencyMs = elapsed;
+        if (m_previewRequested) {
+            m_receivedFrame = false;
+            m_previewClock.restart();
+            m_lastFrameClock.invalidate();
+            setStatus("awaiting-frames", "Command sent. Waiting for a subsequent video frame; then check the selected source.");
+        }
+        m_switchState = "sent";
         if (m_activeInput > 0) {
             m_switchStatus = "Command sent for " + inputLabel(m_activeInput) + ". Confirm the preview shows that source.";
-            emit changed();
         }
+        emit changed();
     });
     connect(&m_serialWriter, &SerialCommandWriter::failed, this, &CaptureController::serialWriteFailed);
     connect(&m_serialWriter, &SerialCommandWriter::stateChanged, this, [this] {
+        if (m_serialWriter.state() == "sent") return;
         m_switchState = m_serialWriter.state();
         emit changed();
     });
@@ -251,6 +259,9 @@ void CaptureController::refreshDevices()
 
 void CaptureController::updateStatusForConfiguration()
 {
+    // Configuration changes must not turn a live signal state into "ready":
+    // the session uses that state to gate source confirmation.
+    if (m_previewRequested) return;
     bool videoPresent = m_captureDeviceId.isEmpty();
     bool formatPresent = m_videoFormatKey.isEmpty();
     bool audioPresent = m_audioDeviceId.isEmpty();
@@ -644,9 +655,19 @@ bool CaptureController::startPreview()
         return false;
     }
     m_camera->setCameraDevice(selected);
-    if (!m_videoFormatKey.isEmpty())
+    if (!m_videoFormatKey.isEmpty()) {
+        bool formatFound = false;
         for (const auto &format : selected.videoFormats())
-            if (formatKey(format) == m_videoFormatKey) m_camera->setCameraFormat(format);
+            if (formatKey(format) == m_videoFormatKey) {
+                m_camera->setCameraFormat(format);
+                formatFound = true;
+                break;
+            }
+        if (!formatFound) {
+            setStatus("format-missing", "The saved video format is no longer supported. Choose another format or use the card default.");
+            return false;
+        }
+    }
     m_captureSession.setCamera(m_camera);
     configureAudio();
     m_previewRequested = true;
@@ -728,7 +749,7 @@ bool CaptureController::switchInput(int input)
     selectInput(input);
     m_switchClock.restart();
     if (!m_serialWriter.start(&m_serial, command, 2500)) {
-        if (m_serialWriter.state() != "error")
+        if (m_serialWriter.state() != "error" && m_serialWriter.state() != "cancelled")
             serialWriteFailed("Could not queue the complete RS-232 command.");
         return false;
     }

@@ -37,6 +37,10 @@ Item {
         const index = captureController.selectedInput - 1
         return index >= 0 && index < inputs.length ? inputs[index].name : "Input"
     }
+    function videoReady() {
+        return captureController.state === "receiving-frames"
+            && (!pendingSwitchConfirmation || captureController.switchState === "sent")
+    }
     function handleCommand(command) {
         if (command === inputManager.back || command === inputManager.home) { closeSession(); return }
         if (chooseInput) {
@@ -79,7 +83,12 @@ Item {
     visible: open
     z: 1000
     Rectangle { anchors.fill: parent; color: "#05080E" }
-    VideoOutput { id: videoOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit }
+    VideoOutput {
+        id: videoOutput
+        anchors.fill: parent
+        fillMode: VideoOutput.PreserveAspectFit
+        visible: root.videoReady()
+    }
     Rectangle {
         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
         height: 122; color: "#D2080C14"
