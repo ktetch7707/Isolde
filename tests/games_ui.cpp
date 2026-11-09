@@ -580,6 +580,7 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     QVERIFY(coverage.value("integratedPlatforms").toList().contains("PSP"));
     QVERIFY(coverage.value("integratedPlatforms").toList().contains("Nintendo DS"));
     QVERIFY(coverage.value("integratedPlatforms").toList().contains("Virtual Boy"));
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("PlayStation"));
     QVERIFY(coverage.value("notIntegrated").toList().contains("Nintendo DSi"));
     QVERIFY(coverage.value("notIntegrated").toList().contains("Xbox 360"));
     const auto budgets=coverage.value("budgets").toMap();
@@ -604,17 +605,20 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown);
     command(widget.data(),InputManager::Confirm);QCOMPARE(library.emulatorSettings("ppsspp").value("video").toString(),QString("software"));
     QVERIFY(!library.installEmulators(false));QVERIFY(!library.setupBusy());
+    QVERIFY(!library.configureEmulator("retroarch-psx",{{"video","automatic"},{"controller","xbox"}},"/etc/passwd"));
+    QVERIFY(library.errorString().contains("Approve"));
+    QVERIFY(library.emulatorSettings("retroarch-psx").value("firmware").toString().isEmpty());
     const auto emulators=library.emulators();
-    for(const auto &id:QStringList{"retroarch-ds","retroarch-vb"}){
+    for(const auto &id:QStringList{"retroarch-ds","retroarch-vb","retroarch-psx"}){
         int index=-1;
         for(int i=0;i<emulators.size();++i)if(emulators[i].toMap().value("id")==id)index=i;
         QVERIFY(index>=0);
         QVERIFY(widget->setProperty("mode","emulators"));QVERIFY(widget->setProperty("choice",index));
         command(widget.data(),InputManager::Confirm);
         QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));
-        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"stylus":"second D-pad"));
+        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"stylus":id=="retroarch-vb"?"second D-pad":"single CHD"));
         QVERIFY(widget->setProperty("choice",1));command(widget.data(),InputManager::Confirm);
-        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"right trigger":"right trigger left"));
+        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"right trigger":id=="retroarch-vb"?"right trigger left":"SDL mappings"));
     }
     QVERIFY(QDir(QFileInfo(GameEmulators::home(profile,"ppsspp")).absolutePath()).removeRecursively());
     qApp->setProperty("isoldeProfile",QVariant());

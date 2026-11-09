@@ -551,6 +551,9 @@ QVariantMap GameLibrary::emulatorSettings(const QString &id){
 }
 bool GameLibrary::configureEmulator(const QString &id,const QVariantMap &options,const QString &firmware){
     if(!m_ready)return fail(tr("This games profile is no longer active."));
+    if(id=="retroarch-psx" && !firmware.isEmpty()
+        && !approvedMediaDirectory(m_emulatorProfile,QFileInfo(firmware).absolutePath()))
+        return fail(tr("Approve the firmware's media folder for this profile before importing."));
     QString error;if(!GameEmulators::configure(m_emulatorProfile,id,options,firmware,&error))return fail(error);
     m_error.clear();emit errorChanged();emit changed();return true;
 }
@@ -1796,6 +1799,13 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionI
     if (!query.exec() || !query.next()) { fail(tr("Game not found in this profile.")); return {}; }
     const auto runtime=query.value(0).toString(), root=query.value(1).toString(), relative=query.value(2).toString();
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("The game runtime is missing or incompatible. Repair it and retry.")); return {}; }
+    if(runtime=="retroarch-psx"){
+        QString error;
+        if(!GameEmulators::playStationFirmwareReady(m_emulatorProfile,&error)){fail(error);return {};}
+        if(root.isEmpty() || QFileInfo(relative).suffix().compare("chd",Qt::CaseInsensitive)!=0){
+            fail(tr("This PlayStation route requires a single CHD disc image."));return {};
+        }
+    }
     if(runtime=="steam"){
         if(ComponentSchema::gameRegistration({{"schemaVersion",1},{"title","Steam game"},{"platform","Steam"},{"runtimeId",runtime},{"root",root},{"target",relative}}).isEmpty()){
             fail(tr("Invalid Steam identity. Remove the entry and import it again."));return {};

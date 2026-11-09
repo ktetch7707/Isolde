@@ -15,10 +15,19 @@ The version-2 `config/game-runtimes.json` manifest is the source of truth for th
 | RetroArch / Gambatte | Game Boy, Game Boy Color | GB, GBC | RetroArch + Gambatte |
 | RetroArch / mGBA | Game Boy Advance | GBA | RetroArch + mGBA |
 | RetroArch / bsnes-mercury-balanced | SNES | SFC, SMC | RetroArch + bsnes-mercury-balanced |
+| RetroArch / Beetle PSX | PlayStation | CHD only | RetroArch + Beetle PSX |
 | RetroArch / DeSmuME | Nintendo DS (not DSi) | NDS | RetroArch + DeSmuME |
 | RetroArch / Beetle VB | Virtual Boy | VB, VBOY | RetroArch + Beetle VB |
 
-The managed provisioning target is Ubuntu 26.04 amd64 only. PlayStation, PS3/4/5, Vita, N64, DSi/3DS, Wii U, Switch generations, Original Xbox, Xbox 360 and Xbox One/Series are explicitly not integrated; no generic frontend or candidate emulator is presented as support for them. Extending the matrix requires a separately pinned runtime/core and formats, bounded remote setup, safe firmware/input/session contracts, and focused tests.
+The managed provisioning target is Ubuntu 26.04 amd64 only. PS3/4/5, Vita, N64, DSi/3DS, Wii U, Switch generations, Original Xbox, Xbox 360 and Xbox One/Series are explicitly not integrated; no generic frontend or candidate emulator is presented as support for them. Extending the matrix requires a separately pinned runtime/core and formats, bounded remote setup, safe firmware/input/session contracts, and focused tests.
+
+## PlayStation CHD route
+
+The same authenticated release index identifies `libretro-beetle-psx` version `0.9.38.6+git20260227-1` and SHA-256 `f6bfa15de69ae45c50210ddf7bb82b749fd2a0dd00866282c023fa3e87df1df1`. The downloaded deb matched and contains `/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so`, with package copyright records under `/usr/share/doc/libretro-beetle-psx/copyright`. Its authenticated source archive SHA-256 is `69d2104c7f4697edf4e11c67603d50258fa6f0cfc2ffa8d5bb8c076aa19c67fb`; the shipped core supports CHD and selects a regional BIOS based on the disc. The existing bundle builder resolves and authenticates dependencies including `libchdr0` on the target, but a new offline bundle has not been built or installed.
+
+The remote setup permits one 512 KiB user-supplied BIOS at a time: SCPH-5500 (Japan), 5501 (North America) or 5502 (Europe). Firmware must be in a profile-approved media folder. Save explicitly copies it privately; known SHA-1 values from the pinned core identify the supported region, and a content-addressed SHA-256 guards the stored copy. Both Games launch preflight and the session adapter recheck it; missing, changed, redirected or unsupported firmware is refused. The session generates only the selected region's expected filename in a private directory and refuses unexpected files there. Older generated private firmware copies can remain; saves are never deleted. Hash matching identifies bytes, not ownership or licensing. Isolde supplies neither games nor BIOS.
+
+Register or import a user-owned single `.chd` image through Games; the existing source-root grant and sandbox mount route it read-only to the selected core. Catalog disc identity is the approved locator, **not** a content hash: replacing the CHD in place is not detected. The UI cannot determine the image's region before launch; select matching firmware, or the core will report missing regional firmware. Profile-private RetroArch save and state directories and standard SDL Xbox mappings are used. CUE and other multi-file images, direct physical PlayStation discs, playlists, live disc swaps, CHD conversion and universal game compatibility are not supported. Changing regions requires another firmware import. Actual gameplay, region mismatch presentation, save flush, input and offline bundle installation are not yet verified.
 
 ## Verified DS and Virtual Boy package selection
 

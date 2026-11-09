@@ -286,12 +286,15 @@ void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
 }
 void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCoreApplication::setApplicationVersion("0.0.1.2");
+    const auto previousProfile=qApp->property("isoldeProfile");
+    const auto restoreProfile=qScopeGuard([&]{qApp->setProperty("isoldeProfile",previousProfile);});
+    qApp->setProperty("isoldeProfile",QUuid::createUuid().toString(QUuid::WithoutBraces));
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.loadFromData(::apps));AppCatalog catalog(&apps);
     QVERIFY2(catalog.load(QFINDTESTDATA("../config/catalog.json"),dir.filePath("installed.json"),dir.filePath("packages")),qPrintable(catalog.errorString()));
     HomeLayout home(&apps);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
     const auto originalHome=home.committedDocument();QSignalSpy homeChanges(&home,&HomeLayout::layoutChanged);
     connect(&catalog,&AppCatalog::packageInstalled,&home,&HomeLayout::addAppTile);
-    const QStringList runtimeIds{"dolphin","pcsx2","ppsspp","retroarch-nes","retroarch-gb","retroarch-gba","retroarch-snes","retroarch-ds","retroarch-vb","supertux"};
+    const QStringList runtimeIds{"dolphin","pcsx2","ppsspp","retroarch-nes","retroarch-gb","retroarch-gba","retroarch-snes","retroarch-psx","retroarch-ds","retroarch-vb","supertux"};
     for(const auto &id:runtimeIds){
         QVERIFY2(catalog.install(id),qPrintable(catalog.errorString()));
         if(id!="supertux"){QCOMPARE(home.committedDocument(),originalHome);QCOMPARE(homeChanges.count(),0);}
@@ -306,6 +309,10 @@ void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     const auto disc=library.addGame(registration);QVERIFY2(!disc.isEmpty(),qPrintable(library.errorString()));
     QCOMPARE(library.resolveLaunch(disc).value("openWith").toString(),QString("dolphin"));
     QCOMPARE(library.resolveLaunch(disc).value("sourceRoot").toString(),root);
+    writeFile(root+"/game.chd","inert");
+    auto psx=gameRegistration(root);psx["runtimeId"]="retroarch-psx";psx["platform"]="PlayStation";psx["target"]="game.chd";
+    const auto psxGame=library.addGame(psx);QVERIFY2(!psxGame.isEmpty(),qPrintable(library.errorString()));
+    QVERIFY(library.resolveLaunch(psxGame).isEmpty());QVERIFY(library.errorString().contains("firmware"));
     auto forged=gamesRuntime("forged");QVERIFY(forged.isValid());forged.launchConfiguration["gameSourceRoot"]=root;
     QVERIFY(!forged.isValid());QVERIFY(!apps.addApp(forged));
     for(const auto &key:{"managedGameRoot","managedGameExecutable","opticalMediaId","opticalReference","opticalObservationId"}){
@@ -330,6 +337,8 @@ void ComponentTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData
     const auto before=readFile(file);
     QVERIFY(!GameEmulators::configure(first,"ppsspp",{{"video","arbitrary"},{"controller","xbox"}},{},&error));QCOMPARE(readFile(file),before);
     QVERIFY(!GameEmulators::configure(first,"ppsspp",{{"video","automatic"},{"controller","xbox"},{"command","evil"}},{},&error));QCOMPARE(readFile(file),before);
+    QVERIFY(!GameEmulators::playStationFirmwareReady(first,&error));QVERIFY(error.contains("firmware"));
+    QCOMPARE(GameEmulators::settings(second,"retroarch-psx",&error).value("firmware").toString(),QString());
     writeFile(file,"{\"schemaVersion\":99}");QVERIFY(GameEmulators::settings(first,"ppsspp",&error).isEmpty());
     QVERIFY(!GameEmulators::configure(first,"ppsspp",{{"video","automatic"},{"controller","xbox"}},{},&error));QCOMPARE(readFile(file),QByteArray("{\"schemaVersion\":99}"));
     QVERIFY(GameEmulators::home("../other","ppsspp").isEmpty());QVERIFY(GameEmulators::home(first,"unknown").isEmpty());
@@ -337,7 +346,7 @@ void ComponentTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData
     QVERIFY(QDir(QFileInfo(home).absolutePath()).removeRecursively());
 }
 void ComponentTests::emulatorManifestIsBoundedAndVersioned(){
-    const auto runtimes=GameEmulators::definitions();QCOMPARE(runtimes.size(),7);
+    const auto runtimes=GameEmulators::definitions();QCOMPARE(runtimes.size(),10);
     QSet<QString> ids,platforms;
     for(const auto &entry:runtimes){
         const auto runtime=entry.toMap();const auto id=runtime.value("id").toString();
@@ -346,9 +355,10 @@ void ComponentTests::emulatorManifestIsBoundedAndVersioned(){
         QVERIFY(!runtime.value("formats").toStringList().isEmpty());
         for(const auto &platform:runtime.value("platforms").toStringList())platforms.insert(platform);
     }
-    QCOMPARE(platforms,QSet<QString>({"PSP","GameCube","Wii","PlayStation 2","NES","Game Boy","Game Boy Color","Game Boy Advance","SNES"}));
+    QCOMPARE(platforms,QSet<QString>({"PSP","GameCube","Wii","PlayStation","PlayStation 2","NES","Game Boy","Game Boy Color","Game Boy Advance","SNES","Nintendo DS","Virtual Boy"}));
     QVERIFY(GameEmulators::definition("xbox-360").isEmpty());
     QVERIFY(GameEmulators::definition("pcsx2").value("firmwareRequired").toBool());
+    QVERIFY(GameEmulators::definition("retroarch-psx").value("firmwareRequired").toBool());
 }
 void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");

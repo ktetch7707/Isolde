@@ -6,7 +6,7 @@ Every delivered route must support TV-remote selection/setup/launch, Xbox-contro
 
 | Family | Generations / systems retained | Candidate route and current gap |
 | --- | --- | --- |
-| Sony | PlayStation | [DuckStation](https://www.duckstation.org/) candidate. Runtime/license/firmware/controller/import/session integration and gameplay are not implemented. |
+| Sony | PlayStation | Beetle PSX software core route supports single CHD images and one user-supplied regional firmware selection. Gameplay, controller and save acceptance remain open; physical discs, CUE and live swaps are not supported. |
 | Sony | PlayStation 2 | PCSX2 adapter/setup is implemented in the current batch; actual firmware/gameplay/offline/update acceptance remains open. |
 | Sony | PlayStation 3 | [RPCS3](https://rpcs3.net/compatibility) candidate with title-specific compatibility. Provisioning, firmware, directory/package import, renderer/performance, input and gameplay remain open. |
 | Sony | PlayStation 4 | [shadPS4](https://www.shadps4.net/compatibility/) is a candidate requiring title-specific assessment. No Linux appliance support or general compatibility is promised by source presence. |
@@ -37,7 +37,7 @@ routes above do not implicitly supply any of these systems.
 
 | Route | Concrete work before declaring an integrated route |
 | --- | --- |
-| PlayStation | Ubuntu's signed release index and downloaded deb identify `libretro-beetle-psx` `0.9.38.6+git20260227-1`, SHA-256 `f6bfa15de69ae45c50210ddf7bb82b749fd2a0dd00866282c023fa3e87df1df1`, and `/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so`. Its packaged metadata names three mandatory regional firmware files. Implement and verify regional user-owned firmware import/preflight, safe multi-file disc formats or a bounded single-file route, private saves, controller mapping and session adapter; review dependencies and redistribution terms before selecting it. |
+| PlayStation | The single-CHD Beetle PSX route is implemented as described above; CUE/multi-file import, direct physical discs, region autodetection before launch and live disc swapping are not. Gameplay, actual controller and save behavior still require verification. |
 | PlayStation 3 | Verify a pinned Linux runtime and dependencies; implement firmware setup and safe directory/package import, private storage, controller and session handling. Compatibility and renderer constraints are title-specific. |
 | PlayStation 4 | Establish a supportable Linux runtime artifact and dependencies and a bounded title/format/input/storage contract before adding an adapter; upstream compatibility information alone is not an appliance integration. |
 | PlayStation 5 | No runtime or owned-console control route has been selected. A console route also needs an Xbox-controller bridge and launch/return design; capture alone is insufficient. |
@@ -53,9 +53,8 @@ package-index files; its apt cache cannot establish a 26.04 package pin. On
 2026-11-09 the official Ubuntu 26.04 release index was subsequently fetched
 read-only and authenticated, enabling the DS and Virtual Boy routes documented
 in [the emulator contract](emulator-runtime-contract-2026-11-09.md). The
-same index contains a Beetle PSX package; this is candidate evidence, not an
-implemented PlayStation route. Its firmware and safe disc import contracts
-still need work. No host package was installed.
+same index contains the Beetle PSX package, now used for the bounded
+single-CHD route. No host package was installed.
 
 To unblock an apt-based route, obtain authenticated **target-release and
 architecture** index metadata from the configured Ubuntu archive and verify

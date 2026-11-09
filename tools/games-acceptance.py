@@ -107,8 +107,8 @@ def main():
         before=game_hashes()
         layout_before=(local/'home-layout.json').read_bytes()
         capture('emulatorsempty');keys('Return',*(['Right']*8),'Return');capture('emulatorssetup')
-        keys(*(['Down']*9+['Return']));capture('emulatorsinstallreview');keys('Right','Return')
-        expected={'ppsspp','dolphin','pcsx2','retroarch-nes','retroarch-gb','retroarch-gba','retroarch-snes','retroarch-ds','retroarch-vb'}
+        keys(*(['Down']*10+['Return']));capture('emulatorsinstallreview');keys('Right','Return')
+        expected={'ppsspp','dolphin','pcsx2','retroarch-nes','retroarch-gb','retroarch-gba','retroarch-snes','retroarch-psx','retroarch-ds','retroarch-vb'}
         def activated():
             try:return expected.issubset(json.loads((local/'installed-apps.json').read_text()).get('installed',[]))
             except (OSError,ValueError):return False

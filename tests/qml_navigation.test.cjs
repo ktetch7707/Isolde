@@ -81,6 +81,29 @@ test("DS and Virtual Boy setup exposes controller limitations remotely", () => {
     }
 });
 
+test("PlayStation firmware selection is reviewed before saving", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        mode: "emulators", choice: 0, message: "", emulatorId: "", firmwareDraft: "",
+        keyboard: {selectedIndex: -1, value: ""},
+        emulators: [{id:"retroarch-psx", name:"PlayStation", installed:true, registered:true, firmwareRequired:true}],
+        library: {
+            emulatorSettings() { return {schemaVersion:1, video:"automatic", controller:"xbox", firmware:""}; },
+            configureEmulator(...args) { calls.push(args); return true; },
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.match(scope.message,/single CHD/);
+    assert.match(scope.message,/matching regional/);
+    scope.choice=2;scope.activateChoice();
+    assert.equal(scope.mode,"keyboard");assert.equal(scope.field,5);assert.equal(calls.length,0);
+    scope.firmwareDraft="/media/games/user-firmware.bin";scope.mode="emulatorSettings";scope.choice=3;
+    scope.activateChoice();
+    assert.equal(calls.length,1);assert.equal(calls[0][0],"retroarch-psx");
+    assert.equal(calls[0][2],scope.firmwareDraft);
+});
+
 test("pending uninstall cleanup requires the separate remote confirmation", () => {
     const calls = [];
     const inputManager = {back: 1, navigateDown: 2, navigateRight: 3, navigateUp: 4, navigateLeft: 5, confirm: 6};

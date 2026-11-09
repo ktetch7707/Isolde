@@ -412,7 +412,7 @@ class EmulatorAdapterTests(unittest.TestCase):
     def test_all_declared_routes_build_identity_only_commands(self):
         for identity in self.runtime_definitions:
             runtime,target=self.runtime(identity,self.runtime_definitions[identity]["formats"][0])
-            if identity=="pcsx2":
+            if identity in {"pcsx2","retroarch-psx"}:
                 with self.assertRaisesRegex(ValueError,"firmware is required"):adapter.command(runtime,target,self.home)
                 continue
             with patch.object(adapter,"dolphin_controller",return_value="Xbox Controller"):
@@ -504,6 +504,48 @@ class EmulatorAdapterTests(unittest.TestCase):
         coverage=json.loads((root/"config/game-runtimes.json").read_text())["generationCoverage"]
         self.assertIn("Nintendo DSi",coverage["notIntegrated"])
         self.assertNotIn("Nintendo DS",coverage["notIntegrated"])
+
+    def test_playstation_route_binds_chd_and_firmware(self):
+        root=Path(__file__).parents[1]
+        route=self.runtime_definitions["retroarch-psx"]
+        self.assertEqual(route["platforms"],["PlayStation"])
+        self.assertEqual(route["formats"],["chd"])
+        self.assertTrue(route["firmwareRequired"])
+        self.assertEqual(games.PACKAGES["libretro-beetle-psx"],
+            ("0.9.38.6+git20260227-1","/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so"))
+        cpp=(root/"src/games/GameEmulators.cpp").read_text()
+        for digest in adapter.PSX_FIRMWARE:
+            self.assertIn(digest,cpp)
+        manifest=json.loads((root/"config/packages/retroarch-psx/manifest.json").read_text())
+        self.assertEqual(manifest["app"]["gameFormats"],["chd"])
+        self.assertEqual(manifest["app"]["emulatorRuntime"],"retroarch-psx")
+        runtime,target=self.runtime("retroarch-psx","chd")
+        with self.assertRaisesRegex(ValueError,"firmware is required"):
+            adapter.command(runtime,target,self.home)
+        import hashlib
+        data=b"synthetic firmware"+bytes(512*1024-len(b"synthetic firmware"))
+        digest=hashlib.sha256(data).hexdigest()
+        name=digest+".bin"
+        adapter.atomic(self.home/"firmware"/name,data)
+        adapter.atomic(self.home/".config/isolde-emulator/settings.json",json.dumps({
+            "schemaVersion":1,"video":"automatic","controller":"xbox","firmware":name}).encode())
+        with patch.dict(adapter.PSX_FIRMWARE,{hashlib.sha1(data).hexdigest():"scph5501.bin"}):
+            argv=adapter.command(runtime,target,self.home)
+            self.assertEqual(argv[-3:],["--libretro",runtime["core"],target])
+            system=self.home/".config/isolde-emulator/generated"/("psx-"+digest)
+            self.assertEqual((system/"scph5501.bin").read_bytes(),data)
+            self.assertIn('system_directory = '+json.dumps(str(system)),
+                (self.home/".config/isolde-emulator/generated/retroarch.cfg").read_text())
+            config=(self.home/".config/isolde-emulator/generated/retroarch.cfg").read_text()
+            self.assertIn('auto_overrides_enable = "false"',config)
+            self.assertIn('game_specific_options = "false"',config)
+            (system/"scph5502.bin").write_bytes(b"unexpected")
+            with self.assertRaisesRegex(ValueError,"unexpected files"):
+                adapter.command(runtime,target,self.home)
+            (system/"scph5502.bin").unlink()
+            (self.home/"firmware"/name).write_bytes(bytes(len(data)))
+            with self.assertRaisesRegex(ValueError,"changed or is invalid"):
+                adapter.command(runtime,target,self.home)
 
     def test_ds_controller_options_are_private_and_recreated(self):
         runtime,target=self.runtime("retroarch-ds","nds")
