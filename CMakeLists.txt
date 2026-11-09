@@ -313,6 +313,33 @@ install(FILES tools/portable-game-installer.py DESTINATION share/isolde)
 configure_file(tools/steam-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/steam-games.py COPYONLY)
 configure_file(tools/portable-game-installer.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/portable-game-installer.py COPYONLY)
 install(FILES tools/provision-games.py tools/build-ppsspp.py DESTINATION share/isolde)
+set(ISOLDE_GAME_RUNTIME_BUNDLE "" CACHE PATH "Optional prepared Ubuntu 26.04 amd64 emulator bundle root")
+set(ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY "" CACHE FILEPATH "Trusted Ed25519 public key for the prepared emulator bundle")
+if(ISOLDE_GAME_RUNTIME_BUNDLE)
+    if(NOT IS_DIRECTORY "${ISOLDE_GAME_RUNTIME_BUNDLE}" OR
+       NOT EXISTS "${ISOLDE_GAME_RUNTIME_BUNDLE}/bundle.json")
+        message(FATAL_ERROR "ISOLDE_GAME_RUNTIME_BUNDLE must name a prepared bundle root containing bundle.json")
+    endif()
+    if(NOT EXISTS "${ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY}" OR
+       IS_DIRECTORY "${ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY}")
+        message(FATAL_ERROR "A trusted ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY is required with a packaged runtime bundle")
+    endif()
+    file(READ "${ISOLDE_GAME_RUNTIME_BUNDLE}/bundle.json" game_bundle_manifest)
+    string(JSON game_runtime_hash ERROR_VARIABLE game_runtime_hash_error
+        GET "${game_bundle_manifest}" runtimeManifestSha256)
+    if(game_runtime_hash_error OR NOT game_runtime_hash MATCHES "^[0-9a-f]{64}$")
+        message(FATAL_ERROR "The prepared emulator bundle has no valid runtime manifest hash")
+    endif()
+    string(SUBSTRING "${game_runtime_hash}" 0 16 game_runtime_hash_short)
+    install(DIRECTORY "${ISOLDE_GAME_RUNTIME_BUNDLE}/"
+        DESTINATION "share/isolde/game-runtime-bundle/ubuntu-26.04-amd64-${game_runtime_hash_short}" OPTIONAL)
+    install(FILES "${ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY}" DESTINATION share/isolde
+        RENAME game-runtime-bundle.pub)
+    configure_file("${ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY}"
+        "${CMAKE_CURRENT_BINARY_DIR}/share/isolde/game-runtime-bundle.pub" COPYONLY)
+elseif(ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY)
+    message(FATAL_ERROR "ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY requires ISOLDE_GAME_RUNTIME_BUNDLE")
+endif()
 install(FILES tools/fetch-game-fixtures.py DESTINATION share/isolde)
 install(FILES config/game-runtimes.json DESTINATION share/isolde)
 configure_file(tools/emulator-session.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/emulator-session.py COPYONLY)
