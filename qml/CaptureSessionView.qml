@@ -8,11 +8,17 @@ Item {
     property bool chooseInput: false
     property bool pendingSwitchConfirmation: true
     property bool selectionPending: false
+    property int artworkInput: 0
+    property string artworkSource: ""
+    readonly property bool motionAllowed: !displaySettings.reduceMotion && captureController.sessionTransition !== "instant"
+    readonly property int animationDuration: motionAllowed ? captureController.transitionDuration : 0
     signal returned(string originId)
     signal configureRequested(string originId)
 
-    function openSession(input, origin) {
+    function openSession(input, origin, artwork) {
         originId = origin || ""
+        artworkInput = input
+        artworkSource = artwork || ""
         chooseInput = input < 1 || input > 8
         pendingSwitchConfirmation = true
         selectionPending = false
@@ -87,9 +93,23 @@ Item {
         : pendingSwitchConfirmation ? "VERIFYING INPUT · " + root.selectedInputName()
         : "HDMI INPUT · " + root.selectedInputName()
 
-    visible: open
+    visible: open || opacity > 0
+    opacity: open ? 1 : 0
+    scale: open || captureController.sessionTransition !== "expand" || !motionAllowed ? 1 : 0.9
+    transform: Translate { x: root.open || captureController.sessionTransition !== "slide" || !root.motionAllowed ? 0 : root.width * 0.08
+        Behavior on x { NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
+    }
+    Behavior on opacity { NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
+    Behavior on scale { NumberAnimation { duration: root.animationDuration; easing.type: Easing.OutCubic } }
     z: 1000
     Rectangle { anchors.fill: parent; color: "#05080E" }
+    Image {
+        anchors.centerIn: parent
+        width: Math.min(parent.width * 0.55, 800); height: Math.min(parent.height * 0.55, 500)
+        fillMode: Image.PreserveAspectFit; asynchronous: true
+        source: !root.videoReady() && captureController.selectedInput === root.artworkInput ? root.artworkSource : ""
+        visible: source.toString() !== ""
+    }
     VideoOutput {
         id: videoOutput
         anchors.fill: parent

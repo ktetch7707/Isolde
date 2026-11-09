@@ -654,7 +654,7 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
         }
         const auto configuration = value.toMap();
         const QStringList keys{"audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
-            "inputLabels", "selectedInput", "serialPortName", "videoFormatKey"};
+            "inputLabels", "selectedInput", "serialPortName", "sessionTransition", "transitionDuration", "videoFormatKey"};
         if (configuration.size() != keys.size()) {
             if (error) *error = "Capture settings must include every staged field exactly once.";
             return {};
@@ -678,7 +678,7 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
         };
         if (!stringField("audioDeviceId", 512) || !stringField("captureDeviceId", 512)
             || !stringField("serialPortName", 256) || !stringField("videoFormatKey", 256)
-            || !stringField("commandTemplate", 128))
+            || !stringField("commandTemplate", 128) || !stringField("sessionTransition", 16))
             return {};
         const auto exactInteger = [&configuration, &normalized, error](const QString &key, int minimum, int maximum) {
             const auto value = configuration.value(key);
@@ -699,8 +699,11 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
         };
         if (!exactInteger("baudRate", 9600, 115200)
             || !QList<int>{9600, 19200, 38400, 57600, 115200}.contains(normalized.value("baudRate").toInt())
-            || !exactInteger("selectedInput", MinHdmiInput, MaxHdmiInput)) {
-            if (error && error->isEmpty()) *error = "Choose a supported serial speed.";
+            || !exactInteger("selectedInput", MinHdmiInput, MaxHdmiInput)
+            || !exactInteger("transitionDuration", 200, 350)
+            || !QList<int>{200, 250, 300, 350}.contains(normalized.value("transitionDuration").toInt())
+            || !QStringList{"instant", "fade", "slide", "expand"}.contains(normalized.value("sessionTransition").toString())) {
+            if (error && error->isEmpty()) *error = "Choose a supported serial speed and session transition.";
             return {};
         }
         const auto labelsValue = configuration.value("inputLabels");

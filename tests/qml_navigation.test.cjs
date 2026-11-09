@@ -116,6 +116,7 @@ test("capture settings stage changes, apply together, and discard without saving
     const controller = {
         captureDeviceId: "card-a", videoFormatKey: "fmt-a", audioDeviceId: "audio-a",
         serialPortName: "serial-a", baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 1,
+        sessionTransition: "fade", transitionDuration: 250,
         inputs: Array.from({length: 8}, (_, index) => ({number: index + 1, name: "HDMI " + (index + 1)})),
         result: false,
     };
@@ -149,7 +150,7 @@ test("capture settings stage changes, apply together, and discard without saving
     assert.equal(saved[2].configuration.commandTemplate, "HDMI {input}\\r");
     assert.deepEqual(Object.keys(saved[2].configuration).sort(), [
         "audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
-        "inputLabels", "selectedInput", "serialPortName", "videoFormatKey",
+        "inputLabels", "selectedInput", "serialPortName", "sessionTransition", "transitionDuration", "videoFormatKey",
     ]);
     assert.equal(Object.keys(saved[2].configuration.inputLabels).length, 8);
     assert.equal(scope.draftDirty, false);
@@ -160,10 +161,11 @@ test("capture editor routes apply, test, preview, refresh, and cancel through ty
     const scope = vm.createContext({
         selectedIndex: 9, keyboardMode: 0, draftDirty: true,
         draft: {captureDeviceId: "card", videoFormatKey: "", audioDeviceId: "", serialPortName: "ttyUSB0",
-            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2, inputLabels: {"1":"HDMI 1"}},
+            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2, inputLabels: {"1":"HDMI 1"},
+            sessionTransition: "fade", transitionDuration: 250},
         captureController: {
             captureDeviceId: "card", videoFormatKey: "", audioDeviceId: "", serialPortName: "ttyUSB0",
-            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2,
+            baudRate: 9600, commandTemplate: "{input}\\r", selectedInput: 2, sessionTransition: "fade", transitionDuration: 250,
             inputs: Array.from({length: 8}, (_, index) => ({number: index + 1, name: "HDMI " + (index + 1)})),
         },
         actionDispatcher: {dispatchEditorAction: action => { actions.push(action); return true; }},
@@ -223,12 +225,48 @@ test("disconnected saved capture devices can be cleared or replaced", () => {
 
 test("capture settings keep remote focus on screen through the last editor rows", () => {
     const calls = [], scope = vm.createContext({
-        selectedIndex: 14, ListView: {Contain: "contain"},
+        selectedIndex: 16, ListView: {Contain: "contain"},
         optionList: {positionViewAtIndex: (...args) => calls.push(args)},
     });
     method("CaptureSettingsView.qml", "keepSelectedRowVisible", scope);
     scope.keepSelectedRowVisible();
-    assert.deepEqual(calls, [[14, "contain"]]);
+    assert.deepEqual(calls, [[16, "contain"]]);
+});
+
+test("capture session appearance choices are staged and cancel restores saved choices", () => {
+    const scope = vm.createContext({
+        selectedIndex: 15, draftDirty: false, draft: {sessionTransition: "fade", transitionDuration: 250},
+        captureController: {
+            sessionTransition: "fade", transitionDuration: 250,
+            inputs: Array.from({length: 8}, (_, i) => ({number: i + 1, name: "HDMI " + (i + 1)})),
+        },
+        actionDispatcher: {dispatchEditorAction: () => true},
+    });
+    for (const name of ["setDraftValue", "adjust", "resetDraft", "cancelDraft"])
+        method("CaptureSettingsView.qml", name, scope);
+    scope.adjust(1);
+    assert.equal(scope.draft.sessionTransition, "slide");
+    scope.selectedIndex = 16;
+    scope.adjust(-1);
+    assert.equal(scope.draft.transitionDuration, 200);
+    assert.equal(scope.draftDirty, true);
+    scope.cancelDraft();
+    assert.equal(scope.draft.sessionTransition, "fade");
+    assert.equal(scope.draft.transitionDuration, 250);
+    assert.equal(scope.draftDirty, false);
+});
+
+test("capture fallback art belongs only to the matching HDMI shortcut", () => {
+    const scope = vm.createContext({
+        homeLayout: {
+            components: [{id: "tile", action: {type: "switch-input", input: 2}, customLogo: "artwork/a.png"}],
+            resolveArtwork: asset => "managed:" + asset,
+        },
+    });
+    method("Main.qml", "captureFallbackArtwork", scope);
+    assert.equal(scope.captureFallbackArtwork(2, "tile"), "managed:artwork/a.png");
+    assert.equal(scope.captureFallbackArtwork(3, "tile"), "");
+    assert.equal(scope.captureFallbackArtwork(2, "other"), "");
 });
 
 test("capture session preserves selection for retry after a failed switch", () => {

@@ -43,6 +43,8 @@ class CaptureController final : public QObject {
     Q_PROPERTY(int selectedInput READ selectedInput NOTIFY changed)
     Q_PROPERTY(int activeInput READ activeInput NOTIFY changed)
     Q_PROPERTY(int baudRate READ baudRate NOTIFY changed)
+    Q_PROPERTY(QString sessionTransition READ sessionTransition NOTIFY changed)
+    Q_PROPERTY(int transitionDuration READ transitionDuration NOTIFY changed)
 public:
     explicit CaptureController(QObject *parent = nullptr);
     ~CaptureController() override;
@@ -70,6 +72,8 @@ public:
     int selectedInput() const { return m_selectedInput; }
     int activeInput() const { return m_activeInput; }
     int baudRate() const { return m_baudRate; }
+    QString sessionTransition() const { return m_sessionTransition; }
+    int transitionDuration() const { return m_transitionDuration; }
 
     Q_INVOKABLE void refreshDevices();
     Q_INVOKABLE QVariantList videoFormatsFor(const QString &deviceId) const;
@@ -131,6 +135,7 @@ private:
     QString m_audioDeviceId;
     QString m_serialPortName;
     QString m_commandTemplate;
+    QString m_sessionTransition = "fade";
     QString m_previewCaptureId;
     QString m_previewFormatKey;
     QString m_previewAudioId;
@@ -140,6 +145,7 @@ private:
     QString m_switchState = "idle";
     QString m_state = "needs-setup";
     int m_baudRate = 9600;
+    int m_transitionDuration = 250;
     int m_selectedInput = 1;
     int m_activeInput = 0;
     qint64 m_serialWriteLatencyMs = -1;

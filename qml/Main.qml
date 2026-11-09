@@ -634,6 +634,17 @@ Window {
         }
     }
 
+    function captureFallbackArtwork(input, originId) {
+        const items = homeLayout.components
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i]
+            if (item.id === originId && item.action && item.action.type === "switch-input"
+                    && item.action.input === input && item.customLogo)
+                return homeLayout.resolveArtwork(item.customLogo)
+        }
+        return ""
+    }
+
     Connections {
         target: appVpn
         function onFailed(appId,message){
@@ -712,7 +723,7 @@ Window {
         }
         function onCaptureSessionRequested(input, originId) {
             commandCenter.open = false
-            captureSession.openSession(input, originId)
+            captureSession.openSession(input, originId, window.captureFallbackArtwork(input, originId))
         }
         function onSettingsRequested(section) { if (section < 0) settings.inPage = false; else settings.openSection(section) }
     }

@@ -94,6 +94,10 @@ void CaptureController::loadSettings()
     m_baudRate = settings.value("switch/baud", 9600).toInt();
     if (!SupportedBaudRates.contains(m_baudRate)) m_baudRate = 9600;
     m_commandTemplate = settings.value("switch/commandTemplate").toString();
+    const auto transition = settings.value("session/transition", "fade").toString();
+    if (QStringList{"instant", "fade", "slide", "expand"}.contains(transition)) m_sessionTransition = transition;
+    const auto duration = settings.value("session/duration", 250).toInt();
+    if (QList<int>{200, 250, 300, 350}.contains(duration)) m_transitionDuration = duration;
     m_switchStatus = m_commandTemplate.isEmpty() ? "No switch command is configured."
         : "Saved command loaded. Send a test and visually verify the selected source.";
     for (int input = 1; input <= 8; ++input) {
@@ -504,7 +508,7 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
 
     const QStringList expectedKeys{
         "audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
-        "inputLabels", "selectedInput", "serialPortName", "videoFormatKey"
+        "inputLabels", "selectedInput", "serialPortName", "sessionTransition", "transitionDuration", "videoFormatKey"
     };
     const auto captureId = configuration.value("captureDeviceId").toString();
     const auto format = configuration.value("videoFormatKey").toString();
@@ -526,9 +530,11 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
         *result = static_cast<int>(number);
         return true;
     };
-    int baud = 0, selectedInput = 0;
+    const auto transition = configuration.value("sessionTransition").toString();
+    int baud = 0, selectedInput = 0, duration = 0;
     const bool integerTypesValid = exactInt(configuration.value("baudRate"), &baud)
-        && exactInt(configuration.value("selectedInput"), &selectedInput);
+        && exactInt(configuration.value("selectedInput"), &selectedInput)
+        && exactInt(configuration.value("transitionDuration"), &duration);
     const auto labels = configuration.value("inputLabels").toMap();
 
     bool captureFound = captureId.isEmpty();
@@ -557,11 +563,14 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
         && configuration.value("audioDeviceId").metaType().id() == QMetaType::QString
         && configuration.value("serialPortName").metaType().id() == QMetaType::QString
         && configuration.value("commandTemplate").metaType().id() == QMetaType::QString
+        && configuration.value("sessionTransition").metaType().id() == QMetaType::QString
         && integerTypesValid
         && configuration.value("inputLabels").metaType().id() == QMetaType::QVariantMap;
     if (configuration.keys() != expectedKeys || !typesValid
         || !captureFound || !formatFound || !audioFound || !portFound
         || !SupportedBaudRates.contains(baud) || selectedInput < 1 || selectedInput > 8
+        || !QStringList{"instant", "fade", "slide", "expand"}.contains(transition)
+        || !QList<int>{200, 250, 300, 350}.contains(duration)
         || !commandValid || !labelsValid) {
         m_switchState = "error";
         m_switchStatus = !commandValid && !commandError.isEmpty()
@@ -577,7 +586,8 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
         {"switch/port", portName},
         {"switch/baud", baud},
         {"switch/commandTemplate", commandTemplate},
-        {"inputs/selected", selectedInput}
+        {"inputs/selected", selectedInput},
+        {"session/transition", transition}, {"session/duration", duration}
     };
     for (int input = 1; input <= 8; ++input)
         values.insert(QString("inputs/%1/name").arg(input),
@@ -593,6 +603,8 @@ bool CaptureController::applyConfiguration(const QVariantMap &configuration)
     m_serialPortName = portName;
     m_baudRate = baud;
     m_commandTemplate = commandTemplate;
+    m_sessionTransition = transition;
+    m_transitionDuration = duration;
     m_selectedInput = selectedInput;
     for (int input = 1; input <= 8; ++input)
         m_inputLabels.insert(input, labels.value(QString::number(input)).toString().trimmed());

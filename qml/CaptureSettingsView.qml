@@ -32,7 +32,9 @@ Item {
         { name: "Stop preview", value: captureController.previewActive ? "Release capture card" : "Already stopped" },
         { name: "Apply capture changes", value: draftDirty ? "Save all staged settings" : "No pending changes" },
         { name: "Cancel capture changes", value: draftDirty ? "Discard staged settings" : "Restore saved settings" },
-        { name: "Refresh devices", value: "Rescan capture, audio, and serial devices" }
+        { name: "Refresh devices", value: "Rescan capture, audio, and serial devices" },
+        { name: "Session transition", value: draft.sessionTransition || "fade" },
+        { name: "Transition duration", value: (draft.transitionDuration || 250) + " ms" }
     ]
 
     function setDraftValue(key, value) {
@@ -53,7 +55,9 @@ Item {
             baudRate: captureController.baudRate,
             commandTemplate: captureController.commandTemplate,
             selectedInput: captureController.selectedInput,
-            inputLabels: labels
+            inputLabels: labels,
+            sessionTransition: captureController.sessionTransition,
+            transitionDuration: captureController.transitionDuration
         }
         draftDirty = false
     }
@@ -66,7 +70,9 @@ Item {
             baudRate: draft.baudRate,
             commandTemplate: draft.commandTemplate,
             selectedInput: draft.selectedInput,
-            inputLabels: draft.inputLabels
+            inputLabels: draft.inputLabels,
+            sessionTransition: draft.sessionTransition,
+            transitionDuration: draft.transitionDuration
         }
     }
     function applyDraft() {
@@ -148,6 +154,11 @@ Item {
             setDraftValue("commandTemplate", templates[index])
         } else if (selectedIndex === 7) {
             setDraftValue("selectedInput", (draft.selectedInput - 1 + direction + 8) % 8 + 1)
+        } else if (selectedIndex === 15 || selectedIndex === 16) {
+            const key = selectedIndex === 15 ? "sessionTransition" : "transitionDuration"
+            const values = selectedIndex === 15 ? ["instant", "fade", "slide", "expand"] : [200, 250, 300, 350]
+            const index = Math.max(0, values.indexOf(draft[key]))
+            setDraftValue(key, values[(index + direction + values.length) % values.length])
         }
     }
     function activateSelected() {
@@ -167,7 +178,8 @@ Item {
         else if (selectedIndex === 11) actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"})
         else if (selectedIndex === 12) applyDraft()
         else if (selectedIndex === 13) cancelDraft()
-        else actionDispatcher.dispatchEditorAction({type: "capture-refresh"})
+        else if (selectedIndex === 14) actionDispatcher.dispatchEditorAction({type: "capture-refresh"})
+        else adjust(1)
     }
     function handleCommand(command) {
         if (keyboardMode) { keyboard.handleCommand(command); return }
