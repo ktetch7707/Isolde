@@ -263,36 +263,50 @@ def bundle_signing_paths(create=True):
         shutil.rmtree(stage)
 
 
-def sign_bundle(path):
-    root=Path(path)
+def sign_document(path, signature_path):
+    path=Path(path)
+    signature_path=Path(signature_path)
     private,_=bundle_signing_paths()
-    fd,temporary=tempfile.mkstemp(prefix=".bundle-signature-",dir=root)
+    fd,temporary=tempfile.mkstemp(prefix=".document-signature-",dir=signature_path.parent)
     os.close(fd)
     try:
         run("openssl","pkeyutl","-sign","-inkey",str(private),"-rawin",
-            "-in",str(root/"bundle.json"),"-out",temporary,timeout=30)
-        os.replace(temporary,root/"bundle.sig")
+            "-in",str(path),"-out",temporary,timeout=30)
+        os.replace(temporary,signature_path)
     finally:
         if os.path.exists(temporary):os.unlink(temporary)
 
 
+def verify_document_signature(path, signature_path, public=None):
+    path=Path(path).absolute()
+    signature_path=Path(signature_path).absolute()
+    if signature_path.is_symlink() or not signature_path.is_file() or signature_path.stat().st_size!=64:
+        raise ValueError("Runtime document lacks a trusted signature")
+    if public is None:
+        _,public=bundle_signing_paths(create=False)
+    public=Path(public).absolute()
+    result=run("openssl","pkeyutl","-verify","-pubin","-inkey",str(public),"-rawin",
+        "-in",str(path),"-sigfile",str(signature_path),
+        capture_output=True,text=True,timeout=30,check=False)
+    if result.returncode:
+        raise ValueError("Runtime document signature does not match its trusted signing key")
+
+
+def sign_bundle(path):
+    root=Path(path)
+    sign_document(root/"bundle.json",root/"bundle.sig")
+
+
 def verify_bundle_signature(path):
     root=Path(path).absolute()
-    signature_path=root/"bundle.sig"
-    if signature_path.is_symlink() or not signature_path.is_file() or signature_path.stat().st_size!=64:
-        raise ValueError("Runtime bundle lacks a trusted signature")
     packaged=Path(__file__).with_name("game-runtime-bundle").absolute()
     if root.parent==packaged:
         public=Path(__file__).with_name("game-runtime-bundle.pub").absolute()
         if public.is_symlink() or not public.is_file() or public.stat().st_uid!=0 or public.stat().st_mode & 0o022:
             raise ValueError("Packaged runtime bundle has no root-owned trusted signing key")
+        verify_document_signature(root/"bundle.json",root/"bundle.sig",public)
     else:
-        _,public=bundle_signing_paths(create=False)
-    result=run("openssl","pkeyutl","-verify","-pubin","-inkey",str(public),"-rawin",
-        "-in",str(root/"bundle.json"),"-sigfile",str(signature_path),
-        capture_output=True,text=True,timeout=30,check=False)
-    if result.returncode:
-        raise ValueError("Runtime bundle signature does not match its trusted signing key")
+        verify_document_signature(root/"bundle.json",root/"bundle.sig")
 
 
 def package_status(names, runner=run):
@@ -326,7 +340,7 @@ def package_metadata(path, runner=run):
         "file":path.name,"size":path.stat().st_size,"sha256":digest}
 
 
-def validate_bundle(path, expected_manifest=None, runner=run):
+def validate_bundle(path, expected_manifest=None, runner=run, allow_historical=False):
     root=Path(path).absolute()
     if root.is_symlink() or not root.is_dir() or root.resolve()!=root:
         raise ValueError("Runtime dependency bundle is missing or redirected")
@@ -347,7 +361,11 @@ def validate_bundle(path, expected_manifest=None, runner=run):
     if (root_contents!={"bundle.json","bundle.sig","archives"}
             or any((root/name).is_symlink() for name in root_contents)):
         raise ValueError("Runtime bundle contains unlisted or redirected files")
-    if document["runtimePackages"]!=emulator_package_pins():
+    if (set(document["runtimePackages"])!=set(emulator_package_pins())
+            or any(not isinstance(name,str) or not re.fullmatch(r"[a-z0-9][a-z0-9+.-]{0,80}",name)
+                   or not isinstance(version,str) or not re.fullmatch(r"[A-Za-z0-9.+:~_-]{1,128}",version)
+                   for name,version in document["runtimePackages"].items())
+            or (not allow_historical and document["runtimePackages"]!=emulator_package_pins())):
         raise ValueError("Runtime package pins do not match this Isolde release")
     archives=root/"archives"
     if archives.is_symlink() or not archives.is_dir() or archives.resolve()!=archives:
@@ -406,11 +424,224 @@ def authenticate_bundle(path, document, runner=run, verify_repository_indices=Fa
             raise ValueError("Runtime package does not match the cached signed Ubuntu package index: "+item["package"])
 
 
+def indexed_package_hash(name,version,architecture,runner=run):
+    result=runner("apt-cache","show",name+"="+version,capture_output=True,text=True,timeout=30)
+    for record in (result.stdout or "").strip().split("\n\n"):
+        fields={}
+        for line in record.splitlines():
+            if ": " in line:
+                key,value=line.split(": ",1);fields[key]=value
+        if (fields.get("Package")==name and fields.get("Version")==version
+                and fields.get("Architecture") in (architecture,"all")
+                and re.fullmatch(r"[a-f0-9]{64}",fields.get("SHA256",""))):
+            return fields["SHA256"]
+    raise RuntimeError("No authenticated Ubuntu package index entry is available for rollback version "+name+"="+version)
+
+
 def _copy_archive(source,destination):
     source=Path(source);destination=Path(destination)
     if source.is_symlink() or not source.is_file():raise ValueError("Refusing redirected package input")
     if destination.exists():raise ValueError("Duplicate package archive in runtime bundle")
     shutil.copyfile(source,destination)
+
+
+def signed_historical_archive(name,version,runner=run):
+    for cache_root in bundle_cache_roots():
+        if not cache_root.is_dir() or cache_root.is_symlink():continue
+        for candidate in sorted(cache_root.iterdir()):
+            if candidate.is_symlink() or not candidate.is_dir():continue
+            try:
+                old=validate_bundle(candidate,runner=runner,allow_historical=True)
+                verify_bundle_signature(candidate)
+            except (OSError,ValueError,json.JSONDecodeError,subprocess.CalledProcessError):
+                continue
+            if old["runtimePackages"].get(name)!=version:continue
+            for entry in old["packages"]:
+                if entry["package"]==name and entry["version"]==version:
+                    return candidate/"archives"/entry["file"],entry
+    return None,None
+
+
+def create_rollback_snapshot(before, requested, runner=run, offline=False):
+    versions={name:installed_version(before.get(name)) for name in requested}
+    versions={name:version for name,version in versions.items() if version is not None}
+    if not versions: return None
+    state=Path(os.environ.get("XDG_STATE_HOME",str(Path.home()/".local/state")))
+    if not state.is_absolute() or state.is_symlink() or state.resolve()!=state:
+        raise ValueError("Choose an absolute private runtime transaction state directory")
+    root=state/"isolde/runtime-transactions"
+    if root.is_symlink() or root.resolve()!=root:raise ValueError("Redirected runtime transaction directory")
+    root.mkdir(parents=True,exist_ok=True,mode=0o700);root.chmod(0o700)
+    stage=Path(tempfile.mkdtemp(prefix="update-",dir=root));(stage/"archives").mkdir(mode=0o700)
+    entries=[]
+    try:
+        for name,version in sorted(versions.items()):
+            source,entry=signed_historical_archive(name,version,runner)
+            if source is not None:
+                _copy_archive(source,stage/"archives"/entry["file"])
+                metadata=package_metadata(stage/"archives"/entry["file"],runner)
+                if metadata!=entry:raise ValueError("Prior signed runtime rollback archive changed")
+            elif name=="isolde-ppsspp" or offline:
+                raise RuntimeError("A signed prior runtime package bundle is required for a reversible offline update: "+name)
+            else:
+                expected=indexed_package_hash(name,version,"amd64",runner)
+                runner("apt-get","download",name+"="+version,cwd=str(stage/"archives"),timeout=300)
+                matches=[]
+                for archive in (stage/"archives").glob("*.deb"):
+                    metadata=package_metadata(archive,runner)
+                    if metadata["package"]==name and metadata["version"]==version and metadata["sha256"]==expected:
+                        matches.append(archive)
+                if len(matches)!=1:
+                    raise RuntimeError("Could not retrieve exactly one authenticated rollback archive for "+name+"="+version)
+                matches[0].rename(stage/"archives"/(name+"_"+version+"_amd64.deb"))
+                metadata=package_metadata(stage/"archives"/(name+"_"+version+"_amd64.deb"),runner)
+                entries.append(metadata)
+                continue
+            entries.append(metadata)
+        document={"schemaVersion":1,"before":versions,"packages":entries}
+        atomic_bytes(stage/"rollback.json",json.dumps(document,indent=2).encode())
+        sign_document(stage/"rollback.json",stage/"rollback.sig")
+        verify_document_signature(stage/"rollback.json",stage/"rollback.sig")
+        final=root/("update-"+str(int(time.time()))+"-"+os.urandom(8).hex())
+        os.replace(stage,final)
+        return {"directory":str(final),"document":document}
+    finally:
+        if stage.exists():shutil.rmtree(stage)
+
+
+def validate_rollback_snapshot(snapshot,runner=run):
+    if not isinstance(snapshot,dict) or set(snapshot)!={"directory","document"}:
+        raise ValueError("Update recovery snapshot reference is invalid")
+    root=Path(snapshot["directory"]).absolute()
+    state=Path(os.environ.get("XDG_STATE_HOME",str(Path.home()/".local/state")))
+    expected=(state/"isolde/runtime-transactions").absolute()
+    if (root.is_symlink() or not root.is_dir() or root.resolve()!=root
+            or root.parent!=expected or not root.name.startswith("update-")):
+        raise ValueError("Update recovery snapshot path is redirected")
+    manifest=root/"rollback.json"
+    if manifest.is_symlink() or not manifest.is_file() or manifest.stat().st_size>128*1024:
+        raise ValueError("Update recovery snapshot is missing or oversized")
+    verify_document_signature(manifest,root/"rollback.sig")
+    document=json.loads(manifest.read_text())
+    if not isinstance(document,dict) or document!=snapshot["document"] \
+            or set(document)!={"schemaVersion","before","packages"} \
+            or document["schemaVersion"]!=1 or not isinstance(document["before"],dict) \
+            or not isinstance(document["packages"],list) or not document["packages"]:
+        raise ValueError("Update recovery snapshot does not match its signed manifest")
+    expected_names=set(document["before"])
+    if (set(document["before"])!=expected_names or len(expected_names)!=len(document["packages"])
+            or any(name not in emulator_package_pins() or not isinstance(version,str)
+                   or not re.fullmatch(r"[A-Za-z0-9.+:~_-]{1,128}",version)
+                   for name,version in document["before"].items())):
+        raise ValueError("Update recovery snapshot package set is invalid")
+    archive_dir=root/"archives"
+    if archive_dir.is_symlink() or not archive_dir.is_dir() or archive_dir.resolve()!=archive_dir:
+        raise ValueError("Update rollback archive directory is redirected")
+    observed={}
+    for entry in document["packages"]:
+        if not isinstance(entry,dict) or set(entry)!={"package","version","architecture","file","size","sha256"}:
+            raise ValueError("Update rollback package entry is invalid")
+        if (not isinstance(entry["package"],str) or entry["package"] not in expected_names
+                or entry["version"]!=document["before"].get(entry["package"])
+                or entry["architecture"] not in ("amd64","all")
+                or not isinstance(entry["file"],str)
+                or not re.fullmatch(r"[A-Za-z0-9.+_%~-]{1,180}\.deb",entry["file"])
+                or Path(entry["file"]).name!=entry["file"]
+                or type(entry["size"]) is not int or entry["size"]<=0 or entry["size"]>MAX_DEB_BYTES
+                or not isinstance(entry["sha256"],str) or not re.fullmatch(r"[a-f0-9]{64}",entry["sha256"])):
+            raise ValueError("Update rollback package entry has unsafe metadata")
+        metadata=package_metadata(archive_dir/entry["file"],runner)
+        if metadata!=entry or document["before"].get(entry["package"])!=entry["version"]:
+            raise ValueError("Update rollback archive does not match the initial installed version")
+        if entry["package"] in observed:raise ValueError("Duplicate update rollback package")
+        observed[entry["package"]]=entry
+    if set(observed)!=expected_names or {p.name for p in archive_dir.iterdir()}!={entry["file"] for entry in observed.values()}:
+        raise ValueError("Update rollback archive set is incomplete")
+    return root,document
+
+
+def verify_apt_install_plan(archives,expected,runner=run,installed=None):
+    prefix=("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","LC_ALL=C","/usr/bin/apt-get")
+    paths=[str(Path(path).absolute()) for path in archives]
+    simulation=runner(*prefix,"--simulate","--no-download","--no-remove","--allow-downgrades",
+        "--no-install-recommends","install",*paths,capture_output=True,text=True,timeout=300)
+    changed={}
+    for line in (simulation.stdout or "").splitlines():
+        if line.startswith("Remv "):
+            raise RuntimeError("Runtime update plan would remove a package; transaction refused.")
+        match=re.match(r"^Inst ([a-z0-9][a-z0-9+.-]*(?::[a-z0-9]+)?)(?: \[([^]]+)\])? \(([^ )]+)",line)
+        if not match:continue
+        name=match.group(1).split(":",1)[0]
+        old,new=match.group(2),match.group(3)
+        if name not in expected:
+            raise RuntimeError("Runtime update plan changes an undeclared package: "+name)
+        if installed is not None:
+            current=installed_version(installed.get(name))
+            if old!=current:
+                raise RuntimeError("Runtime package state changed since the update snapshot: "+name)
+        if new!=expected[name]:
+            raise RuntimeError("Runtime update plan selected an unexpected package version: "+name)
+        changed[name]=new
+    if changed!=expected:
+        raise RuntimeError("Runtime update plan does not contain every exact requested package version.")
+
+
+def restore_runtime_snapshot(snapshot,runner=run):
+    root,document=validate_rollback_snapshot(snapshot,runner)
+    archives=[str(root/"archives"/entry["file"]) for entry in document["packages"]]
+    expected=document["before"]
+    current=package_status(expected.keys(),runner)
+    verify_apt_install_plan(archives,expected,runner,current)
+    prefix=("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","LC_ALL=C","/usr/bin/apt-get")
+    runner(*prefix,"--no-download","--no-remove","--allow-downgrades","--yes",
+        "--no-install-recommends","install",*archives,timeout=900,transaction=True)
+    current=package_status(expected,runner)
+    if any(installed_version(current.get(name))!=version for name,version in expected.items()):
+        raise RuntimeError("Restored runtime package versions do not match the pre-update snapshot.")
+
+
+def apply_runtime_update(root,document,before,updates,runner,checkpoint,offline):
+    if not updates:return {"ready":True,"installed":before,"updated":[]}
+    if any(installed_version(before.get(name)) is None for name in emulator_package_pins()):
+        raise RuntimeError("Install all declared runtime packages before requesting a reversible update.")
+    entries={item["package"]:item for item in document["packages"]}
+    if any(name not in entries for name in updates):
+        raise ValueError("Runtime update bundle is missing a requested pinned package")
+    archives=[str(root/"archives"/entries[name]["file"]) for name in updates]
+    verify_apt_install_plan(archives,updates,runner,before)
+    if checkpoint is None:
+        checkpoint=Path(os.environ.get("XDG_STATE_HOME",str(Path.home()/".local/state")))/"isolde/emulator-provisioning.json"
+    checkpoint=Path(checkpoint).absolute()
+    if checkpoint.exists():raise RuntimeError("An interrupted emulator package transaction needs recovery before retrying.")
+    snapshot=create_rollback_snapshot(before,updates,runner,offline)
+    transaction={"schemaVersion":2,"phase":"applying","bundle":str(root),"before":before,
+        "requested":updates,"rollbackSnapshot":snapshot,"createdAt":int(time.time())}
+    atomic_bytes(checkpoint,json.dumps(transaction,indent=2).encode())
+    prefix=("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","LC_ALL=C","/usr/bin/apt-get")
+    try:
+        runner(*prefix,"--no-download","--no-remove","--allow-downgrades","--yes","--no-install-recommends",
+            "install",*archives,timeout=1800,transaction=True)
+        after=package_status(before.keys(),runner)
+        invalid={name:after.get(name) for name,version in updates.items()
+            if installed_version(after.get(name))!=version}
+        if invalid:raise RuntimeError("Updated runtime packages did not match their pinned versions.")
+        transaction["phase"]="committed";transaction["after"]=after
+        atomic_bytes(checkpoint,json.dumps(transaction,indent=2).encode())
+        checkpoint.unlink()
+        shutil.rmtree(snapshot["directory"])
+        return {"ready":True,"installed":after,"updated":sorted(updates),
+            "bundleSha256":hashlib.sha256((root/"bundle.json").read_bytes()).hexdigest()}
+    except Exception as error:
+        try:
+            restore_runtime_snapshot(snapshot,runner)
+        except Exception as rollback_error:
+            transaction.update({"phase":"recovery-required","failure":str(error)[:1000],
+                "rollbackFailure":str(rollback_error)[:1000]})
+            atomic_bytes(checkpoint,json.dumps(transaction,indent=2).encode())
+            raise RuntimeError("Runtime update failed and prior packages could not be fully restored; keep the checkpoint and retry recovery. "+str(rollback_error)) from error
+        checkpoint.unlink(missing_ok=True)
+        shutil.rmtree(snapshot["directory"],ignore_errors=True)
+        raise RuntimeError("Runtime update failed; the prior pinned package versions were restored. "+str(error)) from error
 
 
 def purge_added_packages(names,runner=run):
@@ -491,7 +722,7 @@ def prepare_bundle(destination=None):
         if stage.exists():shutil.rmtree(stage)
 
 
-def apply_bundle(path, installed=None, runner=run, checkpoint=None):
+def apply_bundle(path, installed=None, runner=run, checkpoint=None, update=False, offline=False):
     manifest_path,_=runtime_manifest()
     document=validate_bundle(path,hashlib.sha256(manifest_path.read_bytes()).hexdigest(),runner)
     authenticate_bundle(path,document,runner)
@@ -502,9 +733,11 @@ def apply_bundle(path, installed=None, runner=run, checkpoint=None):
     for name,version in required.items():
         current=before.get(name)
         if current_version:=installed_version(current):
-            if current_version!=version:
+            if current_version!=version and not update:
                 raise RuntimeError("Installed runtime version differs from this bundle; preserve it and use an explicit reviewed update: "+name)
     missing={name:version for name,version in required.items() if installed_version(before.get(name))!=version}
+    if update:
+        return apply_runtime_update(root,document,before,missing,runner,checkpoint,offline)
     if not missing:return {"ready":True,"installed":before,"added":[],"bundleSha256":hashlib.sha256((root/"bundle.json").read_bytes()).hexdigest()}
     if checkpoint is None:
         checkpoint=Path(os.environ.get("XDG_STATE_HOME",str(Path.home()/".local/state")))/"isolde/emulator-provisioning.json"
@@ -513,7 +746,6 @@ def apply_bundle(path, installed=None, runner=run, checkpoint=None):
     transaction={"schemaVersion":1,"phase":"applying","bundle":str(root),
         "before":before,"requested":missing,"createdAt":int(time.time())}
     atomic_bytes(checkpoint,json.dumps(transaction,indent=2).encode())
-    package_files=[str(root/"archives"/item["file"]) for item in document["packages"]]
     archive_option="--option=Dir::Cache::archives="+str(root/"archives")+"/"
     try:
         runner("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","--no-download",
@@ -561,6 +793,41 @@ def recover_package_transaction(checkpoint=None,runner=run):
     if checkpoint.is_symlink() or checkpoint.stat().st_size>128*1024:
         raise RuntimeError("Emulator recovery record is redirected or oversized; preserve it for review.")
     transaction=json.loads(checkpoint.read_text())
+    if not isinstance(transaction,dict):
+        raise RuntimeError("Emulator recovery record is invalid; preserve it for review.")
+    if transaction.get("schemaVersion")==2:
+        if (set(transaction)-{"schemaVersion","phase","bundle","before","requested","rollbackSnapshot",
+                              "createdAt","after","failure","rollbackFailure"}
+                or transaction.get("phase") not in
+                ("applying","recovery-required","committed")):
+            raise RuntimeError("Runtime update recovery record is invalid; preserve it for review.")
+        snapshot=transaction.get("rollbackSnapshot")
+        if transaction["phase"]=="committed":
+            validate_rollback_snapshot(snapshot,runner)
+            shutil.rmtree(snapshot["directory"])
+            checkpoint.unlink()
+            return True
+        manifest_path,_=runtime_manifest()
+        bundle=Path(transaction.get("bundle",""))
+        document=validate_bundle(bundle,hashlib.sha256(manifest_path.read_bytes()).hexdigest(),runner)
+        authenticate_bundle(bundle,document,runner)
+        requested=transaction.get("requested")
+        before=transaction.get("before")
+        if (not isinstance(requested,dict) or not requested
+                or any(name not in emulator_package_pins() or version!=emulator_package_pins()[name]
+                       for name,version in requested.items())
+                or not isinstance(before,dict)):
+            raise RuntimeError("Runtime update recovery record does not match the pinned bundle.")
+        restore_runtime_snapshot(snapshot,runner)
+        restored=package_status(before.keys(),runner)
+        if any(restored.get(name)!=state for name,state in before.items()):
+            transaction.update({"phase":"recovery-required",
+                "rollbackFailure":"Installed package inventory still differs after update recovery."})
+            atomic_bytes(checkpoint,json.dumps(transaction,indent=2).encode())
+            raise RuntimeError("Runtime update rollback is incomplete; preserve the recovery record.")
+        shutil.rmtree(snapshot["directory"])
+        checkpoint.unlink()
+        return True
     if (set(transaction)-{"schemaVersion","phase","bundle","before","requested","createdAt","failure","added","rollbackFailure"}
             or transaction.get("schemaVersion")!=1 or transaction.get("phase") not in
             ("applying","rolling-back","recovery-required","committed")):
@@ -639,23 +906,26 @@ def verify_runtime_receipt(receipt):
     return True
 
 
-def provision(packages, install=False, offline=False, bundle_output=None):
+def provision(packages, install=False, offline=False, bundle_output=None, update=False):
     platform()
     if not packages or len(set(packages)) != len(packages) or any(p not in PACKAGES for p in packages):
         raise ValueError("Choose declared runtime packages only")
     if offline and not install:raise ValueError("Offline mode requires an explicit --install request")
+    if update and not install:raise ValueError("Reversible runtime updates require an explicit --install request")
     before = inspect(packages)
     missing = [p for p in packages if not before[p]["ready"]]
     changed=[p for p in missing if before[p].get("installedVersion")
         and before[p]["installedVersion"]!=PACKAGES[p][0]]
-    if install and changed:
+    if update and "supertux" in changed:
+        raise RuntimeError("The optional SuperTux gameplay fixture is not part of the reversible emulator runtime update set.")
+    if install and changed and not update:
         raise RuntimeError("A different emulator package version is installed. Preserve it; use an explicit reviewed update/rollback before retrying: "+", ".join(changed))
     if install:
         recover_package_transaction()
         runtime_missing=[name for name in missing if name!="supertux"]
         if runtime_missing:
             bundle=find_bundle() if offline else prepare_bundle(bundle_output)
-            apply_bundle(bundle)
+            apply_bundle(bundle,update=update,offline=offline)
         if "supertux" in missing:
             if offline:raise RuntimeError("The optional SuperTux fixture is not included in the offline emulator bundle")
             run("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","update",
@@ -692,18 +962,21 @@ def main():
     install_cancellation_handlers()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--install", action="store_true")
+    parser.add_argument("--update", action="store_true",help="Apply exact pinned runtime versions with a verified prior-package rollback snapshot")
     parser.add_argument("--offline", action="store_true",help="Install only from a previously prepared authenticated bundle")
     parser.add_argument("--prepare-bundle", action="store_true",help="Download and verify the complete pinned runtime dependency bundle")
     parser.add_argument("--bundle-output",type=Path,help="Absolute bundle-cache directory for --prepare-bundle")
     parser.add_argument("--fixture", action="store_true")
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
-    if args.prepare_bundle and (args.install or args.offline):
-        parser.error("--prepare-bundle cannot be combined with --install or --offline")
+    if args.prepare_bundle and (args.install or args.offline or args.update):
+        parser.error("--prepare-bundle cannot be combined with --install, --offline, or --update")
     if args.bundle_output and not args.prepare_bundle:
         parser.error("--bundle-output requires --prepare-bundle")
+    if args.update and not args.install:
+        parser.error("--update requires --install")
     packages = [name for name in PACKAGES if name!="supertux"] + (["supertux"] if args.fixture else [])
-    result = provision(packages, args.install,args.offline)
+    result = provision(packages, args.install,args.offline,update=args.update)
     if args.prepare_bundle:
         bundle=prepare_bundle(args.bundle_output)
         result["bundlePrepared"]=str(bundle)

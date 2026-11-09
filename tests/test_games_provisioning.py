@@ -49,7 +49,7 @@ class GamesProvisioningTests(unittest.TestCase):
                 patch.object(games,"recover_package_transaction"),patch.object(games,"prepare_bundle",return_value=Path("bundle")),\
                 patch.object(games,"apply_bundle",side_effect=RuntimeError("fixture failure")) as apply:
             with self.assertRaises(RuntimeError):games.provision(["pcsx2"],True)
-            apply.assert_called_once_with(Path("bundle"))
+            apply.assert_called_once_with(Path("bundle"),update=False,offline=False)
 
     def test_changed_installed_runtime_is_preserved_instead_of_silently_downgraded(self):
         state={"pcsx2":{"ready":False,"installedVersion":"2.5.0"}}
@@ -265,8 +265,134 @@ class RuntimeBundleTests(unittest.TestCase):
                 patch.object(games,"run") as run:
             result=games.provision(["pcsx2"],True,offline=True)
         self.assertTrue(result["ready"])
-        apply.assert_called_once_with(self.bundle)
+        apply.assert_called_once_with(self.bundle,update=False,offline=True)
         run.assert_not_called()
+
+
+class RuntimeUpdateTests(unittest.TestCase):
+    def setUp(self):
+        self.directory=tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root=Path(self.directory.name)
+        self.before={name:{"status":"install ok installed","version":"old-"+version}
+            for name,version in games.emulator_package_pins().items()}
+        self.target={"pcsx2":games.emulator_package_pins()["pcsx2"]}
+        self.snapshot_dir=self.root/"state/isolde/runtime-transactions/update-fixture"
+        self.snapshot_dir.mkdir(parents=True)
+        self.snapshot={"directory":str(self.snapshot_dir),"document":{"schemaVersion":1,
+            "before":{"pcsx2":self.before["pcsx2"]["version"]},"packages":[]}}
+
+    def test_update_applies_exact_plan_and_keeps_old_bundle_until_commit(self):
+        checkpoint=self.root/"checkpoint.json"
+        archive=self.root/"bundle/archives/pcsx2.deb"
+        archive.parent.mkdir(parents=True);archive.write_bytes(b"fixture")
+        document={"packages":[{"package":"pcsx2","file":"pcsx2.deb"}]}
+        (self.root/"bundle/bundle.json").write_text("{}")
+        installed={name:dict(state) for name,state in self.before.items()}
+        installed["pcsx2"]["version"]=self.target["pcsx2"]
+        with patch.object(games,"create_rollback_snapshot",return_value=self.snapshot),\
+                patch.object(games,"verify_apt_install_plan") as plan,\
+                patch.object(games,"package_status",return_value=installed):
+            result=games.apply_runtime_update(self.root/"bundle",document,self.before,self.target,
+                lambda *args,**kwargs:subprocess.CompletedProcess(args,0,"",""),
+                checkpoint,False)
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["updated"],["pcsx2"])
+        plan.assert_called_once_with([str(archive)],self.target,unittest.mock.ANY,self.before)
+        self.assertFalse(checkpoint.exists())
+        self.assertFalse(self.snapshot_dir.exists())
+
+    def test_failed_update_restores_snapshot_and_clears_checkpoint(self):
+        checkpoint=self.root/"checkpoint.json"
+        bundle=self.root/"bundle";(bundle/"archives").mkdir(parents=True)
+        archive=bundle/"archives/pcsx2.deb";archive.write_bytes(b"fixture")
+        document={"packages":[{"package":"pcsx2","file":"pcsx2.deb"}]}
+        commands=[]
+        def runner(*args,**kwargs):
+            commands.append(args)
+            raise subprocess.CalledProcessError(1,args)
+        with patch.object(games,"create_rollback_snapshot",return_value=self.snapshot),\
+                patch.object(games,"verify_apt_install_plan"),\
+                patch.object(games,"restore_runtime_snapshot") as restore:
+            with self.assertRaisesRegex(RuntimeError,"prior pinned package versions were restored"):
+                games.apply_runtime_update(bundle,document,self.before,self.target,runner,checkpoint,False)
+        restore.assert_called_once_with(self.snapshot,runner)
+        self.assertFalse(checkpoint.exists())
+        self.assertFalse(self.snapshot_dir.exists())
+        install=commands[0]
+        self.assertIn("--no-remove",install)
+        self.assertIn("--allow-downgrades",install)
+        self.assertNotIn("--no-upgrade",install)
+
+    def test_interrupted_update_uses_signed_snapshot_recovery_path(self):
+        checkpoint=self.root/"checkpoint.json"
+        bundle=self.root/"bundle"
+        manifest=self.root/"game-runtimes.json"
+        manifest.write_text("{}")
+        transaction={"schemaVersion":2,"phase":"applying","bundle":str(bundle),
+            "before":self.before,"requested":self.target,"rollbackSnapshot":self.snapshot,"createdAt":1}
+        checkpoint.write_text(json.dumps(transaction))
+        with patch.object(games,"runtime_manifest",return_value=(manifest,{})),\
+                patch.object(games,"validate_bundle",return_value={}),\
+                patch.object(games,"authenticate_bundle"),\
+                patch.object(games,"restore_runtime_snapshot") as restore,\
+                patch.object(games,"package_status",return_value=self.before):
+            self.assertTrue(games.recover_package_transaction(checkpoint))
+        restore.assert_called_once_with(self.snapshot,games.run)
+        self.assertFalse(checkpoint.exists())
+        self.assertFalse(self.snapshot_dir.exists())
+
+    def test_update_solver_plan_rejects_dependency_changes(self):
+        expected={"pcsx2":games.emulator_package_pins()["pcsx2"]}
+        line="Inst pcsx2 [2.5.0] ("+expected["pcsx2"]+" Ubuntu:26.04 [amd64])\n"
+        runner=lambda *args,**kwargs:subprocess.CompletedProcess(args,0,line,"")
+        games.verify_apt_install_plan(["/bundle/pcsx2.deb"],expected,runner)
+        with self.assertRaisesRegex(RuntimeError,"changed since the update snapshot"):
+            games.verify_apt_install_plan(["/bundle/pcsx2.deb"],expected,runner,
+                {"pcsx2":{"status":"install ok installed","version":"2.4.0"}})
+        extra=line+"Inst libnew-dependency (1.0 Ubuntu:26.04 [amd64])\n"
+        runner=lambda *args,**kwargs:subprocess.CompletedProcess(args,0,extra,"")
+        with self.assertRaisesRegex(RuntimeError,"undeclared package"):
+            games.verify_apt_install_plan(["/bundle/pcsx2.deb"],expected,runner)
+
+    def test_offline_update_snapshot_uses_prior_signed_bundle_archives(self):
+        import hashlib
+        cache=self.root/"cache/isolde/game-runtime-bundles"
+        bundle=cache/"ubuntu-26.04-amd64-prior"
+        archives=bundle/"archives";archives.mkdir(parents=True)
+        old_pins=dict(games.emulator_package_pins())
+        old_pins["pcsx2"]="2.5.0"
+        entries=[]
+        for name,version in old_pins.items():
+            filename=name+"_"+version+"_amd64.deb"
+            payload=("signed prior "+name+" "+version).encode()
+            (archives/filename).write_bytes(payload)
+            entries.append({"package":name,"version":version,"architecture":"amd64","file":filename,
+                "size":len(payload),"sha256":hashlib.sha256(payload).hexdigest()})
+        manifest_path,_=games.runtime_manifest()
+        document={"schemaVersion":1,"target":{"os":"ubuntu","version":"26.04","architecture":"amd64"},
+            "runtimeManifestSha256":hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            "runtimePackages":old_pins,"packages":entries}
+        (bundle/"bundle.json").write_text(json.dumps(document))
+        hashes={entry["file"]:entry for entry in entries}
+        def metadata(path,runner=games.run):
+            entry=hashes[Path(path).name]
+            actual=hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            return dict(entry,size=Path(path).stat().st_size,sha256=actual)
+        with patch.dict(os.environ,{"XDG_CACHE_HOME":str(self.root/"cache"),
+                                  "XDG_STATE_HOME":str(self.root/"state")}),\
+                patch.object(games,"package_metadata",side_effect=metadata):
+            games.sign_bundle(bundle)
+            before={"pcsx2":{"status":"install ok installed","version":"2.5.0"}}
+            snapshot=games.create_rollback_snapshot(before,{"pcsx2":games.emulator_package_pins()["pcsx2"]},
+                runner=lambda *args,**kwargs:self.fail("offline rollback snapshot must not use apt"),
+                offline=True)
+            root,restored=games.validate_rollback_snapshot(snapshot,runner=lambda *a,**k:None)
+            self.assertEqual(restored["before"],{"pcsx2":"2.5.0"})
+            archive=root/"archives"/restored["packages"][0]["file"]
+            archive.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError,"does not match the initial installed version"):
+                games.validate_rollback_snapshot(snapshot,runner=lambda *a,**k:None)
 
 
 class EmulatorAdapterTests(unittest.TestCase):
