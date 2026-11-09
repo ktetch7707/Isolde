@@ -24,6 +24,7 @@ class SessionManager final : public QObject {
 
 public:
     explicit SessionManager(AppRegistry *registry, QObject *parent = nullptr);
+    ~SessionManager() override;
     void setLaunchGuard(std::function<QString(const QString &)> guard) { m_launchGuard = std::move(guard); }
     void setLaunchPreparation(std::function<bool(const AppDefinition &)> prepare) { m_launchPreparation=std::move(prepare); }
     bool resumePreparedLaunch(const AppDefinition &definition);

@@ -16,6 +16,12 @@
 SessionManager::SessionManager(AppRegistry *registry, QObject *parent)
     : QObject(parent), m_registry(registry) {}
 
+SessionManager::~SessionManager()
+{
+    if(m_session)disconnect(m_session.get(),nullptr,this,nullptr);
+    m_session.reset();
+}
+
 bool SessionManager::hasActiveSession() const { return m_session != nullptr; }
 QString SessionManager::currentAppId() const { return m_session ? m_session->definition().id : QString(); }
 QString SessionManager::currentAppName() const { return m_session ? m_session->definition().name : QString(); }
@@ -86,10 +92,6 @@ bool SessionManager::launchDefinition(AppDefinition definition)
 
     if(m_launchPreparation && !m_launchPreparation(definition)){
         return true;
-    }
-    if(definition.launchConfiguration.contains("steamGameId")){
-        m_steamProviderState.clear();
-        emit steamProviderStateChanged();
     }
     m_previousFocusId = definition.id;
     emit launching(definition.id);
@@ -190,6 +192,8 @@ bool SessionManager::launchSteamGame(const QString &identity)
     }
     auto definition=*steam;definition.launchConfiguration.insert("steamGameId",identity);
     definition.launchConfiguration.remove("containment"); // Never fullscreen the Steam client instead of its game.
+    m_steamProviderState.clear();
+    emit steamProviderStateChanged();
     return launchDefinition(definition);
 }
 bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot,const QString &opticalMediaId)

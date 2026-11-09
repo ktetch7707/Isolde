@@ -20,6 +20,7 @@ public:
 private:
     bool applyContainment();
     void stopProcess();
+    void readDiagnostics();
     bool m_stopping = false;
     QByteArray m_diagnostics;
     std::unique_ptr<SteamSessionOutput> m_steamOutput;

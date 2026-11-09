@@ -42,6 +42,8 @@ The shipped provider is intentionally narrower: it observes only the isolated la
 
 The helper emits bounded version-1 JSON status records with a closed vocabulary and App ID; the C++ receiver rejects noncanonical/duplicate-key records, unknown keys, values, identities and overlong records. The native session publishes validated state to Games. Cancellation and forced teardown retain unknown save state; an explicit provider save failure or crash is an error, while Cloud pending is distinct from synced. Focused checks pass Steam 21/21, provisioning 14/14 and portable installer 11/11. The new Qt protocol/UI cases are unrun here because native Qt/CMake are unavailable.
 
+The supervisor drains final status records on process exit and while stopping, but a late process marker during cancellation cannot open a new game session or create history. A new Play request clears the prior in-memory status even if launch preparation is deferred; profile teardown disconnects session callbacks before stopping the private native process.
+
 ## Implementation and boundaries
 
 - The existing bounded `games`/edition tables store `runtime=steam`, an empty filesystem root and a validated positive uint32 Steam App ID in the provider target field. Existing catalog versions remain readable; no startup migration or rewrite is introduced. IDs, not commands/URIs/launch options, reach the dispatcher.
