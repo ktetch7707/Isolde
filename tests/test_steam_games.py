@@ -54,10 +54,18 @@ class SteamGamesTests(unittest.TestCase):
 
     def test_external_library_is_not_read_or_granted(self):
         external=self.home.parent/"another-account";outside=external/"steamapps"
-        outside.mkdir(parents=True);(outside/"appmanifest_90.acf").write_text("unreadable and never parsed")
+        (outside/"common/Fixture").mkdir(parents=True)
+        (outside/"appmanifest_90.acf").write_text('"AppState" { "appid" "90" "name" "External fixture" "StateFlags" "4" "installdir" "Fixture" }')
         (self.root/"libraryfolders.vdf").write_text('"libraryfolders" { "0" { "path" '+__import__('json').dumps(str(external))+' } }')
         result=steam.discover(self.home)
         self.assertEqual(len(result["games"]),1);self.assertTrue(result["warnings"])
+        from unittest.mock import patch
+        with self.assertRaises(ValueError):steam.external_roots([str(external)])
+        with patch.object(steam,"external_roots",return_value=[external.resolve()]):
+            connected=steam.discover(self.home,[str(external)])
+            self.assertEqual({game["target"] for game in connected["games"]},{"42","90"})
+            self.assertEqual(steam.verify_installed(self.home,"90",[str(external)])["title"],"External fixture")
+        self.assertEqual(steam.discover(self.home)["games"][0]["target"],"42")
 
     def test_redirected_game_manifest_and_profile_refused(self):
         self.manifest.write_text(self.text.replace('"Fixture"','"../outside"'))

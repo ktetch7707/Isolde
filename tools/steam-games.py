@@ -57,22 +57,24 @@ def vdf(text):
     return obj()
 
 
-def private_path(path, home, directory=False):
+def private_path(path, home, directory=False, external=()):
     home = Path(home).absolute()
     if home.resolve() != home:
         raise ValueError("Steam profile storage is redirected")
     path = Path(path)
     canonical = path.resolve(strict=True)
-    if not canonical.is_relative_to(home) or canonical == home:
+    allowed = canonical.is_relative_to(home) and canonical != home
+    allowed |= any(canonical.is_relative_to(root) for root in external)
+    if not allowed:
         raise ValueError("Steam library is outside this Isolde profile")
     if directory and not canonical.is_dir(): raise ValueError("Steam library folder is unavailable")
     return canonical
 
 
-def read_vdf(path, home, limit):
+def read_vdf(path, home, limit, external=()):
     path = Path(path)
     if path.is_symlink(): raise ValueError("Redirected Steam manifest")
-    path = private_path(path, home)
+    path = private_path(path, home, external=external)
     # Walk the canonical path with directory descriptors. An ancestor replaced
     # after resolve() cannot turn a metadata read into a cross-profile read.
     if len(path.parts)>128: raise ValueError("Steam metadata path is too deep")
@@ -90,8 +92,31 @@ def read_vdf(path, home, limit):
     return vdf(data.decode("utf-8-sig"))
 
 
-def libraries(home):
+def external_roots(values):
+    roots=[]
+    for value in values:
+        if not isinstance(value,str) or len(value)>4096:
+            raise ValueError("Invalid external Steam library path length")
+        path=Path(value)
+        if not path.is_absolute() or str(path)!=str(path.resolve(strict=True)):
+            raise ValueError("External Steam library path is redirected or unavailable")
+        if not (path.is_relative_to(Path("/media")) or path.is_relative_to(Path("/mnt"))) or path in (Path("/media"),Path("/mnt")):
+            raise ValueError("External Steam libraries must be approved mount folders")
+        steamapps=path/"steamapps"
+        if not steamapps.is_dir() or steamapps.is_symlink() or steamapps.resolve(strict=True)!=steamapps:
+            raise ValueError("External Steam library has no steamapps folder")
+        if path in roots: raise ValueError("Duplicate external Steam library")
+        for existing in roots:
+            if path in existing.parents or existing in path.parents:
+                raise ValueError("Nested external Steam libraries are not supported")
+        roots.append(path)
+    if len(roots)>8: raise ValueError("Too many external Steam libraries")
+    return roots
+
+
+def libraries(home, external=()):
     home = Path(home).absolute()
+    approved=external_roots(external)
     roots = []
     warnings = []
     for relative in (".local/share/Steam/steamapps", ".steam/steam/steamapps", ".steam/root/steamapps"):
@@ -102,25 +127,30 @@ def libraries(home):
     for root in list(roots):
         index = root/"libraryfolders.vdf"
         if not index.exists(): continue
-        folders = read_vdf(index, home, 1024*1024).get("libraryfolders", {})
+        folders = read_vdf(index, home, 1024*1024, approved).get("libraryfolders", {})
         if not isinstance(folders, dict) or len(folders) > 32: raise ValueError("Too many Steam libraries")
         for number, entry in folders.items():
             if not number.isdigit(): continue
             name = entry.get("path") if isinstance(entry, dict) else entry
             if not isinstance(name, str) or not Path(name).is_absolute(): raise ValueError("Invalid Steam library path")
-            candidate = Path(name)/"steamapps"
+            library=Path(name)
+            candidate = library/"steamapps"
             if not candidate.exists(): continue
-            try: candidate = private_path(candidate, home, True)
+            try: candidate = private_path(candidate, home, True, approved)
             except ValueError:
-                warnings.append("External Steam libraries are not connected to this Isolde profile."); continue
+                warnings.append("External Steam libraries are not approved for this Isolde profile."); continue
             if candidate not in roots: roots.append(candidate)
             if len(roots) > 32: raise ValueError("Too many Steam libraries")
+    for library in approved:
+        candidate=library/"steamapps"
+        if candidate not in roots: roots.append(candidate)
+        if len(roots)>32: raise ValueError("Too many Steam libraries")
     return roots, sorted(set(warnings))
 
 
-def installed(manifest, home):
+def installed(manifest, home, external=()):
     identity = app_id(Path(manifest).stem.removeprefix("appmanifest_"))
-    data = read_vdf(manifest, home, 65536).get("AppState")
+    data = read_vdf(manifest, home, 65536, external).get("AppState")
     if not isinstance(data, dict) or data.get("appid") != identity: raise ValueError("Steam manifest identity changed")
     if data.get("StateFlags") != "4": return None
     title, folder = data.get("name"), data.get("installdir")
@@ -129,14 +159,14 @@ def installed(manifest, home):
         or len(folder) > 256 or "\\" in folder or Path(folder).is_absolute()
         or any(p in (".", "..") for p in folder.split("/"))):
         raise ValueError("Invalid installed Steam title metadata")
-    common = private_path(Path(manifest).parent/"common", home, True)
-    game = private_path(common/folder, home, True)
+    common = private_path(Path(manifest).parent/"common", home, True, external)
+    game = private_path(common/folder, home, True, external)
     if not game.is_relative_to(common) or game == common: raise ValueError("Redirected Steam game folder")
     return {"schemaVersion":1, "title":title, "platform":"Steam", "runtimeId":"steam", "root":"", "target":identity}
 
 
-def discover(home):
-    roots, warnings = libraries(home)
+def discover(home, external=()):
+    roots, warnings = libraries(home, external)
     games = {}
     entries = 0
     for root in roots:
@@ -145,7 +175,7 @@ def discover(home):
                 entries += 1
                 if entries > 10000: raise ValueError("Steam discovery exceeds 10,000 entries; nothing was imported")
                 if not re.fullmatch(r"appmanifest_[1-9][0-9]{0,9}\.acf", entry.name): continue
-                game = installed(Path(entry.path), home)
+                game = installed(Path(entry.path), home, external)
                 if game:
                     if game["target"] in games: raise ValueError("Duplicate Steam game identity across libraries")
                     games[game["target"]] = game
@@ -153,13 +183,13 @@ def discover(home):
     return {"games":sorted(games.values(), key=lambda g:(g["title"].casefold(), g["target"])), "warnings":warnings}
 
 
-def verify_installed(home, identity):
-    roots, _ = libraries(home)
+def verify_installed(home, identity, external=()):
+    roots, _ = libraries(home, external)
     matches = []
     for root in roots:
         manifest = root/("appmanifest_"+app_id(identity)+".acf")
         if manifest.exists():
-            game = installed(manifest, home)
+            game = installed(manifest, home, external)
             if game: matches.append(game)
     if len(matches) != 1:
         raise ValueError("This Steam game is missing, updating or ambiguous. Check installation in Steam, then retry")
@@ -215,11 +245,11 @@ def wait_for_game(identity, launcher, timeout=120, clock=time.monotonic, sleep=t
     raise RuntimeError("Steam did not start this game within two minutes. Check sign-in, installation and compatibility, then retry")
 
 
-def launch(identity):
+def launch(identity, external=()):
     app_id(identity)
     if os.environ.get("ISOLDE_NATIVE_NAMESPACE") != "1": raise ValueError("Steam games require an isolated Isolde session")
     home = Path.home()
-    verify_installed(home, identity)
+    verify_installed(home, identity, external)
     binary = Path("/usr/games/steam")
     if not binary.is_file() or not os.access(binary, os.X_OK): raise ValueError("Install or repair Steam in the Isolde Store")
     # HOME, /tmp, IPC, PID view and bus all belong to NativeSandbox.
@@ -253,16 +283,17 @@ def main():
     group.add_argument("--discover", action="store_true")
     group.add_argument("--launch")
     parser.add_argument("--home", type=Path)
+    parser.add_argument("--library", action="append", default=[])
     args = parser.parse_args()
     if args.discover:
         if args.home is None: parser.error("A private Steam home is required")
-        result = discover(args.home)
+        result = discover(args.home,args.library)
         data = json.dumps(result, ensure_ascii=False)
         if len(data.encode()) > 2*1024*1024: raise ValueError("Steam import preview is too large")
         print(data)
     else:
         if args.home is not None: parser.error("Launch uses the isolated profile home only")
-        launch(args.launch)
+        launch(args.launch,args.library)
 
 
 if __name__ == "__main__":

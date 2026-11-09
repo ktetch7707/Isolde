@@ -1,6 +1,7 @@
 #include "sessions/NativeSandbox.h"
 #include "sessions/DesktopSession.h"
 #include "media/MediaGrants.h"
+#include "games/SteamLibraryGrants.h"
 #include <QSettings>
 #include <QCoreApplication>
 #include <QDir>
@@ -22,6 +23,7 @@ private slots:
     void normalExitRemovesDetachedChildren();
     void invalidIdentityAndSymlinkAreRefused();
     void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
+    void externalSteamGrantsAreProfileScopedAndFailClosed();
 };
 
 static const QString alice = "11111111-1111-4111-8111-111111111111";
@@ -49,6 +51,31 @@ void NativeSandboxTests::steamAdapterCannotAttachToHostGameProcesses(){
     QVERIFY(outside.state()!=QProcess::NotRunning);outside.terminate();QVERIFY(outside.waitForFinished());
     QVERIFY(!NativeSandbox::prepare(alice,"other","/usr/bin/python3",env,{},storage.path(),{},{},"42").error.isEmpty());
     QVERIFY(!NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42 -bad").error.isEmpty());
+}
+void NativeSandboxTests::externalSteamGrantsAreProfileScopedAndFailClosed()
+{
+    QTemporaryDir config, storage;
+    const auto original = QSettings::defaultFormat();
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, config.path());
+    const auto candidate=QStringLiteral("/media/isolde-test/SteamLibrary");
+    QVERIFY(SteamLibraryGrants::validate(candidate,false).isEmpty());
+    QVERIFY(!SteamLibraryGrants::validate("/media",false).isEmpty());
+    QVERIFY(!SteamLibraryGrants::validate("/home/other/SteamLibrary",false).isEmpty());
+    QVERIFY(!SteamLibraryGrants::validate("/etc/SteamLibrary",false).isEmpty());
+    QVERIFY(SteamLibraryGrants::save(alice,{candidate}).isEmpty());
+
+    QSettings settings(QSettings::IniFormat,QSettings::UserScope,"Isolde","MediaAccess");
+    QCOMPARE(SteamLibraryGrants::folders(alice),QStringList{candidate});
+    QVERIFY(SteamLibraryGrants::folders(bob).isEmpty());
+    const auto env=QProcessEnvironment::systemEnvironment();
+    const auto disconnected=NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");
+    QVERIFY(disconnected.error.isEmpty());
+    QVERIFY(disconnected.steamLibraryRoots.isEmpty());
+    settings.setValue("profiles/"+alice+"/steam/libraries",QStringList{"/etc/isolde-test"});
+    const auto invalid=NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");
+    QVERIFY(!invalid.error.isEmpty());
+    QSettings::setDefaultFormat(original);
 }
 void NativeSandboxTests::rememberedKodiGrantsAreScopedReadOnlyAndRevocable()
 {

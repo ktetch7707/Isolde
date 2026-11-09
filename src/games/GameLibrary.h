@@ -47,6 +47,9 @@ public:
     bool scanning() const { return bool(m_scan) || m_steamScan.state()!=QProcess::NotRunning; }
     QString importStatus() const { return m_importStatus; }
     Q_INVOKABLE bool beginSteamImport();
+    Q_INVOKABLE QStringList steamLibraries() const;
+    Q_INVOKABLE bool addSteamLibrary(const QString &path);
+    Q_INVOKABLE bool removeSteamLibrary(const QString &path);
     int importCount() const { return m_preview.size(); }
     bool importReady() const { return m_importReady; }
     Q_INVOKABLE bool beginImport(const QString &root, const QString &runtimeId, const QString &platform);

@@ -1,5 +1,6 @@
 #include "GameLibrary.h"
 #include "GameEmulators.h"
+#include "SteamLibraryGrants.h"
 #include <QCoreApplication>
 #include "app/AppRegistry.h"
 #include "app/AppCatalog.h"
@@ -1258,9 +1259,38 @@ bool GameLibrary::beginSteamImport(){
     const auto python=QStandardPaths::findExecutable("python3");
     if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde Steam adapter."));
     const auto home=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+m_emulatorProfile+"/steam/home";
+    const auto libraries=SteamLibraryGrants::folders(m_emulatorProfile);
+    const auto grantsError=SteamLibraryGrants::validateList(libraries,false);
+    if(!grantsError.isEmpty())return fail(tr("Review external Steam library access in Games settings. %1").arg(grantsError));
+    QStringList arguments{helper,"--discover","--home",home};
+    for(const auto &library:libraries){
+        if(QFileInfo(library).isDir())arguments << "--library" << library;
+    }
     m_preview.clear();m_steamScanOutput.clear();m_steamScanCanceled=false;m_importRuntime="steam";m_importRoot=QStringLiteral("");m_importReady=false;
-    m_error.clear();emit errorChanged();m_importStatus=tr("Reading installed games in this profile's Steam library. Nothing is saved yet.");
-    m_steamScan.start(python,{helper,"--discover","--home",home});m_steamScanDeadline.start();emit importChanged();return true;
+    m_error.clear();emit errorChanged();m_importStatus=tr("Reading installed games in this profile's approved Steam libraries. Nothing is saved yet.");
+    m_steamScan.start(python,arguments);m_steamScanDeadline.start();emit importChanged();return true;
+}
+QStringList GameLibrary::steamLibraries() const {
+    return SteamLibraryGrants::folders(m_emulatorProfile);
+}
+bool GameLibrary::addSteamLibrary(const QString &path) {
+    if(!m_ready)return fail(tr("Games is unavailable in this profile."));
+    auto libraries=steamLibraries();
+    if(libraries.contains(path))return fail(tr("That external Steam library is already approved."));
+    const auto validation=SteamLibraryGrants::validate(path);
+    if(!validation.isEmpty())return fail(validation);
+    libraries.append(path);
+    const auto error=SteamLibraryGrants::save(m_emulatorProfile,libraries);
+    if(!error.isEmpty())return fail(error);
+    m_error.clear();emit errorChanged();emit changed();return true;
+}
+bool GameLibrary::removeSteamLibrary(const QString &path) {
+    if(!m_ready)return fail(tr("Games is unavailable in this profile."));
+    auto libraries=steamLibraries();
+    if(!libraries.removeOne(path))return fail(tr("That external Steam library is not approved in this profile."));
+    const auto error=SteamLibraryGrants::save(m_emulatorProfile,libraries);
+    if(!error.isEmpty())return fail(error);
+    m_error.clear();emit errorChanged();emit changed();return true;
 }
 bool GameLibrary::beginImport(const QString &root,const QString &runtime,const QString &platform) {
     if(!m_ready || scanning() || m_importReady)return fail(tr("Finish or cancel the current import first."));

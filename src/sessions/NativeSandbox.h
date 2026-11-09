@@ -8,6 +8,7 @@ struct NativeSandboxPlan {
     QProcessEnvironment environment;
     QString homeDirectory;
     QString actionTarget;
+    QStringList steamLibraryRoots;
     QString error;
 };
 

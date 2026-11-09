@@ -12,7 +12,15 @@ User authorization: implement selecting a Steam game in Isolde and pressing Play
 
 This implementation discovers fully installed games, not every title owned by an online Steam account. It does not claim entitlement from installation. Steam enforces sign-in, ownership, DRM, updates, Proton and third-party launcher requirements. Nonstandard game launchers that do not expose a SteamAppId-tagged process can time out rather than produce a false running-game claim. Existing Steam UI sessions must be returned from before starting another managed session.
 
-External libraries outside the managed Steam home are reported as unconnected and are not granted filesystem access. This preserves the standing profile/account boundary; it is not a supported external-library connection workflow. No desktop-account or other-profile fallback is attempted. A separate approved external-library connection remains open.
+At the original implementation checkpoint, external libraries were reported as unconnected and not granted filesystem access. The conservative connection slice below supersedes that limitation; no desktop-account or other-profile fallback is used.
+
+## External Steam library connection — 2026-11-09
+
+The Games toolbar now provides **Steam access** for the active profile. An explicit folder path can be approved only when it is a real Steam library under `/media` or `/mnt` with a local `steamapps` directory. Grants are stored separately per profile, bounded to eight non-nested libraries, and can be individually revoked. A disconnected previously approved mount remains listed but is not mounted until it is available again.
+
+Steam discovery receives only that profile's approved library paths. Steam sessions mount each available approved root at its original path, read-only; the rest of the host mount tree remains unavailable. The adapter accepts manifests from the profile's managed Steam home or from the exact approved roots, rechecks App-ID/install identity before launch, and refuses unapproved external paths. The selected source remains read-only to avoid granting a game arbitrary write access to user-owned external storage. This may limit titles that require writing into their installation folder; such compatibility is not claimed. Revoking a grant does not delete files or catalog records. This is a conservative external-library connection slice, not evidence of real Steam-client/game acceptance.
+
+Focused checks: Steam adapter tests pass 11/11 and Games provisioning tests pass 14/14. A new Qt native-sandbox profile/fail-closed regression and remote keyboard/menu coverage were added, but CMake/Qt are unavailable here, so neither native nor QML test executable was built or run.
 
 ## Implementation and boundaries
 

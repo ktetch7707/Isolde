@@ -32,6 +32,7 @@ class GamesUiTests : public QObject {
     Q_OBJECT
 private slots:
     void remoteSteamImportCanCancelReviewAndPlay();
+    void remoteExternalSteamAccessIsExplicitAndCancelable();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
     void remoteEditCanCancelAndApplyWithoutMouse();
@@ -53,6 +54,24 @@ static void doneOnKeyboard(QObject *widget) {
     for(int i=0;i<5;++i)command(widget,InputManager::NavigateDown);
     for(int i=0;i<9;++i)command(widget,InputManager::NavigateRight);
     command(widget,InputManager::Confirm);
+}
+void GamesUiTests::remoteExternalSteamAccessIsExplicitAndCancelable(){
+    QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    for(int i=0;i<12;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("catalogTools"));
+    command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::NavigateDown);
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("steamLibraries"));
+    QVERIFY(library.steamLibraries().isEmpty());
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("keyboard"));
+    QVERIFY(library.steamLibraries().isEmpty());
+    command(widget.data(),InputManager::Back);QCOMPARE(widget->property("mode").toString(),QString("steamLibraries"));
+    command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("mode").toString(),QString("catalogTools"));QVERIFY(library.steamLibraries().isEmpty());
+    qApp->setProperty("isoldeProfile",QVariant());
 }
 void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);

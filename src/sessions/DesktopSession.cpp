@@ -366,6 +366,8 @@ void DesktopSession::launch()
         setState(State::Exited);
         return;
     }
+    if(!steamGame.isEmpty())
+        for(const auto &library:sandbox.steamLibraryRoots)resolvedLaunch.arguments << "--library" << library;
 
     const auto emulator=configuration.value("emulatorRuntime").toString();
     if(!emulator.isEmpty())resolvedLaunch.arguments={"/run/emulator-session.py","--runtime",emulator,sandbox.actionTarget};

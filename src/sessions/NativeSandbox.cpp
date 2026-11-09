@@ -1,6 +1,7 @@
 #include "sessions/NativeSandbox.h"
 #include "media/MediaGrants.h"
 #include "games/GameEmulators.h"
+#include "games/SteamLibraryGrants.h"
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -9,6 +10,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUuid>
+#include <QSet>
 #ifdef Q_OS_LINUX
 #include <unistd.h>
 #endif
@@ -245,6 +247,29 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             plan.error="Repair the private Steam game adapter or import this game again.";return plan;
         }
         bind(helper,"/run/steam-games.py");
+    }
+    if(appId=="steam"){
+        const auto libraries=SteamLibraryGrants::folders(profileId);
+        const auto grantsError=SteamLibraryGrants::validateList(libraries,false);
+        if(!grantsError.isEmpty()){
+            plan.error="Review external Steam library access in Games settings. "+grantsError;
+            return plan;
+        }
+        QSet<QString> createdParents;
+        for(const auto &library:libraries){
+            if(!QFileInfo(library).isDir())continue;
+            QString parent;
+            for(const auto &part:library.split('/',Qt::SkipEmptyParts)){
+                parent+="/"+part;
+                if(parent==library)break;
+                if(!createdParents.contains(parent)){
+                    args << "--dir" << parent;
+                    createdParents.insert(parent);
+                }
+            }
+            bind(library,library);
+            plan.steamLibraryRoots.append(library);
+        }
     }
     bind(supervisor, "/run/isolde-native-host");
     bind(busConfig, "/run/isolde-session-bus.conf");
