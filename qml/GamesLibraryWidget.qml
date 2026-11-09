@@ -47,7 +47,7 @@ Item {
     readonly property var runtimes:library?library.runtimes:[]
     readonly property var tools:["Add game","All","Favorites","Recent","Platforms","Search","Previous","Next","Emulator setup","Import folder","Continue","Collections","Catalog backup"]
     readonly property var importActions:["Import all reviewed games","Cancel · save nothing","Previous preview page","Next preview page"].concat(importItems.map(g=>g.title+" · "+g.target))
-    readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Add edition / version","Collections","Edit metadata, aliases & summary"].concat(collectionIsManual()?["Move earlier in collection","Move later in collection"]:[]).concat(["Back"]):[]
+    readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Add edition / version","Collections","Edit metadata, aliases & summary","Import cover artwork"].concat(detail.artwork?["Remove cover artwork"]:[]).concat(collectionIsManual()?["Move earlier in collection","Move later in collection"]:[]).concat(["Back"]):[]
     readonly property int columns:style.libraryLayout==="list"?1:Math.max(1,style.libraryColumns || 4)
     readonly property real scale:appearance.typographyScale || 1
     readonly property string foreground:appearance.textColor || "#F5F1F3"
@@ -240,13 +240,25 @@ Item {
             else if(choice===4){const game=detail.id;beginAdd(false);if(mode==="runtime"){editionGameId=game;message="Add a version to this game. Its launch settings remain separate. Confirming the first edition backs up and upgrades this catalog."}}
             else if(choice===5){collectionChoices=library.collections().filter(c=>c.kind==="manual");mode="collectionMembers";choice=0;message="Choose a manual collection to add/remove this game. Smart shelves are read-only rules."}
             else if(choice===6){draft={franchise:detail.franchise || "",tags:(detail.tags || []).join(", "),summary:detail.summary || "",aliases:(detail.aliases || []).join("; ")};beginField(6)}
-            else if(choice===7 && collectionIsManual()){
-                if(!library.moveCollectionMember(activeCollectionId,detail.id,-1))message=library.errorString
-                reload();mode="details"
-            }else if(choice===8 && collectionIsManual()){
-                if(!library.moveCollectionMember(activeCollectionId,detail.id,1))message=library.errorString
-                reload();mode="details"
-            }else{mode="browse";detail=null}
+            else if(choice===7){field=15;mode="keyboard";keyboard.selectedIndex=0;keyboard.value="";return}
+            else{
+                let index=8
+                if(detail.artwork){
+                    if(choice===index){
+                        if(!library.clearArtwork(detail.id)){message=library.errorString;return}
+                        detail=library.details(detail.id);mode="details";choice=7;return
+                    }
+                    index++
+                }
+                if(collectionIsManual()){
+                    if(choice===index || choice===index+1){
+                        if(!library.moveCollectionMember(activeCollectionId,detail.id,choice===index?-1:1))message=library.errorString
+                        reload();mode="details";return
+                    }
+                    index+=2
+                }
+                if(choice===index){mode="browse";detail=null}
+            }
         }
     }
     function launchEdition(id){
@@ -306,7 +318,7 @@ Item {
                 width:grid.cellWidth;height:grid.cellHeight
                 HomeCard {
                     anchors.fill:parent;anchors.margins:(root.style.cardGap===undefined?16:root.style.cardGap)/2
-                    item:({name:modelData.title,presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || "media",subtitle:modelData.platform+(modelData.favorite?" · Favorite":"")})})
+                    item:({name:modelData.title,logoSource:modelData.artwork || "",presentation:Object.assign({},root.style,{variant:root.style.libraryCardStyle || "media",subtitle:modelData.platform+(modelData.favorite?" · Favorite":"")})})
                     appearance:root.appearance;selected:root.engaged && root.selected===index
                     onActivated:{if(root.readOnly)return;root.engage();root.selected=index;root.openDetails()}
                 }
@@ -341,8 +353,8 @@ Item {
     }
     OnScreenKeyboard {
         id:keyboard;anchors.fill:parent;visible:root.mode==="keyboard";appearance:root.appearance
-        hint:root.field===5?"Your absolute PS2 firmware path · Save setup confirms copying it into this profile":root.field===6?"Franchise or series name":root.field===7?"Comma-separated tags · up to 32 (commas separate tags)":root.field===13?"Game summary · up to 4096 characters":root.field===14?"Alternate titles separated by semicolons · up to 32":root.field===8?(root.collectionCreateType==="title"?"Collection name · smart rule matches this text in game titles":"Collection name"):root.field===9?"Absolute JSON export path inside a granted media folder":root.field===10?"Absolute JSON backup path inside a granted media folder":root.field===11?"Collection name":root.field===12?"Platform or title text for the smart collection":""
-        onCanceled:{if(root.field===5){root.mode="emulatorSettings";return}if(root.field===6 || root.field===7 || root.field===13 || root.field===14){root.mode="details";return}if(root.field===8){root.mode="collectionChooser";return}if(root.field===11 || root.field===12){root.mode=root.editingCollectionId?"collectionActions":"collectionChooser";root.editingCollectionId="";return}if(root.field===9 || root.field===10){root.mode="catalogTools";return}root.draft=({});root.mode="browse"}
+        hint:root.field===5?"Your absolute PS2 firmware path · Save setup confirms copying it into this profile":root.field===6?"Franchise or series name":root.field===7?"Comma-separated tags · up to 32 (commas separate tags)":root.field===13?"Game summary · up to 4096 characters":root.field===14?"Alternate titles separated by semicolons · up to 32":root.field===15?"Absolute PNG or JPEG artwork path in a profile-approved media folder":root.field===8?(root.collectionCreateType==="title"?"Collection name · smart rule matches this text in game titles":"Collection name"):root.field===9?"Absolute JSON export path inside a granted media folder":root.field===10?"Absolute JSON backup path inside a granted media folder":root.field===11?"Collection name":root.field===12?"Platform or title text for the smart collection":""
+        onCanceled:{if(root.field===5){root.mode="emulatorSettings";return}if(root.field===6 || root.field===7 || root.field===13 || root.field===14 || root.field===15){root.mode="details";return}if(root.field===8){root.mode="collectionChooser";return}if(root.field===11 || root.field===12){root.mode=root.editingCollectionId?"collectionActions":"collectionChooser";root.editingCollectionId="";return}if(root.field===9 || root.field===10){root.mode="catalogTools";return}root.draft=({});root.mode="browse"}
         onAccepted:text=>{
             if(root.field===5){root.firmwareDraft=text;root.mode="emulatorSettings";return}
             if(root.field===6){root.draft=Object.assign({},root.draft,{franchise:text});root.beginField(7);return}
@@ -355,6 +367,10 @@ Item {
                 const aliases=text.split(";").map(alias=>alias.trim()).filter(alias=>alias.length>0)
                 if(!root.library.setOrganization(root.detail.id,root.draft.franchise || "",root.draft.tags || [],aliases,root.draft.summary || "")){root.message=root.library.errorString;root.mode="details";return}
                 root.detail=root.library.details(root.detail.id);root.mode="details";root.choice=5;return
+            }
+            if(root.field===15){
+                if(!root.library.setArtwork(root.detail.id,text)){root.message=root.library.errorString;root.mode="details";return}
+                root.detail=root.library.details(root.detail.id);root.message="Cover artwork was copied into this profile. The source image was not modified.";root.mode="details";root.choice=7;return
             }
             if(root.field===8){
                 if(root.collectionCreateType==="platform"){

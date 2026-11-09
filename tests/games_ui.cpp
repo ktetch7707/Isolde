@@ -17,6 +17,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QImage>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -237,6 +238,18 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(library.setFavorite(game,true));QVERIFY(library.recordCompletedSession(game));
     const auto collection=library.createCollection("Export set","manual");QVERIFY(!collection.isEmpty());
     QVERIFY(library.setCollectionMember(collection,game,true));
+    const auto coverPath=dir.filePath("cover.png");QImage cover(48,64,QImage::Format_ARGB32);cover.fill(QColor("#3467a1"));
+    QVERIFY(cover.save(coverPath,"PNG"));
+    QVERIFY2(library.setArtwork(game,coverPath),qPrintable(library.errorString()));
+    QVERIFY(!library.details(game).value("artwork").toString().isEmpty());
+    QVERIFY(library.clearArtwork(game));QVERIFY(library.details(game).value("artwork").toString().isEmpty());
+    QVERIFY2(library.setArtwork(game,coverPath),qPrintable(library.errorString()));
+    QTemporaryDir ungrantedArtwork;QVERIFY(ungrantedArtwork.isValid());
+    const auto ungrantedCover=ungrantedArtwork.filePath("cover.png");QVERIFY(cover.save(ungrantedCover,"PNG"));
+    QVERIFY(!library.setArtwork(game,ungrantedCover));
+    const auto invalidCover=dir.filePath("invalid.png");QFile invalidImage(invalidCover);
+    QVERIFY(invalidImage.open(QIODevice::WriteOnly));QVERIFY(invalidImage.write("not a PNG")>0);invalidImage.close();
+    QVERIFY(!library.setArtwork(game,invalidCover));
     QTemporaryDir ungranted;QVERIFY(ungranted.isValid());
     QVERIFY(!library.exportCatalog(ungranted.filePath("unapproved.json")));
     const auto backup=dir.filePath("games-backup.json");
@@ -254,14 +267,28 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(library.details(game).value("tags").toStringList(),QStringList({"Puzzle"}));
     QCOMPARE(library.details(game).value("aliases").toStringList(),QStringList({"Portable fixture alt"}));
     QCOMPARE(library.details(game).value("summary").toString(),QString("Archive summary"));
+    QVERIFY(!library.details(game).value("artwork").toString().isEmpty());
     QCOMPARE(library.editions(game).size(),2);QCOMPARE(library.page("continue").size(),1);
     QCOMPARE(library.pageCollection(collection).size(),1);QVERIFY(library.collectionContains(collection,game));
     QFile exported(backup);QVERIFY(exported.open(QIODevice::ReadOnly));
-    QJsonParseError parse;auto legacy=QJsonDocument::fromJson(exported.readAll(),&parse).object();exported.close();
-    QCOMPARE(parse.error,QJsonParseError::NoError);legacy["schemaVersion"]=1;
+    QJsonParseError parse;const auto exportedObject=QJsonDocument::fromJson(exported.readAll(),&parse).object();exported.close();
+    QCOMPARE(parse.error,QJsonParseError::NoError);
+    auto versionTwo=exportedObject;versionTwo["schemaVersion"]=2;
+    QJsonArray versionTwoGames;
+    for(const auto &entry:versionTwo.value("games").toArray()){
+        auto gameObject=entry.toObject();gameObject.remove("artwork");versionTwoGames.append(gameObject);
+    }
+    versionTwo["games"]=versionTwoGames;
+    const auto versionTwoPath=dir.filePath("version-two-backup.json");QFile versionTwoFile(versionTwoPath);
+    QVERIFY(versionTwoFile.open(QIODevice::WriteOnly));QVERIFY(versionTwoFile.write(QJsonDocument(versionTwo).toJson(QJsonDocument::Compact))>0);versionTwoFile.close();
+    QVERIFY2(library.restoreCatalog(versionTwoPath,true),qPrintable(library.errorString()));
+    QCOMPARE(library.details(game).value("aliases").toStringList(),QStringList({"Portable fixture alt"}));
+    QCOMPARE(library.details(game).value("summary").toString(),QString("Archive summary"));
+    QVERIFY(library.details(game).value("artwork").toString().isEmpty());
+    auto legacy=exportedObject;legacy["schemaVersion"]=1;
     QJsonArray legacyGames;
     for(const auto &entry:legacy.value("games").toArray()){
-        auto gameObject=entry.toObject();gameObject.remove("aliases");gameObject.remove("summary");legacyGames.append(gameObject);
+        auto gameObject=entry.toObject();gameObject.remove("aliases");gameObject.remove("summary");gameObject.remove("artwork");legacyGames.append(gameObject);
     }
     legacy["games"]=legacyGames;
     const auto legacyPath=dir.filePath("legacy-backup.json");QFile legacyFile(legacyPath);
@@ -269,7 +296,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY2(library.restoreCatalog(legacyPath,true),qPrintable(library.errorString()));
     QVERIFY(library.details(game).value("aliases").toStringList().isEmpty());
     QVERIFY(library.details(game).value("summary").toString().isEmpty());
-    QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),2);
+    QVERIFY(library.details(game).value("artwork").toString().isEmpty());
+    QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),3);
     GameLibrary reopened(database,&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
     QCOMPARE(reopened.pageCollection(collection).size(),1);QCOMPARE(reopened.editions(game).size(),2);
 }

@@ -60,6 +60,8 @@ public:
     bool recordCompletedSession(const QString &gameId);
     Q_INVOKABLE bool setOrganization(const QString &gameId, const QString &franchise, const QStringList &tags,
                                      const QStringList &aliases = {}, const QString &summary = {});
+    Q_INVOKABLE bool setArtwork(const QString &gameId, const QString &source);
+    Q_INVOKABLE bool clearArtwork(const QString &gameId);
     Q_INVOKABLE QVariantList collections();
     Q_INVOKABLE QString createCollection(const QString &name, const QString &kind,
                                          const QString &filterType = {}, const QString &filterValue = {});
@@ -100,11 +102,14 @@ private:
     bool m_hasActivity = false;
     bool m_hasMetadata = false;
     bool m_hasRichMetadata = false;
+    bool m_hasArtwork = false;
     bool m_hasCollections = false;
     bool installationExists(const QString &runtime, const QString &root, const QString &target);
     bool platformAvailable(const QString &platform);
     bool ensureOrganizationSchema();
     bool ensureRichMetadataSchema();
+    bool ensureArtworkSchema();
+    QString artworkDirectory() const;
     void scanStep();
     QTimer m_scanTimer;
     std::unique_ptr<QDirIterator> m_scan;
