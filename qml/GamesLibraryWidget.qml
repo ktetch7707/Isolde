@@ -89,10 +89,13 @@ Item {
         const exit={unknown:"unknown",exited:"reported normal",crashed:"reported crash"}
         const local={unknown:"unknown",flushed:"reported flushed",failed:"reported failed"}
         const cloud={unknown:"unknown",synced:"reported synced",pending:"reported pending",failed:"reported failed"}
+        const sessionEnd={unknown:"unconfirmed",normal:"reported normal process exit",canceled:"canceled",incomplete:"incomplete · check Steam and saves",recovery_required:"recovery required · check Steam and saves"}
         return "Steam App "+providerStatus.appId+" · last Play: "+(phases[providerStatus.phase] || "unknown")+
             "\nInstall: "+(installation[providerStatus.installation] || "unknown")+" · Client: "+(client[providerStatus.client] || "unknown")+
             "\nAccount: "+(account[providerStatus.account] || "unknown")+" · Ownership: "+(ownership[providerStatus.ownership] || "unknown")+" · Connection: "+(connection[providerStatus.connection] || "unknown")+" · Offline readiness: "+(offline[providerStatus.offline] || "unknown")+
-            "\nExit: "+(exit[providerStatus.exit] || "unknown")+" · Local save: "+(local[providerStatus.local_save] || "unknown")+" · Cloud: "+(cloud[providerStatus.cloud_save] || "unknown")
+            "\nSession end: "+(sessionEnd[providerStatus.session_end] || "unconfirmed")+" · Exit: "+(exit[providerStatus.exit] || "unknown")+
+            "\nLocal save: "+(local[providerStatus.local_save] || "unknown")+" · Cloud: "+(cloud[providerStatus.cloud_save] || "unknown")+
+            "\nA normal process exit, cancellation, or wait period does not prove that saves were written or Cloud sync completed."
     }
     signal engage()
     Component.onCompleted:reload()

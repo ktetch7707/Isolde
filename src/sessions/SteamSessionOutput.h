@@ -50,10 +50,11 @@ private:
             {"exit",{"unknown","exited","crashed"}},
             {"local_save",{"unknown","flushed","failed"}},
             {"cloud_save",{"unknown","synced","pending","failed"}},
+            {"session_end",{"unknown","normal","canceled","incomplete","recovery_required"}},
             {"error",{"none","bootstrap_failed","ownership_denied","auth_required","offline_unavailable","launch_failed","install_check_failed","client_unavailable"}}
         };
         if(obj.size()!=allowed.size()+2 || !obj.value("version").isDouble()
-            || obj.value("version").toDouble()!=1 || obj.value("appId").toString()!=m_identity)return;
+            || obj.value("version").toDouble()!=2 || obj.value("appId").toString()!=m_identity)return;
         for(auto it=allowed.cbegin();it!=allowed.cend();++it)
             if(!obj.value(it.key()).isString() || !it.value().contains(obj.value(it.key()).toString()))return;
         m_state=obj.toVariantMap();

@@ -156,13 +156,14 @@ void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
     QVERIFY(!parser.consume(QByteArray(2100,'x')+"STEAM_GAME_PROCESS_OBSERVED 42\n"));
     QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBSERVED 42x\n"));
     QVERIFY(parser.consume("noise\nSTEAM_GAME_PROCESS_OBSERVED 42\n"));
-    const QByteArray state=R"({"account":"unknown","appId":"42","client":"available","cloud_save":"unknown","connection":"unknown","error":"none","exit":"unknown","installation":"verified","local_save":"unknown","offline":"unknown","ownership":"unknown","phase":"ended","process":"gone","version":1})";
+    const QByteArray state=R"({"account":"unknown","appId":"42","client":"available","cloud_save":"unknown","connection":"unknown","error":"none","exit":"unknown","installation":"verified","local_save":"unknown","offline":"unknown","ownership":"unknown","phase":"ended","process":"gone","session_end":"normal","version":2})";
     QVERIFY(!parser.consume("STEAM_PROVIDER_STATE "+state.left(50)));
     QVERIFY(parser.takeState().isEmpty());
     QVERIFY(!parser.consume(state.mid(50)+"\n"));
     const auto parsed=parser.takeState();
     QCOMPARE(parsed.value("phase").toString(),QString("ended"));
     QCOMPARE(parsed.value("local_save").toString(),QString("unknown"));
+    QCOMPARE(parsed.value("session_end").toString(),QString("normal"));
     auto other=state;other.replace("\"appId\":\"42\"","\"appId\":\"43\"");
     parser.consume("STEAM_PROVIDER_STATE "+other+"\n");
     QVERIFY(parser.takeState().isEmpty());
@@ -171,6 +172,9 @@ void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
     QVERIFY(parser.takeState().isEmpty());
     auto duplicate=state;duplicate.replace("\"exit\":\"unknown\"","\"exit\":\"unknown\",\"exit\":\"crashed\"");
     parser.consume("STEAM_PROVIDER_STATE "+duplicate+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+    auto oldVersion=state;oldVersion.replace("\"version\":2","\"version\":1");
+    parser.consume("STEAM_PROVIDER_STATE "+oldVersion+"\n");
     QVERIFY(parser.takeState().isEmpty());
     parser.consume("STEAM_PROVIDER_STATE "+QByteArray(2050,'x')+"\n");
     QVERIFY(parser.takeState().isEmpty());

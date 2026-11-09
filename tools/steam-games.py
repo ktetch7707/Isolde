@@ -28,6 +28,7 @@ FACT_VALUES = {
     "exit": {"unknown", "exited", "crashed"},
     "local_save": {"unknown", "flushed", "failed"},
     "cloud_save": {"unknown", "synced", "pending", "failed"},
+    "session_end": {"unknown", "normal", "canceled", "incomplete", "recovery_required"},
     "error": {"none", "bootstrap_failed", "ownership_denied", "auth_required",
               "offline_unavailable", "launch_failed", "install_check_failed", "client_unavailable"},
 }
@@ -332,21 +333,30 @@ def supervise_provider(provider, publish, timeout=120, clock=None, sleep=None):
         elif seen:
             if missing is None: missing = clock()
             elif clock()-missing >= 3:
-                publish("ended", facts)
                 if facts["exit"] == "crashed":
+                    facts["session_end"] = "recovery_required"
+                    publish("failed", facts)
                     raise RuntimeError("Steam reported that this game crashed. Check its saves and compatibility before retrying")
                 if facts["local_save"] == "failed":
+                    facts["session_end"] = "recovery_required"
+                    publish("failed", facts)
                     raise RuntimeError("Steam reported that the game could not save. Check local saves before retrying")
                 if facts["cloud_save"] == "failed":
+                    facts["session_end"] = "recovery_required"
+                    publish("failed", facts)
                     raise RuntimeError("Steam reported that Cloud sync failed. Check Steam before using these saves on another device")
+                facts["session_end"] = "normal" if facts["exit"] == "exited" else "unknown"
+                publish("ended", facts)
                 return facts
         elif clock() >= deadline:
+            facts["error"] = "launch_failed"
+            publish("failed", facts)
             raise RuntimeError("Steam did not start this game within two minutes. Check the active account, offline availability, installation and compatibility in Steam, then retry")
         sleep(.25)
 
 
 def publish_provider_state(identity, phase, facts):
-    payload = {"version":1, "appId":identity, "phase":phase, **facts}
+    payload = {"version":2, "appId":identity, "phase":phase, **facts}
     print("STEAM_PROVIDER_STATE "+json.dumps(payload, separators=(",", ":"), sort_keys=True),
           file=sys.stderr, flush=True)
 
@@ -404,18 +414,27 @@ def launch(identity, external=()):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         try:
-            if canceled:
-                signal_owned_processes(processes(identity), token)
+            game_was_running = started
+            if canceled or failed:
+                owned_games=processes(identity)
+                game_was_running = game_was_running or bool(owned_games)
+                signal_owned_processes(owned_games, token)
                 clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
                 stopped = clean_game_exit
             else:
                 stopped = started
             # Give Steam a bounded opportunity to process game exit and sync before
             # ending its private client. This is not a cloud-sync confirmation.
-            if stopped:
+            if stopped and game_was_running:
                 time.sleep(3)
             stop_owned_session(token)
             if canceled or failed:
+                if started and clean_game_exit:
+                    last_facts["process"] = "gone"
+                if not clean_game_exit:
+                    last_facts["session_end"] = "incomplete"
+                elif canceled:
+                    last_facts["session_end"] = "canceled"
                 publish("failed" if failed or not clean_game_exit else "canceled", last_facts)
         finally:
             signal.signal(signal.SIGTERM, previous_term)
