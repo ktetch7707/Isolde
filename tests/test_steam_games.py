@@ -117,6 +117,26 @@ class SteamGamesTests(unittest.TestCase):
             self.assertEqual(facts[field],"unknown")
         self.assertEqual(facts["error"],"none")
 
+    def test_preflight_reports_install_and_client_without_claiming_ownership(self):
+        output=io.StringIO()
+        def records():
+            return [json.loads(line.split(" ",1)[1]) for line in output.getvalue().splitlines()
+                    if line.startswith("STEAM_PROVIDER_STATE ")]
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), contextlib.redirect_stderr(output):
+            self.manifest.unlink()
+            with self.assertRaisesRegex(ValueError,"missing"):steam.launch("42")
+            self.assertEqual(records()[-1]["installation"],"unavailable")
+            self.assertEqual(records()[-1]["error"],"install_check_failed")
+            self.assertEqual(records()[-1]["ownership"],"unknown")
+            output.seek(0);output.truncate();self.manifest.write_text(self.text)
+            with patch.object(steam.os,"access",return_value=False):
+                with self.assertRaisesRegex(ValueError,"Install or repair Steam"):steam.launch("42")
+            self.assertEqual(records()[-1]["installation"],"verified")
+            self.assertEqual(records()[-1]["client"],"unavailable")
+            self.assertEqual(records()[-1]["error"],"client_unavailable")
+            self.assertEqual(records()[-1]["offline"],"unknown")
+
     def test_controlled_provider_distinguishes_denial_offline_crash_and_saves(self):
         def facts(**changes): return dict(steam.UNKNOWN_FACTS,**changes)
         def run(script):
@@ -189,6 +209,37 @@ class SteamGamesTests(unittest.TestCase):
         self.assertEqual(records[-1]["local_save"],"flushed")
         self.assertEqual(records[-1]["cloud_save"],"pending")
         self.assertEqual(set(records[-1]),set(steam.FACT_VALUES)|{"version","appId","phase"})
+
+    def test_disconnected_preflight_failure_and_retry_preserve_profile_save(self):
+        save=self.home/"saved-game";save.write_bytes(b"offline save")
+        elapsed=[0.0]
+        def sleep(seconds):elapsed[0]+=seconds
+        output=io.StringIO()
+        with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}), \
+             patch.object(Path,"home",return_value=self.home), \
+             patch.object(Path,"is_file",return_value=True), \
+             patch.object(steam.os,"access",return_value=True), \
+             patch.object(steam.subprocess,"Popen",return_value=Mock(poll=lambda:0)) as popen, \
+             patch.object(steam,"game_processes",side_effect=lambda identity,token: [123] if elapsed[0]<.5 else []), \
+             patch.object(steam,"stop_owned_session"), \
+             patch.object(steam.time,"monotonic",side_effect=lambda:elapsed[0]), \
+             patch.object(steam.time,"sleep",side_effect=sleep), \
+             patch("socket.socket",side_effect=AssertionError("unexpected network")), \
+             contextlib.redirect_stderr(output):
+            self.manifest.unlink()
+            with self.assertRaises(ValueError): steam.launch("42")
+            popen.assert_not_called()
+            self.assertEqual(save.read_bytes(),b"offline save")
+            self.manifest.write_text(self.text)
+            steam.launch("42")
+        states=[json.loads(line.split(" ",1)[1]) for line in output.getvalue().splitlines()
+                if line.startswith("STEAM_PROVIDER_STATE ")]
+        self.assertEqual(states[-1]["phase"],"ended")
+        self.assertEqual(states[-1]["installation"],"verified")
+        self.assertEqual(states[-1]["offline"],"unknown")
+        self.assertEqual(states[-1]["ownership"],"unknown")
+        self.assertEqual(states[-1]["local_save"],"unknown")
+        self.assertEqual(save.read_bytes(),b"offline save")
 
     def test_cancel_stops_game_before_client_and_preserves_profile_save(self):
         save=self.home/"save.dat";save.write_bytes(b"local save")

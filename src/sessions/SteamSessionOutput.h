@@ -41,6 +41,8 @@ private:
         const QMap<QString,QStringList> allowed{
             {"phase",{"starting","process_observed","ended","canceled","failed"}},
             {"process",{"waiting","observed","gone"}},
+            {"installation",{"unknown","verified","unavailable"}},
+            {"client",{"unknown","available","unavailable"}},
             {"ownership",{"unknown","owned","not_owned"}},
             {"account",{"unknown","signed_in","signed_out"}},
             {"connection",{"unknown","online","offline"}},
@@ -48,7 +50,7 @@ private:
             {"exit",{"unknown","exited","crashed"}},
             {"local_save",{"unknown","flushed","failed"}},
             {"cloud_save",{"unknown","synced","pending","failed"}},
-            {"error",{"none","bootstrap_failed","ownership_denied","auth_required","offline_unavailable","launch_failed"}}
+            {"error",{"none","bootstrap_failed","ownership_denied","auth_required","offline_unavailable","launch_failed","install_check_failed","client_unavailable"}}
         };
         if(obj.size()!=allowed.size()+2 || !obj.value("version").isDouble()
             || obj.value("version").toDouble()!=1 || obj.value("appId").toString()!=m_identity)return;

@@ -44,6 +44,14 @@ The helper emits bounded version-1 JSON status records with a closed vocabulary 
 
 The supervisor drains final status records on process exit and while stopping, but a late process marker during cancellation cannot open a new game session or create history. A new Play request clears the prior in-memory status even if launch preparation is deferred; profile teardown disconnects session callbacks before stopping the private native process.
 
+## Profile Steam setup and honest preflight — 2026-11-09
+
+Games details and catalog tools now offer **Open Steam · account and offline setup** through the existing registered-app dispatcher, using the same profile-private Steam home and lock as direct Play. The action does not sign in, modify offline settings, connect a library or prove ownership. Steam's own UI remains responsible for sign-in, downloads, offline setup and account decisions. The sandbox's existing device policy is unchanged; controller-only operation inside Steam's own setup UI remains unproved.
+
+Direct Play publishes separate bounded preflight observations: the manifest/install-directory check is `verified` or `unavailable`, and the packaged client executable is `available` or `unavailable`. A failed check is visible as a failed status and remains retryable; it does not delete the catalog or saves. A verified installation is **not** authenticated ownership, offline entitlement, Steam-client readiness or gameplay. Connection, account, ownership, offline, game-exit and save facts remain unknown for the shipped process provider. The supported production boundary is deliberately the managed profile, reviewed read-only external libraries, canonical App ID and isolated/token-scoped process tracking; it does not read Steam account secrets, make a Steam Web API request, guess entitlement from cached files, or turn network connectivity into provider status.
+
+Fixtures exercise missing-game and missing-client outcomes, retry after restoring a manifest with outbound socket creation denied, unchanged profile save bytes and unknown entitlement/offline/save state. They are controlled local-process fixtures, not Steam gameplay or provider account simulation. The Qt suite adds account-setup routing and profile isolation assertions; native Qt and installed-VM verification are deferred.
+
 ## Implementation and boundaries
 
 - The existing bounded `games`/edition tables store `runtime=steam`, an empty filesystem root and a validated positive uint32 Steam App ID in the provider target field. Existing catalog versions remain readable; no startup migration or rewrite is introduced. IDs, not commands/URIs/launch options, reach the dispatcher.
