@@ -141,6 +141,45 @@ class PortableGameInstallerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"changed after preflight"):
                 installer.inspect_directory(source,"bin/game")
 
+    def test_directory_inspection_rejects_root_replaced_between_stat_and_open(self):
+        source=self.game_directory_fixture()
+        original_open=os.open
+        moved=source.with_name(source.name+"-original")
+        swapped=False
+        def replace_before_open(path,*args,**kwargs):
+            nonlocal swapped
+            if Path(path)==source and not swapped:
+                swapped=True
+                source.rename(moved)
+                source.mkdir()
+            return original_open(path,*args,**kwargs)
+        with mock.patch.object(installer.os,"open",side_effect=replace_before_open):
+            with self.assertRaisesRegex(ValueError,"changed while it was being opened"):
+                installer.inspect_directory(source,"bin/game")
+        self.assertTrue(swapped)
+
+    def test_directory_copy_closes_source_fd_when_staging_file_open_fails(self):
+        source=self.game_directory_fixture()
+        preview=installer.inspect_directory(source,"bin/game")
+        destination=self.root/"private"/"games"/"id"/"install"
+        original_open=os.open
+        opened=[]
+        def fail_staging_open(path,*args,**kwargs):
+            if isinstance(path,Path) and path==destination.with_name("install.staging")/"bin/game":
+                raise OSError("injected staging open failure")
+            descriptor=original_open(path,*args,**kwargs)
+            if path=="game":
+                opened.append(descriptor)
+            return descriptor
+        with mock.patch.object(installer.os,"open",side_effect=fail_staging_open):
+            with self.assertRaisesRegex(OSError,"injected staging open failure"):
+                installer.install_directory(source,destination,"bin/game",preview["archiveSha256"])
+        self.assertTrue(opened)
+        for descriptor in opened:
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+        self.assertFalse(destination.with_name("install.staging").exists())
+
     def test_directory_copy_detects_source_change_during_copy_and_discards_stage(self):
         source=self.game_directory_fixture()
         preview=installer.inspect_directory(source,"bin/game")

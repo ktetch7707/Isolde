@@ -288,6 +288,37 @@ def _directory_identity(value):
             value.st_mtime_ns, value.st_ctime_ns, value.st_nlink)
 
 
+def _open_directory_root(source):
+    root = Path(source)
+    if root.is_symlink() or not root.is_dir() or root.resolve(strict=True) != root.absolute():
+        raise ValueError("Choose a real game directory inside an approved media folder.")
+    before = os.stat(root, follow_symlinks=False)
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(root, flags)
+    try:
+        opened = os.fstat(descriptor)
+    except Exception:
+        os.close(descriptor)
+        raise
+    if (not stat.S_ISDIR(before.st_mode) or not stat.S_ISDIR(opened.st_mode)
+            or _directory_identity(before) != _directory_identity(opened)):
+        os.close(descriptor)
+        raise ValueError("The game directory changed while it was being opened.")
+    return root, descriptor, _directory_identity(opened)
+
+
+def _verify_directory_root(root, descriptor, expected_identity):
+    opened = os.fstat(descriptor)
+    try:
+        current = os.stat(root, follow_symlinks=False)
+    except OSError:
+        raise ValueError("The game directory root changed during inspection or copy.") from None
+    if (_directory_identity(opened) != expected_identity
+            or _directory_identity(current) != expected_identity
+            or not stat.S_ISDIR(current.st_mode)):
+        raise ValueError("The game directory root changed during inspection or copy.")
+
+
 def _safe_tree_path(relative):
     path = PurePosixPath(relative)
     if (not relative or path.is_absolute() or "\\" in relative or "\x00" in relative
@@ -326,11 +357,7 @@ def _read_directory_file(parent_fd, name, relative, total, expected_stat):
 
 
 def _inspect_directory_tree(source):
-    root = Path(source)
-    if root.is_symlink() or not root.is_dir() or root.resolve(strict=True) != root.absolute():
-        raise ValueError("Choose a real game directory inside an approved media folder.")
-    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
-    root_fd = os.open(root, flags)
+    root, root_fd, root_identity = _open_directory_root(source)
     records = []
     files = []
     directories = []
@@ -393,6 +420,7 @@ def _inspect_directory_tree(source):
 
     try:
         walk(root_fd, "", 1)
+        _verify_directory_root(root, root_fd, root_identity)
     finally:
         os.close(root_fd)
     digest = hashlib.sha256()
@@ -402,7 +430,8 @@ def _inspect_directory_tree(source):
         digest.update(struct.pack(">I", len(encoded)))
         digest.update(encoded)
     return {"files": files, "directories": directories, "total": total,
-            "archiveSha256": digest.hexdigest(), "archiveEntries": len(records)}
+            "archiveSha256": digest.hexdigest(), "archiveEntries": len(records),
+            "rootIdentity": root_identity}
 
 
 def inspect_directory(source, entrypoint):
@@ -412,7 +441,10 @@ def inspect_directory(source, entrypoint):
     selected = next((item for item in inventory["files"] if item["path"] == relative.as_posix()), None)
     if not selected or not selected["mode"]:
         raise ValueError("Choose an executable file inside the selected game directory.")
-    root_fd = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+    _, root_fd, root_identity = _open_directory_root(root)
+    if root_identity != inventory["rootIdentity"]:
+        os.close(root_fd)
+        raise ValueError("The game directory root changed after inspection.")
     current_fd = root_fd
     try:
         for part in relative.parts[:-1]:
@@ -439,6 +471,7 @@ def inspect_directory(source, entrypoint):
             after = os.fstat(executable.fileno())
             if _directory_identity(before) != _directory_identity(after):
                 raise ValueError("The selected game executable changed during inspection.")
+        _verify_directory_root(root, root_fd, root_identity)
     finally:
         if current_fd != root_fd:
             os.close(current_fd)
@@ -459,8 +492,6 @@ def install_directory(source, destination, entrypoint, expected_sha256):
     if (destination.exists() or destination.is_symlink() or stage.exists() or stage.is_symlink()
             or destination.with_name(destination.name + ".staging-source").exists()):
         raise ValueError("Install destination already exists. Existing files will not be overwritten.")
-    if source.is_symlink() or not source.is_dir() or source.resolve(strict=True) != source.absolute():
-        raise ValueError("Choose a real game directory inside an approved media folder.")
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if destination.parent.is_symlink() or destination.parent.resolve() != destination.parent.absolute():
         raise ValueError("Install destination parent must not be a symlink.")
@@ -476,10 +507,11 @@ def install_directory(source, destination, entrypoint, expected_sha256):
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     try:
-        root_fd = os.open(source, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0))
+        _, root_fd, root_identity = _open_directory_root(source)
         try:
             inventory = _inspect_directory_tree(source)
-            if inventory["archiveSha256"] != expected_sha256:
+            if (inventory["archiveSha256"] != expected_sha256
+                    or inventory["rootIdentity"] != root_identity):
                 raise ValueError("The game directory changed after preflight. Review it again before installing.")
             for name in sorted(inventory["directories"], key=lambda value: (value.count("/"), value)):
                 target = stage.joinpath(*PurePosixPath(name).parts)
@@ -502,8 +534,12 @@ def install_directory(source, destination, entrypoint, expected_sha256):
                 finally:
                     os.close(source_fd)
                 target = stage.joinpath(*parts)
-                output_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                                    | getattr(os, "O_NOFOLLOW", 0), 0o700 if item["mode"] else 0o600)
+                try:
+                    output_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                                        | getattr(os, "O_NOFOLLOW", 0), 0o700 if item["mode"] else 0o600)
+                except Exception:
+                    os.close(input_fd)
+                    raise
                 digest = hashlib.sha256()
                 with os.fdopen(input_fd, "rb") as input_file, os.fdopen(output_fd, "wb") as output_file:
                     before = os.fstat(input_file.fileno())
@@ -529,6 +565,7 @@ def install_directory(source, destination, entrypoint, expected_sha256):
             after_copy = inspect_directory(source, entrypoint)
             if after_copy["archiveSha256"] != expected_sha256:
                 raise ValueError("The game directory changed during copy; staged files were discarded.")
+            _verify_directory_root(source, root_fd, root_identity)
             entry = stage.joinpath(*PurePosixPath(entrypoint).parts)
             if (entry.is_symlink() or not entry.is_file() or entry.stat().st_size != metadata["entrySize"]):
                 raise ValueError("Installed game entry point failed destination verification.")

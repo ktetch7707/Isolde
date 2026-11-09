@@ -73,6 +73,18 @@ test("standalone portable install requires remote review and confirmation", () =
     assert.equal(scope.mode, "installerInstalling");
 });
 
+test("optical portable confirmation uses disc identity rather than media-folder grants", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../src/games/GameLibrary.cpp"), "utf8");
+    const start = source.indexOf("bool GameLibrary::confirmPortableInstall()");
+    const end = source.indexOf("\nvoid GameLibrary::cancelPortableInstall()", start);
+    assert.ok(start >= 0 && end > start, "portable confirmation implementation exists");
+    const confirmation = source.slice(start, end);
+    assert.match(confirmation, /m_portableDirectoryCopy[\s\S]*approvedMediaDirectory\(m_emulatorProfile,m_portableSource\)/);
+    assert.match(confirmation, /!m_portableOpticalObservationId\.isEmpty\(\)\s*\|\|\s*approvedMediaDirectory\(m_emulatorProfile,source\.absolutePath\(\)\)/);
+    assert.match(confirmation, /revalidateOpticalDisc\(m_portableOpticalObservationId,m_portableOpticalDevice\)/);
+    assert.doesNotMatch(confirmation, /MediaGrants::validate\(source\.absolutePath\(\)\)/);
+});
+
 test("local game directory copy is an explicit remote review workflow", () => {
     const calls = [];
     const scope = vm.createContext({

@@ -2090,13 +2090,13 @@ bool GameLibrary::inspectWindowsInstaller(const QString &source){
 bool GameLibrary::confirmPortableInstall(){
     if(!m_ready || m_portablePhase!="review" || portableInstallBusy())return fail(tr("No portable game package is awaiting confirmation."));
     const QFileInfo source(m_portableSource);
+    // Optical sources are authorized by the mounted-disc identity check below, not MediaGrants.
     const bool sourceValid=m_portableDirectoryCopy
         ?source.isDir() && !source.isSymLink() && source.canonicalFilePath()==m_portableSource
             && approvedMediaDirectory(m_emulatorProfile,m_portableSource)
         :source.isFile() && !source.isSymLink() && source.canonicalFilePath()==m_portableSource
-            && (m_portableOpticalObservationId.isEmpty()
-                ?approvedMediaDirectory(m_emulatorProfile,source.absolutePath())
-                :MediaGrants::validate(source.absolutePath()).isEmpty());
+            && (!m_portableOpticalObservationId.isEmpty()
+                || approvedMediaDirectory(m_emulatorProfile,source.absolutePath()));
     if(!compatibleRuntime(m_portableRuntime,true) || !sourceValid)
         return fail(tr("The package source or selected runtime changed. Review preflight again."));
     if(!m_portableOpticalObservationId.isEmpty()){
