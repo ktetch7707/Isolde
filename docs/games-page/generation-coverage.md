@@ -28,6 +28,45 @@ The project must not mark this expanded target complete while required generatio
 
 The N64 route remains excluded until the exact Ubuntu 26.04 core package/version, authenticated package metadata, installed core path, and lawful gameplay/input fixture are verified. The current development environment had no network access to the official package archive, so this change deliberately does not guess or add an unverified dependency.
 
+## Expanded Sony and Nintendo implementation blockers — 2026-11-09
+
+The following means **not integrated in Isolde**, not that an emulator is
+impossible or that every title is unsupported upstream. The existing managed
+routes above do not implicitly supply any of these systems.
+
+| Route | Concrete work before declaring an integrated route |
+| --- | --- |
+| PlayStation | Select and verify a Linux runtime and its pinned artifact/package, dependencies and redistribution terms; implement its own disc formats, any required user-supplied firmware preflight, private saves, controller mapping and session adapter. |
+| PlayStation 3 | Verify a pinned Linux runtime and dependencies; implement firmware setup and safe directory/package import, private storage, controller and session handling. Compatibility and renderer constraints are title-specific. |
+| PlayStation 4 | Establish a supportable Linux runtime artifact and dependencies and a bounded title/format/input/storage contract before adding an adapter; upstream compatibility information alone is not an appliance integration. |
+| PlayStation 5 | No runtime or owned-console control route has been selected. A console route also needs an Xbox-controller bridge and launch/return design; capture alone is insufficient. |
+| PS Vita | Verify a pinned Linux artifact and dependencies; implement firmware/font setup, safe archive installation, private storage, and a controller-only touch/input workflow. |
+| Nintendo 64 | Verify an exact core package version and installed core path against authenticated Ubuntu 26.04 amd64 metadata; add the pinned core, format/controller profile, private saves and tests. The installed RetroArch frontend by itself does not provide this route. |
+| DS / DSi | Select and verify a pinned runtime/core and dependencies; define each supported system's firmware and formats and implement dual-screen layout, touch and microphone alternatives, private saves and controller/session handling. A DS candidate does not establish DSi support. |
+| 3DS | Select and verify a separate pinned runtime and dependencies; implement its firmware/format requirements, dual-screen/touch input, private storage and session handling. |
+| Wii U | Verify a pinned Linux runtime and dependencies; implement format/import and private storage plus a controller-only GamePad second-screen/touch/gyro workflow with explicit title limitations. |
+| Switch / Switch 2 | No verified runtime or owned-console route is selected. Each generation needs its own lawful content/firmware and input/session assessment; neither a candidate for one nor HDMI capture establishes the other. |
+
+This checkout contains no authenticated Ubuntu 26.04 package index, signed
+runtime bundle, or package artifact for an additional route. In the isolated
+development environment the host is Ubuntu 24.04 amd64 and its apt lists have
+no package-index files; querying its cache therefore cannot establish a 26.04
+package name, version or path. This observation does not establish that an
+official package is unavailable. No network request or installation was made
+for this assessment.
+
+To unblock an apt-based route, obtain authenticated **target-release and
+architecture** index metadata from the configured Ubuntu archive and verify
+the exact package/version, dependency closure and installed executable/core
+path. For a non-archive build, establish the upstream source/artifact identity,
+license and independently provisioned trust root before pinning. In either
+case, the existing signed offline bundle and rollback contract must include
+the new artifacts. Then implement the route end-to-end in the runtime manifest,
+package catalog/provisioner, validated session and remote setup/import UI,
+with focused positive and failure tests. Firmware and games remain
+user-supplied; do not download them as test data. VM acceptance remains a
+separate later phase, not a reason to invent missing runtime evidence.
+
 ## Enforced catalog budgets
 
 The shared `GameResourceLimits.h` contract is surfaced through the Games emulator-coverage API and shown in the remote setup screen. Current bounds are 50,000 catalog entries, 50 entries per page, 128 platforms, 256 collections, 32 editions per game including its primary registration, 1,600,000 retained provenance rows, 32 MiB per catalog archive, 128 MiB of artwork expanded during one restore, and a 512 MiB profile artwork store. These are software/resource ceilings, not performance or target-machine acceptance claims. The catalog code and its tests consume the same constants so the visible matrix does not advertise separate, drift-prone numbers.
