@@ -68,13 +68,15 @@ public:
                                              const QString &observationId, const QString &device);
     Q_INVOKABLE bool approveOpticalMedia(const QString &observationId, const QString &device);
     Q_INVOKABLE bool revokeOpticalMedia(const QString &observationId, const QString &device);
-    Q_INVOKABLE bool mountOpticalDisc(const QString &device);
-    Q_INVOKABLE bool ejectOpticalDisc(const QString &device);
+    Q_INVOKABLE bool mountOpticalDisc(const QString &observationId,const QString &device);
+    Q_INVOKABLE bool ejectOpticalDisc(const QString &observationId,const QString &device);
     bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
     QString portableInstallStatus() const { return m_portableInstallStatus; }
     QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }
     Q_INVOKABLE bool beginPortableInstall(const QString &source, const QString &runtimeId,
                                           const QString &opticalObservationId = {}, const QString &opticalDevice = {});
+    Q_INVOKABLE bool beginPortableDirectoryInstall(const QString &source, const QString &entrypoint,
+                                                   const QString &runtimeId);
     Q_INVOKABLE bool confirmPortableInstall();
     Q_INVOKABLE void cancelPortableInstall();
     int importCount() const { return m_preview.size(); }
@@ -115,6 +117,7 @@ public:
     Q_INVOKABLE QVariantMap compatibilityInstallerStatus() const;
     Q_INVOKABLE bool inspectWindowsInstaller(const QString &source);
     Q_INVOKABLE bool recoverOrphanedUninstall(const QString &installationId, bool confirmed);
+    Q_INVOKABLE bool resumeOrphanedUninstall(const QString &installationId, bool confirmed);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
     void invalidate();
 signals:
@@ -180,8 +183,10 @@ private:
     QVariantMap m_portableInstallPreview;
     QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination, m_portableGameId;
     QString m_portableOpticalObservationId, m_portableOpticalDevice;
+    QString m_portableDirectoryEntrypoint;
     QStringList m_lastOpticalObservationIds;
     QString m_portablePhase;
+    bool m_portableDirectoryCopy=false;
     bool m_portableCanceled=false;
     std::function<bool()> m_sessionActiveGuard;
 };

@@ -17,6 +17,11 @@ import tempfile
 
 MAX_SETTINGS = 16384
 OPTIONS = {"video": {"automatic", "software"}, "controller": {"xbox", "xbox-wii-classic"}}
+PSX_FIRMWARE = {
+    "b05def971d8ec59f346f2d9ac21fb742e3eb6917": "scph5500.bin",
+    "0555c6fae8906f3f09baf5988f00e55f88e9f30b": "scph5501.bin",
+    "f6bc2d1f5eb6593de7d089c425ac681d6fffd3f0": "scph5502.bin",
+}
 
 
 def read_json(path, limit=MAX_SETTINGS):
@@ -61,6 +66,17 @@ def definitions(path):
                 or not Path(item.get("binary", "")).is_absolute()
                 or ("core" in item and (not isinstance(item["core"],str) or not Path(item["core"]).is_absolute()))):
             raise ValueError("Invalid emulator capability entry")
+        packages = set(item["packages"])
+        if item["engine"] == "retroarch":
+            if ("core" not in item or "retroarch" not in packages
+                    or len([name for name in packages if name.startswith("libretro-")]) != 1):
+                raise ValueError("RetroArch routes must bind one pinned libretro core")
+        elif ("core" in item or packages != {
+                "ppsspp": {"isolde-ppsspp"},
+                "dolphin": {"dolphin-emu"},
+                "pcsx2": {"pcsx2"},
+            }[item["engine"]]):
+            raise ValueError("Emulator route packages do not match its engine")
         result[item["id"]] = item
     coverage = document["generationCoverage"]
     if (not isinstance(coverage,dict) or set(coverage) != {"integratedPlatforms", "notIntegrated"}
@@ -132,6 +148,30 @@ def ps2_firmware(home, options):
     if hashlib.sha256(content).hexdigest()+".bin" != name or b"ROMVER" not in content or b"ROMDIR" not in content:
         raise ValueError("PS2 firmware changed or is invalid. Import it again")
     return path
+
+
+def psx_firmware(home, options):
+    name = options["firmware"]
+    if not name:
+        raise ValueError("PlayStation firmware is required. Import your matching regional firmware in Emulator setup")
+    path = protected(home / "firmware" / name)
+    if not path.is_file() or path.stat().st_size != 512*1024:
+        raise ValueError("PlayStation firmware is missing or invalid. Import it again")
+    with path.open("rb") as source:
+        content = source.read(512*1024+1)
+    region = PSX_FIRMWARE.get(hashlib.sha1(content).hexdigest())
+    if len(content) != 512*1024 or hashlib.sha256(content).hexdigest()+".bin" != name or not region:
+        raise ValueError("PlayStation firmware changed or is invalid. Import it again")
+    destination = home / ".config/isolde-emulator/generated" / ("psx-" + name[:-4])
+    protected(destination)
+    if destination.exists():
+        if not destination.is_dir():
+            raise ValueError("PlayStation firmware staging is invalid; repair emulator storage")
+        with os.scandir(destination) as entries:
+            if any(entry.name != region for entry in entries):
+                raise ValueError("PlayStation firmware staging contains unexpected files; review emulator storage")
+    atomic(destination / region, content)
+    return destination
 
 
 def dolphin_controller():
@@ -249,6 +289,20 @@ def command(runtime, target, home):
             "joypad_autoconfig_dir":"/usr/share/libretro/autoconfig", "menu_show_online_updater":"false",
             "network_cmd_enable":"false", "stdin_cmd_enable":"false", "menu_mouse_enable":"false",
             "input_exit_emulator":"escape", "savestate_auto_save":"false", "savestate_auto_load":"false"}
+        if runtime["id"] == "retroarch-psx":
+            values["system_directory"] = str(psx_firmware(home, options))
+            core_options = base/"psx-options.cfg"
+            atomic(core_options, b"")
+            values.update({"core_options_path":str(core_options), "global_core_options":"true",
+                "game_specific_options":"false", "auto_overrides_enable":"false", "auto_remaps_enable":"false"})
+        if runtime["id"] == "retroarch-ds":
+            core_options = base/"desmume-options.cfg"
+            core_values = {"desmume_screens_layout":"top/bottom", "desmume_pointer_mouse":"disable",
+                "desmume_pointer_device":"r-stick", "desmume_mic_force_enable":"no",
+                "desmume_mic_mode":"internal"}
+            atomic(core_options, "".join(k+' = '+json.dumps(v)+'\n' for k,v in core_values.items()).encode())
+            values.update({"core_options_path":str(core_options), "global_core_options":"true",
+                "game_specific_options":"false", "auto_overrides_enable":"false", "auto_remaps_enable":"false"})
         if options["video"]=="software": values["video_driver"]="sdl2"
         atomic(config, "".join(k+' = '+json.dumps(v)+'\n' for k,v in values.items()).encode())
         return [str(binary), "--fullscreen", "--config", str(config), "--libretro", str(core), str(game)]

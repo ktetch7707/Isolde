@@ -148,6 +148,8 @@ Packaged defaults: Continue Playing, Favorites, Recently Added, populated platfo
 
 Details presents Play, edition/version choice, availability, input compatibility, provenance and organization controls. Missing art uses a readable title tile. Search covers local titles, aliases, franchises and tags. Browse All supports virtualized grid, platform/franchise/tag/installed/favorite/completed filters and title/added/last-played sorts. Collection rules use validated declarative predicates, never expressions or scripts. Remote and desktop edits produce identical data and atomic draft/cancel behavior.
 
+The Games toolbar's Filters chooser offers profile-local platform choices and direct text entry for franchise and tag browsing. Franchise matches a literal substring; tag matches a complete tag. Both use SQLite's built-in `lower` (ASCII case folding), consistent with smart collections. Entries are limited to 160 UTF-16 code units, and paging preserves the selected predicate. All clears the direct filter; canceling entry preserves the previous view. These direct views do not create or alter collections.
+
 Default Continue Playing means launch again; only label “Resume save state” when the specific adapter proves that capability. Local save ownership stays with the game/emulator.
 
 ## 7. Launch, controller and return lifecycle

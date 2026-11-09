@@ -267,6 +267,9 @@ qt_add_resources(isolde "isolde_config"
         config/packages/retroarch-gb/manifest.json
         config/packages/retroarch-gba/manifest.json
         config/packages/retroarch-snes/manifest.json
+        config/packages/retroarch-psx/manifest.json
+        config/packages/retroarch-ds/manifest.json
+        config/packages/retroarch-vb/manifest.json
         config/packages/supertux/manifest.json
         config/packages/spotify/manifest.json
         config/packages/steam/manifest.json
@@ -304,6 +307,9 @@ set(ISOLDE_PACKAGE_MANIFESTS
     config/packages/retroarch-gb/manifest.json
     config/packages/retroarch-gba/manifest.json
     config/packages/retroarch-snes/manifest.json
+    config/packages/retroarch-psx/manifest.json
+    config/packages/retroarch-ds/manifest.json
+    config/packages/retroarch-vb/manifest.json
     config/packages/supertux/manifest.json
     config/packages/ambient-weather/manifest.json
     config/packages/living-room-radio/manifest.json

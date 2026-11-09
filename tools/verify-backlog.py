@@ -11,13 +11,16 @@ parser.add_argument('--evidence', action='store_true', help='Also inspect retain
 args = parser.parse_args()
 text = (ROOT / 'docs/agent-backlog.md').read_text(encoding='utf-8')
 active = text.split('## Hardware qualification', 1)[0]
-expected = {'T01', 'T03', 'T04', 'T05'} | {f'T{i:02}' for i in range(9, 32)}
+excluded = {'T13', 'T31'}
+all_tasks = {'T01', 'T03', 'T04', 'T05'} | {f'T{i:02}' for i in range(9, 32)}
+expected = all_tasks - excluded
 parts = re.split(r'(?=^## T\d+ )', active, flags=re.M)
 tasks = {re.match(r'## (T\d+) ', p).group(1): p for p in parts if re.match(r'## (T\d+) ', p)}
-assert set(tasks) == expected
-rows = re.findall(r'^\| (T\d+) \| (\d+) \| [^|]+ \| (\d+)% \| [^|]+ \|$', active, re.M)
-assert len(rows) == len(expected) == 27
-assert [int(r[1]) for r in rows] == list(range(1, 28))
+assert set(tasks) == all_tasks
+rows = re.findall(r'^\| (T\d+) \| (\d+|—) \| [^|]+ \| (\d+)% \| (\d+)% \| [^|]+ \|$', active, re.M)
+assert len(rows) == len(all_tasks) == 27
+assert [int(r[1]) for r in rows if r[0] in expected] == list(range(1, 26))
+assert all(r[1] == '—' for r in rows if r[0] in excluded)
 assert [r[0] for r in rows] == list(tasks), 'Table/scope order differs'
 round_pct = lambda n, d: (200*n+d)//(2*d)
 milestones = {}
@@ -29,7 +32,7 @@ for ident, state in re.findall(r'^\| (T\d{2}\.\d+\.[a-z]+) \| (done|open) \|',
     children[ident] = state == 'done'
 counts = {}
 all_parents = set()
-for task, _, pct in rows:
+for task, _, pct, _ in rows:
     scope = re.split(r'^Scope[^\n]*:\s*', tasks[task], maxsplit=1, flags=re.M)[1].split('Done when:', 1)[0]
     boxes = re.findall(r'^- \[([ x])\] ('+task+r'\.\d+)\b', scope, re.M)
     assert boxes and [int(b[1].split('.')[1]) for b in boxes] == list(range(1, len(boxes)+1)), task
@@ -50,13 +53,18 @@ for task, _, pct in rows:
     assert 'Verify:' in tasks[task] and re.search(r'\bevidence:', tasks[task], re.I), task
     counts[task] = {'checked': checked, 'total': len(boxes), 'percent': int(pct)}
 assert set(milestones) <= all_parents, 'Milestones reference unknown Scope groups'
-total = sum(r['percent'] for r in counts.values())
-overall = (2*total+len(counts))//(2*len(counts))
-overall_row = re.search(r'^\| \*\*Overall\*\*[^\n]*\| \*\*(\d+)%\*\*', active, re.M)
+total = sum(counts[task]['percent'] for task in expected)
+overall = (2*total+len(expected))//(2*len(expected))
+coding_total = sum(int(r[3]) for r in rows if r[0] in expected)
+coding_overall = (2*coding_total+len(expected))//(2*len(expected))
+if any(int(r[3]) != 100 for r in rows if r[0] in expected):
+    coding_overall = min(99, coding_overall)
+overall_row = re.search(r'^\| \*\*Overall\*\* \| [^|]+ \| [^|]+ \| \*\*(\d+)%\*\*', active, re.M)
 assert overall_row and int(overall_row[1]) == overall
-assert f'Sum **{total}**; Overall **{overall}%**' in active
-assert '27 ACTIVE software tasks' in (ROOT/'AGENTS.md').read_text(encoding='utf-8')
-assert '**27 ACTIVE software tasks**' in (ROOT/'docs/implementation-order.md').read_text(encoding='utf-8')
+assert f'{total} / 25 acceptance and {coding_total} / 25 coding' in active
+assert re.search(r'^\| \*\*Overall\*\*[^\n]*\| \*\*'+str(overall)+r'%\*\* \| \*\*'+str(coding_overall)+r'%\*\*', active, re.M)
+assert '25 ACTIVE software tasks' in (ROOT/'AGENTS.md').read_text(encoding='utf-8')
+assert '**25 ACTIVE software tasks**' in (ROOT/'docs/implementation-order.md').read_text(encoding='utf-8')
 hardware = text.split('## Hardware qualification', 1)[1].split('## Archive:', 1)[0]
 assert re.findall(r'^\| (H\d+) \|', hardware, re.M) == [f'H{i:02}' for i in range(1, 6)]
 deps = {}
@@ -65,8 +73,8 @@ for task, part in tasks.items():
     expanded = set()
     for m in re.finditer(r'T(\d+)(?:-T?(\d+))?', raw):
         expanded.update(f'T{i:02}' for i in range(int(m[1]), int(m[2] or m[1])+1))
-    deps[task] = expected-{task} if task == 'T31' else expanded
-    assert deps[task] <= expected and task not in deps[task], (task, deps[task])
+    deps[task] = all_tasks-{task} if task == 'T31' else expanded
+    assert deps[task] <= all_tasks and task not in deps[task], (task, deps[task])
 def visit(task, path=()):
     assert task not in path, ('Dependency cycle', path+(task,))
     for dep in deps[task]:
@@ -99,8 +107,8 @@ if args.evidence:
     assert store['normalLayoutsBefore'] == store['normalLayoutsAfter']
     online = json.loads((ROOT/evidence[4]).read_text(encoding='utf-8'))
     assert online['state'] == 'passed' and online['tests'] == 3 and not online['fullSuite']
-print(json.dumps({'result': 'PASS', 'activeTasks': len(counts), 'sumPercentages': total,
-                  'overallPercent': overall, 'physicalGates': 5,
+print(json.dumps({'result': 'PASS', 'activeTasks': len(expected), 'sumPercentages': total,
+                  'overallPercent': overall, 'codingSum': coding_total, 'codingOverallPercent': coding_overall, 'physicalGates': 5,
                   'checks': ['scope/table/order', 'fixed-weight milestone math', 'entrypoint synchronization',
-                             'dependency graph', 'local document links', '27 VM gate mappings'],
+                             'dependency graph', 'local document links', '25 VM gate mappings'],
                   'retainedEvidenceChecked': args.evidence, 'tasks': counts}, indent=2))

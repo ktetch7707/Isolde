@@ -28,6 +28,9 @@ PACKAGES = {
     "libretro-gambatte": ("0.5.0+git20160522+dfsg1-3build1", "/usr/lib/x86_64-linux-gnu/libretro/gambatte_libretro.so"),
     "libretro-mgba": ("0.10.5+dfsg-3build1", "/usr/lib/x86_64-linux-gnu/libretro/mgba_libretro.so"),
     "libretro-bsnes-mercury-balanced": ("094+git20220807-8build2", "/usr/lib/x86_64-linux-gnu/libretro/bsnes_mercury_balanced_libretro.so"),
+    "libretro-desmume": ("0.9.11+git20160819+dfsg1-2build2", "/usr/lib/x86_64-linux-gnu/libretro/desmume_libretro.so"),
+    "libretro-beetle-psx": ("0.9.38.6+git20260227-1", "/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so"),
+    "libretro-beetle-vb": ("0.9.36.1+git20160623-2build2", "/usr/lib/x86_64-linux-gnu/libretro/mednafen_vb_libretro.so"),
 }
 MAX_BUNDLE_FILES=512
 MAX_BUNDLE_BYTES=8*1024**3
@@ -192,7 +195,12 @@ def runtime_manifest():
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
     path=Path(__file__).with_name("game-runtimes.json")
     if not path.exists():path=Path(__file__).parents[1]/"config/game-runtimes.json"
-    return path,module.definitions(path)
+    runtimes=module.definitions(path)
+    declared={name for runtime in runtimes.values() for name in runtime["packages"]}
+    pinned=set(PACKAGES)-{"supertux"}
+    if declared!=pinned:
+        raise ValueError("Runtime manifest package set does not match the pinned provisioning set")
+    return path,runtimes
 
 
 def file_hash(path):

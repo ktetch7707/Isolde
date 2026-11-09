@@ -17,6 +17,7 @@
 #include <QMutexLocker>
 #include <QThreadPool>
 #include <QMap>
+#include <limits>
 #ifdef Q_OS_LINUX
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
@@ -35,7 +36,8 @@ struct HashState {
     quint64 size=0;
     QString state;
     QByteArray digest;
-    QVariantMap descriptor;
+    QVariantMap iso9660Descriptor;
+    QVariantMap udfDescriptor;
 };
 struct HashCache {
     QMutex mutex;
@@ -56,6 +58,58 @@ quint32 le32(const QByteArray &bytes,int offset)
 {
     return quint32(quint8(bytes.at(offset))) | (quint32(quint8(bytes.at(offset+1)))<<8)
         | (quint32(quint8(bytes.at(offset+2)))<<16) | (quint32(quint8(bytes.at(offset+3)))<<24);
+}
+
+bool validUdfTag(const QByteArray &descriptor,quint16 minimumCrcLength=0,
+                 quint32 expectedLocation=std::numeric_limits<quint32>::max())
+{
+    if(descriptor.size()!=2048)return false;
+    const auto version=le16(descriptor,2);
+    if((version!=2 && version!=3) || quint8(descriptor.at(5))!=0
+        || (expectedLocation!=std::numeric_limits<quint32>::max()
+            && le32(descriptor,12)!=expectedLocation))return false;
+    unsigned checksum=0;
+    for(int i=0;i<16;++i)if(i!=4)checksum=(checksum+quint8(descriptor.at(i)))&0xff;
+    if(checksum!=quint8(descriptor.at(4)))return false;
+    const auto length=le16(descriptor,10);
+    if(length<minimumCrcLength || length>descriptor.size()-16)return false;
+    quint16 crc=0;
+    for(int i=0;i<length;++i){
+        crc^=quint16(quint8(descriptor.at(16+i)))<<8;
+        for(int bit=0;bit<8;++bit)crc=crc&0x8000?quint16((crc<<1)^0x1021):quint16(crc<<1);
+    }
+    return crc==le16(descriptor,8);
+}
+
+QVariantMap udfDescriptorForDevice(QFile *file,quint64 size)
+{
+    constexpr quint64 sectorSize=2048;
+    constexpr quint64 anchorSector=256;
+    constexpr quint64 maxDescriptorBytes=2ULL*1024*1024;
+    if(!file || size<(anchorSector+1)*sectorSize || !file->seek(qint64(anchorSector*sectorSize)))
+        return {};
+    const auto anchor=file->read(qint64(sectorSize));
+    if(!validUdfTag(anchor,8,quint32(anchorSector)) || le16(anchor,0)!=2)return {};
+    const quint64 length=le32(anchor,16),location=le32(anchor,20);
+    if(!length || length>maxDescriptorBytes || length%sectorSize
+        || location>size/sectorSize || length/sectorSize>size/sectorSize-location
+        || !file->seek(qint64(location*sectorSize)))return {};
+    const auto descriptors=file->read(qint64(length));
+    if(quint64(descriptors.size())!=length)return {};
+    return OpticalDiscAdapter::parseUdfVolumeDescriptors(anchor,descriptors,quint32(location));
+}
+
+QByteArray udfDstringAscii(const QByteArray &field,bool *valid)
+{
+    if(valid)*valid=false;
+    if(field.size()<3 || quint8(field.at(0))!=8)return {};
+    const int length=quint8(field.at(field.size()-1));
+    if(length<1 || length>field.size()-1)return {};
+    const auto text=field.mid(1,length-1);
+    for(const auto byte:text)if(quint8(byte)<0x20 || quint8(byte)>0x7e)return {};
+    for(int i=length;i<field.size()-1;++i)if(field.at(i)!='\0')return {};
+    if(valid)*valid=true;
+    return text;
 }
 
 #ifdef Q_OS_LINUX
@@ -103,17 +157,19 @@ QVariantMap contentIdentity(const QString &device)
     auto existing=hashes.find(device);
     if(existing!=hashes.end() && existing->sequence==sequence && existing->size==size)
         return {{"hashState",existing->state},{"contentId",QString::fromLatin1(existing->digest.toHex())},
-            {"diskSequence",QString::number(sequence)},{"descriptor",existing->descriptor}};
+            {"diskSequence",QString::number(sequence)},{"iso9660Descriptor",existing->iso9660Descriptor},
+            {"udfDescriptor",existing->udfDescriptor}};
     if(cache->running>=4)return {{"hashState","busy"},{"diskSequence",QString::number(sequence)}};
     if(hashes.size()>=4 && existing==hashes.end())hashes.erase(hashes.begin());
-    hashes.insert(device,{sequence,size,"hashing",{},{}});
+    hashes.insert(device,{sequence,size,"hashing",{},{},{}});
     ++cache->running;
     QThreadPool::globalInstance()->start([device,sequence,size]{
         QFile input(device);quint64 before=0,bytes=0,after=0,afterSize=0;
-        QByteArray digest;QVariantMap descriptor;
+        QByteArray digest;QVariantMap iso9660Descriptor,udfDescriptor;
         if(diskInfo(input,&before,&bytes) && before==sequence && bytes==size){
             if(size>=17*2048 && input.seek(16*2048))
-                descriptor=OpticalDiscAdapter::parseIsoVolumeDescriptor(input.read(2048));
+                iso9660Descriptor=OpticalDiscAdapter::parseIsoVolumeDescriptor(input.read(2048));
+            udfDescriptor=udfDescriptorForDevice(&input,size);
             if(input.seek(0))digest=OpticalDiscAdapter::hashContent(&input,size);
             if(::ioctl(input.handle(),BLKGETDISKSEQ,&after)!=0
                 || ::ioctl(input.handle(),BLKGETSIZE64,&afterSize)!=0
@@ -125,7 +181,8 @@ QVariantMap contentIdentity(const QString &device)
         auto entry=cache->hashes.find(device);
         if(entry!=cache->hashes.end() && entry->sequence==sequence && entry->size==size){
             entry->digest=digest;
-            entry->descriptor=digest.isEmpty()?QVariantMap{}:descriptor;
+            entry->iso9660Descriptor=digest.isEmpty()?QVariantMap{}:iso9660Descriptor;
+            entry->udfDescriptor=digest.isEmpty()?QVariantMap{}:udfDescriptor;
             entry->state=digest.size()==32?"ready":"unreadable";
         }
     });
@@ -200,6 +257,73 @@ QVariantMap OpticalDiscAdapter::parseIsoVolumeDescriptor(const QByteArray &descr
     return {{"mediaId",QString::fromLatin1(QCryptographicHash::hash(identity,QCryptographicHash::Sha256).toHex())},
         {"mediaSetId",QString::fromLatin1(QCryptographicHash::hash(setIdentity,QCryptographicHash::Sha256).toHex())},
         {"discNumber",discNumber},{"discCount",discCount},{"volumeIdentifier",QString::fromLatin1(volumeId)}};
+}
+
+QVariantMap OpticalDiscAdapter::parseUdfVolumeDescriptors(const QByteArray &anchorDescriptor,
+                                                           const QByteArray &volumeDescriptors,
+                                                           quint32 sequenceLocation)
+{
+    constexpr int sectorSize=2048;
+    constexpr int maxDescriptorBytes=2*1024*1024;
+    if(!validUdfTag(anchorDescriptor,8,256) || le16(anchorDescriptor,0)!=2
+        || volumeDescriptors.isEmpty() || volumeDescriptors.size()>maxDescriptorBytes
+        || volumeDescriptors.size()%sectorSize)return {};
+    const auto extentLength=le32(anchorDescriptor,16);
+    if(extentLength!=quint32(volumeDescriptors.size()) || extentLength%sectorSize
+        || le32(anchorDescriptor,20)!=sequenceLocation)return {};
+
+    QByteArray primary;
+    bool hasLogicalVolume=false,hasTerminator=false;
+    for(int offset=0;offset<volumeDescriptors.size();offset+=sectorSize){
+        const auto descriptor=volumeDescriptors.mid(offset,sectorSize);
+        const quint32 index=quint32(offset/sectorSize);
+        if(index>std::numeric_limits<quint32>::max()-sequenceLocation)return {};
+        const auto identifier=le16(descriptor,0);
+        const quint16 minimumCrcLength=identifier==8?0:1;
+        if(!validUdfTag(descriptor,minimumCrcLength,sequenceLocation+index))return {};
+        if(identifier==1){
+            if(!validUdfTag(descriptor,184,sequenceLocation+index))return {};
+            if(!primary.isEmpty())return {};
+            primary=descriptor;
+        }else if(identifier==6){
+            if(hasLogicalVolume)return {};
+            hasLogicalVolume=true;
+        }else if(identifier==8){
+            for(int body=16;body<descriptor.size();++body)
+                if(descriptor.at(body)!='\0')return {};
+            hasTerminator=true;
+            for(int tail=offset+sectorSize;tail<volumeDescriptors.size();++tail)
+                if(volumeDescriptors.at(tail)!='\0')return {};
+            break;
+        }
+    }
+    if(primary.isEmpty() || !hasLogicalVolume || !hasTerminator)return {};
+
+    const int volumeNumber=le16(primary,56),volumeCount=le16(primary,58);
+    if(volumeNumber<1 || volumeCount<volumeNumber || volumeCount>99)return {};
+    bool setIdValid=false,volumeIdValid=false;
+    const auto setId=udfDstringAscii(primary.mid(72,128),&setIdValid);
+    const auto volumeId=udfDstringAscii(primary.mid(24,32),&volumeIdValid);
+    if(!setIdValid || !volumeIdValid || setId.trimmed().isEmpty())return {};
+
+    QByteArray setIdentity("UDF-volume-set",14);
+    setIdentity.append(setId);
+    setIdentity.append(char(volumeCount&0xff));
+    setIdentity.append(char((volumeCount>>8)&0xff));
+    return {
+        {"mediaSetId",QString::fromLatin1(QCryptographicHash::hash(setIdentity,QCryptographicHash::Sha256).toHex())},
+        {"discNumber",volumeNumber},{"discCount",volumeCount},
+        {"volumeIdentifier",QString::fromLatin1(volumeId)}
+    };
+}
+
+QVariantMap OpticalDiscAdapter::descriptorForFilesystem(const QString &filesystem,
+                                                         const QVariantMap &iso9660Descriptor,
+                                                         const QVariantMap &udfDescriptor)
+{
+    if(filesystem=="iso9660")return iso9660Descriptor;
+    if(filesystem=="udf")return udfDescriptor;
+    return {};
 }
 
 QVariantMap OpticalDiscAdapter::identityForDevice(const QString &device)
@@ -332,8 +456,10 @@ QVariantList OpticalDiscAdapter::mountedDiscs()
         mountedDevices.insert(device);
         const auto content=contentIdentity(device);
         const auto contentId=content.value("contentId").toString();
+        const auto descriptor=descriptorForFilesystem(filesystem,content.value("iso9660Descriptor").toMap(),
+                                                       content.value("udfDescriptor").toMap());
         const auto identity=content.value("hashState")=="ready"
-            ?identityForContent(filesystem=="iso9660"?content.value("descriptor").toMap():QVariantMap{},contentId):QVariantMap{};
+            ?identityForContent(descriptor,contentId):QVariantMap{};
 #ifdef Q_OS_LINUX
         const auto instance=mountInstance(root);
 #else
@@ -374,10 +500,17 @@ QVariantList OpticalDiscAdapter::mountedDiscs()
             bool sizeOk=false;
             const auto sectors=sizeFile.read(64).trimmed().toULongLong(&sizeOk);
             if(!sizeOk || sectors==0)continue;
-            const auto observed=device+"\nunmounted";
+            QString sequence;
+#ifdef Q_OS_LINUX
+            QFile block(device);
+            quint64 diskSequence=0,diskSize=0;
+            if(diskInfo(block,&diskSequence,&diskSize))sequence=QString::number(diskSequence);
+#endif
+            const auto observationId=mountObservationId(device,"unknown",{}, {},sequence,
+                "unmounted",QString::number(sectors),{});
             result.append(QVariantMap{
                 {"schemaVersion",1},{"sourceType","pc-optical-disc"},
-                {"observationId",QString::fromLatin1(QCryptographicHash::hash(observed.toUtf8(),QCryptographicHash::Sha256).toHex())},
+                {"observationId",observationId},{"mediaTracking",sequence.isEmpty()?"unavailable":"disk-sequence"},
                 {"device",device},{"mountRoot",QString()},{"filesystem","unknown"},
                 {"volumeLabel",QString()},{"mediaId",QString()},
                 {"mediaSetId",QString()},{"discNumber",0},
@@ -514,7 +647,7 @@ QVariantMap OpticalDiscAdapter::classifyRevalidation(const QString &observationI
 {
     for(const auto &item:currentDiscs){
         const auto disc=item.toMap();
-        if(disc.value("observationId")==observationId)
+        if(disc.value("observationId")==observationId && disc.value("device")==device)
             return {{"schemaVersion",1},{"state",disc.value("state")=="mounted"?"ready":"unmounted"},{"disc",disc}};
     }
     for(const auto &item:currentDiscs){

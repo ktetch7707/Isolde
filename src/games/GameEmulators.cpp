@@ -28,6 +28,31 @@ bool save(const QString &path,const QByteArray &bytes,QString *error) {
         *error="Cannot save emulator setup. Previous settings were preserved. "+file.errorString();return false;}
     QFile::setPermissions(path,QFile::ReadOwner|QFile::WriteOwner);return true;
 }
+bool psxFirmware(const QByteArray &bytes) {
+    static const QSet<QByteArray> hashes{
+        "b05def971d8ec59f346f2d9ac21fb742e3eb6917",
+        "0555c6fae8906f3f09baf5988f00e55f88e9f30b",
+        "f6bc2d1f5eb6593de7d089c425ac681d6fffd3f0"};
+    return bytes.size()==512*1024
+        && hashes.contains(QCryptographicHash::hash(bytes,QCryptographicHash::Sha1).toHex());
+}
+bool prunePsxFirmware(const QString &root,const QString &keep,QString *error){
+    const auto directory=root+"/firmware";
+    if(!protectedPath(directory)){*error="Private firmware storage is redirected.";return false;}
+    QDir dir(directory);if(!dir.exists())return true;
+    const auto names=dir.entryList(QDir::AllEntries|QDir::NoDotAndDotDot|QDir::Hidden|QDir::System);
+    if(names.size()>8){*error="Firmware storage contains too many entries. Review it before importing more.";return false;}
+    for(const auto &name:names){
+        if(name==keep || !QRegularExpression("^[a-f0-9]{64}\\.bin$").match(name).hasMatch())continue;
+        const auto path=dir.filePath(name);const QFileInfo info(path);
+        if(info.isSymLink() || !info.isFile() || info.size()!=512*1024)continue;
+        QFile file(path);if(!file.open(QIODevice::ReadOnly))continue;
+        const auto bytes=file.read(512*1024+1);
+        if(!psxFirmware(bytes) || QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex())+".bin"!=name)continue;
+        if(!QFile::remove(path)){*error="A previous private firmware copy could not be retired.";return false;}
+    }
+    return true;
+}
 bool pruneFirmware(const QString &root,const QString &keep,QString *error){
     const auto directory=root+"/firmware";
     if(!protectedPath(directory)){*error="Private firmware storage is redirected.";return false;}
@@ -90,6 +115,16 @@ QVariantList GameEmulators::definitions(){
             || !QDir::isAbsolutePath(item.value("binary").toString()) || packages.isEmpty()
             || platforms.isEmpty() || formats.isEmpty() || item.value("firmwareRequired").metaType().id()!=QMetaType::Bool
             || (item.contains("core") && !QDir::isAbsolutePath(item.value("core").toString())))return {};
+        const QSet<QString> packageSet(packages.cbegin(),packages.cend());
+        if(engine=="retroarch"){
+            int corePackages=0;
+            for(const auto &package:packages)if(package.startsWith("libretro-"))++corePackages;
+            if(!item.contains("core") || !packageSet.contains("retroarch") || corePackages!=1)return {};
+        }else{
+            const QSet<QString> expectedPackage=engine=="ppsspp"?QSet<QString>{"isolde-ppsspp"}
+                :engine=="dolphin"?QSet<QString>{"dolphin-emu"}:QSet<QString>{"pcsx2"};
+            if(item.contains("core") || packageSet!=expectedPackage)return {};
+        }
         ids.insert(id);
         for(const auto &package:packages)if(!QRegularExpression("^[a-z0-9][a-z0-9+.-]{0,80}$").match(package).hasMatch())return {};
         for(const auto &format:formats)if(!QRegularExpression("^[a-z0-9]{1,8}$").match(format).hasMatch())return {};
@@ -138,6 +173,20 @@ QVariantMap GameEmulators::settings(const QString &profile,const QString &id,QSt
     if(!valid(result)){*error="Invalid emulator settings. Original data was preserved.";return {};}
     return result;
 }
+bool GameEmulators::playStationFirmwareReady(const QString &profile,QString *error){
+    const auto value=settings(profile,"retroarch-psx",error);if(value.isEmpty())return false;
+    const auto name=value.value("firmware").toString();
+    if(name.isEmpty()){*error="Import your matching regional PlayStation firmware in Emulator setup before playing.";return false;}
+    const auto path=home(profile,"retroarch-psx")+"/firmware/"+name;
+    if(!protectedPath(path)){*error="PlayStation firmware storage is redirected.";return false;}
+    QFile file(path);
+    if(!file.open(QIODevice::ReadOnly) || file.size()!=512*1024){*error="PlayStation firmware is missing or invalid. Import it again.";return false;}
+    const auto bytes=file.read(512*1024+1);
+    if(!psxFirmware(bytes) || QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex())+".bin"!=name){
+        *error="PlayStation firmware changed or is invalid. Import it again.";return false;
+    }
+    return true;
+}
 bool GameEmulators::configure(const QString &profile,const QString &id,const QVariantMap &options,const QString &firmware,QString *error){
     auto value=settings(profile,id,error);if(value.isEmpty())return false;
     if(options.size()!=2 || !options.contains("video") || !options.contains("controller")){*error="Choose known emulator settings only.";return false;}
@@ -146,20 +195,23 @@ bool GameEmulators::configure(const QString &profile,const QString &id,const QVa
     const auto root=home(profile,id);
     if(!firmware.isEmpty()){
         if(!definition(id).value("firmwareRequired").toBool()){*error="This runtime does not require imported firmware.";return false;}
-        if(!pruneFirmware(root,value.value("firmware").toString(),error))return false;
+        if(!(id=="retroarch-psx"?prunePsxFirmware(root,value.value("firmware").toString(),error)
+                                 :pruneFirmware(root,value.value("firmware").toString(),error)))return false;
         const QFileInfo source(firmware);
         const auto grant=MediaGrants::validate(source.absolutePath());
         if(!grant.isEmpty() || !source.isFile() || !source.isReadable() || source.canonicalFilePath()!=firmware
-            || (source.size()!=4*1024*1024 && source.size()!=8*1024*1024)){
-            *error="Choose your readable 4 or 8 MiB PS2 firmware file inside a game source folder.";return false;}
+            || (id=="retroarch-psx"?source.size()!=512*1024:(source.size()!=4*1024*1024 && source.size()!=8*1024*1024))){
+            *error=id=="retroarch-psx"?"Choose your readable 512 KiB PlayStation firmware inside a game source folder.":"Choose your readable 4 or 8 MiB PS2 firmware file inside a game source folder.";return false;}
         QFile file(firmware);if(!file.open(QIODevice::ReadOnly)){*error="Cannot read selected firmware.";return false;}
         const auto bytes=file.read(8*1024*1024+1);
-        if(bytes.size()!=source.size() || !bytes.contains("ROMDIR") || !bytes.contains("ROMVER")){*error="The selected file is not recognized as PS2 firmware.";return false;}
+        if(bytes.size()!=source.size() || (id=="retroarch-psx"?!psxFirmware(bytes):(!bytes.contains("ROMDIR") || !bytes.contains("ROMVER")))){
+            *error=id=="retroarch-psx"?"The file is not a recognized SCPH-5500, 5501 or 5502 firmware image.":"The selected file is not recognized as PS2 firmware.";return false;}
         const auto name=QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex())+".bin";
         if(!save(root+"/firmware/"+name,bytes,error))return false;value["firmware"]=name;
     }
     if(!save(root+"/.config/isolde-emulator/settings.json",QJsonDocument::fromVariant(value).toJson(),error))return false;
     QString cleanupError;
-    pruneFirmware(root,value.value("firmware").toString(),&cleanupError);
+    if(id=="retroarch-psx")prunePsxFirmware(root,value.value("firmware").toString(),&cleanupError);
+    else pruneFirmware(root,value.value("firmware").toString(),&cleanupError);
     return true;
 }

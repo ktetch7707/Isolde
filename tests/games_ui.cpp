@@ -28,6 +28,7 @@
 #include <QDBusVariant>
 #include <QBuffer>
 #include <QCryptographicHash>
+#include <QUrl>
 
 class GameDispatchProbe : public QObject {
     Q_OBJECT
@@ -38,6 +39,15 @@ public:
 signals:
     void rejected(const QString &reason);
 };
+class SteamRecoveryProbe : public QObject {
+    Q_OBJECT
+public:
+    QString acknowledged;
+    Q_INVOKABLE bool acknowledgeSteamRecovery(const QString &identity) {
+        acknowledged=identity;
+        return true;
+    }
+};
 class GamesUiTests : public QObject {
     Q_OBJECT
 private slots:
@@ -46,6 +56,7 @@ private slots:
     void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void opticalIdentityAndMultiDiscReferencesAreDurable();
+    void udfVolumeSetIdentityGroupsDiscNumbers();
     void fullOpticalContentIdentityRejectsTruncationAndChanges();
     void opticalSessionContractNeverClaimsHotSwap();
     void opticalMountInstanceChangesObservation();
@@ -57,17 +68,20 @@ private slots:
     void compatibilityCandidatesNeverClaimInstallerSupport();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
+    void remoteOpticalRemovalOffersRefreshAndRetry();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
     void remoteEditCanCancelAndApplyWithoutMouse();
     void remoteEditionChooserDispatchesOwnedVersion();
     void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
     void platformShelvesFilterCanonicalGamesRemotely();
+    void directFranchiseAndTagFiltersArePagedAndRemoteOperable();
     void fiveThousandGameCatalogStaysPagedAndSearchable();
     void catalogCapDisablesNextFromLastFullPage();
     void organizationAndManualSmartCollectionsStayProfileLocal();
     void remoteSmartCollectionRulesAreDpadSelectable();
     void catalogExportRestoreIsBoundedAndTransactional();
+    void catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection();
     void catalogProvenanceIsImmutableAndConflictSafe();
 };
 static AppDefinition runtime() {
@@ -88,6 +102,11 @@ void GamesUiTests::opticalMountInstanceChangesObservation(){
     QVERIFY(first!=observe({}));
     QVERIFY(OpticalDiscAdapter::mountObservationId("a\nb","c","","","1","ready","","mount:1")
         !=OpticalDiscAdapter::mountObservationId("a","b\nc","","","1","ready","","mount:1"));
+    const auto unmounted=[](const QString &sequence,const QString &sectors){
+        return OpticalDiscAdapter::mountObservationId("/dev/sr0","unknown",{}, {},sequence,"unmounted",sectors,{});
+    };
+    QVERIFY(unmounted("10","4096")!=unmounted("11","4096"));
+    QVERIFY(unmounted("10","4096")!=unmounted("10","8192"));
 }
 void GamesUiTests::opticalSessionContractNeverClaimsHotSwap(){
     const QVariantMap disc{{"mediaId",QString(64,'a')},{"mediaSetId",QString(64,'b')},
@@ -139,7 +158,10 @@ void GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles(){
     QTemporaryDir dbdir;AppRegistry apps;GameLibrary library(dbdir.filePath("games.sqlite"),&apps);QVERIFY(library.ready());
     QCOMPARE(library.pendingUninstallRecovery().size(),1);
     QVERIFY(!library.recoverOrphanedUninstall(identity,false));
+    QVERIFY(!library.resumeOrphanedUninstall(identity,false));
+    QVERIFY(!library.resumeOrphanedUninstall("invalid",true));
     QVERIFY(QDir().mkpath(root));QVERIFY(!library.recoverOrphanedUninstall(identity,true));
+    QVERIFY(!library.resumeOrphanedUninstall(identity,true));
     QVERIFY(QDir().rmdir(root));
     QVERIFY(library.recoverOrphanedUninstall(identity,true));
     QFile restored(root+"/remaining-save");QVERIFY(restored.open(QIODevice::ReadOnly));QCOMPARE(restored.readAll(),QByteArray("keep"));
@@ -196,6 +218,7 @@ void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval(){
     const QVariantMap old{{"schemaVersion",1},{"observationId",QString(64,'a')},{"device","/dev/sr0"},{"mountRoot","/media/disc-a"},{"state","mounted"}};
     const QVariantMap replacement{{"schemaVersion",1},{"observationId",QString(64,'b')},{"device","/dev/sr0"},{"mountRoot","/media/disc-b"},{"state","mounted"}};
     QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{old}).value("state").toString(),QString("ready"));
+    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr1",{old}).value("state").toString(),QString("missing"));
     const auto changed=OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{replacement});
     QCOMPARE(changed.value("state").toString(),QString("replaced"));
     QCOMPARE(changed.value("disc").toMap().value("observationId").toString(),replacement.value("observationId").toString());
@@ -240,6 +263,87 @@ void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable(){
     QVERIFY(!OpticalDiscAdapter::parseIsoVolumeDescriptor(QByteArray(2048,'x')).size());
     QVERIFY(!OpticalDiscAdapter::isRootReference(secondRoot+"/../bad"));
 }
+void GamesUiTests::udfVolumeSetIdentityGroupsDiscNumbers(){
+    const auto put16=[](QByteArray &bytes,int offset,quint16 value){
+        bytes[offset]=char(value&0xff);bytes[offset+1]=char((value>>8)&0xff);
+    };
+    const auto put32=[](QByteArray &bytes,int offset,quint32 value){
+        for(int i=0;i<4;++i)bytes[offset+i]=char((value>>(8*i))&0xff);
+    };
+    const auto finishTag=[](QByteArray descriptor){
+        quint16 crc=0;
+        const auto crcLength=quint8(descriptor.at(10))|(quint16(quint8(descriptor.at(11)))<<8);
+        for(int i=0;i<crcLength;++i){
+            crc^=quint16(quint8(descriptor.at(16+i)))<<8;
+            for(int bit=0;bit<8;++bit)crc=crc&0x8000?quint16((crc<<1)^0x1021):quint16(crc<<1);
+        }
+        descriptor[8]=char(crc&0xff);descriptor[9]=char((crc>>8)&0xff);
+        unsigned checksum=0;for(int i=0;i<16;++i)if(i!=4)checksum=(checksum+quint8(descriptor.at(i)))&0xff;
+        descriptor[4]=char(checksum);return descriptor;
+    };
+    const auto makeTag=[&](quint16 id,quint32 location){
+        QByteArray descriptor(2048,'\0');put16(descriptor,0,id);put16(descriptor,2,2);descriptor[6]=1;
+        put16(descriptor,10,2032);put32(descriptor,12,location);return descriptor;
+    };
+    const auto fixture=[&](int number,const QByteArray &setName){
+        auto primary=makeTag(1,300);
+        QByteArray volumeId(32,'\0');volumeId[0]=8;volumeId.replace(1,7,"VOLUME1");volumeId[31]=8;
+        primary.replace(24,32,volumeId);
+        put16(primary,56,quint16(number));put16(primary,58,2);
+        QByteArray encodedSet(128,'\0');encodedSet[0]=8;encodedSet.replace(1,setName.size(),setName);
+        encodedSet[127]=char(setName.size()+1);
+        primary.replace(72,128,encodedSet);
+        auto logical=makeTag(6,301);auto terminator=makeTag(8,302);
+        auto anchor=makeTag(2,256);put32(anchor,16,3*2048);put32(anchor,20,300);
+        QByteArray sequence=finishTag(primary)+finishTag(logical)+finishTag(terminator);
+        return qMakePair(finishTag(anchor),sequence);
+    };
+    const auto first=fixture(1,"ISOLDE-SET"),second=fixture(2,"ISOLDE-SET");
+    const auto firstDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second,300);
+    const auto secondDescriptor=OpticalDiscAdapter::parseUdfVolumeDescriptors(second.first,second.second,300);
+    QVERIFY(!firstDescriptor.isEmpty());QVERIFY(!secondDescriptor.isEmpty());
+    QCOMPARE(firstDescriptor.value("mediaSetId"),secondDescriptor.value("mediaSetId"));
+    QCOMPARE(firstDescriptor.value("discNumber").toInt(),1);QCOMPARE(secondDescriptor.value("discNumber").toInt(),2);
+    QCOMPARE(firstDescriptor.value("discCount").toInt(),2);
+    const auto firstMedia=OpticalDiscAdapter::identityForContent(firstDescriptor,QString(64,'a'));
+    const auto secondMedia=OpticalDiscAdapter::identityForContent(secondDescriptor,QString(64,'b'));
+    QVERIFY(firstMedia.value("mediaId")!=secondMedia.value("mediaId"));
+    QCOMPARE(firstMedia.value("mediaSetId"),secondMedia.value("mediaSetId"));
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(OpticalDiscAdapter::rootReference(firstMedia),
+        {{ "mediaId",secondMedia.value("mediaId")},{"mediaSetId",secondMedia.value("mediaSetId")},
+         {"discNumber",2},{"discCount",2},{"state","mounted"}}).value("state").toString(),QString("wrong-disc"));
+    const auto unrelated=fixture(1,"OTHER-SET");
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(unrelated.first,unrelated.second,300)
+        .value("mediaSetId")!=firstDescriptor.value("mediaSetId"));
+    auto corrupt=first.first;corrupt[100]=char(1);
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(corrupt,first.second,300).isEmpty());
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second.left(2048),300).isEmpty());
+    auto invalidCount=fixture(1,"ISOLDE-SET");
+    put16(invalidCount.second,58,100);invalidCount.second.replace(0,2048,finishTag(invalidCount.second.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(invalidCount.first,invalidCount.second,300).isEmpty());
+    auto wrongLocation=first.second;put32(wrongLocation,12,299);
+    wrongLocation.replace(0,2048,finishTag(wrongLocation.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,wrongLocation,300).isEmpty());
+    auto shortCrc=first.second;put16(shortCrc,10,0);shortCrc.replace(0,2048,finishTag(shortCrc.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,shortCrc,300).isEmpty());
+    auto invalidDstring=first.second;invalidDstring[72]=char(16);
+    invalidDstring.replace(0,2048,finishTag(invalidDstring.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,invalidDstring,300).isEmpty());
+    auto shortAnchorCrc=first.first;put16(shortAnchorCrc,10,0);
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(finishTag(shortAnchorCrc),first.second,300).isEmpty());
+    auto wrongAnchorLocation=first.first;put32(wrongAnchorLocation,12,255);
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(finishTag(wrongAnchorLocation),first.second,300).isEmpty());
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,first.second,301).isEmpty());
+    auto blankSet=first.second;blankSet[72]=8;blankSet[73]=' ';blankSet[199]=2;
+    blankSet.replace(0,2048,finishTag(blankSet.left(2048)));
+    QVERIFY(OpticalDiscAdapter::parseUdfVolumeDescriptors(first.first,blankSet,300).isEmpty());
+    QVariantMap iso{{"mediaSetId",QString("iso-set")},{"discNumber",1}};
+    const auto selectedIso=OpticalDiscAdapter::descriptorForFilesystem("iso9660",iso,firstDescriptor);
+    const auto selectedUdf=OpticalDiscAdapter::descriptorForFilesystem("udf",iso,firstDescriptor);
+    QCOMPARE(selectedIso.value("mediaSetId").toString(),QString("iso-set"));
+    QCOMPARE(selectedUdf.value("mediaSetId"),firstDescriptor.value("mediaSetId"));
+    QVERIFY(OpticalDiscAdapter::descriptorForFilesystem("udf",iso,{}).isEmpty());
+}
 void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable(){
     QStandardPaths::setTestModeEnabled(true);
     const auto alice=QUuid::createUuid().toString(QUuid::WithoutBraces),bob=QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -254,13 +358,15 @@ void GamesUiTests::ejectRefusesWhileSessionIsActive(){
     QVERIFY(library.ready());
     bool active=true;
     library.setSessionActiveGuard([&active]{return active;});
-    QVERIFY(!library.ejectOpticalDisc("/dev/sr0"));
+    QVERIFY(!library.ejectOpticalDisc(QString(64,'a'),"/dev/sr0"));
     QVERIFY(library.errorString().contains("session is active"));
     QVERIFY(!library.uninstallManagedGame("game-test",true));
     QVERIFY(library.errorString().contains("session is active"));
     active=false;
-    QVERIFY(!library.ejectOpticalDisc("/dev/sr9999"));
-    QCOMPARE(library.errorString(),QString("Invalid optical device."));
+    QVERIFY(!library.ejectOpticalDisc(QString(64,'a'),"/dev/sr9999"));
+    QVERIFY(library.errorString().contains("changed"));
+    QVERIFY(!library.mountOpticalDisc(QString(64,'a'),"/dev/sr9999"));
+    QVERIFY(library.errorString().contains("changed"));
 }
 void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces(){
     QStringList calls;
@@ -382,15 +488,37 @@ void GamesUiTests::remoteOpticalInspectionNeverStartsMedia(){
     }
     QVERIFY(dispatch.lastAction.isEmpty());
 }
+void GamesUiTests::remoteOpticalRemovalOffersRefreshAndRetry(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},
+        {"dispatcher",QVariant::fromValue(&dispatch)},{"width",1000},{"height",600}}));
+    QVERIFY2(widget,qPrintable(component.errorString()));
+    widget->setProperty("mode","opticalDetails");widget->setProperty("opticalDevice","/dev/sr99");
+    widget->setProperty("opticalSelectedDisc",QVariantMap{{"device","/dev/sr99"},{"state","mounted"},{"mountRoot","/media/old"}});
+    emit library.opticalDiscsChanged({},QStringLiteral("removed"));
+    QCOMPARE(widget->property("opticalSelectedDisc").toMap().value("state").toString(),QString("missing"));
+    auto *choices=widget->findChild<QObject*>("gamesReviewChoices");QVERIFY(choices);
+    auto labels=choices->property("model").toList();
+    QCOMPARE(labels.value(0).toString(),QString("Refresh and retry media"));
+    const QVariantMap replacement{{"device","/dev/sr99"},{"state","mounted"},{"observationId",QString(64,'a')},
+        {"hashState","ready"},{"directPlaySupported",true},{"mountRoot","/media/new"}};
+    emit library.opticalDiscsChanged({replacement},QStringLiteral("changed"));
+    QCOMPARE(widget->property("opticalSelectedDisc").toMap().value("mountRoot").toString(),QString("/media/new"));
+    labels=choices->property("model").toList();
+    QCOMPARE(labels.value(5).toString(),QString("Refresh / retry"));
+    QVERIFY(dispatch.lastAction.isEmpty());
+}
 void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QStandardPaths::setTestModeEnabled(true);const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);
     const auto parent=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+profile;
     const auto path=parent+"/steam/home/.local/share/Steam/steamapps";QVERIFY(QDir().mkpath(path+"/common/Fixture"));
     QFile manifest(path+"/appmanifest_42.acf");QVERIFY(manifest.open(QIODevice::WriteOnly));manifest.write("\"AppState\" { \"appid\" \"42\" \"name\" \"Steam fixture\" \"StateFlags\" \"4\" \"installdir\" \"Fixture\" }");manifest.close();
     QTemporaryDir dir;AppRegistry apps;auto steam=runtime();steam.id="steam";steam.name="Steam";steam.presentationMode="game-hub";steam.launchConfiguration={{"desktopId","isolde-steam"}};QVERIFY(apps.addApp(steam));
-    GameLibrary library(dir.filePath("games.sqlite"),&apps);InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    GameLibrary library(dir.filePath("games.sqlite"),&apps);InputManager input;GameDispatchProbe dispatch;SteamRecoveryProbe recovery;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
     QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
-    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"originId","steam-origin"},{"width",1000},{"height",600},{"engaged",true}}));QVERIFY2(widget,qPrintable(component.errorString()));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"sessions",QVariant::fromValue(static_cast<QObject *>(&recovery))},{"originId","steam-origin"},{"width",1000},{"height",600},{"engaged",true}}));QVERIFY2(widget,qPrintable(component.errorString()));
     command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     QTRY_COMPARE_WITH_TIMEOUT(widget->property("mode").toString(),QString("importPreview"),10000);QVERIFY(library.page().isEmpty());
     command(widget.data(),InputManager::Confirm);QVERIFY(library.page().isEmpty()); // Default Cancel.
@@ -409,12 +537,32 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     QCOMPARE(dispatch.lastAction.value("type").toString(),QString("launch-game"));QCOMPARE(dispatch.origin,QString("steam-origin"));
     QCOMPARE(library.resolveLaunch(dispatch.lastAction.value("gameId").toString()).value("steamAppId").toString(),QString("42"));
-    const QVariantMap status{{"appId","42"},{"phase","ended"},{"account","unknown"},{"ownership","unknown"},{"offline","unknown"},{"exit","unknown"},{"local_save","unknown"},{"cloud_save","unknown"}};
+    const QVariantMap status{{"appId","42"},{"phase","ended"},{"process","gone"},{"error","none"},{"account","unknown"},{"ownership","unknown"},{"offline","unknown"},{"exit","unknown"},{"local_save","unknown"},{"cloud_save","unknown"},{"session_end","normal"}};
     QVERIFY(widget->setProperty("providerStatus",status));
     QVERIFY(QMetaObject::invokeMethod(widget.data(),"openDetails"));
     const auto statusText=widget->findChild<QObject *>("steamProviderStatus");QVERIFY(statusText);
     QVERIFY(statusText->property("text").toString().contains("Ownership: unknown"));
     QVERIFY(statusText->property("text").toString().contains("Cloud: unknown"));
+    QVERIFY(statusText->property("text").toString().contains("Session end: reported normal process exit"));
+    QVERIFY(statusText->property("text").toString().contains("does not prove that saves were written"));
+    auto unknownProcess=status;unknownProcess["process"]="unknown";unknownProcess["error"]="process_observation_failed";unknownProcess["phase"]="failed";unknownProcess["session_end"]="incomplete";
+    QVERIFY(widget->setProperty("providerStatus",unknownProcess));
+    QVERIFY(statusText->property("text").toString().contains("Process observation: observation unavailable"));
+    QVERIFY(statusText->property("text").toString().contains("process visibility was incomplete"));
+    QVERIFY(statusText->property("text").toString().contains("Session end: incomplete"));
+    QVERIFY(widget->setProperty("recoveryStatuses",QVariantMap{{"42",unknownProcess}}));
+    const auto recoveryActions=widget->property("detailActions").value<QJSValue>().toVariant().toList();
+    int recoveryChoice=-1;
+    for(int i=0;i<recoveryActions.size();++i)
+        if(recoveryActions[i].toString().startsWith("Review Steam recovery warning"))recoveryChoice=i;
+    QVERIFY(recoveryChoice>=0);
+    QVERIFY(widget->setProperty("choice",recoveryChoice));
+    QVERIFY(QMetaObject::invokeMethod(widget.data(),"activateChoice"));
+    QCOMPARE(widget->property("mode").toString(),QString("steamRecoveryReview"));
+    QVERIFY(widget->setProperty("choice",1));
+    QVERIFY(QMetaObject::invokeMethod(widget.data(),"activateChoice"));
+    QCOMPARE(recovery.acknowledged,QString("42"));
+    QVERIFY(widget->property("message").toString().contains("no save, ownership or Cloud-sync result was inferred"));
     auto other=status;other["appId"]="43";QVERIFY(widget->setProperty("providerStatus",other));
     QVERIFY(widget->property("steamStatus").toString().contains("Steam checks account ownership"));
     const auto gameId=dispatch.lastAction.value("gameId").toString();
@@ -452,6 +600,10 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulators"));
     const auto coverage=library.emulatorCoverage();
     QVERIFY(coverage.value("integratedPlatforms").toList().contains("PSP"));
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("Nintendo DS"));
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("Virtual Boy"));
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("PlayStation"));
+    QVERIFY(coverage.value("notIntegrated").toList().contains("Nintendo DSi"));
     QVERIFY(coverage.value("notIntegrated").toList().contains("Xbox 360"));
     const auto budgets=coverage.value("budgets").toMap();
     QCOMPARE(budgets.value("catalogEntries").toInt(),50000);
@@ -475,6 +627,21 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown);
     command(widget.data(),InputManager::Confirm);QCOMPARE(library.emulatorSettings("ppsspp").value("video").toString(),QString("software"));
     QVERIFY(!library.installEmulators(false));QVERIFY(!library.setupBusy());
+    QVERIFY(!library.configureEmulator("retroarch-psx",{{"video","automatic"},{"controller","xbox"}},"/etc/passwd"));
+    QVERIFY(library.errorString().contains("Approve"));
+    QVERIFY(library.emulatorSettings("retroarch-psx").value("firmware").toString().isEmpty());
+    const auto emulators=library.emulators();
+    for(const auto &id:QStringList{"retroarch-ds","retroarch-vb","retroarch-psx"}){
+        int index=-1;
+        for(int i=0;i<emulators.size();++i)if(emulators[i].toMap().value("id")==id)index=i;
+        QVERIFY(index>=0);
+        QVERIFY(widget->setProperty("mode","emulators"));QVERIFY(widget->setProperty("choice",index));
+        command(widget.data(),InputManager::Confirm);
+        QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));
+        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"stylus":id=="retroarch-vb"?"second D-pad":"single CHD"));
+        QVERIFY(widget->setProperty("choice",1));command(widget.data(),InputManager::Confirm);
+        QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"right trigger":id=="retroarch-vb"?"right trigger left":"SDL mappings"));
+    }
     QVERIFY(QDir(QFileInfo(GameEmulators::home(profile,"ppsspp")).absolutePath()).removeRecursively());
     qApp->setProperty("isoldeProfile",QVariant());
 }
@@ -527,6 +694,62 @@ void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
     const auto continued=continueWidget->property("items");
     const auto continueItems=continued.metaType()==QMetaType::fromType<QJSValue>()?continued.value<QJSValue>().toVariant().toList():continued.toList();
     QCOMPARE(continueItems.size(),1);QCOMPARE(continueItems.first().toMap().value("id").toString(),psp);
+}
+void GamesUiTests::directFranchiseAndTagFiltersArePagedAndRemoteOperable(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    const auto path=dir.filePath("profile/games.sqlite");
+    GameLibrary library(path,&apps);QVERIFY(library.ready());
+    const auto game=library.addGame({{"schemaVersion",1},{"title","First"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
+    QVERIFY(!game.isEmpty());QVERIFY(library.setOrganization(game,"Saga One",{"1","Puzzle"}));
+    const auto connection="direct-filter-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(path);QVERIFY(db.open());
+    QSqlQuery q(db);QVERIFY(q.exec("WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<50) "
+        "INSERT INTO games(id,title,platform,runtime,root,target,added) "
+        "SELECT printf('seed-%02d',x),printf('Title %02d',x),'PC',printf('runtime-%02d',x),'','',x FROM n"));
+    QVERIFY(q.exec("INSERT INTO game_metadata(game_id,franchise,tags) SELECT id,'Saga One','[\"1\",\"Puzzle Plus\"]' FROM games WHERE id LIKE 'seed-%'"));
+    q=QSqlQuery();db.close();db=QSqlDatabase();QSqlDatabase::removeDatabase(connection);
+    QCOMPARE(library.page("franchise","saga",0).size(),50);
+    QCOMPARE(library.page("franchise","saga",50).size(),2);
+    QCOMPARE(library.page("tag","1",0).size(),50);
+    QCOMPARE(library.page("tag","1",50).size(),2);
+    QCOMPARE(library.page("tag","puzzle").size(),1);
+    QCOMPARE(library.page("tag","puzz").size(),0);
+    QCOMPARE(library.page("tag","1' OR 1=1 --").size(),0);
+    QVERIFY(library.page("tag"," ").isEmpty());
+    QVERIFY(library.page("franchise",QString(161,'x')).isEmpty());
+    GameLibrary other(dir.filePath("other/games.sqlite"),&apps);QVERIFY(other.ready());
+    QVERIFY(other.page("tag","1").isEmpty());QVERIFY(other.page("franchise","saga").isEmpty());
+
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({
+        {"library",QVariant::fromValue(&library)},{"width",1000},{"height",600},{"engaged",true}}));
+    QVERIFY2(widget,qPrintable(component.errorString()));
+    for(int i=0;i<4;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);
+    for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown); // PC, all, franchise, tag
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("mode").toString(),QString("keyboard"));
+    auto *keyboard=widget->findChild<QObject*>("gamesKeyboard");QVERIFY(keyboard);
+    command(widget.data(),InputManager::Confirm); // 1
+    const auto keysValue=keyboard->property("keys");
+    const auto keys=keysValue.metaType()==QMetaType::fromType<QJSValue>()?keysValue.value<QJSValue>().toVariant().toList():keysValue.toList();
+    int done=-1;for(int i=0;i<keys.size();++i)if(keys.at(i).toString()=="Done"){done=i;break;}
+    QVERIFY(done>0);
+    for(int i=0;i<done;++i)command(widget.data(),InputManager::NavigateRight);
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("queryView").toString(),QString("tag"));
+    QVERIFY(widget->property("canNextPage").toBool());
+    widget->setProperty("toolbar",7);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("offset").toInt(),50);
+    QVERIFY(!widget->property("canNextPage").toBool());
+    widget->setProperty("toolbar",4);command(widget.data(),InputManager::Confirm);
+    command(widget.data(),InputManager::Back); // chooser cancellation retains filter
+    QCOMPARE(widget->property("queryView").toString(),QString("tag"));
+    widget->setProperty("toolbar",1);command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("queryView").toString(),QString("all"));
+    QCOMPARE(widget->property("offset").toInt(),0);
 }
 void GamesUiTests::catalogCapDisablesNextFromLastFullPage(){
     QTemporaryDir dir;QVERIFY(dir.isValid());
@@ -761,6 +984,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(invalid.write("{\"schemaVersion\":1}")>0);invalid.close();
     QVERIFY(!library.restoreCatalog(invalidBackup,true));
     QCOMPARE(library.page().size(),1);
+    const auto originalArtworkPath=QUrl(library.details(game).value("artwork").toString()).toLocalFile();
+    QVERIFY(QFileInfo::exists(originalArtworkPath));
     const auto triggerConnection="games-restore-injection-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto triggerDb=QSqlDatabase::addDatabase("QSQLITE",triggerConnection);triggerDb.setDatabaseName(database);
     QVERIFY(triggerDb.open());
@@ -770,6 +995,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(!library.restoreCatalog(backup,true));
     QCOMPARE(library.page().size(),1);
     QCOMPARE(library.details(game).value("title").toString(),QString("Portable fixture"));
+    QCOMPARE(QUrl(library.details(game).value("artwork").toString()).toLocalFile(),originalArtworkPath);
+    QVERIFY(QFileInfo::exists(originalArtworkPath));
     const auto dropConnection="games-restore-cleanup-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto cleanupDb=QSqlDatabase::addDatabase("QSQLITE",dropConnection);cleanupDb.setDatabaseName(database);
     QVERIFY(cleanupDb.open());QSqlQuery cleanupQuery(cleanupDb);
@@ -822,6 +1049,63 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(reopened.pageCollection(tagCollection).size(),1);
     QCOMPARE(reopened.pageCollection(recentCollection).size(),1);
     QCOMPARE(reopened.details(game).value("sourceReference").toString(),QString());
+}
+void GamesUiTests::catalogArtworkSurvivesRecoverySnapshotsWithoutGarbageCollection() {
+    QTemporaryDir dir;QVERIFY(dir.isValid());
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previousProfile=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);qApp->setProperty("isoldeProfile",profile);
+    auto cleanup=qScopeGuard([&]{qApp->setProperty("isoldeProfile",previousProfile);MediaGrants::save(profile,{});});
+    QVERIFY2(MediaGrants::save(profile,{dir.path()}).isEmpty(),"Test export folder grant could not be prepared.");
+    AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    const auto database=dir.filePath("profile/games.sqlite");
+    GameLibrary library(database,&apps);
+    QVariantMap registration{{"schemaVersion",1},{"title","Artwork recovery fixture"},{"platform","PC"},
+        {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}};
+    const auto game=library.addGame(registration);QVERIFY2(!game.isEmpty(),qPrintable(library.errorString()));
+    const auto artA=dir.filePath("cover-a.png"),artB=dir.filePath("cover-b.png");
+    QImage cover(48,64,QImage::Format_ARGB32);cover.fill(QColor("#3467a1"));QVERIFY(cover.save(artA,"PNG"));
+    cover.fill(QColor("#a14634"));QVERIFY(cover.save(artB,"PNG"));
+    QVERIFY2(library.setArtwork(game,artA),qPrintable(library.errorString()));
+    const auto backupA=dir.filePath("artwork-a.json");
+    QVERIFY2(library.exportCatalog(backupA),qPrintable(library.errorString()));
+    const auto legacySnapshot=database+".v1-backup.sqlite";
+    const auto snapshotConnection="games-artwork-v1-snapshot-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    {
+        auto snapshotDb=QSqlDatabase::addDatabase("QSQLITE",snapshotConnection);snapshotDb.setDatabaseName(database);
+        QVERIFY(snapshotDb.open());QSqlQuery snapshot(snapshotDb);snapshot.prepare("VACUUM main INTO ?");
+        snapshot.addBindValue(legacySnapshot);QVERIFY2(snapshot.exec(),qPrintable(snapshot.lastError().text()));
+        snapshotDb.close();
+    }
+    QSqlDatabase::removeDatabase(snapshotConnection);
+    const auto artworkA=QUrl(library.details(game).value("artwork").toString()).toLocalFile();
+    QVERIFY(QFileInfo::exists(artworkA));
+    QVERIFY2(library.setArtwork(game,artB),qPrintable(library.errorString()));
+    QVERIFY2(QFileInfo::exists(artworkA),"Replacing artwork deleted a blob that another catalog snapshot may use.");
+    const auto backupB=dir.filePath("artwork-b.json");
+    QVERIFY2(library.exportCatalog(backupB),qPrintable(library.errorString()));
+    QVERIFY2(library.restoreCatalog(backupA,true),qPrintable(library.errorString()));
+    QVERIFY2(library.setArtwork(game,artB),qPrintable(library.errorString()));
+    const auto retainedUrl=QUrl(library.details(game).value("artwork").toString());
+    const auto retainedPath=retainedUrl.toLocalFile();QVERIFY(QFileInfo::exists(retainedPath));
+    QVERIFY2(library.clearArtwork(game),qPrintable(library.errorString()));
+    QVERIFY2(QFileInfo::exists(retainedPath),"Artwork was deleted despite potentially concurrent backup references.");
+    QVERIFY2(QFileInfo::exists(artworkA),"Artwork referenced by the retained .v1-backup.sqlite snapshot was deleted.");
+    QVERIFY2(library.removeGame(game),qPrintable(library.errorString()));
+    QVERIFY(QFileInfo::exists(retainedPath));QVERIFY(QFileInfo::exists(artworkA));
+
+    const QByteArray orphanBytes("interrupted artwork publication");
+    const auto orphanHash=QString::fromLatin1(QCryptographicHash::hash(orphanBytes,QCryptographicHash::Sha256).toHex());
+    const auto orphanPath=database+".artwork/"+orphanHash+".png";
+    QFile orphan(orphanPath);QVERIFY(orphan.open(QIODevice::WriteOnly));
+    QCOMPARE(orphan.write(orphanBytes),qint64(orphanBytes.size()));orphan.close();
+    {
+        GameLibrary reopened(database,&apps);
+        QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
+        QVERIFY(QFileInfo::exists(retainedPath));
+        QVERIFY(QFileInfo::exists(artworkA));
+        QVERIFY2(QFileInfo::exists(orphanPath),"Startup silently deleted an orphan without cross-process ownership.");
+    }
 }
 void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QTemporaryDir dir;QVERIFY(dir.isValid());

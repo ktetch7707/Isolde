@@ -7,7 +7,9 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $backlog = Get-Content -Raw -LiteralPath $BacklogPath
 $ledger = Get-Content -Raw -LiteralPath $MilestonePath
-$active = @('T01') + (3..5 | ForEach-Object { 'T{0:00}' -f $_ }) + (9..31 | ForEach-Object { 'T{0:00}' -f $_ })
+$excluded = @('T13', 'T31')
+$active = @('T01') + @(3..5 | ForEach-Object { 'T{0:00}' -f $_ }) + @(9..30 | ForEach-Object { 'T{0:00}' -f $_ })
+$active = @($active | Where-Object { $_ -notin $excluded })
 $parents = @{}; $children = @{}; $seen = @{}
 foreach ($task in $active) {
     foreach ($m in [regex]::Matches($backlog, '(?m)^- \[([ x])\] (' + $task + '\.\d+) (.+)\r?$')) {
@@ -18,6 +20,7 @@ foreach ($task in $active) {
 }
 foreach ($m in [regex]::Matches($ledger, '(?m)^\| (T\d{2}\.\d+\.[a-z]+) \| (done|open) \| ([^\r\n]+) \| ([^\r\n]+) \|\r?$')) {
     $id = $m.Groups[1].Value; $parent = $id.Substring(0,$id.LastIndexOf('.'))
+    if ($parent.Substring(0,3) -in $excluded) { continue }
     if ($seen.ContainsKey($id)) { throw "Duplicate milestone $id" }; $seen[$id]=$true
     if (!$parents.ContainsKey($parent)) { throw "Unknown Scope parent $parent" }
     if (!$children.ContainsKey($parent)) { $children[$parent]=[Collections.Generic.List[object]]::new() }
@@ -42,9 +45,9 @@ $results = foreach ($task in $active) {
     [pscustomobject]@{ Task=$task; Percent=$percent; AcceptedGroups=$accepted; Groups=$ids.Count }
 }
 $sum = ($results | Measure-Object -Property Percent -Sum).Sum
-$overall = [int][math]::Round($sum/27,0,[MidpointRounding]::AwayFromZero)
+$overall = [int][math]::Round($sum/$active.Count,0,[MidpointRounding]::AwayFromZero)
 if (@($results | Where-Object { $_.AcceptedGroups -ne $_.Groups }).Count) { $overall=[math]::Min(99,$overall) }
-$output = [pscustomobject]@{ Tasks=@($results); Sum=$sum; Overall=$overall; Active=27; Milestones=$seen.Count; DoneMilestones=@($children.Values | ForEach-Object { $_ } | Where-Object { $_.done }).Count }
+$output = [pscustomobject]@{ Tasks=@($results); Sum=$sum; Overall=$overall; Active=$active.Count; Milestones=$seen.Count; DoneMilestones=@($children.Values | ForEach-Object { $_ } | Where-Object { $_.done }).Count }
 if ($CheckTable) {
     foreach ($result in $results) {
         $row = [regex]::Match($backlog,'(?m)^\| '+$result.Task+' \|[^\r\n]*?\| (\d+)% \|')
@@ -53,4 +56,4 @@ if ($CheckTable) {
     $row=[regex]::Match($backlog,'(?m)^\| \*\*Overall\*\* \|[^\r\n]*?\*\*(\d+)%\*\*')
     if (!$row.Success -or [int]$row.Groups[1].Value -ne $overall) { throw "Overall table mismatch: expected $overall%" }
 }
-if ($Json) { $output | ConvertTo-Json -Depth 5 } else { $results | Format-Table; Write-Output "Sum=$sum; Overall=$overall%; Active=27; milestones=$($output.DoneMilestones)/$($output.Milestones)" }
+if ($Json) { $output | ConvertTo-Json -Depth 5 } else { $results | Format-Table; Write-Output "Sum=$sum; Overall=$overall%; Active=$($active.Count); milestones=$($output.DoneMilestones)/$($output.Milestones)" }

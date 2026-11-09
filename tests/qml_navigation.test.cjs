@@ -21,6 +21,269 @@ function method(file, name, context, anchor) {
     vm.runInContext(source.slice(start, end), context, {filename: file + ":" + name});
 }
 
+test("direct browse filters use the remote chooser and the same next-page query", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        mode: "platformChooser", choice: 2, platformChoices: ["PC"], queryView: "collection",
+        activeCollectionId: "saved", search: "", selectedPlatform: "PC", selected: -1,
+        selectedId: "", offset: 50, field: 0, message: "", keyboard: {value: "", selectedIndex: 0},
+        library: {
+            page(...args) { calls.push(args); return args[2] === 0 ? Array.from({length: 50}, (_, i) => ({id: String(i)})) : [{id: "next"}]; },
+        },
+        pageSize: 50, catalogLimit: 50000, detail: null,
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    method("GamesLibraryWidget.qml", "reload", scope);
+    method("GamesLibraryWidget.qml", "submitDirectFilter", scope);
+    scope.activateChoice();
+    assert.equal(scope.mode, "keyboard");
+    assert.equal(scope.field, 22);
+    scope.submitDirectFilter("  ");
+    assert.equal(scope.mode, "keyboard");
+    assert.equal(scope.queryView, "collection");
+    scope.submitDirectFilter(" Saga ");
+    assert.equal(scope.queryView, "franchise");
+    assert.equal(scope.offset, 0);
+    assert.equal(scope.activeCollectionId, "");
+    assert.deepEqual(calls, [["franchise", "Saga", 0, ""], ["franchise", "Saga", 50, ""]]);
+    assert.equal(scope.canNextPage, true);
+    scope.mode = "platformChooser"; scope.choice = 3;
+    scope.activateChoice();
+    assert.equal(scope.field, 23);
+    scope.submitDirectFilter("Puzzle");
+    assert.equal(scope.queryView, "tag");
+    assert.deepEqual(calls.slice(-2), [["tag", "Puzzle", 0, ""], ["tag", "Puzzle", 50, ""]]);
+});
+
+test("DS and Virtual Boy setup exposes controller limitations remotely", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../qml/GamesLibraryWidget.qml"), "utf8");
+    const actions = source.match(/readonly property var emulatorActions:(.*)/)[1];
+    for (const [id, hint, controls] of [
+        ["retroarch-ds", /right stick moves the stylus/i, /right trigger touches/i],
+        ["retroarch-vb", /second D-pad/i, /right trigger left/i],
+    ]) {
+        const scope = vm.createContext({
+            mode: "emulators", choice: 0, message: "", emulatorId: "",
+            emulators: [{id, name: id, installed: false, registered: false, firmwareRequired: false}],
+            library: {emulatorSettings() { return {schemaVersion: 1, video: "automatic", controller: "xbox"}; }},
+        });
+        method("GamesLibraryWidget.qml", "activateChoice", scope);
+        scope.activateChoice();
+        assert.equal(scope.mode, "emulatorSettings");
+        assert.match(scope.message, hint);
+        const label=vm.runInContext(actions, scope)[1];
+        assert.match(label, id==="retroarch-ds"?/Controller help: Xbox · DS/:/Controller help: Xbox · Virtual Boy/);
+        assert.doesNotMatch(label,/Wii/);
+        scope.choice = 1;
+        scope.activateChoice();
+        assert.match(scope.message, controls);
+        assert.equal(scope.emulatorDraft.controller,"xbox");
+    }
+});
+
+test("PlayStation firmware selection is reviewed before saving", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        mode: "emulators", choice: 0, message: "", emulatorId: "", firmwareDraft: "",
+        keyboard: {selectedIndex: -1, value: ""},
+        emulators: [{id:"retroarch-psx", name:"PlayStation", installed:true, registered:true, firmwareRequired:true}],
+        library: {
+            emulatorSettings() { return {schemaVersion:1, video:"automatic", controller:"xbox", firmware:""}; },
+            configureEmulator(...args) { calls.push(args); return true; },
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.match(scope.message,/single CHD/);
+    assert.match(scope.message,/matching regional/);
+    scope.choice=2;scope.activateChoice();
+    assert.equal(scope.mode,"keyboard");assert.equal(scope.field,5);assert.equal(calls.length,0);
+    scope.firmwareDraft="/media/games/user-firmware.bin";scope.mode="emulatorSettings";scope.choice=3;
+    scope.activateChoice();
+    assert.equal(calls.length,1);assert.equal(calls[0][0],"retroarch-psx");
+    assert.equal(calls[0][2],scope.firmwareDraft);
+});
+
+test("pending uninstall cleanup requires the separate remote confirmation", () => {
+    const calls = [];
+    const inputManager = {back: 1, navigateDown: 2, navigateRight: 3, navigateUp: 4, navigateLeft: 5, confirm: 6};
+    const scope = vm.createContext({
+        inputManager, readOnly: false, mode: "uninstallRecoveryReview", choice: 0,
+        pendingUninstall: {id: "install-id"}, message: "",
+        library: {
+            resumeOrphanedUninstall(id, confirmed) { calls.push([id, confirmed]); return true; },
+            portableInstallStatus: "Checking files",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    method("GamesLibraryWidget.qml", "handleCommand", scope);
+    scope.handleCommand(inputManager.navigateDown);
+    scope.handleCommand(inputManager.navigateDown);
+    assert.equal(scope.choice, 2);
+    assert.deepEqual(calls, []);
+    scope.handleCommand(inputManager.confirm);
+    assert.deepEqual(calls, [["install-id", true]]);
+    assert.equal(scope.mode, "uninstalling");
+    assert.equal(scope.message, "Checking files");
+});
+
+test("standalone portable install requires remote review and confirmation", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        readOnly: false, mode: "catalogTools", choice: 4, message: "",
+        opticalObservationId: "old", opticalDevice: "old", registeringOpticalGame: true,
+        runtimes: [{id: "native", name: "Native", file: true}],
+        keyboard: {selectedIndex: -1, value: "old"},
+        library: {
+            confirmPortableInstall() { calls.push("install"); return true; },
+            portableInstallStatus: "Installing",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.equal(scope.mode, "installerRuntime");
+    assert.equal(scope.registeringOpticalGame, false);
+    assert.match(scope.message, /only the standalone file is copied/i);
+    scope.activateChoice();
+    assert.equal(scope.field, 17);
+    assert.equal(scope.mode, "keyboard");
+    assert.equal(scope.portableRuntimeId, "native");
+    assert.deepEqual(calls, []);
+    scope.mode = "installerReview";
+    scope.choice = 1;
+    scope.activateChoice();
+    assert.deepEqual(calls, ["install"]);
+    assert.equal(scope.mode, "installerInstalling");
+});
+
+test("portable file preflight and confirmation use the same profile media grant", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../src/games/GameLibrary.cpp"), "utf8");
+    const begin = source.slice(source.indexOf("bool GameLibrary::beginPortableInstall("),
+                               source.indexOf("bool GameLibrary::beginPortableDirectoryInstall("));
+    assert.match(begin, /opticalObservationId\.isEmpty\(\)\s*&&\s*!approvedMediaDirectory\(m_emulatorProfile,file\.absolutePath\(\)\)/);
+});
+
+test("optical portable confirmation uses disc identity rather than media-folder grants", () => {
+    const source = fs.readFileSync(path.join(__dirname, "../src/games/GameLibrary.cpp"), "utf8");
+    const start = source.indexOf("bool GameLibrary::confirmPortableInstall()");
+    const end = source.indexOf("\nvoid GameLibrary::cancelPortableInstall()", start);
+    assert.ok(start >= 0 && end > start, "portable confirmation implementation exists");
+    const confirmation = source.slice(start, end);
+    assert.match(confirmation, /m_portableDirectoryCopy[\s\S]*approvedMediaDirectory\(m_emulatorProfile,m_portableSource\)/);
+    assert.match(confirmation, /!m_portableOpticalObservationId\.isEmpty\(\)\s*\|\|\s*approvedMediaDirectory\(m_emulatorProfile,source\.absolutePath\(\)\)/);
+    assert.match(confirmation, /revalidateOpticalDisc\(m_portableOpticalObservationId,m_portableOpticalDevice\)/);
+    assert.doesNotMatch(confirmation, /MediaGrants::validate\(source\.absolutePath\(\)\)/);
+});
+
+test("local game directory copy is an explicit remote review workflow", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        readOnly: false, mode: "catalogTools", choice: 9, message: "",
+        opticalObservationId: "", opticalDevice: "", registeringOpticalGame: false,
+        runtimes: [{id: "native", name: "Native", file: true}],
+        keyboard: {selectedIndex: -1, value: ""},
+        library: {
+            beginPortableDirectoryInstall(...args) { calls.push(args); return true; },
+            portableInstallStatus: "Preflight started",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    method("GamesLibraryWidget.qml", "submitPortableDirectoryField", scope);
+    scope.activateChoice();
+    assert.equal(scope.installingDirectory, true);
+    assert.equal(scope.mode, "installerRuntime");
+    scope.activateChoice();
+    assert.equal(scope.field, 20);
+    assert.equal(scope.mode, "keyboard");
+    scope.submitPortableDirectoryField("/media/approved/Sample Game");
+    assert.equal(scope.field, 21);
+    assert.deepEqual(calls, []);
+    scope.submitPortableDirectoryField("bin/game");
+    assert.deepEqual(calls, [["/media/approved/Sample Game", "bin/game", "native"]]);
+    assert.equal(scope.mode, "installerPreflight");
+});
+
+test("optical remote actions retain the selected media identity and require eject confirmation", () => {
+    const calls = [];
+    const disc = {observationId: "selected", device: "/dev/sr0", state: "mounted",
+        volumeLabel: "Fixture", filesystem: "iso9660", mountRoot: "/media/disc",
+        directPlaySupported: true};
+    let mediaState = "replaced";
+    const scope = vm.createContext({
+        readOnly: false, mode: "opticalChooser", choice: 0, message: "", opticalChoices: [disc],
+        library: {
+            revalidateOpticalDisc(id, device) { calls.push(["revalidate", id, device]); return {state: mediaState, disc}; },
+            ejectOpticalDisc(id, device) { calls.push(["eject", id, device]); return false; },
+            mountOpticalDisc(id, device) { calls.push(["mount", id, device]); return true; },
+            mountedOpticalDiscs() { return []; },
+            errorString: "The selected disc or drive changed.",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.equal(scope.mode, "opticalDetails");
+    scope.activateChoice();
+    assert.match(scope.message, /different media/i);
+    assert.deepEqual(calls, [["revalidate", "selected", "/dev/sr0"]]);
+    scope.choice = 4;
+    scope.activateChoice();
+    assert.equal(scope.mode, "opticalEjectReview");
+    assert.equal(scope.choice, 0);
+    scope.activateChoice();
+    assert.equal(calls.length, 1);
+    scope.choice = 4;
+    scope.activateChoice();
+    scope.choice = 1;
+    scope.activateChoice();
+    assert.deepEqual(calls[1], ["eject", "selected", "/dev/sr0"]);
+    assert.match(scope.message, /changed/i);
+    scope.opticalSelectedDisc = {...disc, state: "unmounted"};
+    scope.choice = 0;
+    scope.activateChoice();
+    assert.deepEqual(calls[2], ["mount", "selected", "/dev/sr0"]);
+    assert.equal(scope.mode, "opticalChooser");
+});
+
+test("optical refresh resets selection and displays replacement identity before action", () => {
+    let discs = [];
+    const scope = vm.createContext({
+        opticalDevice: "/dev/sr0", opticalObservationId: "old", choice: 5, message: "",
+        opticalSelectedDisc: {state: "mounted", observationId: "old"},
+        library: {refreshOpticalDiscs() { return discs; }},
+    });
+    method("GamesLibraryWidget.qml", "refreshOpticalDetails", scope);
+    scope.refreshOpticalDetails();
+    assert.equal(scope.choice, 0);
+    assert.equal(scope.opticalSelectedDisc.state, "missing");
+    discs = [{device:"/dev/sr0", observationId:"new", state:"mounted", directPlaySupported:true,
+        volumeLabel:"New disc", filesystem:"udf", mountRoot:"/media/new", mediaId:"new-hash",
+        mediaSetId:"new-set", discNumber:2, discCount:2}];
+    scope.opticalObservationId = "old";
+    scope.choice = 5;
+    scope.refreshOpticalDetails();
+    assert.equal(scope.choice, 0);
+    assert.equal(scope.opticalObservationId, "new");
+    assert.match(scope.message, /new-hash/);
+    assert.match(scope.message, /Disc 2 of 2/);
+    assert.match(scope.message, /Media changed/);
+});
+
+test("optical direct play registration clears an earlier directory-copy mode", () => {
+    const disc = {observationId:"disc-id", device:"/dev/sr0", state:"mounted", directPlaySupported:true};
+    const scope = vm.createContext({
+        readOnly:false, mode:"opticalDetails", choice:0, message:"", installingDirectory:true,
+        opticalSelectedDisc:disc, opticalObservationId:disc.observationId, opticalDevice:disc.device,
+        runtimes:[{id:"native", name:"Native", file:true}], keyboard:{selectedIndex:-1,value:""},
+        library:{revalidateOpticalDisc() {return {state:"ready",disc};}},
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    scope.activateChoice();
+    assert.equal(scope.registeringOpticalGame,true);
+    assert.equal(scope.installingDirectory,false);
+    scope.activateChoice();
+    assert.equal(scope.field,17);
+});
+
 test("app overflow opens All Apps while button overflow retains shortcuts", () => {
     const calls = [];
     const scope = vm.createContext({

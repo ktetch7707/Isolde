@@ -2,12 +2,13 @@
 $ErrorActionPreference='Stop'
 $calculate=Join-Path $PSScriptRoot 'backlog-progress.ps1'
 $current=(& $calculate -Json -CheckTable | ConvertFrom-Json)
-if($current.Active -ne 27){throw 'Active task count mismatch'}
+if($current.Active -ne 25 -or @($current.Tasks | Where-Object { $_.Task -in @('T13','T31') }).Count){throw 'Active task count or exclusions mismatch'}
 $folder=Join-Path $PSScriptRoot ('../build/progress-contract-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $folder -Force | Out-Null
 $path=Join-Path $folder 'milestones.md'
 $fixture=Join-Path $folder 'backlog.md'
-$active=@('T01')+(3..5 | ForEach-Object {'T{0:00}' -f $_})+(9..31 | ForEach-Object {'T{0:00}' -f $_})
+$active=@('T01')+@(3..5 | ForEach-Object {'T{0:00}' -f $_})+@(9..30 | ForEach-Object {'T{0:00}' -f $_})
+$active=@($active | Where-Object {$_ -ne 'T13'})
 $lines=foreach($task in $active){
     if($task -eq 'T20'){1..4 | ForEach-Object {"- [x] T20.$_ Accepted fixture group"}; '- [ ] T20.5 Pending fixture group'}
     else{"- [ ] $task.1 Pending fixture group"}
@@ -17,6 +18,9 @@ $ledger=(1..4 | ForEach-Object {"| T20.5.$([char](96+$_)) | open | Pending fixtu
 Set-Content -LiteralPath $path -Value $ledger -Encoding utf8
 $result=(& $calculate -Json -BacklogPath $fixture -MilestonePath $path | ConvertFrom-Json)
 if($result.Sum -ne 80 -or $result.Overall -ne 3){throw 'Fixture baseline or rounding mismatch'}
+Set-Content -LiteralPath $path -Value ($ledger+"`n| T13.1.a | done | Excluded fixture | docs/progress-milestones.md |`n| T31.6.a | done | Excluded fixture | docs/progress-milestones.md |") -Encoding utf8
+$excludedResult=(& $calculate -Json -BacklogPath $fixture -MilestonePath $path | ConvertFrom-Json)
+if($excludedResult.Sum -ne $result.Sum -or $excludedResult.Active -ne 25){throw 'Excluded tasks affected progress'}
 # Duplicating an equivalent open outcome subdivides the same parent weight,
 # rather than increasing this parent's weight relative to other parents.
 $extra='| T20.5.e | open | Additional unverified movement requirement | Pending evidence |'

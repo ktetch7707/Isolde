@@ -11,12 +11,133 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QRegularExpression>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QSet>
+#include <QUuid>
 
 #include <QUrl>
 #include <QScopedValueRollback>
 
+namespace {
+QString steamRecoveryDirectory(const QString &profile)
+{
+    if(profile!="default" && (QUuid(profile).isNull()
+       || QUuid(profile).toString(QUuid::WithoutBraces)!=profile))return {};
+    const auto base=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles";
+    return QDir::cleanPath(base+"/"+profile+"/steam/home/.local/state/isolde");
+}
+
+bool safeSteamRecoveryDirectory(const QString &directory,bool create)
+{
+    if(directory.isEmpty())return false;
+    QString current;
+    const auto parts=directory.split('/',Qt::SkipEmptyParts);
+    if(directory.startsWith('/'))current="/";
+    for(const auto &part:parts){
+        current=QDir(current).filePath(part);
+        QFileInfo info(current);
+        if(!info.exists()){
+            if(!create || !QDir().mkdir(current))return false;
+            info.setFile(current);
+        }
+        if(info.isSymLink() || !info.isDir() || info.canonicalFilePath()!=QDir::cleanPath(current))return false;
+    }
+    return true;
+}
+
+QVariantMap loadSteamRecoveryStatuses(const QString &profile)
+{
+    const auto directory=steamRecoveryDirectory(profile);
+    if(directory.isEmpty() || !safeSteamRecoveryDirectory(directory,false))return {};
+    const auto path=directory+"/steam-recovery.json";
+    QFileInfo info(path);
+    if(!info.exists())return {};
+    if(info.isSymLink() || !info.isFile() || info.size()<1 || info.size()>64*1024)return {};
+    QFile file(path);
+    if(!file.open(QIODevice::ReadOnly))return {};
+    QJsonParseError error;
+    const auto document=QJsonDocument::fromJson(file.readAll(),&error);
+    if(error.error!=QJsonParseError::NoError || !document.isObject())return {};
+    const auto root=document.object();
+    const auto games=root.value("games").toObject();
+    if(root.size()!=2 || !root.contains("version") || !root.value("games").isObject()
+       || root.value("version").toInt()!=1
+       || games.size()>64)return {};
+    QVariantMap result;
+    static const QRegularExpression appIdPattern("^[1-9][0-9]{0,9}$");
+    const QMap<QString,QStringList> allowed{
+        {"phase",{"starting","process_observed","ended","failed","canceled"}},
+        {"process",{"unknown","waiting","observed","gone"}},
+        {"installation",{"unknown","verified","unavailable"}},
+        {"client",{"unknown","available","unavailable"}},
+        {"ownership",{"unknown","owned","not_owned"}},
+        {"account",{"unknown","signed_in","signed_out"}},
+        {"connection",{"unknown","online","offline"}},
+        {"offline",{"unknown","ready","unavailable"}},
+        {"exit",{"unknown","exited","crashed"}},
+        {"local_save",{"unknown","flushed","failed"}},
+        {"cloud_save",{"unknown","synced","pending","failed"}},
+        {"session_end",{"incomplete","recovery_required"}},
+        {"error",{"none","bootstrap_failed","ownership_denied","auth_required","offline_unavailable","launch_failed","install_check_failed","client_unavailable","process_observation_failed"}}
+    };
+    const QSet<QString> fields{"version","appId","phase","recordedAt","process","installation","client","ownership","account",
+        "connection","offline","exit","local_save","cloud_save","session_end","error"};
+    for(auto it=games.begin();it!=games.end();++it){
+        const auto object=it.value().toObject();
+        QSet<QString> objectFields;
+        for(const auto &key:object.keys())objectFields.insert(key);
+        bool validAppId=false;
+        const auto numericAppId=it.key().toULongLong(&validAppId);
+        if(!appIdPattern.match(it.key()).hasMatch() || !validAppId || numericAppId>4294967295ULL
+           || QString::number(numericAppId)!=it.key() || object.size()!=fields.size()
+           || objectFields!=fields
+           || object.value("appId").toString()!=it.key() || object.value("version").toInt()!=2
+           || !object.value("recordedAt").isString() || object.value("recordedAt").toString().isEmpty()
+           || object.value("recordedAt").toString().size()>32)return {};
+        for(auto rule=allowed.cbegin();rule!=allowed.cend();++rule)
+            if(!object.value(rule.key()).isString() || !rule.value().contains(object.value(rule.key()).toString()))return {};
+        auto record=object.toVariantMap();
+        record.insert("recoveryPending",true);
+        result.insert(it.key(),record);
+    }
+    return result;
+}
+
+bool writeSteamRecoveryStatuses(const QString &profile,const QVariantMap &statuses)
+{
+    const auto directory=steamRecoveryDirectory(profile);
+    if(directory.isEmpty() || statuses.size()>64 || !safeSteamRecoveryDirectory(directory,true))return false;
+    QJsonObject games;
+    static const QRegularExpression appIdPattern("^[1-9][0-9]{0,9}$");
+    for(auto it=statuses.cbegin();it!=statuses.cend();++it){
+        if(!appIdPattern.match(it.key()).hasMatch() || it.value().metaType()!=QMetaType::fromType<QVariantMap>())return false;
+        auto record=it.value().toMap();
+        record.remove("recoveryPending");
+        record.insert("recordedAt",QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+        if(record.value("appId").toString()!=it.key() || record.value("version").toInt()!=2
+           || !QStringList{"starting","process_observed","ended","failed","canceled"}.contains(record.value("phase").toString())
+           || !QStringList{"incomplete","recovery_required"}.contains(record.value("session_end").toString()))return false;
+        games.insert(it.key(),QJsonObject::fromVariantMap(record));
+    }
+    const auto bytes=QJsonDocument(QJsonObject{{"version",1},{"games",games}}).toJson(QJsonDocument::Compact);
+    if(bytes.size()>64*1024)return false;
+    const auto path=directory+"/steam-recovery.json";
+    if(QFileInfo(path).isSymLink())return false;
+    QSaveFile file(path);
+    file.setDirectWriteFallback(false);
+    return file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size() && file.commit();
+}
+}
+
 SessionManager::SessionManager(AppRegistry *registry, QObject *parent)
-    : QObject(parent), m_registry(registry) {
+    : QObject(parent), m_registry(registry), m_profileId(qApp->property("isoldeProfile").toString()) {
+    m_steamRecoveryStatuses=loadSteamRecoveryStatuses(m_profileId);
     m_opticalTimer.setInterval(2500);
     connect(&m_opticalTimer,&QTimer::timeout,this,&SessionManager::refreshOpticalSession);
 }
@@ -43,6 +164,36 @@ SessionManager::~SessionManager()
 {
     if(m_session)disconnect(m_session.get(),nullptr,this,nullptr);
     m_session.reset();
+}
+
+bool SessionManager::acknowledgeSteamRecovery(const QString &identity)
+{
+    static const QRegularExpression appIdPattern("^[1-9][0-9]{0,9}$");
+    bool valid=false;const auto number=identity.toULongLong(&valid);
+    if(!appIdPattern.match(identity).hasMatch() || !valid || number>4294967295ULL
+       || QString::number(number)!=identity || !m_steamRecoveryStatuses.contains(identity))return false;
+    auto updated=m_steamRecoveryStatuses;
+    updated.remove(identity);
+    if(!writeSteamRecoveryStatuses(m_profileId,updated))return false;
+    m_steamRecoveryStatuses=updated;
+    emit steamRecoveryStatusesChanged();
+    return true;
+}
+
+void SessionManager::handleSteamProviderState(const QVariantMap &state)
+{
+    m_steamProviderState=state;
+    const auto identity=state.value("appId").toString();
+    if(QStringList{"incomplete","recovery_required"}.contains(state.value("session_end").toString())
+       && QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch()){
+        auto record=state;record.insert("recoveryPending",true);
+        auto updated=m_steamRecoveryStatuses;updated.insert(identity,record);
+        if(writeSteamRecoveryStatuses(m_profileId,updated)){
+            m_steamRecoveryStatuses=updated;
+            emit steamRecoveryStatusesChanged();
+        }
+    }
+    emit steamProviderStateChanged();
 }
 
 bool SessionManager::hasActiveSession() const { return m_session != nullptr; }
@@ -129,8 +280,7 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     auto *session = m_session.get();
     connect(session,&AppSession::steamProviderStateChanged,this,[this,session](const QVariantMap &state){
         if(m_session.get()!=session)return;
-        m_steamProviderState=state;
-        emit steamProviderStateChanged();
+        handleSteamProviderState(state);
     });
     connect(session,&AppSession::gamepadSessionStatusChanged,this,[this,session](const QVariantMap &state){
         if(m_session.get()!=session)return;

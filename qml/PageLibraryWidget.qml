@@ -151,6 +151,8 @@ Item {
             library:typeof gameLibrary!=="undefined"?gameLibrary:null
             dispatcher:typeof actionDispatcher!=="undefined"?actionDispatcher:null
             providerStatus:typeof sessionManager!=="undefined"?sessionManager.steamProviderState:({})
+            recoveryStatuses:typeof sessionManager!=="undefined"?sessionManager.steamRecoveryStatuses:({})
+            sessions:typeof sessionManager!=="undefined"?sessionManager:null
             originId:root.originId
             style:root.style;appearance:root.appearance
             engaged:root.engaged;readOnly:root.readOnly || root.frozen

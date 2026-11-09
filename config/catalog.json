@@ -47,6 +47,9 @@
     "packages/retroarch-nes/manifest.json",
     "packages/retroarch-gb/manifest.json",
     "packages/retroarch-gba/manifest.json",
-    "packages/retroarch-snes/manifest.json"
+    "packages/retroarch-snes/manifest.json",
+    "packages/retroarch-psx/manifest.json",
+    "packages/retroarch-ds/manifest.json",
+    "packages/retroarch-vb/manifest.json"
   ]
 }

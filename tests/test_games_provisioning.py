@@ -93,7 +93,7 @@ except games.ProvisioningCancelled:
             root=Path(directory);state,manifest,routes=self.launcher_receipt(root)
             with patch.object(games,"runtime_manifest",return_value=(manifest,routes)):
                 written=games.register_launchers(state,root)
-                self.assertEqual(len(written),8)
+                self.assertEqual(len(written),len(routes)+1)
                 original={p:Path(p).read_bytes() for p in written}
                 games.register_launchers(state,root)
                 self.assertEqual(original,{p:Path(p).read_bytes() for p in written})
@@ -109,7 +109,7 @@ except games.ProvisioningCancelled:
             root=Path(directory);state,manifest,routes=self.launcher_receipt(root)
             with patch.object(games,"runtime_manifest",return_value=(manifest,routes)):
                 written=games.register_launchers(state)
-                self.assertEqual(len(written),8)
+                self.assertEqual(len(written),len(routes)+1)
                 self.assertTrue(all(Path(path).parent==root/"applications" for path in written))
 
 
@@ -412,7 +412,7 @@ class EmulatorAdapterTests(unittest.TestCase):
     def test_all_declared_routes_build_identity_only_commands(self):
         for identity in self.runtime_definitions:
             runtime,target=self.runtime(identity,self.runtime_definitions[identity]["formats"][0])
-            if identity=="pcsx2":
+            if identity in {"pcsx2","retroarch-psx"}:
                 with self.assertRaisesRegex(ValueError,"firmware is required"):adapter.command(runtime,target,self.home)
                 continue
             with patch.object(adapter,"dolphin_controller",return_value="Xbox Controller"):
@@ -472,6 +472,101 @@ class EmulatorAdapterTests(unittest.TestCase):
         self.assertIn('config_save_on_exit = "false"',config)
         self.assertIn(str(self.home/"saves"),config)
 
+    def test_ds_and_virtual_boy_are_pinned_catalog_routes(self):
+        root=Path(__file__).parents[1]
+        catalog=json.loads((root/"config/catalog.json").read_text())
+        expected={
+            "retroarch-ds":("Nintendo DS",["nds"],"libretro-desmume",
+                "0.9.11+git20160819+dfsg1-2build2","desmume_libretro.so"),
+            "retroarch-vb":("Virtual Boy",["vb","vboy"],"libretro-beetle-vb",
+                "0.9.36.1+git20160623-2build2","mednafen_vb_libretro.so"),
+        }
+        for identity,(platform,formats,package,version,core) in expected.items():
+            with self.subTest(identity=identity):
+                route=self.runtime_definitions[identity]
+                self.assertEqual(route["platforms"],[platform])
+                self.assertEqual(route["formats"],formats)
+                self.assertEqual(route["packages"],["retroarch",package])
+                self.assertEqual(games.PACKAGES[package],(version,route["core"]))
+                self.assertEqual(Path(route["core"]).name,core)
+                self.assertFalse(route["firmwareRequired"])
+                manifest_path="packages/"+identity+"/manifest.json"
+                self.assertIn(manifest_path,catalog["packages"])
+                app=json.loads((root/"config"/manifest_path).read_text())["app"]
+                self.assertEqual(app["emulatorRuntime"],identity)
+                self.assertEqual(app["gameFormats"],formats)
+                runtime,target=self.runtime(identity,formats[0])
+                argv=adapter.command(runtime,target,self.home)
+                self.assertEqual(argv[-3:],["--libretro",runtime["core"],target])
+                Path(target).rename(Path(target).with_suffix(".bad"))
+                with self.assertRaisesRegex(ValueError,"format"):
+                    adapter.command(runtime,str(Path(target).with_suffix(".bad")),self.home)
+        coverage=json.loads((root/"config/game-runtimes.json").read_text())["generationCoverage"]
+        self.assertIn("Nintendo DSi",coverage["notIntegrated"])
+        self.assertNotIn("Nintendo DS",coverage["notIntegrated"])
+
+    def test_playstation_route_binds_chd_and_firmware(self):
+        root=Path(__file__).parents[1]
+        route=self.runtime_definitions["retroarch-psx"]
+        self.assertEqual(route["platforms"],["PlayStation"])
+        self.assertEqual(route["formats"],["chd"])
+        self.assertTrue(route["firmwareRequired"])
+        self.assertEqual(games.PACKAGES["libretro-beetle-psx"],
+            ("0.9.38.6+git20260227-1","/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so"))
+        cpp=(root/"src/games/GameEmulators.cpp").read_text()
+        for digest in adapter.PSX_FIRMWARE:
+            self.assertIn(digest,cpp)
+        manifest=json.loads((root/"config/packages/retroarch-psx/manifest.json").read_text())
+        self.assertEqual(manifest["app"]["gameFormats"],["chd"])
+        self.assertEqual(manifest["app"]["emulatorRuntime"],"retroarch-psx")
+        runtime,target=self.runtime("retroarch-psx","chd")
+        with self.assertRaisesRegex(ValueError,"firmware is required"):
+            adapter.command(runtime,target,self.home)
+        import hashlib
+        data=b"synthetic firmware"+bytes(512*1024-len(b"synthetic firmware"))
+        digest=hashlib.sha256(data).hexdigest()
+        name=digest+".bin"
+        adapter.atomic(self.home/"firmware"/name,data)
+        adapter.atomic(self.home/".config/isolde-emulator/settings.json",json.dumps({
+            "schemaVersion":1,"video":"automatic","controller":"xbox","firmware":name}).encode())
+        with patch.dict(adapter.PSX_FIRMWARE,{hashlib.sha1(data).hexdigest():"scph5501.bin"}):
+            argv=adapter.command(runtime,target,self.home)
+            self.assertEqual(argv[-3:],["--libretro",runtime["core"],target])
+            system=self.home/".config/isolde-emulator/generated"/("psx-"+digest)
+            self.assertEqual((system/"scph5501.bin").read_bytes(),data)
+            self.assertIn('system_directory = '+json.dumps(str(system)),
+                (self.home/".config/isolde-emulator/generated/retroarch.cfg").read_text())
+            config=(self.home/".config/isolde-emulator/generated/retroarch.cfg").read_text()
+            self.assertIn('auto_overrides_enable = "false"',config)
+            self.assertIn('game_specific_options = "false"',config)
+            (system/"scph5502.bin").write_bytes(b"unexpected")
+            with self.assertRaisesRegex(ValueError,"unexpected files"):
+                adapter.command(runtime,target,self.home)
+            (system/"scph5502.bin").unlink()
+            (self.home/"firmware"/name).write_bytes(bytes(len(data)))
+            with self.assertRaisesRegex(ValueError,"changed or is invalid"):
+                adapter.command(runtime,target,self.home)
+
+    def test_ds_controller_options_are_private_and_recreated(self):
+        runtime,target=self.runtime("retroarch-ds","nds")
+        (self.home/"saves").mkdir();save=self.home/"saves/game.dsv";save.write_bytes(b"save")
+        adapter.command(runtime,target,self.home)
+        base=self.home/".config/isolde-emulator/generated"
+        config=(base/"retroarch.cfg").read_text()
+        core=base/"desmume-options.cfg"
+        self.assertIn('core_options_path = '+json.dumps(str(core)),config)
+        self.assertIn('game_specific_options = "false"',config)
+        self.assertIn('global_core_options = "true"',config)
+        for value in ('desmume_screens_layout = "top/bottom"',
+                      'desmume_pointer_device = "r-stick"',
+                      'desmume_pointer_mouse = "disable"',
+                      'desmume_mic_mode = "internal"'):
+            self.assertIn(value,core.read_text())
+        core.write_text('desmume_pointer_device = "none"\n')
+        adapter.command(runtime,target,self.home)
+        self.assertIn('desmume_pointer_device = "r-stick"',core.read_text())
+        self.assertEqual(save.read_bytes(),b"save")
+
     def test_manifest_matrix_is_explicit_and_runtime_packages_are_bound(self):
         manifest=Path(__file__).parents[1]/"config/game-runtimes.json"
         document=json.loads(manifest.read_text())
@@ -479,6 +574,8 @@ class EmulatorAdapterTests(unittest.TestCase):
         self.assertIn("Original Xbox",document["generationCoverage"]["notIntegrated"])
         self.assertEqual(set(document["generationCoverage"]["integratedPlatforms"]),
             {platform for runtime in document["runtimes"] for platform in runtime["platforms"]})
+        declared={name for runtime in document["runtimes"] for name in runtime["packages"]}
+        self.assertEqual(declared,set(games.emulator_package_pins()))
         for runtime in document["runtimes"]:
             self.assertTrue(runtime["packages"])
             self.assertTrue(runtime["formats"])
@@ -494,6 +591,22 @@ class EmulatorAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/"manifest.json";path.write_text(json.dumps(document))
             with self.assertRaisesRegex(ValueError,"capability entry"):adapter.definitions(path)
+
+    def test_manifest_requires_engine_specific_pinned_core_packages(self):
+        manifest=Path(__file__).parents[1]/"config/game-runtimes.json"
+        original=json.loads(manifest.read_text())
+        mutations=(
+            lambda doc: doc["runtimes"][3].pop("core"),
+            lambda doc: doc["runtimes"][3]["packages"].remove("libretro-nestopia"),
+            lambda doc: doc["runtimes"][0].update(core="/usr/lib/untrusted.so"),
+            lambda doc: doc["runtimes"][0]["packages"].append("unverified-emulator"),
+        )
+        for mutate in mutations:
+            document=json.loads(json.dumps(original));mutate(document)
+            with self.subTest(document=document["runtimes"][0]), tempfile.TemporaryDirectory() as directory:
+                path=Path(directory)/"manifest.json";path.write_text(json.dumps(document))
+                with self.assertRaisesRegex(ValueError,"route|core"):
+                    adapter.definitions(path)
 
     def test_provisioned_runtime_fingerprint_binds_manifest_executable_and_core(self):
         manifest_hash,routes=games.inspect_runtimes({name:{"ready":True} for name in games.PACKAGES})

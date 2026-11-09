@@ -1,5 +1,7 @@
 # Executable backlog queue
 
+**Current scope and handoff:** T13 and T31 are excluded from project requirements and project averages. Continue toward 100% Coding across the remaining 25 tasks; only then start the testing agent, which reports every bug found. Older queue instructions to select T13/T31 are historical.
+
 Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/files/percentages: [agent-backlog.md](agent-backlog.md). This queue breaks execution into resumable outcomes without replacing or relaxing any linked requirement. A future selection reads the full owning gate before implementation. Tests below use the F/H/I/V/A ladder in the contract.
 
 **User testing-budget revision, 2026-10-29:** all I/full-suite references below are conditional under the contract's task-level budget: one task-closure run, applicable prior passes reused, additional runs only with a recorded concrete justification. They do not order a full run per row or small fix. Proceed across rows without asking or ending work at each checkpoint. Current Studio has verified full-G/focused-J application coverage and installed evidence; reuse it by scope rather than starting a broad test cycle for every slice.

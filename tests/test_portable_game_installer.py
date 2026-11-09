@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import stat
@@ -38,10 +39,13 @@ class PortableGameInstallerTests(unittest.TestCase):
             for item in extra: archive.writestr(*item)
 
     def package_ustar(self, compressed=False):
-        self.archive=self.root/("fixture.tar.gz" if compressed else "fixture.tar")
+        compression = "gzip" if compressed is True else compressed if compressed else ""
+        suffix = {"gzip": ".gz", "bzip2": ".bz2"}.get(compression, "")
+        mode = {"gzip": "w:gz", "bzip2": "w:bz2"}.get(compression, "w")
+        self.archive=self.root/("fixture.tar"+suffix)
         files=((installer.MANIFEST,json.dumps(self.manifest).encode(),0o644),
                ("bin/game",b"\x7fELF"+b"\x00"*32,0o755))
-        with tarfile.open(self.archive,"w:gz" if compressed else "w",format=tarfile.USTAR_FORMAT) as archive:
+        with tarfile.open(self.archive,mode,format=tarfile.USTAR_FORMAT) as archive:
             directory=tarfile.TarInfo("bin/");directory.type=tarfile.DIRTYPE;directory.mode=0o755
             archive.addfile(directory)
             for name,data,mode in files:
@@ -57,6 +61,322 @@ class PortableGameInstallerTests(unittest.TestCase):
         struct.pack_into("<H",data,0x80+24,0x20b)
         self.archive.write_bytes(data)
         return data
+
+    def native_fixture(self):
+        source=self.root/"Independent game"
+        shutil.copyfile(Path(sys.executable).resolve(),source)
+        return source
+
+    def game_directory_fixture(self):
+        source=self.root/"media"/"Sample Linux Game"
+        (source/"bin").mkdir(parents=True)
+        (source/"data"/"empty").mkdir(parents=True)
+        shutil.copyfile(Path(sys.executable).resolve(),source/"bin"/"game")
+        (source/"bin"/"game").chmod(0o755)
+        (source/"data"/"readme.txt").write_text("assets remain beside the copied executable\n",encoding="utf-8")
+        (source/"data"/"level.dat").write_bytes(b"game-data\x00\x01")
+        return source
+
+    def run_directory_helper(self,*arguments,check=True):
+        helper=str(Path(__file__).parents[1]/"tools/portable-game-installer.py")
+        return subprocess.run([sys.executable,helper,*map(str,arguments)],check=check,
+                              capture_output=True,text=True)
+
+    def test_directory_copy_full_cli_install_recovery_and_uninstall(self):
+        source=self.game_directory_fixture()
+        original={path.relative_to(source).as_posix():path.read_bytes()
+                  for path in source.rglob("*") if path.is_file()}
+        preview=json.loads(self.run_directory_helper(
+            "--inspect-directory","--source",source,"--entrypoint","bin/game").stdout)
+        self.assertEqual(preview["title"],source.name)
+        self.assertEqual(preview["platform"],"PC")
+        self.assertEqual(preview["entrypoint"],"bin/game")
+        self.assertEqual(preview["archiveFormat"],"directory-copy")
+        self.assertEqual(preview["archiveEntries"],6)
+        self.assertGreater(preview["unpackedBytes"],sum(map(len,original.values()))-1)
+        destination=self.root/"private"/"games"/"id"/"install"
+        result=self.run_directory_helper("--install-directory","--source",source,"--entrypoint","bin/game",
+            "--destination",destination,"--expected-sha256",preview["archiveSha256"])
+        self.assertEqual(json.loads(result.stdout)["archiveSha256"],preview["archiveSha256"])
+        copied={path.relative_to(destination).as_posix():path.read_bytes()
+                for path in destination.rglob("*") if path.is_file() and path.name!=".isolde-install.json"}
+        self.assertEqual(copied,original)
+        self.assertTrue((destination/"bin/game").stat().st_mode & stat.S_IXUSR)
+        recovered=installer.inspect_installed(destination)
+        self.assertEqual(recovered["archiveSha256"],preview["archiveSha256"])
+        self.assertEqual(source.joinpath("data/readme.txt").read_text(encoding="utf-8"),
+                         "assets remain beside the copied executable\n")
+        installer.prepare_uninstall(destination)
+        installer.recover_uninstall(destination)
+        self.assertTrue((destination/"data/level.dat").is_file())
+        (destination/"unowned-user-file").write_bytes(b"preserve")
+        with self.assertRaisesRegex(ValueError,"unowned files"):
+            installer.uninstall(destination)
+        self.assertEqual((destination/"unowned-user-file").read_bytes(),b"preserve")
+        (destination/"unowned-user-file").unlink()
+        installer.uninstall(destination)
+        self.assertFalse(destination.exists())
+        self.assertEqual(source.joinpath("bin/game").read_bytes(),original["bin/game"])
+
+    def test_directory_title_is_trimmed_for_catalog_registration(self):
+        source=self.game_directory_fixture()
+        renamed=source.with_name("  Sample Linux Game  ")
+        source.rename(renamed)
+        preview=installer.inspect_directory(renamed,"bin/game")
+        self.assertEqual(preview["title"],"Sample Linux Game")
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install_directory(renamed,destination,"bin/game",preview["archiveSha256"])
+        self.assertEqual(installer.inspect_installed(destination)["title"],preview["title"])
+
+    def test_bundle_metadata_respects_qt_utf16_catalog_limits(self):
+        for field,value in (("title","\U0001f3ae"*129),("platform","\U0001f3ae"*41),
+                            ("title","\ud800")):
+            with self.subTest(field=field):
+                self.package(manifest={**self.manifest,field:value})
+                with self.assertRaisesRegex(ValueError,"invalid fields"):
+                    installer.inspect(self.archive)
+        self.package(manifest={**self.manifest,"title":"\U0001f3ae"*128})
+        self.assertEqual(installer.inspect(self.archive)["title"],"\U0001f3ae"*128)
+        with self.assertRaisesRegex(ValueError,"filename"):
+            installer.inspect(self.native_fixture(),title_hint="\U0001f3ae"*129)
+
+    def test_directory_copy_refuses_changed_content_after_review(self):
+        source=self.game_directory_fixture()
+        preview=installer.inspect_directory(source,"bin/game")
+        (source/"data/level.dat").write_bytes(b"changed after preflight")
+        destination=self.root/"private"/"games"/"id"/"install"
+        with self.assertRaisesRegex(ValueError,"changed after preflight"):
+            installer.install_directory(source,destination,"bin/game",preview["archiveSha256"])
+        self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name("install.staging").exists())
+
+    def test_directory_inspection_rejects_entrypoint_replaced_after_tree_scan(self):
+        source=self.game_directory_fixture()
+        original_scan=installer._inspect_directory_tree
+        entrypoint=source/"bin/game"
+        def scan_then_replace(root):
+            inventory=original_scan(root)
+            content=entrypoint.read_bytes()
+            entrypoint.write_bytes(content[:-1]+bytes([content[-1]^1]))
+            return inventory
+        with mock.patch.object(installer,"_inspect_directory_tree",side_effect=scan_then_replace):
+            with self.assertRaisesRegex(ValueError,"changed after preflight"):
+                installer.inspect_directory(source,"bin/game")
+
+    def test_directory_inspection_rejects_root_replaced_between_stat_and_open(self):
+        source=self.game_directory_fixture()
+        original_open=os.open
+        moved=source.with_name(source.name+"-original")
+        swapped=False
+        def replace_before_open(path,*args,**kwargs):
+            nonlocal swapped
+            if Path(path)==source and not swapped:
+                swapped=True
+                source.rename(moved)
+                source.mkdir()
+            return original_open(path,*args,**kwargs)
+        with mock.patch.object(installer.os,"open",side_effect=replace_before_open):
+            with self.assertRaisesRegex(ValueError,"changed while it was being opened"):
+                installer.inspect_directory(source,"bin/game")
+        self.assertTrue(swapped)
+
+    def test_directory_copy_closes_source_fd_when_staging_file_open_fails(self):
+        source=self.game_directory_fixture()
+        preview=installer.inspect_directory(source,"bin/game")
+        destination=self.root/"private"/"games"/"id"/"install"
+        original_open=os.open
+        opened=[]
+        def fail_staging_open(path,*args,**kwargs):
+            if isinstance(path,Path) and path==destination.with_name("install.staging")/"bin/game":
+                raise OSError("injected staging open failure")
+            descriptor=original_open(path,*args,**kwargs)
+            if path=="game":
+                opened.append(descriptor)
+            return descriptor
+        with mock.patch.object(installer.os,"open",side_effect=fail_staging_open):
+            with self.assertRaisesRegex(OSError,"injected staging open failure"):
+                installer.install_directory(source,destination,"bin/game",preview["archiveSha256"])
+        self.assertTrue(opened)
+        for descriptor in opened:
+            with self.assertRaises(OSError):
+                os.fstat(descriptor)
+        self.assertFalse(destination.with_name("install.staging").exists())
+
+    def test_directory_copy_detects_source_change_during_copy_and_discards_stage(self):
+        source=self.game_directory_fixture()
+        preview=installer.inspect_directory(source,"bin/game")
+        destination=self.root/"private"/"games"/"id"/"install"
+        original_scan=installer._inspect_directory_tree
+        scans=0
+        def mutate_after_copy_inventory(path):
+            nonlocal scans
+            result=original_scan(path)
+            scans+=1
+            if scans==2:
+                (source/"data/level.dat").write_bytes(b"changed while copying")
+            return result
+        with mock.patch.object(installer,"_inspect_directory_tree",side_effect=mutate_after_copy_inventory):
+            with self.assertRaisesRegex(ValueError,"changed (during copy|after preflight)"):
+                installer.install_directory(source,destination,"bin/game",preview["archiveSha256"])
+        self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name("install.staging").exists())
+
+    def test_directory_copy_refuses_symlinks_hardlinks_and_special_files(self):
+        source=self.game_directory_fixture()
+        linked_root=self.root/"linked-game-root"
+        linked_root.symlink_to(source,target_is_directory=True)
+        with self.assertRaisesRegex(ValueError,"real game directory"):
+            installer.inspect_directory(linked_root,"bin/game")
+        (source/"linked-data").symlink_to(source/"data",target_is_directory=True)
+        with self.assertRaisesRegex(ValueError,"symbolic links"):
+            installer.inspect_directory(source,"bin/game")
+        (source/"linked-data").unlink()
+        os.link(source/"data/level.dat",source/"data/hard-linked.dat")
+        with self.assertRaisesRegex(ValueError,"hard links"):
+            installer.inspect_directory(source,"bin/game")
+        (source/"data/hard-linked.dat").unlink()
+        os.mkfifo(source/"data/pipe")
+        with self.assertRaisesRegex(ValueError,"special files"):
+            installer.inspect_directory(source,"bin/game")
+
+    def test_directory_copy_rejects_unsafe_entrypoints_and_non_elf_files(self):
+        source=self.game_directory_fixture()
+        for entrypoint in ("../bin/game","/bin/game","bin/../game","data/readme.txt"):
+            with self.subTest(entrypoint=entrypoint):
+                with self.assertRaises(ValueError):
+                    installer.inspect_directory(source,entrypoint)
+        (source/"bin/game").write_bytes(b"not an executable")
+        with self.assertRaisesRegex(ValueError,"native x86-64 Linux ELF"):
+            installer.inspect_directory(source,"bin/game")
+
+    def test_directory_copy_enforces_entry_depth_size_and_entry_limits(self):
+        source=self.game_directory_fixture()
+        with mock.patch.object(installer,"MAX_ENTRIES",3):
+            with self.assertRaisesRegex(ValueError,"10,000-entry"):
+                installer.inspect_directory(source,"bin/game")
+        with mock.patch.object(installer,"MAX_TREE_DEPTH",1):
+            with self.assertRaisesRegex(ValueError,"32-level"):
+                installer.inspect_directory(source,"bin/game")
+        with mock.patch.object(installer,"MAX_TREE_PATH_BYTES",1):
+            with self.assertRaisesRegex(ValueError,"4 MiB"):
+                installer.inspect_directory(source,"bin/game")
+        with mock.patch.object(installer,"MAX_EXPANDED",1):
+            with self.assertRaisesRegex(ValueError,"2 GiB"):
+                installer.inspect_directory(source,"bin/game")
+        with mock.patch.object(installer,"MAX_ARCHIVE",100):
+            with self.assertRaisesRegex(ValueError,"512 MiB per-file"):
+                installer.inspect_directory(source,"bin/game")
+
+    def test_directory_copy_checks_free_space_and_publication_races(self):
+        source=self.game_directory_fixture()
+        preview=installer.inspect_directory(source,"bin/game")
+        destination=self.root/"private"/"games"/"id"/"install"
+        with mock.patch.object(installer.shutil,"disk_usage",return_value=type("Usage",(),{"free":1})()):
+            with self.assertRaisesRegex(ValueError,"Insufficient free space"):
+                installer.install_directory(source,destination,"bin/game",preview["archiveSha256"])
+        self.assertFalse(destination.exists())
+        free=type("Usage",(),{"free":10**9})()
+        insufficient=type("Usage",(),{"free":1})()
+        with mock.patch.object(installer.shutil,"disk_usage",side_effect=[free,free,insufficient]):
+            with self.assertRaisesRegex(ValueError,"Free space fell below"):
+                installer.install_directory(source,destination,"bin/game",preview["archiveSha256"])
+        self.assertFalse(destination.with_name("install.staging").exists())
+        publish=installer.rename_without_replace
+        def race(staging,target):
+            destination.mkdir()
+            (destination/"existing").write_bytes(b"keep")
+            return publish(staging,target)
+        with mock.patch.object(installer,"rename_without_replace",side_effect=race):
+            with self.assertRaises(OSError):
+                installer.install_directory(source,destination,"bin/game",preview["archiveSha256"])
+        self.assertEqual((destination/"existing").read_bytes(),b"keep")
+        self.assertFalse(destination.with_name("install.staging").exists())
+
+    def test_native_executable_cli_review_install_recovery_and_uninstall(self):
+        source=self.native_fixture()
+        original=source.read_bytes()
+        destination=self.root/"private"/"games"/"id"/"install"
+        helper=str(Path(__file__).parents[1]/"tools/portable-game-installer.py")
+        preview=json.loads(subprocess.run(
+            [sys.executable,helper,"--inspect","--source",str(source)],
+            check=True,capture_output=True,text=True).stdout)
+        self.assertEqual(preview["archiveFormat"],"native-elf")
+        self.assertEqual(preview["title"],source.name)
+        self.assertEqual(preview["entrypoint"],"bin/game")
+        installed=json.loads(subprocess.run(
+            [sys.executable,helper,"--install","--source",str(source),"--destination",str(destination),
+             "--expected-sha256",preview["archiveSha256"]],
+            check=True,capture_output=True,text=True).stdout)
+        self.assertEqual(installed,preview)
+        self.assertEqual((destination/"bin/game").read_bytes(),original)
+        self.assertTrue((destination/"bin/game").stat().st_mode & stat.S_IXUSR)
+        self.assertEqual(source.read_bytes(),original)
+        recovered=installer.inspect_installed(destination)
+        self.assertEqual(recovered["title"],preview["title"])
+        self.assertEqual(recovered["archiveSha256"],preview["archiveSha256"])
+        installer.prepare_uninstall(destination)
+        installer.recover_uninstall(destination)
+        installer.uninstall(destination)
+        self.assertFalse(destination.exists())
+        self.assertEqual(source.read_bytes(),original)
+
+    def test_native_executable_rejects_bad_headers_and_appimages(self):
+        source=self.native_fixture()
+        original=source.read_bytes()
+        variants=[]
+        for offset,replacement in ((4,b"\x01"),(5,b"\x02"),(16,struct.pack("<H",1)),
+                                   (18,struct.pack("<H",3)),(24,b"\0"*8),
+                                   (32,struct.pack("<Q",len(original))),
+                                   (8,b"AI\x02")):
+            data=bytearray(original);data[offset:offset+len(replacement)]=replacement
+            variants.append(data)
+        variants.append(original[:24])
+        for data in variants:
+            with self.subTest(header=data[:64]):
+                source.write_bytes(data)
+                with self.assertRaises(ValueError):
+                    installer.inspect(source)
+        source.write_bytes(original)
+        link=self.root/"linked-game";link.symlink_to(source)
+        with self.assertRaises(ValueError):installer.inspect(link)
+        with mock.patch.object(installer,"MAX_ARCHIVE",len(original)-1):
+            with self.assertRaises(ValueError):installer.inspect(source)
+        with self.assertRaises(ValueError):installer.inspect(source,title_hint="\udcff")
+
+    def test_native_install_preserves_destination_on_publication_failure(self):
+        source=self.native_fixture()
+        destination=self.root/"private"/"games"/"id"/"install"
+        def race(staging, target):
+            destination.mkdir()
+            (destination/"existing").write_bytes(b"keep")
+            return original_publish(staging,target)
+        original_publish=installer.rename_without_replace
+        with mock.patch.object(installer,"rename_without_replace",side_effect=race):
+            with self.assertRaises(OSError):
+                installer.install(source,destination,installer.inspect(source)["archiveSha256"])
+        self.assertEqual((destination/"existing").read_bytes(),b"keep")
+        self.assertFalse(destination.with_name("install.staging").exists())
+        self.assertFalse(destination.with_name("install.staging-source").exists())
+
+    def test_native_executable_changed_after_review_is_not_installed(self):
+        source=self.native_fixture()
+        preview=installer.inspect(source)
+        with source.open("ab") as output:output.write(b"changed")
+        destination=self.root/"private"/"games"/"id"/"install"
+        with self.assertRaisesRegex(ValueError,"changed after preflight"):
+            installer.install(source,destination,preview["archiveSha256"])
+        self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name("install.staging").exists())
+        self.assertFalse(destination.with_name("install.staging-source").exists())
+
+    def test_native_uninstall_preserves_modified_payload(self):
+        source=self.native_fixture()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(source,destination,installer.inspect(source)["archiveSha256"])
+        with (destination/"bin/game").open("ab") as output:output.write(b"changed")
+        with self.assertRaisesRegex(ValueError,"changed after installation"):
+            installer.uninstall(destination)
+        self.assertTrue((destination/"bin/game").exists())
 
     def test_windows_pe_preflight_is_inert_and_explicitly_unsupported(self):
         data=self.windows_fixture()
@@ -124,13 +444,39 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.assertFalse(installed.with_name(installed.name+".staging").exists())
         self.assertFalse(installed.with_name(installed.name+".staging-source").exists())
 
+    def test_preflight_refuses_archive_modified_during_inspection(self):
+        self.package()
+        original=installer.open_bundle
+        def mutate(stream, archive_format):
+            with self.archive.open("ab") as output:
+                output.write(b"changed")
+            return original(stream,archive_format)
+        with mock.patch.object(installer,"open_bundle",side_effect=mutate):
+            with self.assertRaisesRegex(ValueError,"changed during preflight"):
+                installer.inspect(self.archive)
+
     def test_write_failure_removes_unpublished_staging_data(self):
         self.package()
         destination=self.root/"private"/"games"/"id"/"install"
-        with mock.patch.object(installer.os,"replace",side_effect=OSError("simulated publication failure")):
+        with mock.patch.object(installer,"rename_without_replace",side_effect=OSError("simulated publication failure")):
             with self.assertRaisesRegex(OSError,"publication failure"):
                 installer.install(self.archive,destination)
         self.assertFalse(destination.exists())
+        self.assertFalse(destination.with_name(destination.name+".staging").exists())
+        self.assertFalse(destination.with_name(destination.name+".staging-source").exists())
+
+    def test_publication_preserves_destination_created_after_preflight(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        publish=installer.rename_without_replace
+        def race(source, target):
+            destination.mkdir()
+            return publish(source,target)
+        with mock.patch.object(installer,"rename_without_replace",side_effect=race):
+            with self.assertRaises(OSError):
+                installer.install(self.archive,destination)
+        self.assertTrue(destination.is_dir())
+        self.assertEqual(list(destination.iterdir()),[])
         self.assertFalse(destination.with_name(destination.name+".staging").exists())
         self.assertFalse(destination.with_name(destination.name+".staging-source").exists())
 
@@ -209,6 +555,47 @@ class PortableGameInstallerTests(unittest.TestCase):
         with self.assertRaises((ValueError, EOFError, tarfile.TarError, OSError)):
             installer.inspect(self.archive)
 
+    def test_bzip2_ustar_full_install_recovery_and_uninstall(self):
+        self.package_ustar(compressed="bzip2")
+        preview=installer.inspect(self.archive)
+        self.assertEqual(preview["archiveFormat"],"ustar-bzip2")
+        destination=self.root/"private"/"bzip2"/"install"
+        installer.install(self.archive,destination,preview["archiveSha256"])
+        self.assertEqual((destination/"bin/game").read_bytes(),b"\x7fELF"+b"\x00"*32)
+        recovered=installer.inspect_installed(destination)
+        self.assertEqual(recovered["archiveSha256"],preview["archiveSha256"])
+        installer.prepare_uninstall(destination)
+        installer.recover_uninstall(destination)
+        self.assertTrue((destination/"bin/game").is_file())
+        installer.uninstall(destination)
+        self.assertFalse(destination.exists())
+
+    def test_bzip2_truncation_and_expansion_limits_are_rejected(self):
+        self.package_ustar(compressed="bzip2")
+        with mock.patch.object(installer,"MAX_EXPANDED",20):
+            with self.assertRaisesRegex(ValueError,"unpacked size"):
+                installer.inspect(self.archive)
+        self.archive.write_bytes(self.archive.read_bytes()[:20])
+        with self.assertRaises((ValueError, EOFError, tarfile.TarError, OSError, RuntimeError)):
+            installer.inspect(self.archive)
+
+    def test_xz_ustar_is_explicitly_rejected_before_decompression(self):
+        self.archive=self.root/"fixture.tar.xz"
+        self.archive.write_bytes(b"\xfd7zXZ\x00" + b"attacker-controlled-stream")
+        with self.assertRaisesRegex(ValueError,"XZ-compressed USTAR bundles are unsupported"):
+            installer.inspect(self.archive)
+
+    def test_malformed_bzip2_stream_has_a_bounded_user_facing_error(self):
+        self.archive=self.root/"malformed.tar.bz2"
+        self.archive.write_bytes(b"BZh9" + b"not-a-bzip2-stream")
+        result=subprocess.run(
+            [sys.executable,str(Path(__file__).parents[1]/"tools/portable-game-installer.py"),
+             "--inspect","--source",str(self.archive)],
+            capture_output=True,text=True)
+        self.assertEqual(result.returncode,2)
+        self.assertIn("Portable game install:",result.stderr)
+        self.assertNotIn("Traceback",result.stderr)
+
     def test_uninstall_preserves_modified_or_unowned_payloads(self):
         self.package()
         destination=self.root/"private"/"games"/"id"/"install"
@@ -280,6 +667,42 @@ class PortableGameInstallerTests(unittest.TestCase):
                 installer.finalize_uninstall(destination)
         self.assertEqual((pending/"bin"/"new-save").read_bytes(),b"keep")
         self.assertTrue((pending/".isolde-install.json").exists())
+
+    def test_interrupted_cleanup_can_resume_without_touching_saves(self):
+        self.package(extra=[("extra", b"owned")])
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        (pending/"bin"/"game").unlink()
+        (pending/"bin").rmdir()
+        save=self.root/"private"/"save.dat"
+        save.write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"missing or unowned"):
+            installer.finalize_uninstall(destination)
+        helper=Path(__file__).parents[1]/"tools/portable-game-installer.py"
+        result=subprocess.run([sys.executable,str(helper),"--resume-uninstall","--root",str(destination)],
+                              check=True,capture_output=True,text=True)
+        self.assertTrue(json.loads(result.stdout)["removed"])
+        self.assertFalse(pending.exists())
+        self.assertEqual(save.read_bytes(),b"keep")
+
+    def test_resume_refuses_modified_or_unowned_remaining_files(self):
+        self.package(extra=[("extra", b"owned")])
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        (pending/"bin"/"game").unlink()
+        (pending/"extra").write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError,"changed after installation"):
+            installer.finalize_uninstall(destination,allow_missing=True)
+        self.assertEqual((pending/"extra").read_bytes(),b"changed")
+        (pending/"extra").write_bytes(b"owned")
+        (pending/"new-save").write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"unowned"):
+            installer.finalize_uninstall(destination,allow_missing=True)
+        self.assertEqual((pending/"new-save").read_bytes(),b"keep")
 
     def test_cleanup_preserves_file_changed_after_verification(self):
         self.package()
