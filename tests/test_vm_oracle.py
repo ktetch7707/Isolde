@@ -295,8 +295,11 @@ class OracleTests(unittest.TestCase):
         path=Path(__file__).resolve().parents[1]
         spec=importlib.util.spec_from_file_location('guide_feature_keys',path/'tools/guide_features.py');features=importlib.util.module_from_spec(spec);spec.loader.exec_module(features)
         source=(path/'qml/OnScreenKeyboard.qml').read_text()
-        arrays=re.search(r'readonly property var keys: shift\s*\?\s*(\[[\s\S]*?\])\s*:\s*(\[[\s\S]*?\])',source)
+        arrays=re.search(r'const letters = shift\s*\?\s*(\[[^\n]+\])\s*:\s*(\[[^\n]+\])',source)
         self.assertIsNotNone(arrays);upper,lower=(json.loads(arrays.group(index)) for index in (1,2))
+        prefix=list('1234567890');suffix=['-','_','.','@','#','!','?',',',':','/','{','}','\\','Del','Space','Clear','Done','ABC','123','#+=']
+        upper=prefix+upper+suffix;lower=prefix+lower+suffix
+        self.assertEqual(features.keyboard_letters(),(upper,lower))
         for text in ('/tmp/isolde-tv-acceptance-test/channel.json','/home/isolde-dev/Videos/Isolde-Acceptance/Poster.png','saved tv','http://127.0.0.1:12345/stream.ogv'):
             at=0;shift=False;value='previous draft';accepted=[];events=[]
             def key(command):
@@ -1053,6 +1056,26 @@ class OracleTests(unittest.TestCase):
         result=subprocess.run(oracle.ctest_command(build,build/'results.xml'),capture_output=True,text=True,timeout=15)
         self.assertNotEqual(result.returncode,0);self.assertFalse(marker.exists())
         self.assertIn('first',result.stdout)
+
+    def test_campaign_continuation_retains_failures_and_refuses_unknown_or_repeated_results(self):
+        results=[{'name':'first','state':'failed'}]
+        self.assertEqual(oracle.campaign_pending(['first','later'],results),['later'])
+        self.assertEqual(results,[{'name':'first','state':'failed'}])
+        for invalid in (results+results,[{'name':'foreign','state':'passed'}]):
+            with self.assertRaises(RuntimeError):oracle.campaign_pending(['first','later'],invalid)
+        xml=self.root/'campaign.xml'
+        xml.write_text('<testsuite><testcase name="first"><failure/></testcase><testcase name="later"/></testsuite>')
+        self.assertEqual(oracle.campaign_results(xml),[{'name':'first','state':'failed'},{'name':'later','state':'passed'}])
+
+    def test_diagnostic_staging_never_claims_pass_or_accepts_incomplete_campaign(self):
+        progress={'acceptance':False,'registered':['first'],'results':[{'name':'first','state':'failed'}],
+                  'pending':[],'sourceDigest':'source','runs':['base','next']}
+        receipt={'acceptance':False,'passed':False,'fullSuite':False,'sourceDigest':'source','runs':['base','next'],'payload':{'bin/isolde':'hash'}}
+        self.assertTrue(oracle.diagnostic_campaign_receipt(receipt,progress))
+        for field in ('passed','acceptance','fullSuite'):
+            with self.assertRaises(RuntimeError):oracle.diagnostic_campaign_receipt(dict(receipt,**{field:True}),progress)
+        with self.assertRaises(RuntimeError):oracle.diagnostic_campaign_receipt(receipt,dict(progress,pending=['first']))
+        with self.assertRaises(RuntimeError):oracle.diagnostic_campaign_receipt(dict(receipt,sourceDigest='different'),progress)
 
     def test_source_policy_suite_runs_registered_native_contracts(self):
         targets,pattern=oracle.suite_selection('sources')

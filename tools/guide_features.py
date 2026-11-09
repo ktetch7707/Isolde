@@ -12,7 +12,20 @@ from datetime import datetime
 from xml.etree import ElementTree
 
 PHASES=['guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated','guidedirectdraft','guidedirectpreview','guidedirectimported','guidefeedrefreshfailed']
-KEYS=['1','2','3','4','5','6','7','8','9','0','q','w','e','r','t','y','u','i','o','p','a','s','d','f','g','h','j','k','l','-','Shift','z','x','c','v','b','n','m','_','Del','Space','.','@','#','!','?',',',':','/','Clear','Done']
+def keyboard_letters():
+    """Read the production letter layout; fail if its contract changes again."""
+    source=(Path(__file__).resolve().parents[1]/'qml/OnScreenKeyboard.qml').read_text()
+    letters=re.search(r'const letters = shift\s*\?\s*(\[[^\n]+\])\s*:\s*(\[[^\n]+\])',source)
+    composition=re.search(r'return (\[[^\n]+?\])\.concat\(letters, (\[[^\n]+?\]), actions\)',source)
+    actions=re.search(r'const actions = (\[[^\n]+?\])\.concat\(modes\)',source)
+    modes=re.search(r'const modes = (\[[^\n]+?\])',source)
+    if not all((letters,composition,actions,modes)):
+        raise AssertionError('Production keyboard layout contract changed')
+    prefix,suffix=(json.loads(composition.group(i)) for i in (1,2))
+    tail=json.loads(actions.group(1))+json.loads(modes.group(1))
+    return tuple(prefix+json.loads(letters.group(i))+suffix+tail for i in (1,2))
+
+UPPER_KEYS,KEYS=keyboard_letters()
 
 
 def remote_text(key,text):
@@ -34,7 +47,7 @@ def remote_text(key,text):
         upper=char.isupper()
         if upper:
             move(KEYS.index('Shift'),KEYS);key('Return');shift=True
-        values=([value.upper() if len(value)==1 and value.isalpha() else value for value in KEYS[:-2]]+['{','}','\\','Clear','Done']) if shift else KEYS
+        values=UPPER_KEYS if shift else KEYS
         label='Space' if char==' ' else char
         if label not in values:raise AssertionError('Fixture text needs an unsupported remote keyboard character')
         move(values.index(label),values);key('Return');shift=False
