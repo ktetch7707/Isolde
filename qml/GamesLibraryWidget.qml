@@ -249,7 +249,7 @@ Item {
             if(choice===0){
                 const status=library.revalidateOpticalDisc(opticalObservationId,opticalDevice)
                 if(status.state!=="ready"){message=status.state==="replaced"?"The drive now reports different media. Refresh and review it again.":"The selected disc is no longer mounted. Insert it and refresh.";return}
-                if(!status.disc.directPlaySupported){message="Full-disc verification is not ready. Wait or return to the disc list and refresh to retry; nothing will launch automatically.";return}
+                if(!status.disc.directPlaySupported){message=status.disc.mountTracking==="unavailable"?"This system cannot identify the mounted disc instance. Direct Play is unavailable; update the kernel or use another supported system.":"Full-disc verification is not ready. Wait or return to the disc list and refresh to retry; nothing will launch automatically.";return}
                 registeringOpticalGame=true;mode="installerRuntime";choice=0;message="Choose an installed native file runtime. Registration requires a relative executable path and title. Only directly executable Linux ELF files are supported; scripts/installers are never autorun.";return
             }
             if(choice===1){

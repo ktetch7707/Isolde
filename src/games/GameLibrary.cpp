@@ -1588,7 +1588,9 @@ QString GameLibrary::registerOpticalGame(const QString &title,const QString &run
     const auto disc=media.value("disc").toMap();
     const auto root=OpticalDiscAdapter::rootReference(disc);
     if(root.isEmpty() || !disc.value("directPlaySupported").toBool()){
-        fail(tr("The disc's full-content identity is not ready. Wait for verification or refresh to retry."));return {};
+        fail(disc.value("mountTracking")=="unavailable"
+            ?tr("This system cannot identify the mounted disc instance. Direct Play is unavailable; update the kernel or use another supported system.")
+            :tr("The disc's full-content identity is not ready. Wait for verification or refresh to retry."));return {};
     }
     const auto grantError=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
     if(!grantError.isEmpty()){fail(grantError);return {};}
