@@ -73,17 +73,24 @@ void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
     QTemporaryDir root;QVERIFY(root.isValid());
     const auto sys=root.filePath("sys"),devices=root.filePath("dev");
     QVERIFY(QDir().mkpath(devices));
-    const auto addNode=[&](const QString &name,const QString &bitmap){
+    const auto addNode=[&](const QString &name,const QString &bitmap,const QString &deviceNumber={}){
         const auto capability=sys+"/"+name+"/device/capabilities/key";
         QVERIFY(QDir().mkpath(QFileInfo(capability).absolutePath()));
         QFile file(capability);QVERIFY(file.open(QIODevice::WriteOnly));
         QCOMPARE(file.write(bitmap.toLatin1()),qint64(bitmap.toLatin1().size()));file.close();
+        const auto suffix=name.mid(name.startsWith("event")?5:2).toUInt();
+        const auto expected=name.startsWith("event")?64+suffix:suffix;
+        const auto devPath=sys+"/"+name+"/dev";
+        QFile dev(devPath);QVERIFY(dev.open(QIODevice::WriteOnly));
+        const auto number=deviceNumber.isEmpty()?QString("13:%1").arg(expected):deviceNumber;
+        QCOMPARE(dev.write(number.toLatin1()),qint64(number.toLatin1().size()));dev.close();
         QFile device(devices+"/"+name);QVERIFY(device.open(QIODevice::WriteOnly));device.close();
     };
     addNode("event0","0 0 0 0 1000000000000"); // BTN_GAMEPAD, not ordinary keys.
     addNode("event1","40000000 0 0 0 0"); // Keyboard key.
     addNode("js0","0 0 0 0 1000000000000");
     addNode("event1000","0 0 0 0 1000000000000"); // Outside the node grammar.
+    addNode("event3","0 0 0 0 1000000000000","13:99"); // Sysfs number does not match the endpoint.
     QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
              QStringList({devices+"/event0",devices+"/js0"}));
 
@@ -97,6 +104,11 @@ void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
 void NativeSandboxTests::gamepadCharacterDeviceNumbersAreExactAndBounded()
 {
     uint major=0,minor=0;
+    const QString gamepadKeys="0 0 0 0 1000000000000";
+    QVERIFY(GamepadTopology::verifiedGamepadNode("event0",gamepadKeys,"13:64"));
+    QVERIFY(GamepadTopology::verifiedGamepadNode("js0",gamepadKeys,"13:0"));
+    QVERIFY(!GamepadTopology::verifiedGamepadNode("event0",gamepadKeys,"13:65"));
+    QVERIFY(!GamepadTopology::verifiedGamepadNode("event0","0 0 0 0 0","13:64"));
     QVERIFY(GamepadTopology::deviceNumber("event0","13:64",&major,&minor));
     QCOMPARE(major,13u);QCOMPARE(minor,64u);
     QVERIFY(GamepadTopology::deviceNumber("event191","13:255",&major,&minor));

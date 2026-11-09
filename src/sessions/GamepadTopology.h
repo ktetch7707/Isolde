@@ -22,6 +22,28 @@ inline bool deviceNumber(const QString &name, const QString &text, uint *major, 
     return true;
 }
 
+inline bool hasGamepadKeyCapabilities(const QString &bitmap)
+{
+    if(bitmap.isEmpty() || bitmap.size()>4096)return false;
+    const auto words=bitmap.split(' ',Qt::SkipEmptyParts);
+    if(words.isEmpty() || words.size()>512)return false;
+    for(const auto &word:words)
+        if(word.isEmpty() || word.size()>16 || !QRegularExpression("^[0-9a-fA-F]+$").match(word).hasMatch())return false;
+    for(int code=0x120;code<0x140;++code){
+        const auto word=words.size()-1-code/64;
+        if(word<0)continue;
+        bool ok=false;
+        const auto bits=words.at(word).toULongLong(&ok,16);
+        if(ok && (bits&(quint64(1)<<(code%64))))return true;
+    }
+    return false;
+}
+
+inline bool verifiedGamepadNode(const QString &name,const QString &bitmap,const QString &device)
+{
+    return hasGamepadKeyCapabilities(bitmap) && deviceNumber(name,device,nullptr,nullptr);
+}
+
 inline QVariantMap summarize(const QSet<QString> &connected, const QSet<QString> &availableAtLaunch,
                              const QSet<QString> &availableAfterLaunch = {})
 {

@@ -29,18 +29,15 @@
 #endif
 
 namespace {
-bool gamepadKeyBitmap(const QByteArray &bitmap)
+bool verifiedGamepadNode(const QDir &input,const QString &name)
 {
-    const auto words=QString::fromLatin1(bitmap).trimmed().split(' ',Qt::SkipEmptyParts);
-    if(words.isEmpty() || words.size()>512)return false;
-    for(int code=0x120;code<0x140;++code){
-        const auto word=words.size()-1-code/64;
-        if(word<0)continue;
-        bool ok=false;
-        const auto bits=words.at(word).toULongLong(&ok,16);
-        if(ok && (bits&(quint64(1)<<(code%64))))return true;
-    }
-    return false;
+    QFile capabilities(input.filePath(name+"/device/capabilities/key"));
+    QFile device(input.filePath(name+"/dev"));
+    if(!capabilities.open(QIODevice::ReadOnly) || !device.open(QIODevice::ReadOnly))return false;
+    const auto bitmap=capabilities.read(4097),number=device.read(32);
+    return bitmap.size()<=4096 && number.size()<32
+        && GamepadTopology::verifiedGamepadNode(name,QString::fromLatin1(bitmap).trimmed(),
+                                                 QString::fromLatin1(number).trimmed());
 }
 
 QSet<QString> connectedGamepadEvents()
@@ -48,11 +45,7 @@ QSet<QString> connectedGamepadEvents()
     QSet<QString> result;
     const QDir input("/sys/class/input");
     for(const auto &name:input.entryList({"event*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot,QDir::Name)){
-        if(!QRegularExpression("^event[0-9]{1,3}$").match(name).hasMatch())continue;
-        QFile capabilities(input.filePath(name+"/device/capabilities/key"));
-        if(!capabilities.open(QIODevice::ReadOnly))continue;
-        const auto bitmap=capabilities.read(4097);
-        if(bitmap.size()<=4096 && gamepadKeyBitmap(bitmap)){
+        if(verifiedGamepadNode(input,name)){
             result.insert(name);
             if(result.size()>=32)break;
         }
@@ -65,11 +58,7 @@ QSet<QString> connectedGamepadNodes()
     QSet<QString> result;
     const QDir input("/sys/class/input");
     for(const auto &name:input.entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot,QDir::Name)){
-        if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(name).hasMatch())continue;
-        QFile capabilities(input.filePath(name+"/device/capabilities/key"));
-        if(!capabilities.open(QIODevice::ReadOnly))continue;
-        const auto bitmap=capabilities.read(4097);
-        if(bitmap.size()<=4096 && gamepadKeyBitmap(bitmap))result.insert(name);
+        if(verifiedGamepadNode(input,name))result.insert(name);
         if(result.size()>=32)break;
     }
     return result;

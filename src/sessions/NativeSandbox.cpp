@@ -1,4 +1,5 @@
 #include "sessions/NativeSandbox.h"
+#include "sessions/GamepadTopology.h"
 #include "media/MediaGrants.h"
 #include "games/GameEmulators.h"
 #include "games/SteamLibraryGrants.h"
@@ -47,20 +48,7 @@ bool NativeSandbox::isGameSession(const QString &emulatorRuntime,const QString &
 }
 bool NativeSandbox::hasGamepadKeyCapabilities(const QString &bitmap)
 {
-    if(bitmap.isEmpty() || bitmap.size()>4096)return false;
-    const auto words=bitmap.split(' ',Qt::SkipEmptyParts);
-    if(words.isEmpty() || words.size()>512)return false;
-    for(const auto &word:words){
-        if(word.isEmpty() || word.size()>16 || !QRegularExpression("^[0-9a-fA-F]+$").match(word).hasMatch())return false;
-    }
-    for(int code=0x120;code<0x140;++code){
-        const auto word=words.size()-1-code/64;
-        if(word<0)continue;
-        bool ok=false;
-        const auto bits=words.at(word).toULongLong(&ok,16);
-        if(ok && (bits&(quint64(1)<<(code%64))))return true;
-    }
-    return false;
+    return GamepadTopology::hasGamepadKeyCapabilities(bitmap);
 }
 QStringList NativeSandbox::gamepadDeviceNodes(const QString &sysInputDirectory,const QString &deviceDirectory)
 {
@@ -70,10 +58,14 @@ QStringList NativeSandbox::gamepadDeviceNodes(const QString &sysInputDirectory,c
     for(const auto &node:nodes){
         if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(node).hasMatch())continue;
         const auto capabilityPath=sys.filePath(node+"/device/capabilities/key");
+        const auto devicePath=sys.filePath(node+"/dev");
         QFile capabilities(capabilityPath);
-        if(!capabilities.open(QIODevice::ReadOnly))continue;
+        QFile deviceNumber(devicePath);
+        if(!capabilities.open(QIODevice::ReadOnly) || !deviceNumber.open(QIODevice::ReadOnly))continue;
         const auto bitmap=QString::fromLatin1(capabilities.read(4097));
-        if(bitmap.size()>4096 || !hasGamepadKeyCapabilities(bitmap.trimmed()))continue;
+        const auto device=QString::fromLatin1(deviceNumber.read(32));
+        if(bitmap.size()>4096 || device.size()>=32
+            || !GamepadTopology::verifiedGamepadNode(node,bitmap.trimmed(),device.trimmed()))continue;
         const auto device=devices.filePath(node);
         const QFileInfo info(device);
         if(info.isSymLink() || !info.exists() || info.canonicalFilePath()!=QDir::cleanPath(device))continue;
