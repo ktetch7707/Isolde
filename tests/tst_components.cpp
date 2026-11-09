@@ -138,6 +138,34 @@ void ComponentTests::steamGamesUseProviderIdentityAndReviewedImport(){
     QVERIFY(library.setFavorite(id,true));registration["title"]="My corrected title";QVERIFY(library.updateGame(id,registration));
     QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),1);QCOMPARE(library.details(id).value("title").toString(),QString("My corrected title"));QVERIFY(library.details(id).value("favorite").toBool());
+    {
+        SessionManager sessions(&apps);
+        KodiMedia media(profile,nullptr,dir.path()); KodiService service(profile);service.setEnabled(false);
+        CaptureController capture;
+        ActionDispatcher dispatcher(&apps,&sessions,&media,&service,nullptr,&capture);dispatcher.setGames(&library);
+        sessions.setLaunchPreparation([](const AppDefinition &){return false;});
+        QSignalSpy focus(&dispatcher,&ActionDispatcher::restoreFocusRequested);
+        const QVariantMap action{{"type","launch-game"},{"gameId",id}};
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));sessions.goHome();
+        QCOMPARE(focus.last().at(0).toString(),QString("steam-tile"));
+        QVERIFY(library.page("continue").isEmpty()); // Cancel before any game process.
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("43");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");
+        emit sessions.steamGameFailed("42","fixture denial");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");
+        qApp->setProperty("isoldeProfile","different-profile");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        qApp->setProperty("isoldeProfile",profile);
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");sessions.goHome();
+        QCOMPARE(library.page("continue").size(),1);
+        QCOMPARE(library.page("continue").first().toMap().value("id").toString(),id);
+    }
     for(const auto &bad:QStringList{"0","01","4294967296","42; touch x","steam://run/42","/tmp/game","42\n"}){auto invalid=registration;invalid["target"]=bad;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());}
     auto invalid=registration;invalid["root"]=steamapps;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());
     steam.launchConfiguration["steamGameId"]="42";QVERIFY(!steam.isValid());

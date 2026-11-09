@@ -52,6 +52,7 @@ public:
     Q_INVOKABLE QVariantMap registration(const QString &gameId);
     Q_INVOKABLE bool updateGame(const QString &gameId, const QVariantMap &registration);
     Q_INVOKABLE QVariantList editions(const QString &gameId);
+    Q_INVOKABLE bool steamGameContainsAppId(const QString &gameId, const QString &steamAppId);
     Q_INVOKABLE QString addEdition(const QString &gameId, const QVariantMap &registration);
     bool scanning() const { return bool(m_scan) || m_steamScan.state()!=QProcess::NotRunning; }
     QString importStatus() const { return m_importStatus; }

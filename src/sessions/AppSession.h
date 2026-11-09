@@ -3,6 +3,7 @@
 #include "app/AppDefinition.h"
 
 #include <QObject>
+#include <QVariantMap>
 
 class AppSession : public QObject {
     Q_OBJECT
@@ -25,6 +26,7 @@ public:
 
 signals:
     void stateChanged(AppSession::State state);
+    void steamProviderStateChanged(const QVariantMap &state);
 
 protected:
     void setError(const QString &error) { m_error = error; }

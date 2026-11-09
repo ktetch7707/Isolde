@@ -17,6 +17,24 @@ import time
 import uuid
 
 MAX_GAMES = 5000
+FACT_VALUES = {
+    "process": {"waiting", "observed", "gone"},
+    "ownership": {"unknown", "owned", "not_owned"},
+    "account": {"unknown", "signed_in", "signed_out"},
+    "connection": {"unknown", "online", "offline"},
+    "offline": {"unknown", "ready", "unavailable"},
+    "exit": {"unknown", "exited", "crashed"},
+    "local_save": {"unknown", "flushed", "failed"},
+    "cloud_save": {"unknown", "synced", "pending", "failed"},
+    "error": {"none", "bootstrap_failed", "ownership_denied", "auth_required",
+              "offline_unavailable", "launch_failed"},
+}
+UNKNOWN_FACTS = {key: ("waiting" if key == "process" else "none" if key == "error" else "unknown")
+                 for key in FACT_VALUES}
+
+
+class SessionCanceled(Exception):
+    pass
 
 
 def app_id(value):
@@ -196,7 +214,7 @@ def verify_installed(home, identity, external=()):
     return matches[0]
 
 
-def matching_processes(variable, value, proc=Path("/proc")):
+def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_client=False):
     result = []
     entries = 0
     for entry in proc.iterdir():
@@ -206,20 +224,29 @@ def matching_processes(variable, value, proc=Path("/proc")):
         try:
             with (entry/"environ").open("rb") as stream: environment = stream.read(65537)
             if len(environment) > 65536: continue
-            if (variable+"="+value).encode() in environment.split(b"\0"):
+            fields = environment.split(b"\0")
+            if token is not None and ("ISOLDE_STEAM_SESSION="+token).encode() not in fields: continue
+            if exclude_client:
+                executable = os.path.basename(os.readlink(entry/"exe")).lower()
+                if executable in ("steam", "steam.sh", "steamwebhelper", "steamservice", "steam-runtime-launcher-service"):
+                    continue
+            if (variable+"="+value).encode() in fields:
                 if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] != "Z": result.append(int(entry.name))
         except (OSError, ValueError, IndexError): continue
     return result
 
 
-def game_processes(identity, proc=Path("/proc")):
-    return matching_processes("SteamAppId",identity,proc)
+def game_processes(identity, proc=Path("/proc"), token=None):
+    # Both names occur in Steam/Proton environments. Neither is entitlement
+    # proof, and a tagged third-party launcher may still precede the game.
+    return sorted(set(matching_processes("SteamAppId",identity,proc,token,True)
+                      + matching_processes("SteamGameId",identity,proc,token,True)))
 
 
-def stop_owned_session(token):
+def signal_owned_processes(pids, token):
     # A unique inherited environment token, in addition to the private PID
     # namespace, prevents shutdown commands from reaching an existing client.
-    for pid in matching_processes("ISOLDE_STEAM_SESSION",token):
+    for pid in pids:
         if pid<=1: continue
         descriptor=None
         try:
@@ -230,19 +257,93 @@ def stop_owned_session(token):
         except (ProcessLookupError,FileNotFoundError): pass
         finally:
             if descriptor is not None:os.close(descriptor)
-    deadline=time.monotonic()+1.5
+
+
+def wait_until_gone(processes, timeout, clock=time.monotonic, sleep=time.sleep):
+    deadline=clock()+timeout
+    while clock()<deadline:
+        if not processes(): return True
+        sleep(.05)
+    return not processes()
+
+
+def stop_owned_session(token):
+    signal_owned_processes(matching_processes("ISOLDE_STEAM_SESSION",token), token)
+    deadline=time.monotonic()+3
     while time.monotonic()<deadline:
         if not matching_processes("ISOLDE_STEAM_SESSION",token):return
         time.sleep(.05)
 
 
-def wait_for_game(identity, launcher, timeout=120, clock=time.monotonic, sleep=time.sleep, processes=game_processes):
+class SteamProcessProvider:
+    """Local process boundary; it has no authenticated Steam account API."""
+    def __init__(self, identity, token, launcher):
+        self.identity, self.token, self.launcher = identity, token, launcher
+
+    def observe(self):
+        facts = dict(UNKNOWN_FACTS)
+        facts["process"] = "observed" if game_processes(self.identity, token=self.token) else "gone"
+        if self.launcher.poll() not in (None, 0): facts["error"] = "bootstrap_failed"
+        return facts
+
+
+def validated_facts(value):
+    if not isinstance(value, dict) or set(value) != set(FACT_VALUES):
+        raise ValueError("Invalid Steam provider observation")
+    if any(not isinstance(value[k], str) or value[k] not in allowed for k, allowed in FACT_VALUES.items()):
+        raise ValueError("Invalid Steam provider observation")
+    return dict(value)
+
+
+def provider_message(error):
+    return {
+        "bootstrap_failed": "Steam could not start this game. Check the active account, ownership, connection and updates in Steam, then retry",
+        "ownership_denied": "Steam reported that this account cannot launch this game. Check the active account and ownership in Steam, then retry",
+        "auth_required": "Steam requires account sign-in before this game can start. Open Steam and sign in, then retry",
+        "offline_unavailable": "Steam reported that this game is unavailable offline. Reconnect in Steam and prepare the game for offline use, then retry",
+        "launch_failed": "Steam reported that this game could not start. Check installation and compatibility in Steam, then retry",
+    }[error]
+
+
+def supervise_provider(provider, publish, timeout=120, clock=None, sleep=None):
+    """Consume only bounded provider observations; absence is never a crash or save proof."""
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
     deadline = clock()+timeout
-    while clock() < deadline:
-        if processes(identity): return
-        if launcher.poll() not in (None, 0): raise RuntimeError("Steam could not start this game. Check sign-in, ownership and updates in Steam")
+    seen = False
+    missing = None
+    last = None
+    while True:
+        facts = validated_facts(provider.observe())
+        phase = "process_observed" if seen or facts["process"] == "observed" else "starting"
+        if facts != last:
+            publish(phase, facts)
+            last = facts
+        if facts["error"] != "none" and (not seen or facts["error"] != "bootstrap_failed"):
+            raise RuntimeError(provider_message(facts["error"]))
+        if facts["process"] == "observed":
+            seen = True
+            missing = None
+        elif seen:
+            if missing is None: missing = clock()
+            elif clock()-missing >= 3:
+                publish("ended", facts)
+                if facts["exit"] == "crashed":
+                    raise RuntimeError("Steam reported that this game crashed. Check its saves and compatibility before retrying")
+                if facts["local_save"] == "failed":
+                    raise RuntimeError("Steam reported that the game could not save. Check local saves before retrying")
+                if facts["cloud_save"] == "failed":
+                    raise RuntimeError("Steam reported that Cloud sync failed. Check Steam before using these saves on another device")
+                return facts
+        elif clock() >= deadline:
+            raise RuntimeError("Steam did not start this game within two minutes. Check the active account, offline availability, installation and compatibility in Steam, then retry")
         sleep(.25)
-    raise RuntimeError("Steam did not start this game within two minutes. Check sign-in, installation and compatibility, then retry")
+
+
+def publish_provider_state(identity, phase, facts):
+    payload = {"version":1, "appId":identity, "phase":phase, **facts}
+    print("STEAM_PROVIDER_STATE "+json.dumps(payload, separators=(",", ":"), sort_keys=True),
+          file=sys.stderr, flush=True)
 
 
 def launch(identity, external=()):
@@ -253,28 +354,58 @@ def launch(identity, external=()):
     binary = Path("/usr/games/steam")
     if not binary.is_file() or not os.access(binary, os.X_OK): raise ValueError("Install or repair Steam in the Isolde Store")
     # HOME, /tmp, IPC, PID view and bus all belong to NativeSandbox.
-    def stopped(signum, frame): raise InterruptedError("Steam game launch canceled")
-    signal.signal(signal.SIGTERM, stopped)
-    signal.signal(signal.SIGINT, stopped)
+    def stopped(signum, frame): raise SessionCanceled()
+    previous_term = signal.signal(signal.SIGTERM, stopped)
+    previous_int = signal.signal(signal.SIGINT, stopped)
     token=uuid.uuid4().hex
-    launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
+    processes = lambda game: game_processes(game, token=token)
+    started = False
+    canceled = False
+    clean_game_exit = True
+    last_facts = dict(UNKNOWN_FACTS)
+    failed = False
+    def publish(phase, facts):
+        nonlocal started, last_facts
+        last_facts = facts
+        if phase == "process_observed" and not started:
+            started = True
+            print("STEAM_GAME_PROCESS_OBSERVED "+identity, file=sys.stderr, flush=True)
+        publish_provider_state(identity, phase, facts)
     try:
-        wait_for_game(identity, launcher)
-        print("STEAM_GAME_STARTED "+identity, file=sys.stderr, flush=True)
-        missing = None
-        while True:
-            if game_processes(identity): missing = None
-            elif missing is None: missing = time.monotonic()
-            elif time.monotonic()-missing >= 3: break
-            time.sleep(.25)
+        publish("starting", last_facts)
+        launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
+        supervise_provider(SteamProcessProvider(identity, token, launcher), publish)
+    except SessionCanceled:
+        canceled = True
+    except (OSError, ValueError, RuntimeError):
+        failed = True
+        raise
     finally:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        stop_owned_session(token)
+        try:
+            if canceled:
+                signal_owned_processes(processes(identity), token)
+                clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
+                stopped = clean_game_exit
+            else:
+                stopped = started
+            # Give Steam a bounded opportunity to process game exit and sync before
+            # ending its private client. This is not a cloud-sync confirmation.
+            if stopped:
+                time.sleep(3)
+            stop_owned_session(token)
+            if canceled or failed:
+                publish("failed" if failed or not clean_game_exit else "canceled", last_facts)
+        finally:
+            signal.signal(signal.SIGTERM, previous_term)
+            signal.signal(signal.SIGINT, previous_int)
         # No global Steam IPC shutdown. NativeSandbox teardown is the final
         # boundary for descendants that discard the token. Cloud sync is not
         # promised by this direct-launch adapter.
+    if not clean_game_exit:
+        raise RuntimeError("The game did not exit normally. Recent saves or Steam Cloud sync may be incomplete; open Steam to check before retrying")
 
 
 def main():

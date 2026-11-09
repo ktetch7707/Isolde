@@ -366,7 +366,9 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         }
         bind(helper,"/run/isolde-optical-exec.py");
     }
-    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--";
+    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host";
+    if(!steamGameId.isEmpty()) args << "--steam-session";
+    args << "--";
     if(opticalNoExec)args << "/usr/bin/python3" << "/run/isolde-optical-exec.py" << plan.actionTarget;
     else args << (nativeGame ? plan.actionTarget : executable);
     plan.environment.insert("PATH", "/usr/bin:/bin");

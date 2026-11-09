@@ -343,6 +343,7 @@ void DesktopSession::launch()
     }else if(!steamGame.isEmpty()){
         resolvedLaunch.program="/usr/bin/python3";
         resolvedLaunch.arguments={"/run/steam-games.py","--launch",steamGame};
+        m_steamOutput=std::make_unique<SteamSessionOutput>(steamGame);
     }
     const auto sandbox = NativeSandbox::prepare(qApp->property("isoldeProfile").toString(), definition().id,
         resolvedLaunch.program, environment, definition().launchConfiguration.value("actionTarget").toString(), {},
@@ -390,9 +391,7 @@ void DesktopSession::launch()
         launchArguments.insert(index,"--web-remote");launchArguments.insert(index+1,QString::fromLatin1(QJsonDocument::fromVariant(appearance).toJson(QJsonDocument::Compact).toBase64()));
     }
     m_launcher.setArguments(launchArguments + resolvedLaunch.arguments);
-    connect(&m_launcher, &QProcess::readyReadStandardError, this, [this] {
-        m_diagnostics = (m_diagnostics + m_launcher.readAllStandardError()).right(8192);
-    });
+    connect(&m_launcher, &QProcess::readyReadStandardError, this, &DesktopSession::readDiagnostics);
     connect(&m_launcher, &QProcess::readyReadStandardOutput, this, [this] { m_launcher.readAllStandardOutput(); });
     connect(&m_launcher, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         qWarning() << "Desktop bridge process error for" << definition().id << error << m_launcher.errorString();
@@ -401,10 +400,13 @@ void DesktopSession::launch()
     connect(&m_launcher, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
             [this](int exitCode, QProcess::ExitStatus exitStatus) {
                 qInfo() << "Isolated native session finished" << definition().id << exitCode << exitStatus;
+                readDiagnostics();
                 m_kodiLock.reset();
                 if (m_stopping) return;
                 if((exitStatus!=QProcess::NormalExit || exitCode!=0) && definition().launchConfiguration.contains("steamGameId") && m_diagnostics.contains("Steam game: ")){
                     setError(QString::fromUtf8(m_diagnostics).section("Steam game: ",-1).section('\n',0,0).left(400));
+                } else if (m_steamOutput && !m_steamObserved) {
+                    setError(QStringLiteral("Steam ended without observing the selected game process. Check the active account, offline availability and installation, then retry."));
                 } else if((exitStatus!=QProcess::NormalExit || exitCode!=0)
                     && definition().launchConfiguration.contains("opticalMediaId") && m_diagnostics.contains("Optical game: ")){
                     setError(QString::fromUtf8(m_diagnostics).section("Optical game: ",-1).section('\n',0,0).left(400));
@@ -424,7 +426,7 @@ void DesktopSession::launch()
         setState(State::Exited);
         return;
     }
-    setState(State::Running);
+    if(!m_steamOutput) setState(State::Running);
     if (definition().launchConfiguration.value(QStringLiteral("containment")).toString() == QStringLiteral("fullscreen")) {
         QTimer::singleShot(1200, this, &DesktopSession::applyContainment);
         QTimer::singleShot(3000, this, &DesktopSession::applyContainment);
@@ -439,15 +441,38 @@ void DesktopSession::resume() { if (state() == State::Suspended) setState(State:
 
 DesktopSession::~DesktopSession() { stopProcess(); }
 
+void DesktopSession::readDiagnostics()
+{
+    const auto output=m_launcher.readAllStandardError();
+    m_diagnostics=(m_diagnostics+output).right(8192);
+    if(!m_steamOutput)return;
+    const bool observed=m_steamOutput->consume(output);
+    const auto providerState=m_steamOutput->takeState();
+    if(!providerState.isEmpty())emit steamProviderStateChanged(providerState);
+    if(observed && !m_stopping && state()==State::Created){
+        m_steamObserved=true;
+        setState(State::Running);
+    }
+}
+
 void DesktopSession::stopProcess()
 {
     m_stopping = true;
     if (m_launcher.state() != QProcess::NotRunning) {
         m_launcher.write("quit\n");
         m_launcher.waitForBytesWritten(500);
-        if (!m_launcher.waitForFinished(4000)) {
+        const auto timeout = definition().launchConfiguration.contains("steamGameId") ? 18000 : 4000;
+        const bool finished=m_launcher.waitForFinished(timeout);
+        if (!finished) {
             m_launcher.kill();
             m_launcher.waitForFinished(3000);
+        }
+        readDiagnostics();
+        if(m_steamOutput && (!finished || m_launcher.exitStatus()!=QProcess::NormalExit || m_launcher.exitCode()!=0)){
+            if(m_diagnostics.contains("Steam game: "))
+                setError(QString::fromUtf8(m_diagnostics).section("Steam game: ",-1).section('\n',0,0).left(400));
+            else
+                setError(QStringLiteral("Steam did not exit cleanly. Recent saves or Steam Cloud sync may be incomplete; open Steam to check before retrying."));
         }
     }
 }

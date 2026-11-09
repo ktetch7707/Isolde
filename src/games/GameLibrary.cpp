@@ -1692,6 +1692,18 @@ QVariantList GameLibrary::editions(const QString &id) {
     while(query.next())result.append(QVariantMap{{"id",query.value(0)},{"title",query.value(1)},{"platform",query.value(2)},{"runtimeId",query.value(3)}});
     return result;
 }
+bool GameLibrary::steamGameContainsAppId(const QString &id,const QString &identity) {
+    if(identity.size()>10)return false;
+    bool valid=false;const auto number=identity.toULongLong(&valid);
+    if(!m_ready || !ComponentSchema::safeId(id) || !valid || number==0 || number>4294967295ULL
+        || QString::number(number)!=identity)return false;
+    QSqlQuery query(m_db);
+    query.prepare("SELECT id FROM games WHERE id=? AND runtime='steam' AND target=?"
+        +QString(m_hasEditions?" UNION ALL SELECT id FROM game_editions WHERE game_id=? AND runtime='steam' AND target=?":"")+" LIMIT 1");
+    query.addBindValue(id);query.addBindValue(identity);
+    if(m_hasEditions){query.addBindValue(id);query.addBindValue(identity);}
+    return query.exec() && query.next();
+}
 QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
     if(m_portablePhase.startsWith("uninstall")){fail(tr("Wait for the managed uninstall to finish before changing game sources."));return {};}
     if(!m_ready || registration(id).isEmpty()){fail(tr("Game not found in this profile."));return {};}

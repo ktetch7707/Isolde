@@ -103,6 +103,9 @@ void PageData::setApplications(AppRegistry *registry,SessionManager *sessions,Ac
     connect(sessions,&SessionManager::sessionFailed,this,[this](const QString &id,const QString &){
         if(id==m_pendingOpening){m_pendingOpening.clear();m_pendingOpeningTime={};}
     });
+    connect(sessions,&SessionManager::steamGameFailed,this,[this](const QString &,const QString &){
+        if(m_pendingOpening=="steam"){m_pendingOpening.clear();m_pendingOpeningTime={};}
+    });
     connect(sessions,&SessionManager::returnedHome,this,[this](const QString &){
         if(!m_valid)return;
         // Publish only after a successful session return; failed starts cannot

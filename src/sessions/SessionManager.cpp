@@ -39,6 +39,12 @@ void SessionManager::refreshOpticalSession()
     if(status.isEmpty())m_opticalTimer.stop();
 }
 
+SessionManager::~SessionManager()
+{
+    if(m_session)disconnect(m_session.get(),nullptr,this,nullptr);
+    m_session.reset();
+}
+
 bool SessionManager::hasActiveSession() const { return m_session != nullptr; }
 QString SessionManager::currentAppId() const { return m_session ? m_session->definition().id : QString(); }
 QString SessionManager::currentAppName() const { return m_session ? m_session->definition().name : QString(); }
@@ -117,41 +123,31 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     else if (definition.type == "android") m_session = std::make_unique<AndroidSession>(definition);
     else m_session = std::make_unique<MockSession>(definition);
     auto *session = m_session.get();
-    const auto appName = definition.name;
+    connect(session,&AppSession::steamProviderStateChanged,this,[this,session](const QVariantMap &state){
+        if(m_session.get()!=session)return;
+        m_steamProviderState=state;
+        emit steamProviderStateChanged();
+    });
     const auto appId = definition.id;
-    connect(session, &AppSession::stateChanged, this, [this, session, appName, appId, opened=false](AppSession::State state) mutable {
+    connect(session, &AppSession::stateChanged, this, [this, session, appId, opened=false](AppSession::State state) mutable {
         if(state==AppSession::State::Running && m_session.get()==session && !opened) {
             opened=true;
-            if(QStringList{"web","desktop","android"}.contains(session->definition().type))emit appOpened(appId);
+            const auto steamGame=session->definition().launchConfiguration.value("steamGameId").toString();
+            const auto type=session->definition().type;
+            if(QStringList{"web","desktop","android"}.contains(type))emit appOpened(appId);
+            if(!steamGame.isEmpty() && m_session.get()==session)emit steamGameProcessObserved(steamGame);
         }
-        if (state != AppSession::State::Exited || m_session.get() != session)
-            return;
-        const bool intentionalExit = m_intentionalExit;
-        const auto failure = session->errorString();
-        const bool normalDesktopExit = (session->definition().type == "desktop" || session->definition().type == "android") && failure.isEmpty();
-        m_intentionalExit = false;
-        m_session.reset();
-        refreshOpticalSession();
-        emit currentAppChanged();
-        emit activeChanged();
-        if (intentionalExit || normalDesktopExit) {
-            emit returnedHome(m_previousFocusId);
-            return;
-        }
-        const auto reason = failure.isEmpty() ? tr("%1 closed or failed to start.").arg(appName) : failure;
-        emit sessionRejected(reason);
-        emit sessionFailed(appId, reason);
-        emit returnedHome(m_previousFocusId);
+        if (state == AppSession::State::Exited && !m_sessionCall)
+            finishSession(session);
     });
-    m_session->launch();
+    {
+        QScopedValueRollback<bool> calling(m_sessionCall,true);
+        session->launch();
+    }
     if (!m_session)
         return false;
     if (m_session->state() == AppSession::State::Exited) {
-        m_session.reset();
-        refreshOpticalSession();
-        const auto reason = tr("Unable to start %1.").arg(definition.name);
-        emit sessionRejected(reason);
-        emit sessionFailed(definition.id, reason);
+        finishSession(session);
         return false;
     }
     emit currentAppChanged();
@@ -159,6 +155,32 @@ bool SessionManager::launchDefinition(AppDefinition definition)
     refreshOpticalSession();
     if(!m_opticalSessionStatus.isEmpty())m_opticalTimer.start();
     return true;
+}
+
+void SessionManager::finishSession(AppSession *session)
+{
+    if(m_session.get()!=session)return;
+    const bool intentionalExit=m_intentionalExit;
+    const auto failure=session->errorString();
+    const auto appName=session->definition().name;
+    const auto appId=session->definition().id;
+    const auto steamGame=session->definition().launchConfiguration.value("steamGameId").toString();
+    const bool normalDesktopExit=(session->definition().type=="desktop" || session->definition().type=="android") && failure.isEmpty();
+    m_intentionalExit=false;
+    m_session.reset();
+    refreshOpticalSession();
+    emit currentAppChanged();
+    emit activeChanged();
+    if(intentionalExit && !failure.isEmpty() && !steamGame.isEmpty()){
+        emit sessionRejected(failure);
+        emit steamGameFailed(steamGame,failure);
+    }else if(!intentionalExit && !normalDesktopExit){
+        const auto reason=failure.isEmpty()?tr("%1 closed or failed to start.").arg(appName):failure;
+        emit sessionRejected(reason);
+        if(!steamGame.isEmpty())emit steamGameFailed(steamGame,reason);
+        else emit sessionFailed(appId,reason);
+    }
+    emit returnedHome(m_previousFocusId);
 }
 
 bool SessionManager::launchAction(const QVariantMap &input)
@@ -209,6 +231,8 @@ bool SessionManager::launchSteamGame(const QString &identity)
     }
     auto definition=*steam;definition.launchConfiguration.insert("steamGameId",identity);
     definition.launchConfiguration.remove("containment"); // Never fullscreen the Steam client instead of its game.
+    m_steamProviderState.clear();
+    emit steamProviderStateChanged();
     return launchDefinition(definition);
 }
 bool SessionManager::launchFileAction(const QVariantMap &input,const QString &sourceRoot,const QString &opticalMediaId,const QString &opticalReference)
@@ -262,9 +286,16 @@ void SessionManager::exitCurrent()
         return;
     auto *session = m_session.get();
     m_intentionalExit = true;
-    session->exit();
+    {
+        QScopedValueRollback<bool> calling(m_sessionCall,true);
+        session->exit();
+    }
     if (!m_session)
         return;
+    if(m_session->state()==AppSession::State::Exited){
+        finishSession(session);
+        return;
+    }
     m_intentionalExit = false;
     m_session.reset();
     refreshOpticalSession();
