@@ -109,6 +109,9 @@ public:
     Q_INVOKABLE bool canUninstallManagedGame(const QString &gameId) const;
     Q_INVOKABLE bool uninstallManagedGame(const QString &gameId, bool confirmed);
     Q_INVOKABLE QVariantList pendingUninstallRecovery();
+    Q_INVOKABLE QVariantList unregisteredManagedInstallRecovery();
+    Q_INVOKABLE bool recoverUnregisteredManagedInstall(const QString &installationId,
+                                                       const QString &runtimeId, bool confirmed);
     Q_INVOKABLE QVariantMap compatibilityInstallerStatus() const;
     Q_INVOKABLE bool inspectWindowsInstaller(const QString &source);
     Q_INVOKABLE bool recoverOrphanedUninstall(const QString &installationId, bool confirmed);

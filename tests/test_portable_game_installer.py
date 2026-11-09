@@ -5,6 +5,8 @@ from pathlib import Path
 import shutil
 import stat
 import struct
+import subprocess
+import sys
 import unittest
 from unittest import mock
 import uuid
@@ -91,7 +93,23 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.assertEqual((destination/"bin/game").read_bytes(),b"\x7fELF"+b"\x00"*32)
         self.assertTrue((destination/"bin/game").stat().st_mode & stat.S_IXUSR)
         self.assertTrue((destination/".isolde-install.json").is_file())
+        recovered=installer.inspect_installed(destination)
+        self.assertEqual(recovered["title"],result["title"])
+        self.assertEqual(recovered["platform"],result["platform"])
+        self.assertEqual(recovered["entrypoint"],result["entrypoint"])
+        cli=subprocess.run([sys.executable,str(Path(__file__).parents[1]/"tools/portable-game-installer.py"),
+                            "--inspect-installed","--root",str(destination)],
+                           check=True,capture_output=True,text=True)
+        self.assertEqual(json.loads(cli.stdout)["archiveSha256"],result["archiveSha256"])
         with self.assertRaisesRegex(ValueError,"already exists"):installer.install(self.archive,destination)
+
+    def test_installed_recovery_rejects_changed_or_unowned_files(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        (destination/"bin/game").write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError,"changed after installation"):
+            installer.inspect_installed(destination)
 
     def test_installer_rejects_archive_replaced_after_preflight(self):
         self.package()

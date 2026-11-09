@@ -258,6 +258,8 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
                 ?"Safe uninstall stopped or failed. The catalog entry was preserved. "+recovery+" "+reason
                 :m_portablePhase=="uninstall-finalize"
                 ?"Catalog removal completed, but cleanup stopped. The pending managed folder was retained for recovery. "+reason
+                :m_portablePhase=="recover"
+                ?"Managed install verification failed. Nothing was added to the catalog; files were preserved. "+reason
                 :m_portablePhase=="windows-inspect"
                 ?"Windows executable inspection stopped or failed. No installer was run. "+reason
                 :m_portableCanceled?"Install canceled. Existing files and saves were preserved.":
@@ -266,6 +268,31 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
         }
         m_portableInstallOutput+=m_portableInstall.readAllStandardOutput();
         QJsonParseError parse;const auto metadata=QJsonDocument::fromJson(m_portableInstallOutput,&parse).toVariant().toMap();
+        if(m_portablePhase=="recover"){
+            const auto root=m_portableDestination;
+            bool referenced=false;
+            const bool valid=parse.error==QJsonParseError::NoError
+                && metadata.value("schemaVersion").toInt()==1
+                && !metadata.value("title").toString().trimmed().isEmpty()
+                && !metadata.value("platform").toString().trimmed().isEmpty()
+                && metadata.value("title").toString().size()<=256
+                && metadata.value("platform").toString().size()<=80
+                && QRegularExpression("^[0-9a-f]{64}$").match(metadata.value("archiveSha256").toString()).hasMatch()
+                && ManagedGamePaths::isInstallRoot(m_emulatorProfile,root)
+                && compatibleRuntime(m_portableRuntime,true)
+                && catalogReferencesRoot(root,&referenced) && !referenced;
+            if(valid){
+                const auto id=addGameWithOrigin({{"schemaVersion",1},{"title",metadata.value("title")},
+                    {"platform",metadata.value("platform")},{"runtimeId",m_portableRuntime},
+                    {"root",root},{"target",metadata.value("entrypoint")}},"portable-install");
+                m_portableInstallStatus=id.isEmpty()
+                    ?"Verified install remains unregistered. Resolve the catalog error and retry recovery; files were preserved."
+                    :"Verified managed install was restored to the catalog. No game files or saves were changed.";
+            }else{
+                m_portableInstallStatus="Install verification or catalog checks failed. Nothing was added; files were preserved.";
+            }
+            m_portablePhase.clear();emit portableInstallChanged();return;
+        }
         if(m_portablePhase=="uninstall" && m_portableCanceled){
             const auto recovery=ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,m_portableDestination);
             m_portableInstallStatus="Uninstall canceled. The catalog entry was preserved. "+recovery;
@@ -1641,6 +1668,56 @@ QVariantList GameLibrary::pendingUninstallRecovery(){
             {"conflict",QFileInfo::exists(root) || QFileInfo(root).isSymLink()}});
     }
     return result;
+}
+QVariantList GameLibrary::unregisteredManagedInstallRecovery(){
+    QVariantList result;
+    if(!m_ready || !m_portablePhase.isEmpty())return result;
+    const auto base=ManagedGamePaths::gamesRoot(m_emulatorProfile);
+    if(base.isEmpty() || !QFileInfo(base).isDir() || QFileInfo(base).canonicalFilePath()!=base)return result;
+    QDirIterator entries(base,QDir::Dirs|QDir::NoDotAndDotDot|QDir::NoSymLinks);
+    int scanned=0;
+    while(entries.hasNext() && scanned++<10000 && result.size()<128){
+        const auto parent=entries.next();
+        const auto identity=QFileInfo(parent).fileName();
+        const auto uuid=QUuid(identity);
+        if(uuid.isNull() || uuid.toString(QUuid::WithoutBraces)!=identity
+            || QFileInfo(parent).canonicalFilePath()!=parent)continue;
+        const auto root=parent+"/install";
+        const QFileInfo marker(root+"/.isolde-install.json");
+        if(!ManagedGamePaths::isInstallRoot(m_emulatorProfile,root)
+            || marker.isSymLink() || !marker.isFile() || marker.canonicalFilePath()!=marker.absoluteFilePath())continue;
+        bool referenced=false;
+        if(!catalogReferencesRoot(root,&referenced))return {};
+        if(!referenced)result.append(QVariantMap{{"id",identity},{"path",root}});
+    }
+    return result;
+}
+bool GameLibrary::recoverUnregisteredManagedInstall(const QString &installationId,
+                                                     const QString &runtimeId,bool confirmed){
+    if(!m_ready || !confirmed || !m_portablePhase.isEmpty() || portableInstallBusy()
+        || (m_sessionActiveGuard && m_sessionActiveGuard()))
+        return fail(tr("Return Home and confirm recovery after all game operations finish."));
+    const auto uuid=QUuid(installationId);
+    if(uuid.isNull() || uuid.toString(QUuid::WithoutBraces)!=installationId
+        || !compatibleRuntime(runtimeId,true))
+        return fail(tr("Choose a valid profile installation and installed file runtime."));
+    const auto root=ManagedGamePaths::gamesRoot(m_emulatorProfile)+'/'+installationId+"/install";
+    if(!ManagedGamePaths::isInstallRoot(m_emulatorProfile,root))
+        return fail(tr("The private install or ownership marker is unavailable; nothing was changed."));
+    bool referenced=false;
+    if(!catalogReferencesRoot(root,&referenced))return false;
+    if(referenced)return fail(tr("The catalog already references this installation."));
+    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/portable-game-installer.py";
+    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde managed-game verifier."));
+    m_portableGameId.clear();m_portableRuntime=runtimeId;m_portableDestination=root;
+    m_portableInstallOutput.clear();m_portableInstallError.clear();m_portableCanceled=false;
+    m_portableInstallPreview.clear();
+    m_portablePhase="recover";
+    m_portableInstallStatus="Verifying the complete managed install inventory and entry point before restoring its catalog entry.";
+    m_portableInstall.start(python,{helper,"--inspect-installed","--root",root});
+    m_portableInstallDeadline.start();m_error.clear();emit errorChanged();emit portableInstallChanged();return true;
 }
 bool GameLibrary::recoverOrphanedUninstall(const QString &installationId,bool confirmed){
     if(!m_ready || !confirmed || !m_portablePhase.isEmpty() || portableInstallBusy()

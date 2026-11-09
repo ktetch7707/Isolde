@@ -357,7 +357,8 @@ def verify_install(root, expected_name):
     directories = ownership.get("ownedDirectories") if isinstance(ownership, dict) else None
     if (not isinstance(ownership, dict) or ownership.get("ownershipSchemaVersion") != 1
             or not isinstance(files, list) or not isinstance(directories, list)
-            or len(files) > MAX_ENTRIES or len(directories) > MAX_ENTRIES):
+            or len(files) > MAX_ENTRIES or len(directories) > MAX_ENTRIES
+            or len(files) + len(directories) > MAX_ENTRIES):
         raise ValueError("The install ownership manifest is incomplete; files were preserved.")
     expected_files = {}
     for item in files:
@@ -384,6 +385,8 @@ def verify_install(root, expected_name):
     actual_files = set()
     actual_directories = set()
     for path in root.rglob("*"):
+        if len(actual_files) + len(actual_directories) >= MAX_ENTRIES + 1:
+            raise ValueError("The install contains too many files or directories; files were preserved.")
         relative = path.relative_to(root).as_posix()
         if path.is_symlink():
             raise ValueError("The install contains a symbolic link; files were preserved.")
@@ -408,6 +411,41 @@ def verify_install(root, expected_name):
     if ".isolde-install.json" not in {path.name for path in root.iterdir()}:
         raise ValueError("The install ownership marker changed; files were preserved.")
     return expected_files, expected_directories, (len(marker_bytes), hashlib.sha256(marker_bytes).hexdigest())
+
+
+def inspect_installed(root):
+    root = Path(root)
+    verify_install(root, "install")
+    marker = root / ".isolde-install.json"
+    with marker.open("rb") as marker_file:
+        ownership = json.loads(marker_file.read(16 * 1024 * 1024 + 1).decode("utf-8"))
+    title, platform, entrypoint = ownership.get("title"), ownership.get("platform"), ownership.get("entrypoint")
+    archive_digest = ownership.get("archiveSha256")
+    entry_size = ownership.get("entrySize")
+    entry = PurePosixPath(entrypoint) if isinstance(entrypoint, str) else PurePosixPath(".")
+    if (type(ownership.get("schemaVersion")) is not int or ownership["schemaVersion"] != 1
+            or not isinstance(title, str) or not title.strip() or len(title) > 256
+            or any(ord(char) < 32 for char in title)
+            or not isinstance(platform, str) or not platform.strip() or len(platform) > 80
+            or any(ord(char) < 32 for char in platform)
+            or not isinstance(entrypoint, str) or entry.is_absolute() or "\\" in entrypoint
+            or len(entrypoint) > 4096 or entrypoint != entry.as_posix()
+            or any(part in ("", ".", "..") for part in entry.parts)
+            or type(entry_size) is not int or not 1 <= entry_size <= MAX_ARCHIVE
+            or not isinstance(archive_digest, str) or len(archive_digest) != 64
+            or any(char not in "0123456789abcdef" for char in archive_digest)):
+        raise ValueError("The installed game metadata is invalid; files were preserved.")
+    executable = root.joinpath(*entry.parts)
+    if (executable.is_symlink() or not executable.is_file()
+            or executable.resolve(strict=True) != executable.absolute()
+            or executable.stat().st_size != entry_size
+            or not executable.stat().st_mode & 0o111):
+        raise ValueError("The installed game entry point is not a verified executable; files were preserved.")
+    with executable.open("rb") as stream:
+        if stream.read(4) != b"\x7fELF":
+            raise ValueError("The installed game entry point is not a Linux ELF file; files were preserved.")
+    return {"schemaVersion": 1, "title": title.strip(), "platform": platform.strip(),
+            "entrypoint": entrypoint, "archiveSha256": archive_digest}
 
 
 def open_owned_directory(root_fd, parts):
@@ -552,6 +590,7 @@ def main():
     group.add_argument("--prepare-uninstall", action="store_true")
     group.add_argument("--finalize-uninstall", action="store_true")
     group.add_argument("--recover-uninstall", action="store_true")
+    group.add_argument("--inspect-installed", action="store_true")
     parser.add_argument("--source")
     parser.add_argument("--destination")
     parser.add_argument("--root")
@@ -562,6 +601,10 @@ def main():
             parser.error("--inspect requires --source")
         result = inspect_windows(args.source) if args.inspect_windows else inspect(args.source)
         print(json.dumps(result, ensure_ascii=False))
+    elif args.inspect_installed:
+        if not args.root:
+            parser.error("--inspect-installed requires --root")
+        print(json.dumps(inspect_installed(args.root), ensure_ascii=False))
     elif args.uninstall or args.prepare_uninstall or args.finalize_uninstall or args.recover_uninstall:
         if not args.root:
             parser.error("--uninstall requires --root")
