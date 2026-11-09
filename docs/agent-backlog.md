@@ -67,15 +67,17 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T04 | 19 | Complete Kodi interface, preservation and import | 14% | 100% | all scope items implemented: backup/preview/import/rollback, first-library setup, Desktop/Return, nested-folder scan, playlist create/reorder/delete, library sources/settings/artwork, Kodi capability inventory |
 | T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 0% | 100% | all code complete: keyboard symbol mode + focus-restore + global tvKeyboard; screensaver QML pages; universal return binding; reduced-motion/contrast; app support matrix; VPN setup/provisioning complete |
 | T09 | 21 | Playback preference and viewing controls | 0% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
-| T10 | 22 | Capture/HDMI/audio software and editors | 33% | 60% | software foundation verified; physical H04 separate |
+| T10 | 22 | Capture/HDMI/audio software and editors | 33% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
 | T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
 | T14 | 24 | Online discovery and Linguist subtitles | 0% | 100% | provider and offline subtitle workflows implemented; VM/live acceptance deferred |
 | T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 15% | new plan mapped; software 0/9; H02/H03 physical |
 | T13 | 26 | Appliance software, distribution and user setup guide | 0% | 35% | installer foundation; clean-VM/recovery and beginner guide open; appliance validation code added |
 | T31 | 27 | Frozen first-product software acceptance | 5% | 10% | tool inventory verified; 0/7 final groups accepted |
-| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **90%** | **1568 / 27 acceptance and 2420 / 27 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **91%** | **1568 / 27 acceptance and 2460 / 27 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
+
+- 2026-11-09: **T10 coding integration; acceptance deferred.** Capture/video and audio use independently injectable adapters; serial commands use an injectable writer. Shared validated editor actions cover staged capture/audio settings, preview/cancel, eight input labels and profile-local fallback artwork; session transitions, return policy, device suggestions, signal retry and Configure recovery are implemented. The focused Node capture/navigation suite passed 17/17 at `99267fa`; native Qt adapter/schema tests and installed virtual-device journeys remain unrun on this host. Qt builds before 6.8 explicitly report video-only capture monitoring; hardware remains unqualified. Coding is 100% for the requested T10 software scope; T10 acceptance remains 33%.
 
 - 2026-11-09: **T14 coding integration; acceptance deferred.** The discovery and Linguist implementation and provider/model choices are documented in [T14 contracts](t14-provider-and-linguist-contracts.md). Focused Kodi bridge and playback Python suites passed (21 and 32 tests); native Qt tests and installed VM journeys remain unrun on this host. Live provider/account behavior and deployment licensing remain deferred. Coding is 100% with no known unfinished T14 code; acceptance percentages are unchanged.
 
