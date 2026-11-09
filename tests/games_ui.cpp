@@ -829,7 +829,16 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QSqlQuery query(db);query.prepare("UPDATE game_provenance SET origin='steam-import' WHERE entity_id=?");
     query.addBindValue(game);QVERIFY(!query.exec());
     query.prepare("DELETE FROM game_provenance WHERE entity_id=?");query.addBindValue(game);QVERIFY(!query.exec());
+    QVERIFY(query.exec("CREATE TRIGGER reject_manual_provenance BEFORE INSERT ON game_provenance "
+        "WHEN NEW.origin='manual-registration' BEGIN SELECT RAISE(ABORT,'injected provenance failure'); END"));
     query=QSqlQuery();db.close();db=QSqlDatabase();QSqlDatabase::removeDatabase(connection);
+    auto rejectedRegistration=registration;rejectedRegistration["title"]="Must roll back with provenance";
+    QVERIFY(library.addGame(rejectedRegistration).isEmpty());
+    QCOMPARE(library.page().size(),2);
+    const auto dropConnection="games-provenance-cleanup-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto dropDb=QSqlDatabase::addDatabase("QSQLITE",dropConnection);dropDb.setDatabaseName(database);QVERIFY(dropDb.open());
+    QSqlQuery dropQuery(dropDb);QVERIFY(dropQuery.exec("DROP TRIGGER reject_manual_provenance"));
+    dropQuery=QSqlQuery();dropDb.close();dropDb=QSqlDatabase();QSqlDatabase::removeDatabase(dropConnection);
 
     const auto backup=dir.filePath("provenance-backup.json");
     QVERIFY2(library.exportCatalog(backup),qPrintable(library.errorString()));
