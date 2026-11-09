@@ -65,11 +65,11 @@ int main(int argc, char **argv)
             // A launcher script may have exited before the real app underneath it.
             ::kill(-pid_t(childGroup), SIGTERM);
 #endif
-            QTimer::singleShot(1500, &app, [&] {
+            QTimer::singleShot(1500, &app, [&,code,status] {
 #ifdef Q_OS_UNIX
                 ::kill(-pid_t(childGroup), SIGKILL);
 #endif
-                app.exit(remoteFailed?1:0);
+                app.exit(remoteFailed || (steamSession && (status!=QProcess::NormalExit || code!=0)) ? 1 : 0);
             });
         });
     #ifdef Q_OS_LINUX

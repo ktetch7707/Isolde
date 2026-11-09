@@ -285,6 +285,7 @@ def launch(identity, external=()):
     processes = lambda game: game_processes(game, token=token)
     started = False
     canceled = False
+    clean_game_exit = True
     try:
         launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                     env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
@@ -305,7 +306,8 @@ def launch(identity, external=()):
         try:
             if canceled:
                 signal_owned_processes(processes(identity), token)
-                stopped = wait_until_gone(lambda: processes(identity), 5)
+                clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
+                stopped = clean_game_exit
             else:
                 stopped = started
             # Give Steam a bounded opportunity to process game exit and sync before
@@ -319,6 +321,8 @@ def launch(identity, external=()):
         # No global Steam IPC shutdown. NativeSandbox teardown is the final
         # boundary for descendants that discard the token. Cloud sync is not
         # promised by this direct-launch adapter.
+    if not clean_game_exit:
+        raise RuntimeError("The game did not exit normally. Recent saves or Steam Cloud sync may be incomplete; open Steam to check before retrying")
 
 
 def main():

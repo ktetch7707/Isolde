@@ -181,7 +181,8 @@ class SteamGamesTests(unittest.TestCase):
              patch.object(steam,"wait_until_gone",return_value=False), \
              patch.object(steam.time,"sleep",side_effect=lambda t: events.append(t)), \
              patch.object(steam,"stop_owned_session") as stop:
-            steam.launch("42")
+            with self.assertRaisesRegex(RuntimeError,"saves.*incomplete"):
+                steam.launch("42")
             self.assertEqual(events,[])
             stop.assert_called_once()
 

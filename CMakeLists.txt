@@ -117,6 +117,7 @@ add_library(isolde_core STATIC
     src/sessions/DesktopMode.h
     src/sessions/NativeSandbox.cpp
     src/sessions/NativeSandbox.h
+    src/sessions/SteamSessionOutput.h
     src/sessions/SessionManager.cpp
     src/sessions/SessionManager.h
 )

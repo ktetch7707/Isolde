@@ -1,5 +1,6 @@
 #include "sessions/NativeSandbox.h"
 #include "sessions/DesktopSession.h"
+#include "sessions/SteamSessionOutput.h"
 #include "media/MediaGrants.h"
 #include "games/SteamLibraryGrants.h"
 #include <QSettings>
@@ -15,12 +16,14 @@ class NativeSandboxTests : public QObject {
     Q_OBJECT
 private slots:
     void steamAdapterCannotAttachToHostGameProcesses();
+    void steamProcessMarkerIsExactAndBounded();
     void profileAndAppStorageRemainSeparate();
     void explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
     void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
     void processTreeDiesWithLauncher();
     void gracefulExitFlushesAppState();
     void steamHostAllowsDelayedGracefulExit();
+    void steamHostReportsFailedGracefulExit();
     void normalExitRemovesDetachedChildren();
     void invalidIdentityAndSymlinkAreRefused();
     void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
@@ -29,6 +32,18 @@ private slots:
 
 static const QString alice = "11111111-1111-4111-8111-111111111111";
 static const QString bob = "22222222-2222-4222-8222-222222222222";
+
+void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
+{
+    SteamSessionOutput parser("42");
+    QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBS"));
+    QVERIFY(!parser.consume("ERVED 43\nSTEAM_GAME_PROCESS_OBSERVED 42"));
+    QVERIFY(parser.consume("\n"));
+    QVERIFY(!parser.consume("prefix STEAM_GAME_PROCESS_OBSERVED 42\n"));
+    QVERIFY(!parser.consume(QByteArray(300,'x')+"STEAM_GAME_PROCESS_OBSERVED 42\n"));
+    QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBSERVED 42x\n"));
+    QVERIFY(parser.consume("noise\nSTEAM_GAME_PROCESS_OBSERVED 42\n"));
+}
 
 static QByteArray run(const NativeSandboxPlan &plan, const QString &script, const QStringList &extra = {})
 {
@@ -246,6 +261,24 @@ void NativeSandboxTests::steamHostAllowsDelayedGracefulExit()
     QCOMPARE(process.exitCode(),0);
     QFile file(saved); QVERIFY(file.open(QIODevice::ReadOnly));
     QCOMPARE(file.readAll(),QByteArray("saved"));
+}
+
+void NativeSandboxTests::steamHostReportsFailedGracefulExit()
+{
+    QTemporaryDir storage;
+    const auto ready=storage.filePath("ready");
+    QProcess process;
+    process.start(QCoreApplication::applicationDirPath()+"/isolde-native-host",
+        {"--steam-session","--","/usr/bin/python3","-c",
+         "import pathlib,signal,sys,time\n"
+         "signal.signal(signal.SIGTERM,lambda *_: sys.exit(2))\n"
+         "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+         "while True: time.sleep(.1)\n",ready});
+    QVERIFY(process.waitForStarted());
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(ready), 5000);
+    process.write("quit\n");
+    QVERIFY(process.waitForFinished(7000));
+    QCOMPARE(process.exitCode(),1);
 }
 
 void NativeSandboxTests::normalExitRemovesDetachedChildren()

@@ -51,22 +51,26 @@ signals:
     void launchDeferred(const QString &reason);
     void launching(const QString &appId);
     void appOpened(const QString &appId);
+    void steamGameProcessObserved(const QString &steamAppId);
     void activeChanged();
     void currentAppChanged();
     void previousFocusIdChanged();
     void sessionRejected(const QString &reason);
     void sessionFailed(const QString &appId, const QString &reason);
+    void steamGameFailed(const QString &steamAppId, const QString &reason);
     void returnedHome(const QString &focusId);
 
 private:
     bool launchFileAction(const QVariantMap &action, const QString &sourceRoot,
                           const QString &opticalMediaId = {});
     bool launchDefinition(AppDefinition definition);
+    void finishSession(AppSession *session);
 
     AppRegistry *m_registry;
     std::unique_ptr<AppSession> m_session;
     QString m_previousFocusId;
     bool m_intentionalExit = false;
+    bool m_sessionCall = false;
     bool m_resumingPrepared=false;
     std::function<QString(const QString &)> m_launchGuard;
     std::function<bool(const AppDefinition &)> m_launchPreparation;
