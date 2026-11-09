@@ -111,6 +111,19 @@ class PortableGameInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"unsafe"):
             installer.inspect(self.archive)
 
+    def test_tar_member_limits_are_enforced_during_enumeration(self):
+        self.package_ustar()
+        with mock.patch.object(installer, "MAX_ENTRIES", 2), \
+             mock.patch.object(tarfile.TarFile, "getmembers", side_effect=AssertionError("unbounded enumeration")):
+            with self.assertRaisesRegex(ValueError, "too many"):
+                installer.inspect(self.archive)
+
+    def test_tar_expanded_limit_is_enforced_during_enumeration(self):
+        self.package_ustar()
+        with mock.patch.object(installer, "MAX_EXPANDED", 20):
+            with self.assertRaisesRegex(ValueError, "unpacked size"):
+                installer.inspect(self.archive)
+
     def test_compressed_tar_is_explicitly_unsupported(self):
         self.archive=self.root/"compressed.tar.gz"
         with tarfile.open(self.archive,"w:gz") as archive:

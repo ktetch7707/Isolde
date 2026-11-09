@@ -44,6 +44,7 @@ private slots:
     void opticalIdentityAndMultiDiscReferencesAreDurable();
     void opticalApprovalsAreProfileScopedAndRevocable();
     void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
+    void ejectRefusesWhileSessionIsActive();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
@@ -94,6 +95,9 @@ void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable(){
     const auto state=OpticalDiscAdapter::classifyRootReference(root,{wrong});
     QCOMPARE(state.value("state").toString(),QString("wrong-disc"));
     QCOMPARE(state.value("expectedDisc").toInt(),1);
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{wrong,ready}).value("state").toString(),QString("ready"));
+    auto inconsistent=ready;inconsistent["discNumber"]=2;
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{inconsistent}).value("state").toString(),QString("wrong-disc"));
     auto unmounted=wrong;unmounted["observationId"]=QString(64,'c');unmounted["state"]="unmounted";unmounted["mountRoot"]="";
     QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{unmounted}).value("state").toString(),QString("missing"));
     QCOMPARE(OpticalDiscAdapter::classifyRevalidation(QString(64,'a'),"/dev/sr0",{unmounted}).value("state").toString(),QString("replaced"));
@@ -114,6 +118,19 @@ void GamesUiTests::opticalApprovalsAreProfileScopedAndRevocable(){
     QVERIFY(OpticalDiscGrants::approved(alice,identity));QVERIFY(!OpticalDiscGrants::approved(bob,identity));
     QVERIFY(OpticalDiscGrants::revoke(alice,identity).isEmpty());QVERIFY(!OpticalDiscGrants::approved(alice,identity));
     QVERIFY(!OpticalDiscGrants::authorize(alice,"not-an-identity").isEmpty());
+}
+void GamesUiTests::ejectRefusesWhileSessionIsActive(){
+    QTemporaryDir dir;AppRegistry apps;GameLibrary library(dir.filePath("games.sqlite"),&apps);
+    QVERIFY(library.ready());
+    bool active=true;
+    library.setSessionActiveGuard([&active]{return active;});
+    QVERIFY(!library.ejectOpticalDisc("/dev/sr0"));
+    QVERIFY(library.errorString().contains("session is active"));
+    QVERIFY(!library.uninstallManagedGame("game-test",true));
+    QVERIFY(library.errorString().contains("session is active"));
+    active=false;
+    QVERIFY(!library.ejectOpticalDisc("/dev/sr9999"));
+    QCOMPARE(library.errorString(),QString("Invalid optical device."));
 }
 void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces(){
     QStringList calls;

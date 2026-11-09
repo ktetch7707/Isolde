@@ -239,9 +239,14 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
             m_portablePhase.clear();emit portableInstallChanged();return;
         }
         if(m_portablePhase=="inspect"){
+            const auto *runtime=m_apps->find(m_portableRuntime);
+            if(!runtime || !compatibleRuntime(m_portableRuntime,true)){
+                m_portableInstallStatus="The selected runtime is no longer available. Choose a runtime and inspect the bundle again.";
+                m_portablePhase.clear();emit portableInstallChanged();return;
+            }
             m_portableInstallPreview=metadata;
             m_portableInstallPreview["destination"]=m_portableDestination;
-            m_portableInstallPreview["runtimeName"]=m_apps->find(m_portableRuntime)->name;
+            m_portableInstallPreview["runtimeName"]=runtime->name;
             m_portablePhase="review";
             m_portableInstallStatus="Preflight complete. Review runtime, destination and side effects before Install.";
             emit portableInstallChanged();return;
@@ -454,6 +459,7 @@ QString GameLibrary::checkedTarget(const QString &root, const QString &relative)
 }
 QString GameLibrary::addGame(const QVariantMap &input) {
     if (!m_ready) { fail(tr("The games catalog is unavailable.")); return {}; }
+    if(m_portablePhase=="uninstall"){fail(tr("Wait for the managed uninstall to finish before changing game sources."));return {};}
     QString error; const auto registration = ComponentSchema::gameRegistration(input,&error);
     if (registration.isEmpty()) { fail(error); return {}; }
     const auto runtime = registration.value("runtimeId").toString();
@@ -672,6 +678,7 @@ QVariantMap GameLibrary::registration(const QString &id) {
         {"runtimeId",query.value(2)},{"root",query.value(3)},{"target",query.value(4)}};
 }
 bool GameLibrary::updateGame(const QString &id,const QVariantMap &input) {
+    if(m_portablePhase=="uninstall")return fail(tr("Wait for the managed uninstall to finish before changing game sources."));
     if(!m_ready || registration(id).isEmpty())return fail(tr("Game not found in this profile."));
     QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
     if(value.isEmpty())return fail(error);
@@ -1024,6 +1031,7 @@ bool GameLibrary::exportCatalog(const QString &destination) {
     m_error.clear();emit errorChanged();return true;
 }
 bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
+    if(m_portablePhase=="uninstall")return fail(tr("Wait for the managed uninstall to finish before restoring the catalog."));
     if(!m_ready || !confirmed || !QDir::isAbsolutePath(source) || QDir::cleanPath(source)!=source
         || QFileInfo(source).isSymLink() || !QFileInfo(source).isFile() || QFileInfo(source).canonicalFilePath()!=source
         || QFileInfo(source).size()<1 || QFileInfo(source).size()>MaxCatalogArchiveBytes)
@@ -1313,6 +1321,8 @@ bool GameLibrary::canUninstallManagedGame(const QString &id) const {
     return true;
 }
 bool GameLibrary::uninstallManagedGame(const QString &id,bool confirmed) {
+    if(m_sessionActiveGuard && m_sessionActiveGuard())
+        return fail(tr("A session is active or starting. Return Home before uninstalling a game."));
     if(!m_ready || !confirmed || portableInstallBusy() || !m_portablePhase.isEmpty()
         || !canUninstallManagedGame(id))
         return fail(tr("Only a separately confirmed, verified Isolde-managed install can be uninstalled."));
@@ -1330,6 +1340,7 @@ bool GameLibrary::uninstallManagedGame(const QString &id,bool confirmed) {
 }
 QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionId) {
     m_error.clear();emit errorChanged();
+    if(m_portablePhase=="uninstall"){fail(tr("Wait for the managed uninstall to finish before launching a game."));return {};}
     if (!m_ready || !ComponentSchema::safeId(id)) { fail(tr("Game not found in this profile.")); return {}; }
     if(editionId.isEmpty() && editions(id).size()>1){fail(tr("Choose which edition to play."));return {};}
     if(!editionId.isEmpty() && !ComponentSchema::safeId(editionId)){fail(tr("Invalid edition identity."));return {};}
@@ -1372,6 +1383,7 @@ QVariantList GameLibrary::editions(const QString &id) {
     return result;
 }
 QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
+    if(m_portablePhase=="uninstall"){fail(tr("Wait for the managed uninstall to finish before changing game sources."));return {};}
     if(!m_ready || registration(id).isEmpty()){fail(tr("Game not found in this profile."));return {};}
     QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
     if(value.isEmpty()){fail(error);return {};}
@@ -1519,6 +1531,10 @@ bool GameLibrary::mountOpticalDisc(const QString &device){
 }
 bool GameLibrary::ejectOpticalDisc(const QString &device){
     if(!m_ready)return fail(tr("Games is unavailable."));
+    if(m_sessionActiveGuard && m_sessionActiveGuard())
+        return fail(tr("A session is active. Return Home before safely ejecting optical media."));
+    if(portableInstallBusy() && m_portableOpticalDevice==device)
+        return fail(tr("The disc is being used by the game installer. Finish or cancel it before ejecting."));
     QString error;
     if(!OpticalDiscAdapter::eject(device,&error))return fail(error);
     m_error.clear();emit errorChanged();return true;
@@ -1646,6 +1662,7 @@ QVariantList GameLibrary::importPage(int offset) const {
     return m_preview.mid(offset,PageSize);
 }
 bool GameLibrary::commitImport() {
+    if(m_portablePhase=="uninstall")return fail(tr("Wait for the managed uninstall to finish before importing games."));
     if(!m_ready || scanning() || !m_importReady)return fail(tr("Wait for the import preview before confirming."));
     const bool steam=m_importRuntime=="steam";
     if(!compatibleRuntime(m_importRuntime,!steam))return fail(tr("The selected runtime is no longer installed."));

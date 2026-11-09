@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QProcess>
 #include <memory>
+#include <functional>
 
 class AppRegistry;
 class AppCatalog;
@@ -37,6 +38,7 @@ public:
     Q_INVOKABLE QVariantMap emulatorSettings(const QString &runtimeId);
     Q_INVOKABLE bool configureEmulator(const QString &runtimeId, const QVariantMap &options, const QString &firmware = {});
     void setCatalog(AppCatalog *catalog) { m_catalog=catalog; }
+    void setSessionActiveGuard(std::function<bool()> guard) { m_sessionActiveGuard=std::move(guard); }
     bool setupBusy() const { return m_setup.state()!=QProcess::NotRunning; }
     QString setupStatus() const { return m_setupStatus; }
     Q_INVOKABLE bool installEmulators(bool consent);
@@ -159,4 +161,5 @@ private:
     QStringList m_lastOpticalObservationIds;
     QString m_portablePhase;
     bool m_portableCanceled=false;
+    std::function<bool()> m_sessionActiveGuard;
 };

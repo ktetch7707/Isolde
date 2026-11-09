@@ -7,6 +7,8 @@
 #include "media/MediaGrants.h"
 #include "games/ManagedGamePaths.h"
 #include "games/OpticalDiscAdapter.h"
+#include "games/OpticalDiscGrants.h"
+#include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
 
@@ -150,9 +152,14 @@ bool SessionManager::launchGameFile(const QVariantMap &input,const QString &sour
     for(const auto &item:OpticalDiscAdapter::mountedDiscs()){
         const auto disc=item.toMap();
         if(disc.value("mountRoot")==sourceRoot && disc.value("mediaId")==opticalMediaId
+            && OpticalDiscGrants::approved(profile,opticalMediaId)
             && disc.value("directPlaySupported").toBool())optical=true;
     }
-    if((!error.isEmpty() && !managed && !optical) || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
+    QFile executable(target);
+    const bool nativeElf=(!(managed || optical) || (executable.open(QIODevice::ReadOnly)
+        && executable.read(4)==QByteArray("\x7f""ELF",4)));
+    if((!opticalMediaId.isEmpty() && !optical) || (!error.isEmpty() && !managed && !optical)
+        || !nativeElf || input.value("type").toString()!="open-file" || !runtime || runtime->type!="desktop"
         || !QStringList{"game","game-hub"}.contains(runtime->presentationMode) || !target.startsWith(sourceRoot+'/')
         || !QFileInfo(target).isFile() || QFileInfo(target).canonicalFilePath()!=target
         || ((managed || optical) && !QFileInfo(target).isExecutable())){
@@ -204,10 +211,11 @@ bool SessionManager::launchFileAction(const QVariantMap &input,const QString &so
     actionDefinition.launchConfiguration.insert(QStringLiteral("actionTarget"), target);
     if(!sourceRoot.isEmpty())actionDefinition.launchConfiguration.insert("gameSourceRoot",sourceRoot);
     if(!opticalMediaId.isEmpty())actionDefinition.launchConfiguration.insert("opticalMediaId",opticalMediaId);
-    if(ManagedGamePaths::isInstallRoot(qApp->property("isoldeProfile").toString(),sourceRoot)){
+    if(!opticalMediaId.isEmpty() || ManagedGamePaths::isInstallRoot(qApp->property("isoldeProfile").toString(),sourceRoot)){
         actionDefinition.name=QFileInfo(target).completeBaseName();
-        actionDefinition.launchConfiguration.insert("managedGameRoot",sourceRoot);
+        if(opticalMediaId.isEmpty())actionDefinition.launchConfiguration.insert("managedGameRoot",sourceRoot);
         actionDefinition.launchConfiguration.insert("managedGameExecutable",target);
+        actionDefinition.launchConfiguration.remove("emulatorRuntime");
     }
     qInfo() << "Launching action tile" << type << "target" << target << "with" << openWith;
     return launchDefinition(actionDefinition);

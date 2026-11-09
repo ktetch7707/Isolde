@@ -101,15 +101,18 @@ QVariantMap OpticalDiscAdapter::classifyRootReference(const QString &root,const 
     const auto parts=root.split('/');
     const auto mediaId=parts.at(2),setId=parts.at(3);
     const int expectedNumber=parts.at(4).toInt(),expectedCount=parts.at(5).toInt();
+    QVariantMap wrongDisc;
     for(const auto &item:currentDiscs){
         const auto disc=item.toMap();
         if(disc.value("state")!="mounted")continue;
-        if(disc.value("mediaId")==mediaId)return {{"state","ready"},{"disc",disc}};
-        if(disc.value("mediaSetId")==setId){
-            return {{"state","wrong-disc"},{"disc",disc},{"expectedDisc",expectedNumber},
-                {"discCount",expectedCount}};
-        }
+        if(disc.value("mediaId")==mediaId && disc.value("mediaSetId")==setId
+            && disc.value("discNumber").toInt()==expectedNumber
+            && disc.value("discCount").toInt()==expectedCount)
+            return {{"state","ready"},{"disc",disc}};
+        if(disc.value("mediaSetId")==setId && wrongDisc.isEmpty())wrongDisc=disc;
     }
+    if(!wrongDisc.isEmpty())return {{"state","wrong-disc"},{"disc",wrongDisc},
+        {"expectedDisc",expectedNumber},{"discCount",expectedCount}};
     return {{"state","missing"},{"expectedDisc",expectedNumber},{"discCount",expectedCount}};
 }
 

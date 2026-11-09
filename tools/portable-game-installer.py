@@ -39,7 +39,11 @@ def bundle_format(stream):
 
 def bundle_members(archive, archive_format):
     members = []
-    for info in archive.infolist() if archive_format == "zip" else archive.getmembers():
+    total = 0
+    names = set()
+    for info in archive.infolist() if archive_format == "zip" else archive:
+        if len(members) >= MAX_ENTRIES:
+            raise ValueError("Portable game bundle has too many or too few entries.")
         if archive_format == "zip":
             raw_name = info.filename
             directory = info.is_dir()
@@ -64,10 +68,17 @@ def bundle_members(archive, archive_format):
         canonical_match=raw_name==canonical_name or (
             archive_format=="ustar" and directory and raw_name==name)
         if (not name or not path.parts or path.is_absolute() or "\\" in name or "\x00" in name
+                or len(name.encode("utf-8", "surrogatepass")) > 4096
                 or not canonical_match or any(part in ("", ".", "..") for part in path.parts)
                 or path.parts[0] == ".isolde-install.json" or invalid_type
                 or invalid_encryption or size < 0 or compressed_size > MAX_ARCHIVE):
             raise ValueError("Portable game bundle contains an unsafe or non-canonical entry.")
+        if name in names:
+            raise ValueError("Portable game bundle contains an unsafe or duplicate path.")
+        names.add(name)
+        total += size
+        if size > MAX_EXPANDED or total > MAX_EXPANDED:
+            raise ValueError("Portable game bundle exceeds the 2 GiB unpacked size limit.")
         members.append({"name": name, "directory": directory, "size": size,
                         "mode": mode, "info": info})
     return members
@@ -99,18 +110,8 @@ def inspect(source):
             members=bundle_members(archive,archive_format)
             if not members or len(members) > MAX_ENTRIES:
                 raise ValueError("Portable game bundle has too many or too few entries.")
-            total = 0
-            names=set()
-            for member in members:
-                name=member["name"]
-                if name in names:
-                    raise ValueError("Portable game bundle contains an unsafe or duplicate path.")
-                names.add(name)
-                if member["size"] > MAX_EXPANDED:
-                    raise ValueError("Portable game file exceeds the unpacked size limit.")
-                total += member["size"]
-                if total > MAX_EXPANDED:
-                    raise ValueError("Portable game bundle exceeds the 2 GiB unpacked size limit.")
+            total = sum(member["size"] for member in members)
+            names={member["name"] for member in members}
             manifest_members=[member for member in members if member["name"]==MANIFEST]
             if len(manifest_members)!=1 or manifest_members[0]["directory"]:
                 raise ValueError("Bundle must contain a valid isolde-game.json manifest.")
