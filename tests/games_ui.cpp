@@ -435,7 +435,7 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QCOMPARE(dispatch.lastAction.value("appId").toString(),QString("steam"));
     QCOMPARE(dispatch.origin,QString("steam-origin"));
     QCOMPARE(widget->property("mode").toString(),QString("details"));
-    QVERIFY(widget->setProperty("mode","catalogTools"));QVERIFY(widget->setProperty("choice",5));
+    QVERIFY(widget->setProperty("mode","catalogTools"));QVERIFY(widget->setProperty("choice",7));
     command(widget.data(),InputManager::Confirm);
     QCOMPARE(dispatch.lastAction.value("appId").toString(),QString("steam"));
     QCOMPARE(widget->property("mode").toString(),QString("catalogTools"));
@@ -852,6 +852,9 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     const auto steamProvenance=library.details(steamGame).value("acquisitionProvenance").toMap();
     QCOMPARE(steamProvenance.value("sourceKind").toString(),QString("steam-app"));
     QCOMPARE(steamProvenance.value("origin").toString(),QString("manual-registration"));
+    auto editionRegistration=registration;editionRegistration["title"]="Alternate edition";
+    editionRegistration["platform"]="PC Edition";editionRegistration["target"]="edition-target";
+    const auto edition=library.addEdition(game,editionRegistration);QVERIFY2(!edition.isEmpty(),qPrintable(library.errorString()));
 
     const auto connection="games-provenance-immutability-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto db=QSqlDatabase::addDatabase("QSQLITE",connection);db.setDatabaseName(database);QVERIFY(db.open());
@@ -873,7 +876,7 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QVERIFY2(library.exportCatalog(backup),qPrintable(library.errorString()));
     QFile input(backup);QVERIFY(input.open(QIODevice::ReadOnly));
     auto archive=QJsonDocument::fromJson(input.readAll()).object();input.close();
-    auto records=archive.value("provenance").toArray();QCOMPARE(records.size(),2);
+    auto records=archive.value("provenance").toArray();QCOMPARE(records.size(),3);
     auto mismatchedType=archive;
     auto typedRecords=mismatchedType.value("provenance").toArray();
     for(qsizetype index=0;index<typedRecords.size();++index){
@@ -885,6 +888,18 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QVERIFY(mismatched.open(QIODevice::WriteOnly));
     QVERIFY(mismatched.write(QJsonDocument(mismatchedType).toJson(QJsonDocument::Compact))>0);mismatched.close();
     QVERIFY(!library.restoreCatalog(mismatchedPath,true));
+    QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
+    auto mismatchedEditionType=archive;
+    typedRecords=mismatchedEditionType.value("provenance").toArray();
+    for(qsizetype index=0;index<typedRecords.size();++index){
+        auto item=typedRecords.at(index).toObject();
+        if(item.value("entityId").toString()==edition){item["entityType"]="game";typedRecords[index]=item;}
+    }
+    mismatchedEditionType["provenance"]=typedRecords;
+    const auto mismatchedEditionPath=dir.filePath("provenance-edition-type-mismatch.json");QFile mismatchedEdition(mismatchedEditionPath);
+    QVERIFY(mismatchedEdition.open(QIODevice::WriteOnly));
+    QVERIFY(mismatchedEdition.write(QJsonDocument(mismatchedEditionType).toJson(QJsonDocument::Compact))>0);mismatchedEdition.close();
+    QVERIFY(!library.restoreCatalog(mismatchedEditionPath,true));
     QCOMPARE(library.details(game).value("acquisitionProvenance").toMap(),provenance);
     for(qsizetype index=0;index<records.size();++index){
         auto item=records.at(index).toObject();

@@ -161,7 +161,6 @@ Item {
         if(!dispatcher.dispatch({schemaVersion:1,type:"launch-app",appId:"steam"},originId))
             message="Steam could not open. Install or repair it in the Store, then retry."
     }
-    }
     function beginAdd(asImport){
         if(!library || !library.ready){message=library?library.errorString:"Games is unavailable in this profile.";return}
         if(!runtimes.length){message="No compatible game runtime is installed. Game runtimes must be provisioned before a game can be added.";return}
