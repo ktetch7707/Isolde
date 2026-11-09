@@ -8,6 +8,7 @@ class KodiMedia;
 class KodiService;
 class HomeLayout;
 class CaptureController;
+class AudioSettings;
 class GameLibrary;
 class GuideController;
 
@@ -18,6 +19,8 @@ public:
     ActionDispatcher(AppRegistry *apps, SessionManager *sessions, KodiMedia *media,
         KodiService *service, AppCatalog *catalog = nullptr, CaptureController *capture = nullptr, QObject *parent = nullptr);
     Q_INVOKABLE bool dispatch(const QVariantMap &action, const QString &originId = {});
+    Q_INVOKABLE bool dispatchEditorAction(const QVariantMap &action);
+    void setAudioSettings(AudioSettings *audio) { m_audio = audio; }
     void setLayout(HomeLayout *layout) { m_layout=layout; }
     void setGames(GameLibrary *games) { m_games=games; }
     void setGuide(GuideController *guide);
@@ -26,6 +29,9 @@ public:
     Q_INVOKABLE bool surfGuide(int direction);
 signals:
     void guidePlaybackChanged();
+    void allAppsRequested(const QString &originId);
+    void searchRequested(const QString &originId);
+    // Kept for older in-process observers; the shell routes this to All Apps.
     void drawerRequested();
     void guideRequested(const QString &originId,const QVariantMap &presentation,const QString &focusChannelId);
     void pageRequested(const QString &id, const QString &originId);
@@ -44,10 +50,16 @@ private:
     KodiService *m_service;
     AppCatalog *m_catalog;
     CaptureController *m_capture;
+    AudioSettings *m_audio = nullptr;
     HomeLayout *m_layout = nullptr;
     GameLibrary *m_games = nullptr;
     GuideController *m_guide = nullptr;
     QString m_origin;
+    QString m_pendingGameId;
+    QString m_pendingGameProfile;
+    QString m_pendingSteamIdentity;
+    bool m_pendingSteamGame = false;
+    bool m_pendingSteamObserved = false;
     QString m_guideChannel,m_guideSlot;
     QString m_surfChannel;
     qint64 m_guideEnd=0;

@@ -1,11 +1,65 @@
 #include "media/CaptureController.h"
+#include "media/AudioCaptureAdapter.h"
+#include "media/VideoCaptureAdapter.h"
 #include <QtTest>
+
+class FakeAudioAdapter final : public AudioCaptureAdapter {
+public:
+    QVariantList available;
+    int stops = 0;
+    int configurations = 0;
+    QString current;
+    bool failConfigure = false;
+    bool emitConfigureError = false;
+    QVariantList devices() const override { return available; }
+    bool monitoringSupported() const override { return true; }
+    QString name() const override { return "fixture audio"; }
+    bool configure(QObject *, const QString &id) override {
+        ++configurations;
+        current = id;
+        if (emitConfigureError) emit errorOccurred("synchronous fixture failure");
+        if (failConfigure) return false;
+        if (id.isEmpty()) return true;
+        for (const auto &entry : available)
+            if (entry.toMap().value("id").toString() == id) return true;
+        return false;
+    }
+    void stop(QObject *) override { ++stops; }
+    void publish() { emit devicesChanged(); }
+    void fail() { emit errorOccurred("fixture audio failure"); }
+};
+
+class FakeVideoAdapter final : public VideoCaptureAdapter {
+public:
+    QVariantList available;
+    QVariantList formatList;
+    QObject audioBridge;
+    int starts = 0;
+    int stops = 0;
+    bool failStart = false;
+    QObject *output = nullptr;
+    QVariantList devices() const override { return available; }
+    QVariantList formats(const QString &id) const override {
+        return id == "fixture-video" && !available.isEmpty() ? formatList : QVariantList{};
+    }
+    QString name() const override { return "fixture video"; }
+    void setOutput(QObject *value) override { output = value; }
+    bool start(const QString &, const QString &) override { ++starts; return !failStart; }
+    void stop() override { ++stops; }
+    QObject *audioContext() override { return &audioBridge; }
+    void publish() { emit devicesChanged(); }
+    void frame() { emit frameReceived(); }
+    void fail() { emit errorOccurred("fixture failure"); }
+};
 
 class CaptureTests final : public QObject {
     Q_OBJECT
 private slots:
     void encodesSwitchCommands();
     void rejectsUnsafeOrAmbiguousCommands();
+    void validatesInputLabels();
+    void injectedAudioDiscoveryAndHotplug();
+    void injectablePreviewLifecycle();
 };
 
 void CaptureTests::encodesSwitchCommands()
@@ -29,5 +83,159 @@ void CaptureTests::rejectsUnsafeOrAmbiguousCommands()
     QVERIFY(CaptureController::commandForInput("{input}", 9).isEmpty());
 }
 
-QTEST_APPLESS_MAIN(CaptureTests)
+void CaptureTests::validatesInputLabels()
+{
+    QVERIFY(CaptureController::isValidInputLabel("Living room console"));
+    QVERIFY(CaptureController::isValidInputLabel(QString(40, QLatin1Char('A'))));
+    QVERIFY(!CaptureController::isValidInputLabel(""));
+    QVERIFY(!CaptureController::isValidInputLabel("   "));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(41, QLatin1Char('A'))));
+    QVERIFY(!CaptureController::isValidInputLabel("Two\nlines"));
+    QVERIFY(!CaptureController::isValidInputLabel("Two\twords"));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(QChar::Null)));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(QChar(0x7f))));
+    QVERIFY(!CaptureController::isValidInputLabel(QString(QChar(0x85))));
+}
+
+void CaptureTests::injectedAudioDiscoveryAndHotplug()
+{
+    FakeAudioAdapter audio;
+    audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
+    {
+        CaptureController controller(&audio, nullptr);
+        QCOMPARE(controller.audioDevices().size(), 1);
+        QCOMPARE(controller.audioDevices().first().toMap().value("id").toString(), QString("fixture-a"));
+        QCOMPARE(controller.capabilities().value("audioAdapter").toString(), QString("fixture audio"));
+        QVERIFY(controller.capabilities().value("audioMonitoringSupported").toBool());
+        QVERIFY(!controller.setAudioDevice("missing"));
+        audio.available.clear();
+        audio.publish();
+        QVERIFY(controller.audioDevices().isEmpty());
+        audio.available = {QVariantMap{{"id", "fixture-b"}, {"name", "Reconnected audio"}}};
+        audio.publish();
+        QCOMPARE(controller.audioDevices().first().toMap().value("id").toString(), QString("fixture-b"));
+        controller.stopPreview();
+        QVERIFY(audio.stops > 0);
+    }
+}
+
+void CaptureTests::injectablePreviewLifecycle()
+{
+    FakeVideoAdapter video;
+    FakeAudioAdapter audio;
+    video.available = {QVariantMap{{"id", "fixture-video"}, {"name", "Fixture video"}}};
+    video.formatList = {QVariantMap{{"key", "fixture-format"}, {"name", "Fixture format"}}};
+    audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
+    CaptureController controller(&video, &audio, nullptr);
+    const auto savedVideo = controller.captureDeviceId();
+    const auto savedAudio = controller.audioDeviceId();
+    QObject surface;
+    controller.setVideoOutput(&surface);
+    QCOMPARE(controller.capabilities().value("captureAdapter").toString(), QString("fixture video"));
+    QVERIFY(!controller.startPreviewFor("fixture-video", "invalid-format", "fixture-a"));
+    QCOMPARE(video.starts, 0);
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "missing"));
+    QCOMPARE(video.starts, 0);
+    QVERIFY(controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.current, QString("fixture-a"));
+    QCOMPARE(video.starts, 1);
+    QVERIFY(controller.capabilities().value("audioMonitoringConfigured").toBool());
+    QCOMPARE(controller.captureDeviceId(), savedVideo);
+    QCOMPARE(controller.audioDeviceId(), savedAudio);
+    QCOMPARE(controller.state(), QString("awaiting-frames"));
+    video.frame();
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "missing"));
+    QVERIFY(controller.previewActive());
+    QCOMPARE(video.starts, 1);
+    audio.available.clear();
+    audio.publish();
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    QCOMPARE(controller.audioState(), QString("missing"));
+    QVERIFY(!controller.capabilities().value("audioMonitoringConfigured").toBool());
+    video.frame();
+    QCOMPARE(controller.audioState(), QString("missing"));
+    audio.available = {QVariantMap{{"id", "fixture-a"}, {"name", "Fixture audio"}}};
+    audio.publish();
+    QCOMPARE(audio.current, QString("fixture-a"));
+    QCOMPARE(controller.audioState(), QString("ready"));
+    QVERIFY(controller.capabilities().value("audioMonitoringConfigured").toBool());
+    audio.fail();
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    QCOMPARE(controller.audioState(), QString("error"));
+    const auto audioFailure = controller.audioStatus();
+    QVERIFY(audioFailure.contains("fixture audio failure"));
+    QVERIFY(!controller.capabilities().value("audioMonitoringConfigured").toBool());
+    video.frame();
+    QCOMPARE(controller.state(), QString("receiving-frames"));
+    QCOMPARE(controller.audioState(), QString("error"));
+    QCOMPARE(controller.audioStatus(), audioFailure);
+    const int priorConfigurations = audio.configurations;
+    const int priorStarts = video.starts;
+    audio.failConfigure = true;
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.configurations, priorConfigurations + 1);
+    QCOMPARE(video.starts, priorStarts);
+    QCOMPARE(controller.audioState(), QString("error"));
+    QVERIFY(controller.previewActive());
+    video.frame();
+    QCOMPARE(controller.audioState(), QString("error"));
+    audio.failConfigure = false;
+    audio.emitConfigureError = true;
+    QVERIFY(!controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.configurations, priorConfigurations + 2);
+    QVERIFY(controller.audioStatus().contains("synchronous fixture failure"));
+    video.frame();
+    QVERIFY(controller.audioStatus().contains("synchronous fixture failure"));
+    audio.emitConfigureError = false;
+    QVERIFY(controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    QCOMPARE(audio.configurations, priorConfigurations + 3);
+    QCOMPARE(video.starts, priorStarts);
+    QCOMPARE(controller.audioState(), QString("ready"));
+    QVERIFY(controller.capabilities().value("audioMonitoringConfigured").toBool());
+    video.formatList.clear();
+    video.publish();
+    QVERIFY(!controller.previewActive());
+    QCOMPARE(controller.state(), QString("format-missing"));
+    video.formatList = {QVariantMap{{"key", "fixture-format"}, {"name", "Fixture format"}}};
+    video.publish();
+    QVERIFY(controller.startPreviewFor("fixture-video", "fixture-format", "fixture-a"));
+    controller.stopPreview();
+    QVERIFY(!controller.previewActive());
+    video.frame();
+    QVERIFY(controller.state() != "receiving-frames");
+    const auto stoppedAudioState = controller.audioState();
+    const auto stoppedAudioStatus = controller.audioStatus();
+    audio.fail();
+    QCOMPARE(controller.audioState(), stoppedAudioState);
+    QCOMPARE(controller.audioStatus(), stoppedAudioStatus);
+    QVERIFY(controller.startPreviewFor("fixture-video", "", ""));
+    video.fail();
+    QVERIFY(!controller.previewActive());
+    QCOMPARE(controller.state(), QString("error"));
+    QVERIFY(controller.startPreviewFor("fixture-video", "", ""));
+    video.available.clear();
+    video.publish();
+    QVERIFY(!controller.previewActive());
+    QCOMPARE(controller.state(), QString("device-missing"));
+    video.available = {QVariantMap{{"id", "fixture-video"}, {"name", "Fixture video"}}};
+    video.publish();
+    audio.failConfigure = true;
+    const int startsBeforeAudioFailure = video.starts;
+    QVERIFY(!controller.startPreviewFor("fixture-video", "", "fixture-a"));
+    QVERIFY(!controller.previewActive());
+    QCOMPARE(video.starts, startsBeforeAudioFailure);
+    QVERIFY(!controller.capabilities().value("audioMonitoringConfigured").toBool());
+    audio.failConfigure = false;
+    video.failStart = true;
+    QVERIFY(!controller.startPreviewFor("fixture-video", "", ""));
+    QVERIFY(!controller.previewActive());
+    video.failStart = false;
+    QVERIFY(controller.startPreviewFor("fixture-video", "", ""));
+    controller.setVideoOutput(nullptr);
+    QVERIFY(!controller.previewActive());
+    QVERIFY(video.output == nullptr);
+}
+
+QTEST_GUILESS_MAIN(CaptureTests)
 #include "tst_capture.moc"

@@ -27,6 +27,7 @@
 #include <QQmlComponent>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <cmath>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QJSValue>
@@ -51,6 +52,9 @@ private slots:
     void repairsSourceWithRemoteAndCanCancel();
     void televisionLibraryRemoteFlow();
     void universalLocalSearchRemoteFlow();
+    void allAppsGalleryUsesLocalFilterAndRestoresOrigin();
+    void allAppsListNavigationUsesSingleRowStep();
+    void allAppsGridColumnsMatchRemoteNavigationStep();
     void searchHeaderSwitchRemoteFocusAndStableResults();
     void searchPreferenceProfileIsolationAndWriteFailure();
     void appSuppliedIconsUseManagedArtwork();
@@ -65,6 +69,136 @@ private slots:
     void studioNestedGroupCanvasAndRemoteScope();
     void studioCatalogAndContextualInspector();
 };
+
+void HomeNavigationTests::allAppsGalleryUsesLocalFilterAndRestoresOrigin()
+{
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(APP_GALLERY_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    const QVariantList apps{
+        QVariantMap{{"id","alpha"},{"name","Alpha"},{"section","Apps"},{"type","web"},{"state","ready"},{"symbol","A"}},
+        QVariantMap{{"id","beta"},{"name","Beta"},{"section","Tools"},{"type","desktop"},{"state","needs-setup"},{"symbol","B"}}
+    };
+    std::unique_ptr<QObject> gallery(component.createWithInitialProperties({
+        {"entries", apps}, {"width", 1280}, {"height", 720}
+    }));
+    QVERIFY2(gallery, qPrintable(component.errorString()));
+    QSignalSpy launch(gallery.get(), SIGNAL(launchRequested(QString)));
+    QSignalSpy closed(gallery.get(), SIGNAL(closeRequested(QString)));
+    QSignalSpy search(gallery.get(), SIGNAL(searchRequested()));
+    QSignalSpy favorite(gallery.get(), SIGNAL(favoriteChanged(QString,bool)));
+    gallery->setProperty("galleryPresentation", QVariantMap{{"favoritesEnabled",true},{"favoriteIds",QVariantList{}},{"sort","name"}});
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("home-card"))));
+    QVERIFY(gallery->property("open").toBool());
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QVERIFY(!gallery->property("keyboardOpen").toBool());
+    auto command = [&](int value) {
+        return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
+    };
+    QVERIFY(command(InputManager::NavigateRight));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
+    QVERIFY(command(InputManager::Confirm));
+    QCOMPARE(launch.size(), 1);
+    QCOMPARE(launch.last().at(0).toString(), QString("beta"));
+    gallery->setProperty("filterText", QString("alpha"));
+    QCoreApplication::processEvents();
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QCOMPARE(gallery->property("visibleEntries").toList().size(), 1);
+    gallery->setProperty("favoritesOnly", false);
+    gallery->setProperty("filterText", QString());
+    QCoreApplication::processEvents();
+    QVERIFY(command(InputManager::Menu));
+    QCOMPARE(favorite.size(), 1);
+    QCOMPARE(favorite.last().at(0).toString(), QString("alpha"));
+    QCOMPARE(favorite.last().at(1).toBool(), true);
+    gallery->setProperty("galleryPresentation", QVariantMap{{"favoritesEnabled",true},{"favoriteIds",QVariantList{"alpha"}},{"sort","name"}});
+    gallery->setProperty("focusArea", QString("favorites"));
+    QVERIFY(command(InputManager::Confirm));
+    QVERIFY(gallery->property("favoritesOnly").toBool());
+    QCOMPARE(gallery->property("visibleEntries").toList().size(), 1);
+    QVERIFY(command(InputManager::Search));
+    QCOMPARE(search.size(), 1);
+    QVERIFY(!gallery->property("keyboardOpen").toBool());
+    QVERIFY(command(InputManager::Back));
+    QCOMPARE(closed.size(), 1);
+    QCOMPARE(closed.last().at(0).toString(), QString("home-card"));
+}
+void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
+{
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(APP_GALLERY_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    const QVariantList apps{
+        QVariantMap{{"id","alpha"},{"name","Alpha"},{"type","web"}},
+        QVariantMap{{"id","beta"},{"name","Beta"},{"type","desktop"}},
+        QVariantMap{{"id","gamma"},{"name","Gamma"},{"type","web"}},
+        QVariantMap{{"id","delta"},{"name","Delta"},{"type","android"}}
+    };
+    std::unique_ptr<QObject> gallery(component.createWithInitialProperties({
+        {"entries", apps},
+        {"galleryPresentation", QVariantMap{{"layout","list"},{"columns",5},{"filterEnabled",true}}},
+        {"width",1280},{"height",720}
+    }));
+    QVERIFY2(gallery, qPrintable(component.errorString()));
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("page-apps"))));
+    auto command = [&](int value) {
+        return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
+    };
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("gamma"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("focusArea").toString(), QString("filter"));
+}
+void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
+{
+    InputManager input;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("inputManager", &input);
+    QQmlComponent component(&engine, QUrl::fromLocalFile(QStringLiteral(APP_GALLERY_QML)));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QVariantList apps;
+    for (int i = 0; i < 10; ++i) {
+        const auto id = QString("app-%1").arg(i);
+        apps.append(QVariantMap{{"id",id},{"name",QString("App %1").arg(i)},{"type","web"}});
+    }
+    QQuickWindow window;
+    window.resize(1280,720);
+    std::unique_ptr<QObject> gallery(component.createWithInitialProperties({
+        {"entries", apps},
+        {"galleryPresentation", QVariantMap{{"layout","grid"},{"columns",5},{"filterEnabled",true}}},
+        {"width",1280},{"height",720}
+    }));
+    QVERIFY2(gallery, qPrintable(component.errorString()));
+    qobject_cast<QQuickItem *>(gallery.get())->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QMetaObject::invokeMethod(gallery.get(), "showForOrigin", Q_ARG(QVariant, QString("page-apps"))));
+    auto *grid = gallery->findChild<QObject *>("allAppsGrid");
+    QVERIFY(grid);
+    QTRY_VERIFY(grid->property("width").toReal() > 0);
+    QTRY_VERIFY(grid->property("cellWidth").toReal() > 0);
+    const double gridWidth = grid->property("width").toReal();
+    const double cellWidth = grid->property("cellWidth").toReal();
+    QCOMPARE(static_cast<int>(std::floor(gridWidth / cellWidth + 0.00001)), 5);
+    auto command = [&](int value) {
+        return QMetaObject::invokeMethod(gallery.get(), "handleCommand", Q_ARG(QVariant, value));
+    };
+    QCOMPARE(gallery->property("selectedId").toString(), QString("app-0"));
+    QVERIFY(command(InputManager::NavigateDown));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("app-5"));
+    QVERIFY(command(InputManager::NavigateUp));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("app-0"));
+}
 void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 {
     QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);InputManager input;
@@ -519,10 +653,14 @@ void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure()
     SearchSettings a(nullptr,path,one),b(nullptr,path,two),household(nullptr,path,"default");
     QVERIFY(!a.webEnabled());QVERIFY(!b.webEnabled());QVERIFY(!household.webEnabled());
     a.toggleWebEnabled();QVERIFY(a.webEnabled());QVERIFY(a.errorString().isEmpty());
+    a.setDiscoveryRegion("ca");QCOMPARE(a.discoveryRegion(),QString("CA"));QVERIFY(a.errorString().isEmpty());
+    a.setDiscoveryRegion("USA");QCOMPARE(a.discoveryRegion(),QString("CA"));QVERIFY(!a.errorString().isEmpty());
     SearchSettings restored(nullptr,path,one);QVERIFY(restored.webEnabled());QVERIFY(!b.webEnabled());
+    QCOMPARE(restored.discoveryRegion(),QString("CA"));
     b.toggleWebEnabled();a.toggleWebEnabled();QVERIFY(b.webEnabled());QVERIFY(!a.webEnabled());
     SearchSettings restoredA(nullptr,path,one),restoredB(nullptr,path,two);
     QVERIFY(!restoredA.webEnabled());QVERIFY(restoredB.webEnabled());QVERIFY(!household.webEnabled());
+    QCOMPARE(restoredA.discoveryRegion(),QString("CA"));QCOMPARE(restoredB.discoveryRegion(),QString("US"));
     QFile blocked(dir.filePath("blocked"));QVERIFY(blocked.open(QIODevice::WriteOnly));blocked.write("retain");blocked.close();
     SearchSettings failed(nullptr,dir.filePath("blocked/preferences.ini"),one);
     failed.toggleWebEnabled();QVERIFY(!failed.webEnabled());QVERIFY(!failed.errorString().isEmpty());
@@ -545,6 +683,10 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
     const auto original=list(root->property("results"));QVERIFY(!original.isEmpty());
     for(const auto &entry:original)QVERIFY(entry.toMap()["kind"]!="searchToggle");
     QCOMPARE(root->property("focusArea").toString(),QString("query"));
+    command(InputManager::NavigateRight);QCOMPARE(root->property("focusArea").toString(),QString("linguist"));
+    command(InputManager::NavigateRight);QCOMPARE(root->property("focusArea").toString(),QString("region"));
+    command(InputManager::Confirm);QVERIFY(root->property("regionKeyboardOpen").toBool());
+    command(InputManager::Back);QVERIFY(!root->property("regionKeyboardOpen").toBool());
     command(InputManager::NavigateRight);QCOMPARE(root->property("focusArea").toString(),QString("web"));QVERIFY(!preferences.webEnabled());
     command(InputManager::Confirm);QVERIFY(preferences.webEnabled());QTRY_VERIFY(toggle->property("checked").toBool());
     QCOMPARE(list(root->property("results")),original);QCOMPARE(root->property("selectedIndex").toInt(),0);
@@ -555,7 +697,7 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
     command(InputManager::NavigateLeft);command(InputManager::Confirm);QVERIFY(root->property("keyboardOpen").toBool());
     command(InputManager::Back);QVERIFY(!root->property("keyboardOpen").toBool());QVERIFY(root->property("open").toBool());
     root->setProperty("query","zzzz-no-matches");QTRY_COMPARE(list(root->property("results")).size(),0);
-    command(InputManager::NavigateRight);command(InputManager::NavigateDown);command(InputManager::NavigateUp);
+    command(InputManager::NavigateRight);command(InputManager::NavigateRight);command(InputManager::NavigateRight);command(InputManager::NavigateDown);command(InputManager::NavigateUp);
     QCOMPARE(root->property("focusArea").toString(),QString("web"));
     command(InputManager::Confirm);QVERIFY(!preferences.webEnabled());QCOMPARE(root->property("query").toString(),QString("zzzz-no-matches"));
     auto *toggleItem=qobject_cast<QQuickItem *>(toggle);QVERIFY(toggleItem);QSignalSpy preferenceChanges(&preferences,&SearchSettings::changed);

@@ -17,6 +17,8 @@ Item {
     property bool highlighted:false
     property string selectedId:""
     property string galleryId:""
+    property string originId:""
+    property bool globalGalleryRoute:false
     property bool pendingGalleryRestore:false
     property string message:""
     property int previousCardIndex:0
@@ -41,6 +43,7 @@ Item {
     onGalleryAppsChanged:if(!galleryApps.some(a=>a.id===galleryId))galleryId=galleryApps.length?galleryApps[Math.min(previousGalleryIndex,galleryApps.length-1)].id:""
     signal engage()
     signal launch(var action)
+    signal allAppsRequested(string originId)
     function logoSource(app){return (style.logoMode || "cutout")==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
     function cardStyle(gallery){const result=Object.assign({},style);delete result.visibleLabel;delete result.showHeading;delete result.headingSize;if(result.cardGap===undefined)result.cardGap=(style.layout || {}).gap || 0;if(gallery){if(result.labelSurfaceColor===undefined)result.labelSurfaceColor=galleryTheme.surface;if(result.labelColor===undefined)result.labelColor=galleryTheme.text;}return Object.assign(result,gallery?{variant:"orb",diameter:style.diameter || 78}:{},{icon:style.icon || "grid",logoMode:style.logoMode || "cutout",artFit:style.artFit || "contain"})}
     function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened || pendingGalleryRestore}}
@@ -54,7 +57,10 @@ Item {
     function activate(id){
         if(readOnly)return
         message=""
-        if(id==="__more__"){pendingGalleryRestore=false;galleryId=galleryApps.length?galleryApps[0].id:"";gallery.open();return}
+        if(id==="__more__"){
+            if(globalGalleryRoute && !buttons){pendingGalleryRestore=false;allAppsRequested(originId);return}
+            pendingGalleryRestore=false;galleryId=galleryApps.length?galleryApps[0].id:"";gallery.open();return
+        }
         const app=galleryApps.find(a=>a.id===id)
         if(app && app.unavailableReason){message=app.unavailableReason;return}
         if(app){

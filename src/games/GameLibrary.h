@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QProcess>
 #include <memory>
+#include <functional>
 
 class AppRegistry;
 class AppCatalog;
@@ -15,25 +16,33 @@ class AppCatalog;
 class GameLibrary final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
+    Q_PROPERTY(int catalogLimit READ catalogLimit CONSTANT)
     Q_PROPERTY(bool ready READ ready NOTIFY changed)
     Q_PROPERTY(QVariantList runtimes READ runtimes NOTIFY changed)
     Q_PROPERTY(QVariantList emulators READ emulators NOTIFY changed)
+    Q_PROPERTY(QVariantMap emulatorCoverage READ emulatorCoverage CONSTANT)
     Q_PROPERTY(bool setupBusy READ setupBusy NOTIFY setupChanged)
     Q_PROPERTY(QString setupStatus READ setupStatus NOTIFY setupChanged)
     Q_PROPERTY(bool scanning READ scanning NOTIFY importChanged)
     Q_PROPERTY(int importCount READ importCount NOTIFY importChanged)
     Q_PROPERTY(bool importReady READ importReady NOTIFY importChanged)
     Q_PROPERTY(QString importStatus READ importStatus NOTIFY importChanged)
+    Q_PROPERTY(bool portableInstallBusy READ portableInstallBusy NOTIFY portableInstallChanged)
+    Q_PROPERTY(QString portableInstallStatus READ portableInstallStatus NOTIFY portableInstallChanged)
+    Q_PROPERTY(QVariantMap portableInstallPreview READ portableInstallPreview NOTIFY portableInstallChanged)
 public:
     GameLibrary(const QString &databasePath, AppRegistry *apps, QObject *parent = nullptr);
     ~GameLibrary() override;
     bool ready() const { return m_ready; }
+    int catalogLimit() const;
     QString errorString() const { return m_error; }
     QVariantList runtimes() const;
     QVariantList emulators() const;
+    QVariantMap emulatorCoverage() const;
     Q_INVOKABLE QVariantMap emulatorSettings(const QString &runtimeId);
     Q_INVOKABLE bool configureEmulator(const QString &runtimeId, const QVariantMap &options, const QString &firmware = {});
     void setCatalog(AppCatalog *catalog) { m_catalog=catalog; }
+    void setSessionActiveGuard(std::function<bool()> guard) { m_sessionActiveGuard=std::move(guard); }
     bool setupBusy() const { return m_setup.state()!=QProcess::NotRunning; }
     QString setupStatus() const { return m_setupStatus; }
     Q_INVOKABLE bool installEmulators(bool consent);
@@ -43,10 +52,31 @@ public:
     Q_INVOKABLE QVariantMap registration(const QString &gameId);
     Q_INVOKABLE bool updateGame(const QString &gameId, const QVariantMap &registration);
     Q_INVOKABLE QVariantList editions(const QString &gameId);
+    Q_INVOKABLE bool steamGameContainsAppId(const QString &gameId, const QString &steamAppId);
     Q_INVOKABLE QString addEdition(const QString &gameId, const QVariantMap &registration);
     bool scanning() const { return bool(m_scan) || m_steamScan.state()!=QProcess::NotRunning; }
     QString importStatus() const { return m_importStatus; }
     Q_INVOKABLE bool beginSteamImport();
+    Q_INVOKABLE QStringList steamLibraries() const;
+    Q_INVOKABLE bool addSteamLibrary(const QString &path);
+    Q_INVOKABLE bool removeSteamLibrary(const QString &path);
+    Q_INVOKABLE QVariantList mountedOpticalDiscs() const;
+    Q_INVOKABLE QVariantList refreshOpticalDiscs() const;
+    Q_INVOKABLE QVariantMap revalidateOpticalDisc(const QString &observationId, const QString &device) const;
+    Q_INVOKABLE QString registerOpticalGame(const QString &title, const QString &runtimeId,
+                                             const QString &relativeExecutable,
+                                             const QString &observationId, const QString &device);
+    Q_INVOKABLE bool approveOpticalMedia(const QString &observationId, const QString &device);
+    Q_INVOKABLE bool revokeOpticalMedia(const QString &observationId, const QString &device);
+    Q_INVOKABLE bool mountOpticalDisc(const QString &device);
+    Q_INVOKABLE bool ejectOpticalDisc(const QString &device);
+    bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
+    QString portableInstallStatus() const { return m_portableInstallStatus; }
+    QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }
+    Q_INVOKABLE bool beginPortableInstall(const QString &source, const QString &runtimeId,
+                                          const QString &opticalObservationId = {}, const QString &opticalDevice = {});
+    Q_INVOKABLE bool confirmPortableInstall();
+    Q_INVOKABLE void cancelPortableInstall();
     int importCount() const { return m_preview.size(); }
     bool importReady() const { return m_importReady; }
     Q_INVOKABLE bool beginImport(const QString &root, const QString &runtimeId, const QString &platform);
@@ -54,9 +84,37 @@ public:
     Q_INVOKABLE QVariantList importPage(int offset = 0) const;
     Q_INVOKABLE bool commitImport();
     Q_INVOKABLE bool setFavorite(const QString &gameId, bool favorite);
-    Q_INVOKABLE QVariantList page(const QString &view = "all", const QString &search = {}, int offset = 0);
+    Q_INVOKABLE QVariantList page(const QString &view = "all", const QString &search = {}, int offset = 0,
+                                  const QString &platform = {});
+    Q_INVOKABLE QVariantList platforms();
+    bool recordCompletedSession(const QString &gameId);
+    Q_INVOKABLE bool setOrganization(const QString &gameId, const QString &franchise, const QStringList &tags,
+                                     const QStringList &aliases = {}, const QString &summary = {});
+    Q_INVOKABLE bool setArtwork(const QString &gameId, const QString &source);
+    Q_INVOKABLE bool clearArtwork(const QString &gameId);
+    Q_INVOKABLE QVariantList collections();
+    Q_INVOKABLE QString createCollection(const QString &name, const QString &kind,
+                                         const QString &filterType = {}, const QString &filterValue = {});
+    Q_INVOKABLE bool updateCollection(const QString &collectionId, const QString &name,
+                                      const QString &filterType = {}, const QString &filterValue = {});
+    Q_INVOKABLE bool removeCollection(const QString &collectionId);
+    Q_INVOKABLE bool setCollectionMember(const QString &collectionId, const QString &gameId, bool member);
+    Q_INVOKABLE bool moveCollectionMember(const QString &collectionId, const QString &gameId, int direction);
+    Q_INVOKABLE bool collectionContains(const QString &collectionId, const QString &gameId);
+    Q_INVOKABLE QVariantList pageCollection(const QString &collectionId, int offset = 0);
+    Q_INVOKABLE bool exportCatalog(const QString &destination);
+    Q_INVOKABLE bool restoreCatalog(const QString &source, bool confirmed);
     Q_INVOKABLE QVariantMap details(const QString &gameId);
     Q_INVOKABLE bool removeGame(const QString &gameId);
+    Q_INVOKABLE bool canUninstallManagedGame(const QString &gameId) const;
+    Q_INVOKABLE bool uninstallManagedGame(const QString &gameId, bool confirmed);
+    Q_INVOKABLE QVariantList pendingUninstallRecovery();
+    Q_INVOKABLE QVariantList unregisteredManagedInstallRecovery();
+    Q_INVOKABLE bool recoverUnregisteredManagedInstall(const QString &installationId,
+                                                       const QString &runtimeId, bool confirmed);
+    Q_INVOKABLE QVariantMap compatibilityInstallerStatus() const;
+    Q_INVOKABLE bool inspectWindowsInstaller(const QString &source);
+    Q_INVOKABLE bool recoverOrphanedUninstall(const QString &installationId, bool confirmed);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
     void invalidate();
 signals:
@@ -64,6 +122,8 @@ signals:
     void errorChanged();
     void importChanged();
     void setupChanged();
+    void portableInstallChanged();
+    void opticalDiscsChanged(const QVariantList &discs, const QString &change);
 private:
     bool fail(const QString &error);
     bool compatibleRuntime(const QString &id, bool file) const;
@@ -80,7 +140,26 @@ private:
     AppRegistry *m_apps;
     bool m_ready = false;
     bool m_hasEditions = false;
+    bool m_hasActivity = false;
+    bool m_hasMetadata = false;
+    bool m_hasRichMetadata = false;
+    bool m_hasArtwork = false;
+    bool m_hasCollections = false;
+    bool m_hasProvenance = false;
     bool installationExists(const QString &runtime, const QString &root, const QString &target);
+    bool catalogReferencesRoot(const QString &root, bool *referenced);
+    bool platformAvailable(const QString &platform);
+    bool ensureOrganizationSchema();
+    bool ensureRichMetadataSchema();
+    bool ensureArtworkSchema();
+    bool ensureProvenanceSchema();
+    bool recordProvenance(const QString &entityId, const QString &entityType,
+                          const QString &runtime, const QString &root, const QString &target,
+                          const QString &origin = {});
+    QString addGameWithOrigin(const QVariantMap &registration, const QString &origin);
+    QString addEditionWithOrigin(const QString &gameId, const QVariantMap &registration,
+                                 const QString &origin);
+    QString artworkDirectory() const;
     void scanStep();
     QTimer m_scanTimer;
     std::unique_ptr<QDirIterator> m_scan;
@@ -94,4 +173,15 @@ private:
     QByteArray m_steamScanOutput;
     bool m_steamScanCanceled = false;
     QString m_importStatus;
+    QProcess m_portableInstall;
+    QTimer m_portableInstallDeadline;
+    QTimer m_opticalRefreshTimer;
+    QByteArray m_portableInstallOutput, m_portableInstallError;
+    QVariantMap m_portableInstallPreview;
+    QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination, m_portableGameId;
+    QString m_portableOpticalObservationId, m_portableOpticalDevice;
+    QStringList m_lastOpticalObservationIds;
+    QString m_portablePhase;
+    bool m_portableCanceled=false;
+    std::function<bool()> m_sessionActiveGuard;
 };

@@ -28,9 +28,52 @@ def read_json(path, limit=MAX_SETTINGS):
 
 def definitions(path):
     document = read_json(path, 65536)
-    if document.get("schemaVersion") != 1 or not isinstance(document.get("runtimes"), list):
+    if (set(document) != {"schemaVersion", "target", "generationCoverage", "runtimes"}
+            or type(document["schemaVersion"]) is not int or document["schemaVersion"] != 2
+            or document["target"] != {
+                "os": "ubuntu", "version": "26.04", "architectures": ["amd64"],
+                "supportBoundary": "Managed integration only; game, controller, performance and firmware compatibility are title-specific and not implied by runtime availability."
+            }
+            or not isinstance(document["generationCoverage"], dict)
+            or not isinstance(document["runtimes"], list)):
         raise ValueError("Unsupported emulator manifest")
-    return {item["id"]: item for item in document["runtimes"]}
+    result = {}
+    for item in document["runtimes"]:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid emulator capability entry")
+        allowed={"id","name","engine","platforms","formats","binary","core","packages","firmwareRequired"}
+        if (set(item)-allowed or not (allowed-{"core"}).issubset(item)
+                or not isinstance(item.get("id"),str) or not re.fullmatch(r"[a-z0-9-]{1,48}", item.get("id", ""))
+                or item["id"] in result or not isinstance(item.get("engine"),str)
+                or item.get("engine") not in {"ppsspp", "dolphin", "pcsx2", "retroarch"}
+                or not isinstance(item.get("name"), str) or not item["name"] or len(item["name"])>120
+                or not isinstance(item.get("platforms"), list) or not item["platforms"]
+                or any(not isinstance(value,str) or not value or len(value)>80 for value in item["platforms"])
+                or len(set(item["platforms"]))!=len(item["platforms"])
+                or not isinstance(item.get("formats"), list) or not item["formats"]
+                or any(not isinstance(value,str) or not re.fullmatch(r"[a-z0-9]{1,8}",value) for value in item["formats"])
+                or len(set(item["formats"]))!=len(item["formats"])
+                or not isinstance(item.get("packages"), list) or not item["packages"]
+                or any(not isinstance(name,str) or not re.fullmatch(r"[a-z0-9][a-z0-9+.-]{0,80}", name) for name in item["packages"])
+                or len(set(item["packages"]))!=len(item["packages"])
+                or not isinstance(item.get("firmwareRequired"), bool)
+                or not isinstance(item.get("binary"),str)
+                or not Path(item.get("binary", "")).is_absolute()
+                or ("core" in item and (not isinstance(item["core"],str) or not Path(item["core"]).is_absolute()))):
+            raise ValueError("Invalid emulator capability entry")
+        result[item["id"]] = item
+    coverage = document["generationCoverage"]
+    if (not isinstance(coverage,dict) or set(coverage) != {"integratedPlatforms", "notIntegrated"}
+            or any(not isinstance(coverage[key],list) or any(not isinstance(v,str) or not v for v in coverage[key])
+                   for key in coverage)):
+        raise ValueError("Invalid emulator generation matrix")
+    integrated = {platform for item in result.values() for platform in item["platforms"]}
+    if (len(set(coverage["integratedPlatforms"]))!=len(coverage["integratedPlatforms"])
+            or len(set(coverage["notIntegrated"]))!=len(coverage["notIntegrated"])
+            or set(coverage["integratedPlatforms"]) != integrated
+            or set(coverage["integratedPlatforms"]) & set(coverage["notIntegrated"])):
+        raise ValueError("Emulator generation matrix does not match the runtime routes")
+    return result
 
 
 def protected(path):

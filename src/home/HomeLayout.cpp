@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -18,6 +19,7 @@
 #include <QtMath>
 #include <QCryptographicHash>
 #include <QMap>
+#include <algorithm>
 
 namespace {
 
@@ -329,6 +331,26 @@ bool HomeLayout::setComposition(const QVariantMap &value)
     if (!save()) { m_composition = previous; return false; }
     emit layoutChanged(); return true;
 }
+bool HomeLayout::setGalleryFavorite(const QString &appId, bool favorite)
+{
+    const auto *app = m_registry ? m_registry->find(appId) : nullptr;
+    if (!app || (app->type != "web" && app->type != "desktop" && app->type != "android")) {
+        setError(tr("Choose an installed registered app to favorite."));
+        return false;
+    }
+    auto composition = m_composition;
+    auto gallery = composition.value("appGallery").toMap();
+    QStringList favorites;
+    for (const auto &value : gallery.value("favoriteIds").toList()) favorites.append(value.toString());
+    favorites.removeAll(appId);
+    if (favorite) favorites.append(appId);
+    std::sort(favorites.begin(), favorites.end(), [](const QString &a, const QString &b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
+    QVariantList favoriteValues;
+    for (const auto &id : favorites) favoriteValues.append(id);
+    gallery.insert("favoriteIds", favoriteValues);
+    composition.insert("appGallery", gallery);
+    return setComposition(composition);
+}
 QVariantMap HomeLayout::grid() const
 {
     return ComponentSchema::normalizedGrid(m_composition.value("grid").toMap());
@@ -448,7 +470,7 @@ QVariantMap HomeLayout::studioOptions() const
     }
     const auto actionCategories=object["actionCategories"].toArray();
     if(!object["actionCategories"].isArray() || actionCategories.isEmpty() || actionCategories.size()>12)return {};
-    const QStringList pickerTypes{"none","media-picker","root-page","open-page","launch-app","app-drawer","open-collection","open-guide","play-movie","open-show","switch-input","settings","desktop-mode","open-file","open-folder","open-url","open-disc"};
+    const QStringList pickerTypes{"none","media-picker","root-page","open-page","launch-app","open-apps","open-search","app-drawer","open-collection","open-guide","play-movie","open-show","switch-input","settings","desktop-mode","open-file","open-folder","open-url","open-disc"};
     for(const auto &value:actionCategories) {
         const auto category=value.toObject();
         if(category.size()!=2 || !category["name"].isString() || category["name"].toString().trimmed().isEmpty() || category["name"].toString().size()>80 || !category["types"].isArray() || category["types"].toArray().size()>pickerTypes.size())return {};
@@ -611,6 +633,60 @@ QString HomeLayout::wallpaperSource() const
 {
     return resolveArtwork(m_composition.value("wallpaper").toString());
 }
+QVariantList HomeLayout::captureArtworkChoices() const
+{
+    QVariantList result;
+    if (m_userPath.isEmpty()) return result;
+    const QDir directory(QDir(QFileInfo(m_userPath).absolutePath()).filePath("artwork"));
+    const auto files = directory.entryInfoList({"*.png", "*.jpg", "*.jpeg", "*.gif"},
+        QDir::Files | QDir::Readable | QDir::NoSymLinks, QDir::Name);
+    for (const auto &file : files) {
+        if (result.size() >= 256) break;
+        const auto relative = QStringLiteral("artwork/") + file.fileName();
+        const auto resolved = managedArtworkSource(relative);
+        if (resolved.isEmpty() || file.size() <= 0 || file.size() > MaxArtworkSize
+            || (relative.endsWith(".gif") && file.size() > 2 * 1024 * 1024)) continue;
+        QImageReader reader(QUrl(resolved).toLocalFile());
+        const auto size = reader.size();
+        if (!reader.canRead() || !size.isValid() || size.width() > 16384 || size.height() > 16384
+            || qint64(size.width()) * size.height() > 32 * 1024 * 1024) continue;
+        result.append(QVariantMap{{"id", relative}, {"name", file.completeBaseName()}});
+    }
+    return result;
+}
+
+QString HomeLayout::captureArtworkSource(int input) const
+{
+    if (input < 1 || input > 8) return {};
+    const auto relative = m_composition.value("captureInputArtwork").toMap().value(QString::number(input)).toString();
+    const auto managed = managedArtworkSource(relative);
+    const QFileInfo file(QUrl(managed).toLocalFile());
+    if (managed.isEmpty() || !file.isFile() || file.isSymLink()) return {};
+    return resolveArtwork(relative);
+}
+
+bool HomeLayout::setCaptureInputArtwork(const QVariantMap &artwork)
+{
+    if (!ComponentSchema::validComposition({{"schemaVersion", 1}, {"captureInputArtwork", artwork}})) {
+        setError(tr("Invalid HDMI input artwork mapping."));
+        return false;
+    }
+    QSet<QString> available;
+    for (const auto &choice : captureArtworkChoices()) available.insert(choice.toMap().value("id").toString());
+    for (const auto &value : artwork)
+        if (!available.contains(value.toString())) {
+            setError(tr("An HDMI image is no longer available. Refresh the artwork choices and try again."));
+            return false;
+        }
+    auto composition = m_composition;
+    if (artwork.isEmpty()) composition.remove("captureInputArtwork");
+    else {
+        composition.insert("schemaVersion", 1);
+        composition.insert("captureInputArtwork", artwork);
+    }
+    return setComposition(composition);
+}
+
 QString HomeLayout::managedArtworkSource(const QString &relative) const
 {
     if(relative.isEmpty())return {};
@@ -779,7 +855,12 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
         setError(tr("The designated Home page does not exist."));return false;
     }
     const auto theme = object.value("theme").toObject();
-    const auto composition = object.value("composition").toObject().toVariantMap();
+    auto composition = object.value("composition").toObject().toVariantMap();
+    if (composition.contains("appGallery") && !ComponentSchema::validComposition(composition)) {
+        auto fallbackComposition = composition;
+        fallbackComposition.remove("appGallery");
+        if (ComponentSchema::validComposition(fallbackComposition)) composition = fallbackComposition;
+    }
     if ((object.contains("composition") && !object["composition"].isObject()) || !ComponentSchema::validComposition(composition)) {
         setError(tr("Home composition is invalid.")); return false;
     }

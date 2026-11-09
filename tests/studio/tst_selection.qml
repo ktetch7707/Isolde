@@ -12,7 +12,40 @@ Item {
         Component {id:appPickerCatalogComponent;App.StudioCatalog {width:1280;height:720}}
         Component {id:appPickerInspectorComponent;App.StudioInspector {width:1280;height:720}}
         Component {id:commandCenterComponent;App.CommandCenter {width:1280;height:720;apps:[];packages:[]}}
+        Component {id:allAppsComponent;App.AppGallery {width:1280;height:720;entries:[{id:"sample",name:"Sample",type:"web"}]}}
         SignalSpy {id:appPickerSpy;signalName:"picked"}
+        function test_gallery_vpn_deferred_failure_retry_and_settings_return(){
+            const gallery=createTemporaryObject(allAppsComponent,tests.parent);verify(gallery!==null)
+            gallery.showForOrigin("page-apps")
+            const synchronous={dispatch:function(action,origin){
+                compare(origin,"all-apps");gallery.restoreAfterAction()
+                verify(gallery.vpnLaunchFailed(action.appId))
+                return true
+            }}
+            verify(gallery.dispatchFromGallery(synchronous,{type:"launch-app",appId:"sample"}))
+            verify(gallery.open);verify(!gallery.launchPending);compare(gallery.selectedId,"sample")
+            const deferred={dispatch:function(action,origin){compare(origin,"all-apps");return true}}
+            verify(gallery.dispatchFromGallery(deferred,{type:"launch-app",appId:"sample"}))
+            verify(!gallery.open);verify(gallery.launchPending)
+            wait(0);compare(gallery.launchAttemptAppId,"sample")
+            gallery.restoreAfterAction()
+            verify(gallery.vpnLaunchFailed("sample"))
+            verify(gallery.open);verify(!gallery.launchPending)
+            verify(gallery.dispatchFromGallery(deferred,{type:"launch-app",appId:"sample"}))
+            gallery.restoreAfterAction()
+            verify(gallery.vpnLaunchFailed("sample")) // Cancellation follows the same failed signal.
+            verify(gallery.open);compare(gallery.selectedId,"sample")
+            verify(gallery.dispatchFromGallery(deferred,{type:"launch-app",appId:"sample"}))
+            verify(!gallery.open);gallery.restoreAfterAction();verify(gallery.open)
+            verify(gallery.dispatchFromGallery(deferred,{type:"settings",section:6}))
+            verify(!gallery.open);gallery.restoreAfterAction()
+            verify(gallery.open);compare(gallery.selectedId,"sample");compare(gallery.originId,"page-apps")
+            wait(0);verify(!gallery.vpnLaunchFailed("sample"))
+            verify(!gallery.dispatchFromGallery({dispatch:function(){return false}},{type:"launch-app",appId:"sample"}))
+            verify(gallery.open);verify(!gallery.launchPending);verify(!gallery.vpnLaunchFailed("sample"))
+            verify(gallery.dispatchFromGallery(deferred,{type:"launch-app",appId:"sample"}))
+            gallery.clearLaunchAttempt();verify(!gallery.vpnLaunchFailed("sample"))
+        }
         function test_search_focus_contrast_is_local_to_controls(){
             const pastel={textColor:"#514b67",mutedColor:"#625b73",surfaceColor:"#f5e7f4",selectedColor:"#edd7ef",focusColor:"#ffffff"}
             const tokens=homeLayout.resolvedSurfacePalette(pastel)
@@ -93,6 +126,11 @@ Item {
         SignalSpy {id:menuHomeSpy;signalName:"actionActivated"}
         QtObject {id:fakeRegistry;property var apps:[]}
         Component {id:carouselComponent;App.PageAppCarousel {width:900;height:160;registry:fakeRegistry;appearance:({textColor:"#514b67",surfaceColor:"#f7edff",focusColor:"#bd8198"});style:({variant:"orb",layout:{visibleColumns:2}})}}
+        Component {id:globalCarouselComponent;App.PageAppCarousel {
+            width:900;height:160;registry:fakeRegistry;originId:"page-apps";globalGalleryRoute:true;collection:({mode:"all"})
+            style:({layout:{visibleColumns:2}});property string requestedOrigin:""
+            onAllAppsRequested:origin=>requestedOrigin=origin
+        }}
         SignalSpy {id:launchSpy;signalName:"launch"}
         QtObject {
             id:historyClientFixture
@@ -135,6 +173,13 @@ Item {
             carousel.style={layout:{mode:"grid",columns:2,rows:2},moreLabel:"More buttons"};carousel.selectedId="button-0"
             verify(carousel.handleCommand(inputManager.navigateDown));compare(carousel.selectedId,"button-2");compare(carousel.cards.length,4)
             carousel.buttonItems=[{id:"unassigned",name:"Unassigned"}];carousel.activate("unassigned");compare(launchSpy.count,1);verify(carousel.message.length>0)
+        }
+        function test_more_apps_uses_global_destination_when_hosted(){
+            const carousel=createTemporaryObject(globalCarouselComponent,parent,{registry:{apps:[{id:"one",name:"One",type:"web"},{id:"two",name:"Two",type:"web"},{id:"three",name:"Three",type:"web"}]}});verify(carousel!==null)
+            compare(carousel.cards[carousel.cards.length-1].id,"__more__")
+            carousel.activate("__more__")
+            compare(carousel.requestedOrigin,"page-apps")
+            verify(!findChild(carousel,"appCarouselGallery").opened)
         }
         QtObject {
             id:storeCatalog

@@ -162,10 +162,14 @@ public:
     Q_INVOKABLE QVariantList gridCollisions(const QString &itemId, const QVariantMap &placement) const;
     [[nodiscard]] QString wallpaperSource() const;
     Q_INVOKABLE QString resolveArtwork(const QString &relative) const;
+    Q_INVOKABLE QVariantList captureArtworkChoices() const;
+    Q_INVOKABLE QString captureArtworkSource(int input) const;
+    bool setCaptureInputArtwork(const QVariantMap &artwork);
     Q_INVOKABLE QVariantMap artworkAnimation(const QString &relative, const QString &owner);
     Q_INVOKABLE void releaseArtworkAnimation(const QString &owner);
     Q_INVOKABLE bool setWallpaper(const QString &sourceUrl);
     Q_INVOKABLE bool setComposition(const QVariantMap &value);
+    Q_INVOKABLE bool setGalleryFavorite(const QString &appId, bool favorite);
 
     // T16 Studio bridge: committed bytes + atomic draft apply + focus recap.
     // committedDocument() exposes the current bytes for session.open();

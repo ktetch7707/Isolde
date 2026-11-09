@@ -70,6 +70,9 @@ bool safeId(const QString &id);
 // Normalizes and validates an action map; returns an empty map and sets
 // error on rejection. Owns the full list of supported action types.
 QVariantMap action(const QVariantMap &input, QString *error = nullptr);
+// Short-lived editor commands are validated separately from persistent Home
+// actions, so they cannot be saved as component destinations.
+QVariantMap editorAction(const QVariantMap &input, QString *error = nullptr);
 // Normalizes and validates a component map; legacy mode accepts v1 documents.
 // Returns an empty map and sets error on rejection.
 QVariantMap component(const QVariantMap &input, bool legacy, QString *error = nullptr);

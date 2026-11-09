@@ -19,11 +19,13 @@
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QSettings>
+#include <QSet>
 #include <QFile>
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QImage>
+#include "home/HomeDesignData.h"
 #include <QUrl>
 #ifdef Q_OS_UNIX
 #include <sys/stat.h>
@@ -51,13 +53,16 @@ private slots:
     void sourceFamiliesUseGenericBoundedComposition();
     void steamGamesUseProviderIdentityAndReviewedImport();
     void guideActionsValidateIdentityAndAppearance();
+    void captureAndAudioEditorActionsValidateAndDispatch();
     void gamesCatalogIsBoundedAtomicAndProfileLocal();
     void gamesLaunchRejectsMissingAndRedirectedTargets();
     void gamesContractsRejectExecutableData();
     void gamesRelinkPreservesIdentityAndRollsBack();
     void gamesFolderImportIsReviewedAtomicAndCancelable();
+    void gamesFolderImportPreservesManualInstallation();
     void gamesEditionsKeepOneCardAndSeparateLaunchTargets();
     void gamesCuratedPackagesBindThroughRealCatalog();
+    void emulatorManifestIsBoundedAndVersioned();
     void emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData();
     void studioSafetyVersionsAreBoundedReversibleAndProfileScoped();
     void studioSafetyArchiveFailureRetainsDraftForRetry();
@@ -132,10 +137,42 @@ void ComponentTests::steamGamesUseProviderIdentityAndReviewedImport(){
     QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),1);const auto id=library.page()[0].toMap().value("id").toString();
     auto registration=library.registration(id);QCOMPARE(registration.value("target").toString(),QString("42"));QVERIFY(registration.value("root").toString().isEmpty());
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("sourceKind").toString(),QString("steam-app"));
+    QCOMPARE(provenance.value("origin").toString(),QString("steam-import"));
+    QCOMPARE(provenance.value("sourceReference").toString(),QString("42"));
     QCOMPARE(library.resolveLaunch(id),QVariantMap({{"type","steam-game"},{"steamAppId","42"}}));
     QVERIFY(library.setFavorite(id,true));registration["title"]="My corrected title";QVERIFY(library.updateGame(id,registration));
     QVERIFY(library.beginSteamImport());QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),1);QCOMPARE(library.details(id).value("title").toString(),QString("My corrected title"));QVERIFY(library.details(id).value("favorite").toBool());
+    {
+        SessionManager sessions(&apps);
+        KodiMedia media(profile,nullptr,dir.path()); KodiService service(profile);service.setEnabled(false);
+        CaptureController capture;
+        ActionDispatcher dispatcher(&apps,&sessions,&media,&service,nullptr,&capture);dispatcher.setGames(&library);
+        sessions.setLaunchPreparation([](const AppDefinition &){return false;});
+        QSignalSpy focus(&dispatcher,&ActionDispatcher::restoreFocusRequested);
+        const QVariantMap action{{"type","launch-game"},{"gameId",id}};
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));sessions.goHome();
+        QCOMPARE(focus.last().at(0).toString(),QString("steam-tile"));
+        QVERIFY(library.page("continue").isEmpty()); // Cancel before any game process.
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("43");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");
+        emit sessions.steamGameFailed("42","fixture denial");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");
+        qApp->setProperty("isoldeProfile","different-profile");sessions.goHome();
+        QVERIFY(library.page("continue").isEmpty());
+        qApp->setProperty("isoldeProfile",profile);
+        QVERIFY(dispatcher.dispatch(action,"steam-tile"));
+        emit sessions.steamGameProcessObserved("42");sessions.goHome();
+        QCOMPARE(library.page("continue").size(),1);
+        QCOMPARE(library.page("continue").first().toMap().value("id").toString(),id);
+    }
     for(const auto &bad:QStringList{"0","01","4294967296","42; touch x","steam://run/42","/tmp/game","42\n"}){auto invalid=registration;invalid["target"]=bad;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());}
     auto invalid=registration;invalid["root"]=steamapps;QVERIFY(ComponentSchema::gameRegistration(invalid).isEmpty());
     steam.launchConfiguration["steamGameId"]="42";QVERIFY(!steam.isValid());
@@ -169,6 +206,84 @@ void ComponentTests::guideActionsValidateIdentityAndAppearance() {
     for(const auto &invalid:QVariantList{64,101,65.5,true,QString("95")})QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayWidth",invalid}}));
     QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayRows",6}}));QVERIFY(!ComponentSchema::validPresentation({{"guideOverlayPosition","offscreen"}}));
 }
+void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
+{
+    QVariantMap labels;
+    for (int input = 1; input <= 8; ++input)
+        labels.insert(QString::number(input), QString("HDMI %1").arg(input));
+    const QVariantMap configuration{
+        {"audioDeviceId", ""}, {"baudRate", 9600}, {"captureDeviceId", ""},
+        {"commandTemplate", ""}, {"inputLabels", labels}, {"selectedInput", 1},
+        {"serialPortName", ""}, {"sessionReturn", "origin"}, {"sessionTransition", "fade"}, {"transitionDuration", 250}, {"videoFormatKey", ""}
+    };
+    QString error;
+    const auto apply = ComponentSchema::editorAction(
+        {{"type", "capture-apply"}, {"configuration", configuration}}, &error);
+    QVERIFY2(!apply.isEmpty(), qPrintable(error));
+    QCOMPARE(apply.value("configuration").toMap().size(), 11);
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-start"}}).contains("type"));
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-draft"}, {"captureDeviceId", "video"},
+        {"videoFormatKey", ""}, {"audioDeviceId", "audio"}}).contains("captureDeviceId"));
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-draft"}, {"captureDeviceId", 42},
+        {"videoFormatKey", ""}, {"audioDeviceId", ""}}).isEmpty());
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-switch-input"}, {"input", 8}}).contains("input"));
+    QVERIFY(ComponentSchema::editorAction({{"type", "audio-output-select"}, {"outputId", "alsa_output.usb-01"}}).contains("outputId"));
+    QVERIFY(ComponentSchema::action({{"type", "capture-apply"}, {"configuration", configuration}}).isEmpty());
+
+    auto invalid = configuration;
+    invalid.insert("extra", "ignored?");
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}, &error).isEmpty());
+    QVERIFY(!error.isEmpty());
+    invalid = configuration;
+    invalid.insert("selectedInput", 1.5);
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+    invalid = configuration;
+    invalid.insert("sessionTransition", "spin");
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+    invalid = configuration;
+    invalid.insert("transitionDuration", 225);
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+    invalid = configuration;
+    invalid.insert("sessionReturn", "elsewhere");
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+    invalid = configuration;
+    labels.insert("9", "Out of range");
+    invalid.insert("inputLabels", labels);
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
+    QVERIFY(ComponentSchema::editorAction({{"type", "audio-output-select"}, {"outputId", "../speaker"}}).isEmpty());
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-stop"}, {"ignored", true}}).isEmpty());
+    const QVariantMap validArtwork{{"1", "artwork/studio-a.png"}, {"8", "artwork/logo-b.gif"}};
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", validArtwork}}).contains("artwork"));
+    QVERIFY(ComponentSchema::validComposition({{"schemaVersion", 1}, {"captureInputArtwork", validArtwork}}));
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", QVariantMap{{"9", "artwork/a.png"}}}}).isEmpty());
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", QVariantMap{{"1", "../a.png"}}}}).isEmpty());
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", QVariantMap{{"1", 42}}}}).isEmpty());
+    QVERIFY(ComponentSchema::action({{"type", "capture-artwork-apply"}, {"artwork", validArtwork}}).isEmpty());
+    const QJsonObject artworkDocument{{"composition", QJsonObject{{"captureInputArtwork", QJsonObject{{"1", "artwork/a.png"}}}}}};
+    const auto rewritten = HomeDesignData::artwork(artworkDocument, [](const QString &) { return QString("artwork/imported.png"); }).toObject();
+    QCOMPARE(rewritten.value("composition").toObject().value("captureInputArtwork").toObject().value("1").toString(),
+             QString("artwork/imported.png"));
+
+    AppRegistry registry;
+    SessionManager sessions(&registry);
+    KodiMedia media("editor-actions-test");
+    KodiService service("editor-actions-test");
+    CaptureController capture;
+    ActionDispatcher dispatcher(&registry, &sessions, &media, &service, nullptr, &capture);
+    QSignalSpy rejected(&dispatcher, &ActionDispatcher::rejected);
+    QVERIFY(dispatcher.dispatchEditorAction({{"type", "capture-preview-stop"}}));
+    QVERIFY(!dispatcher.dispatchEditorAction({{"type", "capture-apply"}, {"configuration", invalid}}));
+    QCOMPARE(rejected.size(), 1);
+    QVERIFY(!dispatcher.dispatchEditorAction({{"type", "audio-output-select"}, {"outputId", "alsa_output.usb-01"}}));
+    QCOMPARE(rejected.size(), 2);
+    const auto savedCapture = capture.captureDeviceId();
+    const auto savedAudio = capture.audioDeviceId();
+    QVERIFY(!dispatcher.dispatchEditorAction({{"type", "capture-preview-draft"},
+        {"captureDeviceId", ""}, {"videoFormatKey", ""}, {"audioDeviceId", ""}}));
+    QCOMPARE(capture.captureDeviceId(), savedCapture);
+    QCOMPARE(capture.audioDeviceId(), savedAudio);
+    QCOMPARE(rejected.size(), 3);
+}
 void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCoreApplication::setApplicationVersion("0.0.1.2");
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.loadFromData(::apps));AppCatalog catalog(&apps);
@@ -193,6 +308,10 @@ void ComponentTests::gamesCuratedPackagesBindThroughRealCatalog() {
     QCOMPARE(library.resolveLaunch(disc).value("sourceRoot").toString(),root);
     auto forged=gamesRuntime("forged");QVERIFY(forged.isValid());forged.launchConfiguration["gameSourceRoot"]=root;
     QVERIFY(!forged.isValid());QVERIFY(!apps.addApp(forged));
+    for(const auto &key:{"managedGameRoot","managedGameExecutable","opticalMediaId","opticalReference","opticalObservationId"}){
+        auto injected=gamesRuntime("injected");injected.launchConfiguration[key]=root;
+        QVERIFY(!injected.isValid());QVERIFY(!apps.addApp(injected));
+    }
     registration["runtimeId"]="supertux";registration["root"]=QStringLiteral("");registration["target"]=QStringLiteral("");registration["title"]="SuperTux";registration["platform"]="PC";
     const auto native=library.addGame(registration);QVERIFY2(!native.isEmpty(),qPrintable(library.errorString()));
     QCOMPARE(library.resolveLaunch(native).value("appId").toString(),QString("supertux"));
@@ -216,6 +335,20 @@ void ComponentTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData
     QVERIFY(GameEmulators::home("../other","ppsspp").isEmpty());QVERIFY(GameEmulators::home(first,"unknown").isEmpty());
     // This unique test profile is under Qt's test storage only.
     QVERIFY(QDir(QFileInfo(home).absolutePath()).removeRecursively());
+}
+void ComponentTests::emulatorManifestIsBoundedAndVersioned(){
+    const auto runtimes=GameEmulators::definitions();QCOMPARE(runtimes.size(),7);
+    QSet<QString> ids,platforms;
+    for(const auto &entry:runtimes){
+        const auto runtime=entry.toMap();const auto id=runtime.value("id").toString();
+        QVERIFY(!id.isEmpty());QVERIFY(!ids.contains(id));ids.insert(id);
+        QVERIFY(!runtime.value("packages").toStringList().isEmpty());
+        QVERIFY(!runtime.value("formats").toStringList().isEmpty());
+        for(const auto &platform:runtime.value("platforms").toStringList())platforms.insert(platform);
+    }
+    QCOMPARE(platforms,QSet<QString>({"PSP","GameCube","Wii","PlayStation 2","NES","Game Boy","Game Boy Color","Game Boy Advance","SNES"}));
+    QVERIFY(GameEmulators::definition("xbox-360").isEmpty());
+    QVERIFY(GameEmulators::definition("pcsx2").value("firmwareRequired").toBool());
 }
 void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");
@@ -247,10 +380,30 @@ void ComponentTests::gamesFolderImportIsReviewedAtomicAndCancelable() {
     QVERIFY(QFile::remove(root+"/nested/b.iso"));QVERIFY(!library.commitImport());QVERIFY(library.page().isEmpty());
     writeFile(root+"/nested/b.iso","b");QVERIFY(library.commitImport());QCOMPARE(library.page().size(),2);
     const auto id=library.page()[0].toMap().value("id").toString();auto corrected=library.registration(id);corrected["title"]="Manual correction";QVERIFY(library.updateGame(id,corrected));
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("sourceKind").toString(),QString("external-folder"));
+    QCOMPARE(provenance.value("origin").toString(),QString("folder-import"));
     QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY(library.importReady());QVERIFY(library.commitImport());
     QCOMPARE(library.page().size(),2);QCOMPARE(library.details(id).value("title").toString(),QString("Manual correction"));
+    QCOMPARE(library.details(id).value("acquisitionProvenance").toMap(),provenance);
     QVERIFY(library.beginImport(root,"psp-test","PSP"));library.invalidate();QVERIFY(!library.scanning());QVERIFY(!library.commitImport());
     QCOMPARE(readFile(root+"/a.iso"),QByteArray("a"));QCOMPARE(readFile(root+"/nested/b.iso"),QByteArray("b"));
+}
+void ComponentTests::gamesFolderImportPreservesManualInstallation() {
+    QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));
+    writeFile(root+"/a.iso","a");
+    AppRegistry apps;auto runtime=gamesRuntime();runtime.launchConfiguration["gameFormats"]=QVariantList{"iso"};QVERIFY(apps.addApp(runtime));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    auto registration=gameRegistration(root,"a.iso");registration["title"]="My manual title";
+    const auto id=library.addGame(registration);QVERIFY(!id.isEmpty());QVERIFY(library.setFavorite(id,true));
+    const auto provenance=library.details(id).value("acquisitionProvenance").toMap();
+    QVERIFY(provenance.value("recorded").toBool());QCOMPARE(provenance.value("origin").toString(),QString("manual-registration"));
+    QVERIFY(library.beginImport(root,"psp-test","PSP"));QTRY_VERIFY_WITH_TIMEOUT(library.importReady(),10000);
+    QCOMPARE(library.importPage(0).size(),1);QVERIFY(library.commitImport());
+    QCOMPARE(library.page().size(),1);QCOMPARE(library.page()[0].toMap().value("id").toString(),id);
+    const auto details=library.details(id);QCOMPARE(details.value("title").toString(),QString("My manual title"));
+    QVERIFY(details.value("favorite").toBool());
+    QCOMPARE(details.value("acquisitionProvenance").toMap(),provenance);
 }
 void ComponentTests::gamesRelinkPreservesIdentityAndRollsBack() {
     QTemporaryDir dir;const auto oldRoot=dir.filePath("original"),newRoot=dir.filePath("moved");
@@ -282,6 +435,15 @@ void ComponentTests::gamesContractsRejectExecutableData() {
     QCOMPARE(ComponentSchema::action(action),action);
     action["arguments"]=QStringList{"--unsafe"};QVERIFY(ComponentSchema::action(action,&error).isEmpty());
     QVERIFY(!error.isEmpty());
+    QVariantMap shelf{{"schemaVersion",1},{"id","games-shelf"},{"kind","widget"},{"widgetType","library"},{"componentType","library"},
+        {"name","Games"},{"presentation",QVariantMap{{"libraryKind","games"},{"libraryView","continue"}}}};
+    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","favorites"}};
+    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue","PSP"}};
+    QVERIFY(!ComponentSchema::component(shelf).isEmpty());
+    shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue",""}};
+    QVERIFY(ComponentSchema::component(shelf,false,&error).isEmpty());QVERIFY(!error.isEmpty());
 }
 void ComponentTests::gamesCatalogIsBoundedAtomicAndProfileLocal() {
     QTemporaryDir dir;QVERIFY(dir.isValid());const auto root=dir.filePath("library");QVERIFY(QDir().mkpath(root));
@@ -723,10 +885,15 @@ void ComponentTests::validatesContracts()
 void ComponentTests::compositionPersistenceAndValidation()
 {
     QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    AppDefinition galleryApp; galleryApp.id = "gallery-test"; galleryApp.name = "Gallery test"; galleryApp.type = "web";
+    QVERIFY(registry.addApp(galleryApp));
     writeFile(dir.filePath("default.json"), legacy);
     HomeLayout layout(&registry); QVERIFY(layout.load(dir.filePath("default.json"),dir.filePath("user.json")));
     const QVariantMap config{{"schemaVersion",1},{"enabled",true},{"columns",2},{"fit",true},
-        {"navigation",QVariantList{QVariantMap{{"id","home"},{"name","My Home"}},QVariantMap{{"id","films"},{"name","Films"},{"sections",QVariantList{"personal"}}}}}};
+        {"navigation",QVariantList{QVariantMap{{"id","home"},{"name","My Home"}},QVariantMap{{"id","films"},{"name","Films"},{"sections",QVariantList{"personal"}}}}},
+        {"appGallery",QVariantMap{{"layout","list"},{"columns",4},{"density","compact"},{"sort","favorites"},
+            {"showArtwork",false},{"showLabels",true},{"filterEnabled",true},{"favoritesEnabled",true},
+            {"favoriteIds",QVariantList{"gallery-test"}},{"title","Installed Apps"}}}};
     QVERIFY(layout.setComposition(config));
     QVERIFY(layout.setSectionPresentation("personal",{{"variant","media"},{"columns",3},{"height",250},{"span",1},{"subtitle","Keep watching"}}));
     QVERIFY(layout.setItemPresentation("my-folder",{{"progress",0.5},{"imageCrop",QVariantMap{{"x",0},{"y",1},{"width",100},{"height",90}}}}));
@@ -734,8 +901,30 @@ void ComponentTests::compositionPersistenceAndValidation()
     QCOMPARE(sections[0].toMap()["presentation"].toMap()["columns"].toInt(),3);
     HomeLayout restored(&registry); QVERIFY(restored.load(dir.filePath("default.json"),dir.filePath("user.json")));
     QCOMPARE(restored.composition(),config); QCOMPARE(restored.sections(),sections);
+    QVERIFY(layout.setGalleryFavorite("gallery-test", false));
+    QCOMPARE(layout.composition().value("appGallery").toMap().value("favoriteIds").toList(),QVariantList{});
+    QVERIFY(layout.setGalleryFavorite("gallery-test", true));
+    HomeLayout favoritesReloaded(&registry); QVERIFY(favoritesReloaded.load(dir.filePath("default.json"),dir.filePath("user.json")));
+    QCOMPARE(favoritesReloaded.composition().value("appGallery").toMap().value("favoriteIds").toList(),QVariantList{"gallery-test"});
+    auto invalidDocument = QJsonDocument::fromJson(readFile(dir.filePath("user.json"))).object();
+    auto invalidDocumentComposition = invalidDocument.value("composition").toObject();
+    auto invalidDocumentGallery = invalidDocumentComposition.value("appGallery").toObject();
+    invalidDocumentGallery["layout"] = "masonry";
+    invalidDocumentComposition["appGallery"] = invalidDocumentGallery;
+    invalidDocument["composition"] = invalidDocumentComposition;
+    const auto invalidDocumentBytes = QJsonDocument(invalidDocument).toJson();
+    const auto invalidUserPath = dir.filePath("invalid-gallery.json");
+    writeFile(invalidUserPath, invalidDocumentBytes);
+    HomeLayout fallbackGallery(&registry); QVERIFY(fallbackGallery.load(dir.filePath("default.json"),invalidUserPath));
+    QVERIFY(!fallbackGallery.composition().contains("appGallery"));
+    QCOMPARE(readFile(invalidUserPath),invalidDocumentBytes);
     const auto original = readFile(dir.filePath("user.json"));
     auto invalid = config; invalid["navigation"] = QVariantList{QVariantMap{{"id","same"},{"name","A"}},QVariantMap{{"id","same"},{"name","B"}}};
+    QVERIFY(!layout.setComposition(invalid));
+    invalid = config; invalid["appGallery"] = QVariantMap{{"layout","masonry"}};
+    QVERIFY(!layout.setComposition(invalid));
+    invalid = config; auto invalidGallery = config.value("appGallery").toMap();
+    invalidGallery["favoriteIds"] = QVariantList{"gallery-test","gallery-test"}; invalid["appGallery"] = invalidGallery;
     QVERIFY(!layout.setComposition(invalid));
     invalid = config; invalid["navigation"] = QVariantList{QVariantMap{{"id","bad"},{"name","Bad"},{"action",QVariantMap{{"type","shell"}}}}};
     QVERIFY(!layout.setComposition(invalid));
@@ -763,6 +952,25 @@ void ComponentTests::compositionPersistenceAndValidation()
     QCOMPARE(readFile(QUrl(layout.wallpaperSource()).toLocalFile()),readFile(wallpaper));
     const auto savedWallpaper = layout.composition();
     QVERIFY(!layout.setWallpaper("https://example.com/clouds.png")); QCOMPARE(layout.composition(),savedWallpaper);
+    const auto managed = savedWallpaper.value("wallpaper").toString();
+    QVERIFY(!layout.captureArtworkChoices().isEmpty());
+    const QVariantMap inputArtwork{{"1", managed}, {"8", managed}};
+    QVERIFY(layout.setCaptureInputArtwork(inputArtwork));
+    QVERIFY(!layout.captureArtworkSource(1).isEmpty());
+    QVERIFY(layout.captureArtworkSource(2).isEmpty());
+    HomeLayout artReloaded(&registry);
+    QVERIFY(artReloaded.load(dir.filePath("default.json"), dir.filePath("user.json")));
+    QCOMPARE(artReloaded.composition().value("captureInputArtwork").toMap(), inputArtwork);
+    const auto beforeInvalidArt = readFile(dir.filePath("user.json"));
+    QVERIFY(!layout.setCaptureInputArtwork({{"1", "artwork/not-present.png"}}));
+    QCOMPARE(readFile(dir.filePath("user.json")), beforeInvalidArt);
+    QVERIFY(!layout.setCaptureInputArtwork({{"1", "../bad.png"}}));
+    QCOMPARE(readFile(dir.filePath("user.json")), beforeInvalidArt);
+    HomeLayout otherProfile(&registry);
+    QVERIFY(otherProfile.load(dir.filePath("default.json"), dir.filePath("other-profile/user.json")));
+    QVERIFY(otherProfile.captureArtworkSource(1).isEmpty());
+    QVERIFY(layout.setCaptureInputArtwork({}));
+    QVERIFY(layout.captureArtworkSource(1).isEmpty());
 }
 void ComponentTests::universalGridValidatesAndPersists()
 {
@@ -959,7 +1167,14 @@ void ComponentTests::dispatchesValidatedActionsAndOrigins()
         QSignalSpy rejected(&dispatcher, &ActionDispatcher::rejected), focus(&dispatcher, &ActionDispatcher::restoreFocusRequested);
         QSignalSpy library(&dispatcher, &ActionDispatcher::libraryRequested), settings(&dispatcher, &ActionDispatcher::settingsRequested);
         QSignalSpy drawer(&dispatcher, &ActionDispatcher::drawerRequested);
+        QSignalSpy allApps(&dispatcher, &ActionDispatcher::allAppsRequested);
+        QSignalSpy search(&dispatcher, &ActionDispatcher::searchRequested);
         QVERIFY(dispatcher.dispatch({{"type","app-drawer"}},"more-apps")); QCOMPARE(drawer.size(),1);
+        QCOMPARE(allApps.size(),1); QCOMPARE(allApps.last().at(0).toString(),QString("more-apps"));
+        QVERIFY(dispatcher.dispatch({{"type","open-apps"}},"apps-card"));
+        QCOMPARE(allApps.size(),2); QCOMPARE(allApps.last().at(0).toString(),QString("apps-card"));
+        QVERIFY(dispatcher.dispatch({{"type","open-search"}},"search-card"));
+        QCOMPARE(search.size(),1); QCOMPARE(search.last().at(0).toString(),QString("search-card"));
         QVERIFY(!dispatcher.dispatch({{"type", "shell"}, {"target", "bad"}}));
         QVERIFY(!dispatcher.dispatch({{"type", "launch-app"}, {"appId", "missing"}}));
         QVERIFY(!dispatcher.dispatch({{"type", "open-folder"}, {"target", "/media/movies"}, {"openWith", "settings"}}));
@@ -1841,19 +2056,24 @@ void ComponentTests::studioHeaderValidationAndDraftRollback()
     const auto otherHeader=other.composition().value("header");
     QVERIFY(!home.studioOptions().value("headerDefaults").toMap().isEmpty());
     auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);const auto before=session->draft();
-    QVERIFY(session->previewCommand("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    const QVariantMap gallery{{"layout","list"},{"columns",4},{"density","spacious"},{"sort","favorites"},
+        {"showArtwork",false},{"showLabels",true},{"filterEnabled",true},{"favoritesEnabled",true},{"title","Installed Apps"}};
+    const QVariantMap pageComposition{{"headerMode","identity"},{"header",style},{"appGallery",gallery}};
+    QVERIFY(session->previewCommand("pagePatch",{{"scope","composition"},{"value",pageComposition}}));
     QCOMPARE(session->draft(),before);QCOMPARE(session->changeCount(),0);QVERIFY(!QFile::exists(path));
     session->cancelPreview();QCOMPARE(session->draft(),before);
-    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",pageComposition}}));
     QCOMPARE(session->changeCount(),1);const auto valid=session->draft();
     QVERIFY(!session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"header",QVariantMap{{"schemaVersion",2}}}}}}));
+    QVERIFY(!session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"appGallery",QVariantMap{{"columns",1}}}}}}));
     QCOMPARE(session->draft(),valid);QCOMPARE(session->changeCount(),1);QVERIFY(!QFile::exists(path));
     QVERIFY(session->undo());QCOMPARE(session->draft(),before);
-    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",QVariantMap{{"headerMode","identity"},{"header",style}}}}));
+    QVERIFY(session->execute("pagePatch",{{"scope","composition"},{"value",pageComposition}}));
     QVERIFY(session->apply(QString()));
     QCOMPARE(readFile(otherPath),otherBytes);QCOMPARE(other.composition().value("header"),otherHeader);
     HomeLayout reopened(&registry);QVERIFY(reopened.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
     QCOMPARE(reopened.composition().value("header").toMap(),style);
+    QCOMPARE(reopened.composition().value("appGallery").toMap(),gallery);
     const auto skin=reopened.saveSkin("Bottom header");QVERIFY(!skin.isEmpty());
     auto changed=reopened.composition();changed["header"]=QVariantMap{{"schemaVersion",1},{"position","top"}};
     QVERIFY(reopened.setComposition(changed));QVERIFY(reopened.applySkin(skin));

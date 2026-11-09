@@ -26,13 +26,21 @@ Item {
             return
         }
         if (activePage === 8) {
-            if (command === inputManager.back) { capturePage.handleCommand(command); activePage = -1 }
+            if (command === inputManager.back) {
+                if (capturePage.draftDirty || capturePage.keyboardMode || capturePage.artworkEditing) capturePage.handleCommand(command)
+                else { capturePage.handleCommand(command); activePage = -1 }
+            }
             else capturePage.handleCommand(command)
             return
         }
         if (activePage === 6) {
             if (command === inputManager.back) { if (!kodiPage.back()) activePage = -1 }
             else kodiPage.handleCommand(command)
+            return
+        }
+        if (activePage === 4) {
+            if (command === inputManager.back) activePage = -1
+            else tmdbAttribution.handleCommand(command)
             return
         }
         if (activePage === 0) {
@@ -45,7 +53,8 @@ Item {
         }
         if (activePage === 1) {
             if (command === inputManager.back) {
-                activePage = -1
+                if (audioPage.outputDraftActive) audioPage.handleCommand(command)
+                else activePage = -1
                 return
             }
             audioPage.handleCommand(command)
@@ -71,6 +80,7 @@ Item {
         else if (command === inputManager.confirm && selectedIndex === 6) activePage = 6
         else if (command === inputManager.confirm && selectedIndex === 7) activePage = 7
         else if (command === inputManager.confirm && selectedIndex === 8) activePage = 8
+        else if (command === inputManager.confirm && selectedIndex === 4) activePage = 4
     }
 
     DisplaySettingsView { appearance: root.appearance;
@@ -99,6 +109,13 @@ Item {
         onCaptureSetupRequested: root.activePage = 8
     }
     CaptureSettingsView { appearance: root.appearance; id: capturePage; anchors.fill: parent; visible: root.activePage === 8 }
+    TMDBAttributionView {
+        id: tmdbAttribution
+        anchors.fill: parent
+        appearance: root.appearance
+        visible: root.activePage === 4
+        onBackRequested: root.activePage = -1
+    }
 
     onSelectedIndexChanged: {
         const row = rowsRepeater.itemAt(selectedIndex)

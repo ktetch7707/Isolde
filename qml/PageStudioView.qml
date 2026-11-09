@@ -532,6 +532,32 @@ Item {
         return origin[axis]/a
     }
     function beginKeyboard(action, value) { keyboardReturnMode=mode; keyboardAction=action; keyboard.value=value || ""; keyboard.selectedIndex=0; mode="keyboard" }
+    function appGalleryPresentation() {
+        const packaged = typeof appCatalog !== "undefined" ? appCatalog.galleryPresentation
+            : {layout:"grid",columns:5,density:"standard",sort:"name",showArtwork:true,showLabels:true,filterEnabled:true,favoritesEnabled:true,title:"All Apps"}
+        return Object.assign({},packaged,layoutModel.composition.appGallery || {},page.composition.appGallery || {})
+    }
+    function patchAppGallery(key,value) {
+        const gallery=Object.assign({},page.composition.appGallery || {})
+        if(value===undefined)delete gallery[key]
+        else gallery[key]=value
+        if(command("pagePatch",{scope:"composition",value:{appGallery:Object.keys(gallery).length?gallery:null}}))message="Saved to this page's draft."
+        else message=session.errorString
+    }
+    function changeAppGallerySetting(index,direction) {
+        if(index===8){beginKeyboard("appGalleryTitle",appGalleryPresentation().title || "All Apps");return}
+        if(index===9){if(command("pagePatch",{scope:"composition",value:{appGallery:null}})){mode="editorSettings";choice=2;message="This page inherits the profile's All Apps presentation."}else message=session.errorString;return}
+        if(index===10){mode="editorSettings";choice=2;return}
+        const presentation=appGalleryPresentation()
+        if(index===0)patchAppGallery("layout",presentation.layout==="grid"?"list":"grid")
+        else if(index===1)patchAppGallery("columns",Math.max(2,Math.min(8,Number(presentation.columns || 5)+direction)))
+        else if(index===2){const values=["compact","standard","spacious"],current=values.indexOf(presentation.density || "standard");patchAppGallery("density",values[(current+direction+values.length)%values.length])}
+        else if(index===3)patchAppGallery("sort",presentation.sort==="name"?"favorites":"name")
+        else if(index===4)patchAppGallery("showArtwork",presentation.showArtwork===false)
+        else if(index===5)patchAppGallery("showLabels",presentation.showLabels===false)
+        else if(index===6)patchAppGallery("filterEnabled",presentation.filterEnabled===false)
+        else if(index===7)patchAppGallery("favoritesEnabled",presentation.favoritesEnabled===false)
+    }
     function startAddition(type,configuration) {
         pointerBoundaryError=""
         pendingScrollEnable=false;addingType=type;addingConfiguration=configuration || ({})
@@ -657,7 +683,14 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="confirmDeletePage")return ["Delete page in draft","Cancel"]
         if(mode==="pageAppearance")return ["Background start","Background end","Component surface","Text color","Focus color"]
         if(mode==="editorAppearance")return ["Surface color","Selected surface","Text color","Supporting text","Focus color","Reset Studio colors"]
-        if(mode==="editorSettings")return ["Canvas view","Studio colors","Reset interface…"]
+        if(mode==="editorSettings")return ["Canvas view","Studio colors","All Apps presentation","Reset interface…"]
+        if(mode==="appGallery"){
+            const p=appGalleryPresentation()
+            return ["Layout · "+p.layout,"Grid columns · "+p.columns,"Density · "+p.density,"Sort · "+p.sort,
+                "Show artwork · "+(p.showArtwork===false?"Off":"On"),"Show labels · "+(p.showLabels===false?"Off":"On"),
+                "Local filter · "+(p.filterEnabled===false?"Off":"On"),"Favorites · "+(p.favoritesEnabled===false?"Off":"On"),
+                "Gallery title · "+p.title,"Reset page override to profile","Done"]
+        }
         if(mode==="restoreDefaults")return ["Cancel","Restore this page in draft; keep other pages","Restore Whole interface..."]
         if(mode==="defaultsReview")return ["Keep draft","Restore Whole interface in draft"].concat(defaultRemovedPages.map(p=>"Remove page: "+p.name))
         if(mode==="context") return (current && (current.componentType==="container" || current.componentType==="carousel")) ? ["Move","Edit component","Duplicate","Delete…","Edit contents"] : ["Move","Edit component","Duplicate","Delete…"]
@@ -759,9 +792,11 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="editorSettings"){
             if(choice===0){mode="view";choice=0}
             else if(choice===1){openInspector(false);inspector.editorMode=true;inspector.view="fields";inspector.tab=0;inspector.controlsShown=true}
+            else if(choice===2){mode="appGallery";choice=0;message="All Apps presentation is stored with this page. The profile's configured presentation is inherited until you change an override."}
             else{mode="restoreDefaults";choice=0;message="Replace this page's layout with packaged defaults in the draft. Other pages, apps, accounts and Kodi media stay unchanged. Undo restores the page; Apply saves it."}
             return
         }
+        if(mode==="appGallery"){changeAppGallerySetting(choice,1);return}
         if(mode==="headerContext"){openHeader(choice===1?"title":choice===2?"clock":choice===3?"settings":choice===4?"layout":headerSelection);return}
         if(mode==="noRoom"){
             if(choice===0){if(!scrollingEnabled && !parentScopeId && !sectionMode){pendingScrollEnable=true;mode="move";suggestAdditionPosition()}else message="Choose a position, a different size or another container."}
@@ -983,7 +1018,8 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             if(mode==="conflictCompare"){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="applyFailed";choice=1;return}
             if(mode==="resetVersions"){mode="versions";choice=2;return}
             if(mode==="versionReview" || mode==="deleteVersion"){session.cancelPreview();restoreEditSnapshot(versionOrigin);mode="versions";choice=0;return}
-            if(mode==="view" || mode==="restoreDefaults"){choice=mode==="view"?0:2;mode="editorSettings";return}
+            if(mode==="appGallery"){mode="editorSettings";choice=2;return}
+            if(mode==="view" || mode==="restoreDefaults"){choice=mode==="view"?0:3;mode="editorSettings";return}
             if(mode==="replaceReview"){session.cancelPreview();mode="inspector";message="";return}
             if(mode==="canvas" && historyFocus){historyFocus=false;return}
             if(mode==="history" && addingType){cancelGesture();return}
@@ -1031,6 +1067,9 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                 candidate=next;preview.revealPlacement(next,scopeId,parentScopeId);message="";return
             }
             const labels=dialogLabels()
+            if(mode==="appGallery" && choice<8 && (c===inputManager.navigateLeft || c===inputManager.navigateRight)){
+                changeAppGallerySetting(choice,c===inputManager.navigateRight?1:-1);return
+            }
             if(mode==="layers" && layerRows[choice]){
                 const item=layerRows[choice].item
                 if(c===inputManager.menu){const selection=multiSelection.slice(),index=selection.indexOf(item.id);if(index>=0)selection.splice(index,1);else if(selection.length<32)selection.push(item.id);else{message="Select at most 32 components.";return}multiSelection=selection;message="Menu toggles selection · Right expands · Left collapses · Group selected appears at the end.";return}
@@ -1702,6 +1741,15 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         onCanceled:studio.mode=studio.keyboardReturnMode
         onAccepted:text=>{
             if(studio.keyboardAction==="saveVersion"){if(studio.session.saveVersion(text)){studio.versionEntries=studio.session.versions();studio.mode="versions";studio.choice=0;studio.message="Named milestone saved."}else studio.message=studio.session.errorString;return}
+            if(studio.keyboardAction==="appGalleryTitle"){
+                const gallery=Object.assign({},studio.page.composition.appGallery || {})
+                if(text.trim())gallery.title=text
+                else delete gallery.title
+                if(studio.command("pagePatch",{scope:"composition",value:{appGallery:Object.keys(gallery).length?gallery:null}})){
+                    studio.mode=studio.keyboardReturnMode;studio.message="Saved to this page's draft."
+                }else studio.message=studio.session.errorString
+                return
+            }
             if(studio.keyboardAction==="navAdd" || studio.keyboardAction==="sectionAdd"){
                 const section=studio.keyboardAction==="sectionAdd";if(studio.command(section?"section":"navigation",{kind:"add",name:text})){studio.mode=section?"sections":"navigation";studio.choice=0}return
             }

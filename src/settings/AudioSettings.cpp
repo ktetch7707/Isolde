@@ -304,6 +304,8 @@ void AudioSettings::enqueueRead()
     if (QFileInfo(m_mixerTool).fileName() == "pactl") {
         m_commands.append(QStringList{"get-sink-volume", "@DEFAULT_SINK@"});
         m_commands.append(QStringList{"get-sink-mute", "@DEFAULT_SINK@"});
+        m_commands.append(QStringList{"list", "sinks"});
+        m_commands.append(QStringList{"get-default-sink"});
     } else {
         m_commands.append(QStringList{"get-volume", "@DEFAULT_AUDIO_SINK@"});
         m_commands.append(QStringList{"status"});
@@ -318,13 +320,15 @@ bool AudioSettings::selectOutput(const QString &id)
     }
     bool found = false;
     for (const auto &entry : m_outputs) if (entry.toMap().value("id").toString() == id) found = true;
-    if (!found || !QRegularExpression("^[0-9]+$").match(id).hasMatch()) {
+    const bool pulse = QFileInfo(m_mixerTool).fileName() == "pactl";
+    if (!found || !(pulse ? QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id).hasMatch()
+                           : QRegularExpression("^[0-9]+$").match(id).hasMatch())) {
         m_outputStatus = "Output is no longer available. Refresh outputs."; emit changed(); return false;
     }
     m_requestedOutput = id;
     m_outputStatus = "Switching output…";
     // Do not copy the previous output's volume onto different speakers.
-    m_commands.append(QStringList{"set-default", id});
+    m_commands.append(pulse ? QStringList{"set-default-sink", id} : QStringList{"set-default", id});
     enqueueRead();
     runNext(); emit changed(); return true;
 }
@@ -396,6 +400,50 @@ void AudioSettings::completeCommand(int exitCode, QProcess::ExitStatus status)
         if (!sawSinks) m_outputStatus = "Cannot read outputs from this WirePlumber version.";
         else if (outputs.isEmpty()) m_outputStatus = "No audio outputs detected.";
         else if (!m_requestedOutput.isEmpty() && current != m_requestedOutput) m_outputStatus = "Output change was not confirmed. Refresh and retry.";
+        else m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
+        m_requestedOutput.clear();
+        emit changed();
+    } else if (command == "list") {
+        QVariantList outputs;
+        QString id, name;
+        const auto appendOutput = [&] {
+            if (id.isEmpty() || id.size() > 256 || outputs.size() >= 128
+                || !QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id).hasMatch())
+                return;
+            const auto displayName = name.isEmpty() || name.size() > 256 ? id : name;
+            outputs.append(QVariantMap{{"id", id}, {"name", displayName}, {"active", false}});
+        };
+        for (const auto &line : output.split('\n')) {
+            const auto trimmed = line.trimmed();
+            if (trimmed.startsWith("Sink #")) {
+                appendOutput();
+                id.clear();
+                name.clear();
+            } else if (trimmed.startsWith("Name:")) {
+                id = trimmed.mid(5).trimmed();
+            } else if (trimmed.startsWith("Description:")) {
+                name = trimmed.mid(12).trimmed();
+            }
+        }
+        appendOutput();
+        m_outputs = outputs;
+        m_outputStatus = !m_requestedOutput.isEmpty() ? "Switching output…"
+            : outputs.isEmpty() ? "No audio outputs detected."
+            : "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
+        emit changed();
+    } else if (command == "get-default-sink") {
+        bool found = false;
+        const auto current = output;
+        for (auto &entry : m_outputs) {
+            auto item = entry.toMap();
+            const bool active = item.value("id").toString() == current;
+            item.insert("active", active);
+            found |= active;
+            entry = item;
+        }
+        if (!found) m_outputStatus = "The current default output is not in the playback device list.";
+        else if (!m_requestedOutput.isEmpty() && current != m_requestedOutput)
+            m_outputStatus = "Output change was not confirmed. Refresh and retry.";
         else m_outputStatus = "Choose with ← →, Enter applies. Restart playback if it stays on the old output.";
         m_requestedOutput.clear();
         emit changed();

@@ -8,6 +8,7 @@
 #include <QSet>
 #include <QRegularExpression>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QUrl>
 #include <algorithm>
 #ifdef Q_OS_LINUX
@@ -68,6 +69,13 @@ void KodiMedia::releaseSocket()
 }
 void KodiMedia::fail(const QString &message)
 {
+    if (m_busy && (m_stage == 14 || m_stage == 15)) {
+        m_busy = false;
+        m_subtitleStatus = QStringLiteral("Kodi subtitle operation failed: %1").arg(message);
+        releaseSocket();
+        emit changed();
+        return;
+    }
     if((m_stage==9 || m_stage==10 || m_stage==11 || m_stage==12) && m_busy)m_playlistStatus="Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. "+message;
     m_pendingMovie = m_pendingShow = 0;
     m_pendingDirectKind.clear(); m_pendingDirectId = 0;
@@ -761,6 +769,52 @@ void KodiMedia::playbackControl(const QString &action)
     m_busy = true; m_stage = 7;
     request("Isolde.PlaybackControl", {{"action", action}});
 }
+void KodiMedia::loadSubtitle(const QString &path)
+{
+    const QFileInfo subtitle(path);
+    if (!m_playbackActive || !subtitle.isFile() ||
+        subtitle.suffix().compare(QStringLiteral("srt"), Qt::CaseInsensitive) != 0 ||
+        subtitle.size() > 8 * 1024 * 1024) {
+        m_playbackStatus = QStringLiteral("Load a completed local SRT while an Isolde-managed video is playing.");
+        emit changed();
+        return;
+    }
+    if (m_busy) {
+        m_playbackStatus = QStringLiteral("Kodi is busy. Wait for the current request and retry loading the subtitle.");
+        emit changed();
+        return;
+    }
+    m_busy = true;
+    m_stage = 13;
+    request(QStringLiteral("Isolde.LoadSubtitle"), {{QStringLiteral("path"), subtitle.absoluteFilePath()}});
+}
+void KodiMedia::refreshSubtitleTracks()
+{
+    if (!m_playbackActive || m_busy) {
+        m_subtitleStatus = m_playbackActive
+            ? QStringLiteral("Kodi is busy. Wait and retry subtitle track discovery.")
+            : QStringLiteral("Subtitle tracks are available only during Isolde-managed video playback.");
+        emit changed();
+        return;
+    }
+    m_busy = true;
+    m_stage = 14;
+    m_subtitleStatus = QStringLiteral("Reading subtitle tracks from the managed Kodi player…");
+    request(QStringLiteral("Isolde.GetSubtitleTracks"));
+}
+void KodiMedia::setSubtitleTrack(int trackId)
+{
+    if (!m_playbackActive || m_busy || trackId < -1) {
+        m_subtitleStatus = QStringLiteral("Choose an available subtitle track during Isolde-managed video playback.");
+        emit changed();
+        return;
+    }
+    m_busy = true;
+    m_stage = 15;
+    m_subtitleStatus = QStringLiteral("Applying subtitle track selection in Kodi…");
+    request(QStringLiteral("Isolde.SetSubtitleTrack"),
+            {{QStringLiteral("subtitleId"), trackId < 0 ? QJsonValue(QStringLiteral("off")) : QJsonValue(trackId)}});
+}
 void KodiMedia::request(const QString &method, const QJsonObject &params)
 {
     if (m_retired) { fail("This profile is no longer active."); return; }
@@ -787,6 +841,16 @@ void KodiMedia::consume()
         fail(m_mediaKind=="channels"?"TV guide unavailable. Configure a PVR TV source in Kodi, then refresh.":"Kodi returned an incompatible response."); return;
     }
     if (response.contains("error")) {
+        if (m_stage == 13) {
+            m_busy = false; m_timeout.stop(); releaseSocket();
+            m_playbackStatus = QStringLiteral("Kodi could not load this local subtitle. Keep your video playing and retry.");
+            emit changed(); return;
+        }
+        if (m_stage == 14 || m_stage == 15) {
+            m_busy = false; m_timeout.stop(); releaseSocket();
+            m_subtitleStatus = QStringLiteral("Kodi could not read or change the managed video's subtitle tracks.");
+            emit changed(); return;
+        }
         if(m_stage==9){m_busy=false;m_timeout.stop();releaseSocket();m_playlistStatus="Could not save this Kodi playlist. Previous playlists are unchanged. Check storage and retry.";emit changed();return;}
         if(m_mediaKind=="playlists" || m_viewKind=="playlist"){
             fail("Kodi video playlist unavailable. Refresh to retry; choose a library playlist of the selected kind. Catalog limit: 128 saved playlists.");return;
@@ -835,6 +899,39 @@ void KodiMedia::consume()
         }
         m_playlistStatus="Playlist reordered in Kodi · "+result["name"].toString();emit changed();return;
     }
+    if(m_stage==13){
+        m_busy=false;releaseSocket();
+        m_playbackStatus=result.value("loaded").toBool()
+            ? QStringLiteral("Subtitle loaded in Kodi.")
+            : QStringLiteral("Kodi did not confirm loading the subtitle.");
+        emit changed();return;
+    }
+    if (m_stage == 14 || m_stage == 15) {
+        const auto tracks = result.value(QStringLiteral("tracks")).toArray();
+        if (tracks.size() > 64 || !result.value(QStringLiteral("enabled")).isBool()) {
+            fail(QStringLiteral("Kodi returned an invalid subtitle track response.")); return;
+        }
+        QVariantList normalized;
+        for (const auto &value : tracks) {
+            if (!value.isObject()) continue;
+            const auto track = value.toObject();
+            if (!track.value(QStringLiteral("id")).isDouble() ||
+                track.value(QStringLiteral("id")).toInt(-1) < 0) continue;
+            normalized.append(QVariantMap{
+                {QStringLiteral("id"), track.value(QStringLiteral("id")).toInt()},
+                {QStringLiteral("name"), track.value(QStringLiteral("name")).toString()},
+                {QStringLiteral("language"), track.value(QStringLiteral("language")).toString()},
+                {QStringLiteral("external"), track.value(QStringLiteral("external")).toBool()},
+                {QStringLiteral("selected"), track.value(QStringLiteral("selected")).toBool()}
+            });
+        }
+        m_subtitleTracks = normalized;
+        m_busy = false; releaseSocket();
+        m_subtitleStatus = m_stage == 14
+            ? QStringLiteral("%1 subtitle track(s) discovered from Kodi.").arg(normalized.size())
+            : QStringLiteral("Kodi subtitle selection updated.");
+        emit changed(); return;
+    }
     if (m_stage == 5 || m_stage == 6 || m_stage == 7) {
         const auto state = result.value("state").toString();
         if (!QStringList{"starting", "playing", "paused", "ended", "failed", "replaced", "idle"}.contains(state)
@@ -850,6 +947,7 @@ void KodiMedia::consume()
             if (state != "starting" && !m_playbackVisible) { m_playbackVisible = true; emit playbackStarted(); }
         } else {
             m_playbackPoll.stop(); m_playbackActive = m_playbackVisible = false;
+            m_subtitleTracks.clear();
             m_lastPlaybackNaturalEnd=state=="ended" && result.value("naturalEnd").isBool() && result.value("naturalEnd").toBool();
             // Trust only a negative start acknowledgement for the identity we
             // requested. Timeouts, PVR failures and later player errors do not

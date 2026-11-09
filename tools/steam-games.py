@@ -17,6 +17,26 @@ import time
 import uuid
 
 MAX_GAMES = 5000
+FACT_VALUES = {
+    "process": {"waiting", "observed", "gone"},
+    "installation": {"unknown", "verified", "unavailable"},
+    "client": {"unknown", "available", "unavailable"},
+    "ownership": {"unknown", "owned", "not_owned"},
+    "account": {"unknown", "signed_in", "signed_out"},
+    "connection": {"unknown", "online", "offline"},
+    "offline": {"unknown", "ready", "unavailable"},
+    "exit": {"unknown", "exited", "crashed"},
+    "local_save": {"unknown", "flushed", "failed"},
+    "cloud_save": {"unknown", "synced", "pending", "failed"},
+    "error": {"none", "bootstrap_failed", "ownership_denied", "auth_required",
+              "offline_unavailable", "launch_failed", "install_check_failed", "client_unavailable"},
+}
+UNKNOWN_FACTS = {key: ("waiting" if key == "process" else "none" if key == "error" else "unknown")
+                 for key in FACT_VALUES}
+
+
+class SessionCanceled(Exception):
+    pass
 
 
 def app_id(value):
@@ -57,22 +77,24 @@ def vdf(text):
     return obj()
 
 
-def private_path(path, home, directory=False):
+def private_path(path, home, directory=False, external=()):
     home = Path(home).absolute()
     if home.resolve() != home:
         raise ValueError("Steam profile storage is redirected")
     path = Path(path)
     canonical = path.resolve(strict=True)
-    if not canonical.is_relative_to(home) or canonical == home:
+    allowed = canonical.is_relative_to(home) and canonical != home
+    allowed |= any(canonical.is_relative_to(root) for root in external)
+    if not allowed:
         raise ValueError("Steam library is outside this Isolde profile")
     if directory and not canonical.is_dir(): raise ValueError("Steam library folder is unavailable")
     return canonical
 
 
-def read_vdf(path, home, limit):
+def read_vdf(path, home, limit, external=()):
     path = Path(path)
     if path.is_symlink(): raise ValueError("Redirected Steam manifest")
-    path = private_path(path, home)
+    path = private_path(path, home, external=external)
     # Walk the canonical path with directory descriptors. An ancestor replaced
     # after resolve() cannot turn a metadata read into a cross-profile read.
     if len(path.parts)>128: raise ValueError("Steam metadata path is too deep")
@@ -90,8 +112,31 @@ def read_vdf(path, home, limit):
     return vdf(data.decode("utf-8-sig"))
 
 
-def libraries(home):
+def external_roots(values):
+    roots=[]
+    for value in values:
+        if not isinstance(value,str) or len(value)>4096:
+            raise ValueError("Invalid external Steam library path length")
+        path=Path(value)
+        if not path.is_absolute() or str(path)!=str(path.resolve(strict=True)):
+            raise ValueError("External Steam library path is redirected or unavailable")
+        if not (path.is_relative_to(Path("/media")) or path.is_relative_to(Path("/mnt"))) or path in (Path("/media"),Path("/mnt")):
+            raise ValueError("External Steam libraries must be approved mount folders")
+        steamapps=path/"steamapps"
+        if not steamapps.is_dir() or steamapps.is_symlink() or steamapps.resolve(strict=True)!=steamapps:
+            raise ValueError("External Steam library has no steamapps folder")
+        if path in roots: raise ValueError("Duplicate external Steam library")
+        for existing in roots:
+            if path in existing.parents or existing in path.parents:
+                raise ValueError("Nested external Steam libraries are not supported")
+        roots.append(path)
+    if len(roots)>8: raise ValueError("Too many external Steam libraries")
+    return roots
+
+
+def libraries(home, external=()):
     home = Path(home).absolute()
+    approved=external_roots(external)
     roots = []
     warnings = []
     for relative in (".local/share/Steam/steamapps", ".steam/steam/steamapps", ".steam/root/steamapps"):
@@ -102,25 +147,30 @@ def libraries(home):
     for root in list(roots):
         index = root/"libraryfolders.vdf"
         if not index.exists(): continue
-        folders = read_vdf(index, home, 1024*1024).get("libraryfolders", {})
+        folders = read_vdf(index, home, 1024*1024, approved).get("libraryfolders", {})
         if not isinstance(folders, dict) or len(folders) > 32: raise ValueError("Too many Steam libraries")
         for number, entry in folders.items():
             if not number.isdigit(): continue
             name = entry.get("path") if isinstance(entry, dict) else entry
             if not isinstance(name, str) or not Path(name).is_absolute(): raise ValueError("Invalid Steam library path")
-            candidate = Path(name)/"steamapps"
+            library=Path(name)
+            candidate = library/"steamapps"
             if not candidate.exists(): continue
-            try: candidate = private_path(candidate, home, True)
+            try: candidate = private_path(candidate, home, True, approved)
             except ValueError:
-                warnings.append("External Steam libraries are not connected to this Isolde profile."); continue
+                warnings.append("External Steam libraries are not approved for this Isolde profile."); continue
             if candidate not in roots: roots.append(candidate)
             if len(roots) > 32: raise ValueError("Too many Steam libraries")
+    for library in approved:
+        candidate=library/"steamapps"
+        if candidate not in roots: roots.append(candidate)
+        if len(roots)>32: raise ValueError("Too many Steam libraries")
     return roots, sorted(set(warnings))
 
 
-def installed(manifest, home):
+def installed(manifest, home, external=()):
     identity = app_id(Path(manifest).stem.removeprefix("appmanifest_"))
-    data = read_vdf(manifest, home, 65536).get("AppState")
+    data = read_vdf(manifest, home, 65536, external).get("AppState")
     if not isinstance(data, dict) or data.get("appid") != identity: raise ValueError("Steam manifest identity changed")
     if data.get("StateFlags") != "4": return None
     title, folder = data.get("name"), data.get("installdir")
@@ -129,14 +179,14 @@ def installed(manifest, home):
         or len(folder) > 256 or "\\" in folder or Path(folder).is_absolute()
         or any(p in (".", "..") for p in folder.split("/"))):
         raise ValueError("Invalid installed Steam title metadata")
-    common = private_path(Path(manifest).parent/"common", home, True)
-    game = private_path(common/folder, home, True)
+    common = private_path(Path(manifest).parent/"common", home, True, external)
+    game = private_path(common/folder, home, True, external)
     if not game.is_relative_to(common) or game == common: raise ValueError("Redirected Steam game folder")
     return {"schemaVersion":1, "title":title, "platform":"Steam", "runtimeId":"steam", "root":"", "target":identity}
 
 
-def discover(home):
-    roots, warnings = libraries(home)
+def discover(home, external=()):
+    roots, warnings = libraries(home, external)
     games = {}
     entries = 0
     for root in roots:
@@ -145,7 +195,7 @@ def discover(home):
                 entries += 1
                 if entries > 10000: raise ValueError("Steam discovery exceeds 10,000 entries; nothing was imported")
                 if not re.fullmatch(r"appmanifest_[1-9][0-9]{0,9}\.acf", entry.name): continue
-                game = installed(Path(entry.path), home)
+                game = installed(Path(entry.path), home, external)
                 if game:
                     if game["target"] in games: raise ValueError("Duplicate Steam game identity across libraries")
                     games[game["target"]] = game
@@ -153,20 +203,20 @@ def discover(home):
     return {"games":sorted(games.values(), key=lambda g:(g["title"].casefold(), g["target"])), "warnings":warnings}
 
 
-def verify_installed(home, identity):
-    roots, _ = libraries(home)
+def verify_installed(home, identity, external=()):
+    roots, _ = libraries(home, external)
     matches = []
     for root in roots:
         manifest = root/("appmanifest_"+app_id(identity)+".acf")
         if manifest.exists():
-            game = installed(manifest, home)
+            game = installed(manifest, home, external)
             if game: matches.append(game)
     if len(matches) != 1:
         raise ValueError("This Steam game is missing, updating or ambiguous. Check installation in Steam, then retry")
     return matches[0]
 
 
-def matching_processes(variable, value, proc=Path("/proc")):
+def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_client=False):
     result = []
     entries = 0
     for entry in proc.iterdir():
@@ -176,20 +226,29 @@ def matching_processes(variable, value, proc=Path("/proc")):
         try:
             with (entry/"environ").open("rb") as stream: environment = stream.read(65537)
             if len(environment) > 65536: continue
-            if (variable+"="+value).encode() in environment.split(b"\0"):
+            fields = environment.split(b"\0")
+            if token is not None and ("ISOLDE_STEAM_SESSION="+token).encode() not in fields: continue
+            if exclude_client:
+                executable = os.path.basename(os.readlink(entry/"exe")).lower()
+                if executable in ("steam", "steam.sh", "steamwebhelper", "steamservice", "steam-runtime-launcher-service"):
+                    continue
+            if (variable+"="+value).encode() in fields:
                 if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] != "Z": result.append(int(entry.name))
         except (OSError, ValueError, IndexError): continue
     return result
 
 
-def game_processes(identity, proc=Path("/proc")):
-    return matching_processes("SteamAppId",identity,proc)
+def game_processes(identity, proc=Path("/proc"), token=None):
+    # Both names occur in Steam/Proton environments. Neither is entitlement
+    # proof, and a tagged third-party launcher may still precede the game.
+    return sorted(set(matching_processes("SteamAppId",identity,proc,token,True)
+                      + matching_processes("SteamGameId",identity,proc,token,True)))
 
 
-def stop_owned_session(token):
+def signal_owned_processes(pids, token):
     # A unique inherited environment token, in addition to the private PID
     # namespace, prevents shutdown commands from reaching an existing client.
-    for pid in matching_processes("ISOLDE_STEAM_SESSION",token):
+    for pid in pids:
         if pid<=1: continue
         descriptor=None
         try:
@@ -200,51 +259,172 @@ def stop_owned_session(token):
         except (ProcessLookupError,FileNotFoundError): pass
         finally:
             if descriptor is not None:os.close(descriptor)
-    deadline=time.monotonic()+1.5
+
+
+def wait_until_gone(processes, timeout, clock=time.monotonic, sleep=time.sleep):
+    deadline=clock()+timeout
+    while clock()<deadline:
+        if not processes(): return True
+        sleep(.05)
+    return not processes()
+
+
+def stop_owned_session(token):
+    signal_owned_processes(matching_processes("ISOLDE_STEAM_SESSION",token), token)
+    deadline=time.monotonic()+3
     while time.monotonic()<deadline:
         if not matching_processes("ISOLDE_STEAM_SESSION",token):return
         time.sleep(.05)
 
 
-def wait_for_game(identity, launcher, timeout=120, clock=time.monotonic, sleep=time.sleep, processes=game_processes):
+class SteamProcessProvider:
+    """Local process boundary; it has no authenticated Steam account API."""
+    def __init__(self, identity, token, launcher, preflight=None):
+        self.identity, self.token, self.launcher = identity, token, launcher
+        self.preflight = dict(preflight or UNKNOWN_FACTS)
+
+    def observe(self):
+        facts = dict(self.preflight)
+        facts["process"] = "observed" if game_processes(self.identity, token=self.token) else "gone"
+        if self.launcher.poll() not in (None, 0): facts["error"] = "bootstrap_failed"
+        return facts
+
+
+def validated_facts(value):
+    if not isinstance(value, dict) or set(value) != set(FACT_VALUES):
+        raise ValueError("Invalid Steam provider observation")
+    if any(not isinstance(value[k], str) or value[k] not in allowed for k, allowed in FACT_VALUES.items()):
+        raise ValueError("Invalid Steam provider observation")
+    return dict(value)
+
+
+def provider_message(error):
+    return {
+        "bootstrap_failed": "Steam could not start this game. Check the active account, ownership, connection and updates in Steam, then retry",
+        "ownership_denied": "Steam reported that this account cannot launch this game. Check the active account and ownership in Steam, then retry",
+        "auth_required": "Steam requires account sign-in before this game can start. Open Steam and sign in, then retry",
+        "offline_unavailable": "Steam reported that this game is unavailable offline. Reconnect in Steam and prepare the game for offline use, then retry",
+        "launch_failed": "Steam reported that this game could not start. Check installation and compatibility in Steam, then retry",
+        "install_check_failed": "The Steam installation could not be verified. Check the game and library access in Steam, then retry",
+        "client_unavailable": "Install or repair Steam in the Isolde Store",
+    }[error]
+
+
+def supervise_provider(provider, publish, timeout=120, clock=None, sleep=None):
+    """Consume only bounded provider observations; absence is never a crash or save proof."""
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
     deadline = clock()+timeout
-    while clock() < deadline:
-        if processes(identity): return
-        if launcher.poll() not in (None, 0): raise RuntimeError("Steam could not start this game. Check sign-in, ownership and updates in Steam")
+    seen = False
+    missing = None
+    last = None
+    while True:
+        facts = validated_facts(provider.observe())
+        phase = "process_observed" if seen or facts["process"] == "observed" else "starting"
+        if facts != last:
+            publish(phase, facts)
+            last = facts
+        if facts["error"] != "none" and (not seen or facts["error"] != "bootstrap_failed"):
+            raise RuntimeError(provider_message(facts["error"]))
+        if facts["process"] == "observed":
+            seen = True
+            missing = None
+        elif seen:
+            if missing is None: missing = clock()
+            elif clock()-missing >= 3:
+                publish("ended", facts)
+                if facts["exit"] == "crashed":
+                    raise RuntimeError("Steam reported that this game crashed. Check its saves and compatibility before retrying")
+                if facts["local_save"] == "failed":
+                    raise RuntimeError("Steam reported that the game could not save. Check local saves before retrying")
+                if facts["cloud_save"] == "failed":
+                    raise RuntimeError("Steam reported that Cloud sync failed. Check Steam before using these saves on another device")
+                return facts
+        elif clock() >= deadline:
+            raise RuntimeError("Steam did not start this game within two minutes. Check the active account, offline availability, installation and compatibility in Steam, then retry")
         sleep(.25)
-    raise RuntimeError("Steam did not start this game within two minutes. Check sign-in, installation and compatibility, then retry")
 
 
-def launch(identity):
+def publish_provider_state(identity, phase, facts):
+    payload = {"version":1, "appId":identity, "phase":phase, **facts}
+    print("STEAM_PROVIDER_STATE "+json.dumps(payload, separators=(",", ":"), sort_keys=True),
+          file=sys.stderr, flush=True)
+
+
+def launch(identity, external=()):
     app_id(identity)
     if os.environ.get("ISOLDE_NATIVE_NAMESPACE") != "1": raise ValueError("Steam games require an isolated Isolde session")
+    preflight = dict(UNKNOWN_FACTS)
+    publish_provider_state(identity, "starting", preflight)
     home = Path.home()
-    verify_installed(home, identity)
-    binary = Path("/usr/games/steam")
-    if not binary.is_file() or not os.access(binary, os.X_OK): raise ValueError("Install or repair Steam in the Isolde Store")
-    # HOME, /tmp, IPC, PID view and bus all belong to NativeSandbox.
-    def stopped(signum, frame): raise InterruptedError("Steam game launch canceled")
-    signal.signal(signal.SIGTERM, stopped)
-    signal.signal(signal.SIGINT, stopped)
-    token=uuid.uuid4().hex
-    launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
     try:
-        wait_for_game(identity, launcher)
-        print("STEAM_GAME_STARTED "+identity, file=sys.stderr, flush=True)
-        missing = None
-        while True:
-            if game_processes(identity): missing = None
-            elif missing is None: missing = time.monotonic()
-            elif time.monotonic()-missing >= 3: break
-            time.sleep(.25)
+        verify_installed(home, identity, external)
+    except (OSError, ValueError):
+        preflight["installation"] = "unavailable"
+        preflight["error"] = "install_check_failed"
+        publish_provider_state(identity, "failed", preflight)
+        raise
+    preflight["installation"] = "verified"
+    binary = Path("/usr/games/steam")
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        preflight["client"] = "unavailable"
+        preflight["error"] = "client_unavailable"
+        publish_provider_state(identity, "failed", preflight)
+        raise ValueError("Install or repair Steam in the Isolde Store")
+    preflight["client"] = "available"
+    publish_provider_state(identity, "starting", preflight)
+    # HOME, /tmp, IPC, PID view and bus all belong to NativeSandbox.
+    def stopped(signum, frame): raise SessionCanceled()
+    previous_term = signal.signal(signal.SIGTERM, stopped)
+    previous_int = signal.signal(signal.SIGINT, stopped)
+    token=uuid.uuid4().hex
+    processes = lambda game: game_processes(game, token=token)
+    started = False
+    canceled = False
+    clean_game_exit = True
+    last_facts = dict(preflight)
+    failed = False
+    def publish(phase, facts):
+        nonlocal started, last_facts
+        last_facts = facts
+        if phase == "process_observed" and not started:
+            started = True
+            print("STEAM_GAME_PROCESS_OBSERVED "+identity, file=sys.stderr, flush=True)
+        publish_provider_state(identity, phase, facts)
+    try:
+        launcher = subprocess.Popen([str(binary), "-silent", "-applaunch", identity], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                    env=dict(os.environ,ISOLDE_STEAM_SESSION=token))
+        supervise_provider(SteamProcessProvider(identity, token, launcher, preflight), publish)
+    except SessionCanceled:
+        canceled = True
+    except (OSError, ValueError, RuntimeError):
+        failed = True
+        raise
     finally:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-        stop_owned_session(token)
+        try:
+            if canceled:
+                signal_owned_processes(processes(identity), token)
+                clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
+                stopped = clean_game_exit
+            else:
+                stopped = started
+            # Give Steam a bounded opportunity to process game exit and sync before
+            # ending its private client. This is not a cloud-sync confirmation.
+            if stopped:
+                time.sleep(3)
+            stop_owned_session(token)
+            if canceled or failed:
+                publish("failed" if failed or not clean_game_exit else "canceled", last_facts)
+        finally:
+            signal.signal(signal.SIGTERM, previous_term)
+            signal.signal(signal.SIGINT, previous_int)
         # No global Steam IPC shutdown. NativeSandbox teardown is the final
         # boundary for descendants that discard the token. Cloud sync is not
         # promised by this direct-launch adapter.
+    if not clean_game_exit:
+        raise RuntimeError("The game did not exit normally. Recent saves or Steam Cloud sync may be incomplete; open Steam to check before retrying")
 
 
 def main():
@@ -253,16 +433,17 @@ def main():
     group.add_argument("--discover", action="store_true")
     group.add_argument("--launch")
     parser.add_argument("--home", type=Path)
+    parser.add_argument("--library", action="append", default=[])
     args = parser.parse_args()
     if args.discover:
         if args.home is None: parser.error("A private Steam home is required")
-        result = discover(args.home)
+        result = discover(args.home,args.library)
         data = json.dumps(result, ensure_ascii=False)
         if len(data.encode()) > 2*1024*1024: raise ValueError("Steam import preview is too large")
         print(data)
     else:
         if args.home is not None: parser.error("Launch uses the isolated profile home only")
-        launch(args.launch)
+        launch(args.launch,args.library)
 
 
 if __name__ == "__main__":

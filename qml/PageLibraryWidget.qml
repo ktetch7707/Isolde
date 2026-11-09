@@ -150,6 +150,7 @@ Item {
         sourceComponent:GamesLibraryWidget {
             library:typeof gameLibrary!=="undefined"?gameLibrary:null
             dispatcher:typeof actionDispatcher!=="undefined"?actionDispatcher:null
+            providerStatus:typeof sessionManager!=="undefined"?sessionManager.steamProviderState:({})
             originId:root.originId
             style:root.style;appearance:root.appearance
             engaged:root.engaged;readOnly:root.readOnly || root.frozen

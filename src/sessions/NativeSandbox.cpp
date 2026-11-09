@@ -1,6 +1,11 @@
 #include "sessions/NativeSandbox.h"
+#include "sessions/GamepadTopology.h"
 #include "media/MediaGrants.h"
 #include "games/GameEmulators.h"
+#include "games/SteamLibraryGrants.h"
+#include "games/ManagedGamePaths.h"
+#include "games/OpticalDiscAdapter.h"
+#include "games/OpticalDiscGrants.h"
 #include <QDir>
 #include <QCoreApplication>
 #include <QFileInfo>
@@ -9,8 +14,10 @@
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUuid>
+#include <QSet>
 #ifdef Q_OS_LINUX
 #include <unistd.h>
+#include <sys/statvfs.h>
 #endif
 
 namespace {
@@ -32,11 +39,46 @@ bool privateDirectory(const QString &path)
     return QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 }
 }
-
+bool NativeSandbox::isGameSession(const QString &emulatorRuntime,const QString &steamGameId,
+                                  const QString &gameSourceRoot,const QString &managedGameRoot,
+                                  const QString &opticalMediaId)
+{
+    return !emulatorRuntime.isEmpty() || !steamGameId.isEmpty() || !gameSourceRoot.isEmpty()
+        || !managedGameRoot.isEmpty() || !opticalMediaId.isEmpty();
+}
+bool NativeSandbox::hasGamepadKeyCapabilities(const QString &bitmap)
+{
+    return GamepadTopology::hasGamepadKeyCapabilities(bitmap);
+}
+QStringList NativeSandbox::gamepadDeviceNodes(const QString &sysInputDirectory,const QString &deviceDirectory)
+{
+    const QDir sys(sysInputDirectory),devices(deviceDirectory);
+    auto nodes=sys.entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot,QDir::Name);
+    QStringList result;
+    for(const auto &node:nodes){
+        if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(node).hasMatch())continue;
+        const auto capabilityPath=sys.filePath(node+"/device/capabilities/key");
+        const auto devicePath=sys.filePath(node+"/dev");
+        QFile capabilities(capabilityPath);
+        QFile deviceNumber(devicePath);
+        if(!capabilities.open(QIODevice::ReadOnly) || !deviceNumber.open(QIODevice::ReadOnly))continue;
+        const auto bitmap=QString::fromLatin1(capabilities.read(4097));
+        const auto sysDeviceNumber=QString::fromLatin1(deviceNumber.read(32));
+        if(bitmap.size()>4096 || sysDeviceNumber.size()>=32
+            || !GamepadTopology::verifiedGamepadNode(node,bitmap.trimmed(),sysDeviceNumber.trimmed()))continue;
+        const auto device=devices.filePath(node);
+        const QFileInfo info(device);
+        if(info.isSymLink() || !info.exists() || info.canonicalFilePath()!=QDir::cleanPath(device))continue;
+        result.append(device);
+        if(result.size()>32)break;
+    }
+    return result;
+}
 NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString &appId,
                                         const QString &executable, const QProcessEnvironment &host,
                                         const QString &target, const QString &storageRoot, const QString &emulatorRuntime,
-                                        const QString &gameSourceRoot, const QString &steamGameId)
+                                        const QString &gameSourceRoot, const QString &steamGameId, const QString &managedGameRoot,
+                                        const QString &opticalMediaId, const QString &opticalObservationId)
 {
     NativeSandboxPlan plan;
 #ifndef Q_OS_LINUX
@@ -75,7 +117,30 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         return plan;
     }
     const auto binary = QFileInfo(executable).canonicalFilePath();
-    if (binary.isEmpty() || (!inside(binary, "/usr") && !inside(binary, "/opt"))) {
+    const bool managedExecutable=!managedGameRoot.isEmpty()
+        && gameSourceRoot==managedGameRoot
+        && ManagedGamePaths::isInstallRoot(profileId,managedGameRoot)
+        && inside(binary,managedGameRoot) && QFileInfo(binary).isExecutable();
+    bool opticalExecutable=false;
+    if(!opticalMediaId.isEmpty() && OpticalDiscGrants::approved(profileId,opticalMediaId)){
+        for(const auto &item:OpticalDiscAdapter::mountedDiscs()){
+            const auto disc=item.toMap();
+            if(disc.value("mountRoot")==gameSourceRoot && disc.value("mediaId")==opticalMediaId
+                && disc.value("observationId")==opticalObservationId && !opticalObservationId.isEmpty()
+                && disc.value("directPlaySupported").toBool() && inside(binary,gameSourceRoot)
+                && (QFileInfo(binary).permissions() & (QFile::ExeOwner|QFile::ExeGroup|QFile::ExeOther)))opticalExecutable=true;
+        }
+    }
+    const bool nativeGame=managedExecutable || opticalExecutable;
+    if(!opticalMediaId.isEmpty() && !opticalExecutable){
+        plan.error="The approved optical disc changed or is unavailable. Reinsert it and retry.";return plan;
+    }
+    QFile nativeFile(binary);
+    if(nativeGame && (target!=binary || executable!=binary || !nativeFile.open(QIODevice::ReadOnly)
+        || nativeFile.read(4)!=QByteArray("\x7f""ELF",4))){
+        plan.error="The native game executable changed or is not a Linux ELF file.";return plan;
+    }
+    if (binary.isEmpty() || (!inside(binary, "/usr") && !inside(binary, "/opt") && !nativeGame)) {
         plan.error = QStringLiteral("This app must be installed in a system application directory before it can run in a separate profile.");
         return plan;
     }
@@ -104,8 +169,10 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     const auto runtime = QStringLiteral("/run/user/%1").arg(getuid());
     const auto hostRuntime = host.value("XDG_RUNTIME_DIR", runtime);
     auto &args = plan.arguments;
+    const bool gameSession=isGameSession(emulatorRuntime,steamGameId,gameSourceRoot,managedGameRoot,opticalMediaId);
     args = {"--unshare-user", "--unshare-pid", "--unshare-ipc", "--unshare-uts",
             "--die-with-parent", "--new-session", "--cap-drop", "ALL", "--clearenv"};
+    if(gameSession)args << "--cap-add" << "CAP_MKNOD";
     const auto bind = [&](const QString &source, const QString &destination, const QString &mode = "--ro-bind") {
         args << mode << source << destination;
     };
@@ -113,6 +180,7 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         if (QFileInfo::exists(path)) bind(path, path);
     args << "--proc" << "/proc" << "--dev" << "/dev" << "--tmpfs" << "/tmp"
          << "--dir" << "/run" << "--perms" << "0700" << "--dir" << runtime;
+    if(gameSession)args << "--dir" << "/dev/input";
     bind(plan.homeDirectory, userHome, "--bind");
     args << "--chdir" << userHome;
     const auto setenv = [&](const QString &key, const QString &value) { args << "--setenv" << key << value; };
@@ -153,22 +221,18 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
     }
     if (QFileInfo::exists(hostRuntime + "/pipewire-0")) bind(hostRuntime + "/pipewire-0", runtime + "/pipewire-0");
     if (QFileInfo::exists("/dev/dri")) bind("/dev/dri", "/dev/dri", "--dev-bind");
-    if(!emulatorRuntime.isEmpty() || !steamGameId.isEmpty()){
-        // Give managed emulators gamepad nodes only. Do not expose keyboard,
-        // mouse or the entire host input directory to a native game session.
-        const auto nodes=QDir("/sys/class/input").entryList({"event*","js*"},QDir::Dirs|QDir::System|QDir::NoDotAndDotDot);
-        int granted=0;
-        for(const auto &node:nodes){
-            if(!QRegularExpression("^(event|js)[0-9]{1,3}$").match(node).hasMatch())continue;
-            QFile capabilities("/sys/class/input/"+node+"/device/capabilities/key");
-            if(!capabilities.open(QIODevice::ReadOnly))continue;
-            const auto bitmap=QString::fromLatin1(capabilities.read(4096)).trimmed().split(' ',Qt::SkipEmptyParts);
-            bool gamepad=false;
-            for(int code=0x120;code<0x140;++code){const auto word=bitmap.size()-1-code/64;
-                if(word>=0){bool ok=false;const auto bits=bitmap.at(word).toULongLong(&ok,16);gamepad|=ok && (bits&(quint64(1)<<(code%64)));}}
-            const auto device="/dev/input/"+node;
-            if(gamepad && QFileInfo::exists(device)){if(++granted>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}bind(device,device,"--dev-bind");}
+    if(gameSession){
+        // Give game sessions gamepad nodes only. Do not expose keyboard, mouse
+        // or the entire host input directory to an application session.
+        const auto nodes=gamepadDeviceNodes();
+        if(nodes.size()>32){plan.error="Too many gamepad devices. Disconnect unused devices and retry.";return plan;}
+        for(const auto &device:nodes)bind(device,device,"--dev-bind");
+        QStringList boundEventNodes;
+        for(const auto &device:nodes){
+            const auto name=QFileInfo(device).fileName();
+            if(name.startsWith("event"))boundEventNodes.append(name);
         }
+        setenv("ISOLDE_GAMEPAD_BOUND_EVENTS",boundEventNodes.join(','));
     }
     if (QFileInfo::exists("/sys")) bind("/sys", "/sys");
     // resolv.conf is often a symlink into /run, which otherwise stays private.
@@ -199,6 +263,10 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             const auto canonical = QFileInfo(requested).canonicalFilePath();
             const auto config = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
             const auto data = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+            const bool managedTarget=!managedGameRoot.isEmpty()
+                && ManagedGamePaths::isInstallRoot(profileId,managedGameRoot)
+                && inside(canonical,managedGameRoot);
+            const bool opticalTarget=opticalExecutable && canonical==binary;
             bool privateHomePath = false;
             if (inside(canonical, userHome)) {
                 const auto components = QDir(userHome).relativeFilePath(canonical).split('/');
@@ -209,22 +277,32 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
                 systemPath |= inside(canonical, system);
             if (canonical.isEmpty() || !QDir::isAbsolutePath(requested)
                 || (!QFileInfo(canonical).isFile() && !QFileInfo(canonical).isDir())
-                || privateHomePath || systemPath
-                || inside(base, canonical) || inside(canonical, base)
-                || inside(config, canonical) || inside(canonical, config)
-                || inside(data, canonical) || inside(canonical, data)
+                || (privateHomePath && !managedTarget && !opticalTarget) || (systemPath && !managedTarget && !opticalTarget)
+                || (!managedTarget && (inside(base, canonical) || inside(canonical, base)))
+                || (!managedTarget && (inside(config, canonical) || inside(canonical, config)
+                    || inside(data, canonical) || inside(canonical, data)))
                 ) {
                 plan.error = QStringLiteral("Choose a media file or folder, not a profile, account, or system folder.");
                 return plan;
             }
             if(!gameSourceRoot.isEmpty()){
                 const auto error=MediaGrants::validate(gameSourceRoot);
-                if(!error.isEmpty() || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
-                    || inside(base,gameSourceRoot) || inside(gameSourceRoot,base)){
+                const bool managed=ManagedGamePaths::isInstallRoot(profileId,gameSourceRoot);
+                bool optical=false;
+                for(const auto &disc:OpticalDiscAdapter::mountedDiscs()){
+                    const auto value=disc.toMap();
+                    if(value.value("mountRoot")==gameSourceRoot && value.value("mediaId")==opticalMediaId
+                        && value.value("observationId")==opticalObservationId && !opticalObservationId.isEmpty()
+                        && value.value("directPlaySupported").toBool()
+                        && OpticalDiscGrants::approved(profileId,opticalMediaId))optical=true;
+                }
+                if((!opticalMediaId.isEmpty() && !optical) || (!error.isEmpty() && !managed && !optical) || !QFileInfo(canonical).isFile() || !canonical.startsWith(gameSourceRoot+'/')
+                    || (!managed && (inside(base,gameSourceRoot) || inside(gameSourceRoot,base)))){
                     plan.error="The reviewed game folder is unavailable or redirected. Review it in Games and retry.";return plan;
                 }
                 plan.actionTarget="/media/games/"+QDir(gameSourceRoot).relativeFilePath(canonical);
                 bind(gameSourceRoot,"/media/games");
+                if(managed || optical)args << "--chdir" << "/media/games";
             } else {
                 plan.actionTarget = "/media/selected/" + QFileInfo(canonical).fileName();
                 bind(canonical, plan.actionTarget);
@@ -246,6 +324,29 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         }
         bind(helper,"/run/steam-games.py");
     }
+    if(appId=="steam"){
+        const auto libraries=SteamLibraryGrants::folders(profileId);
+        const auto grantsError=SteamLibraryGrants::validateList(libraries,false);
+        if(!grantsError.isEmpty()){
+            plan.error="Review external Steam library access in Games settings. "+grantsError;
+            return plan;
+        }
+        QSet<QString> createdParents;
+        for(const auto &library:libraries){
+            if(!QFileInfo(library).isDir())continue;
+            QString parent;
+            for(const auto &part:library.split('/',Qt::SkipEmptyParts)){
+                parent+="/"+part;
+                if(parent==library)break;
+                if(!createdParents.contains(parent)){
+                    args << "--dir" << parent;
+                    createdParents.insert(parent);
+                }
+            }
+            bind(library,library);
+            plan.steamLibraryRoots.append(library);
+        }
+    }
     bind(supervisor, "/run/isolde-native-host");
     bind(busConfig, "/run/isolde-session-bus.conf");
     if(!emulatorRuntime.isEmpty()){
@@ -261,7 +362,31 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
         bind(helper,"/run/emulator-session.py");bind(manifest,"/run/game-runtimes.json");
         // The packaged script accepts identities, never commands from a game.
     }
-    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host" << "--" << executable;
+    bool opticalNoExec=false;
+    if(opticalExecutable){
+        struct statvfs fs{};
+        const auto path=QFile::encodeName(binary);
+        if(::statvfs(path.constData(),&fs)!=0){
+            plan.error="Cannot inspect optical mount execution permissions. Refresh the disc and retry.";return plan;
+        }
+        opticalNoExec=fs.f_flag & ST_NOEXEC;
+    }
+    if(opticalNoExec){
+        auto helperRoot=QCoreApplication::applicationDirPath()+"/share/isolde";
+        if(!QFileInfo(helperRoot+"/optical-exec.py").isReadable())helperRoot=QCoreApplication::applicationDirPath()+"/../share/isolde";
+        const auto helper=helperRoot+"/optical-exec.py";
+        if(!QFileInfo(helper).isReadable() || !QFileInfo("/usr/bin/python3").isExecutable()){
+            plan.error="The optical no-exec adapter is unavailable. Repair Isolde and retry.";return plan;
+        }
+        bind(helper,"/run/isolde-optical-exec.py");
+    }
+    args << "--" << dbus << "--config-file=/run/isolde-session-bus.conf" << "--" << "/run/isolde-native-host";
+    if(gameSession)
+        args << "--game-session";
+    if(!steamGameId.isEmpty()) args << "--steam-session";
+    args << "--";
+    if(opticalNoExec)args << "/usr/bin/python3" << "/run/isolde-optical-exec.py" << plan.actionTarget;
+    else args << (nativeGame ? plan.actionTarget : executable);
     plan.environment.insert("PATH", "/usr/bin:/bin");
     plan.environment.insert("LANG", host.value("LANG", "C.UTF-8"));
     return plan;

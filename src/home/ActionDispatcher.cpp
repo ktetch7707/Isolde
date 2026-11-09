@@ -9,19 +9,46 @@
 #include "media/CaptureController.h"
 #include "media/KodiService.h"
 #include "media/GuideController.h"
+#include "settings/AudioSettings.h"
 #include <QScopedValueRollback>
 #include <QDateTime>
+#include <QCoreApplication>
 #include <QTimer>
 #include <algorithm>
 
 ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, KodiMedia *media,
     KodiService *service, AppCatalog *catalog, CaptureController *capture, QObject *parent)
-    : QObject(parent), m_apps(apps), m_sessions(sessions), m_media(media), m_service(service), m_catalog(catalog), m_capture(capture)
+    : QObject(parent), m_apps(apps), m_sessions(sessions), m_media(media), m_service(service),
+      m_catalog(catalog), m_capture(capture)
 {
     connect(sessions, &SessionManager::launching, this, [this](const QString &) { if (!m_dispatching && !m_sessions->resumingPreparedLaunch()) m_origin.clear(); });
     connect(sessions, &SessionManager::returnedHome, this, [this](const QString &app) {
         clearGuidePlayback();
+        const auto gameId=m_pendingGameId;
+        const bool record=!m_pendingSteamGame || m_pendingSteamObserved;
+        const bool sameProfile=m_pendingGameProfile==qApp->property("isoldeProfile").toString();
+        m_pendingGameId.clear();
+        m_pendingGameProfile.clear();
+        m_pendingSteamIdentity.clear();
+        m_pendingSteamGame=false;m_pendingSteamObserved=false;
+        if(record && sameProfile && !gameId.isEmpty() && m_games && !m_games->recordCompletedSession(gameId))
+            emit rejected(m_games->errorString());
         emit restoreFocusRequested(m_origin.isEmpty() ? app : m_origin);
+    });
+    connect(sessions,&SessionManager::steamGameProcessObserved,this,[this](const QString &identity) {
+        if(identity==m_pendingSteamIdentity && m_pendingSteamGame && !m_pendingGameId.isEmpty()
+            && m_pendingGameProfile==qApp->property("isoldeProfile").toString())m_pendingSteamObserved=true;
+    });
+    connect(sessions,&SessionManager::sessionFailed,this,[this](const QString &,const QString &){
+        m_pendingGameId.clear();
+        m_pendingGameProfile.clear();
+        m_pendingSteamIdentity.clear();
+        m_pendingSteamGame=false;m_pendingSteamObserved=false;
+    });
+    connect(sessions,&SessionManager::steamGameFailed,this,[this](const QString &identity,const QString &){
+        if(identity!=m_pendingSteamIdentity)return;
+        m_pendingGameId.clear();m_pendingGameProfile.clear();m_pendingSteamIdentity.clear();
+        m_pendingSteamGame=false;m_pendingSteamObserved=false;
     });
     connect(media,&KodiMedia::scheduledMediaUnavailable,this,[this](const QString &kind,int id){
         if(m_guide && !m_guideChannel.isEmpty())m_guide->markUnavailable(kind,id);
@@ -81,7 +108,7 @@ bool ActionDispatcher::launchApp(const QString &id)
     }
     if (m_catalog && m_catalog->isInstalled(id)) {
         const auto state = m_catalog->packageState(id);
-        if (state == "needs-setup" || state == "failed") return m_sessions->launch("app-store");
+        if (state == "needs-setup") return m_sessions->launch("app-store");
     }
     return m_sessions->launch(id);
 }
@@ -122,6 +149,7 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
     if (m_sessions->hasActiveSession() || m_media->playbackActive()) {
         emit rejected("Return to Home before starting another action."); return false;
     }
+
     if (!originId.isEmpty() && !ComponentSchema::safeId(originId)) { emit rejected("Invalid origin."); return false; }
     const auto type = value.value("type").toString();
     const auto destination = type == "open-page" ? value.value("pageId").toString()
@@ -155,14 +183,28 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         if(!m_guide)emit rejected("The guide is unavailable for this profile.");
         else accepted=m_guide->tune(value.value("channelId").toString(),originId);
     }
-    else if (type == "app-drawer") { emit drawerRequested(); accepted = true; }
+    else if (type == "app-drawer" || type == "open-apps") {
+        emit allAppsRequested(originId);
+        if (type == "app-drawer") emit drawerRequested();
+        accepted = true;
+    }
+    else if (type == "open-search") { emit searchRequested(originId); accepted = true; }
     else if (type == "launch-app") accepted = launchApp(value.value("appId").toString());
     else if (type == "launch-game") {
-        auto resolved = m_games ? m_games->resolveLaunch(value.value("gameId").toString(),value.value("editionId").toString()) : QVariantMap();
+        const auto gameId=value.value("gameId").toString();
+        auto resolved = m_games ? m_games->resolveLaunch(gameId,value.value("editionId").toString()) : QVariantMap();
+        if(!resolved.isEmpty()){
+            m_pendingGameId=gameId;
+            m_pendingGameProfile=qApp->property("isoldeProfile").toString();
+            m_pendingSteamGame=resolved.value("type")=="steam-game";
+            m_pendingSteamIdentity=resolved.value("steamAppId").toString();
+            m_pendingSteamObserved=false;
+        }
         if(resolved.isEmpty()) emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable in this profile."));
         else if(resolved.value("type")=="launch-app") accepted=launchApp(resolved.value("appId").toString());
         else if(resolved.value("type")=="steam-game") accepted=m_sessions->launchSteamGame(resolved.value("steamAppId").toString());
         else {const auto root=resolved.take("sourceRoot").toString();accepted=m_sessions->launchGameFile(resolved,root);}
+        if(!accepted){m_pendingGameId.clear();m_pendingGameProfile.clear();m_pendingSteamIdentity.clear();m_pendingSteamGame=false;m_pendingSteamObserved=false;}
     }
     else if (type == "settings") {
         accepted = launchApp("settings");
@@ -186,5 +228,65 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         emit desktopRequested(originId);accepted=true;
     } else accepted = m_sessions->launchAction(value);
     if (!accepted) m_origin = previous;
+    return accepted;
+}
+
+bool ActionDispatcher::dispatchEditorAction(const QVariantMap &input)
+{
+    QString error;
+    const auto value = ComponentSchema::editorAction(input, &error);
+    if (value.isEmpty()) {
+        emit rejected(error);
+        return false;
+    }
+
+    const auto type = value.value("type").toString();
+    bool accepted = false;
+    if (type == "capture-artwork-apply") {
+        if (!m_layout) error = tr("Profile artwork settings are unavailable.");
+        else {
+            accepted = m_layout->setCaptureInputArtwork(value.value("artwork").toMap());
+            if (!accepted) error = m_layout->errorString();
+        }
+    } else if (type == "audio-output-select") {
+        if (!m_audio) error = tr("Audio output selection is unavailable.");
+        else accepted = m_audio->selectOutput(value.value("outputId").toString());
+    } else {
+        if (!m_capture) error = tr("Capture input support is unavailable.");
+        else if (type == "capture-apply") {
+            accepted = m_capture->applyConfiguration(value.value("configuration").toMap());
+        } else if (type == "capture-switch-input") {
+            const auto input = value.value("input").toInt();
+            if (!m_capture->canSwitchInput(input)) error = m_capture->switchStatus();
+            else accepted = m_capture->switchInput(input);
+        } else if (type == "capture-preview-start") {
+            accepted = m_capture->startPreview();
+        } else if (type == "capture-preview-draft") {
+            accepted = m_capture->startPreviewFor(value.value("captureDeviceId").toString(),
+                value.value("videoFormatKey").toString(), value.value("audioDeviceId").toString());
+        } else if (type == "capture-preview-stop") {
+            m_capture->stopPreview();
+            accepted = true;
+        } else if (type == "capture-switch-cancel") {
+            m_capture->cancelSwitch();
+            accepted = true;
+        } else if (type == "capture-refresh") {
+            m_capture->refreshDevices();
+            accepted = true;
+        }
+    }
+
+    if (!accepted) {
+        if (error.isEmpty()) {
+            if ((type == "capture-preview-start" || type == "capture-preview-draft") && m_capture)
+                error = (m_capture->audioState() == "error" || m_capture->audioState() == "missing")
+                    ? m_capture->audioStatus() : m_capture->status();
+            else if (type.startsWith("capture-") && m_capture)
+                error = m_capture->switchStatus().isEmpty() ? m_capture->status() : m_capture->switchStatus();
+            else if (m_audio) error = m_audio->outputStatus();
+            if (error.isEmpty()) error = tr("The editor action could not be completed. Review the current device selection and retry.");
+        }
+        emit rejected(error);
+    }
     return accepted;
 }

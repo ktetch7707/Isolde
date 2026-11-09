@@ -248,7 +248,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
         } else if (key == "libraryKind" || key == "libraryView" || key == "libraryLayout" || key == "libraryValue" || key == "libraryColumns" || key == "libraryCardStyle") {
             if (!section) return false;
             if (key == "libraryKind" && !QStringList{"movies","shows","history","albums","channels","games"}.contains(it.value().toString())) return false;
-            if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","tag","genre","collection","playlist"}.contains(it.value().toString())) return false;
+            if (key == "libraryView" && !QStringList{"all","recent","watched","continue","search","favorites","platform","tag","genre","collection","playlist"}.contains(it.value().toString())) return false;
             if (key == "libraryLayout" && !QStringList{"grid","list","row"}.contains(it.value().toString())) return false;
             if (key == "libraryCardStyle" && !QStringList{"media","recent","orb","source","summary","banner"}.contains(it.value().toString())) return false;
             if (key == "libraryValue" && (it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>160)) return false;
@@ -323,8 +323,46 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary", "appGallery", "captureInputArtwork"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
+    if (value.contains("captureInputArtwork")) {
+        const auto artwork = value.value("captureInputArtwork");
+        if (artwork.metaType().id() != QMetaType::QVariantMap || artwork.toMap().size() > 8) return false;
+        const QRegularExpression path("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$");
+        const auto entries = artwork.toMap();
+        for (auto it = entries.cbegin(); it != entries.cend(); ++it)
+            if (!QStringList{"1", "2", "3", "4", "5", "6", "7", "8"}.contains(it.key())
+                || it.value().metaType().id() != QMetaType::QString || !path.match(it.value().toString()).hasMatch())
+                return false;
+    }
+    if (value.contains("appGallery")) {
+        const auto gallery = value.value("appGallery").toMap();
+        if (value.value("appGallery").metaType().id() != QMetaType::QVariantMap || gallery.size() > 10) return false;
+        const QSet<QString> galleryKeys{"layout", "columns", "density", "sort", "showArtwork", "showLabels", "filterEnabled", "favoritesEnabled", "favoriteIds", "title"};
+        for (auto it = gallery.cbegin(); it != gallery.cend(); ++it) {
+            if (!galleryKeys.contains(it.key())) return false;
+            if (it.key() == "layout" && (it.value().metaType().id() != QMetaType::QString || !QStringList{"grid", "list"}.contains(it.value().toString()))) return false;
+            if (it.key() == "density" && (it.value().metaType().id() != QMetaType::QString || !QStringList{"compact", "standard", "spacious"}.contains(it.value().toString()))) return false;
+            if (it.key() == "sort" && (it.value().metaType().id() != QMetaType::QString || !QStringList{"name", "favorites"}.contains(it.value().toString()))) return false;
+            if (it.key() == "columns") {
+                bool ok = false;
+                const double columns = it.value().toDouble(&ok);
+                if (!ok || it.value().metaType().id() == QMetaType::Bool || !std::isfinite(columns)
+                    || std::floor(columns) != columns || columns < 2 || columns > 8) return false;
+            }
+            if (QStringList{"showArtwork", "showLabels", "filterEnabled", "favoritesEnabled"}.contains(it.key()) && it.value().metaType().id() != QMetaType::Bool) return false;
+            if (it.key() == "title" && (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty() || it.value().toString().size() > 48 || it.value().toString().contains(QChar::Null))) return false;
+            if (it.key() == "favoriteIds") {
+                if (it.value().metaType().id() != QMetaType::QVariantList || it.value().toList().size() > 256) return false;
+                QSet<QString> ids;
+                const QRegularExpression idPattern("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$");
+                for (const auto &idValue : it.value().toList()) {
+                    if (idValue.metaType().id() != QMetaType::QString || !idPattern.match(idValue.toString()).hasMatch() || ids.contains(idValue.toString())) return false;
+                    ids.insert(idValue.toString());
+                }
+            }
+        }
+    }
     if (value.contains("designLibrary") && (value["designLibrary"].metaType().id()!=QMetaType::QVariantMap || !DesignSystem::valid(value["designLibrary"].toMap()))) return false;
     if(value.contains("header")) {
         if(value["header"].metaType().id()!=QMetaType::QVariantMap)return false;
@@ -572,7 +610,7 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
         const auto id=input.value("pageId").toString();
         if(!safeId(id))return reject(error,"Choose a valid page.");
         result["pageId"]=id;
-    } else if (type == "app-drawer" || type == "root-page") {
+    } else if (type == "app-drawer" || type == "open-apps" || type == "open-search" || type == "root-page") {
         // Shell-owned drawer, never a command or provider URL.
     } else if (type == "settings") {
         const double section = input.value("section", MinSettingsSection).toDouble();
@@ -600,6 +638,164 @@ QVariantMap ComponentSchema::action(const QVariantMap &input, QString *error)
     } else return reject(error, "This action type is not supported.");
     return result;
 }
+
+QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *error)
+{
+    if (error) error->clear();
+    if (!versionOne(input)) return reject(error, "Unsupported editor action version.");
+
+    const auto typeValue = input.value("type");
+    if (typeValue.metaType().id() != QMetaType::QString)
+        return reject(error, "Choose a supported editor action.");
+    const auto type = typeValue.toString();
+    QVariantMap result{{"schemaVersion", 1}, {"type", type}};
+    const auto exactKeys = [&input, error](const QStringList &keys) {
+        for (auto it = input.cbegin(); it != input.cend(); ++it)
+            if (!keys.contains(it.key())) {
+                if (error) *error = "Editor actions contain only validated fields.";
+                return false;
+            }
+        return true;
+    };
+    const auto normalizeConfiguration = [error](const QVariant &value) -> QVariantMap {
+        if (value.metaType().id() != QMetaType::QVariantMap) {
+            if (error) *error = "Capture settings must be a configuration map.";
+            return {};
+        }
+        const auto configuration = value.toMap();
+        const QStringList keys{"audioDeviceId", "baudRate", "captureDeviceId", "commandTemplate",
+            "inputLabels", "selectedInput", "serialPortName", "sessionReturn", "sessionTransition", "transitionDuration", "videoFormatKey"};
+        if (configuration.size() != keys.size()) {
+            if (error) *error = "Capture settings must include every staged field exactly once.";
+            return {};
+        }
+        for (const auto &key : keys) {
+            if (!configuration.contains(key)) {
+                if (error) *error = "Capture settings must include every staged field exactly once.";
+                return {};
+            }
+        }
+        QVariantMap normalized;
+        const auto stringField = [&configuration, &normalized, error](const QString &key, int maxLength) {
+            const auto value = configuration.value(key);
+            if (value.metaType().id() != QMetaType::QString || value.toString().size() > maxLength
+                || value.toString().contains(QChar::Null)) {
+                if (error) *error = "Capture settings contain an invalid device identity or command.";
+                return false;
+            }
+            normalized.insert(key, value.toString());
+            return true;
+        };
+        if (!stringField("audioDeviceId", 512) || !stringField("captureDeviceId", 512)
+            || !stringField("serialPortName", 256) || !stringField("videoFormatKey", 256)
+            || !stringField("commandTemplate", 128) || !stringField("sessionTransition", 16)
+            || !stringField("sessionReturn", 16))
+            return {};
+        const auto exactInteger = [&configuration, &normalized, error](const QString &key, int minimum, int maximum) {
+            const auto value = configuration.value(key);
+            const auto metaType = value.metaType().id();
+            if (metaType != QMetaType::Int && metaType != QMetaType::Double) {
+                if (error) *error = "Capture baud rate and selected input must be whole numbers.";
+                return false;
+            }
+            bool ok = false;
+            const auto number = value.toDouble(&ok);
+            if (!ok || !std::isfinite(number) || std::floor(number) != number
+                || number < minimum || number > maximum) {
+                if (error) *error = "Capture baud rate or selected HDMI input is outside supported bounds.";
+                return false;
+            }
+            normalized.insert(key, static_cast<int>(number));
+            return true;
+        };
+        if (!exactInteger("baudRate", 9600, 115200)
+            || !QList<int>{9600, 19200, 38400, 57600, 115200}.contains(normalized.value("baudRate").toInt())
+            || !exactInteger("selectedInput", MinHdmiInput, MaxHdmiInput)
+            || !exactInteger("transitionDuration", 200, 350)
+            || !QList<int>{200, 250, 300, 350}.contains(normalized.value("transitionDuration").toInt())
+            || !QStringList{"origin", "home"}.contains(normalized.value("sessionReturn").toString())
+            || !QStringList{"instant", "fade", "slide", "expand"}.contains(normalized.value("sessionTransition").toString())) {
+            if (error && error->isEmpty()) *error = "Choose a supported serial speed and session transition.";
+            return {};
+        }
+        const auto labelsValue = configuration.value("inputLabels");
+        if (labelsValue.metaType().id() != QMetaType::QVariantMap) {
+            if (error) *error = "Capture input labels must name all eight HDMI inputs.";
+            return {};
+        }
+        const auto labels = labelsValue.toMap();
+        QVariantMap normalizedLabels;
+        if (labels.size() != MaxHdmiInput) {
+            if (error) *error = "Capture input labels must name all eight HDMI inputs.";
+            return {};
+        }
+        for (int input = MinHdmiInput; input <= MaxHdmiInput; ++input) {
+            const auto label = labels.value(QString::number(input));
+            const auto text = label.toString();
+            if (!labels.contains(QString::number(input)) || label.metaType().id() != QMetaType::QString
+                || text.trimmed().isEmpty() || text.size() > 40 || text.contains(QChar::Null)) {
+                if (error) *error = "Each HDMI input label must contain 1 to 40 safe characters.";
+                return {};
+            }
+            for (const auto character : text) {
+                const auto code = character.unicode();
+                if ((character.isSpace() && character != QLatin1Char(' '))
+                    || code < 0x20 || (code >= 0x7f && code <= 0x9f)) {
+                    if (error) *error = "HDMI input labels cannot contain control characters.";
+                    return {};
+                }
+            }
+            normalizedLabels.insert(QString::number(input), text.trimmed());
+        }
+        normalized.insert("inputLabels", normalizedLabels);
+        return normalized;
+    };
+
+    if (type == "capture-artwork-apply") {
+        if (!exactKeys({"schemaVersion", "type", "artwork"})
+            || input.value("artwork").metaType().id() != QMetaType::QVariantMap
+            || !validComposition({{"schemaVersion", 1}, {"captureInputArtwork", input.value("artwork")}})) {
+            if (error && error->isEmpty()) *error = "Choose valid managed artwork for HDMI inputs 1–8.";
+            return {};
+        }
+        result.insert("artwork", input.value("artwork").toMap());
+    } else if (type == "capture-apply") {
+        if (!exactKeys({"schemaVersion", "type", "configuration"})) return {};
+        const auto configuration = normalizeConfiguration(input.value("configuration"));
+        if (configuration.isEmpty()) return {};
+        result.insert("configuration", configuration);
+    } else if (type == "capture-switch-input") {
+        if (!exactKeys({"schemaVersion", "type", "input"})) return {};
+        const auto number = input.value("input");
+        if ((number.metaType().id() != QMetaType::Int && number.metaType().id() != QMetaType::Double)
+            || !std::isfinite(number.toDouble()) || std::floor(number.toDouble()) != number.toDouble()
+            || number.toDouble() < MinHdmiInput || number.toDouble() > MaxHdmiInput)
+            return reject(error, "Choose an HDMI input from 1 to 8.");
+        result.insert("input", number.toInt());
+    } else if (type == "capture-preview-draft") {
+        if (!exactKeys({"schemaVersion", "type", "captureDeviceId", "videoFormatKey", "audioDeviceId"})) return {};
+        for (const auto &key : QStringList{"captureDeviceId", "videoFormatKey", "audioDeviceId"}) {
+            const auto field = input.value(key);
+            if (field.metaType().id() != QMetaType::QString || field.toString().size() > 512
+                || field.toString().contains(QChar::Null))
+                return reject(error, "Choose valid capture preview devices and format.");
+            result.insert(key, field.toString());
+        }
+    } else if (QStringList{"capture-preview-start", "capture-preview-stop", "capture-switch-cancel", "capture-refresh"}.contains(type)) {
+        if (!exactKeys({"schemaVersion", "type"})) return {};
+    } else if (type == "audio-output-select") {
+        if (!exactKeys({"schemaVersion", "type", "outputId"})) return {};
+        const auto id = input.value("outputId");
+        if (id.metaType().id() != QMetaType::QString || id.toString().size() > 256
+            || !QRegularExpression("^[A-Za-z0-9_.:-]+$").match(id.toString()).hasMatch())
+            return reject(error, "Choose a valid available audio output.");
+        result.insert("outputId", id.toString());
+    } else {
+        return reject(error, "This editor action type is not supported.");
+    }
+    return result;
+}
+
 QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QString *error)
 {
     if (error) error->clear();
@@ -685,7 +881,12 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
             if(style.value("libraryKind")=="shows" && QStringList{"genre","tag"}.contains(style.value("libraryView").toString()))return reject(error,"This Kodi view is available for movies only.");
             if(style.value("libraryView")=="collection" && !safeId(style.value("libraryValue").toString()))return reject(error,"Choose a saved collection.");
             const bool games=style.value("libraryKind")=="games";
-            if(games && (!QStringList{"all","recent","search"}.contains(style.value("libraryView").toString())))return reject(error,"Choose a supported local Games view.");
+            if(games && (!QStringList{"all","recent","search","favorites","platform","continue"}.contains(style.value("libraryView").toString())))return reject(error,"Choose a supported local Games view.");
+            if(games && style.value("libraryView")=="platform"
+                && (style.value("libraryValue").metaType().id()!=QMetaType::QString
+                    || style.value("libraryValue").toString().trimmed().isEmpty()
+                    || style.value("libraryValue").toString().size()>80))
+                return reject(error,"Choose a platform name of up to 80 characters for this Games shelf.");
             source={{"schemaVersion",1},{"provider",games?"games":"kodi"},{"kind","library"},{"libraryKind",style.value("libraryKind")},{"libraryView",style.value("libraryView")},{"libraryValue",style.value("libraryValue","")}};
             if(history)source["kind"]="recently-viewed";
             if(music)source["kind"]="music";
@@ -730,7 +931,8 @@ QVariantMap ComponentSchema::component(const QVariantMap &input, bool legacy, QS
 QString ComponentSchema::unavailable(const QVariantMap &value, const AppRegistry *apps, const QVariantList &collections)
 {
     const auto type = value.value("type").toString();
-    if(type=="open-page")return {}; // Page existence belongs to the shell dispatcher, never an Open With app.
+    if(QStringList{"open-page","open-apps","open-search","app-drawer","root-page"}.contains(type))
+        return {}; // Shell routes never require an Open With app.
     if (type == "launch-app") return apps->find(value.value("appId").toString()) ? QString() : "App missing · repair source";
     if (type == "open-collection" || type == "play-movie" || type == "open-show") {
         for (const auto &entry : collections) {

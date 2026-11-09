@@ -14,6 +14,13 @@ inline QJsonValue artwork(QJsonValue value, const std::function<QString(const QS
         for (auto it = object.begin(); it != object.end(); ++it) {
             if ((it.key() == "wallpaper" || it.key() == "customLogo") && it.value().isString() && !it.value().toString().isEmpty())
                 it.value() = visit(it.value().toString());
+            else if (it.key() == "captureInputArtwork" && it.value().isObject()) {
+                auto mapping = it.value().toObject();
+                for (auto art = mapping.begin(); art != mapping.end(); ++art)
+                    if (art.value().isString() && !art.value().toString().isEmpty())
+                        art.value() = visit(art.value().toString());
+                it.value() = mapping;
+            }
             else it.value() = artwork(it.value(), visit);
         }
         return object;

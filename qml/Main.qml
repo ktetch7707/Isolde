@@ -16,22 +16,79 @@ Window {
         commandCenter.themeOrigin = ""
         kodiLibrary.themeOrigin = ""
         store.themeOrigin = ""
+        allApps.clearLaunchAttempt()
     })
     property bool ambientActive: false
-    readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
+    readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !allApps.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
+    property var galleryReturnPageState: null
+    property bool searchFromGallery: false
     property string launchErrorText: ""
     property string launchErrorAppId: ""
     property bool launchErrorVpn: false
+    property bool launchErrorReturnToGallery: false
+    property bool launchErrorSteamGame: false
     property bool desktopHidden:false
     property int desktopRestoreVisibility:Window.FullScreen
     DesktopReturnWindow {controller:desktopMode;appearance:homeLayout.homeAppearance}
+    Window {
+        id:opticalSessionNotice
+        readonly property var status:sessionManager.opticalSessionStatus
+        width:Math.min(Screen.width*0.8,720*window.uiScaleFactor)
+        height:noticeText.implicitHeight+32*window.uiScaleFactor
+        x:(Screen.width-width)/2;y:window.safeAreaPixels
+        visible:desktopMode.active && desktopMode.nativeMode && sessionManager.active
+            && !!status.state && status.state!=="pinned"
+        flags:Qt.Tool | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput
+        color:"transparent"
+        Rectangle {
+            anchors.fill:parent;color:homeLayout.homeAppearance.surfaceColor
+            border.width:2;border.color:homeLayout.homeAppearance.focusColor
+            radius:desktopMode.presentation.radius || 0
+            Text {
+                id:noticeText;anchors.left:parent.left;anchors.right:parent.right
+                anchors.verticalCenter:parent.verticalCenter;anchors.margins:16*window.uiScaleFactor
+                text:opticalSessionNotice.status.recovery || ""
+                color:homeLayout.homeAppearance.textColor;wrapMode:Text.WordWrap
+                font.pixelSize:20*window.uiScaleFactor;textFormat:Text.PlainText
+            }
+        }
+        Window {
+            id:gamepadSessionNotice
+            readonly property var status:sessionManager.gamepadSessionStatus
+            readonly property string notice:status.new>0 && status.available<status.connected
+                ?"A controller was detected but could not be added to this game session. Save if possible, return to Games and relaunch."
+                :status.new>0
+                    ?"A new controller endpoint was added to the isolated session. The game/runtime must support rescanning hotplugged devices; if it is not recognized, save and relaunch."
+                    :status.missing>0
+                        ?"A controller this game started with disconnected. Reconnect it or return to Games and relaunch."
+                        :""
+            width:Math.min(Screen.width*0.8,760*window.uiScaleFactor)
+            height:gamepadNoticeText.implicitHeight+32*window.uiScaleFactor
+            x:(Screen.width-width)/2
+            y:window.safeAreaPixels+(opticalSessionNotice.visible?opticalSessionNotice.height+12*window.uiScaleFactor:0)
+            visible:desktopMode.active && desktopMode.nativeMode && sessionManager.active && notice.length>0
+            flags:Qt.Tool | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput
+            color:"transparent"
+            Rectangle {
+                anchors.fill:parent;color:homeLayout.homeAppearance.surfaceColor
+                border.width:2;border.color:homeLayout.homeAppearance.focusColor
+                radius:desktopMode.presentation.radius || 0
+                Text {
+                    id:gamepadNoticeText;anchors.left:parent.left;anchors.right:parent.right
+                    anchors.verticalCenter:parent.verticalCenter;anchors.margins:16*window.uiScaleFactor
+                    text:gamepadSessionNotice.notice;color:homeLayout.homeAppearance.textColor
+                    wrapMode:Text.WordWrap;font.pixelSize:20*window.uiScaleFactor;textFormat:Text.PlainText
+                }
+            }
+        }
+    }
     Connections {
         target:desktopMode
         function onChanged(){
             if(desktopMode.active && !desktopMode.nativeMode && !window.desktopHidden){window.desktopRestoreVisibility=window.visibility;window.desktopHidden=true;window.visibility=Window.Hidden}
             else if(!desktopMode.active && window.desktopHidden){window.desktopHidden=false;window.visibility=window.desktopRestoreVisibility;window.raise();window.requestActivate()}
             if(desktopMode.active || desktopMode.busy)idleTimer.stop();else idleTimer.restart()
-            if(desktopMode.errorString){window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
+            if(desktopMode.errorString){window.launchErrorSteamGame=false;window.launchErrorAppId="";window.launchErrorText=desktopMode.errorString}
         }
         function onReturned(origin){window.raise();window.requestActivate();if(!desktopMode.nativeMode)Qt.callLater(()=>{if(pageSurface.open)pageSurface.restoreOrigin(origin);else home.restoreFocus(origin)})}
     }
@@ -53,6 +110,8 @@ Window {
     }
 
     function openSearchFromPage() {
+        searchFromGallery = allApps.open
+        allApps.open = false
         const onPage = pageSurface.open && pageSurface.model
         commandCenter.themeOrigin = onPage ? pageSurface.activeId : ""
         commandCenter.pageId = onPage ? pageSurface.activeId : ""
@@ -60,12 +119,33 @@ Window {
         commandCenter.open = true
     }
 
+    function openAllAppsFromOrigin(originId) {
+        if (!actionDispatcher.dispatch({type:"open-apps"}, originId || "")) {
+            galleryReturnPageState = null
+            window.launchErrorText = "All Apps could not open."
+        }
+    }
+
+    function closeAllAppsToOrigin(originId) {
+        allApps.clearLaunchAttempt()
+        allApps.open = false
+        const pageState = galleryReturnPageState
+        galleryReturnPageState = null
+        if (pageState && pageSurface.restoreAllAppsOrigin(pageState, originId)) return
+        else home.restoreFocus(originId)
+    }
+
     function showDesignatedHome() {
         guideSearchReturn=null
+        galleryReturnPageState = null
+        searchFromGallery = false
+        allApps.open=false
         kodiLibrary.open=false
         commandCenter.open=false
         if(tvGuide.open){guideController.cancel();tvGuide.open=false}
         sessionManager.goHome()
+        allApps.clearLaunchAttempt()
+        allApps.open=false
         if(homeLayout.homePageId)pageSurface.showPage(homeLayout.homePageId,"",true)
         else if(pageSurface.open)pageSurface.closeAll()
     }
@@ -84,9 +164,14 @@ Window {
             else if(command===inputManager.back){actionDispatcher.cancelGuidePlayback();guideController.refresh()}
             if(command!==inputManager.volumeUp && command!==inputManager.volumeDown && command!==inputManager.mute)return
         }
+        if (subtitleTrackPicker.open) {
+            subtitleTrackPicker.handleCommand(command)
+            return
+        }
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
+            else if (command === inputManager.menu) subtitleTrackPicker.open = true
             else if (command === inputManager.playPause || command === inputManager.confirm) kodiMedia.playbackControl("pause")
             else if (command === inputManager.navigateLeft) kodiMedia.playbackControl("backward")
             else if (command === inputManager.navigateRight) kodiMedia.playbackControl("forward")
@@ -123,8 +208,10 @@ Window {
                 ambientActive = !ambientActive
             return
         }
+        if (subtitleQueue.open) { subtitleQueue.handleCommand(command); return }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
         if(launchErrorOverlay.visible){launchErrorOverlay.handleCommand(command);return}
+        if(allApps.open){allApps.handleCommand(command);return}
         // Editor cancellation must run before the global Home route tears down
         // its session; a dirty draft always gets the ordinary exit choice.
         if(sessionManager.active && sessionManager.currentAppType === "settings" && settings.homeEditing){settings.handleCommand(command);return}
@@ -189,7 +276,7 @@ Window {
         running: setupState.complete && ambientSettings.enabled && !window.ambientActive
         repeat: false
         interval: ambientSettings.timeoutMinutes * 60000
-        onTriggered: if (!sessionManager.active && !captureSession.open && !commandCenter.open && !kodiLibrary.open && !kodiMedia.playbackActive) window.ambientActive = true
+        onTriggered:         if (!sessionManager.active && !captureSession.open && !commandCenter.open && !allApps.open && !kodiLibrary.open && !kodiMedia.playbackActive) window.ambientActive = true
     }
 
     Item {
@@ -251,6 +338,7 @@ Window {
                 onActionActivated: (action, originId) => { if (setupState.complete) actionDispatcher.dispatch(action, originId) }
                 onSettingsRequested: section => actionDispatcher.dispatch({ type: "settings", section: section }, "")
                 onSearchRequested: window.openSearchFromPage()
+                onAllAppsRequested: origin => window.openAllAppsFromOrigin(origin)
                 onKeepSourceRequested: source => {
                     if (source) sourceManager.promoteSource(source.id)
                 }
@@ -324,8 +412,42 @@ Window {
                 internetAvailable:networkSettings.internetAvailable;localNetworkAvailable:networkSettings.localNetworkAvailable
                 onClosed:origin=>{if(!homeLayout.rootPageVisible)Qt.callLater(()=>window.showDesignatedHome());else home.restoreFocus(origin)}
                 onSearchRequested:window.openSearchFromPage()
+                onAllAppsRequested:origin=>window.openAllAppsFromOrigin(origin)
                 onSettingsRequested:section=>actionDispatcher.dispatch({type:"settings",section:section},"")
-                onNavigationRejected:reason=>{window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
+                onNavigationRejected:reason=>{window.launchErrorSteamGame=false;window.launchErrorAppId="";window.launchErrorVpn=false;window.launchErrorText=reason}
+            }
+
+            AppGallery {
+                id: allApps
+                anchors.fill: parent
+                z: 60
+                visible: open && !sessionManager.active
+                entries: appCatalog.galleryEntries
+                galleryPresentation: Object.assign({}, appCatalog.galleryPresentation,
+                    homeLayout.composition.appGallery || {},
+                    (pageSurface.open && pageSurface.model && pageSurface.model.composition.appGallery) || {},
+                    {favoriteIds: (homeLayout.composition.appGallery || {}).favoriteIds || []})
+                appearance: window.shellAppearance("apps", pageSurface.open ? pageSurface.activeId : "")
+                internetAvailable: networkSettings.internetAvailable
+                localNetworkAvailable: networkSettings.localNetworkAvailable
+                onFavoriteChanged: (appId, favorite) => {
+                    if (!homeLayout.setGalleryFavorite(appId, favorite)) allApps.feedback = homeLayout.errorString
+                    else allApps.feedback = ""
+                }
+                onLaunchRequested: appId => {
+                    allApps.dispatchFromGallery(actionDispatcher, {type:"launch-app",appId:appId})
+                }
+                onStoreRequested: {
+                    allApps.dispatchFromGallery(actionDispatcher, {type:"launch-app",appId:"app-store"})
+                }
+                onSettingsRequested: {
+                    allApps.dispatchFromGallery(actionDispatcher, {type:"settings",section:-1})
+                }
+                onCloseRequested: origin => {
+                    if (!origin) window.showDesignatedHome()
+                    else window.closeAllAppsToOrigin(origin)
+                }
+                onSearchRequested: window.openSearchFromPage()
             }
 
             AmbientOverlay {
@@ -347,16 +469,34 @@ Window {
                     if (command === inputManager.back || command === inputManager.home) {
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
+                        if(window.launchErrorReturnToGallery && command === inputManager.home)window.showDesignatedHome()
+                        window.launchErrorReturnToGallery = false
+                        window.launchErrorVpn = false
+                        window.launchErrorSteamGame = false
                     } else if (command === inputManager.confirm && window.launchErrorAppId.length) {
                         const retryId = window.launchErrorAppId
+                        const retryFromGallery = window.launchErrorReturnToGallery
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
-                        sessionManager.launch(retryId)
+                        window.launchErrorReturnToGallery = false
+                        window.launchErrorVpn = false
+                        if (retryFromGallery) {
+                            allApps.dispatchFromGallery(actionDispatcher, {type:"launch-app",appId:retryId})
+                        } else sessionManager.launch(retryId)
                     } else if (command === inputManager.navigateRight && (window.launchErrorAppId.length || window.launchErrorVpn)) {
+                        const returnToGallery = window.launchErrorReturnToGallery
+                        const vpnError = window.launchErrorVpn
                         window.launchErrorText = ""
                         window.launchErrorAppId = ""
-                        sessionManager.launch(window.launchErrorVpn ? "settings" : "app-store")
-                        if(window.launchErrorVpn)settings.openSection(6)
+                        window.launchErrorReturnToGallery = false
+                        window.launchErrorVpn = false
+                        if(returnToGallery) {
+                            allApps.dispatchFromGallery(actionDispatcher, vpnError
+                                ? {type:"settings",section:6} : {type:"launch-app",appId:"app-store"})
+                        } else {
+                            sessionManager.launch(vpnError ? "settings" : "app-store")
+                            if(vpnError)settings.openSection(6)
+                        }
                     } else if (!window.launchErrorVpn && command === inputManager.navigateLeft && window.launchErrorAppId.length && appCatalog.isInstalled(window.launchErrorAppId)) {
                         appCatalog.uninstall(window.launchErrorAppId)
                         window.launchErrorText = ""
@@ -378,7 +518,7 @@ Window {
                         anchors.margins: 34
                         spacing: 18
                         Text {
-                            text: window.launchErrorAppId.length ? "APP DIDN'T START" : "ACTION NEEDED"
+                            text: window.launchErrorSteamGame ? "STEAM GAME" : window.launchErrorAppId.length ? "APP DIDN'T START" : "ACTION NEEDED"
                             color: errorTheme.error
                             font.pixelSize: 34 * errorTheme.textScale
                             font.weight: Font.DemiBold
@@ -392,7 +532,9 @@ Window {
                             width: parent.width
                         }
                         Text {
-                            text: window.launchErrorAppId.length ? "Isolde returned to Home instead of leaving you in the desktop. You can retry, open the App Store, or uninstall the package." : "The app was not started. Your installed package and configuration have not been changed."
+                            text: window.launchErrorVpn ? "The app was not opened. Retry or open VPN settings; your app and configuration are unchanged."
+                                : window.launchErrorSteamGame ? "Close this message, check Steam if needed, then select Play from the game details to retry."
+                                : window.launchErrorAppId.length ? "Isolde returned to Home instead of leaving you in the desktop. You can retry, open the App Store, or uninstall the package." : "The app was not started. Your installed package and configuration have not been changed."
                             color: errorTheme.elevatedMuted
                             font.pixelSize: 17 * errorTheme.textScale
                             wrapMode: Text.WordWrap
@@ -432,6 +574,7 @@ Window {
     KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; provider:pageData;property string themeOrigin: "";appearance: window.shellAppearance("kodi", themeOrigin) }
     property var pendingGuideSearchReturn:null
     property var guideSearchReturn:null
+    property var linguistSearchReturn:null
     GuideView {
         id:tvGuide
         readonly property real availableWidth:Math.max(1,(parent.width-2*window.safeAreaPixels)/window.uiScaleFactor)
@@ -462,6 +605,7 @@ Window {
         apps: appRegistry.apps
         packages: appCatalog.entries
         searchSettings: searchPreferences
+        onlineDiscovery: discoveryProvider
         appearance:window.shellAppearance("search", themeOrigin)
         property string themeOrigin: ""
         movieSearchClient: searchMovies
@@ -474,7 +618,17 @@ Window {
             actionDispatcher.dispatch(action,"")
             window.pendingGuideSearchReturn=null
         }
-        onCloseRequested: open = false
+        onCloseRequested: {
+            open = false
+            if (window.searchFromGallery) {
+                window.searchFromGallery = false
+                allApps.resumeAfterApp()
+            }
+        }
+        onLinguistRequested: {
+            window.linguistSearchReturn={index:commandCenter.selectedIndex,area:commandCenter.focusArea,header:commandCenter.lastHeader}
+            open = false; subtitleQueue.open = true
+        }
         onLaunchApp: appId => { kodiLibrary.open = false; window.launchAppFromShell(appId) }
         onInstallPackage: packageId => {
             kodiLibrary.open = false
@@ -503,15 +657,79 @@ Window {
             if (pageId && pageSurface.activeId !== pageId) pageSurface.showPage(pageId, "", true)
         }
     }
+    SubtitleQueue {
+        id: subtitleQueue
+        anchors.fill: parent
+        service: subtitleService
+        kodiClient: kodiMedia
+        repository: onlineSubtitleRepository
+        webEnabled: searchPreferences.webEnabled
+        appearance: window.shellAppearance("search", commandCenter.themeOrigin)
+        onCloseRequested: {
+            open = false
+            const state=window.linguistSearchReturn;window.linguistSearchReturn=null
+            commandCenter.open = true
+            if(state)Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})
+        }
+    }
+    SubtitleTrackPicker {
+        id: subtitleTrackPicker
+        anchors.fill: parent
+        kodiClient: kodiMedia
+        appearance: window.shellAppearance("kodi", "")
+        onCloseRequested: open = false
+    }
     CaptureSessionView {
         id: captureSession
         anchors.fill: parent
-        onReturned: originId => { if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId) }
+        artworkResolver: window.captureFallbackArtwork
+        artworkConfiguration: homeLayout.composition.captureInputArtwork || ({})
+        onReturned: (originId, goHome) => {
+            if (goHome) { sessionManager.goHome(); if (pageSurface.open) pageSurface.closeAll(); else home.restoreFocus(originId) }
+            else if (pageSurface.open) pageSurface.restoreOrigin(originId)
+            else home.restoreFocus(originId)
+        }
+        onConfigureRequested: originId => {
+            if (actionDispatcher.dispatch({type: "settings", section: 4}, originId))
+                settings.openCaptureSettings()
+        }
+    }
+
+    function captureFallbackArtwork(input, originId) {
+        const configured = homeLayout.captureArtworkSource(input)
+        if (configured) return configured
+        const lists = pageSurface.open && pageSurface.model
+            ? [pageSurface.model.items, homeLayout.components] : [homeLayout.components]
+        let fallback = ""
+        for (let m = 0; m < lists.length; ++m) {
+            const items = lists[m] || []
+            for (let i = 0; i < items.length; ++i) {
+                const item = items[i]
+                if (!item.action || item.action.type !== "switch-input"
+                        || item.action.input !== input || !item.customLogo) continue
+                const resolved = homeLayout.resolveArtwork(item.customLogo)
+                if (!resolved) continue
+                if (item.id === originId) return resolved
+                if (!fallback) fallback = resolved
+            }
+        }
+        return fallback
+    }
+
+    function captureOriginRect(originId) {
+        if (pageSurface.open) return pageSurface.sourceRect(originId, captureSession)
+        const rect = home.editorRectFor(originId)
+        if (!rect) return null
+        const point = home.mapToItem(captureSession, rect.x, rect.y)
+        return {x: point.x, y: point.y, width: rect.width, height: rect.height}
     }
 
     Connections {
         target: appVpn
-        function onFailed(appId,message){window.launchErrorVpn=true;window.launchErrorAppId=appId;window.launchErrorText=message}
+        function onFailed(appId,message){
+            window.launchErrorReturnToGallery = allApps.vpnLaunchFailed(appId)
+            window.launchErrorVpn=true;window.launchErrorAppId=appId;window.launchErrorText=message
+        }
     }
     Rectangle {
         anchors.fill:parent;z:1200
@@ -529,21 +747,35 @@ Window {
             if(appId && store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
         }
         function onSessionRejected(reason) {
+            window.launchErrorSteamGame=false
             window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onLaunchDeferred(reason) {
+            window.launchErrorSteamGame=false
             window.launchErrorVpn=false
             window.launchErrorAppId = ""
             window.launchErrorText = reason
         }
         function onSessionFailed(appId, reason) {
+            window.launchErrorSteamGame=false
             window.launchErrorVpn=false
             if (appCatalog.isInstalled(appId))
                 appCatalog.markFailed(appId, reason)
             window.launchErrorAppId = appId
             window.launchErrorText = reason
+            if (allApps.launchPending) {
+                allApps.launchPending = false
+                window.launchErrorReturnToGallery = true
+                allApps.resumeAfterApp()
+            }
+        }
+        function onSteamGameFailed(steamAppId, reason) {
+            window.launchErrorSteamGame=true
+            window.launchErrorVpn=false
+            window.launchErrorAppId=""
+            window.launchErrorText=reason
         }
     }
     Connections {
@@ -556,15 +788,21 @@ Window {
     }
     Connections {
         target: actionDispatcher
-        function onDrawerRequested() { commandCenter.themeOrigin = pageSurface.open ? pageSurface.activeId : ""; commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
+        function onAllAppsRequested(originId) {
+            commandCenter.open = false
+            galleryReturnPageState = pageSurface.open ? pageSurface.allAppsOriginState() : null
+            allApps.showForOrigin(originId)
+        }
+        function onSearchRequested(originId) { window.openSearchFromPage() }
         function onGuideRequested(origin,presentation,focusChannelId){window.guideSearchReturn=window.pendingGuideSearchReturn;commandCenter.open=false;if((presentation.guideSurface || homeLayout.studioOptions.guide.surface)!=="overlay")kodiLibrary.open=false;tvGuide.showFocused(origin,presentation,focusChannelId)}
         function onRestoreFocusRequested(originId) {
             if(tvGuide.open)return
             if (kodiLibrary.returnToSearchAfterPlayback) return
-            if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
+            if(originId==="all-apps") allApps.restoreAfterAction()
+            else if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId)
         }
         function onPageRequested(id,originId) {commandCenter.open=false;if(id)pageSurface.showPage(id,originId,false);else{sessionManager.goHome();pageSurface.closeAll();home.restoreFocus(originId)}}
-        function onRejected(reason) { window.launchErrorAppId = ""; window.launchErrorText = reason }
+        function onRejected(reason) { window.launchErrorSteamGame=false; window.launchErrorAppId = ""; window.launchErrorText = reason }
         function onLibraryRequested(returnHome) {
             kodiLibrary.themeOrigin = commandCenter.open ? commandCenter.themeOrigin : pageSurface.open ? pageSurface.activeId : ""
             commandCenter.open = false
@@ -573,7 +811,7 @@ Window {
         }
         function onCaptureSessionRequested(input, originId) {
             commandCenter.open = false
-            captureSession.openSession(input, originId)
+            captureSession.openSession(input, originId, window.captureOriginRect(originId))
         }
         function onSettingsRequested(section) { if (section < 0) settings.inPage = false; else settings.openSection(section) }
     }

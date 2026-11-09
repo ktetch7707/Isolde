@@ -1,31 +1,181 @@
 #include "sessions/NativeSandbox.h"
 #include "sessions/DesktopSession.h"
+#include "sessions/SteamSessionOutput.h"
+#include "sessions/GamepadTopology.h"
 #include "media/MediaGrants.h"
+#include "games/SteamLibraryGrants.h"
+#include "games/ManagedGamePaths.h"
 #include <QSettings>
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QProcess>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QtTest>
 
 class NativeSandboxTests : public QObject {
     Q_OBJECT
 private slots:
     void steamAdapterCannotAttachToHostGameProcesses();
+    void steamProcessMarkerIsExactAndBounded();
     void profileAndAppStorageRemainSeparate();
     void explicitMediaIsReadOnlyAndPrivatePathsAreRefused();
     void reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot();
+    void managedExecutableUsesSandboxPathAndRejectsChangedContent();
+    void pendingManagedUninstallRecoveryPreservesConflicts();
     void processTreeDiesWithLauncher();
     void gracefulExitFlushesAppState();
+    void steamHostAllowsDelayedGracefulExit();
+    void steamHostReportsFailedGracefulExit();
     void normalExitRemovesDetachedChildren();
     void invalidIdentityAndSymlinkAreRefused();
     void rememberedKodiGrantsAreScopedReadOnlyAndRevocable();
+    void externalSteamGrantsAreProfileScopedAndFailClosed();
+    void gamepadCapabilityRecognitionIsBoundedAndExact();
+    void gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot();
+    void gamepadCharacterDeviceNumbersAreExactAndBounded();
+    void gamepadTopologyReportsAttachDetachAndReconnect();
+    void gameSessionsAcrossSourcesRequestGamepadAccess();
 };
 
 static const QString alice = "11111111-1111-4111-8111-111111111111";
 static const QString bob = "22222222-2222-4222-8222-222222222222";
+
+void NativeSandboxTests::gamepadCapabilityRecognitionIsBoundedAndExact()
+{
+    const auto bitmapFor=[](int code){
+        QStringList words(5,QStringLiteral("0"));
+        words[words.size()-1-code/64]=QString::number(quint64(1)<<(code%64),16);
+        return words.join(' ');
+    };
+    QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x130)));
+    QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x13f)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x12f)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x001e)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities("0 0 invalid 0 0"));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(QString(4097,'0')));
+}
+void NativeSandboxTests::gameSessionsAcrossSourcesRequestGamepadAccess()
+{
+    QVERIFY(!NativeSandbox::isGameSession({}, {}, {}, {}, {}));
+    QVERIFY(NativeSandbox::isGameSession("ppsspp", {}, {}, {}, {}));
+    QVERIFY(NativeSandbox::isGameSession({}, "42", {}, {}, {}));
+    QVERIFY(NativeSandbox::isGameSession({}, {}, "/media/library", {}, {}));
+    QVERIFY(NativeSandbox::isGameSession({}, {}, {}, "/private/install", {}));
+    QVERIFY(NativeSandbox::isGameSession({}, {}, {}, {}, QString(64,'a')));
+
+}
+void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
+{
+    QTemporaryDir root;QVERIFY(root.isValid());
+    const auto sys=root.filePath("sys"),devices=root.filePath("dev");
+    QVERIFY(QDir().mkpath(devices));
+    const auto addNode=[&](const QString &name,const QString &bitmap,const QString &deviceNumber={}){
+        const auto capability=sys+"/"+name+"/device/capabilities/key";
+        QVERIFY(QDir().mkpath(QFileInfo(capability).absolutePath()));
+        QFile file(capability);QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(bitmap.toLatin1()),qint64(bitmap.toLatin1().size()));file.close();
+        const auto suffix=name.mid(name.startsWith("event")?5:2).toUInt();
+        const auto expected=name.startsWith("event")?64+suffix:suffix;
+        const auto devPath=sys+"/"+name+"/dev";
+        QFile dev(devPath);QVERIFY(dev.open(QIODevice::WriteOnly));
+        const auto number=deviceNumber.isEmpty()?QString("13:%1").arg(expected):deviceNumber;
+        QCOMPARE(dev.write(number.toLatin1()),qint64(number.toLatin1().size()));dev.close();
+        QFile device(devices+"/"+name);QVERIFY(device.open(QIODevice::WriteOnly));device.close();
+    };
+    addNode("event0","0 0 0 0 1000000000000"); // BTN_GAMEPAD, not ordinary keys.
+    addNode("event1","40000000 0 0 0 0"); // Keyboard key.
+    addNode("js0","0 0 0 0 1000000000000");
+    addNode("event1000","0 0 0 0 1000000000000"); // Outside the node grammar.
+    addNode("event3","0 0 0 0 1000000000000","13:99"); // Sysfs number does not match the endpoint.
+    QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
+             QStringList({devices+"/event0",devices+"/js0"}));
+
+    addNode("event2","0 0 0 0 1000000000000"); // Plugged in after the first snapshot.
+    QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
+             QStringList({devices+"/event0",devices+"/event2",devices+"/js0"}));
+    QVERIFY(QFile::remove(devices+"/event0"));
+    QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
+             QStringList({devices+"/event2",devices+"/js0"}));
+}
+void NativeSandboxTests::gamepadCharacterDeviceNumbersAreExactAndBounded()
+{
+    uint major=0,minor=0;
+    const QString gamepadKeys="0 0 0 0 1000000000000";
+    QVERIFY(GamepadTopology::verifiedGamepadNode("event0",gamepadKeys,"13:64"));
+    QVERIFY(GamepadTopology::verifiedGamepadNode("js0",gamepadKeys,"13:0"));
+    QVERIFY(!GamepadTopology::verifiedGamepadNode("event0",gamepadKeys,"13:65"));
+    QVERIFY(!GamepadTopology::verifiedGamepadNode("event0","0 0 0 0 0","13:64"));
+    QVERIFY(GamepadTopology::deviceNumber("event0","13:64",&major,&minor));
+    QCOMPARE(major,13u);QCOMPARE(minor,64u);
+    QVERIFY(GamepadTopology::deviceNumber("event191","13:255",&major,&minor));
+    QVERIFY(GamepadTopology::deviceNumber("js0","13:0",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event192","13:256",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event0","13:65",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event0","8:64",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event1000","13:64",&major,&minor));
+    QVERIFY(!GamepadTopology::deviceNumber("event0","13:64:1",&major,&minor));
+}
+void NativeSandboxTests::gamepadTopologyReportsAttachDetachAndReconnect()
+{
+    const QSet<QString> launchBound{"event0"};
+    auto status=GamepadTopology::summarize(QSet<QString>{"event0"},launchBound);
+    QCOMPARE(status.value("connected").toInt(),1);
+    QCOMPARE(status.value("available").toInt(),1);
+    QCOMPARE(status.value("new").toInt(),0);
+    QCOMPARE(status.value("missing").toInt(),0);
+
+    status=GamepadTopology::summarize(QSet<QString>{"event0","event2"},launchBound);
+    QCOMPARE(status.value("connected").toInt(),2);
+    QCOMPARE(status.value("available").toInt(),1);
+    QCOMPARE(status.value("new").toInt(),1);
+    QCOMPARE(status.value("missing").toInt(),0);
+
+    status=GamepadTopology::summarize(QSet<QString>{"event2"},launchBound,QSet<QString>{"event2"});
+    QCOMPARE(status.value("connected").toInt(),1);
+    QCOMPARE(status.value("available").toInt(),1);
+    QCOMPARE(status.value("new").toInt(),1);
+    QCOMPARE(status.value("missing").toInt(),1);
+
+    status=GamepadTopology::summarize(QSet<QString>{"event0","event2"},launchBound,QSet<QString>{"event2"});
+    QCOMPARE(status.value("available").toInt(),2);
+    QCOMPARE(status.value("new").toInt(),1);
+    QCOMPARE(status.value("missing").toInt(),0);
+}
+
+void NativeSandboxTests::steamProcessMarkerIsExactAndBounded()
+{
+    SteamSessionOutput parser("42");
+    QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBS"));
+    QVERIFY(!parser.consume("ERVED 43\nSTEAM_GAME_PROCESS_OBSERVED 42"));
+    QVERIFY(parser.consume("\n"));
+    QVERIFY(!parser.consume("prefix STEAM_GAME_PROCESS_OBSERVED 42\n"));
+    QVERIFY(!parser.consume(QByteArray(2100,'x')+"STEAM_GAME_PROCESS_OBSERVED 42\n"));
+    QVERIFY(!parser.consume("STEAM_GAME_PROCESS_OBSERVED 42x\n"));
+    QVERIFY(parser.consume("noise\nSTEAM_GAME_PROCESS_OBSERVED 42\n"));
+    const QByteArray state=R"({"account":"unknown","appId":"42","client":"available","cloud_save":"unknown","connection":"unknown","error":"none","exit":"unknown","installation":"verified","local_save":"unknown","offline":"unknown","ownership":"unknown","phase":"ended","process":"gone","version":1})";
+    QVERIFY(!parser.consume("STEAM_PROVIDER_STATE "+state.left(50)));
+    QVERIFY(parser.takeState().isEmpty());
+    QVERIFY(!parser.consume(state.mid(50)+"\n"));
+    const auto parsed=parser.takeState();
+    QCOMPARE(parsed.value("phase").toString(),QString("ended"));
+    QCOMPARE(parsed.value("local_save").toString(),QString("unknown"));
+    auto other=state;other.replace("\"appId\":\"42\"","\"appId\":\"43\"");
+    parser.consume("STEAM_PROVIDER_STATE "+other+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+    auto invalid=state;invalid.replace("\"exit\":\"unknown\"","\"exit\":\"guessed\"");
+    parser.consume("STEAM_PROVIDER_STATE "+invalid+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+    auto duplicate=state;duplicate.replace("\"exit\":\"unknown\"","\"exit\":\"unknown\",\"exit\":\"crashed\"");
+    parser.consume("STEAM_PROVIDER_STATE "+duplicate+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+    parser.consume("STEAM_PROVIDER_STATE "+QByteArray(2050,'x')+"\n");
+    QVERIFY(parser.takeState().isEmpty());
+
+}
 
 static QByteArray run(const NativeSandboxPlan &plan, const QString &script, const QStringList &extra = {})
 {
@@ -44,11 +194,43 @@ void NativeSandboxTests::steamAdapterCannotAttachToHostGameProcesses(){
     QProcess outside;auto outsideEnv=env;outsideEnv.insert("SteamAppId","42");outside.setProcessEnvironment(outsideEnv);
     outside.start("/usr/bin/python3",{"-c","import time; time.sleep(20)"});QVERIFY(outside.waitForStarted());
     const auto plan=NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");QVERIFY2(plan.error.isEmpty(),qPrintable(plan.error));
+    QVERIFY(plan.arguments.contains("--steam-session"));
+    const auto otherPlan=NativeSandbox::prepare(bob,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");
+    QVERIFY(otherPlan.error.isEmpty());
+    QVERIFY(otherPlan.homeDirectory!=plan.homeDirectory);
+    QFile profileSave(plan.homeDirectory+"/steam-save");
+    QVERIFY(profileSave.open(QIODevice::WriteOnly)); QCOMPARE(profileSave.write("private"),qint64(7)); profileSave.close();
+    QCOMPARE(run(otherPlan,"import pathlib; print(pathlib.Path.home().joinpath('steam-save').exists())"),QByteArray("False\n"));
     QCOMPARE(run(plan,"import runpy; m=runpy.run_path('/run/steam-games.py'); print(m['game_processes']('42'))"),QByteArray("[]\n"));
     QCOMPARE(run(plan,"import subprocess; p=subprocess.run(['/usr/bin/python3','/run/steam-games.py','--launch','42'],capture_output=True); assert p.returncode==2 and b'Steam game:' in p.stderr; print('missing-game-refused')"),QByteArray("missing-game-refused\n"));
     QVERIFY(outside.state()!=QProcess::NotRunning);outside.terminate();QVERIFY(outside.waitForFinished());
     QVERIFY(!NativeSandbox::prepare(alice,"other","/usr/bin/python3",env,{},storage.path(),{},{},"42").error.isEmpty());
     QVERIFY(!NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42 -bad").error.isEmpty());
+}
+void NativeSandboxTests::externalSteamGrantsAreProfileScopedAndFailClosed()
+{
+    QTemporaryDir config, storage;
+    const auto original = QSettings::defaultFormat();
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, config.path());
+    const auto candidate=QStringLiteral("/media/isolde-test/SteamLibrary");
+    QVERIFY(SteamLibraryGrants::validate(candidate,false).isEmpty());
+    QVERIFY(!SteamLibraryGrants::validate("/media",false).isEmpty());
+    QVERIFY(!SteamLibraryGrants::validate("/home/other/SteamLibrary",false).isEmpty());
+    QVERIFY(!SteamLibraryGrants::validate("/etc/SteamLibrary",false).isEmpty());
+    QVERIFY(SteamLibraryGrants::save(alice,{candidate}).isEmpty());
+
+    QSettings settings(QSettings::IniFormat,QSettings::UserScope,"Isolde","MediaAccess");
+    QCOMPARE(SteamLibraryGrants::folders(alice),QStringList{candidate});
+    QVERIFY(SteamLibraryGrants::folders(bob).isEmpty());
+    const auto env=QProcessEnvironment::systemEnvironment();
+    const auto disconnected=NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");
+    QVERIFY(disconnected.error.isEmpty());
+    QVERIFY(disconnected.steamLibraryRoots.isEmpty());
+    settings.setValue("profiles/"+alice+"/steam/libraries",QStringList{"/etc/isolde-test"});
+    const auto invalid=NativeSandbox::prepare(alice,"steam","/usr/bin/python3",env,{},storage.path(),{},{},"42");
+    QVERIFY(!invalid.error.isEmpty());
+    QSettings::setDefaultFormat(original);
 }
 void NativeSandboxTests::rememberedKodiGrantsAreScopedReadOnlyAndRevocable()
 {
@@ -140,6 +322,44 @@ void NativeSandboxTests::reviewedGameBundleIsReadOnlyAndCannotEscapeItsRoot(){
     QFile original(resource);QVERIFY(original.open(QIODevice::ReadOnly));QCOMPARE(original.readAll(),QByteArray("preserve-bundle"));
 }
 
+void NativeSandboxTests::managedExecutableUsesSandboxPathAndRejectsChangedContent(){
+    QStandardPaths::setTestModeEnabled(true);
+    QTemporaryDir storage;
+    const auto parent=ManagedGamePaths::gamesRoot(alice)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto root=parent+"/install", target=root+"/game";
+    QVERIFY(QDir().mkpath(root));
+    QFile marker(root+"/.isolde-install.json");QVERIFY(marker.open(QIODevice::WriteOnly));marker.write("{}");marker.close();
+    QVERIFY(QFile::copy("/usr/bin/true",target));
+    QVERIFY(QFile::setPermissions(target,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner));
+    const auto env=QProcessEnvironment::systemEnvironment();
+    const auto plan=NativeSandbox::prepare(alice,"fixture",target,env,target,storage.path(),{},root,{},root);
+    QVERIFY2(plan.error.isEmpty(),qPrintable(plan.error));
+    QCOMPARE(plan.actionTarget,QString("/media/games/game"));
+    QCOMPARE(plan.arguments.last(),plan.actionTarget);
+    QVERIFY(plan.arguments.contains("--ro-bind"));
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture",target,env,target,storage.path(),{},storage.path(),{},root).error.isEmpty());
+    QFile changed(target);QVERIFY(changed.open(QIODevice::WriteOnly|QIODevice::Truncate));changed.write("#!/bin/sh\n");changed.close();
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture",target,env,target,storage.path(),{},root,{},root).error.isEmpty());
+    QVERIFY(!NativeSandbox::prepare(alice,"fixture","/usr/bin/true",env,{},storage.path(),{},root,{}, {},QString(64,'a')).error.isEmpty());
+    QVERIFY(QDir(parent).removeRecursively());
+    QStandardPaths::setTestModeEnabled(false);
+}
+
+void NativeSandboxTests::pendingManagedUninstallRecoveryPreservesConflicts(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto parent=ManagedGamePaths::gamesRoot(alice)+"/"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto root=parent+"/install",pending=root+".uninstall-pending";
+    QVERIFY(QDir().mkpath(pending));
+    QFile marker(pending+"/.isolde-install.json");QVERIFY(marker.open(QIODevice::WriteOnly));marker.write("{}");marker.close();
+    QVERIFY(ManagedGamePaths::recoverPendingUninstall(alice,root).isEmpty());
+    QVERIFY(QFileInfo::exists(root+"/.isolde-install.json"));QVERIFY(!QFileInfo::exists(pending));
+    QVERIFY(QDir().mkpath(pending));
+    QVERIFY(!ManagedGamePaths::recoverPendingUninstall(alice,root).isEmpty());
+    QVERIFY(QFileInfo::exists(root+"/.isolde-install.json"));QVERIFY(QFileInfo::exists(pending));
+    QVERIFY(QDir(parent).removeRecursively());
+    QStandardPaths::setTestModeEnabled(false);
+}
+
 void NativeSandboxTests::processTreeDiesWithLauncher()
 {
     QTemporaryDir storage;
@@ -189,6 +409,46 @@ void NativeSandboxTests::gracefulExitFlushesAppState()
     QFile saved(plan.homeDirectory + "/saved");
     QVERIFY(saved.open(QIODevice::ReadOnly));
     QCOMPARE(saved.readAll(), QByteArray("saved"));
+}
+
+void NativeSandboxTests::steamHostAllowsDelayedGracefulExit()
+{
+    QTemporaryDir storage;
+    const auto ready=storage.filePath("ready");
+    const auto saved=storage.filePath("saved");
+    QProcess process;
+    process.start(QCoreApplication::applicationDirPath()+"/isolde-native-host",
+        {"--steam-session","--","/usr/bin/python3","-c",
+         "import pathlib,signal,sys,time\n"
+         "def stop(*args):\n time.sleep(2.5); pathlib.Path(sys.argv[2]).write_text('saved'); sys.exit(0)\n"
+         "signal.signal(signal.SIGTERM,stop)\n"
+         "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+         "while True: time.sleep(.1)\n",ready,saved});
+    QVERIFY(process.waitForStarted());
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(ready), 5000);
+    process.write("quit\n");
+    QVERIFY(process.waitForFinished(7000));
+    QCOMPARE(process.exitCode(),0);
+    QFile file(saved); QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(),QByteArray("saved"));
+}
+
+void NativeSandboxTests::steamHostReportsFailedGracefulExit()
+{
+    QTemporaryDir storage;
+    const auto ready=storage.filePath("ready");
+    QProcess process;
+    process.start(QCoreApplication::applicationDirPath()+"/isolde-native-host",
+        {"--steam-session","--","/usr/bin/python3","-c",
+         "import pathlib,signal,sys,time\n"
+         "signal.signal(signal.SIGTERM,lambda *_: sys.exit(2))\n"
+         "pathlib.Path(sys.argv[1]).write_text('ready')\n"
+         "while True: time.sleep(.1)\n",ready});
+    QVERIFY(process.waitForStarted());
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(ready), 5000);
+    process.write("quit\n");
+    QVERIFY(process.waitForFinished(7000));
+    QCOMPARE(process.exitCode(),1);
 }
 
 void NativeSandboxTests::normalExitRemovesDetachedChildren()
