@@ -437,7 +437,7 @@ QVariantMap HomeLayout::studioOptions() const
             }
         }
     }
-    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","shape","text","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
+    for(auto it=presets.constBegin();it!=presets.constEnd();++it)if(!QStringList{"button","image","shape","text","library","recently-viewed","music-library","tv-guide","carousel","app-bar","page-menu","detected-sources","source-notice"}.contains(it.key()) || ComponentSchema::component(it.value().toObject().toVariantMap(),true).isEmpty())return {};
     if(object.contains("shapeChoices")) {
         if(!object["shapeChoices"].isArray() || object["shapeChoices"].toArray().isEmpty() || object["shapeChoices"].toArray().size()>8)return {};
         for(const auto &value:object["shapeChoices"].toArray()) {
@@ -490,7 +490,7 @@ QVariantMap HomeLayout::studioOptions() const
         // Older Studio options inherit presentation defaults in memory only.
         // Their source file and every saved layout remain untouched.
         QFile packaged(":/config/studio-defaults.json");
-        if(!packaged.open(QIODevice::ReadOnly) || packaged.size()>64*1024)return {};
+        if(!packaged.open(QIODevice::ReadOnly) || packaged.size()>128*1024)return {};
         const auto defaults=ComponentSchema::guideOptions(QJsonDocument::fromJson(packaged.readAll()).object()["guide"].toObject().toVariantMap());
         if(defaults.isEmpty())return {};
         for(auto it=defaults.cbegin();it!=defaults.cend();++it)if(!guide.contains(it.key()))guide[it.key()]=it.value();
@@ -498,7 +498,7 @@ QVariantMap HomeLayout::studioOptions() const
     auto result=object.toVariantMap();
     if (!result.contains("referenceViewport")) {
         QFile packaged(":/config/studio-defaults.json");
-        if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 64*1024) return {};
+        if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128*1024) return {};
         result["referenceViewport"] = QJsonDocument::fromJson(packaged.readAll()).object()["referenceViewport"].toVariant();
     }
     result["guide"]=guide;result["maxScrollableRows"]=ComponentSchema::MaxScrollableRows;
