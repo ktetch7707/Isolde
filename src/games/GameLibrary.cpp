@@ -1186,9 +1186,11 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
         if(kind=="manual"){
             if(!filterType.isEmpty() || !filterValue.isEmpty())return fail(tr("Manual collections cannot contain filter expressions."));
         }else if(kind=="smart"){
-            if(!QStringList{"platform","favorite","title"}.contains(filterType) || filterValue.size()>80
-                || filterValue.contains(QChar::Null) || (filterType!="favorite" && filterValue.trimmed().isEmpty())
-                || (filterType=="favorite" && !filterValue.isEmpty()) || !object.value("members").toArray().isEmpty())
+            if(!QStringList{"platform","favorite","title","franchise","tag","recent"}.contains(filterType)
+                || filterValue.size()>80 || filterValue.contains(QChar::Null)
+                || (!QStringList{"favorite","recent"}.contains(filterType) && filterValue.trimmed().isEmpty())
+                || (QStringList{"favorite","recent"}.contains(filterType) && !filterValue.isEmpty())
+                || !object.value("members").toArray().isEmpty())
                 return fail(tr("Invalid smart collection rule in backup."));
         }else return fail(tr("Unknown collection type in backup."));
         QSet<QString> memberSet;

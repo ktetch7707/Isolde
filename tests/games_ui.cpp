@@ -536,6 +536,9 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(library.setOrganization(game,"Fixture series",{"Puzzle"},{"Portable fixture alt"},"Archive summary"));
     QVERIFY(library.setFavorite(game,true));QVERIFY(library.recordCompletedSession(game));
     const auto collection=library.createCollection("Export set","manual");QVERIFY(!collection.isEmpty());
+    const auto tagCollection=library.createCollection("Puzzle tag shelf","smart","tag","puzzle");
+    const auto recentCollection=library.createCollection("Recent shelf","smart","recent");
+    QVERIFY(!tagCollection.isEmpty());QVERIFY(!recentCollection.isEmpty());
     QVERIFY(library.setCollectionMember(collection,game,true));
     const auto coverPath=dir.filePath("cover.png");QImage cover(48,64,QImage::Format_ARGB32);cover.fill(QColor("#3467a1"));
     QVERIFY(cover.save(coverPath,"PNG"));
@@ -560,6 +563,20 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(invalid.write("{\"schemaVersion\":1}")>0);invalid.close();
     QVERIFY(!library.restoreCatalog(invalidBackup,true));
     QCOMPARE(library.page().size(),1);
+    const auto triggerConnection="games-restore-injection-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto triggerDb=QSqlDatabase::addDatabase("QSQLITE",triggerConnection);triggerDb.setDatabaseName(database);
+    QVERIFY(triggerDb.open());
+    QSqlQuery trigger(triggerDb);
+    QVERIFY(trigger.exec("CREATE TRIGGER reject_restore BEFORE INSERT ON games WHEN NEW.title='Portable fixture' BEGIN SELECT RAISE(ABORT,'injected restore failure'); END"));
+    trigger=QSqlQuery();triggerDb.close();triggerDb=QSqlDatabase();QSqlDatabase::removeDatabase(triggerConnection);
+    QVERIFY(!library.restoreCatalog(backup,true));
+    QCOMPARE(library.page().size(),1);
+    QCOMPARE(library.details(game).value("title").toString(),QString("Portable fixture"));
+    const auto dropConnection="games-restore-cleanup-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    auto cleanupDb=QSqlDatabase::addDatabase("QSQLITE",dropConnection);cleanupDb.setDatabaseName(database);
+    QVERIFY(cleanupDb.open());QSqlQuery cleanupQuery(cleanupDb);
+    QVERIFY(cleanupQuery.exec("DROP TRIGGER reject_restore"));
+    cleanupQuery=QSqlQuery();cleanupDb.close();cleanupDb=QSqlDatabase();QSqlDatabase::removeDatabase(dropConnection);
     QVERIFY(library.removeGame(game));QVERIFY(library.page().isEmpty());
     QVERIFY2(library.restoreCatalog(backup,true),qPrintable(library.errorString()));
     QCOMPARE(library.details(game).value("sourceKind").toString(),QString("runtime-entry"));
@@ -570,6 +587,8 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(!library.details(game).value("artwork").toString().isEmpty());
     QCOMPARE(library.editions(game).size(),2);QCOMPARE(library.page("continue").size(),1);
     QCOMPARE(library.pageCollection(collection).size(),1);QVERIFY(library.collectionContains(collection,game));
+    QCOMPARE(library.pageCollection(tagCollection).size(),1);
+    QCOMPARE(library.pageCollection(recentCollection).size(),1);
     QFile exported(backup);QVERIFY(exported.open(QIODevice::ReadOnly));
     QJsonParseError parse;const auto exportedObject=QJsonDocument::fromJson(exported.readAll(),&parse).object();exported.close();
     QCOMPARE(parse.error,QJsonParseError::NoError);
@@ -597,9 +616,11 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QVERIFY(library.details(game).value("aliases").toStringList().isEmpty());
     QVERIFY(library.details(game).value("summary").toString().isEmpty());
     QVERIFY(library.details(game).value("artwork").toString().isEmpty());
-    QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),3);
+    QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),4);
     GameLibrary reopened(database,&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
     QCOMPARE(reopened.pageCollection(collection).size(),1);QCOMPARE(reopened.editions(game).size(),2);
+    QCOMPARE(reopened.pageCollection(tagCollection).size(),1);
+    QCOMPARE(reopened.pageCollection(recentCollection).size(),1);
     QCOMPARE(reopened.details(game).value("sourceReference").toString(),QString());
 }
 void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
