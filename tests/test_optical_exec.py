@@ -21,21 +21,25 @@ class OpticalExecTests(unittest.TestCase):
         self.parent.mkdir(exist_ok=True)
         self.root = self.parent / str(uuid.uuid4())
         self.root.mkdir()
-        self.temp = self.root / "temp"
+        self.temp = self.parent / (self.root.name + "-temp")
         self.temp.mkdir()
         self.addCleanup(self.cleanup)
 
     def cleanup(self):
         shutil.rmtree(self.root, ignore_errors=True)
+        shutil.rmtree(self.temp, ignore_errors=True)
         try:
             self.parent.rmdir()
         except OSError:
             pass
 
     def test_real_elf_executes_from_sealed_memory(self):
+        executable = self.root / "true"
+        shutil.copy2("/usr/bin/true", executable)
         code = ("import importlib.util; s=importlib.util.spec_from_file_location('adapter',"
                 + repr(str(HELPER)) + "); m=importlib.util.module_from_spec(s);"
-                " s.loader.exec_module(m); m.execute('/usr/bin/true', '/usr/bin')")
+                " s.loader.exec_module(m); m.execute(" + repr(str(executable)) + ", "
+                + repr(str(self.root)) + ")")
         result = subprocess.run([sys.executable, "-c", code], capture_output=True, timeout=15,
                                 env={**os.environ, "TMPDIR": str(self.temp)})
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -74,6 +78,43 @@ class OpticalExecTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "too many entries"):
                 adapter.execute(str(executable), str(self.root))
         self.assertFalse(staging.exists())
+
+    def test_stages_elf_libraries_and_preserves_safe_symlinks(self):
+        library_dir = self.root / "lib"
+        library_dir.mkdir()
+        library = library_dir / "libgame.so.1"
+        library.write_bytes(b"\x7fELF" + b"x" * 100)
+        library.chmod(0o400)
+        (library_dir / "libgame.so").symlink_to("libgame.so.1")
+        asset = self.root / "asset.dat"
+        asset.write_bytes(b"game data")
+        executable = self.root / "game"
+        executable.write_bytes(b"\x7fELF" + b"y" * 100)
+        executable.chmod(0o500)
+        staging = self.temp / "stage"
+        staging.mkdir()
+        adapter.stage_tree(self.root, staging, executable)
+        self.assertFalse((staging / "lib/libgame.so.1").is_symlink())
+        self.assertEqual((staging / "lib/libgame.so").read_bytes(), library.read_bytes())
+        self.assertTrue((staging / "asset.dat").is_symlink())
+        self.assertEqual((staging / "asset.dat").read_bytes(), asset.read_bytes())
+
+    def test_rejects_escaping_links_and_excess_staged_bytes(self):
+        executable = self.root / "game"
+        executable.write_bytes(b"\x7fELF" + b"x" * 100)
+        executable.chmod(0o500)
+        link = self.root / "outside"
+        link.symlink_to("/etc/passwd")
+        staging = self.temp / "stage"
+        staging.mkdir()
+        with self.assertRaisesRegex(ValueError, "outside the reviewed disc"):
+            adapter.stage_tree(self.root, staging, executable)
+        shutil.rmtree(staging)
+        staging.mkdir()
+        link.unlink()
+        with mock.patch.object(adapter, "MAX_STAGED_BYTES", 10):
+            with self.assertRaisesRegex(ValueError, "staging size limit"):
+                adapter.stage_tree(self.root, staging, executable)
 
     def test_memfd_is_sealed_and_contains_exact_bytes(self):
         executable = self.root / "game"
