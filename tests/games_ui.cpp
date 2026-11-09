@@ -55,6 +55,7 @@ private slots:
     void fiveThousandGameCatalogStaysPagedAndSearchable();
     void catalogCapDisablesNextFromLastFullPage();
     void organizationAndManualSmartCollectionsStayProfileLocal();
+    void remoteSmartCollectionRulesAreDpadSelectable();
     void catalogExportRestoreIsBoundedAndTransactional();
 };
 static AppDefinition runtime() {
@@ -474,6 +475,25 @@ void GamesUiTests::organizationAndManualSmartCollectionsStayProfileLocal(){
     QVERIFY(reopened.removeCollection(manual));
     QCOMPARE(reopened.collections().size(),7);
 }
+void GamesUiTests::remoteSmartCollectionRulesAreDpadSelectable(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    for(int ruleIndex=4;ruleIndex<=6;++ruleIndex){
+        QScopedPointer<QObject> widget(component.createWithInitialProperties({
+            {"library",QVariant::fromValue(&library)},{"width",1000},{"height",600},{"engaged",true}}));
+        QVERIFY2(widget,qPrintable(component.errorString()));
+        widget->setProperty("toolbar",11);command(widget.data(),InputManager::Confirm);
+        QCOMPARE(widget->property("mode").toString(),QString("collectionChooser"));
+        for(int i=0;i<ruleIndex;++i)command(widget.data(),InputManager::NavigateDown);
+        command(widget.data(),InputManager::Confirm);
+        QCOMPARE(widget->property("mode").toString(),QString("keyboard"));
+        QCOMPARE(widget->property("collectionCreateType").toString(),
+            QStringList({"manual","title","favorite","platform","franchise","tag","recent"}).at(ruleIndex));
+    }
+    QVERIFY(library.collections().isEmpty());
+}
 void GamesUiTests::fiveThousandGameCatalogStaysPagedAndSearchable(){
     QTemporaryDir dir;QVERIFY(dir.isValid());
     const auto path=dir.filePath("scale.sqlite");
@@ -542,6 +562,7 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(library.page().size(),1);
     QVERIFY(library.removeGame(game));QVERIFY(library.page().isEmpty());
     QVERIFY2(library.restoreCatalog(backup,true),qPrintable(library.errorString()));
+    QCOMPARE(library.details(game).value("sourceKind").toString(),QString("runtime-entry"));
     QCOMPARE(library.details(game).value("franchise").toString(),QString("Fixture series"));
     QCOMPARE(library.details(game).value("tags").toStringList(),QStringList({"Puzzle"}));
     QCOMPARE(library.details(game).value("aliases").toStringList(),QStringList({"Portable fixture alt"}));
@@ -579,6 +600,7 @@ void GamesUiTests::catalogExportRestoreIsBoundedAndTransactional(){
     QCOMPARE(QDir(QFileInfo(database).absolutePath()).entryList({"games.sqlite.pre-restore-*.sqlite"},QDir::Files).size(),3);
     GameLibrary reopened(database,&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
     QCOMPARE(reopened.pageCollection(collection).size(),1);QCOMPARE(reopened.editions(game).size(),2);
+    QCOMPARE(reopened.details(game).value("sourceReference").toString(),QString());
 }
 void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));
