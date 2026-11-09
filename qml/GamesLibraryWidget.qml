@@ -17,7 +17,9 @@ Item {
     property int toolbar:0
     property int offset:0
     property string queryView:style.libraryView || "all"
-    property string search:style.libraryValue || ""
+    property string search:style.libraryView==="search"?style.libraryValue || "":""
+    property string selectedPlatform:style.libraryView==="platform"?style.libraryValue || "":""
+    property var platformChoices:[]
     property string selectedId:""
     property var detail:null
     property string mode:"browse"
@@ -37,7 +39,7 @@ Item {
     readonly property var emulatorActions:["Video: "+(emulatorDraft.video || "automatic"),"Controller: "+(emulatorDraft.controller==="xbox-wii-classic"?"Xbox · Wii Classic":"Xbox · Wii Remote + Nunchuk / standard pad"), "Import PS2 firmware: "+(firmwareDraft || (emulatorDraft.firmware?"Saved private copy":"None selected")),"Save setup","Cancel · save nothing"]
     property int field:0
     readonly property var runtimes:library?library.runtimes:[]
-    readonly property var tools:["Add game","All","Favorites","Recent","Search","Previous","Next","Import folder","Emulator setup"]
+    readonly property var tools:["Add game","All","Favorites","Recent","Continue","Platforms","Search","Previous","Next","Import folder","Emulator setup"]
     readonly property var importActions:["Import all reviewed games","Cancel · save nothing","Previous preview page","Next preview page"].concat(importItems.map(g=>g.title+" · "+g.target))
     readonly property var detailActions:detail?["Play",detail.favorite?"Unfavorite":"Favorite","Remove from library","Edit / relink source","Add edition / version","Back"]:[]
     readonly property int columns:style.libraryLayout==="list"?1:Math.max(1,style.libraryColumns || 4)
@@ -66,7 +68,7 @@ Item {
     function reload(){
         if(!library){items=[];return}
         const remembered=selectedId
-        items=library.page(queryView,search,offset)
+        items=library.page(queryView,search,offset,selectedPlatform)
         if(remembered){const at=items.findIndex(g=>g.id===remembered);if(at>=0)selected=at;else selected=Math.min(selected,items.length-1)}
         else selected=Math.min(selected,items.length-1)
         if(detail){const updated=library.details(detail.id);if(updated.id)detail=updated;else{detail=null;mode="browse"}}
@@ -80,13 +82,16 @@ Item {
     function beginField(index){field=index;mode="keyboard";keyboard.selectedIndex=0;keyboard.value=index===4?search:index===0?draft.title:index===1?draft.platform:index===2?draft.root:draft.target}
     function activateTool(){
         message=""
-        if(toolbar===0){beginAdd();return}
-        if(toolbar===8){mode="emulators";choice=0;message="Choose a console runtime. Settings and saves belong only to this Isolde profile. Games and firmware are not downloaded.";return}
-        if(toolbar===7){beginAdd(true);return}
-        if(toolbar===4){beginField(4);return}
-        if(toolbar===5){offset=Math.max(0,offset-50);selectedId="";selected=-1;reload();return}
-        if(toolbar===6){if(items.length===50){offset+=50;selectedId="";selected=-1;reload()}return}
-        search="";offset=0;selectedId="";selected=-1;queryView=toolbar===2?"favorites":toolbar===3?"recent":"all";reload()
+        const tool=tools[toolbar]
+        if(tool==="Add game"){beginAdd();return}
+        if(tool==="Emulator setup"){mode="emulators";choice=0;message="Choose a console runtime. Settings and saves belong only to this Isolde profile. Games and firmware are not downloaded.";return}
+        if(tool==="Import folder"){beginAdd(true);return}
+        if(tool==="Search"){beginField(4);return}
+        if(tool==="Previous"){offset=Math.max(0,offset-50);selectedId="";selected=-1;reload();return}
+        if(tool==="Next"){if(items.length===50){offset+=50;selectedId="";selected=-1;reload()}return}
+        if(tool==="Platforms"){platformChoices=library.platforms();mode="platformChooser";choice=0;message="Filter this view by a platform. Categories come from games in this profile.";return}
+        search="";offset=0;selectedId="";selected=-1;selectedPlatform=""
+        queryView=tool==="Favorites"?"favorites":tool==="Recent"?"recent":tool==="Continue"?"continue":"all";reload()
     }
     function activateChoice(){
         if(mode==="emulators"){
@@ -127,6 +132,11 @@ Item {
         if(mode==="editions"){
             if(choice===editionChoices.length){mode="details";choice=0;return}
             const edition=editionChoices[choice];if(edition)launchEdition(edition.id);return
+        }
+        if(mode==="platformChooser"){
+            if(choice===platformChoices.length){selectedPlatform="";queryView="all"}
+            else{selectedPlatform=platformChoices[choice];queryView="platform"}
+            search="";offset=0;selectedId="";selected=-1;mode="browse";reload();return
         }
         if(mode==="scan"){library.cancelImport();mode="browse";return}
         if(mode==="importPreview"){
@@ -181,7 +191,7 @@ Item {
         if(mode==="keyboard"){keyboard.handleCommand(command);return true}
         if(command===inputManager.back){if(mode!=="browse"){if(mode==="scan" || mode==="importPreview")library.cancelImport();mode="browse";detail=null;draft=({});return true}return false}
         if(mode!=="browse"){
-            const count=mode==="emulators"?emulators.length+1:mode==="emulatorSettings"?emulatorActions.length:mode==="editions"?editionChoices.length+1:mode==="runtime"?runtimes.length:mode==="details"?detailActions.length:mode==="scan"?1:mode==="importPreview"?importActions.length:2
+            const count=mode==="emulators"?emulators.length+1:mode==="emulatorSettings"?emulatorActions.length:mode==="editions"?editionChoices.length+1:mode==="platformChooser"?platformChoices.length+1:mode==="runtime"?runtimes.length:mode==="details"?detailActions.length:mode==="scan"?1:mode==="importPreview"?importActions.length:2
             if(command===inputManager.navigateDown || command===inputManager.navigateRight)choice=Math.min(count-1,choice+1)
             else if(command===inputManager.navigateUp || command===inputManager.navigateLeft)choice=Math.max(0,choice-1)
             else if(command===inputManager.confirm)activateChoice()
@@ -248,7 +258,7 @@ Item {
             ListView {
                 objectName:"gamesReviewChoices"
                 width:parent.width;height:Math.max(0,parent.height-reviewTitle.height-reviewSummary.height-2*parent.spacing);clip:true;currentIndex:root.choice;highlightMoveDuration:0
-                model:root.mode==="emulatorInstallReview"?["Cancel","Install all listed emulators and cores"]:root.mode==="emulatorInstallStatus"?["Back to Games",root.library && root.library.setupBusy?"Stop installation safely":"Installation finished"]:root.mode==="emulators"?root.emulators.map(e=>e.name+" · "+(e.installed?"Installed":"Not installed")).concat([root.library && root.library.setupBusy?"Installation status":"Install / repair emulators"]):root.mode==="emulatorSettings"?root.emulatorActions:root.mode==="editions"?root.editionChoices.map(e=>e.title+" · "+e.platform).concat(["Back"]):root.mode==="scan"?["Cancel scan · save nothing"]:root.mode==="importPreview"?root.importActions:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:[root.editionGameId?"Add edition · preserve other versions":root.editingId?"Save changes and approve source":"Add game and approve source","Cancel"]
+                model:root.mode==="emulatorInstallReview"?["Cancel","Install all listed emulators and cores"]:root.mode==="emulatorInstallStatus"?["Back to Games",root.library && root.library.setupBusy?"Stop installation safely":"Installation finished"]:root.mode==="emulators"?root.emulators.map(e=>e.name+" · "+(e.installed?"Installed":"Not installed")).concat([root.library && root.library.setupBusy?"Installation status":"Install / repair emulators"]):root.mode==="emulatorSettings"?root.emulatorActions:root.mode==="editions"?root.editionChoices.map(e=>e.title+" · "+e.platform).concat(["Back"]):root.mode==="platformChooser"?root.platformChoices.concat(["All platforms"]):root.mode==="scan"?["Cancel scan · save nothing"]:root.mode==="importPreview"?root.importActions:root.mode==="runtime"?root.runtimes.map(r=>r.name):root.mode==="details"?root.detailActions:root.mode==="remove"?["Cancel","Remove entry · keep files and saves"]:[root.editionGameId?"Add edition · preserve other versions":root.editingId?"Save changes and approve source":"Add game and approve source","Cancel"]
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     width:ListView.view.width;height:48;color:root.surface;radius:8

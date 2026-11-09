@@ -22,6 +22,7 @@
 namespace {
 constexpr int MaxGames = 50000;
 constexpr int PageSize = 50;
+constexpr int MaxPlatforms = 128;
 QVariantMap row(const QSqlQuery &query) {
     return {{"id",query.value(0)}, {"title",query.value(1)}, {"platform",query.value(2)},
         {"runtimeId",query.value(3)}, {"favorite",query.value(4).toBool()},
@@ -100,7 +101,7 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     if (!query.exec("PRAGMA user_version") || !query.next()) { fail(tr("Cannot read the games catalog version.")); return; }
     const int version = query.value(0).toInt(); query.finish();
     // Never migrate, replace or repair an unknown existing catalog on read.
-    if (exists && version != 1 && version != 2) { fail(tr("Unsupported games catalog version. Original data was preserved.")); return; }
+    if (exists && version != 1 && version != 2 && version != 3) { fail(tr("Unsupported games catalog version. Original data was preserved.")); return; }
     if (!query.exec("PRAGMA foreign_keys=ON") || !query.exec("PRAGMA synchronous=FULL")) { fail(query.lastError().text()); return; }
     if (!exists) {
         if (!m_db.transaction()) { fail(m_db.lastError().text()); return; }
@@ -113,6 +114,15 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
     if(version==2){
         if(!query.exec("SELECT id,game_id,title,platform,runtime,root,target FROM game_editions LIMIT 0")){fail(tr("Invalid edition catalog. Original data was preserved."));return;}
         m_hasEditions=true;
+    }
+    if(version==3){
+        if(!query.exec("SELECT game_id,last_played FROM game_activity LIMIT 0")){fail(tr("Invalid game activity catalog. Original data was preserved."));return;}
+        m_hasActivity=true;
+        if(!query.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='game_editions'")){fail(tr("Cannot inspect the editions catalog."));return;}
+        if(query.next()){
+            if(!query.exec("SELECT id,game_id,title,platform,runtime,root,target FROM game_editions LIMIT 0")){fail(tr("Invalid edition catalog. Original data was preserved."));return;}
+            m_hasEditions=true;
+        }
     }
     m_ready = true;
 }
@@ -209,6 +219,10 @@ QString GameLibrary::addGame(const QVariantMap &input) {
     if (registration.isEmpty()) { fail(error); return {}; }
     const auto runtime = registration.value("runtimeId").toString();
     const auto root = registration.value("root").toString(), target = registration.value("target").toString();
+    if (!platformAvailable(registration.value("platform").toString())) {
+        fail(tr("The Games catalog supports up to 128 distinct platforms. Existing entries were preserved."));
+        return {};
+    }
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("Choose an installed compatible game runtime.")); return {}; }
     if (!root.isEmpty() && checkedTarget(root,target).isEmpty()) return {};
     if(m_hasEditions && installationExists(runtime,root,target)){fail(tr("This installation already belongs to a game or edition."));return {};}
@@ -229,18 +243,65 @@ QString GameLibrary::addGame(const QVariantMap &input) {
     if (!query.exec() || !m_db.commit()) { const auto error = query.lastError().text(); m_db.rollback(); fail(tr("Could not save the game: %1").arg(error)); return {}; }
     m_error.clear(); emit changed(); return id;
 }
-QVariantList GameLibrary::page(const QString &view, const QString &search, int offset) {
+QVariantList GameLibrary::page(const QString &view, const QString &search, int offset, const QString &platform) {
     if (!m_ready) return {};
-    if (!QStringList{"all","recent","favorites","search"}.contains(view) || search.size()>160 || offset<0 || offset>=MaxGames || offset%PageSize) {
+    if (!QStringList{"all","recent","favorites","search","platform","continue"}.contains(view)
+        || search.size()>160 || offset<0 || offset>=MaxGames || offset%PageSize
+        || platform.size()>80 || platform.contains(QChar::Null)
+        || (view=="platform" && (platform.trimmed().isEmpty() || platform!=platform.trimmed()))) {
         fail(tr("Invalid games query.")); return {};
     }
+    if(view=="continue" && !m_hasActivity)return {};
     QSqlQuery query(m_db);
     // instr uses literal text, not LIKE wildcards or executable SQL predicates.
-    query.prepare("SELECT id,title,platform,runtime,favorite FROM games WHERE (?=0 OR favorite=1) AND instr(lower(title),lower(?))>0 ORDER BY "
-        + QString(view=="recent"?"added DESC,id":"title COLLATE NOCASE,id") + " LIMIT 50 OFFSET ?");
-    query.addBindValue(view=="favorites"?1:0); query.addBindValue(search.isNull()?QStringLiteral(""):search); query.addBindValue(offset);
+    QString sql="SELECT g.id,g.title,g.platform,g.runtime,g.favorite FROM games g";
+    if(m_hasActivity)sql+=" LEFT JOIN game_activity a ON a.game_id=g.id";
+    sql+=" WHERE (?=0 OR g.favorite=1) AND (?='' OR lower(g.platform)=lower(?)";
+    if(m_hasEditions)sql+=" OR EXISTS(SELECT 1 FROM game_editions e WHERE e.game_id=g.id AND lower(e.platform)=lower(?))";
+    sql+=") AND instr(lower(g.title),lower(?))>0";
+    if(view=="continue")sql+=" AND a.game_id IS NOT NULL";
+    sql+=" ORDER BY "+QString(view=="recent"?"g.added DESC,g.id":view=="continue"?"a.last_played DESC,g.id":"g.title COLLATE NOCASE,g.id")+" LIMIT 50 OFFSET ?";
+    query.prepare(sql);
+    query.addBindValue(view=="favorites"?1:0);
+    query.addBindValue(view=="platform"?platform:QStringLiteral(""));
+    query.addBindValue(view=="platform"?platform:QStringLiteral(""));
+    if(m_hasEditions)query.addBindValue(view=="platform"?platform:QStringLiteral(""));
+    query.addBindValue(search.isNull()?QStringLiteral(""):search); query.addBindValue(offset);
     if (!query.exec()) { fail(query.lastError().text()); return {}; }
     QVariantList result; while (query.next()) result.append(row(query)); return result;
+}
+QVariantList GameLibrary::platforms() {
+    QVariantList result;
+    if (!m_ready) return result;
+    QSqlQuery query(m_db);
+    const auto sql="SELECT platform FROM (SELECT platform FROM games"
+        +QString(m_hasEditions?" UNION ALL SELECT platform FROM game_editions":"")
+        +") GROUP BY platform COLLATE NOCASE ORDER BY platform COLLATE NOCASE LIMIT 129";
+    if (!query.exec(sql)) {
+        fail(query.lastError().text());
+        return {};
+    }
+    while (query.next()) result.append(query.value(0).toString());
+    if (result.size()>MaxPlatforms) {
+        fail(tr("The Games catalog has more platform categories than supported."));
+        return {};
+    }
+    return result;
+}
+bool GameLibrary::recordCompletedSession(const QString &id) {
+    if(!m_ready || !ComponentSchema::safeId(id) || details(id).isEmpty())return fail(tr("Game not found in this profile."));
+    if(!m_db.transaction())return fail(m_db.lastError().text());
+    QSqlQuery query(m_db);
+    if(!m_hasActivity && (!query.exec("CREATE TABLE game_activity(game_id TEXT PRIMARY KEY REFERENCES games(id) ON DELETE CASCADE,last_played INTEGER NOT NULL)")
+        || !query.exec("CREATE INDEX game_activity_recent ON game_activity(last_played DESC)"))){
+        const auto error=query.lastError().text();m_db.rollback();return fail(tr("Could not initialize game activity. Previous catalog data was preserved. %1").arg(error));
+    }
+    query.prepare("INSERT INTO game_activity(game_id,last_played) VALUES(?,unixepoch()) ON CONFLICT(game_id) DO UPDATE SET last_played=excluded.last_played");
+    query.addBindValue(id);
+    if(!query.exec() || (!m_hasActivity && !query.exec("PRAGMA user_version=3")) || !m_db.commit()){
+        const auto error=query.lastError().text();m_db.rollback();return fail(tr("Could not record the completed game session. Previous activity was preserved. %1").arg(error));
+    }
+    m_hasActivity=true;m_error.clear();emit errorChanged();emit changed();return true;
 }
 QVariantMap GameLibrary::registration(const QString &id) {
     if(!m_ready || !ComponentSchema::safeId(id))return {};
@@ -255,6 +316,7 @@ bool GameLibrary::updateGame(const QString &id,const QVariantMap &input) {
     QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
     if(value.isEmpty())return fail(error);
     const auto runtime=value.value("runtimeId").toString(),root=value.value("root").toString(),target=value.value("target").toString();
+    if(!platformAvailable(value.value("platform").toString()))return fail(tr("The Games catalog supports up to 128 distinct platforms. Previous metadata was preserved."));
     if(!compatibleRuntime(runtime,!root.isEmpty()))return fail(tr("Choose an installed compatible game runtime."));
     if(!root.isEmpty() && checkedTarget(root,target).isEmpty())return false;
     if(m_hasEditions){
@@ -283,6 +345,20 @@ bool GameLibrary::setFavorite(const QString &id, bool favorite) {
     QSqlQuery query(m_db); query.prepare("UPDATE games SET favorite=? WHERE id=?"); query.addBindValue(favorite?1:0); query.addBindValue(id);
     if (!query.exec()) return fail(query.lastError().text());
     m_error.clear(); emit changed(); return true;
+}
+bool GameLibrary::platformAvailable(const QString &platform) {
+    if(!m_ready || platform.trimmed().isEmpty() || platform.size()>80)return false;
+    QSqlQuery query(m_db);
+    query.prepare("SELECT count(DISTINCT lower(platform)) FROM (SELECT platform FROM games"
+        +QString(m_hasEditions?" UNION ALL SELECT platform FROM game_editions":"")+")");
+    if(!query.exec() || !query.next())return false;
+    const int count=query.value(0).toInt();query.finish();
+    if(count<MaxPlatforms)return true;
+    query.prepare("SELECT EXISTS(SELECT 1 FROM games WHERE lower(platform)=lower(?))"
+        +QString(m_hasEditions?" OR EXISTS(SELECT 1 FROM game_editions WHERE lower(platform)=lower(?))":""));
+    query.addBindValue(platform);
+    if(m_hasEditions)query.addBindValue(platform);
+    return query.exec() && query.next() && query.value(0).toBool();
 }
 bool GameLibrary::removeGame(const QString &id) {
     if (!m_ready || details(id).isEmpty()) return fail(tr("Game not found in this profile."));
@@ -334,6 +410,7 @@ QString GameLibrary::addEdition(const QString &id,const QVariantMap &input) {
     QString error;const auto value=ComponentSchema::gameRegistration(input,&error);
     if(value.isEmpty()){fail(error);return {};}
     const auto runtime=value.value("runtimeId").toString(),root=value.value("root").toString(),target=value.value("target").toString();
+    if(!platformAvailable(value.value("platform").toString())){fail(tr("The Games catalog supports up to 128 distinct platforms."));return {};}
     if(!compatibleRuntime(runtime,!root.isEmpty())){fail(tr("Choose a compatible edition runtime."));return {};}
     if(!root.isEmpty() && checkedTarget(root,target).isEmpty())return {};
     if(editions(id).size()>=32){fail(tr("A game supports up to 32 editions."));return {};}
@@ -421,6 +498,7 @@ bool GameLibrary::commitImport() {
     QSqlQuery query(m_db);
     if(!query.exec("SELECT count(*) FROM games") || !query.next()){m_db.rollback();return fail(tr("Cannot read the games catalog."));}
     int count=query.value(0).toInt();query.finish();
+    bool checkedPlatform=false;
     for(const auto &entry:m_preview){
         const auto value=entry.toMap();QString error;
         if(ComponentSchema::gameRegistration(value,&error).isEmpty() || (!steam && checkedTarget(m_importRoot,value.value("target").toString()).isEmpty())){
@@ -431,6 +509,10 @@ bool GameLibrary::commitImport() {
         if(m_hasEditions){query.addBindValue(m_importRuntime);query.addBindValue(m_importRoot);query.addBindValue(value.value("target"));}
         if(!query.exec()){m_db.rollback();return fail(query.lastError().text());}
         const bool existing=query.next();query.finish();if(existing)continue; // Preserve manual corrections.
+        if(!checkedPlatform){
+            checkedPlatform=true;
+            if(!platformAvailable(value.value("platform").toString())){m_db.rollback();return fail(tr("The Games catalog supports up to 128 distinct platforms. Nothing was imported."));}
+        }
         if(++count>MaxGames){m_db.rollback();return fail(tr("Import would exceed the catalog limit. Nothing was imported."));}
         query.prepare("INSERT INTO games(id,title,platform,runtime,root,target,added) VALUES(?,?,?,?,?,?,unixepoch())");
         query.addBindValue("game-"+QUuid::createUuid().toString(QUuid::WithoutBraces));

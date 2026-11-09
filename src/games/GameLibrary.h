@@ -54,7 +54,10 @@ public:
     Q_INVOKABLE QVariantList importPage(int offset = 0) const;
     Q_INVOKABLE bool commitImport();
     Q_INVOKABLE bool setFavorite(const QString &gameId, bool favorite);
-    Q_INVOKABLE QVariantList page(const QString &view = "all", const QString &search = {}, int offset = 0);
+    Q_INVOKABLE QVariantList page(const QString &view = "all", const QString &search = {}, int offset = 0,
+                                  const QString &platform = {});
+    Q_INVOKABLE QVariantList platforms();
+    bool recordCompletedSession(const QString &gameId);
     Q_INVOKABLE QVariantMap details(const QString &gameId);
     Q_INVOKABLE bool removeGame(const QString &gameId);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
@@ -80,7 +83,9 @@ private:
     AppRegistry *m_apps;
     bool m_ready = false;
     bool m_hasEditions = false;
+    bool m_hasActivity = false;
     bool installationExists(const QString &runtime, const QString &root, const QString &target);
+    bool platformAvailable(const QString &platform);
     void scanStep();
     QTimer m_scanTimer;
     std::unique_ptr<QDirIterator> m_scan;

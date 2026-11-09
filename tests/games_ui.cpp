@@ -31,6 +31,7 @@ private slots:
     void remoteEditCanCancelAndApplyWithoutMouse();
     void remoteEditionChooserDispatchesOwnedVersion();
     void remoteEmulatorSetupCancelsAndSavesWithoutMouse();
+    void platformShelvesFilterCanonicalGamesRemotely();
 };
 static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
@@ -93,12 +94,62 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     QVERIFY(QDir(QFileInfo(GameEmulators::home(profile,"ppsspp")).absolutePath()).removeRecursively());
     qApp->setProperty("isoldeProfile",QVariant());
 }
+void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
+    QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);QVERIFY(library.ready());
+    const auto add=[&library](const QString &title,const QString &platform){
+        return library.addGame({{"schemaVersion",1},{"title",title},{"platform",platform},
+            {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
+    };
+    const auto pc=add("Desk fixture","PC"),psp=add("Handheld fixture","PSP");
+    QVERIFY(!pc.isEmpty());QVERIFY(!psp.isEmpty());
+    QVERIFY(library.setFavorite(psp,true));
+    QCOMPARE(library.platforms().size(),2);
+    QCOMPARE(library.page("platform",{},0,"psp").size(),1);
+    QCOMPARE(library.page("platform",{},0,"PSP").first().toMap().value("id").toString(),psp);
+    QCOMPARE(library.page("favorites").size(),1);
+    QVERIFY(library.page("platform",{},0,QString()).isEmpty());
+    QVERIFY(library.page("continue").isEmpty());
+    QVERIFY(!library.recordCompletedSession("missing-game"));
+    QVERIFY(library.recordCompletedSession(psp));
+    QCOMPARE(library.page("continue").size(),1);
+    GameLibrary reopened(dir.filePath("profile/games.sqlite"),&apps);
+    QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
+    QCOMPARE(reopened.page("continue").size(),1); // v3 activity without an editions table
+
+    InputManager input;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
+    QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
+    QScopedPointer<QObject> widget(component.createWithInitialProperties({
+        {"library",QVariant::fromValue(&library)},{"width",1000},{"height",600},{"engaged",true}}));
+    QVERIFY2(widget,qPrintable(component.errorString()));
+    for(int i=0;i<5;++i)command(widget.data(),InputManager::NavigateRight); // Platforms
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("mode").toString(),QString("platformChooser"));
+    command(widget.data(),InputManager::NavigateDown);
+    command(widget.data(),InputManager::Confirm);
+    QCOMPARE(widget->property("mode").toString(),QString("browse"));
+    QCOMPARE(widget->property("queryView").toString(),QString("platform"));
+    QCOMPARE(widget->property("selectedPlatform").toString(),QString("PSP"));
+    const auto items=widget->property("items");
+    const auto listed=items.metaType()==QMetaType::fromType<QJSValue>()?items.value<QJSValue>().toVariant().toList():items.toList();
+    QCOMPARE(listed.size(),1);QCOMPARE(listed.first().toMap().value("id").toString(),psp);
+
+    QScopedPointer<QObject> continueWidget(component.createWithInitialProperties({
+        {"library",QVariant::fromValue(&library)},{"style",QVariantMap{{"libraryView","continue"}}},
+        {"width",1000},{"height",600},{"engaged",true}}));
+    QVERIFY2(continueWidget,qPrintable(component.errorString()));
+    QCOMPARE(continueWidget->property("queryView").toString(),QString("continue"));
+    const auto continued=continueWidget->property("items");
+    const auto continueItems=continued.metaType()==QMetaType::fromType<QJSValue>()?continued.value<QJSValue>().toVariant().toList():continued.toList();
+    QCOMPARE(continueItems.size(),1);QCOMPARE(continueItems.first().toMap().value("id").toString(),psp);
+}
 void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));auto secondRuntime=runtime();secondRuntime.id="other-test";QVERIFY(apps.addApp(secondRuntime));
     GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);
     QVariantMap registration{{"schemaVersion",1},{"title","Shared title"},{"platform","PC"},{"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}};
-    const auto game=library.addGame(registration);QVERIFY(!game.isEmpty());registration["runtimeId"]="other-test";registration["title"]="Alternate";
+    const auto game=library.addGame(registration);QVERIFY(!game.isEmpty());registration["runtimeId"]="other-test";registration["platform"]="PSP";registration["title"]="Alternate";
     const auto edition=library.addEdition(game,registration);QVERIFY2(!edition.isEmpty(),qPrintable(library.errorString()));
+    QCOMPARE(library.platforms().size(),2);QCOMPARE(library.page("platform",{},0,"psp").size(),1);
     InputManager input;GameDispatchProbe dispatch;QQmlEngine engine;engine.rootContext()->setContextProperty("inputManager",&input);
     QQmlComponent component(&engine,QUrl::fromLocalFile(GAMES_WIDGET_QML));
     QScopedPointer<QObject> widget(component.createWithInitialProperties({{"library",QVariant::fromValue(&library)},{"dispatcher",QVariant::fromValue(&dispatch)},{"originId","game-origin"},{"width",1000},{"height",600}}));QVERIFY2(widget,qPrintable(component.errorString()));
@@ -107,6 +158,9 @@ void GamesUiTests::remoteEditionChooserDispatchesOwnedVersion() {
     command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);
     QCOMPARE(dispatch.lastAction.value("gameId").toString(),game);QCOMPARE(dispatch.lastAction.value("editionId").toString(),edition);
     QCOMPARE(dispatch.origin,QString("game-origin"));QCOMPARE(library.page().size(),1);
+    QVERIFY(library.recordCompletedSession(game));
+    GameLibrary reopened(dir.filePath("profile/games.sqlite"),&apps);QVERIFY2(reopened.ready(),qPrintable(reopened.errorString()));
+    QCOMPARE(reopened.editions(game).size(),2);QCOMPARE(reopened.page("continue").size(),1);
 }
 void GamesUiTests::remoteEditCanCancelAndApplyWithoutMouse() {
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);

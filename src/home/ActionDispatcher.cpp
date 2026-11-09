@@ -21,7 +21,13 @@ ActionDispatcher::ActionDispatcher(AppRegistry *apps, SessionManager *sessions, 
     connect(sessions, &SessionManager::launching, this, [this](const QString &) { if (!m_dispatching && !m_sessions->resumingPreparedLaunch()) m_origin.clear(); });
     connect(sessions, &SessionManager::returnedHome, this, [this](const QString &app) {
         clearGuidePlayback();
+        const auto gameId=m_pendingGameId;
+        m_pendingGameId.clear();
+        if(!gameId.isEmpty() && m_games)m_games->recordCompletedSession(gameId);
         emit restoreFocusRequested(m_origin.isEmpty() ? app : m_origin);
+    });
+    connect(sessions,&SessionManager::sessionFailed,this,[this](const QString &,const QString &){
+        m_pendingGameId.clear();
     });
     connect(media,&KodiMedia::scheduledMediaUnavailable,this,[this](const QString &kind,int id){
         if(m_guide && !m_guideChannel.isEmpty())m_guide->markUnavailable(kind,id);
@@ -158,11 +164,13 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
     else if (type == "app-drawer") { emit drawerRequested(); accepted = true; }
     else if (type == "launch-app") accepted = launchApp(value.value("appId").toString());
     else if (type == "launch-game") {
-        auto resolved = m_games ? m_games->resolveLaunch(value.value("gameId").toString(),value.value("editionId").toString()) : QVariantMap();
+        const auto gameId=value.value("gameId").toString();
+        auto resolved = m_games ? m_games->resolveLaunch(gameId,value.value("editionId").toString()) : QVariantMap();
         if(resolved.isEmpty()) emit rejected(m_games ? m_games->errorString() : tr("Games is unavailable in this profile."));
         else if(resolved.value("type")=="launch-app") accepted=launchApp(resolved.value("appId").toString());
         else if(resolved.value("type")=="steam-game") accepted=m_sessions->launchSteamGame(resolved.value("steamAppId").toString());
         else {const auto root=resolved.take("sourceRoot").toString();accepted=m_sessions->launchGameFile(resolved,root);}
+        if(accepted)m_pendingGameId=gameId;
     }
     else if (type == "settings") {
         accepted = launchApp("settings");

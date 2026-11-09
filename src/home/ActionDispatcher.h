@@ -48,6 +48,7 @@ private:
     GameLibrary *m_games = nullptr;
     GuideController *m_guide = nullptr;
     QString m_origin;
+    QString m_pendingGameId;
     QString m_guideChannel,m_guideSlot;
     QString m_surfChannel;
     qint64 m_guideEnd=0;
