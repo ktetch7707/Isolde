@@ -10,6 +10,7 @@ import stat
 import sys
 import signal
 import zipfile
+import uuid
 
 MAX_ENTRIES = 10000
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
@@ -164,9 +165,29 @@ def install(source, destination, expected_sha256=None):
         with entry.open("rb") as installed_entry:
             if installed_entry.read(20)[:4] != b"\x7fELF":
                 raise ValueError("Installed entry point failed ELF verification.")
+        owned_files = []
+        owned_directories = []
+        for path in stage.rglob("*"):
+            relative = path.relative_to(stage).as_posix()
+            if path.is_symlink():
+                raise ValueError("Install staging unexpectedly contains a symbolic link.")
+            if path.is_dir():
+                owned_directories.append(relative)
+            elif path.is_file():
+                file_digest = hashlib.sha256()
+                with path.open("rb") as installed_file:
+                    for chunk in iter(lambda: installed_file.read(1024 * 1024), b""):
+                        file_digest.update(chunk)
+                owned_files.append({"path": relative, "size": path.stat().st_size,
+                                    "sha256": file_digest.hexdigest()})
+            else:
+                raise ValueError("Install staging contains an unsupported file type.")
         marker = stage / ".isolde-install.json"
         with marker.open("w",encoding="utf-8") as marker_file:
-            marker_file.write(json.dumps(metadata, ensure_ascii=False))
+            marker_file.write(json.dumps({**metadata, "ownershipSchemaVersion": 1,
+                                          "ownedFiles": owned_files,
+                                          "ownedDirectories": owned_directories},
+                                         ensure_ascii=False))
             marker_file.flush();os.fsync(marker_file.fileno())
         os.chmod(marker, 0o600)
         for directory in sorted((path for path in stage.rglob("*") if path.is_dir()),key=lambda path:len(path.parts),reverse=True)+[stage]:
@@ -186,21 +207,111 @@ def install(source, destination, expected_sha256=None):
     print(json.dumps(metadata, ensure_ascii=False))
 
 
+def uninstall(root):
+    def interrupted(signum, frame):
+        raise InterruptedError("Uninstallation canceled")
+    signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGINT, interrupted)
+    root = Path(root)
+    if (root.name != "install" or root.is_symlink() or not root.is_dir()
+            or root.resolve(strict=True) != root.absolute()):
+        raise ValueError("Choose a verified Isolde-managed install folder.")
+    marker = root / ".isolde-install.json"
+    if (marker.is_symlink() or not marker.is_file() or marker.resolve(strict=True) != marker.absolute()
+            or marker.stat().st_size > 16 * 1024 * 1024):
+        raise ValueError("The install ownership marker is missing or redirected; files were preserved.")
+    try:
+        ownership = json.loads(marker.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("The install ownership marker is invalid; files were preserved.") from None
+    files = ownership.get("ownedFiles") if isinstance(ownership, dict) else None
+    directories = ownership.get("ownedDirectories") if isinstance(ownership, dict) else None
+    if (not isinstance(ownership, dict) or ownership.get("ownershipSchemaVersion") != 1
+            or not isinstance(files, list) or not isinstance(directories, list)
+            or len(files) > MAX_ENTRIES or len(directories) > MAX_ENTRIES):
+        raise ValueError("The install ownership manifest is incomplete; files were preserved.")
+    expected_files = {}
+    for item in files:
+        if not isinstance(item, dict) or set(item) != {"path", "size", "sha256"}:
+            raise ValueError("The install ownership manifest is invalid; files were preserved.")
+        name, size, digest = item["path"], item["size"], item["sha256"]
+        path = PurePosixPath(name) if isinstance(name, str) else PurePosixPath(".")
+        if (not isinstance(name, str) or not name or path.is_absolute() or "\\" in name
+                or any(part in ("", ".", "..") for part in path.parts)
+                or name == ".isolde-install.json" or name in expected_files
+                or type(size) is not int or size < 0
+                or not isinstance(digest, str) or len(digest) != 64
+                or any(ch not in "0123456789abcdef" for ch in digest)):
+            raise ValueError("The install ownership manifest is invalid; files were preserved.")
+        expected_files[name] = (size, digest)
+    expected_directories = set()
+    for name in directories:
+        path = PurePosixPath(name) if isinstance(name, str) else PurePosixPath(".")
+        if (not isinstance(name, str) or not name or path.is_absolute() or "\\" in name
+                or any(part in ("", ".", "..") for part in path.parts)
+                or name in expected_directories):
+            raise ValueError("The install ownership manifest is invalid; files were preserved.")
+        expected_directories.add(name)
+    actual_files = set()
+    actual_directories = set()
+    for path in root.rglob("*"):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            raise ValueError("The install contains a symbolic link; files were preserved.")
+        if path == marker:
+            continue
+        if path.is_dir():
+            actual_directories.add(relative)
+        elif path.is_file():
+            actual_files.add(relative)
+        else:
+            raise ValueError("The install contains an unsupported file type; files were preserved.")
+    if actual_files != set(expected_files) or actual_directories != expected_directories:
+        raise ValueError("The install contains missing or unowned files; nothing was deleted.")
+    for name, (size, expected_digest) in expected_files.items():
+        path = root.joinpath(*PurePosixPath(name).parts)
+        digest = hashlib.sha256()
+        with path.open("rb") as installed_file:
+            for chunk in iter(lambda: installed_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if path.stat().st_size != size or digest.hexdigest() != expected_digest:
+            raise ValueError("An installed file changed after installation; nothing was deleted.")
+    if ".isolde-install.json" not in {path.name for path in root.iterdir()}:
+        raise ValueError("The install ownership marker changed; files were preserved.")
+    quarantine = root.with_name(".isolde-uninstalling-" + str(uuid.uuid4()))
+    os.replace(root, quarantine)
+    try:
+        shutil.rmtree(quarantine)
+    except Exception:
+        if not root.exists() and quarantine.exists():
+            os.replace(quarantine, root)
+        raise
+    print(json.dumps({"schemaVersion": 1, "removed": True}))
+
+
 def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--inspect", action="store_true")
     group.add_argument("--install", action="store_true")
-    parser.add_argument("--source", required=True)
+    group.add_argument("--uninstall", action="store_true")
+    parser.add_argument("--source")
     parser.add_argument("--destination")
+    parser.add_argument("--root")
     parser.add_argument("--expected-sha256")
     args = parser.parse_args()
     if args.inspect:
+        if not args.source:
+            parser.error("--inspect requires --source")
         result = inspect(args.source)
         print(json.dumps(result, ensure_ascii=False))
+    elif args.uninstall:
+        if not args.root:
+            parser.error("--uninstall requires --root")
+        uninstall(args.root)
     else:
-        if not args.destination:
-            parser.error("--install requires --destination")
+        if not args.destination or not args.source:
+            parser.error("--install requires --source and --destination")
         install(args.source, args.destination,args.expected_sha256)
 
 

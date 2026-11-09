@@ -17,5 +17,6 @@ public:
     static QString rootReference(const QVariantMap &disc);
     static bool isRootReference(const QString &root);
     static QString mediaIdFromRoot(const QString &root);
+    static bool mountReadOnly(const QString &device, QString *error = nullptr);
     static bool eject(const QString &device, QString *error = nullptr);
 };

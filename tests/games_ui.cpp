@@ -56,8 +56,8 @@ static AppDefinition runtime() {
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
 }
 void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval(){
-    const QVariantMap old{{"schemaVersion",1},{"observationId",QString(64,'a')},{"device","/dev/sr0"},{"mountRoot","/media/disc-a"}};
-    const QVariantMap replacement{{"schemaVersion",1},{"observationId",QString(64,'b')},{"device","/dev/sr0"},{"mountRoot","/media/disc-b"}};
+    const QVariantMap old{{"schemaVersion",1},{"observationId",QString(64,'a')},{"device","/dev/sr0"},{"mountRoot","/media/disc-a"},{"state","mounted"}};
+    const QVariantMap replacement{{"schemaVersion",1},{"observationId",QString(64,'b')},{"device","/dev/sr0"},{"mountRoot","/media/disc-b"},{"state","mounted"}};
     QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{old}).value("state").toString(),QString("ready"));
     const auto changed=OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{replacement});
     QCOMPARE(changed.value("state").toString(),QString("replaced"));
@@ -80,11 +80,23 @@ void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable(){
     QCOMPARE(first.value("mediaSetId").toString(),second.value("mediaSetId").toString());
     QVERIFY(first.value("mediaId").toString()!=second.value("mediaId").toString());
     const auto secondRoot=OpticalDiscAdapter::rootReference(second);
+    auto ready=first;ready["state"]="mounted";ready["mountRoot"]="/media/test-disc-1";
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{ready}).value("state").toString(),QString("ready"));
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{}).value("state").toString(),QString("missing"));
     const QVariantMap wrong{{"mediaId",second.value("mediaId")},{"mediaSetId",second.value("mediaSetId")},
-        {"discNumber",2},{"discCount",2},{"mountRoot","/media/test-disc-2"}};
+        {"discNumber",2},{"discCount",2},{"mountRoot","/media/test-disc-2"},{"state","mounted"}};
     const auto state=OpticalDiscAdapter::classifyRootReference(root,{wrong});
     QCOMPARE(state.value("state").toString(),QString("wrong-disc"));
     QCOMPARE(state.value("expectedDisc").toInt(),1);
+    auto unmounted=wrong;unmounted["observationId"]=QString(64,'c');unmounted["state"]="unmounted";unmounted["mountRoot"]="";
+    QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{unmounted}).value("state").toString(),QString("missing"));
+    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(QString(64,'a'),"/dev/sr0",{unmounted}).value("state").toString(),QString("replaced"));
+    const auto selectedUnmounted=OpticalDiscAdapter::classifyRevalidation(
+        unmounted.value("observationId").toString(),"/dev/sr0",{unmounted});
+    QCOMPARE(selectedUnmounted.value("state").toString(),QString("unmounted"));
+    auto noSet=descriptor;noSet.fill('\0');noSet[0]=1;noSet.replace(1,5,"CD001");noSet[6]=1;
+    noSet.replace(40,4,"DISC");noSet[80]=100;noSet[120]=2;noSet[124]=1;noSet[128]=0;noSet[129]=8;
+    QVERIFY(OpticalDiscAdapter::parseIsoVolumeDescriptor(noSet).isEmpty());
     QVERIFY(!OpticalDiscAdapter::parseIsoVolumeDescriptor(QByteArray(2048,'x')).size());
     QVERIFY(!OpticalDiscAdapter::isRootReference(secondRoot+"/../bad"));
 }
@@ -132,9 +144,9 @@ void GamesUiTests::mountedOpticalDiscoveryUsesTypedReadOnlyObservations(){
         QCOMPARE(disc.value("sourceType").toString(),QString("pc-optical-disc"));
         QVERIFY(QRegularExpression("^[0-9a-f]{64}$").match(disc.value("observationId").toString()).hasMatch());
         QVERIFY(disc.value("device").toString().startsWith("/dev/sr"));
-        QVERIFY(disc.value("mountRoot").toString().startsWith("/"));
+        if(disc.value("state")=="mounted")QVERIFY(disc.value("mountRoot").toString().startsWith("/"));
+        else{QCOMPARE(disc.value("state").toString(),QString("unmounted"));QVERIFY(disc.value("mountRoot").toString().isEmpty());}
         QVERIFY(disc.value("readOnly").toBool());
-        QCOMPARE(disc.value("state").toString(),QString("mounted"));
     }
 }
 void GamesUiTests::remoteOpticalInspectionNeverStartsMedia(){

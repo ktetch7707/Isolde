@@ -60,6 +60,7 @@ public:
                                              const QString &observationId, const QString &device);
     Q_INVOKABLE bool approveOpticalMedia(const QString &observationId, const QString &device);
     Q_INVOKABLE bool revokeOpticalMedia(const QString &observationId, const QString &device);
+    Q_INVOKABLE bool mountOpticalDisc(const QString &device);
     Q_INVOKABLE bool ejectOpticalDisc(const QString &device);
     bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
     QString portableInstallStatus() const { return m_portableInstallStatus; }
@@ -97,6 +98,8 @@ public:
     Q_INVOKABLE bool restoreCatalog(const QString &source, bool confirmed);
     Q_INVOKABLE QVariantMap details(const QString &gameId);
     Q_INVOKABLE bool removeGame(const QString &gameId);
+    Q_INVOKABLE bool canUninstallManagedGame(const QString &gameId) const;
+    Q_INVOKABLE bool uninstallManagedGame(const QString &gameId, bool confirmed);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
     void invalidate();
 signals:
@@ -151,7 +154,7 @@ private:
     QTimer m_opticalRefreshTimer;
     QByteArray m_portableInstallOutput, m_portableInstallError;
     QVariantMap m_portableInstallPreview;
-    QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination;
+    QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination, m_portableGameId;
     QString m_portableOpticalObservationId, m_portableOpticalDevice;
     QStringList m_lastOpticalObservationIds;
     QString m_portablePhase;
