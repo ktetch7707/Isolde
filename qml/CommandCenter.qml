@@ -84,14 +84,12 @@ Item {
             if (onlineDiscovery) onlineDiscovery.clearResults()
             return
         }
-        if (!webSearchEnabled) {
-            // T28.4: Network denial when web search is switched OFF —
-            // cancel any provider-mediated search and remain on local results only.
-            invalidateMediaSearch()
+        if (webSearchEnabled) {
+            if (onlineDiscovery) onlineDiscovery.search(text)
+        } else {
+            // Web search OFF: local Kodi library search remains available; only the web provider is cancelled.
             if (onlineDiscovery) onlineDiscovery.clearResults()
-            return
         }
-        if (onlineDiscovery) onlineDiscovery.search(text)
         if (!movieSearchClient || !showSearchClient || !episodeSearchClient) return
         movieSearchClient.openView("movies", "search", text)
         showSearchClient.openView("shows", "search", text)
