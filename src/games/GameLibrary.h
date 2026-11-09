@@ -115,6 +115,7 @@ public:
     Q_INVOKABLE QVariantMap compatibilityInstallerStatus() const;
     Q_INVOKABLE bool inspectWindowsInstaller(const QString &source);
     Q_INVOKABLE bool recoverOrphanedUninstall(const QString &installationId, bool confirmed);
+    Q_INVOKABLE bool resumeOrphanedUninstall(const QString &installationId, bool confirmed);
     QVariantMap resolveLaunch(const QString &gameId, const QString &editionId = {});
     void invalidate();
 signals:

@@ -21,6 +21,29 @@ function method(file, name, context, anchor) {
     vm.runInContext(source.slice(start, end), context, {filename: file + ":" + name});
 }
 
+test("pending uninstall cleanup requires the separate remote confirmation", () => {
+    const calls = [];
+    const inputManager = {back: 1, navigateDown: 2, navigateRight: 3, navigateUp: 4, navigateLeft: 5, confirm: 6};
+    const scope = vm.createContext({
+        inputManager, readOnly: false, mode: "uninstallRecoveryReview", choice: 0,
+        pendingUninstall: {id: "install-id"}, message: "",
+        library: {
+            resumeOrphanedUninstall(id, confirmed) { calls.push([id, confirmed]); return true; },
+            portableInstallStatus: "Checking files",
+        },
+    });
+    method("GamesLibraryWidget.qml", "activateChoice", scope);
+    method("GamesLibraryWidget.qml", "handleCommand", scope);
+    scope.handleCommand(inputManager.navigateDown);
+    scope.handleCommand(inputManager.navigateDown);
+    assert.equal(scope.choice, 2);
+    assert.deepEqual(calls, []);
+    scope.handleCommand(inputManager.confirm);
+    assert.deepEqual(calls, [["install-id", true]]);
+    assert.equal(scope.mode, "uninstalling");
+    assert.equal(scope.message, "Checking files");
+});
+
 test("app overflow opens All Apps while button overflow retains shortcuts", () => {
     const calls = [];
     const scope = vm.createContext({

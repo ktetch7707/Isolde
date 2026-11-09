@@ -307,6 +307,42 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.assertEqual((pending/"bin"/"new-save").read_bytes(),b"keep")
         self.assertTrue((pending/".isolde-install.json").exists())
 
+    def test_interrupted_cleanup_can_resume_without_touching_saves(self):
+        self.package(extra=[("extra", b"owned")])
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        (pending/"bin"/"game").unlink()
+        (pending/"bin").rmdir()
+        save=self.root/"private"/"save.dat"
+        save.write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"missing or unowned"):
+            installer.finalize_uninstall(destination)
+        helper=Path(__file__).parents[1]/"tools/portable-game-installer.py"
+        result=subprocess.run([sys.executable,str(helper),"--resume-uninstall","--root",str(destination)],
+                              check=True,capture_output=True,text=True)
+        self.assertTrue(json.loads(result.stdout)["removed"])
+        self.assertFalse(pending.exists())
+        self.assertEqual(save.read_bytes(),b"keep")
+
+    def test_resume_refuses_modified_or_unowned_remaining_files(self):
+        self.package(extra=[("extra", b"owned")])
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        (pending/"bin"/"game").unlink()
+        (pending/"extra").write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError,"changed after installation"):
+            installer.finalize_uninstall(destination,allow_missing=True)
+        self.assertEqual((pending/"extra").read_bytes(),b"changed")
+        (pending/"extra").write_bytes(b"owned")
+        (pending/"new-save").write_bytes(b"keep")
+        with self.assertRaisesRegex(ValueError,"unowned"):
+            installer.finalize_uninstall(destination,allow_missing=True)
+        self.assertEqual((pending/"new-save").read_bytes(),b"keep")
+
     def test_cleanup_preserves_file_changed_after_verification(self):
         self.package()
         destination=self.root/"private"/"games"/"id"/"install"

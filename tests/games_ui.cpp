@@ -139,7 +139,10 @@ void GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles(){
     QTemporaryDir dbdir;AppRegistry apps;GameLibrary library(dbdir.filePath("games.sqlite"),&apps);QVERIFY(library.ready());
     QCOMPARE(library.pendingUninstallRecovery().size(),1);
     QVERIFY(!library.recoverOrphanedUninstall(identity,false));
+    QVERIFY(!library.resumeOrphanedUninstall(identity,false));
+    QVERIFY(!library.resumeOrphanedUninstall("invalid",true));
     QVERIFY(QDir().mkpath(root));QVERIFY(!library.recoverOrphanedUninstall(identity,true));
+    QVERIFY(!library.resumeOrphanedUninstall(identity,true));
     QVERIFY(QDir().rmdir(root));
     QVERIFY(library.recoverOrphanedUninstall(identity,true));
     QFile restored(root+"/remaining-save");QVERIFY(restored.open(QIODevice::ReadOnly));QCOMPARE(restored.readAll(),QByteArray("keep"));

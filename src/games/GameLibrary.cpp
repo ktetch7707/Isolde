@@ -1737,6 +1737,33 @@ bool GameLibrary::recoverOrphanedUninstall(const QString &installationId,bool co
     if(!error.isEmpty())return fail(error);
     m_error.clear();emit errorChanged();emit changed();return true;
 }
+bool GameLibrary::resumeOrphanedUninstall(const QString &installationId,bool confirmed){
+    if(!m_ready || !confirmed || !m_portablePhase.isEmpty() || portableInstallBusy()
+        || (m_sessionActiveGuard && m_sessionActiveGuard()))
+        return fail(tr("Return Home and confirm cleanup after all game operations finish."));
+    const auto uuid=QUuid(installationId);
+    if(uuid.isNull() || uuid.toString(QUuid::WithoutBraces)!=installationId)
+        return fail(tr("Invalid managed installation identity."));
+    const auto root=ManagedGamePaths::gamesRoot(m_emulatorProfile)+'/'+installationId+"/install";
+    bool referenced=false;
+    if(!catalogReferencesRoot(root,&referenced))return false;
+    if(referenced)return fail(tr("The catalog still references this installation. Reopen Games for normal recovery."));
+    const QFileInfo pending(root+".uninstall-pending");
+    if(!ManagedGamePaths::isInstallRoot(m_emulatorProfile,root,false)
+        || QFileInfo::exists(root) || QFileInfo(root).isSymLink()
+        || !pending.isDir() || pending.isSymLink() || pending.canonicalFilePath()!=pending.absoluteFilePath())
+        return fail(tr("The pending folder is missing, redirected, or conflicts with an installation; nothing was changed."));
+    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/portable-game-installer.py";
+    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde managed-game verifier."));
+    m_portableGameId.clear();m_portableDestination=root;
+    m_portableInstallOutput.clear();m_portableInstallError.clear();m_portableCanceled=false;
+    m_portablePhase="uninstall-finalize";
+    m_portableInstallStatus="Checking remaining managed files before resuming cleanup. Modified and unowned files are preserved.";
+    m_portableInstall.start(python,{helper,"--resume-uninstall","--root",root});
+    m_portableInstallDeadline.start();m_error.clear();emit errorChanged();emit portableInstallChanged();return true;
+}
 bool GameLibrary::uninstallManagedGame(const QString &id,bool confirmed) {
     if(m_sessionActiveGuard && m_sessionActiveGuard())
         return fail(tr("A session is active or starting. Return Home before uninstalling a game."));

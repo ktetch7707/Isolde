@@ -346,7 +346,7 @@ def install(source, destination, expected_sha256=None):
     print(json.dumps(metadata, ensure_ascii=False))
 
 
-def verify_install(root, expected_name):
+def verify_install(root, expected_name, allow_missing=False):
     root = Path(root)
     if (root.name != expected_name or root.is_symlink() or not root.is_dir()
             or root.resolve(strict=True) != root.absolute()):
@@ -408,9 +408,12 @@ def verify_install(root, expected_name):
             actual_files.add(relative)
         else:
             raise ValueError("The install contains an unsupported file type; files were preserved.")
-    if actual_files != set(expected_files) or actual_directories != expected_directories:
+    if (not actual_files.issubset(expected_files) or not actual_directories.issubset(expected_directories)
+            or (not allow_missing and (actual_files != set(expected_files)
+                                       or actual_directories != expected_directories))):
         raise ValueError("The install contains missing or unowned files; nothing was deleted.")
-    for name, (size, expected_digest) in expected_files.items():
+    for name in actual_files:
+        size, expected_digest = expected_files[name]
         path = root.joinpath(*PurePosixPath(name).parts)
         digest = hashlib.sha256()
         with path.open("rb") as installed_file:
@@ -420,7 +423,8 @@ def verify_install(root, expected_name):
             raise ValueError("An installed file changed after installation; nothing was deleted.")
     if ".isolde-install.json" not in {path.name for path in root.iterdir()}:
         raise ValueError("The install ownership marker changed; files were preserved.")
-    return expected_files, expected_directories, (len(marker_bytes), hashlib.sha256(marker_bytes).hexdigest())
+    return ({name: expected_files[name] for name in actual_files}, actual_directories,
+            (len(marker_bytes), hashlib.sha256(marker_bytes).hexdigest()))
 
 
 def inspect_installed(root):
@@ -566,14 +570,14 @@ def recover_uninstall(root):
     print(json.dumps({"schemaVersion": 1, "restored": True}))
 
 
-def finalize_uninstall(root):
+def finalize_uninstall(root, allow_missing=False):
     root = Path(root)
     if root.name != "install":
         raise ValueError("Choose a verified Isolde-managed install folder.")
     pending = root.with_name("install.uninstall-pending")
     if root.exists() or root.is_symlink():
         raise ValueError("The installation is still present; nothing was deleted.")
-    files, directories, marker = verify_install(pending, "install.uninstall-pending")
+    files, directories, marker = verify_install(pending, "install.uninstall-pending", allow_missing=allow_missing)
     remove_owned_files(pending, files, directories, marker)
     sync_directory(root.parent)
     print(json.dumps({"schemaVersion": 1, "removed": True}))
@@ -600,6 +604,7 @@ def main():
     group.add_argument("--prepare-uninstall", action="store_true")
     group.add_argument("--finalize-uninstall", action="store_true")
     group.add_argument("--recover-uninstall", action="store_true")
+    group.add_argument("--resume-uninstall", action="store_true")
     group.add_argument("--inspect-installed", action="store_true")
     parser.add_argument("--source")
     parser.add_argument("--destination")
@@ -615,13 +620,13 @@ def main():
         if not args.root:
             parser.error("--inspect-installed requires --root")
         print(json.dumps(inspect_installed(args.root), ensure_ascii=False))
-    elif args.uninstall or args.prepare_uninstall or args.finalize_uninstall or args.recover_uninstall:
+    elif args.uninstall or args.prepare_uninstall or args.finalize_uninstall or args.recover_uninstall or args.resume_uninstall:
         if not args.root:
             parser.error("--uninstall requires --root")
         if args.prepare_uninstall:
             prepare_uninstall(args.root)
-        elif args.finalize_uninstall:
-            finalize_uninstall(args.root)
+        elif args.finalize_uninstall or args.resume_uninstall:
+            finalize_uninstall(args.root, allow_missing=args.resume_uninstall)
         elif args.recover_uninstall:
             recover_uninstall(args.root)
         else:
