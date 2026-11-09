@@ -29,6 +29,9 @@ public:
     Q_INVOKABLE bool surfGuide(int direction);
 signals:
     void guidePlaybackChanged();
+    void allAppsRequested(const QString &originId);
+    void searchRequested(const QString &originId);
+    // Kept for older in-process observers; the shell routes this to All Apps.
     void drawerRequested();
     void guideRequested(const QString &originId,const QVariantMap &presentation,const QString &focusChannelId);
     void pageRequested(const QString &id, const QString &originId);

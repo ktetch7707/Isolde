@@ -57,6 +57,30 @@ class BridgeTests(unittest.TestCase):
                        {"playerid":1},{"properties":[]},{"playerid":1,"properties":{}},{"playerid":1,"properties":None}):
             self.assertIn("error",bridge.dispatch(self.request("Player.GetItem",params),lambda _:self.fail("Invalid identity request reached Kodi")))
 
+    def test_subtitle_loading_routes_only_through_managed_playback(self):
+        class Playback:
+            def __init__(self): self.calls=[]
+            def handle(self, method, params):
+                self.calls.append((method,params))
+                return {"loaded":True}
+        playback=Playback()
+        params={"path":"/owned/generated.en.srt"}
+        response=bridge.dispatch(self.request("Isolde.LoadSubtitle",params),lambda _:self.fail("Subtitle loading must not use raw Kodi RPC"),playback=playback)
+        self.assertEqual(response["result"],{"loaded":True})
+        self.assertEqual(playback.calls,[("Isolde.LoadSubtitle",params)])
+
+    def test_subtitle_track_operations_route_only_through_managed_playback(self):
+        class Playback:
+            def __init__(self): self.calls=[]
+            def handle(self, method, params):
+                self.calls.append((method,params))
+                return {"tracks":[],"enabled":False,"selectedId":-1}
+        playback=Playback()
+        for method,params in (("Isolde.GetSubtitleTracks",{}),("Isolde.SetSubtitleTrack",{"subtitleId":"off"})):
+            response=bridge.dispatch(self.request(method,params),lambda _:self.fail("Subtitle track control must not use raw Kodi RPC"),playback=playback)
+            self.assertIn("result",response)
+        self.assertEqual(playback.calls,[("Isolde.GetSubtitleTracks",{}),("Isolde.SetSubtitleTrack",{"subtitleId":"off"})])
+
     def test_pvr_broadcast_reads_are_bounded_and_read_only(self):
         calls=[]
         def execute(raw):

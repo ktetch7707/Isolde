@@ -1,0 +1,11 @@
+TMDB attribution asset
+
+This is the unmodified TMDB "Primary short (blue)" SVG approved for API attribution.
+Official source and brand guidance: https://www.themoviedb.org/about/logos-attribution
+The asset is included solely to identify Isolde's use of the TMDB API. Do not recolor,
+distort, or imply endorsement. The application displays TMDB's required notice in its
+About section: "This product uses the TMDB API but is not endorsed or certified by TMDB."
+
+TMDB's API terms distinguish non-commercial developer use from commercial use. Confirm
+that the applicable API license covers the intended deployment/distribution before
+release; a production token does not itself grant commercial rights.

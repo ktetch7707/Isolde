@@ -16,8 +16,12 @@
 #include <QCryptographicHash>
 #include <QNetworkRequest>
 #include <algorithm>
+#include <cmath>
 
+static QVariantMap readGalleryPresentation();
 AppCatalog::AppCatalog(AppRegistry *registry, QObject *parent) : QObject(parent), m_registry(registry) {
+    m_galleryPresentation = readGalleryPresentation();
+    if (m_registry) connect(m_registry, &AppRegistry::appsChanged, this, &AppCatalog::entriesChanged);
     connect(&m_network, &QNetworkAccessManager::finished, this, [this](QNetworkReply *reply){if(reply==m_downloadReply)onDownloadFinished();});
 }
 AppCatalog::~AppCatalog() {
@@ -76,6 +80,32 @@ static bool isValidActionHandlers(const QJsonObject &appObject, const QStringLis
     return true;
 }
 
+static QVariantMap readGalleryPresentation()
+{
+    const QVariantMap fallback{{"schemaVersion", 1}, {"title", "All Apps"}, {"layout", "grid"},
+        {"columns", 5}, {"density", "standard"}, {"sort", "name"}, {"showArtwork", true},
+        {"showLabels", true}, {"filterEnabled", true}, {"favoritesEnabled", true}};
+    QFile file(QStringLiteral(":/config/app-gallery.json"));
+    if (!file.open(QIODevice::ReadOnly)) return fallback;
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(file.readAll(), &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) return fallback;
+    const auto value = document.object();
+    const QStringList keys{"schemaVersion","title","layout","columns","density","sort","showArtwork","showLabels","filterEnabled","favoritesEnabled"};
+    if (value.size() != keys.size()) return fallback;
+    for (const auto &key : keys) if (!value.contains(key)) return fallback;
+    const auto columns = value.value("columns").toDouble(-1);
+    const auto title = value.value("title").toString().trimmed();
+    if (value.value("schemaVersion").toInt() != 1 || title.isEmpty() || title.size() > 48
+        || !QStringList{"grid","list"}.contains(value.value("layout").toString())
+        || columns < 2 || columns > 8 || std::floor(columns) != columns
+        || !QStringList{"compact","standard","spacious"}.contains(value.value("density").toString())
+        || !QStringList{"name","favorites"}.contains(value.value("sort").toString())
+        || !value.value("showArtwork").isBool() || !value.value("showLabels").isBool()
+        || !value.value("filterEnabled").isBool() || !value.value("favoritesEnabled").isBool()) return fallback;
+    return value.toVariantMap();
+}
+
 QVariantList AppCatalog::entries() const
 {
     QVariantList result;
@@ -99,6 +129,41 @@ QVariantList AppCatalog::entries() const
                                   {"updateAvailable",m_onlineStoreSearch && m_availableUpdates.contains(entry.app.id)},
                                   {"updateConsent",m_availableUpdates.value(entry.app.id).value("consentText").toString()},
                                   {"updateVersion",m_availableUpdates.value(entry.app.id).value("version").toString()}});
+    }
+    return result;
+}
+
+QVariantList AppCatalog::galleryEntries() const
+{
+    QVariantList result;
+    QSet<QString> seen;
+    const auto append = [this, &result, &seen](const QVariantMap &app, bool registered) {
+        const auto id = app.value("id").toString();
+        const auto type = app.value("type").toString();
+        if (id.isEmpty() || seen.contains(id)
+            || !QStringList{"web", "desktop", "android"}.contains(type))
+            return;
+        const bool installed = registered || isInstalled(id);
+        if (!installed) return;
+        seen.insert(id);
+        const auto state = isInstalled(id) ? packageState(id) : QStringLiteral("ready");
+        result.append(QVariantMap{
+            {"id", id}, {"name", app.value("name").toString()},
+            {"type", type}, {"section", app.value("section").toString()},
+            {"presentationMode", app.value("presentationMode").toString()},
+            {"networkRequirement", app.value("networkRequirement").toString()},
+            {"symbol", app.value("symbol").toString()},
+            {"accent", app.value("accent").toString()},
+            {"logoSource", app.value("logoSource").toString()},
+            {"cutoutLogoSource", app.value("cutoutLogoSource").toString()},
+            {"installed", installed}, {"registered", registered},
+            {"state", state},
+            {"failureReason", m_failureReasons.value(id)},
+            {"setupPrompt", app.value("setupPrompt").toString()}
+        });
+    };
+    if (m_registry) {
+        for (const auto &value : m_registry->apps()) append(value.toMap(), true);
     }
     return result;
 }

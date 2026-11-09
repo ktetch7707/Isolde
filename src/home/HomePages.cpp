@@ -173,7 +173,7 @@ bool HomeLayout::setItemName(const QString &id,const QString &name) {
     return false;
 }
 bool HomeLayout::addButton(){
-    m_items.append(QJsonObject{{"id","button-"+QUuid::createUuid().toString(QUuid::WithoutBraces)},{"kind","action"},{"name","Button"},{"action",QJsonObject{{"type","app-drawer"}}}});
+    m_items.append(QJsonObject{{"id","button-"+QUuid::createUuid().toString(QUuid::WithoutBraces)},{"kind","action"},{"name","Button"},{"action",QJsonObject{{"type","open-apps"}}}});
     if(!save()){m_items.removeLast();return false;}emit layoutChanged();return true;
 }
 

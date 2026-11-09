@@ -83,7 +83,7 @@ bool ActionDispatcher::launchApp(const QString &id)
     }
     if (m_catalog && m_catalog->isInstalled(id)) {
         const auto state = m_catalog->packageState(id);
-        if (state == "needs-setup" || state == "failed") return m_sessions->launch("app-store");
+        if (state == "needs-setup") return m_sessions->launch("app-store");
     }
     return m_sessions->launch(id);
 }
@@ -158,7 +158,12 @@ bool ActionDispatcher::dispatch(const QVariantMap &input, const QString &originI
         if(!m_guide)emit rejected("The guide is unavailable for this profile.");
         else accepted=m_guide->tune(value.value("channelId").toString(),originId);
     }
-    else if (type == "app-drawer") { emit drawerRequested(); accepted = true; }
+    else if (type == "app-drawer" || type == "open-apps") {
+        emit allAppsRequested(originId);
+        if (type == "app-drawer") emit drawerRequested();
+        accepted = true;
+    }
+    else if (type == "open-search") { emit searchRequested(originId); accepted = true; }
     else if (type == "launch-app") accepted = launchApp(value.value("appId").toString());
     else if (type == "launch-game") {
         auto resolved = m_games ? m_games->resolveLaunch(value.value("gameId").toString(),value.value("editionId").toString()) : QVariantMap();
