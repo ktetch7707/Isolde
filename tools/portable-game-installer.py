@@ -294,7 +294,11 @@ def verify_install(root, expected_name):
             or marker.stat().st_size > 16 * 1024 * 1024):
         raise ValueError("The install ownership marker is missing or redirected; files were preserved.")
     try:
-        ownership = json.loads(marker.read_text(encoding="utf-8"))
+        with marker.open("rb") as marker_file:
+            marker_bytes = marker_file.read(16 * 1024 * 1024 + 1)
+        if len(marker_bytes) > 16 * 1024 * 1024:
+            raise ValueError("The install ownership marker is too large; files were preserved.")
+        ownership = json.loads(marker_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         raise ValueError("The install ownership marker is invalid; files were preserved.") from None
     files = ownership.get("ownedFiles") if isinstance(ownership, dict) else None
@@ -351,6 +355,72 @@ def verify_install(root, expected_name):
             raise ValueError("An installed file changed after installation; nothing was deleted.")
     if ".isolde-install.json" not in {path.name for path in root.iterdir()}:
         raise ValueError("The install ownership marker changed; files were preserved.")
+    return expected_files, expected_directories, (len(marker_bytes), hashlib.sha256(marker_bytes).hexdigest())
+
+
+def open_owned_directory(root_fd, parts):
+    current = os.dup(root_fd)
+    try:
+        for part in parts:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=current)
+            os.close(current)
+            current = child
+        return current
+    except Exception:
+        os.close(current)
+        raise
+
+
+def remove_owned_files(pending, files, directories, marker):
+    root_fd = os.open(pending, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        def remove_file(name, size, expected_digest):
+            parts = PurePosixPath(name).parts
+            parent = open_owned_directory(root_fd, parts[:-1])
+            try:
+                fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+                try:
+                    before = os.fstat(fd)
+                    if not stat.S_ISREG(before.st_mode) or before.st_size != size:
+                        raise ValueError("An installed file changed during cleanup; remaining files were preserved.")
+                    digest = hashlib.sha256()
+                    remaining = size + 1
+                    while remaining:
+                        chunk = os.read(fd, min(1024 * 1024, remaining))
+                        if not chunk:
+                            break
+                        digest.update(chunk)
+                        remaining -= len(chunk)
+                    after = os.fstat(fd)
+                    current = os.stat(parts[-1], dir_fd=parent, follow_symlinks=False)
+                    identity = lambda value: (value.st_dev, value.st_ino, value.st_size,
+                                               value.st_mtime_ns, value.st_ctime_ns)
+                    if identity(before) != identity(after) or identity(after) != identity(current) or digest.hexdigest() != expected_digest:
+                        raise ValueError("An installed file changed during cleanup; remaining files were preserved.")
+                    os.unlink(parts[-1], dir_fd=parent)
+                finally:
+                    os.close(fd)
+            finally:
+                os.close(parent)
+        for name, (size, expected_digest) in sorted(files.items()):
+            remove_file(name, size, expected_digest)
+        for name in sorted(directories, key=lambda value: len(PurePosixPath(value).parts), reverse=True):
+            parts = PurePosixPath(name).parts
+            parent = open_owned_directory(root_fd, parts[:-1])
+            try:
+                os.rmdir(parts[-1], dir_fd=parent)
+            finally:
+                os.close(parent)
+        if set(os.listdir(root_fd)) != {".isolde-install.json"}:
+            raise ValueError("The install acquired unowned files during cleanup; remaining files were preserved.")
+        remove_file(".isolde-install.json", *marker)
+        root_stat = os.fstat(root_fd)
+        current = os.stat(pending, follow_symlinks=False)
+        if (root_stat.st_dev, root_stat.st_ino) != (current.st_dev, current.st_ino):
+            raise ValueError("The pending folder changed during cleanup; remaining files were preserved.")
+        os.rmdir(pending)
+    finally:
+        os.close(root_fd)
 
 
 def sync_directory(path):
@@ -403,8 +473,8 @@ def finalize_uninstall(root):
     pending = root.with_name("install.uninstall-pending")
     if root.exists() or root.is_symlink():
         raise ValueError("The installation is still present; nothing was deleted.")
-    verify_install(pending, "install.uninstall-pending")
-    shutil.rmtree(pending)
+    files, directories, marker = verify_install(pending, "install.uninstall-pending")
+    remove_owned_files(pending, files, directories, marker)
     sync_directory(root.parent)
     print(json.dumps({"schemaVersion": 1, "removed": True}))
 

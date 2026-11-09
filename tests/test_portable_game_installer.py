@@ -175,7 +175,7 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.package()
         destination=self.root/"private"/"games"/"id"/"install"
         installer.install(self.archive,destination)
-        with mock.patch.object(installer.shutil,"rmtree",side_effect=OSError("simulated cleanup failure")):
+        with mock.patch.object(installer,"remove_owned_files",side_effect=OSError("simulated cleanup failure")):
             with self.assertRaisesRegex(OSError,"cleanup failure"):
                 installer.uninstall(destination)
         self.assertTrue((destination/"bin/game").is_file())
@@ -211,6 +211,56 @@ class PortableGameInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"unowned"):
             installer.finalize_uninstall(destination)
         self.assertEqual((pending/"unowned").read_bytes(),b"keep")
+
+    def test_cleanup_never_recursively_deletes_new_unowned_files(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        original=installer.remove_owned_files
+        def inject_unowned(root, files, directories, marker):
+            (root/"bin"/"new-save").write_bytes(b"keep")
+            return original(root, files, directories, marker)
+        with mock.patch.object(installer,"remove_owned_files",side_effect=inject_unowned):
+            with self.assertRaises(OSError):
+                installer.finalize_uninstall(destination)
+        self.assertEqual((pending/"bin"/"new-save").read_bytes(),b"keep")
+        self.assertTrue((pending/".isolde-install.json").exists())
+
+    def test_cleanup_preserves_file_changed_after_verification(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        original=installer.remove_owned_files
+        def modify_owned(root, files, directories, marker):
+            (root/"bin"/"game").write_bytes(b"new user data")
+            return original(root, files, directories, marker)
+        with mock.patch.object(installer,"remove_owned_files",side_effect=modify_owned):
+            with self.assertRaisesRegex(ValueError,"changed during cleanup"):
+                installer.finalize_uninstall(destination)
+        self.assertEqual((pending/"bin"/"game").read_bytes(),b"new user data")
+
+    def test_cleanup_refuses_redirected_directory_after_verification(self):
+        self.package()
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination)
+        installer.prepare_uninstall(destination)
+        pending=destination.with_name("install.uninstall-pending")
+        outside=self.root/"outside";outside.mkdir()
+        (outside/"game").write_bytes(b"keep")
+        original=installer.remove_owned_files
+        def redirect(root, files, directories, marker):
+            (root/"bin").rename(root/"bin-moved")
+            (root/"bin").symlink_to(outside, target_is_directory=True)
+            return original(root, files, directories, marker)
+        with mock.patch.object(installer,"remove_owned_files",side_effect=redirect):
+            with self.assertRaises(OSError):
+                installer.finalize_uninstall(destination)
+        self.assertEqual((outside/"game").read_bytes(),b"keep")
+        self.assertTrue((pending/"bin-moved"/"game").is_file())
 
     def test_atomic_no_replace_preserves_existing_destination(self):
         source=self.root/"source";source.mkdir();(source/"data").write_bytes(b"source")
