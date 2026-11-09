@@ -50,6 +50,7 @@ private slots:
     void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
     void ejectRefusesWhileSessionIsActive();
     void catalogRecoversStagedUninstallOnReopen();
+    void orphanedUninstallRecoveryPreservesRemainingFiles();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
@@ -66,6 +67,26 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::orphanedUninstallRecoveryPreservesRemainingFiles(){
+    QStandardPaths::setTestModeEnabled(true);
+    const auto previous=qApp->property("isoldeProfile");
+    const auto profile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    qApp->setProperty("isoldeProfile",profile);
+    const auto identity=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto parent=ManagedGamePaths::gamesRoot(profile)+"/"+identity;
+    auto cleanup=qScopeGuard([&]{QDir(parent).removeRecursively();qApp->setProperty("isoldeProfile",previous);QStandardPaths::setTestModeEnabled(false);});
+    const auto root=parent+"/install",pending=root+".uninstall-pending";
+    QVERIFY(QDir().mkpath(pending));
+    QFile payload(pending+"/remaining-save");QVERIFY(payload.open(QIODevice::WriteOnly));payload.write("keep");payload.close();
+    QTemporaryDir dbdir;AppRegistry apps;GameLibrary library(dbdir.filePath("games.sqlite"),&apps);QVERIFY(library.ready());
+    QCOMPARE(library.pendingUninstallRecovery().size(),1);
+    QVERIFY(!library.recoverOrphanedUninstall(identity,false));
+    QVERIFY(QDir().mkpath(root));QVERIFY(!library.recoverOrphanedUninstall(identity,true));
+    QVERIFY(QDir().rmdir(root));
+    QVERIFY(library.recoverOrphanedUninstall(identity,true));
+    QFile restored(root+"/remaining-save");QVERIFY(restored.open(QIODevice::ReadOnly));QCOMPARE(restored.readAll(),QByteArray("keep"));
+    QVERIFY(library.pendingUninstallRecovery().isEmpty());
 }
 void GamesUiTests::fullOpticalContentIdentityRejectsTruncationAndChanges(){
     QByteArray bytes(3*1024*1024,'x');

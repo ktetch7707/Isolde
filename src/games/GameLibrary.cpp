@@ -1367,6 +1367,56 @@ bool GameLibrary::canUninstallManagedGame(const QString &id) const {
     if(!gamesQuery.exec() || !gamesQuery.next() || gamesQuery.value(0).toInt()!=0)return false;
     return true;
 }
+bool GameLibrary::catalogReferencesRoot(const QString &root,bool *referenced){
+    QSqlQuery query(m_db);
+    query.prepare("SELECT EXISTS(SELECT 1 FROM games WHERE root=?)"
+        +QString(m_hasEditions?" OR EXISTS(SELECT 1 FROM game_editions WHERE root=?)":""));
+    query.addBindValue(root);if(m_hasEditions)query.addBindValue(root);
+    if(!query.exec() || !query.next())return fail(tr("Cannot verify catalog references; no files were changed."));
+    *referenced=query.value(0).toBool();return true;
+}
+QVariantList GameLibrary::pendingUninstallRecovery(){
+    QVariantList result;
+    if(!m_ready || !m_portablePhase.isEmpty())return result;
+    const auto base=ManagedGamePaths::gamesRoot(m_emulatorProfile);
+    if(base.isEmpty() || !QFileInfo(base).isDir() || QFileInfo(base).canonicalFilePath()!=base)return result;
+    QDirIterator entries(base,QDir::Dirs|QDir::NoDotAndDotDot|QDir::NoSymLinks);
+    int scanned=0;
+    while(entries.hasNext() && scanned++<10000 && result.size()<128){
+        const auto parent=entries.next();
+        const auto identity=QFileInfo(parent).fileName();
+        const auto id=QUuid(identity);
+        if(id.isNull() || id.toString(QUuid::WithoutBraces)!=identity || QFileInfo(parent).canonicalFilePath()!=parent)continue;
+        const auto root=parent+"/install",pending=root+".uninstall-pending";
+        const QFileInfo staged(pending);
+        if(!staged.isDir() || staged.isSymLink() || staged.canonicalFilePath()!=pending)continue;
+        bool referenced=false;
+        if(!catalogReferencesRoot(root,&referenced))return {};
+        if(referenced)continue;
+        result.append(QVariantMap{{"id",identity},{"path",pending},
+            {"markerPresent",QFileInfo(pending+"/.isolde-install.json").isFile()},
+            {"conflict",QFileInfo::exists(root) || QFileInfo(root).isSymLink()}});
+    }
+    return result;
+}
+bool GameLibrary::recoverOrphanedUninstall(const QString &installationId,bool confirmed){
+    if(!m_ready || !confirmed || !m_portablePhase.isEmpty() || portableInstallBusy()
+        || (m_sessionActiveGuard && m_sessionActiveGuard()))
+        return fail(tr("Return Home and confirm recovery after all game operations finish."));
+    const auto uuid=QUuid(installationId);
+    if(uuid.isNull() || uuid.toString(QUuid::WithoutBraces)!=installationId)
+        return fail(tr("Invalid managed installation identity."));
+    const auto root=ManagedGamePaths::gamesRoot(m_emulatorProfile)+'/'+installationId+"/install";
+    bool referenced=false;
+    if(!catalogReferencesRoot(root,&referenced))return false;
+    if(referenced)return fail(tr("The catalog still references this installation. Reopen Games for normal recovery."));
+    const auto pending=root+".uninstall-pending";
+    if(!QFileInfo(pending).isDir() || QFileInfo(pending).isSymLink())
+        return fail(tr("The pending folder is missing or redirected; nothing was changed."));
+    const auto error=ManagedGamePaths::recoverPendingUninstall(m_emulatorProfile,root,false);
+    if(!error.isEmpty())return fail(error);
+    m_error.clear();emit errorChanged();emit changed();return true;
+}
 bool GameLibrary::uninstallManagedGame(const QString &id,bool confirmed) {
     if(m_sessionActiveGuard && m_sessionActiveGuard())
         return fail(tr("A session is active or starting. Return Home before uninstalling a game."));

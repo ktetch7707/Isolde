@@ -44,7 +44,7 @@ bool ManagedGamePaths::isInstallRoot(const QString &profile, const QString &path
         && marker.isFile() && !marker.isSymLink() && marker.canonicalFilePath() == marker.absoluteFilePath();
 }
 
-QString ManagedGamePaths::recoverPendingUninstall(const QString &profile, const QString &path)
+QString ManagedGamePaths::recoverPendingUninstall(const QString &profile, const QString &path, bool requireMarker)
 {
     const auto pending=path+".uninstall-pending";
     const QFileInfo staged(pending);
@@ -52,8 +52,8 @@ QString ManagedGamePaths::recoverPendingUninstall(const QString &profile, const 
     if(QFileInfo::exists(path) || QFileInfo(path).isSymLink()
         || !isInstallRoot(profile,path,false) || staged.isSymLink() || !staged.isDir()
         || staged.canonicalFilePath()!=pending
-        || QFileInfo(pending+"/.isolde-install.json").isSymLink()
-        || !QFileInfo(pending+"/.isolde-install.json").isFile())
+        || (requireMarker && (QFileInfo(pending+"/.isolde-install.json").isSymLink()
+        || !QFileInfo(pending+"/.isolde-install.json").isFile())))
         return "A pending managed uninstall needs manual recovery; all files were preserved.";
 #ifdef Q_OS_LINUX
     const auto sourceBytes=QFile::encodeName(pending), targetBytes=QFile::encodeName(path);
