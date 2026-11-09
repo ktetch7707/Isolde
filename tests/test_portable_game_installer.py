@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 from pathlib import Path
 import shutil
@@ -6,6 +7,7 @@ import stat
 import unittest
 from unittest import mock
 import uuid
+import tarfile
 import zipfile
 
 spec=importlib.util.spec_from_file_location("portable_game_installer",Path(__file__).parents[1]/"tools/portable-game-installer.py")
@@ -31,6 +33,17 @@ class PortableGameInstallerTests(unittest.TestCase):
             archive.writestr(installer.MANIFEST,json.dumps(manifest or self.manifest))
             archive.writestr("bin/game",entry)
             for item in extra: archive.writestr(*item)
+
+    def package_ustar(self):
+        self.archive=self.root/"fixture.tar"
+        files=((installer.MANIFEST,json.dumps(self.manifest).encode(),0o644),
+               ("bin/game",b"\x7fELF"+b"\x00"*32,0o755))
+        with tarfile.open(self.archive,"w",format=tarfile.USTAR_FORMAT) as archive:
+            directory=tarfile.TarInfo("bin/");directory.type=tarfile.DIRTYPE;directory.mode=0o755
+            archive.addfile(directory)
+            for name,data,mode in files:
+                info=tarfile.TarInfo(name);info.size=len(data);info.mode=mode
+                archive.addfile(info,io.BytesIO(data))
 
     def test_inspects_and_installs_without_executing_payload(self):
         self.package()
@@ -77,6 +90,35 @@ class PortableGameInstallerTests(unittest.TestCase):
         installer.uninstall(destination)
         self.assertFalse(destination.exists())
         self.assertEqual(save.read_bytes(),b"keep")
+
+    def test_explicit_ustar_bundle_installs_and_uninstalls_safely(self):
+        self.package_ustar()
+        preview=installer.inspect(self.archive)
+        self.assertEqual(preview["archiveFormat"],"ustar")
+        destination=self.root/"private"/"games"/"id"/"install"
+        installer.install(self.archive,destination,preview["archiveSha256"])
+        entry=destination/"bin/game"
+        self.assertEqual(entry.read_bytes(),b"\x7fELF"+b"\x00"*32)
+        self.assertTrue(entry.stat().st_mode & stat.S_IXUSR)
+        installer.uninstall(destination)
+        self.assertFalse(destination.exists())
+
+    def test_ustar_links_and_traversal_are_rejected(self):
+        self.archive=self.root/"unsafe.tar"
+        with tarfile.open(self.archive,"w",format=tarfile.USTAR_FORMAT) as archive:
+            link=tarfile.TarInfo("../outside");link.type=tarfile.SYMTYPE;link.linkname="/etc/passwd"
+            archive.addfile(link)
+        with self.assertRaisesRegex(ValueError,"unsafe"):
+            installer.inspect(self.archive)
+
+    def test_compressed_tar_is_explicitly_unsupported(self):
+        self.archive=self.root/"compressed.tar.gz"
+        with tarfile.open(self.archive,"w:gz") as archive:
+            data=b"\x7fELF"+b"\x00"*32
+            info=tarfile.TarInfo("game");info.size=len(data)
+            archive.addfile(info,io.BytesIO(data))
+        with self.assertRaisesRegex(ValueError,"ZIP or uncompressed POSIX tar"):
+            installer.inspect(self.archive)
 
     def test_uninstall_preserves_modified_or_unowned_payloads(self):
         self.package()

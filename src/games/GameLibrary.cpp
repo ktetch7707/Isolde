@@ -1533,7 +1533,7 @@ bool GameLibrary::beginPortableInstall(const QString &source,const QString &runt
     if(!file.isFile() || file.isSymLink() || file.canonicalFilePath()!=file.absoluteFilePath()
         || file.size()<1 || file.size()>512LL*1024*1024
         || (opticalObservationId.isEmpty() && !MediaGrants::validate(file.absolutePath()).isEmpty()))
-        return fail(tr("Choose a regular portable game ZIP inside an approved media folder."));
+        return fail(tr("Choose a regular ZIP or uncompressed USTAR bundle inside an approved media folder."));
     if(!opticalObservationId.isEmpty()){
         const auto media=revalidateOpticalDisc(opticalObservationId,opticalDevice);
         const auto disc=media.value("disc").toMap();
