@@ -43,6 +43,7 @@ private slots:
     void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void opticalIdentityAndMultiDiscReferencesAreDurable();
     void opticalApprovalsAreProfileScopedAndRevocable();
+    void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
     void safeEjectRefusesBusyUnmountAndNeverForces();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
@@ -139,6 +140,40 @@ void GamesUiTests::safeEjectRefusesBusyUnmountAndNeverForces(){
     QVERIFY(!calls.contains("ForceEject"));
     QVERIFY(!OpticalDiscAdapter::ejectUsing("/dev/sr9999",false,success,&error));
     QCOMPARE(error,QString("Invalid optical device."));
+}
+void GamesUiTests::readOnlyOpticalMountIsBoundedAndVerifiedByCaller(){
+    int calls=0;QString error,mountPoint,serviceSeen,pathSeen,interfaceSeen,methodSeen;QVariantList argumentsSeen;
+    const OpticalDiscAdapter::DbusCall mount=[&](const QString &service,const QString &path,
+        const QString &interface,const QString &method,const QVariantList &arguments){
+        ++calls;serviceSeen=service;pathSeen=path;interfaceSeen=interface;
+        methodSeen=method;argumentsSeen=arguments;
+        return QDBusMessage::createMethodCall(service,path,interface,method).createReply({"/media/disc"});
+    };
+    QVERIFY(OpticalDiscAdapter::mountUsing("/dev/sr0",true,mount,&mountPoint,&error));
+    QCOMPARE(calls,1);QCOMPARE(mountPoint,QString("/media/disc"));QVERIFY(error.isEmpty());
+    QCOMPARE(serviceSeen,QString("org.freedesktop.UDisks2"));
+    QCOMPARE(pathSeen,QString("/org/freedesktop/UDisks2/block_devices/sr0"));
+    QCOMPARE(interfaceSeen,QString("org.freedesktop.UDisks2.Filesystem"));
+    QCOMPARE(methodSeen,QString("Mount"));
+    QCOMPARE(argumentsSeen.size(),1);
+    QCOMPARE(argumentsSeen.first().toMap().value("options").toString(),QString("ro"));
+    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0",false,mount,&mountPoint,&error));
+    QCOMPARE(calls,1);QVERIFY(error.contains("No unmounted optical media"));
+    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr9999",true,mount,&mountPoint,&error));
+    QCOMPARE(calls,1);QCOMPARE(error,QString("Invalid optical device."));
+    const OpticalDiscAdapter::DbusCall failed=[](const QString &service,const QString &path,
+        const QString &interface,const QString &method,const QVariantList &){
+        return QDBusMessage::createMethodCall(service,path,interface,method)
+            .createErrorReply("org.freedesktop.DBus.Error.Failed","unreadable");
+    };
+    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0",true,failed,&mountPoint,&error));
+    QVERIFY(error.contains("could not be mounted read-only"));
+    const OpticalDiscAdapter::DbusCall invalidPoint=[](const QString &service,const QString &path,
+        const QString &interface,const QString &method,const QVariantList &){
+        return QDBusMessage::createMethodCall(service,path,interface,method).createReply({"relative"});
+    };
+    QVERIFY(!OpticalDiscAdapter::mountUsing("/dev/sr0",true,invalidPoint,&mountPoint,&error));
+    QVERIFY(error.contains("invalid mountpoint"));
 }
 static void command(QObject *widget,int value) {
     QVariant result;QVERIFY(QMetaObject::invokeMethod(widget,"handleCommand",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,value)));

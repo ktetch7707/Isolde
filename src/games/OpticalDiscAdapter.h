@@ -22,6 +22,8 @@ public:
     static bool isRootReference(const QString &root);
     static QString mediaIdFromRoot(const QString &root);
     static bool mountReadOnly(const QString &device, QString *error = nullptr);
+    static bool mountUsing(const QString &device, bool mediaAvailable, const DbusCall &call,
+                           QString *mountPoint, QString *error = nullptr);
     static bool ejectUsing(const QString &device, bool mounted, const DbusCall &call,
                            QString *error = nullptr);
     static bool eject(const QString &device, QString *error = nullptr);
