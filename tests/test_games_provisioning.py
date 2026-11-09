@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 import json
 import os
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +16,22 @@ adapter=importlib.util.module_from_spec(adapter_spec);adapter_spec.loader.exec_m
 
 
 class GamesProvisioningTests(unittest.TestCase):
+    def launcher_receipt(self,directory):
+        source=Path(__file__).parents[1]/"config/game-runtimes.json"
+        document=json.loads(source.read_text())
+        binary=Path(directory)/"runtime";binary.write_text("verified inert runtime");binary.chmod(0o700)
+        core=Path(directory)/"core.so";core.write_text("verified inert core")
+        for runtime in document["runtimes"]:
+            runtime["binary"]=str(binary)
+            if "core" in runtime:runtime["core"]=str(core)
+        manifest=Path(directory)/"game-runtimes.json";manifest.write_text(json.dumps(document))
+        route_definitions=adapter.definitions(manifest)
+        packages={name:{"expectedVersion":value[0],"installedVersion":value[0],"ready":True,
+            "executable":value[1],"sha256":"a"*64} for name,value in games.PACKAGES.items()}
+        with patch.object(games,"runtime_manifest",return_value=(manifest,route_definitions)):
+            manifest_hash,runtimes=games.inspect_runtimes(packages)
+        return {"schemaVersion":2,"manifestSha256":manifest_hash,"packages":packages,"runtimes":runtimes},manifest,route_definitions
+
     def test_no_install_without_explicit_flag(self):
         state={"dolphin-emu":{"ready":False}}
         with patch.object(games,"platform"),patch.object(games,"inspect",return_value=state),patch.object(games,"run") as run:
@@ -21,7 +39,8 @@ class GamesProvisioningTests(unittest.TestCase):
             self.assertFalse(result["ready"]);run.assert_not_called()
 
     def test_repeat_setup_is_idempotent(self):
-        with patch.object(games,"platform"),patch.object(games,"inspect",return_value={"pcsx2":{"ready":True}}),patch.object(games,"run") as run:
+        routes={name:{"ready":True} for name in adapter.definitions(Path(__file__).parents[1]/"config/game-runtimes.json")}
+        with patch.object(games,"platform"),patch.object(games,"inspect",return_value={"pcsx2":{"ready":True}}),patch.object(games,"inspect_runtimes",return_value=("a"*64,routes)),patch.object(games,"run") as run:
             self.assertTrue(games.provision(["pcsx2"],True)["ready"]);run.assert_not_called()
 
     def test_install_is_pinned_and_failure_is_not_ready(self):
@@ -32,6 +51,35 @@ class GamesProvisioningTests(unittest.TestCase):
             command=run.call_args.args
             self.assertIn("pcsx2="+games.PACKAGES["pcsx2"][0],command)
             self.assertIn("--no-remove",command)
+            self.assertIn("--no-upgrade",command)
+
+    def test_changed_installed_runtime_is_preserved_instead_of_silently_downgraded(self):
+        state={"pcsx2":{"ready":False,"installedVersion":"2.5.0"}}
+        with patch.object(games,"platform"),patch.object(games,"inspect",return_value=state),patch.object(games,"run") as run:
+            with self.assertRaisesRegex(RuntimeError,"Preserve it"):
+                games.provision(["pcsx2"],True)
+            run.assert_not_called()
+
+    @unittest.skipUnless(os.name=="posix","Bounded package-operation signal contract")
+    def test_cancel_finishes_active_package_command_before_stopping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);marker=root/"completed"
+            script="""
+import importlib.util,os,signal,sys,threading
+spec=importlib.util.spec_from_file_location('games',sys.argv[1])
+games=importlib.util.module_from_spec(spec);spec.loader.exec_module(games)
+games.install_cancellation_handlers()
+threading.Timer(.05,lambda:os.kill(os.getpid(),signal.SIGTERM)).start()
+try:
+    games.run(sys.executable,'-c','import pathlib,sys,time; time.sleep(.25); pathlib.Path(sys.argv[1]).write_text("done")',sys.argv[2],timeout=3,transaction=True)
+except games.ProvisioningCancelled:
+    print('stopped-at-boundary')
+"""
+            result=subprocess.run([sys.executable,"-c",script,str(Path(__file__).parents[1]/"tools/provision-games.py"),str(marker)],
+                capture_output=True,text=True,timeout=5)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(result.stdout.strip(),"stopped-at-boundary")
+            self.assertEqual(marker.read_text(),"done")
 
     def test_unknown_package_and_redirected_receipt_refused(self):
         with patch.object(games,"platform"):
@@ -43,23 +91,28 @@ class GamesProvisioningTests(unittest.TestCase):
             self.assertEqual((root/"original").read_text(),"preserve")
 
     def test_launchers_use_only_verified_programs_and_are_repeatable(self):
-        state={"packages":{name:{"ready":True,"executable":value[1]} for name,value in games.PACKAGES.items()}}
         with tempfile.TemporaryDirectory() as directory:
-            written=games.register_launchers(state,Path(directory))
-            self.assertEqual(len(written),8)
-            original={p:Path(p).read_bytes() for p in written}
-            games.register_launchers(state,Path(directory))
-            self.assertEqual(original,{p:Path(p).read_bytes() for p in written})
-            self.assertIn(b"--fullscreen --renderer sdl",(Path(directory)/"isolde-supertux.desktop").read_bytes())
-            state["packages"]["supertux"]["executable"]="/tmp/untrusted"
-            with self.assertRaises(ValueError):games.register_launchers(state,Path(directory))
+            root=Path(directory);state,manifest,routes=self.launcher_receipt(root)
+            with patch.object(games,"runtime_manifest",return_value=(manifest,routes)):
+                written=games.register_launchers(state,root)
+                self.assertEqual(len(written),8)
+                original={p:Path(p).read_bytes() for p in written}
+                games.register_launchers(state,root)
+                self.assertEqual(original,{p:Path(p).read_bytes() for p in written})
+                self.assertIn(b"--fullscreen --renderer sdl",(root/"isolde-supertux.desktop").read_bytes())
+                executable=Path(routes["ppsspp"]["binary"]);executable.write_text("changed runtime")
+                with self.assertRaisesRegex(ValueError,"receipt"):games.register_launchers(state,root)
+                executable.write_text("verified inert runtime")
+                state["packages"]["supertux"]["executable"]="/untrusted"
+                with self.assertRaises(ValueError):games.register_launchers(state,root)
 
     def test_launcher_registration_respects_private_xdg_data_home(self):
-        state={"packages":{name:{"ready":True,"executable":value[1]} for name,value in games.PACKAGES.items()}}
         with tempfile.TemporaryDirectory() as directory,patch.dict(os.environ,{"XDG_DATA_HOME":directory}):
-            written=games.register_launchers(state)
-            self.assertEqual(len(written),8)
-            self.assertTrue(all(Path(path).parent==Path(directory)/"applications" for path in written))
+            root=Path(directory);state,manifest,routes=self.launcher_receipt(root)
+            with patch.object(games,"runtime_manifest",return_value=(manifest,routes)):
+                written=games.register_launchers(state)
+                self.assertEqual(len(written),8)
+                self.assertTrue(all(Path(path).parent==root/"applications" for path in written))
 
 
 class EmulatorAdapterTests(unittest.TestCase):
@@ -102,6 +155,20 @@ class EmulatorAdapterTests(unittest.TestCase):
         (self.home/".config").symlink_to(self.root,target_is_directory=True)
         with self.assertRaisesRegex(ValueError,"redirected"):adapter.command(runtime,target,self.home)
 
+    def test_controller_presets_are_typed_and_dolphin_generates_wii_mapping(self):
+        runtime,target=self.runtime("dolphin","iso")
+        adapter.atomic(self.home/".config/isolde-emulator/settings.json",json.dumps({
+            "schemaVersion":1,"video":"automatic","controller":"xbox-wii-classic","firmware":""}).encode())
+        with patch.object(adapter,"dolphin_controller",return_value="Xbox Controller"):
+            argv=adapter.command(runtime,target,self.home)
+        self.assertIn(target,argv)
+        gamecube=(self.home/".local/share/dolphin-emu/Config/GCPadNew.ini").read_text()
+        wii=(self.home/".local/share/dolphin-emu/Config/WiimoteNew.ini").read_text()
+        self.assertIn("SDL/0/Xbox Controller",gamecube)
+        self.assertIn("Extension = Classic",wii)
+        runtime,target=self.runtime("retroarch-nes","nes")
+        with self.assertRaisesRegex(ValueError,"Dolphin only"):adapter.command(runtime,target,self.home)
+
     def test_firmware_hash_checked_and_private_save_paths(self):
         runtime,target=self.runtime("pcsx2","iso")
         data=b"ROMDIR ROMVER"+bytes(4*1024**2-len(b"ROMDIR ROMVER"))
@@ -124,6 +191,60 @@ class EmulatorAdapterTests(unittest.TestCase):
         config=(self.home/".config/isolde-emulator/generated/retroarch.cfg").read_text()
         self.assertIn('config_save_on_exit = "false"',config)
         self.assertIn(str(self.home/"saves"),config)
+
+    def test_manifest_matrix_is_explicit_and_runtime_packages_are_bound(self):
+        manifest=Path(__file__).parents[1]/"config/game-runtimes.json"
+        document=json.loads(manifest.read_text())
+        self.assertEqual(document["target"]["architectures"],["amd64"])
+        self.assertIn("Original Xbox",document["generationCoverage"]["notIntegrated"])
+        self.assertEqual(set(document["generationCoverage"]["integratedPlatforms"]),
+            {platform for runtime in document["runtimes"] for platform in runtime["platforms"]})
+        for runtime in document["runtimes"]:
+            self.assertTrue(runtime["packages"])
+            self.assertTrue(runtime["formats"])
+
+    def test_manifest_rejects_overlap_and_unknown_route_fields(self):
+        manifest=Path(__file__).parents[1]/"config/game-runtimes.json"
+        document=json.loads(manifest.read_text())
+        document["generationCoverage"]["notIntegrated"].append("PSP")
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/"manifest.json";path.write_text(json.dumps(document))
+            with self.assertRaisesRegex(ValueError,"generation matrix"):adapter.definitions(path)
+        document=json.loads(manifest.read_text());document["runtimes"][0]["command"]="untrusted"
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/"manifest.json";path.write_text(json.dumps(document))
+            with self.assertRaisesRegex(ValueError,"capability entry"):adapter.definitions(path)
+
+    def test_provisioned_runtime_fingerprint_binds_manifest_executable_and_core(self):
+        manifest_hash,routes=games.inspect_runtimes({name:{"ready":True} for name in games.PACKAGES})
+        self.assertRegex(manifest_hash,r"^[a-f0-9]{64}$")
+        self.assertEqual(set(routes),set(self.runtime_definitions))
+        route=routes["retroarch-gba"]
+        self.assertEqual(route["packages"],["retroarch","libretro-mgba"])
+        self.assertEqual(route["ready"],False)
+        self.assertIsNone(route["binarySha256"])
+        self.assertIsNone(route["coreSha256"])
+
+    def test_provisioned_runtime_fingerprint_detects_binary_or_core_change(self):
+        source=Path(__file__).parents[1]/"config/game-runtimes.json"
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);binary=root/"runtime";binary.write_text("verified runtime");binary.chmod(0o700)
+            core=root/"core.so";core.write_text("verified core")
+            routes={identity:dict(runtime,binary=str(binary)) for identity,runtime in self.runtime_definitions.items()}
+            for runtime in routes.values():
+                if "core" in runtime:runtime["core"]=str(core)
+            packages={name:{"expectedVersion":value[0],"installedVersion":value[0],"ready":True,
+                "executable":value[1],"sha256":"a"*64} for name,value in games.PACKAGES.items()}
+            with patch.object(games,"runtime_manifest",return_value=(source,routes)):
+                manifest_hash,receipt=games.inspect_runtimes(packages)
+                self.assertTrue(all(item["ready"] for item in receipt.values()))
+                report={"schemaVersion":2,"manifestSha256":manifest_hash,"runtimes":receipt,"packages":packages}
+                self.assertTrue(games.verify_runtime_receipt(report))
+                core.write_text("changed core")
+                self.assertFalse(games.verify_runtime_receipt(report))
+                core.write_text("verified core")
+                binary.write_text("changed runtime")
+                self.assertFalse(games.verify_runtime_receipt(report))
 
 
 class GameFixtureTests(unittest.TestCase):
@@ -151,6 +272,27 @@ class GameFixtureTests(unittest.TestCase):
                 if time.monotonic()>=deadline:
                     self.fail("Timed-out builder left a live descendant: "+child_state)
                 time.sleep(.02)
+
+    @unittest.skipUnless(os.name=="posix","Bounded PSP build cancellation contract")
+    def test_builder_cancel_stops_fetch_or_compile_process_group(self):
+        spec=importlib.util.spec_from_file_location("psp_timeout",Path(__file__).parents[1]/"tools/build-ppsspp.py")
+        builder=importlib.util.module_from_spec(spec);spec.loader.exec_module(builder)
+        script="""
+import importlib.util,os,signal,sys,threading
+base=sys.argv[1]
+game_spec=importlib.util.spec_from_file_location('games',base+'/tools/provision-games.py')
+games=importlib.util.module_from_spec(game_spec);game_spec.loader.exec_module(games)
+build_spec=importlib.util.spec_from_file_location('builder',base+'/tools/build-ppsspp.py')
+builder=importlib.util.module_from_spec(build_spec);build_spec.loader.exec_module(builder)
+games.install_cancellation_handlers();builder._cancel_check=games.check_cancelled
+threading.Timer(.05,lambda:os.kill(os.getpid(),signal.SIGTERM)).start()
+try:builder.run(sys.executable,'-c','import time; time.sleep(30)',timeout=60)
+except games.ProvisioningCancelled:print('build-stopped')
+"""
+        result=subprocess.run([sys.executable,"-c",script,str(Path(__file__).parents[1])],
+            capture_output=True,text=True,timeout=5)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(result.stdout.strip(),"build-stopped")
 
     def test_archive_pin_and_traversal_refused_without_extraction(self):
         spec=importlib.util.spec_from_file_location("fixture_fetch",Path(__file__).parents[1]/"tools/fetch-game-fixtures.py")
