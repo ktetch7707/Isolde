@@ -18,6 +18,10 @@ public:
     static QVariantMap identityForDevice(const QString &device);
     static QByteArray hashContent(QIODevice *input, quint64 size);
     static QVariantMap identityForContent(QVariantMap descriptor, const QString &contentId);
+    static QString mountObservationId(const QString &device, const QString &filesystem,
+                                      const QString &label, const QString &root,
+                                      const QString &sequence, const QString &hashState,
+                                      const QString &mediaId, const QString &mountInstance);
     static void retryIdentity(const QString &device);
     static QVariantMap currentMedia(const QString &mediaId);
     static QVariantMap resolveRootReference(const QString &root);

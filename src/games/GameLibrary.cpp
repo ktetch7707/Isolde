@@ -258,6 +258,8 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
                 ?"Safe uninstall stopped or failed. The catalog entry was preserved. "+recovery+" "+reason
                 :m_portablePhase=="uninstall-finalize"
                 ?"Catalog removal completed, but cleanup stopped. The pending managed folder was retained for recovery. "+reason
+                :m_portablePhase=="windows-inspect"
+                ?"Windows executable inspection stopped or failed. No installer was run. "+reason
                 :m_portableCanceled?"Install canceled. Existing files and saves were preserved.":
                     "Portable game preflight/install failed. Nothing was added to the catalog. "+reason;
             m_portablePhase.clear();emit portableInstallChanged();return;
@@ -300,6 +302,23 @@ GameLibrary::GameLibrary(const QString &path, AppRegistry *apps, QObject *parent
                 ?"Verified Isolde-owned files removed. Runtime profile and saves were preserved."
                 :"Catalog updated, but cleanup could not be confirmed. Inspect the pending managed folder.";
             m_portableGameId.clear();m_portablePhase.clear();emit portableInstallChanged();return;
+        }
+        if(m_portablePhase=="windows-inspect"){
+            const auto digest=metadata.value("sha256").toString();
+            if(parse.error!=QJsonParseError::NoError || metadata.value("schemaVersion").toInt()!=1
+                || !QRegularExpression("^[0-9a-f]{64}$").match(digest).hasMatch()
+                || !QStringList{"PE32","PE32+"}.contains(metadata.value("format").toString())
+                || !QStringList{"x86","x86-64","arm64","other"}.contains(metadata.value("architecture").toString())
+                || metadata.value("supported").toBool()){
+                m_portableInstallStatus="Windows executable inspection failed. No installer was run.";
+            }else{
+                m_portableInstallStatus=tr("Windows executable: %1 · %2 · %3 bytes\nSHA-256: %4\n"
+                    "Inspection does not verify its publisher, ownership, safety or installer type. "
+                    "Installation remains unsupported; no code was run and no files were installed.")
+                    .arg(metadata.value("format").toString(),metadata.value("architecture").toString())
+                    .arg(metadata.value("fileSize").toLongLong()).arg(digest);
+            }
+            m_portablePhase.clear();emit portableInstallChanged();return;
         }
         if(parse.error!=QJsonParseError::NoError || metadata.value("schemaVersion").toInt()!=1
             || metadata.value("title").toString().isEmpty() || metadata.value("platform").toString().isEmpty()){
@@ -1826,7 +1845,9 @@ QString GameLibrary::registerOpticalGame(const QString &title,const QString &run
     const auto disc=media.value("disc").toMap();
     const auto root=OpticalDiscAdapter::rootReference(disc);
     if(root.isEmpty() || !disc.value("directPlaySupported").toBool()){
-        fail(tr("The disc's full-content identity is not ready. Wait for verification or refresh to retry."));return {};
+        fail(disc.value("mountTracking")=="unavailable"
+            ?tr("This system cannot identify the mounted disc instance. Direct Play is unavailable; update the kernel or use another supported system.")
+            :tr("The disc's full-content identity is not ready. Wait for verification or refresh to retry."));return {};
     }
     const auto grantError=OpticalDiscGrants::authorize(m_emulatorProfile,disc.value("mediaId").toString());
     if(!grantError.isEmpty()){fail(grantError);return {};}
@@ -1915,6 +1936,25 @@ bool GameLibrary::beginPortableInstall(const QString &source,const QString &runt
     m_portableInstall.start(python,{helper,"--inspect","--source",m_portableSource});
     m_portableInstallDeadline.start();m_error.clear();emit errorChanged();emit portableInstallChanged();return true;
 }
+bool GameLibrary::inspectWindowsInstaller(const QString &source){
+    if(!m_ready || portableInstallBusy() || !m_portablePhase.isEmpty())
+        return fail(tr("Finish or cancel the current game operation first."));
+    const QFileInfo file(source);
+    if(!file.isFile() || file.isSymLink() || file.canonicalFilePath()!=file.absoluteFilePath()
+        || file.size()<64 || file.size()>512LL*1024*1024
+        || !approvedMediaDirectory(m_emulatorProfile,file.absolutePath()))
+        return fail(tr("Choose a regular Windows executable under an approved media folder, up to 512 MiB."));
+    auto helper=QCoreApplication::applicationDirPath()+"/share/isolde/portable-game-installer.py";
+    if(!QFileInfo(helper).isReadable())helper=QCoreApplication::applicationDirPath()+"/../share/isolde/portable-game-installer.py";
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(python.isEmpty() || !QFileInfo(helper).isReadable())return fail(tr("Repair the Isolde installer inspection helper."));
+    m_portableInstallOutput.clear();m_portableInstallError.clear();m_portableInstallPreview.clear();
+    m_portableOpticalObservationId.clear();m_portableOpticalDevice.clear();
+    m_portableCanceled=false;m_portablePhase="windows-inspect";
+    m_portableInstallStatus="Inspecting the executable without executing it. No files will be installed.";
+    m_portableInstall.start(python,{helper,"--inspect-windows","--source",file.canonicalFilePath()});
+    m_portableInstallDeadline.start();m_error.clear();emit errorChanged();emit portableInstallChanged();return true;
+}
 bool GameLibrary::confirmPortableInstall(){
     if(!m_ready || m_portablePhase!="review" || portableInstallBusy())return fail(tr("No portable game package is awaiting confirmation."));
     if(!compatibleRuntime(m_portableRuntime,true)
@@ -1971,6 +2011,8 @@ void GameLibrary::cancelPortableInstall(){
         ?"Catalog removal completed. Cleanup stopped; inspect the pending managed folder."
         :phase=="uninstall"
         ?"Uninstall canceled. The catalog entry was preserved; inspect the managed folder before retrying."
+        :phase=="windows-inspect"
+        ?"Windows executable inspection canceled. No installer was run."
         :"Installation canceled. Existing installations and saves were preserved.";
     emit portableInstallChanged();
 }

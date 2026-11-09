@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import stat
+import struct
 import unittest
 from unittest import mock
 import uuid
@@ -44,6 +45,40 @@ class PortableGameInstallerTests(unittest.TestCase):
             for name,data,mode in files:
                 info=tarfile.TarInfo(name);info.size=len(data);info.mode=mode
                 archive.addfile(info,io.BytesIO(data))
+
+    def windows_fixture(self):
+        data=bytearray(0x80+24+112+40)
+        data[:2]=b"MZ"
+        struct.pack_into("<I",data,60,0x80)
+        data[0x80:0x84]=b"PE\0\0"
+        struct.pack_into("<HHIIIHH",data,0x84,0x8664,1,0,0,0,112,2)
+        struct.pack_into("<H",data,0x80+24,0x20b)
+        self.archive.write_bytes(data)
+        return data
+
+    def test_windows_pe_preflight_is_inert_and_explicitly_unsupported(self):
+        data=self.windows_fixture()
+        result=installer.inspect_windows(self.archive)
+        self.assertEqual(result["format"],"PE32+")
+        self.assertEqual(result["architecture"],"x86-64")
+        self.assertEqual(result["fileSize"],len(data))
+        self.assertEqual(len(result["sha256"]),64)
+        self.assertFalse(result["supported"])
+        self.assertEqual(self.archive.read_bytes(),data)
+
+    def test_windows_preflight_rejects_malformed_and_redirected_files(self):
+        data=self.windows_fixture()
+        for offset, replacement in ((0,b"NO"), (60,struct.pack("<I",0xffffffff)),
+                                    (0x80,b"NOPE"), (0x86,struct.pack("<H",97)),
+                                    (0x94,struct.pack("<H",0xffff))):
+            bad=bytearray(data);bad[offset:offset+len(replacement)]=replacement
+            self.archive.write_bytes(bad)
+            with self.assertRaises(ValueError):
+                installer.inspect_windows(self.archive)
+        self.archive.write_bytes(data)
+        link=self.root/"link.exe";link.symlink_to(self.archive)
+        with self.assertRaises(ValueError):
+            installer.inspect_windows(link)
 
     def test_inspects_and_installs_without_executing_payload(self):
         self.package()

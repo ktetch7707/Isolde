@@ -8,6 +8,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
+import struct
 import sys
 import signal
 import tarfile
@@ -107,6 +108,57 @@ def open_member(archive, member, archive_format):
     if result is None:
         raise ValueError("Portable game archive contains an unreadable file.")
     return result
+
+
+def inspect_windows(source):
+    source = Path(source)
+    if source.is_symlink():
+        raise ValueError("Choose a regular Windows executable no larger than 512 MiB.")
+    descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(descriptor, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or not 64 <= before.st_size <= MAX_ARCHIVE:
+            raise ValueError("Choose a regular Windows executable no larger than 512 MiB.")
+        header = stream.read(64)
+        if header[:2] != b"MZ":
+            raise ValueError("The selected file is not a Windows PE executable.")
+        pe_offset = struct.unpack_from("<I", header, 60)[0]
+        if pe_offset < 64 or pe_offset > min(before.st_size - 24, 1024 * 1024):
+            raise ValueError("The Windows PE header offset is invalid.")
+        stream.seek(pe_offset)
+        pe = stream.read(24)
+        if len(pe) != 24 or pe[:4] != b"PE\0\0":
+            raise ValueError("The Windows PE header is invalid.")
+        machine, sections, _, _, _, optional_size, flags = struct.unpack_from("<HHIIIHH", pe, 4)
+        if not 1 <= sections <= 96 or not flags & 2 or flags & 0x2000:
+            raise ValueError("The Windows PE executable header is unsupported or invalid.")
+        if optional_size < 2 or pe_offset + 24 + optional_size + sections * 40 > before.st_size:
+            raise ValueError("The Windows PE headers are truncated.")
+        magic_data = stream.read(2)
+        if len(magic_data) != 2:
+            raise ValueError("The Windows PE optional header is truncated.")
+        magic = struct.unpack("<H", magic_data)[0]
+        minimum = {0x10b: 96, 0x20b: 112}.get(magic)
+        if not minimum or optional_size < minimum:
+            raise ValueError("The Windows PE optional header is unsupported or invalid.")
+        stream.seek(0)
+        digest = hashlib.sha256()
+        remaining = before.st_size
+        while remaining:
+            chunk = stream.read(min(1024 * 1024, remaining))
+            if not chunk:
+                raise ValueError("The Windows executable changed or became unreadable.")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        after = os.fstat(stream.fileno())
+        identity = lambda value: (value.st_dev, value.st_ino, value.st_size,
+                                   value.st_mtime_ns, value.st_ctime_ns)
+        if identity(before) != identity(after):
+            raise ValueError("The Windows executable changed during inspection.")
+        architecture = {0x14c: "x86", 0x8664: "x86-64", 0xaa64: "arm64"}.get(machine, "other")
+        return {"schemaVersion": 1, "format": "PE32+" if magic == 0x20b else "PE32",
+                "architecture": architecture, "fileSize": before.st_size,
+                "sha256": digest.hexdigest(), "supported": False}
 
 
 def inspect(source):
@@ -494,6 +546,7 @@ def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--inspect", action="store_true")
+    group.add_argument("--inspect-windows", action="store_true")
     group.add_argument("--install", action="store_true")
     group.add_argument("--uninstall", action="store_true")
     group.add_argument("--prepare-uninstall", action="store_true")
@@ -504,10 +557,10 @@ def main():
     parser.add_argument("--root")
     parser.add_argument("--expected-sha256")
     args = parser.parse_args()
-    if args.inspect:
+    if args.inspect or args.inspect_windows:
         if not args.source:
             parser.error("--inspect requires --source")
-        result = inspect(args.source)
+        result = inspect_windows(args.source) if args.inspect_windows else inspect(args.source)
         print(json.dumps(result, ensure_ascii=False))
     elif args.uninstall or args.prepare_uninstall or args.finalize_uninstall or args.recover_uninstall:
         if not args.root:

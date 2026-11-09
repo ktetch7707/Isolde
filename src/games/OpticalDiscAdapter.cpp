@@ -12,13 +12,17 @@
 #include <QDBusObjectPath>
 #include <QDBusVariant>
 #include <QSet>
+#include <QStringList>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QThreadPool>
 #include <QMap>
 #ifdef Q_OS_LINUX
 #include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <fcntl.h>
 #include <linux/fs.h>
+#include <linux/stat.h>
 #ifndef BLKGETDISKSEQ
 #define BLKGETDISKSEQ _IOR(0x12,128,__u64)
 #endif
@@ -61,6 +65,26 @@ bool diskInfo(QFile &file,quint64 *sequence,quint64 *size)
         && ::ioctl(file.handle(),BLKGETDISKSEQ,sequence)==0
         && ::ioctl(file.handle(),BLKGETSIZE64,size)==0
         && *sequence && *size && *size<=MaxOpticalBytes;
+}
+
+QString mountInstance(const QString &root)
+{
+#if defined(SYS_statx) && defined(STATX_MNT_ID)
+    const auto path=QFile::encodeName(root);
+    struct statx info{};
+#ifdef STATX_MNT_ID_UNIQUE
+    if(::syscall(SYS_statx,AT_FDCWD,path.constData(),AT_SYMLINK_NOFOLLOW,
+                 STATX_MNT_ID_UNIQUE,&info)==0 && (info.stx_mask & STATX_MNT_ID_UNIQUE) && info.stx_mnt_id)
+        return "unique:"+QString::number(info.stx_mnt_id);
+#endif
+    info={};
+    if(::syscall(SYS_statx,AT_FDCWD,path.constData(),AT_SYMLINK_NOFOLLOW,
+                 STATX_MNT_ID,&info)==0 && (info.stx_mask & STATX_MNT_ID) && info.stx_mnt_id)
+        return "mount:"+QString::number(info.stx_mnt_id);
+#else
+    Q_UNUSED(root);
+#endif
+    return {};
 }
 #endif
 
@@ -108,6 +132,22 @@ QVariantMap contentIdentity(const QString &device)
     return {{"hashState","hashing"},{"diskSequence",QString::number(sequence)}};
 #endif
 }
+}
+
+QString OpticalDiscAdapter::mountObservationId(const QString &device,const QString &filesystem,
+                                              const QString &label,const QString &root,
+                                              const QString &sequence,const QString &hashState,
+                                              const QString &mediaId,const QString &mountInstance)
+{
+    const auto fields=QStringList{device,filesystem,label,root,sequence,hashState,mediaId,mountInstance};
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    for(const auto &field:fields){
+        const auto bytes=field.toUtf8();
+        hash.addData(QByteArray::number(bytes.size()));
+        hash.addData(":",1);
+        hash.addData(bytes);
+    }
+    return QString::fromLatin1(hash.result().toHex());
 }
 
 QByteArray OpticalDiscAdapter::hashContent(QIODevice *input,quint64 size)
@@ -294,15 +334,19 @@ QVariantList OpticalDiscAdapter::mountedDiscs()
         const auto contentId=content.value("contentId").toString();
         const auto identity=content.value("hashState")=="ready"
             ?identityForContent(filesystem=="iso9660"?content.value("descriptor").toMap():QVariantMap{},contentId):QVariantMap{};
-        const auto observed = device + '\n' + filesystem + '\n' + storage.name() + '\n' + root
-            + '\n' + content.value("diskSequence").toString() + '\n' + content.value("hashState").toString()
-            + '\n' + identity.value("mediaId").toString();
-        const auto observationId = QString::fromLatin1(
-            QCryptographicHash::hash(observed.toUtf8(), QCryptographicHash::Sha256).toHex());
+#ifdef Q_OS_LINUX
+        const auto instance=mountInstance(root);
+#else
+        const QString instance;
+#endif
+        const auto observationId=mountObservationId(device,filesystem,storage.name(),root,
+            content.value("diskSequence").toString(),content.value("hashState").toString(),
+            identity.value("mediaId").toString(),instance);
         result.append(QVariantMap{
             {"schemaVersion", 1},
             {"sourceType", "pc-optical-disc"},
             {"observationId", observationId},
+            {"mountTracking",instance.isEmpty()?"unavailable":instance.startsWith("unique:")?"unique":"available"},
             {"device", device},
             {"mountRoot", root},
             {"filesystem", filesystem},
@@ -313,7 +357,7 @@ QVariantList OpticalDiscAdapter::mountedDiscs()
             {"discCount",identity.value("discCount")},
             {"volumeIdentifier",identity.value("volumeIdentifier")},
             {"hashState",content.value("hashState")},
-            {"directPlaySupported",!contentId.isEmpty() && !rootReference(identity).isEmpty()},
+            {"directPlaySupported",!instance.isEmpty() && !contentId.isEmpty() && !rootReference(identity).isEmpty()},
             {"readOnly", true},
             {"state", "mounted"}
         });

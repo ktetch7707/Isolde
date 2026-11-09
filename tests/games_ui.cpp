@@ -48,6 +48,7 @@ private slots:
     void opticalIdentityAndMultiDiscReferencesAreDurable();
     void fullOpticalContentIdentityRejectsTruncationAndChanges();
     void opticalSessionContractNeverClaimsHotSwap();
+    void opticalMountInstanceChangesObservation();
     void opticalApprovalsAreProfileScopedAndRevocable();
     void readOnlyOpticalMountIsBoundedAndVerifiedByCaller();
     void ejectRefusesWhileSessionIsActive();
@@ -73,6 +74,20 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::opticalMountInstanceChangesObservation(){
+    const auto observe=[](const QString &instance){
+        return OpticalDiscAdapter::mountObservationId("/dev/sr0","udf","Disc","/media/disc",
+            "7","ready",QString(64,'a'),instance);
+    };
+    const auto first=observe("unique:100");
+    QCOMPARE(first.size(),64);
+    QCOMPARE(first,observe("unique:100"));
+    QVERIFY(first!=observe("unique:101"));
+    QVERIFY(first!=observe("mount:100"));
+    QVERIFY(first!=observe({}));
+    QVERIFY(OpticalDiscAdapter::mountObservationId("a\nb","c","","","1","ready","","mount:1")
+        !=OpticalDiscAdapter::mountObservationId("a","b\nc","","","1","ready","","mount:1"));
 }
 void GamesUiTests::opticalSessionContractNeverClaimsHotSwap(){
     const QVariantMap disc{{"mediaId",QString(64,'a')},{"mediaSetId",QString(64,'b')},
