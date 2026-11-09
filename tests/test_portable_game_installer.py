@@ -26,12 +26,26 @@ class PortableGameInstallerTests(unittest.TestCase):
         self.package()
         result=installer.inspect(self.archive)
         self.assertEqual(result["title"],"Inert Linux fixture")
+        self.assertEqual(len(result["archiveSha256"]),64)
         destination=self.root/"private"/"games"/"id"/"install"
         installer.install(self.archive,destination)
         self.assertEqual((destination/"bin/game").read_bytes(),b"\x7fELF"+b"\x00"*32)
         self.assertTrue((destination/"bin/game").stat().st_mode & stat.S_IXUSR)
         self.assertTrue((destination/".isolde-install.json").is_file())
         with self.assertRaisesRegex(ValueError,"already exists"):installer.install(self.archive,destination)
+
+    def test_installer_rejects_archive_replaced_after_preflight(self):
+        self.package()
+        preview=installer.inspect(self.archive)
+        installed=self.root/"private"/"games"/"id"/"install"
+        with zipfile.ZipFile(self.archive,"w") as archive:
+            archive.writestr(installer.MANIFEST,json.dumps({**self.manifest,"title":"Changed after review"}))
+            archive.writestr("bin/game",b"\x7fELF"+b"\x00"*32)
+        with self.assertRaisesRegex(ValueError,"changed after preflight"):
+            installer.install(self.archive,installed,preview["archiveSha256"])
+        self.assertFalse(installed.exists())
+        self.assertFalse(installed.with_name(installed.name+".staging").exists())
+        self.assertFalse(installed.with_name(installed.name+".staging-source").exists())
 
     def test_rejects_traversal_symlinks_duplicates_non_elf_and_bad_manifest(self):
         self.package(extra=[("../escape",b"unsafe")])

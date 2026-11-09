@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install bounded, inert Isolde portable-game bundles; never execute archive content."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -18,69 +19,81 @@ MANIFEST = "isolde-game.json"
 
 def inspect(source):
     source = Path(source)
-    if source.is_symlink() or not source.is_file() or source.stat().st_size > MAX_ARCHIVE:
+    if source.is_symlink():
         raise ValueError("Choose a regular portable game ZIP no larger than 512 MiB.")
-    with zipfile.ZipFile(source) as archive:
-        infos = archive.infolist()
-        if not infos or len(infos) > MAX_ENTRIES:
-            raise ValueError("Portable game bundle has too many or too few files.")
-        total = 0
-        names = set()
-        for info in infos:
-            path = PurePosixPath(info.filename)
-            mode = (info.external_attr >> 16) & 0xFFFF
-            file_type = stat.S_IFMT(mode)
-            canonical_name = "/".join(path.parts) + ("/" if info.is_dir() else "")
-            if (not info.filename or path.is_absolute() or "\\" in info.filename
-                    or "\x00" in info.filename or info.filename != canonical_name
-                    or any(part in ("", ".", "..") for part in path.parts)
-                    or info.filename in names or info.flag_bits & 1
-                    or file_type not in (0, stat.S_IFREG, stat.S_IFDIR)):
-                raise ValueError("Portable game bundle contains an unsafe or duplicate path.")
-            names.add(info.filename)
-            if info.file_size < 0 or info.file_size > MAX_EXPANDED:
-                raise ValueError("Portable game file exceeds the unpacked size limit.")
-            if not info.is_dir() and info.compress_size > MAX_ARCHIVE:
-                raise ValueError("Portable game member exceeds the compressed size limit.")
-            total += info.file_size
-            if total > MAX_EXPANDED:
-                raise ValueError("Portable game bundle exceeds the 2 GiB unpacked size limit.")
-        try:
-            manifest_info=archive.getinfo(MANIFEST)
-            if manifest_info.file_size>65536:raise ValueError("Portable game manifest exceeds its 64 KiB limit.")
-            manifest = json.loads(archive.read(manifest_info))
-        except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
-            raise ValueError("Bundle must contain a valid isolde-game.json manifest.") from None
-        if (not isinstance(manifest, dict) or set(manifest) != {"schemaVersion", "title", "platform", "entrypoint"}
-                or manifest["schemaVersion"] != 1
-                or not isinstance(manifest["title"], str) or not manifest["title"].strip()
-                or len(manifest["title"]) > 256 or any(ord(c) < 32 for c in manifest["title"])
-                or not isinstance(manifest["platform"], str) or not manifest["platform"].strip()
-                or len(manifest["platform"]) > 80
-                or not isinstance(manifest["entrypoint"], str)):
-            raise ValueError("Portable game manifest has invalid fields.")
-        entry = PurePosixPath(manifest["entrypoint"])
-        if (entry.is_absolute() or "\\" in manifest["entrypoint"]
-                or any(part in ("", ".", "..") for part in entry.parts)
-                or manifest["entrypoint"] not in names
-                or archive.getinfo(manifest["entrypoint"]).is_dir()):
-            raise ValueError("Portable game entry point must name a file inside the bundle.")
-        entry_info=archive.getinfo(manifest["entrypoint"])
-        if entry_info.file_size > MAX_ARCHIVE:raise ValueError("Game entry point exceeds the 512 MiB executable limit.")
-        with archive.open(entry_info) as stream:executable=stream.read(20)
-        if not executable.startswith(b"\x7fELF") or len(executable) < 20:
-            raise ValueError("Only native Linux ELF game entry points are supported by this installer.")
-        return {"schemaVersion": 1, "title": manifest["title"].strip(),
-                "platform": manifest["platform"].strip(), "entrypoint": manifest["entrypoint"],
-                "entrySize": len(executable), "archiveEntries": len(infos), "unpackedBytes": total}
+    descriptor=os.open(source,os.O_RDONLY|getattr(os,"O_NOFOLLOW",0)|getattr(os,"O_NONBLOCK",0))
+    if not stat.S_ISREG(os.fstat(descriptor).st_mode) or os.fstat(descriptor).st_size>MAX_ARCHIVE:
+        os.close(descriptor)
+        raise ValueError("Choose a regular portable game ZIP no larger than 512 MiB.")
+    with os.fdopen(descriptor,"rb") as stream:
+        digest=hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1024*1024), b""):
+            digest.update(chunk)
+        stream.seek(0)
+        with zipfile.ZipFile(stream) as archive:
+            infos = archive.infolist()
+            if not infos or len(infos) > MAX_ENTRIES:
+                raise ValueError("Portable game bundle has too many or too few files.")
+            total = 0
+            names = set()
+            for info in infos:
+                path = PurePosixPath(info.filename)
+                mode = (info.external_attr >> 16) & 0xFFFF
+                file_type = stat.S_IFMT(mode)
+                canonical_name = "/".join(path.parts) + ("/" if info.is_dir() else "")
+                if (not info.filename or path.is_absolute() or "\\" in info.filename
+                        or "\x00" in info.filename or info.filename != canonical_name
+                        or any(part in ("", ".", "..") for part in path.parts)
+                        or path.parts[0] == ".isolde-install.json"
+                        or info.filename in names or info.flag_bits & 1
+                        or file_type not in (0, stat.S_IFREG, stat.S_IFDIR)):
+                    raise ValueError("Portable game bundle contains an unsafe or duplicate path.")
+                names.add(info.filename)
+                if info.file_size < 0 or info.file_size > MAX_EXPANDED:
+                    raise ValueError("Portable game file exceeds the unpacked size limit.")
+                if not info.is_dir() and info.compress_size > MAX_ARCHIVE:
+                    raise ValueError("Portable game member exceeds the compressed size limit.")
+                total += info.file_size
+                if total > MAX_EXPANDED:
+                    raise ValueError("Portable game bundle exceeds the 2 GiB unpacked size limit.")
+            try:
+                manifest_info=archive.getinfo(MANIFEST)
+                if manifest_info.file_size>65536:raise ValueError("Portable game manifest exceeds its 64 KiB limit.")
+                manifest = json.loads(archive.read(manifest_info))
+            except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
+                raise ValueError("Bundle must contain a valid isolde-game.json manifest.") from None
+            if (not isinstance(manifest, dict) or set(manifest) != {"schemaVersion", "title", "platform", "entrypoint"}
+                    or manifest["schemaVersion"] != 1
+                    or not isinstance(manifest["title"], str) or not manifest["title"].strip()
+                    or len(manifest["title"]) > 256 or any(ord(c) < 32 for c in manifest["title"])
+                    or not isinstance(manifest["platform"], str) or not manifest["platform"].strip()
+                    or len(manifest["platform"]) > 80
+                    or not isinstance(manifest["entrypoint"], str)):
+                raise ValueError("Portable game manifest has invalid fields.")
+            entry = PurePosixPath(manifest["entrypoint"])
+            if (entry.is_absolute() or "\\" in manifest["entrypoint"]
+                    or any(part in ("", ".", "..") for part in entry.parts)
+                    or manifest["entrypoint"] not in names
+                    or archive.getinfo(manifest["entrypoint"]).is_dir()):
+                raise ValueError("Portable game entry point must name a file inside the bundle.")
+            entry_info=archive.getinfo(manifest["entrypoint"])
+            if entry_info.file_size > MAX_ARCHIVE:raise ValueError("Game entry point exceeds the 512 MiB executable limit.")
+            with archive.open(entry_info) as entry_stream:executable=entry_stream.read(20)
+            if not executable.startswith(b"\x7fELF") or len(executable) < 20:
+                raise ValueError("Only native Linux ELF game entry points are supported by this installer.")
+            return {"schemaVersion": 1, "title": manifest["title"].strip(),
+                    "platform": manifest["platform"].strip(), "entrypoint": manifest["entrypoint"],
+                    "entrySize": len(executable), "archiveEntries": len(infos), "unpackedBytes": total,
+                    "archiveSha256": digest.hexdigest()}
 
 
-def install(source, destination):
-    metadata = inspect(source)
+def install(source, destination, expected_sha256=None):
     source = Path(source)
     destination = Path(destination)
     stage = destination.with_name(destination.name + ".staging")
-    if destination.exists() or destination.is_symlink() or stage.exists() or stage.is_symlink():
+    snapshot = destination.with_name(destination.name + ".staging-source")
+    if (destination.exists() or destination.is_symlink() or stage.exists() or stage.is_symlink()
+            or snapshot.exists() or snapshot.is_symlink()):
         raise ValueError("Install destination already exists. Existing files will not be overwritten.")
     destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if destination.parent.is_symlink() or destination.parent.resolve() != destination.parent.absolute():
@@ -91,7 +104,30 @@ def install(source, destination):
     signal.signal(signal.SIGTERM, interrupted)
     signal.signal(signal.SIGINT, interrupted)
     try:
-        with zipfile.ZipFile(source) as archive:
+        if source.is_symlink() or not source.is_file():
+            raise ValueError("Choose a regular portable game ZIP.")
+        source_fd = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+        if not stat.S_ISREG(os.fstat(source_fd).st_mode):
+            os.close(source_fd)
+            raise ValueError("Choose a regular portable game ZIP.")
+        try:
+            snapshot_fd = os.open(snapshot, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        except Exception:
+            os.close(source_fd)
+            raise
+        with os.fdopen(source_fd, "rb") as input_file, os.fdopen(snapshot_fd, "wb") as saved:
+            copied_archive=0
+            while True:
+                chunk=input_file.read(1024*1024)
+                if not chunk:break
+                copied_archive+=len(chunk)
+                if copied_archive>MAX_ARCHIVE:raise ValueError("Choose a regular portable game ZIP no larger than 512 MiB.")
+                saved.write(chunk)
+            saved.flush();os.fsync(saved.fileno())
+        metadata=inspect(snapshot)
+        if expected_sha256 and metadata["archiveSha256"]!=expected_sha256:
+            raise ValueError("The package changed after preflight. Review it again before installing.")
+        with zipfile.ZipFile(snapshot) as archive:
             written=0
             for info in archive.infolist():
                 relative = PurePosixPath(info.filename)
@@ -127,6 +163,9 @@ def install(source, destination):
     except Exception:
         shutil.rmtree(stage, ignore_errors=True)
         raise
+    finally:
+        try:snapshot.unlink()
+        except FileNotFoundError:pass
     print(json.dumps(metadata, ensure_ascii=False))
 
 
@@ -137,6 +176,7 @@ def main():
     group.add_argument("--install", action="store_true")
     parser.add_argument("--source", required=True)
     parser.add_argument("--destination")
+    parser.add_argument("--expected-sha256")
     args = parser.parse_args()
     if args.inspect:
         result = inspect(args.source)
@@ -144,7 +184,7 @@ def main():
     else:
         if not args.destination:
             parser.error("--install requires --destination")
-        install(args.source, args.destination)
+        install(args.source, args.destination,args.expected_sha256)
 
 
 if __name__ == "__main__":

@@ -54,10 +54,12 @@ public:
     Q_INVOKABLE bool addSteamLibrary(const QString &path);
     Q_INVOKABLE bool removeSteamLibrary(const QString &path);
     Q_INVOKABLE QVariantList mountedOpticalDiscs() const;
+    Q_INVOKABLE QVariantMap revalidateOpticalDisc(const QString &observationId, const QString &device) const;
     bool portableInstallBusy() const { return m_portableInstall.state()!=QProcess::NotRunning; }
     QString portableInstallStatus() const { return m_portableInstallStatus; }
     QVariantMap portableInstallPreview() const { return m_portableInstallPreview; }
-    Q_INVOKABLE bool beginPortableInstall(const QString &source, const QString &runtimeId);
+    Q_INVOKABLE bool beginPortableInstall(const QString &source, const QString &runtimeId,
+                                          const QString &opticalObservationId = {}, const QString &opticalDevice = {});
     Q_INVOKABLE bool confirmPortableInstall();
     Q_INVOKABLE void cancelPortableInstall();
     int importCount() const { return m_preview.size(); }
@@ -97,6 +99,7 @@ signals:
     void importChanged();
     void setupChanged();
     void portableInstallChanged();
+    void opticalDiscsChanged(const QVariantList &discs, const QString &change);
 private:
     bool fail(const QString &error);
     bool compatibleRuntime(const QString &id, bool file) const;
@@ -139,9 +142,12 @@ private:
     QString m_importStatus;
     QProcess m_portableInstall;
     QTimer m_portableInstallDeadline;
+    QTimer m_opticalRefreshTimer;
     QByteArray m_portableInstallOutput, m_portableInstallError;
     QVariantMap m_portableInstallPreview;
     QString m_portableInstallStatus, m_portableSource, m_portableRuntime, m_portableDestination;
+    QString m_portableOpticalObservationId, m_portableOpticalDevice;
+    QStringList m_lastOpticalObservationIds;
     QString m_portablePhase;
     bool m_portableCanceled=false;
 };

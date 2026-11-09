@@ -35,3 +35,24 @@ QVariantList OpticalDiscAdapter::mountedDiscs()
     }
     return result;
 }
+
+QVariantMap OpticalDiscAdapter::revalidate(const QString &observationId, const QString &device)
+{
+    return classifyRevalidation(observationId,device,mountedDiscs());
+}
+
+QVariantMap OpticalDiscAdapter::classifyRevalidation(const QString &observationId, const QString &device,
+                                                      const QVariantList &currentDiscs)
+{
+    for(const auto &item:currentDiscs){
+        const auto disc=item.toMap();
+        if(disc.value("observationId")==observationId)
+            return {{"schemaVersion",1},{"state","ready"},{"disc",disc}};
+    }
+    for(const auto &item:currentDiscs){
+        const auto disc=item.toMap();
+        if(disc.value("device")==device)
+            return {{"schemaVersion",1},{"state","replaced"},{"disc",disc}};
+    }
+    return {{"schemaVersion",1},{"state","missing"}};
+}

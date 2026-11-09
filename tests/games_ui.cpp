@@ -1,5 +1,6 @@
 #include "games/GameLibrary.h"
 #include "games/GameEmulators.h"
+#include "games/OpticalDiscAdapter.h"
 #include <QStandardPaths>
 #include <QUuid>
 #include "app/AppRegistry.h"
@@ -35,6 +36,7 @@ private slots:
     void remoteSteamImportCanCancelReviewAndPlay();
     void remoteExternalSteamAccessIsExplicitAndCancelable();
     void mountedOpticalDiscoveryUsesTypedReadOnlyObservations();
+    void opticalRevalidationClassifiesReadyReplacementAndRemoval();
     void remoteOpticalInspectionNeverStartsMedia();
     void remoteDetailsFavoriteRemoveAndCancel();
     void remoteAddReviewWritesOnlyOnConfirm();
@@ -49,6 +51,15 @@ static AppDefinition runtime() {
     AppDefinition app;app.id="local-test";app.name="Local game";app.type="desktop";
     app.presentationMode="game";app.section="Games";app.accent=QColor("#556677");
     app.launchConfiguration={{"desktopId","isolde-test-game"}};return app;
+}
+void GamesUiTests::opticalRevalidationClassifiesReadyReplacementAndRemoval(){
+    const QVariantMap old{{"schemaVersion",1},{"observationId",QString(64,'a')},{"device","/dev/sr0"},{"mountRoot","/media/disc-a"}};
+    const QVariantMap replacement{{"schemaVersion",1},{"observationId",QString(64,'b')},{"device","/dev/sr0"},{"mountRoot","/media/disc-b"}};
+    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{old}).value("state").toString(),QString("ready"));
+    const auto changed=OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{replacement});
+    QCOMPARE(changed.value("state").toString(),QString("replaced"));
+    QCOMPARE(changed.value("disc").toMap().value("observationId").toString(),replacement.value("observationId").toString());
+    QCOMPARE(OpticalDiscAdapter::classifyRevalidation(old.value("observationId").toString(),"/dev/sr0",{}).value("state").toString(),QString("missing"));
 }
 static void command(QObject *widget,int value) {
     QVariant result;QVERIFY(QMetaObject::invokeMethod(widget,"handleCommand",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,value)));
@@ -105,7 +116,7 @@ void GamesUiTests::remoteOpticalInspectionNeverStartsMedia(){
         command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
     }else{
         command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalDetails"));
-        command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
+        command(widget.data(),InputManager::NavigateDown);command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("opticalChooser"));
     }
     QVERIFY(dispatch.lastAction.isEmpty());
 }
