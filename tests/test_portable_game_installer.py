@@ -28,6 +28,7 @@ class PortableGameInstallerTests(unittest.TestCase):
         result=installer.inspect(self.archive)
         self.assertEqual(result["title"],"Inert Linux fixture")
         self.assertEqual(len(result["archiveSha256"]),64)
+        self.assertEqual(result["entrySize"],36)
         destination=self.root/"private"/"games"/"id"/"install"
         installer.install(self.archive,destination)
         self.assertEqual((destination/"bin/game").read_bytes(),b"\x7fELF"+b"\x00"*32)
@@ -65,6 +66,10 @@ class PortableGameInstallerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"ELF"):installer.inspect(self.archive)
         self.package(manifest={"schemaVersion":1,"title":"x","platform":"PC","entrypoint":"../outside"})
         with self.assertRaises(ValueError):installer.inspect(self.archive)
+        self.package(manifest={"schemaVersion":True,"title":"x","platform":"PC","entrypoint":"bin/game"})
+        with self.assertRaisesRegex(ValueError,"invalid fields"):installer.inspect(self.archive)
+        self.package(manifest={"schemaVersion":1,"title":"x","platform":"PC\nbad","entrypoint":"bin/game"})
+        with self.assertRaisesRegex(ValueError,"invalid fields"):installer.inspect(self.archive)
         with zipfile.ZipFile(self.archive,"w") as archive:
             info=zipfile.ZipInfo("link");info.external_attr=(stat.S_IFLNK|0o777)<<16;archive.writestr(info,"/etc")
         with self.assertRaisesRegex(ValueError,"unsafe"):installer.inspect(self.archive)

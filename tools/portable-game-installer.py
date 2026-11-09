@@ -63,11 +63,12 @@ def inspect(source):
             except (KeyError, UnicodeDecodeError, json.JSONDecodeError):
                 raise ValueError("Bundle must contain a valid isolde-game.json manifest.") from None
             if (not isinstance(manifest, dict) or set(manifest) != {"schemaVersion", "title", "platform", "entrypoint"}
-                    or manifest["schemaVersion"] != 1
+                    or type(manifest["schemaVersion"]) is not int or manifest["schemaVersion"] != 1
                     or not isinstance(manifest["title"], str) or not manifest["title"].strip()
                     or len(manifest["title"]) > 256 or any(ord(c) < 32 for c in manifest["title"])
                     or not isinstance(manifest["platform"], str) or not manifest["platform"].strip()
                     or len(manifest["platform"]) > 80
+                    or any(ord(c)<32 for c in manifest["platform"])
                     or not isinstance(manifest["entrypoint"], str)):
                 raise ValueError("Portable game manifest has invalid fields.")
             entry = PurePosixPath(manifest["entrypoint"])
@@ -83,7 +84,7 @@ def inspect(source):
                 raise ValueError("Only native Linux ELF game entry points are supported by this installer.")
             return {"schemaVersion": 1, "title": manifest["title"].strip(),
                     "platform": manifest["platform"].strip(), "entrypoint": manifest["entrypoint"],
-                    "entrySize": len(executable), "archiveEntries": len(infos), "unpackedBytes": total,
+                    "entrySize": entry_info.file_size, "archiveEntries": len(infos), "unpackedBytes": total,
                     "archiveSha256": digest.hexdigest()}
 
 
