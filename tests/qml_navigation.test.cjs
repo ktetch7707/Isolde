@@ -114,6 +114,30 @@ test("optical remote actions retain the selected media identity and require ejec
     assert.equal(scope.mode, "opticalChooser");
 });
 
+test("optical refresh resets selection and displays replacement identity before action", () => {
+    let discs = [];
+    const scope = vm.createContext({
+        opticalDevice: "/dev/sr0", opticalObservationId: "old", choice: 5, message: "",
+        opticalSelectedDisc: {state: "mounted", observationId: "old"},
+        library: {refreshOpticalDiscs() { return discs; }},
+    });
+    method("GamesLibraryWidget.qml", "refreshOpticalDetails", scope);
+    scope.refreshOpticalDetails();
+    assert.equal(scope.choice, 0);
+    assert.equal(scope.opticalSelectedDisc.state, "missing");
+    discs = [{device:"/dev/sr0", observationId:"new", state:"mounted", directPlaySupported:true,
+        volumeLabel:"New disc", filesystem:"udf", mountRoot:"/media/new", mediaId:"new-hash",
+        mediaSetId:"new-set", discNumber:2, discCount:2}];
+    scope.opticalObservationId = "old";
+    scope.choice = 5;
+    scope.refreshOpticalDetails();
+    assert.equal(scope.choice, 0);
+    assert.equal(scope.opticalObservationId, "new");
+    assert.match(scope.message, /new-hash/);
+    assert.match(scope.message, /Disc 2 of 2/);
+    assert.match(scope.message, /Media changed/);
+});
+
 test("app overflow opens All Apps while button overflow retains shortcuts", () => {
     const calls = [];
     const scope = vm.createContext({

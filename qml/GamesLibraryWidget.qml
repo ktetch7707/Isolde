@@ -168,14 +168,17 @@ Item {
     function refreshOpticalDetails(){
         opticalChoices=library.refreshOpticalDiscs()
         const current=opticalChoices.find(disc=>disc.device===opticalDevice)
+        choice=0
         if(!current){
             opticalSelectedDisc=Object.assign({},opticalSelectedDisc,{state:"missing",mountRoot:"",directPlaySupported:false})
             opticalObservationId=""
             message="This optical drive or disc is no longer available. Insert the expected disc, then refresh and retry. Nothing was launched or changed."
             return
         }
+        const previousObservation=opticalObservationId
         opticalSelectedDisc=current;opticalObservationId=current.observationId
         if(current.state==="unmounted")message="Media is present but not mounted. Choose Mount read-only, or refresh after checking the drive."
+        else if(previousObservation && current.observationId!==previousObservation && current.directPlaySupported)message=(current.volumeLabel || "Unlabeled optical disc")+" · "+current.filesystem+"\nDevice: "+current.device+"\nMounted at: "+current.mountRoot+"\nMedia identity: "+current.mediaId+"\n"+(current.mediaSetId?"Disc "+current.discNumber+" of "+current.discCount+" in media set "+current.mediaSetId:"No identified disc set")+"\nMedia changed. Review these details before any action; content identity is not proof of ownership."
         else if(current.hashState==="hashing")message="Verifying the complete disc in the background. Refresh and retry after verification; nothing starts automatically."
         else if(current.hashState==="unreadable")message="The disc could not be read completely. Refresh and retry, or safely eject it; no partial identity is approved."
         else if(!current.directPlaySupported)message="The media observation changed. Review its identity and mount before any action."
