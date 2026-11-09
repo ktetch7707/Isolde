@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -632,6 +633,60 @@ QString HomeLayout::wallpaperSource() const
 {
     return resolveArtwork(m_composition.value("wallpaper").toString());
 }
+QVariantList HomeLayout::captureArtworkChoices() const
+{
+    QVariantList result;
+    if (m_userPath.isEmpty()) return result;
+    const QDir directory(QDir(QFileInfo(m_userPath).absolutePath()).filePath("artwork"));
+    const auto files = directory.entryInfoList({"*.png", "*.jpg", "*.jpeg", "*.gif"},
+        QDir::Files | QDir::Readable | QDir::NoSymLinks, QDir::Name);
+    for (const auto &file : files) {
+        if (result.size() >= 256) break;
+        const auto relative = QStringLiteral("artwork/") + file.fileName();
+        const auto resolved = managedArtworkSource(relative);
+        if (resolved.isEmpty() || file.size() <= 0 || file.size() > MaxArtworkSize
+            || (relative.endsWith(".gif") && file.size() > 2 * 1024 * 1024)) continue;
+        QImageReader reader(QUrl(resolved).toLocalFile());
+        const auto size = reader.size();
+        if (!reader.canRead() || !size.isValid() || size.width() > 16384 || size.height() > 16384
+            || qint64(size.width()) * size.height() > 32 * 1024 * 1024) continue;
+        result.append(QVariantMap{{"id", relative}, {"name", file.completeBaseName()}});
+    }
+    return result;
+}
+
+QString HomeLayout::captureArtworkSource(int input) const
+{
+    if (input < 1 || input > 8) return {};
+    const auto relative = m_composition.value("captureInputArtwork").toMap().value(QString::number(input)).toString();
+    const auto managed = managedArtworkSource(relative);
+    const QFileInfo file(QUrl(managed).toLocalFile());
+    if (managed.isEmpty() || !file.isFile() || file.isSymLink()) return {};
+    return resolveArtwork(relative);
+}
+
+bool HomeLayout::setCaptureInputArtwork(const QVariantMap &artwork)
+{
+    if (!ComponentSchema::validComposition({{"schemaVersion", 1}, {"captureInputArtwork", artwork}})) {
+        setError(tr("Invalid HDMI input artwork mapping."));
+        return false;
+    }
+    QSet<QString> available;
+    for (const auto &choice : captureArtworkChoices()) available.insert(choice.toMap().value("id").toString());
+    for (const auto &value : artwork)
+        if (!available.contains(value.toString())) {
+            setError(tr("An HDMI image is no longer available. Refresh the artwork choices and try again."));
+            return false;
+        }
+    auto composition = m_composition;
+    if (artwork.isEmpty()) composition.remove("captureInputArtwork");
+    else {
+        composition.insert("schemaVersion", 1);
+        composition.insert("captureInputArtwork", artwork);
+    }
+    return setComposition(composition);
+}
+
 QString HomeLayout::managedArtworkSource(const QString &relative) const
 {
     if(relative.isEmpty())return {};

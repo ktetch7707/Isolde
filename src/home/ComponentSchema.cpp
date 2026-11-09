@@ -323,8 +323,18 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary", "appGallery"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary", "appGallery", "captureInputArtwork"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
+    if (value.contains("captureInputArtwork")) {
+        const auto artwork = value.value("captureInputArtwork");
+        if (artwork.metaType().id() != QMetaType::QVariantMap || artwork.toMap().size() > 8) return false;
+        const QRegularExpression path("^artwork/[A-Za-z0-9][A-Za-z0-9._-]*\\.(png|jpg|jpeg|gif)$");
+        const auto entries = artwork.toMap();
+        for (auto it = entries.cbegin(); it != entries.cend(); ++it)
+            if (!QStringList{"1", "2", "3", "4", "5", "6", "7", "8"}.contains(it.key())
+                || it.value().metaType().id() != QMetaType::QString || !path.match(it.value().toString()).hasMatch())
+                return false;
+    }
     if (value.contains("appGallery")) {
         const auto gallery = value.value("appGallery").toMap();
         if (value.value("appGallery").metaType().id() != QMetaType::QVariantMap || gallery.size() > 10) return false;
@@ -739,7 +749,15 @@ QVariantMap ComponentSchema::editorAction(const QVariantMap &input, QString *err
         return normalized;
     };
 
-    if (type == "capture-apply") {
+    if (type == "capture-artwork-apply") {
+        if (!exactKeys({"schemaVersion", "type", "artwork"})
+            || input.value("artwork").metaType().id() != QMetaType::QVariantMap
+            || !validComposition({{"schemaVersion", 1}, {"captureInputArtwork", input.value("artwork")}})) {
+            if (error && error->isEmpty()) *error = "Choose valid managed artwork for HDMI inputs 1–8.";
+            return {};
+        }
+        result.insert("artwork", input.value("artwork").toMap());
+    } else if (type == "capture-apply") {
         if (!exactKeys({"schemaVersion", "type", "configuration"})) return {};
         const auto configuration = normalizeConfiguration(input.value("configuration"));
         if (configuration.isEmpty()) return {};

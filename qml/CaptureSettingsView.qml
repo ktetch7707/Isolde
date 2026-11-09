@@ -10,6 +10,11 @@ Item {
     property int keyboardMode: 0
     property var draft: ({})
     property bool draftDirty: false
+    property bool artworkEditing: false
+    property var artworkDraft: ({})
+    property var artworkChoices: []
+    property int artworkRow: 0
+    property string artworkMessage: ""
     property int deviceListRevision: 0
     readonly property real leftColumnWidth: width * 0.46
     readonly property var baudRates: [9600, 19200, 38400, 57600, 115200]
@@ -34,7 +39,8 @@ Item {
         { name: "Cancel capture changes", value: draftDirty ? "Discard staged settings" : "Restore saved settings" },
         { name: "Refresh devices", value: "Rescan capture, audio, and serial devices" },
         { name: "Session transition", value: draft.sessionTransition || "expand" },
-        { name: "Transition duration", value: (draft.transitionDuration || 250) + " ms" }
+        { name: "Transition duration", value: (draft.transitionDuration || 250) + " ms" },
+        { name: "Input fallback artwork", value: "Choose profile images for each HDMI input" }
     ]
 
     function setDraftValue(key, value) {
@@ -42,6 +48,43 @@ Item {
         next[key] = value
         draft = next
         draftDirty = true
+    }
+    function openArtworkEditor() {
+        artworkDraft = Object.assign({}, homeLayout.composition.captureInputArtwork || {})
+        artworkChoices = homeLayout.captureArtworkChoices()
+        artworkRow = 0
+        artworkMessage = "Left / Right choose a managed image. Apply saves all eight mappings; Back discards."
+        artworkEditing = true
+    }
+    function artworkName(input) {
+        const id = artworkDraft[String(input)] || ""
+        if (!id) return "Neutral / shortcut fallback"
+        const match = artworkChoices.find(item => item.id === id)
+        return match ? match.name : "Missing image · choose another"
+    }
+    function adjustArtwork(direction) {
+        if (artworkRow >= 8) return
+        const key = String(artworkRow + 1), values = [""].concat(artworkChoices.map(item => item.id))
+        let index = values.indexOf(artworkDraft[key] || "")
+        if (index < 0) index = 0
+        const next = Object.assign({}, artworkDraft), id = values[(index + direction + values.length) % values.length]
+        if (id) next[key] = id
+        else delete next[key]
+        artworkDraft = next
+    }
+    function handleArtworkCommand(command) {
+        if (command === inputManager.back) { artworkEditing = false; return }
+        if (command === inputManager.navigateUp) artworkRow = Math.max(0, artworkRow - 1)
+        else if (command === inputManager.navigateDown) artworkRow = Math.min(9, artworkRow + 1)
+        else if (command === inputManager.navigateLeft) adjustArtwork(-1)
+        else if (command === inputManager.navigateRight) adjustArtwork(1)
+        else if (command === inputManager.confirm) {
+            if (artworkRow < 8) adjustArtwork(1)
+            else if (artworkRow === 9) artworkEditing = false
+            else if (actionDispatcher.dispatchEditorAction({type: "capture-artwork-apply", artwork: artworkDraft}))
+                artworkEditing = false
+            else artworkMessage = homeLayout.errorString || "Could not apply artwork. Refresh choices and try again."
+        }
     }
     function resetDraft() {
         const labels = ({})
@@ -179,14 +222,16 @@ Item {
         else if (selectedIndex === 12) applyDraft()
         else if (selectedIndex === 13) cancelDraft()
         else if (selectedIndex === 14) actionDispatcher.dispatchEditorAction({type: "capture-refresh"})
+        else if (selectedIndex === 17) openArtworkEditor()
         else adjust(1)
     }
     function handleCommand(command) {
+        if (artworkEditing) { handleArtworkCommand(command); return }
         if (keyboardMode) { keyboard.handleCommand(command); return }
         if (command === inputManager.back) {
             actionDispatcher.dispatchEditorAction({type: "capture-switch-cancel"})
             if (draftDirty) cancelDraft()
-            else actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"})
+            else { artworkEditing = false; actionDispatcher.dispatchEditorAction({type: "capture-preview-stop"}) }
             return
         }
         if (command === inputManager.navigateUp) selectedIndex = Math.max(0, selectedIndex - 1)
@@ -207,6 +252,49 @@ Item {
     Connections {
         target: captureController
         function onChanged() { root.deviceListRevision += 1 }
+    }
+
+    Rectangle {
+        anchors.fill: parent; z: 50; visible: root.artworkEditing; color: shell.background
+        Column {
+            anchors.fill: parent; anchors.margins: 24; spacing: 10
+            Text { text: "HDMI FALLBACK ARTWORK"; color: shell.text; font.pixelSize: 25 * shell.textScale }
+            Text { width: parent.width; text: root.artworkMessage; color: shell.muted; font.pixelSize: 15 * shell.textScale; wrapMode: Text.WordWrap }
+            Row {
+                width: parent.width; height: parent.height - 100; spacing: 20
+                ListView {
+                    id: artworkList
+                    width: parent.width * 0.56; height: parent.height; clip: true
+                    model: 10; currentIndex: root.artworkRow
+                    onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
+                    delegate: Rectangle {
+                        required property int index
+                        width: artworkList.width; height: 45; radius: 5
+                        color: root.artworkRow === index ? shell.selected : shell.surface
+                        border.width: root.artworkRow === index ? 2 : 1
+                        border.color: root.artworkRow === index ? shell.selectedFocus : shell.outline
+                        Text {
+                            anchors.fill: parent; anchors.margins: 8; verticalAlignment: Text.AlignVCenter
+                            text: index < 8 ? root.inputName(index + 1) + " · " + root.artworkName(index + 1)
+                                : index === 8 ? "Apply artwork mappings" : "Cancel artwork changes"
+                            textFormat: Text.PlainText; elide: Text.ElideRight
+                            color: root.artworkRow === index ? shell.selectedText : shell.text; font.pixelSize: 15 * shell.textScale
+                        }
+                        MouseArea { anchors.fill: parent; onClicked: { root.artworkRow = index; root.handleArtworkCommand(inputManager.confirm) } }
+                    }
+                }
+                Column {
+                    width: parent.width * 0.38; spacing: 10
+                    Image {
+                        width: parent.width; height: Math.max(100, parent.parent.height * 0.65)
+                        fillMode: Image.PreserveAspectFit; asynchronous: true
+                        source: root.artworkRow < 8 && root.artworkDraft[String(root.artworkRow + 1)]
+                            ? homeLayout.resolveArtwork(root.artworkDraft[String(root.artworkRow + 1)]) : ""
+                    }
+                    Text { width: parent.width; wrapMode: Text.WordWrap; text: "Choose images already imported to this profile in Home Studio. Removing a mapping restores shortcut or neutral fallback."; color: shell.muted; font.pixelSize: 14 * shell.textScale }
+                }
+            }
+        }
     }
 
     Row {

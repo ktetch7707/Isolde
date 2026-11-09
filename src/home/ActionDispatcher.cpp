@@ -208,7 +208,13 @@ bool ActionDispatcher::dispatchEditorAction(const QVariantMap &input)
 
     const auto type = value.value("type").toString();
     bool accepted = false;
-    if (type == "audio-output-select") {
+    if (type == "capture-artwork-apply") {
+        if (!m_layout) error = tr("Profile artwork settings are unavailable.");
+        else {
+            accepted = m_layout->setCaptureInputArtwork(value.value("artwork").toMap());
+            if (!accepted) error = m_layout->errorString();
+        }
+    } else if (type == "audio-output-select") {
         if (!m_audio) error = tr("Audio output selection is unavailable.");
         else accepted = m_audio->selectOutput(value.value("outputId").toString());
     } else {

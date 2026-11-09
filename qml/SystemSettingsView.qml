@@ -27,7 +27,7 @@ Item {
         }
         if (activePage === 8) {
             if (command === inputManager.back) {
-                if (capturePage.draftDirty || capturePage.keyboardMode) capturePage.handleCommand(command)
+                if (capturePage.draftDirty || capturePage.keyboardMode || capturePage.artworkEditing) capturePage.handleCommand(command)
                 else { capturePage.handleCommand(command); activePage = -1 }
             }
             else capturePage.handleCommand(command)

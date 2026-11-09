@@ -24,6 +24,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QImage>
+#include "home/HomeDesignData.h"
 #include <QUrl>
 #ifdef Q_OS_UNIX
 #include <sys/stat.h>
@@ -213,6 +214,17 @@ void ComponentTests::captureAndAudioEditorActionsValidateAndDispatch()
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-apply"}, {"configuration", invalid}}).isEmpty());
     QVERIFY(ComponentSchema::editorAction({{"type", "audio-output-select"}, {"outputId", "../speaker"}}).isEmpty());
     QVERIFY(ComponentSchema::editorAction({{"type", "capture-preview-stop"}, {"ignored", true}}).isEmpty());
+    const QVariantMap validArtwork{{"1", "artwork/studio-a.png"}, {"8", "artwork/logo-b.gif"}};
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", validArtwork}}).contains("artwork"));
+    QVERIFY(ComponentSchema::validComposition({{"schemaVersion", 1}, {"captureInputArtwork", validArtwork}}));
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", QVariantMap{{"9", "artwork/a.png"}}}}).isEmpty());
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", QVariantMap{{"1", "../a.png"}}}}).isEmpty());
+    QVERIFY(ComponentSchema::editorAction({{"type", "capture-artwork-apply"}, {"artwork", QVariantMap{{"1", 42}}}}).isEmpty());
+    QVERIFY(ComponentSchema::action({{"type", "capture-artwork-apply"}, {"artwork", validArtwork}}).isEmpty());
+    const QJsonObject artworkDocument{{"composition", QJsonObject{{"captureInputArtwork", QJsonObject{{"1", "artwork/a.png"}}}}}};
+    const auto rewritten = HomeDesignData::artwork(artworkDocument, [](const QString &) { return QString("artwork/imported.png"); }).toObject();
+    QCOMPARE(rewritten.value("composition").toObject().value("captureInputArtwork").toObject().value("1").toString(),
+             QString("artwork/imported.png"));
 
     AppRegistry registry;
     SessionManager sessions(&registry);
@@ -855,6 +867,25 @@ void ComponentTests::compositionPersistenceAndValidation()
     QCOMPARE(readFile(QUrl(layout.wallpaperSource()).toLocalFile()),readFile(wallpaper));
     const auto savedWallpaper = layout.composition();
     QVERIFY(!layout.setWallpaper("https://example.com/clouds.png")); QCOMPARE(layout.composition(),savedWallpaper);
+    const auto managed = savedWallpaper.value("wallpaper").toString();
+    QVERIFY(!layout.captureArtworkChoices().isEmpty());
+    const QVariantMap inputArtwork{{"1", managed}, {"8", managed}};
+    QVERIFY(layout.setCaptureInputArtwork(inputArtwork));
+    QVERIFY(!layout.captureArtworkSource(1).isEmpty());
+    QVERIFY(layout.captureArtworkSource(2).isEmpty());
+    HomeLayout artReloaded(&registry);
+    QVERIFY(artReloaded.load(dir.filePath("default.json"), dir.filePath("user.json")));
+    QCOMPARE(artReloaded.composition().value("captureInputArtwork").toMap(), inputArtwork);
+    const auto beforeInvalidArt = readFile(dir.filePath("user.json"));
+    QVERIFY(!layout.setCaptureInputArtwork({{"1", "artwork/not-present.png"}}));
+    QCOMPARE(readFile(dir.filePath("user.json")), beforeInvalidArt);
+    QVERIFY(!layout.setCaptureInputArtwork({{"1", "../bad.png"}}));
+    QCOMPARE(readFile(dir.filePath("user.json")), beforeInvalidArt);
+    HomeLayout otherProfile(&registry);
+    QVERIFY(otherProfile.load(dir.filePath("default.json"), dir.filePath("other-profile/user.json")));
+    QVERIFY(otherProfile.captureArtworkSource(1).isEmpty());
+    QVERIFY(layout.setCaptureInputArtwork({}));
+    QVERIFY(layout.captureArtworkSource(1).isEmpty());
 }
 void ComponentTests::universalGridValidatesAndPersists()
 {

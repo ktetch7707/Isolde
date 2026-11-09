@@ -628,6 +628,7 @@ Window {
         id: captureSession
         anchors.fill: parent
         artworkResolver: window.captureFallbackArtwork
+        artworkConfiguration: homeLayout.composition.captureInputArtwork || ({})
         onReturned: originId => { if (pageSurface.open) pageSurface.restoreOrigin(originId); else home.restoreFocus(originId) }
         onConfigureRequested: originId => {
             if (actionDispatcher.dispatch({type: "settings", section: 4}, originId))
@@ -636,15 +637,18 @@ Window {
     }
 
     function captureFallbackArtwork(input, originId) {
-        const models = pageSurface.open && pageSurface.model ? [pageSurface.model, homeLayout] : [homeLayout]
+        const configured = homeLayout.captureArtworkSource(input)
+        if (configured) return configured
+        const lists = pageSurface.open && pageSurface.model
+            ? [pageSurface.model.items, homeLayout.components] : [homeLayout.components]
         let fallback = ""
-        for (let m = 0; m < models.length; ++m) {
-            const model = models[m], items = model.components
+        for (let m = 0; m < lists.length; ++m) {
+            const items = lists[m] || []
             for (let i = 0; i < items.length; ++i) {
                 const item = items[i]
                 if (!item.action || item.action.type !== "switch-input"
                         || item.action.input !== input || !item.customLogo) continue
-                const resolved = model.resolveArtwork(item.customLogo)
+                const resolved = homeLayout.resolveArtwork(item.customLogo)
                 if (!resolved) continue
                 if (item.id === originId) return resolved
                 if (!fallback) fallback = resolved

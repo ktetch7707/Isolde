@@ -9,6 +9,7 @@ Item {
     property bool pendingSwitchConfirmation: true
     property bool selectionPending: false
     property var artworkResolver: null
+    property var artworkConfiguration: ({})
     property var originRect: null
     readonly property bool motionAllowed: !displaySettings.reduceMotion && captureController.sessionTransition !== "instant"
     readonly property int animationDuration: motionAllowed ? captureController.transitionDuration : 0
@@ -116,8 +117,11 @@ Item {
         anchors.centerIn: parent
         width: Math.min(parent.width * 0.55, 800); height: Math.min(parent.height * 0.55, 500)
         fillMode: Image.PreserveAspectFit; asynchronous: true
-        source: !root.videoReady() && root.artworkResolver
-            ? root.artworkResolver(captureController.selectedInput, root.originId) : ""
+        source: {
+            const mapping = root.artworkConfiguration
+            return !root.videoReady() && root.artworkResolver && mapping
+                ? root.artworkResolver(captureController.selectedInput, root.originId) : ""
+        }
         visible: source.toString() !== ""
     }
     VideoOutput {

@@ -260,6 +260,7 @@ test("capture fallback art belongs only to the matching HDMI shortcut", () => {
     const scope = vm.createContext({
         pageSurface: {open: false},
         homeLayout: {
+            captureArtworkSource: () => "",
             components: [{id: "tile", action: {type: "switch-input", input: 2}, customLogo: "artwork/a.png"},
                 {id: "other", action: {type: "switch-input", input: 3}, customLogo: "artwork/b.png"}],
             resolveArtwork: asset => "managed:" + asset,
@@ -270,11 +271,47 @@ test("capture fallback art belongs only to the matching HDMI shortcut", () => {
     assert.equal(scope.captureFallbackArtwork(3, "tile"), "managed:artwork/b.png");
     assert.equal(scope.captureFallbackArtwork(4, "tile"), "");
     scope.pageSurface = {open: true, model: {
-        components: [{id: "page", action: {type: "switch-input", input: 2}, customLogo: "artwork/page.png"}],
-        resolveArtwork: asset => "page:" + asset,
+        items: [{id: "page", action: {type: "switch-input", input: 2}, customLogo: "artwork/page.png"}],
     }};
-    assert.equal(scope.captureFallbackArtwork(2, "page"), "page:artwork/page.png");
+    assert.equal(scope.captureFallbackArtwork(2, "page"), "managed:artwork/page.png");
     assert.equal(scope.captureFallbackArtwork(2, "tile"), "managed:artwork/a.png");
+    scope.homeLayout.captureArtworkSource = input => input === 2 ? "configured:hdmi-2" : "";
+    assert.equal(scope.captureFallbackArtwork(2, "tile"), "configured:hdmi-2");
+});
+
+test("capture artwork editor stages independent input choices and cancels or applies atomically", () => {
+    const calls = [], inputManager = {back: 1, navigateUp: 2, navigateDown: 3, navigateLeft: 4, navigateRight: 5, confirm: 6};
+    let succeeds = false;
+    const scope = vm.createContext({
+        artworkEditing: false, artworkDraft: {}, artworkChoices: [], artworkRow: 0, artworkMessage: "",
+        inputManager,
+        homeLayout: {composition: {captureInputArtwork: {"1": "artwork/a.png"}},
+            captureArtworkChoices: () => [{id: "artwork/a.png", name: "A"}, {id: "artwork/b.png", name: "B"}]},
+        actionDispatcher: {dispatchEditorAction: action => {calls.push(JSON.parse(JSON.stringify(action))); return succeeds;}},
+    });
+    for (const name of ["openArtworkEditor", "artworkName", "adjustArtwork", "handleArtworkCommand"])
+        method("CaptureSettingsView.qml", name, scope);
+    scope.openArtworkEditor();
+    scope.handleArtworkCommand(inputManager.navigateRight);
+    assert.equal(scope.artworkDraft["1"], "artwork/b.png");
+    assert.equal(scope.homeLayout.composition.captureInputArtwork["1"], "artwork/a.png");
+    scope.handleArtworkCommand(inputManager.back);
+    assert.equal(scope.artworkEditing, false);
+    assert.equal(calls.length, 0);
+    scope.openArtworkEditor();
+    scope.artworkRow = 1;
+    scope.handleArtworkCommand(inputManager.navigateRight);
+    scope.artworkRow = 8;
+    scope.handleArtworkCommand(inputManager.confirm);
+    assert.equal(scope.artworkEditing, true);
+    assert.equal(scope.artworkDraft["2"], "artwork/a.png");
+    succeeds = true;
+    scope.handleArtworkCommand(inputManager.confirm);
+    assert.equal(scope.artworkEditing, false);
+    assert.deepEqual(calls, [
+        {type: "capture-artwork-apply", artwork: {"1": "artwork/a.png", "2": "artwork/a.png"}},
+        {type: "capture-artwork-apply", artwork: {"1": "artwork/a.png", "2": "artwork/a.png"}},
+    ]);
 });
 
 test("capture expand uses the originating home or page rectangle when available", () => {
