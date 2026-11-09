@@ -25,6 +25,9 @@
 #include "media/KodiArtwork.h"
 #include "media/KodiService.h"
 #include "media/KodiImporter.h"
+#include "media/OnlineDiscovery.h"
+#include "media/OnlineSubtitleRepository.h"
+#include "media/SubtitleService.h"
 #include "media/GuideController.h"
 #include "sessions/SessionManager.h"
 #include "sources/SourceManager.h"
@@ -38,12 +41,21 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QProcessEnvironment>
+#include <QStandardPaths>
 #include <memory>
 #include <QtWebEngineQuick/qtwebenginequickglobal.h>
 
 #ifndef ISOLDE_VERSION
 #define ISOLDE_VERSION "0.0.1.2"
 #endif
+
+static QString profileSubtitleCachePath()
+{
+    const auto root = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    if (root.isEmpty()) return {};
+    return QDir(root).filePath(QStringLiteral("profiles/%1/subtitles")
+        .arg(qApp->property("isoldeProfile").toString()));
+}
 
 // Declaration order keeps the engine alive only while its context objects exist.
 struct ProfileRuntime {
@@ -61,6 +73,13 @@ struct ProfileRuntime {
     VpnSettings vpnSettings{qApp->property("isoldeProfile").toString()};
     AppVpn appVpn;
     SearchSettings searchSettings;
+    OnlineDiscovery onlineDiscovery{&searchSettings, nullptr, QUrl(QStringLiteral("https://api.themoviedb.org/3")),
+                                    qEnvironmentVariable("ISOLDE_TMDB_READ_TOKEN")};
+    OnlineSubtitleRepository onlineSubtitleRepository{&searchSettings, nullptr,
+        QUrl(QStringLiteral("https://api.opensubtitles.com/api/v1")),
+        qEnvironmentVariable("ISOLDE_OPENSUBTITLES_API_KEY"),
+        qEnvironmentVariable("ISOLDE_OPENSUBTITLES_TOKEN")};
+    SubtitleService subtitleService{nullptr, profileSubtitleCachePath()};
     DesktopMode desktopMode;
     AppDefinition pendingNativeDefinition;
     bool pendingNativeLaunch=false;
@@ -91,6 +110,9 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
     engine.rootContext()->setContextProperty(QStringLiteral("searchPreferences"), &searchSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("discoveryProvider"), &onlineDiscovery);
+    engine.rootContext()->setContextProperty(QStringLiteral("onlineSubtitleRepository"), &onlineSubtitleRepository);
+    engine.rootContext()->setContextProperty(QStringLiteral("subtitleService"), &subtitleService);
     engine.rootContext()->setContextProperty(QStringLiteral("desktopMode"), &desktopMode);
     engine.rootContext()->setContextProperty(QStringLiteral("captureController"), &captureController);
     engine.rootContext()->setContextProperty(QStringLiteral("kodiMedia"), &kodi);

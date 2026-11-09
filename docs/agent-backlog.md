@@ -69,13 +69,15 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T09 | 21 | Playback preference and viewing controls | 0% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
 | T10 | 22 | Capture/HDMI/audio software and editors | 33% | 60% | software foundation verified; physical H04 separate |
 | T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
-| T14 | 24 | Online discovery and Linguist subtitles | 0% | 35% | retained active; provider/model decisions open |
+| T14 | 24 | Online discovery and Linguist subtitles | 0% | 100% | provider and offline subtitle workflows implemented; VM/live acceptance deferred |
 | T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 15% | new plan mapped; software 0/9; H02/H03 physical |
 | T13 | 26 | Appliance software, distribution and user setup guide | 0% | 35% | installer foundation; clean-VM/recovery and beginner guide open; appliance validation code added |
 | T31 | 27 | Frozen first-product software acceptance | 5% | 10% | tool inventory verified; 0/7 final groups accepted |
-| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **76%** | **1568 / 27 rounded; weighted progress, S1 incomplete** |
+| **Overall** | — | **average of 27 ACTIVE software tasks** | **58%** | **88%** | **1568 / 27 acceptance and 2370 / 27 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
+
+- 2026-11-09: **T14 coding integration; acceptance deferred.** The discovery and Linguist implementation and provider/model choices are documented in [T14 contracts](t14-provider-and-linguist-contracts.md). Focused Kodi bridge and playback Python suites passed (21 and 32 tests); native Qt tests and installed VM journeys remain unrun on this host. Live provider/account behavior and deployment licensing remain deferred. Coding is 100% with no known unfinished T14 code; acceptance percentages are unchanged.
 
 - 2026-11-09: **T26 integration; VM acceptance deferred.** The T26 gallery branch is integrated with T10; app-carousel overflow opens All Apps while button-carousel overflow retains its shortcuts, and the two gallery navigation tests are registered with CTest. Coding remains 50%: dedicated end-to-end QML contracts for gallery launch/failure/retry, exact origin and scroll restoration, and selected-app removal are still missing. Native/installed VM tests, the remote journey and visual reference acceptance are deferred; no acceptance percentages change.
 
@@ -486,7 +488,7 @@ Scope:
 - [ ] T14.1 Implement opt-in discovery with regional freshness/attribution, provider routes, OFF late/cached-result cancellation, remake identity and no false entitlement. Agent documents an in-scope provider/terms choice and exercises actual production adapter/UI with controlled provider/auth/region/network responses; unavailable keys/paid access/live service are handoff limits, not S1 blockers.
 - [ ] T14.2 Linguist: SRT translate/generate/queue/review/cancel, offline, non-overwriting Unicode, provenance, no library-wide auto jobs or implicit downloads
 Done when: OFF-silent + provenance tests pass; provider gate documented.
-Verify: network-denial + subtitle provenance tests. Evidence: persisted Web preference exists and ON remains an unavailable provider stub; T28 owns its header-switch UX, not a provider implementation. No linguist/SRT implementation evidence; T14 remains open.
+Verify: network-denial + subtitle provenance tests. Evidence: [T14 contracts](t14-provider-and-linguist-contracts.md) document implemented adapters, offline subtitle workflows, and focused test coverage. Kodi bridge and playback Python suites passed on the integration host; native Qt and installed VM checks are deferred, as are live provider/account and deployment licensing checks. Acceptance remains open.
 
 
 Scope reconciliation: T14 stays active. Implement and test production discovery/subtitle contracts with controlled provider fixtures and actual local subtitle output; agent documents an in-scope provider/model choice. Unavailable keys/paid models/live services are user handoff limits, not S1 blockers; known software failures remain work.

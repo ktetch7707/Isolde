@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QUuid>
 #include <memory>
+#include <QRegularExpression>
 
 static std::unique_ptr<QSettings> searchStore(const QString &path)
 {
@@ -20,6 +21,9 @@ SearchSettings::SearchSettings(QObject *parent,const QString &settingsPath,const
     auto settings=searchStore(m_settingsPath);
     settings->beginGroup(m_group);
     m_webEnabled = settings->value(QStringLiteral("webEnabled"), false).toBool();
+    const auto region=settings->value(QStringLiteral("discoveryRegion"),QStringLiteral("US")).toString().trimmed().toUpper();
+    static const QRegularExpression regionPattern(QStringLiteral("^[A-Z]{2}$"));
+    if(regionPattern.match(region).hasMatch())m_discoveryRegion=region;
 }
 
 void SearchSettings::setWebEnabled(bool enabled)
@@ -45,4 +49,29 @@ void SearchSettings::setWebEnabled(bool enabled)
 void SearchSettings::toggleWebEnabled()
 {
     setWebEnabled(!m_webEnabled);
+}
+
+void SearchSettings::setDiscoveryRegion(const QString &region)
+{
+    static const QRegularExpression regionPattern(QStringLiteral("^[A-Z]{2}$"));
+    const auto normalized=region.trimmed().toUpper();
+    if(normalized==m_discoveryRegion)return;
+    if(m_group.isEmpty() || !regionPattern.match(normalized).hasMatch()){
+        m_error=m_group.isEmpty()?"Could not save discovery region for this profile.":"Enter a two-letter ISO region code.";
+        emit changed();return;
+    }
+    auto settings=searchStore(m_settingsPath);
+    settings->setAtomicSyncRequired(true);
+    settings->beginGroup(m_group);
+    settings->setValue(QStringLiteral("discoveryRegion"),normalized);
+    settings->sync();
+    if(settings->status()!=QSettings::NoError){
+        settings->setValue(QStringLiteral("discoveryRegion"),m_discoveryRegion);
+        settings->sync();
+        m_error="Could not save discovery region. Your previous setting is unchanged.";
+        emit changed();return;
+    }
+    m_discoveryRegion=normalized;
+    m_error.clear();
+    emit changed();
 }

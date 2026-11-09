@@ -8,8 +8,9 @@ from urllib.error import HTTPError, URLError
 
 
 class Playback:
-    def __init__(self, execute, builtin, managed=False, clock=time.monotonic):
+    def __init__(self, execute, builtin, managed=False, clock=time.monotonic, subtitle_loader=None):
         self.execute, self.builtin, self.managed, self.clock = execute, builtin, managed, clock
+        self.subtitle_loader = subtitle_loader
         self.movie = None
         self.media_type = "movie"
         self.state = "idle"
@@ -80,6 +81,27 @@ class Playback:
     def handle(self, method, params):
         if not self.managed:
             raise ValueError("Playback requires Isolde frontend mode")
+        if method == "Isolde.LoadSubtitle":
+            path = params.get("path")
+            if (set(params) != {"path"} or not isinstance(path, str) or
+                not os.path.isabs(path) or not path.lower().endswith(".srt") or
+                not os.path.isfile(path) or os.path.getsize(path) > 8 * 1024 * 1024):
+                raise ValueError("A readable local SRT is required")
+            if self.movie is None or self.media_type not in ("movie", "episode", "musicvideo") or self.stream_url is not None:
+                raise ValueError("An Isolde-managed local video must be playing")
+            if not self.owned_item(self.player_item(1)):
+                raise ValueError("The active Kodi video is not the Isolde-managed media item")
+            if self.subtitle_loader is None:
+                raise ValueError("Kodi subtitle loading is unavailable")
+            self.subtitle_loader(path)
+            return {"loaded": True}
+        if method == "Isolde.GetSubtitleTracks" and not params:
+            return self.subtitle_tracks()
+        if method == "Isolde.SetSubtitleTrack" and set(params) == {"subtitleId"}:
+            subtitle_id = params["subtitleId"]
+            if subtitle_id != "off" and (type(subtitle_id) is not int or subtitle_id < 0):
+                raise ValueError("A valid subtitle track id or off is required")
+            return self.set_subtitle_track(subtitle_id)
         scheduled = method == "Isolde.PlayScheduled"
         offset = None
         if method == "Isolde.PlayGuideStream":
@@ -181,6 +203,65 @@ class Playback:
         if method == "Isolde.PlaybackControl" and set(params) == {"action"}:
             return self.control(params["action"])
         raise ValueError("Unsupported playback request")
+
+    def subtitle_tracks(self):
+        if (self.movie is None or self.stream_url is not None or
+                self.media_type not in ("movie", "episode", "musicvideo")):
+            raise ValueError("Subtitle tracks require an Isolde-managed local video")
+        for player in self.rpc("Player.GetActivePlayers"):
+            if player.get("type") != "video":
+                continue
+            player_id = player.get("playerid")
+            if type(player_id) is not int or not self.owned_item(self.player_item(player_id)):
+                continue
+            props = self.rpc("Player.GetProperties", {
+                "playerid": player_id,
+                "properties": ["subtitles", "subtitle", "subtitleenabled"],
+            })
+            available = props.get("subtitles")
+            if not isinstance(available, list) or len(available) > 64:
+                raise ValueError("Kodi returned an invalid subtitle track list")
+            selected = props.get("subtitle", {})
+            selected_id = selected.get("index") if isinstance(selected, dict) else None
+            tracks = []
+            seen = set()
+            for entry in available:
+                if not isinstance(entry, dict):
+                    continue
+                track_id = entry.get("index")
+                if type(track_id) is not int or track_id < 0 or track_id in seen:
+                    continue
+                seen.add(track_id)
+                tracks.append({
+                    "id": track_id,
+                    "name": str(entry.get("name", ""))[:160],
+                    "language": str(entry.get("language", ""))[:32],
+                    "external": entry.get("isexternal") is True,
+                    "selected": track_id == selected_id and props.get("subtitleenabled") is True,
+                })
+            return {
+                "tracks": tracks,
+                "enabled": props.get("subtitleenabled") is True,
+                "selectedId": selected_id if type(selected_id) is int else -1,
+            }
+        raise ValueError("The Isolde-managed video player is no longer active")
+
+    def set_subtitle_track(self, subtitle_id):
+        snapshot = self.subtitle_tracks()
+        if subtitle_id != "off" and not any(track["id"] == subtitle_id for track in snapshot["tracks"]):
+            raise ValueError("That subtitle track is not available on the managed video")
+        for player in self.rpc("Player.GetActivePlayers"):
+            if player.get("type") != "video":
+                continue
+            player_id = player.get("playerid")
+            if type(player_id) is int and self.owned_item(self.player_item(player_id)):
+                if self.rpc("Player.SetSubtitle", {
+                    "playerid": player_id,
+                    "subtitle": subtitle_id,
+                }) != "OK":
+                    raise ValueError("Kodi did not confirm the subtitle track change")
+                return self.subtitle_tracks()
+        raise ValueError("The Isolde-managed video player is no longer active")
 
     def stopped_notification(self, data, generation):
         # Called only for Kodi's trusted Player.OnStop notification by service.

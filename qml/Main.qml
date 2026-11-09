@@ -108,9 +108,14 @@ Window {
             else if(command===inputManager.back){actionDispatcher.cancelGuidePlayback();guideController.refresh()}
             if(command!==inputManager.volumeUp && command!==inputManager.volumeDown && command!==inputManager.mute)return
         }
+        if (subtitleTrackPicker.open) {
+            subtitleTrackPicker.handleCommand(command)
+            return
+        }
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
+            else if (command === inputManager.menu) subtitleTrackPicker.open = true
             else if (command === inputManager.playPause || command === inputManager.confirm) kodiMedia.playbackControl("pause")
             else if (command === inputManager.navigateLeft) kodiMedia.playbackControl("backward")
             else if (command === inputManager.navigateRight) kodiMedia.playbackControl("forward")
@@ -147,6 +152,7 @@ Window {
                 ambientActive = !ambientActive
             return
         }
+        if (subtitleQueue.open) { subtitleQueue.handleCommand(command); return }
         if (commandCenter.open) { commandCenter.handleCommand(command); return }
         if(launchErrorOverlay.visible){launchErrorOverlay.handleCommand(command);return}
         if(allApps.open){allApps.handleCommand(command);return}
@@ -523,6 +529,7 @@ Window {
     KodiLibraryView { id: kodiLibrary; anchors.fill: parent; z: 900; provider:pageData;property string themeOrigin: "";appearance: window.shellAppearance("kodi", themeOrigin) }
     property var pendingGuideSearchReturn:null
     property var guideSearchReturn:null
+    property var linguistSearchReturn:null
     GuideView {
         id:tvGuide
         readonly property real availableWidth:Math.max(1,(parent.width-2*window.safeAreaPixels)/window.uiScaleFactor)
@@ -553,6 +560,7 @@ Window {
         apps: appRegistry.apps
         packages: appCatalog.entries
         searchSettings: searchPreferences
+        onlineDiscovery: discoveryProvider
         appearance:window.shellAppearance("search", themeOrigin)
         property string themeOrigin: ""
         movieSearchClient: searchMovies
@@ -571,6 +579,10 @@ Window {
                 window.searchFromGallery = false
                 allApps.resumeAfterApp()
             }
+        }
+        onLinguistRequested: {
+            window.linguistSearchReturn={index:commandCenter.selectedIndex,area:commandCenter.focusArea,header:commandCenter.lastHeader}
+            open = false; subtitleQueue.open = true
         }
         onLaunchApp: appId => { kodiLibrary.open = false; window.launchAppFromShell(appId) }
         onInstallPackage: packageId => {
@@ -599,6 +611,28 @@ Window {
         onPageSourceRequested: (pageId, sourceId, kind, view, value) => {
             if (pageId && pageSurface.activeId !== pageId) pageSurface.showPage(pageId, "", true)
         }
+    }
+    SubtitleQueue {
+        id: subtitleQueue
+        anchors.fill: parent
+        service: subtitleService
+        kodiClient: kodiMedia
+        repository: onlineSubtitleRepository
+        webEnabled: searchPreferences.webEnabled
+        appearance: window.shellAppearance("search", commandCenter.themeOrigin)
+        onCloseRequested: {
+            open = false
+            const state=window.linguistSearchReturn;window.linguistSearchReturn=null
+            commandCenter.open = true
+            if(state)Qt.callLater(()=>{commandCenter.selectedIndex=state.index;commandCenter.focusArea=state.area;commandCenter.lastHeader=state.header})
+        }
+    }
+    SubtitleTrackPicker {
+        id: subtitleTrackPicker
+        anchors.fill: parent
+        kodiClient: kodiMedia
+        appearance: window.shellAppearance("kodi", "")
+        onCloseRequested: open = false
     }
     CaptureSessionView {
         id: captureSession
