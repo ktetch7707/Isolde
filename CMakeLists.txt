@@ -41,6 +41,8 @@ add_library(isolde_core STATIC
     src/media/KodiMedia.h
     src/media/CaptureController.cpp
     src/media/CaptureController.h
+    src/media/SerialCommandWriter.cpp
+    src/media/SerialCommandWriter.h
     src/media/KodiShelves.cpp
     src/media/KodiShelves.h
     src/media/KodiService.cpp
@@ -432,6 +434,9 @@ if(BUILD_TESTING)
     qt_add_executable(isolde_capture_tests tests/tst_capture.cpp)
     target_link_libraries(isolde_capture_tests PRIVATE isolde_core Qt6::Test)
     add_test(NAME capture_protocol COMMAND isolde_capture_tests)
+    qt_add_executable(isolde_serial_writer_tests tests/tst_serial_command_writer.cpp)
+    target_link_libraries(isolde_serial_writer_tests PRIVATE isolde_core Qt6::Test)
+    add_test(NAME capture_serial_writer COMMAND isolde_serial_writer_tests)
     qt_add_executable(isolde_component_tests tests/tst_components.cpp)
     qt_add_executable(isolde_guide_tests tests/tst_guide.cpp)
     target_link_libraries(isolde_guide_tests PRIVATE isolde_core Qt6::Test)

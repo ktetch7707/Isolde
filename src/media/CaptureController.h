@@ -16,6 +16,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVideoSink>
+#include "SerialCommandWriter.h"
 
 class CaptureController final : public QObject {
     Q_OBJECT
@@ -114,13 +115,12 @@ private:
     QMetaObject::Connection m_frameConnection;
     QMetaObject::Connection m_outputDestroyedConnection;
     QSerialPort m_serial;
+    SerialCommandWriter m_serialWriter;
     QTimer m_frameWatchdog;
-    QTimer m_serialWatchdog;
     QTimer m_serialDevicePoll;
     QElapsedTimer m_previewClock;
     QElapsedTimer m_lastFrameClock;
     QElapsedTimer m_switchClock;
-    QElapsedTimer m_serialClock;
     QElapsedTimer m_frameRateClock;
     QList<QCameraDevice> m_videoDevices;
     QList<QAudioDevice> m_audioDevices;
@@ -138,7 +138,6 @@ private:
     int m_baudRate = 9600;
     int m_selectedInput = 1;
     int m_activeInput = 0;
-    qint64 m_serialBytesPending = 0;
     qint64 m_serialWriteLatencyMs = -1;
     qint64 m_firstFrameCallbackLatencyMs = -1;
     qint64 m_maxFrameGapMs = -1;
