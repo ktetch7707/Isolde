@@ -1,5 +1,59 @@
 # Kodi library for designing real Studio carousels
 
+## November 10: real Kodi artwork
+
+The user requested replacing placeholder artwork in the existing persistent demo.
+The fixture now identifies its eight synthetic movie clips as The Matrix,
+Inception, Interstellar, The Fellowship of the Ring, Spirited Away, Gladiator,
+Star Wars and Toy Story, and its shows as Once Upon a Time and Glee.
+Kodi's installed TMDB scrapers resolve URL NFO identities and fetch their own
+posters, fanart and episode images, including scraper-selected fanart.tv assets.
+The clips remain synthetic; their plots explicitly say so.
+
+Run through the supported, hash-verified VM runner against the currently deployed
+tested candidate:
+
+```powershell
+./tools/vm-test.ps1 Configure -ConfigureTarget kodi-demo-art -RunId ui-audit-20261110-f -WaitSeconds 900
+```
+
+This target only supports the exact existing Studio Demo UUID on Isolde-Test.
+It preserves original metadata/history in `real-art-before.json`, original
+placeholder files beside the media, and profile/layout/release identities.
+It uses Kodi's native import UI, internal JSON-RPC refresh/setters, its normal
+artwork cache, and Isolde's existing artwork bridge. There are no database
+writes, separate image downloads, new dependencies or application changes.
+Already-scraped entries use a history-recovery path rather than refreshing again.
+
+Evidence is under `build/vm-oracle/ui-audit-20261110-f/report/`:
+`kodi-demo-art-result.json`, `demo-art-history-after.json`, and ten
+`studio-test-demo-art-*.png` images returned by the production artwork bridge.
+Earlier failures and recovery diagnostics remain recorded. Native refreshes
+replace IDs asynchronously, so the helper follows exact media paths and requires
+the intended title plus primary remote artwork. A prior interrupted refresh
+was recovered with Kodi's configured-source scan. Repeated fixture restarts
+also reached the guest service's start-rate limit; the helper records that
+journal before resetting only that diagnosed guest service failure.
+
+The older seeder's four-resume assumption is historical: the actual pre-change
+backup already contains three resumable movies after earlier playback. Final
+verification compares each movie and episode's history to that backup instead.
+The final Configure run passed: `restartVerified`, `watchHistoryUnchanged` and
+`layoutsUnchanged` are true; ten artwork responses contain 34–95 KB each.
+All eight movies and all six episodes match their saved watch/resume histories.
+The service is active/running with zero automatic restarts, on unchanged release
+`742be8322eff80e0047e9d85`. The Matrix poster returned by the bridge was opened
+and visually reviewed. This is persistent fixture/artwork verification, not a
+claim that the broader Studio or project acceptance gates are complete.
+No software acceptance percentage changes from this development-data setup.
+
+Kodi documents this identity mechanism in
+[parsing NFO files](https://kodi.wiki/view/NFO_files/Parsing); the native library
+operations use its [JSON-RPC API](https://kodi.wiki/view/JSON-RPC_API/v13).
+
+The sections below describe the original fictional seed and are retained as
+historical setup evidence.
+
 The VM has an active **Studio Demo** profile, ID `8bdf6077-4613-4b52-9b20-d1ec7931dfcf`. Household and alex remain registered. Household's layout hash is unchanged; its Kodi library was not imported into or edited. No application build was installed. The service is active with zero automatic restarts.
 
 ## What is available

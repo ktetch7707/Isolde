@@ -17,7 +17,7 @@ param(
     [switch]$GuideDiagnostics,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','games','guide','artifacts')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','games','guide','artifacts','kodi-demo-art')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
@@ -143,6 +143,12 @@ try {
         if ($ReuseFullRun) { $command += " --reuse-full-run $ReuseFullRun" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
+        if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'kodi-demo-art') {
+            $demoHelper = Join-Path $PSScriptRoot 'kodi-demo-art.py'
+            $demoHash = (Get-FileHash -LiteralPath $demoHelper -Algorithm SHA256).Hash.ToLowerInvariant()
+            $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($demoHelper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/kodi-demo-art-$demoHash.py")) -TimeoutSeconds 30 -Log $transport
+            $command += " --demo-art-helper-digest $demoHash"
+        }
         if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'artifacts') {
             $maintenanceFiles = @('tools/install-appliance.py','tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/reference_collections.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt','config/studio-defaults.json','tests/fixtures/shell-theme-routes.json')
             $maintenanceLines = foreach ($relative in $maintenanceFiles) {

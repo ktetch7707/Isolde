@@ -1277,8 +1277,17 @@ class Oracle:
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
-    def configure_native(self, target="native", maintenance_tests_digest=None):
-        if target not in {"native","surfshark","android","android-repair","games","guide","artifacts"}: raise ValueError("Unsupported guest configuration target")
+    def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None):
+        if target not in {"native","surfshark","android","android-repair","games","guide","artifacts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
+        if target=="kodi-demo-art":
+            payload=self.tested_payload();self.deployed_release(payload,target)
+            if self.command('hostname')!='isolde-test' or not isinstance(demo_art_helper_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',demo_art_helper_digest):raise RuntimeError('Demo artwork setup requires the tested Isolde VM and a verified helper')
+            helper=self.root/'bin'/('kodi-demo-art-'+demo_art_helper_digest+'.py')
+            if helper.resolve()!=helper or digest(helper)!=demo_art_helper_digest:raise RuntimeError('Demo artwork helper identity mismatch')
+            with exclusive_lock(Path('/tmp/isolde-home-components-acceptance.lock')):
+                self.stage('kodi-demo-art',[sys.executable,str(helper),'--source',str(self.run/'source'),'--receipt',str(self.run/'kodi-demo-art-result.json')],900)
+            self.update(service=self.service(),releases=self.links())
+            return
         if target=="artifacts":
             if self.command("hostname")!="isolde-test" or self.root!=Path.home()/"isolde-oracle" or self.root.resolve()!=self.root:
                 raise RuntimeError("Artifact maintenance is restricted to the native Isolde-Test oracle")
@@ -1967,7 +1976,8 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","artifacts"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","artifacts","kodi-demo-art"],default="native")
+    parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")
     parser.add_argument("--feature-helper-digest")
@@ -2081,7 +2091,7 @@ def main():
             elif args.action == "diagnose":
                 oracle.diagnose(args.native_app)
             elif args.action == "configure":
-                oracle.configure_native(args.configure_target,args.maintenance_tests_digest)
+                oracle.configure_native(args.configure_target,args.maintenance_tests_digest,args.demo_art_helper_digest)
             elif args.action == "recover":
                 if args.orphan_visual_pid:
                     layouts = oracle.layout_hashes();service = oracle.service();links = oracle.links()
