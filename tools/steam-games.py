@@ -11,11 +11,14 @@ import os
 from pathlib import Path
 import re
 import signal
+import socket
+import struct
 import stat
 import subprocess
 import sys
 import time
 import uuid
+from urllib.parse import unquote
 
 MAX_GAMES = 5000
 FACT_VALUES = {
@@ -364,15 +367,46 @@ def verify_installed(home, identity, external=()):
     return matches[0]
 
 
+def private_bus_processes():
+    """Identify the private bus server by kernel credentials, never its name."""
+    if os.environ.get("ISOLDE_NATIVE_NAMESPACE")!="1": return set()
+    address=os.environ.get("DBUS_SESSION_BUS_ADDRESS","")
+    if not address.startswith("unix:") or ";" in address: return set()
+    try:
+        fields=dict(part.split("=",1) for part in address[5:].split(","))
+        path=unquote(fields.get("path",""))
+        if not path.startswith(("/tmp/",f"/run/user/{os.getuid()}/")) or len(path.encode())>104 or "\0" in path:return set()
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
+            client.settimeout(.25);client.connect(path)
+            pid,uid,_=struct.unpack("3i",client.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
+        return {pid} if pid>0 and uid==os.getuid() else set()
+    except (OSError,ValueError,struct.error):return set()
+
+
 def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_client=False):
     result = []
     entries = 0
+    # The protected native host supervises this helper; it is not a game child.
+    # Its environment is deliberately unreadable after PR_SET_DUMPABLE(0).
+    ancestors=set()
+    ancestor=os.getpid()
+    for _ in range(128):
+        if ancestor<=0 or ancestor in ancestors: break
+        ancestors.add(ancestor)
+        try:
+            directory=proc/str(ancestor)
+            if directory.stat().st_uid!=os.getuid(): break
+            ancestor=int((directory/"stat").read_text().rsplit(") ",1)[1].split()[1])
+        except (OSError,ValueError,IndexError): break
+    excluded=ancestors | private_bus_processes()
     try:
         for entry in proc.iterdir():
-            if not entry.name.isdigit() or int(entry.name) == os.getpid(): continue
+            if not entry.name.isdigit() or int(entry.name) in excluded: continue
             entries += 1
             if entries > 4096: raise ProcessObservationError("Steam session process limit exceeded")
             try:
+                if entry.stat().st_uid != os.getuid(): continue
+                if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] in ("Z","X","x"): continue
                 with (entry/"environ").open("rb") as stream: environment = stream.read(65537)
                 if len(environment) > 65536:
                     raise ProcessObservationError("Steam session process metadata is oversized")
@@ -388,6 +422,10 @@ def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_
                 # Processes can exit between /proc enumeration and inspection.
                 continue
             except OSError as error:
+                try:
+                    if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] in ("Z","X","x"): continue
+                except (FileNotFoundError,ProcessLookupError): continue
+                except (OSError,ValueError,IndexError): pass
                 raise ProcessObservationError("Steam session process state is not fully observable") from error
             except (ValueError, IndexError) as error:
                 raise ProcessObservationError("Steam session process state is malformed") from error
@@ -605,7 +643,8 @@ def launch(identity, external=()):
                     game_was_running = game_was_running or bool(owned_games)
                     signal_owned_processes(owned_games, token, identity)
                     clean_game_exit = wait_until_gone(lambda: processes(identity), 5)
-                except ProcessObservationError:
+                except ProcessObservationError as error:
+                    print("Steam session observation: "+str(error),file=sys.stderr,flush=True)
                     clean_game_exit = False
                     cleanup_complete = False
                     last_facts["process"] = "unknown"

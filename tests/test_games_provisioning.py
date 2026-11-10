@@ -609,7 +609,12 @@ class EmulatorAdapterTests(unittest.TestCase):
                     adapter.definitions(path)
 
     def test_provisioned_runtime_fingerprint_binds_manifest_executable_and_core(self):
-        manifest_hash,routes=games.inspect_runtimes({name:{"ready":True} for name in games.PACKAGES})
+        source=Path(__file__).parents[1]/"config/game-runtimes.json"
+        with tempfile.TemporaryDirectory() as directory:
+            missing=Path(directory)/"missing-runtime"
+            definitions={identity:dict(runtime,binary=str(missing)) for identity,runtime in self.runtime_definitions.items()}
+            with patch.object(games,"runtime_manifest",return_value=(source,definitions)):
+                manifest_hash,routes=games.inspect_runtimes({name:{"ready":True} for name in games.PACKAGES})
         self.assertRegex(manifest_hash,r"^[a-f0-9]{64}$")
         self.assertEqual(set(routes),set(self.runtime_definitions))
         route=routes["retroarch-gba"]

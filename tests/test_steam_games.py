@@ -17,6 +17,26 @@ steam=importlib.util.module_from_spec(spec);spec.loader.exec_module(steam)
 
 
 class SteamGamesTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def private_process_view(self, processes):
+        """Real child observations in a controlled private-PID-namespace view."""
+        original=steam.game_processes
+        with tempfile.TemporaryDirectory() as directory:
+            proc=Path(directory)
+            def probe(identity, token=None):
+                for child in processes():
+                    link=proc/str(child.pid)
+                    if not link.is_symlink():link.symlink_to(Path('/proc')/str(child.pid),target_is_directory=True)
+                try:return original(identity,proc,token=token)
+                except steam.ProcessObservationError as error:
+                    cause=error.__cause__
+                    states={}
+                    for child in processes():
+                        try:states[child.pid]=(Path('/proc')/str(child.pid)/'stat').read_text().rsplit(') ',1)[1].split()[0]
+                        except OSError:states[child.pid]='gone'
+                    raise steam.ProcessObservationError(str(error)+"; fixture boundary cause: "+str(cause)+"; states="+str(states)) from error
+            with patch.object(steam,'game_processes',side_effect=probe):yield
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.home=Path(self.temp.name)/"private-home";self.root=self.home/".local/share/Steam/steamapps"
@@ -178,6 +198,41 @@ class SteamGamesTests(unittest.TestCase):
         with patch.object(Path,"open",side_effect=PermissionError("denied")):
             with self.assertRaises(steam.ProcessObservationError):
                 steam.matching_processes("SteamAppId","42",proc,token="ours")
+
+    def test_foreign_process_environment_is_never_opened(self):
+        proc=self.home.parent/"foreign-proc";entry=proc/"1234"
+        entry.mkdir(parents=True)
+        owner=entry.stat().st_uid
+        with patch.object(steam.os,"getuid",return_value=owner+1), patch.object(Path,"open") as opened:
+            self.assertEqual(steam.matching_processes("SteamAppId","42",proc,token="ours"),[])
+            opened.assert_not_called()
+
+    def test_protected_supervisor_ancestors_are_not_game_candidates(self):
+        proc=self.home.parent/"ancestor-proc"
+        current=proc/str(os.getpid());current.mkdir(parents=True)
+        supervisor=proc/"1234";supervisor.mkdir()
+        (current/"stat").write_text(f"{os.getpid()} (helper) S 1234")
+        (supervisor/"stat").write_text("1234 (protected host) S 0")
+        # No environ files exist: inspecting either ancestor would fail.
+        self.assertEqual(steam.matching_processes("SteamAppId","42",proc,token="ours"),[])
+
+    def test_dead_process_does_not_require_readable_environment(self):
+        proc=self.home.parent/"dead-proc";entry=proc/"1234";entry.mkdir(parents=True)
+        (entry/'stat').write_text('1234 (exited fixture) Z 0')
+        original=Path.open
+        def opened(path,*args,**kwargs):
+            if path.name=='environ':raise PermissionError('exiting process metadata')
+            return original(path,*args,**kwargs)
+        with patch.object(Path,'open',opened):
+            self.assertEqual(steam.matching_processes('SteamAppId','42',proc,token='ours'),[])
+
+    def test_private_bus_exclusion_requires_matching_kernel_peer_credentials(self):
+        with patch.dict(os.environ,{'ISOLDE_NATIVE_NAMESPACE':'1','DBUS_SESSION_BUS_ADDRESS':'unix:path=/tmp/fixture-private-bus'}), patch.object(steam.socket,'socket') as factory:
+            peer=factory.return_value.__enter__.return_value
+            peer.getsockopt.return_value=steam.struct.pack('3i',1234,os.getuid(),os.getgid())
+            self.assertEqual(steam.private_bus_processes(),{1234})
+            peer.getsockopt.return_value=steam.struct.pack('3i',1234,os.getuid()+1,os.getgid())
+            self.assertEqual(steam.private_bus_processes(),set())
 
     def test_preflight_reports_install_and_client_without_claiming_ownership(self):
         output=io.StringIO()
@@ -472,6 +527,7 @@ class SteamGamesTests(unittest.TestCase):
             env=kwargs["env"];env["SteamAppId"]="42"
             child=real_popen([sys.executable,"-c",script,str(save),str(ready)],env=env)
             children.append(child);return child
+        self.enterContext(self.private_process_view(lambda:children+[unrelated]))
         def cancel(*args, **kwargs):
             deadline=time.monotonic()+3
             while not ready.exists() and time.monotonic()<deadline: time.sleep(.02)
@@ -485,7 +541,8 @@ class SteamGamesTests(unittest.TestCase):
                  patch.object(steam.subprocess,"Popen",side_effect=start), \
                  patch.object(steam,"supervise_provider",side_effect=cancel), \
                  contextlib.redirect_stderr(output):
-                steam.launch("42")
+                try:steam.launch("42")
+                except RuntimeError as error:self.fail(str(error)+"\n"+output.getvalue())
             children[0].wait(timeout=3)
             self.assertEqual(save.read_text(),"saved")
             self.assertIsNone(unrelated.poll())
@@ -501,6 +558,7 @@ class SteamGamesTests(unittest.TestCase):
     @unittest.skipUnless(Path("/proc/self/environ").exists(),"Linux process environment")
     def test_process_probe_matches_only_requested_game_identity(self):
         children=[]
+        self.enterContext(self.private_process_view(lambda:children))
         try:
             for identity in ("42","43"):
                 child=subprocess.Popen([sys.executable,"-c","import time; time.sleep(10)"],env=dict(os.environ,SteamAppId=identity))
@@ -529,6 +587,7 @@ class SteamGamesTests(unittest.TestCase):
     def test_termination_targets_only_the_verified_app_and_session_token(self):
         import uuid
         token=uuid.uuid4().hex;children=[]
+        self.enterContext(self.private_process_view(lambda:children))
         ready=self.home/"target-ready"
         script=("import pathlib,signal,sys,time\n"
                 "signal.signal(signal.SIGTERM,lambda *_:sys.exit(0))\n"

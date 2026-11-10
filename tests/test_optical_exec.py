@@ -134,6 +134,7 @@ class OpticalExecTests(unittest.TestCase):
         path.chmod(0o500)
         with self.assertRaisesRegex(ValueError, "ELF"):
             adapter.stage_executable(path)
+        path.chmod(0o600)
         path.write_bytes(b"\x7fELF" + b"x" * 30)
         path.chmod(0o400)
         with self.assertRaisesRegex(ValueError, "bounded executable"):

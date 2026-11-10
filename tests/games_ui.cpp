@@ -252,7 +252,7 @@ void GamesUiTests::opticalIdentityAndMultiDiscReferencesAreDurable(){
     QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{wrong,ready}).value("state").toString(),QString("ready"));
     auto inconsistent=ready;inconsistent["discNumber"]=2;
     QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{inconsistent}).value("state").toString(),QString("wrong-disc"));
-    auto unmounted=wrong;unmounted["observationId"]=QString(64,'c');unmounted["state"]="unmounted";unmounted["mountRoot"]="";
+    auto unmounted=wrong;unmounted["device"]="/dev/sr0";unmounted["observationId"]=QString(64,'c');unmounted["state"]="unmounted";unmounted["mountRoot"]="";
     QCOMPARE(OpticalDiscAdapter::classifyRootReference(root,{unmounted}).value("state").toString(),QString("missing"));
     QCOMPARE(OpticalDiscAdapter::classifyRevalidation(QString(64,'a'),"/dev/sr0",{unmounted}).value("state").toString(),QString("replaced"));
     const auto selectedUnmounted=OpticalDiscAdapter::classifyRevalidation(
@@ -433,8 +433,14 @@ static void command(QObject *widget,int value) {
     QVariant result;QVERIFY(QMetaObject::invokeMethod(widget,"handleCommand",Q_RETURN_ARG(QVariant,result),Q_ARG(QVariant,value)));
 }
 static void doneOnKeyboard(QObject *widget) {
-    for(int i=0;i<5;++i)command(widget,InputManager::NavigateDown);
-    for(int i=0;i<9;++i)command(widget,InputManager::NavigateRight);
+    auto *keyboard=widget->findChild<QObject *>("gamesKeyboard");QVERIFY(keyboard);
+    const auto value=keyboard->property("keys");
+    const auto keys=value.metaType()==QMetaType::fromType<QJSValue>()?value.value<QJSValue>().toVariant().toList():value.toList();
+    const int target=keys.indexOf(QString("Done"));QVERIFY(target>=0 && target<128);
+    int remaining=128;
+    while(keyboard->property("selectedIndex").toInt()!=target && --remaining>0)
+        command(widget,keyboard->property("selectedIndex").toInt()<target?InputManager::NavigateRight:InputManager::NavigateLeft);
+    QVERIFY(remaining>0);
     command(widget,InputManager::Confirm);
 }
 void GamesUiTests::remoteExternalSteamAccessIsExplicitAndCancelable(){
@@ -563,6 +569,7 @@ void GamesUiTests::remoteSteamImportCanCancelReviewAndPlay(){
     QVERIFY(widget->setProperty("choice",1));
     QVERIFY(QMetaObject::invokeMethod(widget.data(),"activateChoice"));
     QCOMPARE(recovery.acknowledged,QString("42"));
+    QVERIFY(widget->setProperty("recoveryStatuses",QVariantMap{})); // Model SessionManager's acknowledged-state update.
     QVERIFY(widget->property("message").toString().contains("no save, ownership or Cloud-sync result was inferred"));
     auto other=status;other["appId"]="43";QVERIFY(widget->setProperty("providerStatus",other));
     QVERIFY(widget->property("steamStatus").toString().contains("Steam checks account ownership"));
@@ -648,10 +655,11 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
 }
 void GamesUiTests::platformShelvesFilterCanonicalGamesRemotely(){
     QTemporaryDir dir;AppRegistry apps;QVERIFY(apps.addApp(runtime()));
+    auto handheld=runtime();handheld.id="local-psp-test";QVERIFY(apps.addApp(handheld));
     GameLibrary library(dir.filePath("profile/games.sqlite"),&apps);QVERIFY(library.ready());
     const auto add=[&library](const QString &title,const QString &platform){
         return library.addGame({{"schemaVersion",1},{"title",title},{"platform",platform},
-            {"runtimeId","local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
+            {"runtimeId",platform=="PSP"?"local-psp-test":"local-test"},{"root",QStringLiteral("")},{"target",QStringLiteral("")}});
     };
     const auto pc=add("Desk fixture","PC"),psp=add("Handheld fixture","PSP");
     QVERIFY(!pc.isEmpty());QVERIFY(!psp.isEmpty());
@@ -1138,7 +1146,8 @@ void GamesUiTests::catalogProvenanceIsImmutableAndConflictSafe() {
     QCOMPARE(steamProvenance.value("sourceKind").toString(),QString("steam-app"));
     QCOMPARE(steamProvenance.value("origin").toString(),QString("manual-registration"));
     auto editionRegistration=registration;editionRegistration["title"]="Alternate edition";
-    editionRegistration["platform"]="PC Edition";editionRegistration["target"]="edition-target";
+    editionRegistration["platform"]="PC Edition";editionRegistration["runtimeId"]="steam";
+    editionRegistration["target"]="43";editionRegistration["root"]=QStringLiteral("");
     const auto edition=library.addEdition(game,editionRegistration);QVERIFY2(!edition.isEmpty(),qPrintable(library.errorString()));
 
     const auto connection="games-provenance-immutability-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -1288,13 +1297,9 @@ void GamesUiTests::remoteAddReviewWritesOnlyOnConfirm() {
     // Enter the title using only the real on-screen keyboard's remote path.
     command(widget.data(),InputManager::Confirm);command(widget.data(),InputManager::Confirm);
     command(widget.data(),InputManager::Confirm); // first key = 1
-    for(int i=0;i<5;++i)command(widget.data(),InputManager::NavigateDown);
-    for(int i=0;i<9;++i)command(widget.data(),InputManager::NavigateRight);
-    command(widget.data(),InputManager::Confirm); // Done: title
+    doneOnKeyboard(widget.data()); // Done: title
     QCOMPARE(widget->property("field").toInt(),1);
-    for(int i=0;i<5;++i)command(widget.data(),InputManager::NavigateDown);
-    for(int i=0;i<9;++i)command(widget.data(),InputManager::NavigateRight);
-    command(widget.data(),InputManager::Confirm); // Done: default platform
+    doneOnKeyboard(widget.data()); // Done: default platform
     QCOMPARE(widget->property("mode").toString(),QString("review"));QVERIFY(library.page().isEmpty());
     command(widget.data(),InputManager::Confirm);QCOMPARE(library.page().size(),1);
     QCOMPARE(library.page()[0].toMap().value("title").toString(),QString("1"));

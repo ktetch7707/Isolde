@@ -128,10 +128,14 @@ int main(int argc, char **argv)
     ::signal(SIGPIPE,SIG_IGN);
     #endif
     auto arguments = app.arguments();
-    const bool steamSession = arguments.size()>1 && arguments.at(1)=="--steam-session";
-    if(steamSession) arguments.removeAt(1);
-    const bool gameSession=arguments.size()>1 && arguments.at(1)=="--game-session";
-    if(gameSession)arguments.removeAt(1);
+    bool steamSession=false,gameSession=false;
+    while(arguments.size()>1){
+        const auto flag=arguments.at(1);
+        if(flag=="--steam-session"){if(steamSession)return 2;steamSession=true;}
+        else if(flag=="--game-session"){if(gameSession)return 2;gameSession=true;}
+        else break;
+        arguments.removeAt(1);
+    }
 #ifdef Q_OS_LINUX
     if(gameSession && ::prctl(PR_SET_DUMPABLE,0,0,0,0)!=0)return 2;
 #endif

@@ -245,8 +245,8 @@ QVariantMap OpticalDiscAdapter::parseIsoVolumeDescriptor(const QByteArray &descr
 {
     if(descriptor.size()!=2048 || quint8(descriptor[0])!=1
         || descriptor.mid(1,5)!="CD001" || quint8(descriptor[6])!=1)return {};
-    const auto volumeId=descriptor.mid(40,32).trimmed();
-    const auto volumeSet=descriptor.mid(190,128).trimmed();
+    const auto volumeId=descriptor.mid(40,32).replace('\0',' ').trimmed();
+    const auto volumeSet=descriptor.mid(190,128).replace('\0',' ').trimmed();
     const auto blocks=le32(descriptor,80);
     const auto blockSize=le16(descriptor,128);
     const auto discNumber=le16(descriptor,124), discCount=le16(descriptor,120);

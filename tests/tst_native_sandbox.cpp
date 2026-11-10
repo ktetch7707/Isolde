@@ -47,13 +47,16 @@ static const QString bob = "22222222-2222-4222-8222-222222222222";
 void NativeSandboxTests::gamepadCapabilityRecognitionIsBoundedAndExact()
 {
     const auto bitmapFor=[](int code){
-        QStringList words(5,QStringLiteral("0"));
+        QStringList words(code/64+1,QStringLiteral("0"));
         words[words.size()-1-code/64]=QString::number(quint64(1)<<(code%64),16);
         return words.join(' ');
     };
     QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x130)));
     QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x13f)));
-    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x12f)));
+    QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x120)));
+    QVERIFY(NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x12f)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x11f)));
+    QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x140)));
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(bitmapFor(0x001e)));
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities("0 0 invalid 0 0"));
     QVERIFY(!NativeSandbox::hasGamepadKeyCapabilities(QString(4097,'0')));
@@ -86,15 +89,15 @@ void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
         QCOMPARE(dev.write(number.toLatin1()),qint64(number.toLatin1().size()));dev.close();
         QFile device(devices+"/"+name);QVERIFY(device.open(QIODevice::WriteOnly));device.close();
     };
-    addNode("event0","0 0 0 0 1000000000000"); // BTN_GAMEPAD, not ordinary keys.
+    addNode("event0","1000000000000 0 0 0 0"); // BTN_GAMEPAD, not ordinary keys.
     addNode("event1","40000000 0 0 0 0"); // Keyboard key.
-    addNode("js0","0 0 0 0 1000000000000");
-    addNode("event1000","0 0 0 0 1000000000000"); // Outside the node grammar.
-    addNode("event3","0 0 0 0 1000000000000","13:99"); // Sysfs number does not match the endpoint.
+    addNode("js0","1000000000000 0 0 0 0");
+    addNode("event1000","1000000000000 0 0 0 0"); // Outside the node grammar.
+    addNode("event3","1000000000000 0 0 0 0","13:99"); // Sysfs number does not match the endpoint.
     QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
              QStringList({devices+"/event0",devices+"/js0"}));
 
-    addNode("event2","0 0 0 0 1000000000000"); // Plugged in after the first snapshot.
+    addNode("event2","1000000000000 0 0 0 0"); // Plugged in after the first snapshot.
     QCOMPARE(NativeSandbox::gamepadDeviceNodes(sys,devices),
              QStringList({devices+"/event0",devices+"/event2",devices+"/js0"}));
     QVERIFY(QFile::remove(devices+"/event0"));
@@ -104,7 +107,7 @@ void NativeSandboxTests::gamepadDiscoveryFiltersKeyboardAndRefreshesSnapshot()
 void NativeSandboxTests::gamepadCharacterDeviceNumbersAreExactAndBounded()
 {
     uint major=0,minor=0;
-    const QString gamepadKeys="0 0 0 0 1000000000000";
+    const QString gamepadKeys="1000000000000 0 0 0 0";
     QVERIFY(GamepadTopology::verifiedGamepadNode("event0",gamepadKeys,"13:64"));
     QVERIFY(GamepadTopology::verifiedGamepadNode("js0",gamepadKeys,"13:0"));
     QVERIFY(!GamepadTopology::verifiedGamepadNode("event0",gamepadKeys,"13:65"));

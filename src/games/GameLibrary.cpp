@@ -36,6 +36,11 @@
 #include <limits>
 
 namespace {
+QString sqlText(const QVariant &value)
+{
+    const auto text=value.toString();
+    return text.isNull()?QStringLiteral(""):text;
+}
 constexpr int MaxGames = GamesResourceLimits::CatalogEntries;
 constexpr int PageSize = GamesResourceLimits::PageEntries;
 constexpr int MaxPlatforms = GamesResourceLimits::Platforms;
@@ -1016,8 +1021,8 @@ bool GameLibrary::setOrganization(const QString &id,const QString &franchise,con
     if(!ensureRichMetadataSchema())return false;
     QSqlQuery query(m_db);
     query.prepare("INSERT INTO game_metadata(game_id,franchise,tags,aliases,summary) VALUES(?,?,?,?,?) ON CONFLICT(game_id) DO UPDATE SET franchise=excluded.franchise,tags=excluded.tags,aliases=excluded.aliases,summary=excluded.summary");
-    query.addBindValue(id);query.addBindValue(franchise);query.addBindValue(QJsonDocument(tags).toJson(QJsonDocument::Compact));
-    query.addBindValue(QJsonDocument(aliases).toJson(QJsonDocument::Compact));query.addBindValue(summary);
+    query.addBindValue(id);query.addBindValue(franchise.isNull()?QStringLiteral(""):franchise);query.addBindValue(QJsonDocument(tags).toJson(QJsonDocument::Compact));
+    query.addBindValue(QJsonDocument(aliases).toJson(QJsonDocument::Compact));query.addBindValue(summary.isNull()?QStringLiteral(""):summary);
     if(!query.exec())return fail(tr("Could not save game organization. Previous metadata was preserved. %1").arg(query.lastError().text()));
     m_error.clear();emit errorChanged();emit changed();return true;
 }
@@ -1063,7 +1068,7 @@ QString GameLibrary::createCollection(const QString &name,const QString &kind,co
     if(collections().size()>=MaxCollections){fail(tr("This profile already has 256 game collections."));return {};}
     const auto id="collection-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
     QSqlQuery query(m_db);query.prepare("INSERT INTO game_collections(id,name,kind,filter_type,filter_value) VALUES(?,?,?,?,?)");
-    query.addBindValue(id);query.addBindValue(clean);query.addBindValue(kind);query.addBindValue(filterType);query.addBindValue(filterValue);
+    query.addBindValue(id);query.addBindValue(clean);query.addBindValue(kind);query.addBindValue(filterType.isNull()?QStringLiteral(""):filterType);query.addBindValue(filterValue.isNull()?QStringLiteral(""):filterValue);
     if(!query.exec()){fail(tr("Collection was not created. Its name may already be in use. %1").arg(query.lastError().text()));return {};}
     m_error.clear();emit errorChanged();emit changed();return id;
 }
@@ -1087,7 +1092,7 @@ bool GameLibrary::updateCollection(const QString &id,const QString &name,const Q
     }else return fail(tr("Collection type is invalid."));
     if(!m_db.transaction())return fail(m_db.lastError().text());
     QSqlQuery query(m_db);query.prepare("UPDATE game_collections SET name=?,filter_type=?,filter_value=? WHERE id=?");
-    query.addBindValue(clean);query.addBindValue(filterType);query.addBindValue(filterValue);query.addBindValue(id);
+    query.addBindValue(clean);query.addBindValue(filterType.isNull()?QStringLiteral(""):filterType);query.addBindValue(filterValue.isNull()?QStringLiteral(""):filterValue);query.addBindValue(id);
     if(!query.exec() || query.numRowsAffected()!=1 || !m_db.commit()){
         const auto error=query.lastError().text();m_db.rollback();
         return fail(tr("Collection was not updated. Its previous settings were preserved. %1").arg(error));
@@ -1585,12 +1590,12 @@ bool GameLibrary::restoreCatalog(const QString &source,bool confirmed) {
             query.addBindValue(game.value(key));
         ok=ok && query.exec();
         query.prepare("INSERT INTO game_metadata(game_id,franchise,tags,aliases,summary,artwork_hash) VALUES(?,?,?,?,?,?)");
-        query.addBindValue(game.value("id"));query.addBindValue(game.value("franchise"));
+        query.addBindValue(game.value("id"));query.addBindValue(sqlText(game.value("franchise")));
         QJsonArray tags;for(const auto &tag:game.value("tags").toStringList())tags.append(tag);
         QJsonArray aliases;for(const auto &alias:game.value("aliases").toStringList())aliases.append(alias);
         query.addBindValue(QJsonDocument(tags).toJson(QJsonDocument::Compact));
         query.addBindValue(QJsonDocument(aliases).toJson(QJsonDocument::Compact));
-        query.addBindValue(game.value("summary"));query.addBindValue(game.value("artworkHash"));ok=ok && query.exec();
+        query.addBindValue(sqlText(game.value("summary")));query.addBindValue(sqlText(game.value("artworkHash")));ok=ok && query.exec();
         if(game.value("lastPlayed").toLongLong()>0){
             query.prepare("INSERT INTO game_activity(game_id,last_played) VALUES(?,?)");
             query.addBindValue(game.value("id"));query.addBindValue(game.value("lastPlayed"));ok=ok && query.exec();
