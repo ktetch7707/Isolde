@@ -4,6 +4,7 @@ param(
     [ValidateSet('all','runtime_contracts','campaign_repairs','sources','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_safety','studio_selection','studio_artwork','studio_visuals','shell_appearance','studio_colors','studio_workflows','studio_cutover','studio_designs','studio_design_contracts','studio_reuse','studio_performance','studio_remaining','studio_closure_regressions','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
     [string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
+    [switch]$FrozenReferenceHelpers,
     [switch]$Diagnostic,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ResumeRunId,
     [string]$GuideReplayPlan,
@@ -26,6 +27,7 @@ if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Rec
 $validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')
 $Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })
 $invalidCases = @($Cases | Where-Object { $_ -notin $validCases })
+if ($FrozenReferenceHelpers -and ($Action -ne 'Visual' -or @($Cases | Where-Object { $_ -notin @('lounge','pastel') }).Count)) { throw 'FrozenReferenceHelpers requires Visual with Lounge/Pastel only.' }
 if (!$Cases.Count -or $invalidCases.Count) { throw "Cases must be comma-separated values from: $($validCases -join ', ')" }
 if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation','studio_selection','studio_artwork','studio_visuals','shell_appearance'))) { throw 'ReuseFullRun requires Test with a supported bounded QML suite.' }
 if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
@@ -95,12 +97,12 @@ try {
             $historyDigest = ''
             $referenceDigest = ''
             $referenceCollectionsDigest = ''
-            if ($case -in @('lounge','pastel')) {
+            if (!$FrozenReferenceHelpers -and $case -in @('lounge','pastel')) {
                 $helper = Join-Path $PSScriptRoot 'home-reference-acceptance.py'
                 $referenceDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/reference-helper-$referenceDigest.py")) -TimeoutSeconds 30 -Log $transport
             }
-            if ($case -in @('lounge','pastel')) {
+            if (!$FrozenReferenceHelpers -and $case -in @('lounge','pastel')) {
                 $collectionsHelper = Join-Path $PSScriptRoot 'reference_collections.py'
                 $referenceCollectionsDigest = (Get-FileHash -LiteralPath $collectionsHelper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($collectionsHelper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/reference-collections-helper-$referenceCollectionsDigest.py")) -TimeoutSeconds 30 -Log $transport
