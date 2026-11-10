@@ -17,6 +17,23 @@ Item {
     signal accepted(string text)
     signal canceled()
 
+    function revealSelection() {
+        const key = keyRepeater.itemAt(selectedIndex)
+        if (!key) return
+        const position = key.mapToItem(keyboardContent, 0, 0)
+        if (position.y < keyboardFlickable.contentY)
+            keyboardFlickable.contentY = position.y
+        else if (position.y + key.height > keyboardFlickable.contentY + keyboardFlickable.height)
+            keyboardFlickable.contentY = position.y + key.height - keyboardFlickable.height
+    }
+    onSelectedIndexChanged: Qt.callLater(revealSelection)
+    onKeysChanged: Qt.callLater(revealSelection)
+    onHeightChanged: Qt.callLater(revealSelection)
+    function keyLabel(key) {
+        const labels={"Del":"⌫","Space":"␣","Clear":"×","Done":"✓","Shift":"⇧","ABC":"Ab","123":"12","#+=":"#+"}
+        return labels[key] || key
+    }
+
     function keyList() {
         const modes = ["ABC", "123", "#+="]
         const actions = ["Del", "Space", "Clear", "Done"].concat(modes)
@@ -79,20 +96,9 @@ Item {
         border.width: 2
         border.color: shell.focus
 
-        Flickable {
-            id: keyboardFlickable
-            anchors.fill: parent
-            anchors.margins: 18
-            contentHeight: keyboardContent.height
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            Column {
-                id: keyboardContent
-                width: parent.width
-                spacing: 14 * shell.gapScale
-
             Rectangle {
-                width: parent.width
+                id: valueField
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 18 }
                 height: 50
                 radius: shell.radius
                 color: shell.input
@@ -111,27 +117,47 @@ Item {
                 }
             }
 
+        Flickable {
+            id: keyboardFlickable
+            objectName: "keyboardViewport"
+            anchors { left: parent.left; right: parent.right; top: valueField.bottom; bottom: keyboardHint.top; margins: 18 }
+            contentHeight: keyboardContent.height
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            Column {
+                id: keyboardContent
+                width: keyboardFlickable.width
+                spacing: 14 * shell.gapScale
+
             Grid {
                 width: parent.width
                 columns: root.columns
                 columnSpacing: 8 * shell.gapScale
                 rowSpacing: 8 * shell.gapScale
                 Repeater {
+                    id: keyRepeater
                     model: root.keys
                     delegate: Rectangle {
                         required property int index
                         required property string modelData
+                        objectName: "keyboardKey-" + index
                         width: (parent.width - parent.columnSpacing * (root.columns - 1)) / root.columns
                         height: 40
                         radius: shell.radius
                         color: root.selectedIndex === index ? shell.selected : shell.surface
                         border.width: root.selectedIndex === index ? 3 : 1
                         border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
+                        Accessible.name: modelData
                         Text { font.family: shell.fontFamily;
-                            anchors.centerIn: parent
-                            text: modelData
+                            anchors.fill: parent
+                            anchors.margins: 3
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            text: root.keyLabel(modelData)
                             color: root.selectedIndex === index ? shell.selectedText : shell.text
-                            font.pixelSize: 18 * (modelData === "Shift" ? 0.85 : 1)
+                            font.pixelSize: 18 * shell.textScale
+                            fontSizeMode: Text.Fit
+                            minimumPixelSize: 12 * shell.textScale
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
@@ -166,13 +192,14 @@ Item {
                 }
             }
 
-            Text { font.family: shell.fontFamily;
-                width:parent.width;wrapMode:Text.Wrap
-                text: root.hint
+        }
+        }
+            Text { id: keyboardHint; font.family: shell.fontFamily;
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 18 }
+                wrapMode:Text.Wrap
+                text: (root.keys[root.selectedIndex] || "") + " · " + root.hint
                 color: shell.muted
                 font.pixelSize: 15 * shell.textScale
             }
-        }
-        }
     }
 }

@@ -6,6 +6,11 @@ Item {
     Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
     property var appearance: ({})
     property int selectedIndex: 0
+    property bool pagePickerOpen: false
+    property int pagePickerIndex: 0
+    property var draftPageIds: []
+    readonly property var pageEntries: homeLayout.pages
+    readonly property var pageChoices: pageEntries.map(page => (draftPageIds.indexOf(page.id)>=0 ? "✓ " : "○ ")+page.name).concat(["Save selection", "Cancel"])
     property bool sourcePanelOpen: false
     property bool pathKeyboardOpen: false
     property int sourceActionIndex: 0
@@ -23,11 +28,27 @@ Item {
         { name: "Date Widget", value: ambientSettings.showDate ? "Shown" : "Hidden", help: "Adds the date under the clock." },
         { name: "System Hint", value: ambientSettings.showSystemHint ? "Shown" : "Hidden", help: "Shows mode/rate and wake hint." },
         { name: "Preview Now", value: "Open", help: "Immediately preview the screensaver." },
-        { name: "Reset Ambient", value: "Defaults", help: "Restore default screensaver settings." }
+        { name: "Reset Ambient", value: "Defaults", help: "Restore default screensaver settings." },
+        { name: "Screensaver Pages", value: (ambientSettings.pageIds || []).length + " selected", help: "Create pages with Page Studio, then choose their rotation here. Select Pages as Visual Mode." }
     ]
     signal previewRequested()
 
     function handleCommand(command) {
+        if (pagePickerOpen) {
+            if (command === inputManager.navigateUp) pagePickerIndex = Math.max(0,pagePickerIndex-1)
+            else if (command === inputManager.navigateDown) pagePickerIndex = Math.min(pageChoices.length-1,pagePickerIndex+1)
+            else if (command === inputManager.back) pagePickerOpen = false
+            else if (command === inputManager.confirm) {
+                if (pagePickerIndex < pageEntries.length) {
+                    const id=pageEntries[pagePickerIndex].id, next=draftPageIds.slice(), at=next.indexOf(id)
+                    if(at>=0)next.splice(at,1);else next.push(id)
+                    draftPageIds=next
+                } else if(pagePickerIndex===pageEntries.length) {
+                    if(ambientSettings.setPageIds(draftPageIds))pagePickerOpen=false
+                } else pagePickerOpen=false
+            }
+            return
+        }
         if (pathKeyboardOpen) {
             pathKeyboard.handleCommand(command)
             return
@@ -76,9 +97,35 @@ Item {
             else if (selectedIndex === 10) ambientSettings.toggleSystemHint()
             else if (selectedIndex === 11) previewRequested()
             else if (selectedIndex === 12) ambientSettings.reset()
+            else if (selectedIndex === 13) {
+                draftPageIds=(ambientSettings.pageIds || []).slice();pagePickerIndex=0;pagePickerOpen=true
+            }
         }
     }
 
+    Rectangle {
+        anchors.fill: parent; z: 20; visible: root.pagePickerOpen; color: shell.surface
+        Flickable {
+            anchors.fill: parent; contentHeight: pageList.height; clip: true
+            contentY: Math.max(0,Math.min(Math.max(0,contentHeight-height),root.pagePickerIndex*64-height/2))
+            Column {
+                id: pageList; width: parent.width; spacing: 4
+                Repeater {
+                    model: root.pageChoices
+                    delegate: Rectangle {
+                        required property int index
+                        required property string modelData
+                        width: pageList.width; height: 60
+                        color: root.pagePickerIndex===index?shell.selected:shell.surface
+                        border.width: root.pagePickerIndex===index?3:0
+                        border.color: shell.selectedFocus
+                        Text {anchors.fill:parent;anchors.margins:12;verticalAlignment:Text.AlignVCenter;text:modelData;color:root.pagePickerIndex===index?shell.selectedText:shell.text;font.pixelSize:22*shell.textScale;elide:Text.ElideRight}
+                    }
+                }
+                Text {width:parent.width;wrapMode:Text.Wrap;text:ambientSettings.errorString;color:shell.error}
+            }
+        }
+    }
     Flickable {
         anchors.fill: parent
         contentHeight: contentColumn.height

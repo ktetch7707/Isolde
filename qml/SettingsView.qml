@@ -23,7 +23,8 @@ Item {
         { name: "System", description: "Display, audio, power, support, updates, and about" },
         { name: "Profiles", description: "People, personal layouts, and separate web sign-ins" },
         { name: "VPN", description: "Install and configure Surfshark and Proton VPN" },
-        { name: "Online Store", description: "Verified Android repositories and Chromium web apps" }
+        { name: "Online Store", description: "Verified Android repositories and Chromium web apps" },
+        { name: "Media", description: "Library and playback preferences" }
     ]
 
     function openSection(index) {
@@ -36,6 +37,11 @@ Item {
     }
 
     function handleCommand(command) {
+        if(inPage && selectedSection===8){
+            if(command===inputManager.back){if(!mediaPage.back())inPage=false}
+            else mediaPage.handleCommand(command)
+            return
+        }
         if (inPage && selectedSection === 2 && sourcePage.editing) { sourcePage.handleCommand(command); return }
         if (inPage && selectedSection === 6 && (vpnPage.editing || command !== inputManager.back)) {
             vpnPage.handleCommand(command)
@@ -153,6 +159,7 @@ Item {
                 NetworkSettingsView { appearance: root.appearance; id: networkPage; anchors.fill: parent; visible: root.selectedSection === 0 }
                 VpnSettingsView { id: vpnPage; anchors.fill: parent; appearance: root.appearance; visible: root.inPage && root.selectedSection === 6 }
                 StoreSettingsView { id: storePage; anchors.fill: parent; appearance:root.appearance; visible: root.inPage && root.selectedSection === 7 }
+                KodiSettingsView {id:mediaPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.selectedSection===8}
                 Column {
                     visible: root.selectedSection === 1
                     anchors.centerIn: parent

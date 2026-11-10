@@ -151,6 +151,12 @@ Window {
     }
     Component.onCompleted:Qt.callLater(()=>{if(setupState.complete && homeLayout.homePageId)window.showDesignatedHome()})
 
+    function ambientIdleAllowed() {
+        const internalSession=!sessionManager.active || ["settings","store","customize"].indexOf(sessionManager.currentAppType)>=0
+        return internalSession && !captureSession.open && !kodiMedia.playbackActive
+            && !desktopMode.active && !desktopMode.busy && !appVpn.busy && !actionDispatcher.guideTransitionPending
+    }
+
     function handleCommand(command) {
         if(appVpn.busy && appVpn.pendingApp){
             if(command===inputManager.back || command===inputManager.home)appVpn.cancel()
@@ -274,9 +280,9 @@ Window {
     Timer {
         id: idleTimer
         running: setupState.complete && ambientSettings.enabled && !window.ambientActive
-        repeat: false
+        repeat: true
         interval: ambientSettings.timeoutMinutes * 60000
-        onTriggered:         if (!sessionManager.active && !captureSession.open && !commandCenter.open && !allApps.open && !kodiLibrary.open && !kodiMedia.playbackActive) window.ambientActive = true
+        onTriggered: if (window.ambientIdleAllowed()) window.ambientActive = true
     }
 
     Item {
@@ -606,6 +612,7 @@ Window {
         packages: appCatalog.entries
         searchSettings: searchPreferences
         onlineDiscovery: discoveryProvider
+        playbackPreferences: kodiService
         appearance:window.shellAppearance("search", themeOrigin)
         property string themeOrigin: ""
         movieSearchClient: searchMovies

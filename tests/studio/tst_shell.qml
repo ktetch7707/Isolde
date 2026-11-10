@@ -13,11 +13,13 @@ Item {
         property var items:[]
         property int pageStart:0
         property int totalMovies:0
+        signal changed()
         function openView(kind,view,query){requests++}
         function invalidate(reason){invalidations++}
     }
     Component {id:searchComponent;App.CommandCenter {width:1280;height:720;apps:[];packages:[];movieSearchClient:client;showSearchClient:client;episodeSearchClient:client}}
     Component {id:keyboardComponent;App.OnScreenKeyboard {width:1000;height:400}}
+    Component {id:displayComponent;App.DisplaySettingsView {width:1000;height:700}}
     Component {id:editorComponent;App.PageStudioView {width:1280;height:720;layoutModel:homeLayout}}
     QtObject {
         id: networkSettings
@@ -78,9 +80,13 @@ Item {
         property bool showDate: true
         property bool showSystemHint: true
         property string errorString: ""
+        property var pageIds: []
+        property var photoUrls: []
+        function setPageIds(ids){pageIds=ids.slice();return true}
     }
     Component {id:audioComponent;App.AudioSettingsView {width:800;height:600}}
     Component {id:ambientComponent;App.AmbientSettingsView {width:800;height:600}}
+    Component {id:ambientScreenComponent;App.AmbientScreen {width:1280;height:720;settings:ambientSettings}}
     TestCase {
         name:"ShellAppearance";when:windowShown
         property var editor:null
@@ -225,6 +231,56 @@ Item {
             verify(keyboard!==null);keyboard.appearance=palette(true);settle()
             compare(keyboard.value,"private");compare(keyboard.selectedIndex,14);verify(keyboard.passwordMode);verify(keyboard.shift)
             keyboard.handleCommand(inputManager.back);compare(keyboard.value,"private")
+        }
+        function test_keyboard_remote_selection_stays_visible_in_short_panel(){
+            const keyboard=createTemporaryObject(keyboardComponent,parent,{width:480,height:300})
+            verify(keyboard!==null)
+            for(let i=0;i<keyboard.keys.length;i++)keyboard.handleCommand(inputManager.navigateRight)
+            settle()
+            const viewport=findChild(keyboard,"keyboardViewport")
+            verify(viewport!==null);verify(viewport.contentY>0)
+            const selected=findChild(keyboard,"keyboardKey-"+keyboard.selectedIndex)
+            verify(selected!==null)
+            const position=selected.mapToItem(viewport,0,0)
+            verify(position.y>=-1 && position.y+selected.height<=viewport.height+1)
+            const done=keyboard.keys.indexOf("Done")
+            while(keyboard.selectedIndex>done)keyboard.handleCommand(inputManager.navigateLeft)
+            settle()
+            if(studioFixture.artifacts)grabImage(keyboard).save(studioFixture.artifacts+"/studio-test-keyboard-short-panel-done.png")
+            keyboard.selectedIndex=0;settle();compare(viewport.contentY,0)
+        }
+        function test_display_contrast_changes_saved_profile_appearance(){
+            verify(studioFixture.reset(false,false))
+            const display=createTemporaryObject(displayComponent,parent)
+            verify(display!==null)
+            display.selectedIndex=3
+            const original=!!homeLayout.homeAppearance.highContrast
+            const disk=studioFixture.disk()
+            display.handleCommand(inputManager.confirm)
+            compare(!!homeLayout.homeAppearance.highContrast,!original)
+            compare(display.errorString,"")
+            verify(studioFixture.disk()!==disk)
+            display.handleCommand(inputManager.confirm)
+            compare(!!homeLayout.homeAppearance.highContrast,original)
+        }
+        function test_ambient_pages_use_shared_models_and_cancel_selection(){
+            verify(studioFixture.reset(false,false))
+            const first=homeLayout.createPage("First screen","blank"),second=homeLayout.createPage("Second screen","blank")
+            verify(first.length>0 && second.length>0)
+            ambientSettings.pageIds=[first,second];ambientSettings.mode="pages"
+            const screen=createTemporaryObject(ambientScreenComponent,parent)
+            verify(screen!==null);settle()
+            compare(screen.currentPage,homeLayout.pageModel(first))
+            screen.slideIndex=1;compare(screen.currentPage,homeLayout.pageModel(second))
+            const settings=createTemporaryObject(ambientComponent,parent)
+            verify(settings!==null);settings.selectedIndex=13;settings.handleCommand(inputManager.confirm)
+            verify(settings.pagePickerOpen)
+            settings.handleCommand(inputManager.confirm)
+            compare(settings.draftPageIds.length,1);compare(ambientSettings.pageIds.length,2)
+            settings.handleCommand(inputManager.back);verify(!settings.pagePickerOpen)
+            compare(ambientSettings.pageIds.length,2)
+            ambientSettings.pageIds=["removed-page"];settle();compare(screen.currentPage,null)
+            ambientSettings.pageIds=[];ambientSettings.mode="slideshow"
         }
         function test_shell_inspector_source_override_reset_and_cancel_are_private(){
             verify(studioFixture.reset(false,false));const disk=studioFixture.disk()

@@ -56,6 +56,7 @@ class IsoldeTests final : public QObject {
 
 private slots:
     void allAppsProjectionContainsOnlyRegisteredLaunchables() {
+        QCoreApplication::setApplicationVersion("0.0.1.2");
         QTemporaryDir temp;
         AppRegistry registry;
         QVERIFY(registry.load(QFINDTESTDATA("../config/apps.json")));
@@ -1219,15 +1220,23 @@ void IsoldeTests::ambientSettingsPersistAndClamp()
     QVERIFY(!settings.showClock());
     QVERIFY(!settings.showDate());
 
+    QVERIFY(settings.setPageIds({QStringLiteral("page.first"),QStringLiteral("page-second")}));
+    QVERIFY(!settings.setPageIds({QStringLiteral("../outside")}));
+    QCOMPARE(settings.pageIds(), QStringList({QStringLiteral("page.first"),QStringLiteral("page-second")}));
+    QVERIFY(!settings.setPageIds({QStringLiteral("page.first"),QStringLiteral("page.first")}));
+
     AmbientSettings restored;
     QCOMPARE(restored.timeoutMinutes(), 120);
     QCOMPARE(restored.slideshowSeconds(), 5);
     QCOMPARE(restored.mode(), QString("gradient"));
+    QCOMPARE(restored.pageIds(), settings.pageIds());
     QCOMPARE(restored.imageFit(), QString("fit"));
     QVERIFY(restored.shuffle());
     QVERIFY(!restored.showClock());
 
     restored.reset();
+    QVERIFY(restored.pageIds().isEmpty());
+    AmbientSettings resetPages;QVERIFY(resetPages.pageIds().isEmpty());
     QCOMPARE(restored.timeoutMinutes(), 5);
     QCOMPARE(restored.slideshowSeconds(), 15);
     QCOMPARE(restored.mode(), QString("slideshow"));

@@ -2,12 +2,14 @@
 
 #include <QObject>
 #include <QVariantList>
+#include <QStringList>
 
 class AmbientSettings final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ enabled NOTIFY changed)
     Q_PROPERTY(int timeoutMinutes READ timeoutMinutes NOTIFY changed)
     Q_PROPERTY(QString mode READ mode NOTIFY changed)
+    Q_PROPERTY(QStringList pageIds READ pageIds NOTIFY changed)
     Q_PROPERTY(int slideshowSeconds READ slideshowSeconds NOTIFY changed)
     Q_PROPERTY(bool showClock READ showClock NOTIFY changed)
     Q_PROPERTY(bool showDate READ showDate NOTIFY changed)
@@ -25,6 +27,8 @@ public:
     [[nodiscard]] bool enabled() const;
     [[nodiscard]] int timeoutMinutes() const;
     [[nodiscard]] QString mode() const;
+    QStringList pageIds() const { return m_pageIds; }
+    Q_INVOKABLE bool setPageIds(const QStringList &ids);
     [[nodiscard]] int slideshowSeconds() const;
     [[nodiscard]] bool showClock() const;
     [[nodiscard]] bool showDate() const;
@@ -65,6 +69,7 @@ private:
     bool m_enabled = true;
     int m_timeoutMinutes = 5;
     QString m_mode = QStringLiteral("slideshow");
+    QStringList m_pageIds;
     int m_slideshowSeconds = 15;
     bool m_showClock = true;
     bool m_showDate = true;

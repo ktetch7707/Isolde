@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QColor>
 #include <QSettings>
+#include "home/ComponentSchema.h"
 #include <QStandardPaths>
 #include <QStringList>
 #include <QUrl>
@@ -29,6 +30,29 @@ QString AmbientSettings::imageFit() const { return m_imageFit; }
 bool AmbientSettings::shuffle() const { return m_shuffle; }
 QString AmbientSettings::errorString() const { return m_errorString; }
 
+bool AmbientSettings::setPageIds(const QStringList &ids)
+{
+    if (ids.size() > 64) { m_errorString = tr("Select at most 64 pages."); emit changed(); return false; }
+    QStringList unique;
+    for (const auto &id : ids) {
+        if (!ComponentSchema::safeId(id) || unique.contains(id)) {
+            m_errorString = tr("Choose distinct valid pages."); emit changed(); return false;
+        }
+        unique.append(id);
+    }
+    QSettings settings;
+    settings.beginGroup(m_settingsGroup);
+    const auto previous = settings.value(QStringLiteral("pageIds"));
+    settings.setValue(QStringLiteral("pageIds"), unique);
+    settings.sync();
+    if (settings.status() != QSettings::NoError) {
+        settings.setValue(QStringLiteral("pageIds"), previous);
+        m_errorString = tr("Screensaver pages could not be saved. Nothing changed.");
+        emit changed(); return false;
+    }
+    m_pageIds = unique; m_errorString.clear(); emit changed(); return true;
+}
+
 void AmbientSettings::toggleEnabled()
 {
     m_enabled = !m_enabled;
@@ -48,7 +72,7 @@ void AmbientSettings::adjustTimeout(int delta)
 
 void AmbientSettings::nextMode()
 {
-    static const QStringList modes{QStringLiteral("slideshow"), QStringLiteral("gradient"), QStringLiteral("dim")};
+    static const QStringList modes{QStringLiteral("slideshow"), QStringLiteral("gradient"), QStringLiteral("dim"), QStringLiteral("pages")};
     const auto next = (modes.indexOf(m_mode) + 1) % modes.size();
     m_mode = modes.at(next);
     save();
@@ -178,6 +202,7 @@ void AmbientSettings::toggleShuffle()
 
 void AmbientSettings::reset()
 {
+    if (!setPageIds({})) return;
     m_enabled = true;
     m_timeoutMinutes = 5;
     m_mode = QStringLiteral("slideshow");
@@ -202,7 +227,10 @@ void AmbientSettings::load()
     m_enabled = settings.value(QStringLiteral("enabled"), m_enabled).toBool();
     m_timeoutMinutes = clamp(settings.value(QStringLiteral("timeoutMinutes"), m_timeoutMinutes).toInt(), 1, 120);
     const auto mode = settings.value(QStringLiteral("mode"), m_mode).toString();
-    m_mode = (mode == QStringLiteral("gradient") || mode == QStringLiteral("dim")) ? mode : QStringLiteral("slideshow");
+    m_mode = (mode == QStringLiteral("gradient") || mode == QStringLiteral("dim") || mode == QStringLiteral("pages")) ? mode : QStringLiteral("slideshow");
+    const auto storedPages = settings.value(QStringLiteral("pageIds")).toStringList();
+    if (storedPages.size() <= 64) for (const auto &id : storedPages)
+        if (ComponentSchema::safeId(id) && !m_pageIds.contains(id)) m_pageIds.append(id);
     m_slideshowSeconds = clamp(settings.value(QStringLiteral("slideshowSeconds"), m_slideshowSeconds).toInt(), 5, 300);
     m_showClock = settings.value(QStringLiteral("showClock"), m_showClock).toBool();
     m_showDate = settings.value(QStringLiteral("showDate"), m_showDate).toBool();

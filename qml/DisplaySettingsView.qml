@@ -5,12 +5,15 @@ Item {
     SurfacePalette { id: shell; appearance: root.appearance }
     Rectangle {anchors.fill:parent;z:-1;color:shell.surface}
     property var appearance: ({})
+    property var layoutModel: homeLayout
+    readonly property var appearanceModel: layoutModel.homePageId ? layoutModel.pageModel(layoutModel.homePageId) : layoutModel
+    property string errorString: ""
     property int selectedIndex: 0
     readonly property var rows: [
         { name: "Safe Area", value: displaySettings.safeArea + "%", help: "Pulls Isolde's interface inward for TVs that crop the edges." },
         { name: "UI Scale", value: displaySettings.uiScale + "%", help: "Makes the living-room interface larger or smaller." },
         { name: "Reduced Motion", value: displaySettings.reduceMotion ? "On" : "Off", help: "Reduces animations and motion for accessibility." },
-        { name: "High Contrast", value: appearance.contrast === "high" ? "On" : "Off", help: "Increases text and border contrast for visibility." },
+        { name: "High Contrast", value: layoutModel.homeAppearance.highContrast ? "On" : "Off", help: "Increases text and border contrast for visibility." },
         { name: "Reset Display", value: "Defaults", help: "Restore safe area, scale, motion, and contrast defaults." }
     ]
 
@@ -26,9 +29,14 @@ Item {
             if (selectedIndex === 0) displaySettings.adjustSafeArea(1)
             else if (selectedIndex === 1) displaySettings.adjustUiScale(5)
         } else if (command === inputManager.confirm) {
-            if (selectedIndex === 4) displaySettings.reset()
+            if (selectedIndex === 4) {
+                if (appearanceModel.setAppearance({highContrast:false})) { displaySettings.reset(); errorString = "" }
+                else errorString = appearanceModel.errorString
+            }
             else if (selectedIndex === 2) displaySettings.toggleReduceMotion()
-            else if (selectedIndex === 3) appearance.contrast = (appearance.contrast === "high") ? "default" : "high"
+            else if (selectedIndex === 3) {
+                errorString = appearanceModel.setAppearance({highContrast:!layoutModel.homeAppearance.highContrast}) ? "" : appearanceModel.errorString
+            }
         }
     }
 
@@ -110,7 +118,7 @@ Item {
         }
 
         Text { font.family: shell.fontFamily;
-            text: "← → adjust    Enter toggle/cycle    Esc back"
+            text: root.errorString || "← → adjust    Enter toggle/cycle    Esc back"
             color: shell.unavailable
             font.pixelSize: 15 * shell.textScale
         }

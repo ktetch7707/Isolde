@@ -62,6 +62,10 @@ Item {
         }
         if (activePage === 2) {
             if (command === inputManager.back) {
+                if (ambientPage.pagePickerOpen || ambientPage.pathKeyboardOpen || ambientPage.sourcePanelOpen) {
+                    ambientPage.handleCommand(command)
+                    return
+                }
                 activePage = -1
                 return
             }
