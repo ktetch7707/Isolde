@@ -1265,6 +1265,9 @@ class Oracle:
                 # fixtures and all config/media/evidence remain protected.
                 removed+=remove_fixture_caches(Path('/tmp'),mounts,active,preserve_recent=0)
             atomic_json(self.run/'guest-fixture-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'fixtureDataPreserved':True,'freeGiB':round(shutil.disk_usage(self.root).free/1024**3,2)})
+        if shutil.disk_usage(self.root).free<3*1024**3:
+            removed=remove_runner_test_bundles(self.root,Path(__file__),mounts)
+            atomic_json(self.run/'guest-runner-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'sourceEvidencePreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
@@ -1282,7 +1285,7 @@ class Oracle:
             if bundle.resolve()!=bundle or hashes.resolve()!=hashes or digest(hashes)!=maintenance_tests_digest:
                 raise RuntimeError("Maintenance self-test bundle checksum mismatch")
             entries=manifest(hashes)
-            if set(entries)!={"tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tools/home-components-acceptance.py","tools/reference_collections.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt","config/studio-defaults.json","tests/fixtures/shell-theme-routes.json"} or entries["tools/vm-oracle.py"]!=driver_digest:
+            if set(entries)!={"tools/install-appliance.py","tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tools/home-components-acceptance.py","tools/reference_collections.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt","config/studio-defaults.json","tests/fixtures/shell-theme-routes.json"} or entries["tools/vm-oracle.py"]!=driver_digest:
                 raise RuntimeError("Unexpected maintenance self-test dependencies")
             if any((bundle/name).resolve()!=bundle/name for name in entries):
                 raise RuntimeError("Redirected maintenance self-test dependency")
@@ -1823,6 +1826,34 @@ def cancel_owned(root, run_id):
             return {"cancelled": True, "state": state}
         time.sleep(.2)
     raise RuntimeError("Owned runner has not finished cleanup; preserve evidence and inspect Status")
+
+
+def remove_runner_test_bundles(root, driver, mounts=(), target_free=3*1024**3):
+    """Only obsolete, checksum-addressed self-test copies; retain all drivers/evidence."""
+    bins=root/'bin'
+    if root.resolve()!=root or bins.resolve()!=bins:raise RuntimeError('Redirected runner cache')
+    bundles=sorted((p for p in bins.iterdir() if re.fullmatch(r'maintenance-[a-f0-9]{64}-[a-f0-9]{64}',p.name)),key=lambda p:p.stat().st_mtime,reverse=True)
+    removed=[]
+    for bundle in bundles[3:]:
+        if shutil.disk_usage(root).free>=target_free:break
+        if driver.resolve().is_relative_to(bundle) or bundle.name.startswith('maintenance-'+digest(driver)+'-'):continue
+        if bundle.resolve()!=bundle or not bundle.is_dir():raise RuntimeError('Unsafe runner test bundle')
+        if any(m!=Path('/') and (m==bundle or m.is_relative_to(bundle) or bundle.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted runner test bundle')
+        hashes=bundle/'files.sha256'
+        # Older runner versions did not write a verification receipt. Preserve
+        # those unknown copies rather than inventing evidence for deletion.
+        if not hashes.exists() and not hashes.is_symlink():continue
+        if hashes.resolve()!=hashes or digest(hashes)!=bundle.name.rsplit('-',1)[1]:raise RuntimeError('Runner test bundle checksum mismatch')
+        entries=manifest(hashes);verify_tree(bundle,entries)
+        allowed=set(entries)|{'files.sha256'}
+        for path in bundle.rglob('*'):
+            if path.is_symlink():raise RuntimeError('Linked runner test bundle')
+            if path.is_file() and path.relative_to(bundle).as_posix() not in allowed:
+                match=re.fullmatch(r'([A-Za-z0-9_-]+)\.cpython-[0-9]{2,3}\.pyc',path.name)
+                original=path.parent.parent/(match[1]+'.py') if match and path.parent.name=='__pycache__' else None
+                if original is None or original.relative_to(bundle).as_posix() not in entries or path.stat().st_size>1024**2:raise RuntimeError('Unknown runner test bundle file')
+        shutil.rmtree(bundle);removed.append(str(bundle))
+    return removed
 
 
 def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, target_free=None, protected=()):

@@ -142,7 +142,7 @@ try {
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
         if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'artifacts') {
-            $maintenanceFiles = @('tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/reference_collections.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt','config/studio-defaults.json','tests/fixtures/shell-theme-routes.json')
+            $maintenanceFiles = @('tools/install-appliance.py','tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/reference_collections.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt','config/studio-defaults.json','tests/fixtures/shell-theme-routes.json')
             $maintenanceLines = foreach ($relative in $maintenanceFiles) {
                 $hash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
                 "$hash  $relative"

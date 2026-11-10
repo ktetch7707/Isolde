@@ -93,6 +93,21 @@ class OracleTests(unittest.TestCase):
         path=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
         compile(path.read_bytes(),str(path),'exec')
 
+    def test_runner_test_cache_preserves_recent_and_rejects_unknown_bytes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);bins=root/'bin';bins.mkdir();driver=bins/'driver.py';driver.write_text('current')
+            bundles=[]
+            for i in range(5):
+                content=('test '+str(i)).encode();entries=hashlib.sha256(content).hexdigest()+'  test.py\n'
+                bundle=bins/('maintenance-'+str(i)*64+'-'+hashlib.sha256(entries.encode()).hexdigest());bundle.mkdir()
+                (bundle/'test.py').write_bytes(content);(bundle/'files.sha256').write_text(entries);os.utime(bundle,(i+1,i+1));bundles.append(bundle)
+            (bundles[0]/'unexpected').write_text('preserve');os.utime(bundles[0],(1,1))
+            with self.assertRaises(RuntimeError):oracle.remove_runner_test_bundles(root,driver,target_free=10**18)
+            self.assertTrue(bundles[0].exists());self.assertTrue(bundles[4].exists())
+            (bundles[0]/'unexpected').unlink();os.utime(bundles[0],(1,1))
+            removed=oracle.remove_runner_test_bundles(root,driver,target_free=10**18)
+            self.assertIn(str(bundles[0]),removed);self.assertTrue(all(p.exists() for p in bundles[2:]))
+
     def test_archive_pruning_requires_exact_host_backup_and_preserves_payload_or_source(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);run=root/'runs/old';run.mkdir(parents=True);content=b'archived source';checksum=hashlib.sha256(content).hexdigest()
