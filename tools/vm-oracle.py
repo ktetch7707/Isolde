@@ -765,9 +765,10 @@ def focused_qml_coverage(root, run, base_id, suite):
              'tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/reference_collections.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1'},
             'ShellKeyboard',{'tests/fixtures/shell-theme-routes.json'})
     if suite=='studio_visuals':
+        icons={'config/app-icons/'+name+'.svg' for name in ('steam','spotify','kodi','freetube','netflix','cbc-gem','crunchyroll','paramount-plus','youtube-tv','prime-video','disney-plus','peacock')}
         return qml_coverage(root,run,base_id,suite,'studio_visuals',
-            {'qml/PageStudioView.qml','qml/CommandCenter.qml'},
-            {'tests/studio/tst_artwork.qml','tests/studio/tst_shell.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1','tools/home-components-acceptance.py'},'StudioVisuals')
+            {'qml/PageStudioView.qml','qml/CommandCenter.qml','qml/HomeCard.qml'}|icons,
+            {'config/app-icons/provenance.json','tests/tst_home_navigation.cpp','tests/studio/tst_editor.qml','tests/studio/tst_artwork.qml','tests/studio/tst_shell.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1','tools/home-components-acceptance.py','tools/home-reference-acceptance.py'},'StudioVisuals')
     if suite=='studio_artwork':
         return qml_coverage(root,run,base_id,suite,'studio_artwork',
             {'qml/StudioImageFraming.qml','qml/StudioArtworkPicker.qml','qml/StudioInspector.qml','qml/PageStudioView.qml'},
@@ -1058,6 +1059,8 @@ class Oracle:
         if resume_run_id:
             self.resume_tests(entries, resume_run_id)
             return
+        selected_targets=SUITES[suite]
+        self.maintenance_build_targets=selected_targets if isinstance(selected_targets,tuple) else (selected_targets,) if selected_targets else ()
         self.automatic_test_cleanup()
         self.check()
         service_before, releases_before = self.state["service"], self.state["releases"]
@@ -1268,6 +1271,9 @@ class Oracle:
         if shutil.disk_usage(self.root).free<3*1024**3:
             removed=remove_runner_test_bundles(self.root,Path(__file__),mounts)
             atomic_json(self.run/'guest-runner-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'sourceEvidencePreserved':True})
+        if shutil.disk_usage(self.root).free<2*1024**3:
+            removed=remove_linked_test_executables(self.root,mounts,active,getattr(self,'maintenance_build_targets',()))
+            atomic_json(self.run/'guest-linked-tests-cleanup.json',{'guest':'isolde-test','targets':removed,'compiledObjectsPreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
@@ -1826,6 +1832,29 @@ def cancel_owned(root, run_id):
             return {"cancelled": True, "state": state}
         time.sleep(.2)
     raise RuntimeError("Owned runner has not finished cleanup; preserve evidence and inspect Status")
+
+
+def remove_linked_test_executables(root,mounts=(),active=(),keep=(),target_free=3*1024**3):
+    """Ninja can relink these generated tests; never remove their compiled objects."""
+    build=root/'work/build';targets=build/'CMakeFiles/TargetDirectories.txt'
+    if not targets.exists():return []
+    if root.resolve()!=root or build.resolve()!=build or targets.resolve()!=targets:raise RuntimeError('Redirected linked-test cache')
+    if targets.stat().st_size>1024**2:raise RuntimeError('Unbounded build target list')
+    declared=set(targets.read_text().splitlines());candidates=[]
+    for path in build.iterdir():
+        if not re.fullmatch(r'isolde(?:_[A-Za-z0-9]+)*_tests',path.name) or path.name in keep:continue
+        if str(build/'CMakeFiles'/(path.name+'.dir')) not in declared:continue
+        if path.resolve()!=path or not path.is_file():raise RuntimeError('Unsafe linked-test executable')
+        if any(m!=Path('/') and (m==path or m.is_relative_to(path) or path.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted linked-test executable')
+        if path in active:continue
+        with path.open('rb') as stream:
+            if stream.read(4)!=b'\x7fELF':raise RuntimeError('Unknown linked-test executable')
+        candidates.append(path)
+    removed=[]
+    for path in sorted(candidates,key=lambda p:p.stat().st_mtime):
+        if shutil.disk_usage(root).free>=target_free:break
+        path.unlink();removed.append(str(path))
+    return removed
 
 
 def remove_runner_test_bundles(root, driver, mounts=(), target_free=3*1024**3):

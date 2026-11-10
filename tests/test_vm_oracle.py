@@ -93,6 +93,18 @@ class OracleTests(unittest.TestCase):
         path=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
         compile(path.read_bytes(),str(path),'exec')
 
+    def test_linked_test_cleanup_preserves_objects_kept_active_and_unknown_targets(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);build=root/'work/build';meta=build/'CMakeFiles';meta.mkdir(parents=True)
+            names=['isolde_old_tests','isolde_keep_tests','isolde_active_tests','isolde_unknown_tests']
+            for name in names:(build/name).write_bytes(b'\x7fELFgenerated')
+            (meta/'TargetDirectories.txt').write_text('\n'.join(str(meta/(name+'.dir')) for name in names[:3]))
+            obj=meta/'cached.o';obj.write_bytes(b'compiled object')
+            removed=oracle.remove_linked_test_executables(root,active=[build/names[2]],keep=[names[1]],target_free=10**18)
+            self.assertEqual(removed,[str(build/names[0])]);self.assertTrue(obj.exists())
+            self.assertTrue(all((build/name).exists() for name in names[1:]))
+            with self.assertRaises(RuntimeError):oracle.remove_linked_test_executables(root,mounts=[build/names[1]],target_free=10**18)
+
     def test_runner_test_cache_preserves_recent_and_rejects_unknown_bytes(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);bins=root/'bin';bins.mkdir();driver=bins/'driver.py';driver.write_text('current')
