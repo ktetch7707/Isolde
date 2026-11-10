@@ -598,7 +598,7 @@ QVariantMap GameLibrary::emulatorSettings(const QString &id){
 }
 bool GameLibrary::configureEmulator(const QString &id,const QVariantMap &options,const QString &firmware){
     if(!m_ready)return fail(tr("This games profile is no longer active."));
-    if(id=="retroarch-psx" && !firmware.isEmpty()
+    if(!firmware.isEmpty()
         && !approvedMediaDirectory(m_emulatorProfile,QFileInfo(firmware).absolutePath()))
         return fail(tr("Approve the firmware's media folder for this profile before importing."));
     QString error;if(!GameEmulators::configure(m_emulatorProfile,id,options,firmware,&error))return fail(error);

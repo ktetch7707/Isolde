@@ -8,6 +8,39 @@ Candidate: `f10bb57` on `agent-backlog-progress`; working tree clean at start. V
 
 ## Findings
 
+### Repair-only follow-up — November 10, no rerun authorized
+
+The user requested repairs with every expectation of passing a later rerun,
+and explicitly deferred that rerun. This follow-up launches no tests, builds,
+VM actions or graphical journeys. Existing passing evidence is historical;
+it does not verify the current unrelated Studio simplification edits.
+
+Reconciliation: BUG-001–074 have recorded repair evidence except the missing
+integration portion of BUG-058. Its provisioning regression is repaired for
+the ten pinned routes, but PS3/RPCS3, PS4/shadPS4, Vita/Vita3K, Original
+Xbox/xemu, Xbox 360/Xenia and Wii U/Cemu remain missing product integrations.
+The later installed UI record in `ui-audit-2026-11-10.md` supersedes this
+report's earlier Android administrator/deployment blocker. Installed playback,
+idle, offline and other broad acceptance journeys remain unproven; that is
+distinct from a recorded failing assertion.
+
+### BUG-075 — PS2 firmware import bypasses active-profile media approval
+
+- Owner: T30; security/profile-isolation defect found during repair review.
+- Source: `GameLibrary::configureEmulator` checked the active profile's folder
+  grants only for `retroarch-psx`. PCSX2 passed directly to structural/path
+  validation and could privately copy a readable firmware file from a folder
+  that the active profile had never approved.
+- Repair: every nonempty firmware import now requires an approved folder for
+  the active emulator profile before calling the copy/settings boundary.
+- Prepared regression: the existing remote emulator setup test checks both
+  firmware routes reject `/etc/passwd` without writing settings. A synthetic
+  structurally accepted PS2 image in another profile's granted folder is
+  refused without creating private storage; approving that folder for the
+  active profile permits the import and preserves source bytes.
+- Status: source-reviewed, regression prepared, **not run**. No completion or
+  acceptance credit. BUG-058's six missing integrations remain open.
+
 ### BUG-001 — Backlog Coding% total contradicts all 25 task rows
 - Type: reporting defect; low severity.
 - Reproduction: read current scope/completion math/Overall row in `docs/agent-backlog.md`.

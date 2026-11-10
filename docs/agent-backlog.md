@@ -7,6 +7,13 @@ The user removed **T13 and T31** from the project completion requirement. Their 
 
 ## Independent test audit — 2026-11-09
 
+Repair-only follow-up, November 10: the user deferred all reruns. Source review
+found and repaired a PS2 firmware-import profile-grant bypass (BUG-075); its
+positive/negative regression is prepared but unrun. See the repair-only section
+of [the campaign report](test-campaign-2026-11-09.md). No acceptance percentages
+change, and BUG-058's six missing emulator integrations remain open. Preserve
+the separate, unverified Studio simplification working-tree batch.
+
 The Coding% figures below are the implementation agents' **pre-campaign claims**, not verified completion. The [test and repair report](test-campaign-2026-11-09.md) records the original frozen campaign (52 passing,8 failing), repairs, and November10 final integration `campaign-20261110-final-a`: all60 registrations pass with zero skips. The sole later product change, All Apps artwork layout, passes focused gallery-c with strict full-origin reuse; its payload matches the reviewed Pastel journey. Studio and both reference staged journeys pass, while broader installed acceptance remains open. Testing confirmed missing expanded-emulator provisioning: the six unprovisioned routes are explicitly notIntegrated, while the ten trusted pinned routes remain supported. T30's expanded-generation requirement remains open; its Coding100% claim needs milestone reconciliation. Preserve unrelated earned credit and award no acceptance merely from these edits or passing checks.
 
 ## UI audit and repair — 2026-11-10

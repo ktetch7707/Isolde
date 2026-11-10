@@ -635,9 +635,39 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown);
     command(widget.data(),InputManager::Confirm);QCOMPARE(library.emulatorSettings("ppsspp").value("video").toString(),QString("software"));
     QVERIFY(!library.installEmulators(false));QVERIFY(!library.setupBusy());
-    QVERIFY(!library.configureEmulator("retroarch-psx",{{"video","automatic"},{"controller","xbox"}},"/etc/passwd"));
-    QVERIFY(library.errorString().contains("Approve"));
-    QVERIFY(library.emulatorSettings("retroarch-psx").value("firmware").toString().isEmpty());
+    for(const auto &id:QStringList{"retroarch-psx","pcsx2"}){
+        const auto settingsFile=GameEmulators::home(profile,id)+"/.config/isolde-emulator/settings.json";
+        const bool existed=QFileInfo::exists(settingsFile);
+        QFile prior(settingsFile);QByteArray before;
+        if(existed){QVERIFY(prior.open(QIODevice::ReadOnly));before=prior.readAll();prior.close();}
+        QVERIFY(!library.configureEmulator(id,{{"video","automatic"},{"controller","xbox"}},"/etc/passwd"));
+        QVERIFY(library.errorString().contains("Approve"));
+        QCOMPARE(QFileInfo::exists(settingsFile),existed);
+        if(existed){QFile after(settingsFile);QVERIFY(after.open(QIODevice::ReadOnly));QCOMPARE(after.readAll(),before);}
+        QVERIFY(library.emulatorSettings(id).value("firmware").toString().isEmpty());
+    }
+    // A readable, structurally accepted PS2 image in another profile's granted
+    // folder must still be refused before a private copy or settings write.
+    QTemporaryDir firmwareDirectory;QVERIFY(firmwareDirectory.isValid());
+    const auto firmwareRoot=QFileInfo(firmwareDirectory.path()).canonicalFilePath();
+    const auto firmwarePath=firmwareRoot+"/synthetic-ps2.bin";
+    QByteArray firmwareBytes(4*1024*1024,'\0');firmwareBytes.replace(0,12,"ROMDIRROMVER");
+    QFile firmwareFile(firmwarePath);QVERIFY(firmwareFile.open(QIODevice::WriteOnly));
+    QCOMPARE(firmwareFile.write(firmwareBytes),qint64(firmwareBytes.size()));firmwareFile.close();
+    const auto otherProfile=QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QVERIFY(MediaGrants::save(otherProfile,{firmwareRoot}).isEmpty());
+    const auto cleanupFirmware=qScopeGuard([&]{
+        MediaGrants::save(otherProfile,{});MediaGrants::save(profile,{});
+        QDir(GameEmulators::home(profile,"pcsx2")).removeRecursively();
+    });
+    const auto ps2Home=GameEmulators::home(profile,"pcsx2");
+    QVERIFY(!QFileInfo::exists(ps2Home));
+    QVERIFY(!library.configureEmulator("pcsx2",{{"video","automatic"},{"controller","xbox"}},firmwarePath));
+    QVERIFY(library.errorString().contains("Approve"));QVERIFY(!QFileInfo::exists(ps2Home));
+    QVERIFY(MediaGrants::save(profile,{firmwareRoot}).isEmpty());
+    QVERIFY2(library.configureEmulator("pcsx2",{{"video","automatic"},{"controller","xbox"}},firmwarePath),qPrintable(library.errorString()));
+    QVERIFY(!library.emulatorSettings("pcsx2").value("firmware").toString().isEmpty());
+    QVERIFY(firmwareFile.open(QIODevice::ReadOnly));QCOMPARE(firmwareFile.readAll(),firmwareBytes);firmwareFile.close();
     const auto emulators=library.emulators();
     for(const auto &id:QStringList{"retroarch-ds","retroarch-vb","retroarch-psx"}){
         int index=-1;
