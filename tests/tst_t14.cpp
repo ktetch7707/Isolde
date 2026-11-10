@@ -439,8 +439,8 @@ void T14Tests::subtitleInputsAreValidatedAndExplicitlyQueued()
         QStringLiteral("en"), downloadedSrt, 756);
     QVERIFY(!secondImport.isEmpty());
     QVERIFY(service.jobs().at(1).toMap().value(QStringLiteral("output")).toString() != importedPath);
-    QCOMPARE(service.jobs().size(), 0);
-    QVERIFY(service.errorString().toLower().contains(QStringLiteral("model downloads are never started")));
+    QCOMPARE(service.jobs().size(), 2);
+    QVERIFY(service.errorString().isEmpty());
 }
 
 void T14Tests::offlineAudioGenerationUsesOnlyAnInstalledLocalModel()

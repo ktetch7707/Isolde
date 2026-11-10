@@ -353,13 +353,13 @@ void KodiMedia::loadPage(int start)
     m_stage = 1;
     m_status = "Loading " + browseTitle() + "…";
     emit changed();
-    QJsonArray fields{"title", "year", "plot", "runtime", "resume", "playcount", "art"};
+    QJsonArray fields{"title", "year", "plot", "runtime", "resume", "playcount", "art", "uniqueid"};
     if(m_mediaKind=="playlists"){request("Isolde.GetPlaylists");return;}
     if(m_viewKind=="playlist"){
         request("Isolde.GetPlaylistItems",{{"name",m_viewValue},{"kind",m_mediaKind},{"start",start},{"end",start+50}});return;
     }
     QString method = "VideoLibrary.GetMovies";
-    if (m_mediaKind == "shows") { method = "VideoLibrary.GetTVShows"; fields = {"title", "year", "plot", "episode", "watchedepisodes", "art"}; }
+    if (m_mediaKind == "shows") { method = "VideoLibrary.GetTVShows"; fields = {"title", "year", "plot", "episode", "watchedepisodes", "art", "uniqueid"}; }
     else if (m_mediaKind == "seasons") { method = "VideoLibrary.GetSeasons"; fields = {"season", "showtitle", "episode", "watchedepisodes", "tvshowid", "art"}; }
     else if (m_mediaKind == "episodes" || (m_mediaKind == "history" && m_recentEpisodes)) { method = "VideoLibrary.GetEpisodes"; fields = {"title", "plot", "runtime", "resume", "playcount", "season", "episode", "showtitle", "tvshowid", "art"}; }
     if (m_mediaKind == "history") fields.append("lastplayed");

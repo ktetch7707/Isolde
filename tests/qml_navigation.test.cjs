@@ -915,6 +915,7 @@ test("a newer route cancels both phases of deferred viewport restoration", () =>
     const scope = vm.createContext({
         Qt: {callLater: callback => queue.push(callback)}, navigationGeneration: 0,
         appCollectionFocus: {}, items: [{id: "same"}],
+        composition: {enabled:false}, legacyHeaderControls: [], legacyMenuEnabled:false,
         composed: {resetNavigationState() {}}, sectionFlick: {cancelFlick() {}},
         repairFocus() {}, restoreFocus() {}, focusable: () => true,
         restoreEditorViewport: state => restored.push(state),
@@ -972,4 +973,47 @@ test("generic navigation errors cannot launch the Store through an unlabeled Rig
     scope.window.launchErrorVpn = true;
     scope.handleCommand(4);
     assert.deepEqual(launches, ["app-store", "settings", "section-6"]);
+});
+
+test("discovery uses provider identity and respects the local playback preference", () => {
+    const calls=[];
+    const title={kind:"onlineTitle",mediaType:"movie",providerId:42,title:"Same title"};
+    const scope=vm.createContext({
+        movieSearchClient:{busy:false,connected:true,pageStart:0,items:[{movieid:7,title:"Same title",uniqueid:{tmdb:"42"}}]},
+        showSearchClient:null,playbackPreferences:{alwaysPlayLocally:true},selectedDiscoveryTitle:null,
+        open:true,webSearchEnabled:true,pendingDiscoverySelection:null,
+        results:[title],selectedIndex:0,query:"Same title",onlineDiscovery:{loadAvailability(...args){calls.push(["availability",...args]);}},
+        closeRequested(){calls.push(["close"]);},mediaRequested(...args){calls.push(["play",...args]);},
+    });
+    method("CommandCenter.qml","localDiscoveryMatch",scope);
+    method("CommandCenter.qml","resolveDiscoverySelection",scope);
+    method("CommandCenter.qml","activateSelected",scope);
+    scope.activateSelected();
+    assert.deepEqual(calls,[["close"],["play","movie",7,"Same title","",0]]);
+    calls.length=0;scope.playbackPreferences.alwaysPlayLocally=false;scope.activateSelected();
+    assert.deepEqual(calls,[["availability","movie",42,"Same title"]]);
+    calls.length=0;scope.playbackPreferences.alwaysPlayLocally=true;
+    scope.movieSearchClient.items[0].uniqueid.tmdb="43";scope.activateSelected();
+    assert.deepEqual(calls,[["availability","movie",42,"Same title"]]);
+    scope.movieSearchClient.items=[{movieid:7,uniqueid:{tmdb:"42"}},{movieid:8,uniqueid:{tmdb:"42"}}];
+    assert.equal(scope.localDiscoveryMatch(title),null);
+    scope.movieSearchClient.items=[{movieid:7,uniqueid:{tmdb:"42"}}];scope.movieSearchClient.busy=true;
+    assert.equal(scope.localDiscoveryMatch(title),null);
+    calls.length=0;scope.activateSelected();assert.equal(calls.length,0);
+    assert.equal(scope.pendingDiscoverySelection,title);
+    scope.open=false;scope.movieSearchClient.busy=false;scope.resolveDiscoverySelection(title);
+    assert.equal(calls.length,0);assert.equal(scope.pendingDiscoverySelection,null);
+});
+
+test("timed ambient covers internal overlays while leaving playback and external sessions alone", () => {
+    const scope=vm.createContext({sessionManager:{active:false,currentAppType:""},captureSession:{open:false},kodiMedia:{playbackActive:false},desktopMode:{active:false,busy:false},appVpn:{busy:false},actionDispatcher:{guideTransitionPending:false}});
+    method("Main.qml","ambientIdleAllowed",scope);
+    assert.equal(scope.ambientIdleAllowed(),true);
+    scope.sessionManager.active=true;
+    for(const type of ["settings","store","customize"]){scope.sessionManager.currentAppType=type;assert.equal(scope.ambientIdleAllowed(),true);}
+    for(const type of ["desktop","web","android"]){scope.sessionManager.currentAppType=type;assert.equal(scope.ambientIdleAllowed(),false);}
+    scope.sessionManager.active=false;
+    for(const [object,key] of [[scope.captureSession,"open"],[scope.kodiMedia,"playbackActive"],[scope.desktopMode,"active"],[scope.desktopMode,"busy"],[scope.appVpn,"busy"],[scope.actionDispatcher,"guideTransitionPending"]]){
+        object[key]=true;assert.equal(scope.ambientIdleAllowed(),false);object[key]=false;
+    }
 });

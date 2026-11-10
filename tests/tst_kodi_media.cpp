@@ -19,6 +19,7 @@ class KodiMediaTests : public QObject {
 private slots:
     void startupPreferenceIsPerProfile();
     void frontendPreferenceRoundTrip();
+    void localPlaybackPreferenceIsPersistedAndProfileScoped();
     void mediaFolderPermissions();
     void readsLibraryThroughTwoRequests();
     void savedKodiPlaylistCatalogAndShelf();
@@ -49,6 +50,22 @@ private slots:
     void observedScanCompletes();
     void rejectedScanIsNotSuccess();
 };
+void KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped()
+{
+    QTemporaryDir config;
+    const auto original=QSettings::defaultFormat();
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,config.path());
+    {
+        KodiService first("local-playback-first");QVERIFY(first.alwaysPlayLocally());
+        first.setAlwaysPlayLocally(false);
+        KodiService restored("local-playback-first");QVERIFY(!restored.alwaysPlayLocally());
+        KodiService other("local-playback-other");QVERIFY(other.alwaysPlayLocally());
+        restored.resetAlwaysPlayLocally();
+        KodiService reset("local-playback-first");QVERIFY(reset.alwaysPlayLocally());
+    }
+    QSettings::setDefaultFormat(original);
+}
 void KodiMediaTests::mediaFolderPermissions()
 {
     QTemporaryDir config, media;
