@@ -566,15 +566,15 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     readonly property var rowField:root.view==="fields" && root.tabs[root.tab]!=="More"?root.fields[index]:null
-                    width:list.width;height:48*root.unit;radius:8*root.unit;color:index===root.selected?root.appearance.selectedColor:"transparent";border.width:index===root.selected?2:0;border.color:root.appearance.focusColor
-                    Text {visible:!scrollCheckbox.visible && !propertySwitch.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;anchors.rightMargin:colorSample.visible?48*root.unit:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;elide:Text.ElideRight}
+                    width:list.width;height:Math.max(48*root.unit,fieldLabel.implicitHeight+20*root.unit,scrollCheckbox.visible?scrollCheckbox.contentItem.implicitHeight+20*root.unit:0,propertySwitch.visible?propertySwitch.contentItem.implicitHeight+20*root.unit:0);radius:8*root.unit;color:index===root.selected?root.appearance.selectedColor:"transparent";border.width:index===root.selected?2:0;border.color:root.appearance.focusColor
+                    Text {id:fieldLabel;visible:!scrollCheckbox.visible && !propertySwitch.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;anchors.rightMargin:colorSample.visible?48*root.unit:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;wrapMode:Text.Wrap}
                     Rectangle {id:colorSample;visible:!!parent.rowField && parent.rowField.type==="color";anchors.right:parent.right;anchors.rightMargin:12*root.unit;anchors.verticalCenter:parent.verticalCenter;width:26*root.unit;height:width;radius:5*root.unit;color:visible?root.effective(root.current,parent.rowField):"transparent";border.width:1;border.color:root.appearance.textColor}
                     CheckBox {
                         id:scrollCheckbox;objectName:"studioScrollingCheckbox";anchors.fill:parent;visible:!!parent.rowField && parent.rowField.type==="scrolling"
                         checkable:false;checked:visible && root.effective(root.current,parent.rowField)===true
                         text:visible?parent.rowField.label:"";font.pixelSize:18*root.unit
                         indicator:Rectangle {x:8*root.unit;anchors.verticalCenter:parent.verticalCenter;width:24*root.unit;height:width;radius:4*root.unit;color:scrollCheckbox.checked?root.appearance.focusColor:root.appearance.surfaceColor;border.width:2;border.color:root.appearance.focusColor;Text {anchors.centerIn:parent;text:scrollCheckbox.checked?"✓":"";color:root.appearance.surfaceColor}}
-                        contentItem:Text {text:scrollCheckbox.text;leftPadding:44*root.unit;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font:scrollCheckbox.font;elide:Text.ElideRight}
+                        contentItem:Text {text:scrollCheckbox.text;leftPadding:44*root.unit;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font:scrollCheckbox.font;wrapMode:Text.Wrap}
                         onClicked:{root.selected=index;root.activateField(parent.rowField)}
                     }
                     Switch {
@@ -590,7 +590,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                             border.width:1;border.color:root.appearance.mutedColor
                             Rectangle {width:18*root.unit;height:width;radius:width/2;y:4*root.unit;x:(propertySwitch.checked?26:4)*root.unit;color:propertySwitch.checked?root.appearance.surfaceColor:root.appearance.textColor}
                         }
-                        contentItem:Text {text:propertySwitch.text;leftPadding:10*root.unit;rightPadding:72*root.unit;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font.pixelSize:18*root.unit;font.family:root.appearance.fontFamily || "DejaVu Sans";elide:Text.ElideRight}
+                        contentItem:Text {text:propertySwitch.text;leftPadding:10*root.unit;rightPadding:72*root.unit;verticalAlignment:Text.AlignVCenter;color:root.appearance.textColor;font.pixelSize:18*root.unit;font.family:root.appearance.fontFamily || "DejaVu Sans";wrapMode:Text.Wrap}
                         onClicked:{root.selected=index;root.activateField(parent.rowField);checked=Qt.binding(()=>propertySwitch.visible && root.effective(root.current,propertySwitch.parent.rowField)===true)}
                     }
                     Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.ignored:scrollCheckbox.visible || propertySwitch.visible

@@ -121,10 +121,17 @@ Item {
         onBackRequested: root.activePage = -1
     }
 
-    onSelectedIndexChanged: {
+    function revealSelection() {
         const row = rowsRepeater.itemAt(selectedIndex)
-        if (row) scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, row.y - 20))
+        if (!row) return
+        const top=row.y, bottom=top+row.height
+        if(top<scroll.contentY)scroll.contentY=top
+        else if(bottom>scroll.contentY+scroll.height)scroll.contentY=Math.max(top,bottom-scroll.height)
+        scroll.contentY=Math.max(0,Math.min(Math.max(0,scroll.contentHeight-scroll.height),scroll.contentY))
     }
+    onSelectedIndexChanged:Qt.callLater(revealSelection)
+    onHeightChanged:Qt.callLater(revealSelection)
+    onWidthChanged:Qt.callLater(revealSelection)
     Flickable {
         id: scroll
         anchors.fill: parent
@@ -147,7 +154,7 @@ Item {
 
         Text { font.family: shell.fontFamily;
             width: parent.width
-            text: "Core TV controls should live here so normal users never need the Ubuntu desktop."
+            text: "Display, sound, screensaver and device settings."
             color: shell.muted
             font.pixelSize: 18 * shell.textScale
             wrapMode: Text.WordWrap
@@ -157,16 +164,18 @@ Item {
             id: rowsRepeater
             model: root.rows
             delegate: Rectangle {
+                objectName:"systemSettingsRow-"+index
                 required property int index
                 required property var modelData
                 width: parent.width
-                height: 84
+                height: Math.max(84*shell.textScale,rowLabels.implicitHeight+32,statusText.implicitHeight+32)
                 radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 3 : 1
                 border.color: root.selectedIndex === index ? shell.selectedFocus : shell.outline
 
                 Column {
+                    id:rowLabels
                     anchors.left: parent.left
                     anchors.right: statusText.left
                     anchors.verticalCenter: parent.verticalCenter
@@ -174,6 +183,8 @@ Item {
                     anchors.rightMargin: 16
                     spacing: 5 * shell.gapScale
                     Text { font.family: shell.fontFamily;
+                        width:parent.width
+                        wrapMode:Text.Wrap
                         text: modelData.name
                         color: (root.selectedIndex === index) ? shell.selectedText : shell.text
                         font.pixelSize: 21 * shell.textScale
@@ -184,7 +195,7 @@ Item {
                         text: modelData.detail
                         color: (root.selectedIndex === index) ? shell.selectedText : shell.muted
                         font.pixelSize: 14 * shell.textScale
-                        elide: Text.ElideRight
+                        wrapMode: Text.WordWrap
                     }
                 }
 
@@ -193,10 +204,10 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 190
+                    width: Math.min(190,parent.width*.3)
                     horizontalAlignment: Text.AlignRight
                     text: modelData.status
-                    color: index === 1 ? shell.text : index === 3 ? shell.warning : shell.muted
+                    color: root.selectedIndex === index ? shell.selectedText : index === 3 ? shell.warning : shell.muted
                     font.pixelSize: 14 * shell.textScale
                     wrapMode: Text.WordWrap
                 }
@@ -205,13 +216,14 @@ Item {
 
         Rectangle {
             width: parent.width
-            height: 88
+            height:footerText.implicitHeight+36
             radius: shell.radius
             color: shell.elevated
             border.color: shell.outline
             Text { font.family: shell.fontFamily;
-                anchors.fill: parent
-                anchors.margins: 18
+                id:footerText
+                width:parent.width-36
+                x:18;y:18
                 text: "Volume uses the available audio backend. Application crash recovery is installed with appliance startup. OS power/update controls remain unavailable; existing settings and profiles are preserved."
                 color: shell.elevatedText
                 font.pixelSize: 16 * shell.textScale

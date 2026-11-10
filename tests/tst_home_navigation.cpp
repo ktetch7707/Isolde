@@ -672,13 +672,40 @@ void HomeNavigationTests::appSuppliedIconsUseManagedArtwork()
     QVERIFY(QRegularExpression("^[0-9a-f]{64}\\.png$").match(QFileInfo(managed).fileName()).hasMatch());
     QImage cached(managed);QVERIFY(!cached.isNull());QVERIFY(cached.width()<=256);QVERIFY(cached.height()<=256);QCOMPARE(cached.pixelColor(cached.width()/2,cached.height()/2),QColor("#35a477"));
     AppRegistry again;QVERIFY(again.addApp(app));QCOMPARE(again.apps().first().toMap()["logoSource"].toString(),supplied);
-    QFile wrapper(dir.filePath("data/applications/provided-wrapper.desktop"));QVERIFY(wrapper.open(QIODevice::WriteOnly));wrapper.write("[Desktop Entry]\nName=Isolde launch wrapper\n");wrapper.close();
+    QFile wrapper(dir.filePath("data/applications/provided-wrapper.desktop"));QVERIFY(wrapper.open(QIODevice::WriteOnly));wrapper.write("[Desktop Entry]\nName=Isolde launch wrapper\nIcon=application-x-executable\n");wrapper.close();
     auto wrapped=app;wrapped.launchConfiguration["desktopId"]="provided-wrapper";AppRegistry wrappedRegistry;QVERIFY(wrappedRegistry.addApp(wrapped));QCOMPARE(wrappedRegistry.apps().first().toMap()["logoSource"].toString(),supplied);
     HomeLayout home(&registry);QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("layout.json")));home.addAppTile(app.id);
     bool bound=false;for(const auto &entry:home.items()){const auto item=entry.toMap();if(item["appId"]==app.id){QCOMPARE(item["logoSource"].toString(),supplied);bound=true;}}QVERIFY(bound);
     auto invalid=app;invalid.id="unsafe-icon";invalid.launchConfiguration["icon"]="../outside";QVERIFY(!registry.addApp(invalid));
     desktop.open(QIODevice::WriteOnly|QIODevice::Truncate);desktop.write("[Desktop Entry]\nIcon=https://example.invalid/icon.png\n");desktop.close();
     auto remote=app;remote.id="remote-icon";QVERIFY(registry.addApp(remote));QVERIFY(registry.apps().last().toMap()["logoSource"].toString().isEmpty());
+    for(const auto &id:QStringList{"steam","spotify","kodi","freetube","netflix","cbc-gem","crunchyroll","paramount-plus","youtube-tv","prime-video","disney-plus","peacock","movies","shows","settings","app-store","desktop-mode","switch","switch2"}) {
+        AppDefinition bundled;bundled.id=id;bundled.name=id;bundled.type="mock";bundled.symbol="?";
+        AppRegistry bundledRegistry;QVERIFY(bundledRegistry.addApp(bundled));
+        const auto logo=bundledRegistry.apps().first().toMap()["logoSource"].toString();
+        QVERIFY2(!logo.isEmpty(),qPrintable(id));
+        const QImage artwork(QUrl(logo).toLocalFile());QVERIFY2(!artwork.isNull(),qPrintable(id));
+        QCOMPARE(artwork.size(),QSize(512,512));
+        int inkPixels=0;const auto backing=artwork.pixelColor(256,32);
+        for(int y=128;y<384;++y)for(int x=128;x<384;++x)if(artwork.pixelColor(x,y)!=backing)++inkPixels;
+        QVERIFY2(inkPixels>100,qPrintable(id+" must render its symbol, not only a blank backing"));
+        const auto iconArtifacts=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+        if(!iconArtifacts.isEmpty())QVERIFY(artwork.save(iconArtifacts+"/studio-test-app-icon-"+id+".png"));
+    }
+    QQmlEngine engine;
+    QQmlComponent card(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(HOME_QML)).dir().filePath("HomeCard.qml")));
+    QVERIFY2(card.isReady(),qPrintable(card.errorString()));
+    QVariantMap tile{{"name","Vendor app"},{"logoSource",supplied},{"action",QVariantMap{{"type","launch-app"},{"appId",app.id}}},{"presentation",QVariantMap{{"icon","gamepad"}}}};
+    std::unique_ptr<QObject> tileObject(card.createWithInitialProperties({{"item",tile},{"width",300},{"height",120}}));
+    QVERIFY2(tileObject,qPrintable(card.errorString()));
+    auto *background=tileObject->findChild<QObject *>("cardArtwork");auto *badge=tileObject->findChild<QObject *>("launcherArtwork");
+    QVERIFY(background);QVERIFY(badge);
+    QVERIFY(background->property("source").toUrl().isEmpty());QVERIFY(!badge->property("visible").toBool());
+    tile["presentation"]=QVariantMap{};tileObject->setProperty("item",tile);
+    QTRY_VERIFY(badge->property("visible").toBool());QVERIFY(badge->property("width").toReal()<120);
+    QVERIFY(background->property("source").toUrl().isEmpty());
+    tile["customLogo"]="artwork/owned.png";tileObject->setProperty("item",tile);
+    QTRY_COMPARE(background->property("source").toUrl(),QUrl(supplied));QVERIFY(!badge->property("visible").toBool());
 }
 void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure()
 {

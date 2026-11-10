@@ -1,0 +1,90 @@
+{
+  "retrieved": "2026-11-10",
+  "simpleIconsRevision": "1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee",
+  "legacyPrimeRevision": "0af835e2949a9222965522780e5e0810d3c53382",
+  "assets": [
+    {
+      "id": "steam",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/steam.svg",
+      "sourceSha256": "5eef8f31106b81956ed908490bcf8c73abe476aa58bb9041acdf70b0d42ebcae",
+      "assetSha256": "a3de3c506a4fccc87877f9c4e9c18f7651f454a601cc1e41d8504e197d49258f",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "spotify",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/spotify.svg",
+      "sourceSha256": "b9ec9bec7769c35643981586d6ea0d675aaf3871b32f8a291bcac7a87fff0bc1",
+      "assetSha256": "dca0e75ec3dbde0eabed166721416d84b8eec378100c4eb1d11f13e2a68108c8",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "kodi",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/kodi.svg",
+      "sourceSha256": "839728a9a99747ee450e82f55865d88f75a2eebc1bfdf8f355b63362fcacdafa",
+      "assetSha256": "c55c6384a6edd7b3775c688a3e93363633d22236c0d3e8ec9752e9227dc5140d",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "freetube",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/freetube.svg",
+      "sourceSha256": "b9d5f4fd676fd88de7246b8cdf50f506c4b8a0ebe0598f3c9e4f2f9da5891428",
+      "assetSha256": "e91b8cab9cd7bb91a838b7b4f9eb1c5c4c9c0764a0b9a367ef01ec631781bc01",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "netflix",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/netflix.svg",
+      "sourceSha256": "67dbc495988bd5667a09ed4f56e14db4070a44c7a74e297b146c229f70fd6f6e",
+      "assetSha256": "7a2065fdab979d613aafbe413ea03a34a8b733ceee6f451677be13ccff2686bb",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "cbc-gem",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/cbc.svg",
+      "sourceSha256": "37d26c0cf03c94ebe839be1939c4f1431fc35c36f1011c7dc9f83887235efcdc",
+      "assetSha256": "afb0e119f54a6e3fac03f044c56ad48905cfb992d6c3e5e42b1221933db7a4a7",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "crunchyroll",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/crunchyroll.svg",
+      "sourceSha256": "3b9c3d87339e18ec09f25e0c3eaffdc5ad4630df3d108fcd907e1b64c4cd13ea",
+      "assetSha256": "4a7f973f60f72e2631e5f6ef5e6f7df42378f4cca900f8ffdd03ae82066ef35b",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "paramount-plus",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/paramountplus.svg",
+      "sourceSha256": "6b8a777222266eefdb08b9737cef97cdecf10143f5402d06634f615b127851f9",
+      "assetSha256": "e3b245ae6a5b28ffcbca27d79ad1e3400ab9e44252e9e735ef10bcb1e4a10ca8",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "youtube-tv",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/1bb2f6e6ea50f920de8d2f3d273ae48564a5eaee/icons/youtubetv.svg",
+      "sourceSha256": "9e9695b9bd42be70d135965cb3e751bbcb5e9b25274172f94704917e692342aa",
+      "assetSha256": "3477aa8a9f011c8041ef7cea045a17e991f58a479232f84fab7ce9e5863868e3",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "prime-video",
+      "url": "https://raw.githubusercontent.com/simple-icons/simple-icons/0af835e2949a9222965522780e5e0810d3c53382/icons/amazonprime.svg",
+      "sourceSha256": "493cb06b25292b562a806caeec091f63712fb349df4a54b3ee58a408e7e83cbd",
+      "assetSha256": "69ea5373caef69a6c8e0f1c313a74494342c60b988fddc072cc4328d8bc091f5",
+      "changes": "Original path geometry, brand-color fill and contrasting rounded backing; flattened viewBox transform for Qt SVG compatibility"
+    },
+    {
+      "id": "disney-plus",
+      "url": "https://static-assets.bamgrid.com/product/disneyplus/favicons/mask-icon-aurora.86b2f302cf50180b25ddd8835041b1c3.svg",
+      "assetSha256": "644d056e86cc5ff9643f8dae76b4e67df81f7addb553f6f81fc59d2937813674",
+      "changes": "Provider mask artwork, white fill and navy backing; flattened viewBox transform for Qt SVG compatibility; white backing for the provider teal mask contrast"
+    },
+    {
+      "id": "peacock",
+      "url": "https://www.peacocktv.com/",
+      "sourceSha256": "41d9f0239162932b10711e6d020bfe62438ccb17b11ed7d2a924e9827949845d",
+      "assetSha256": "c16a04cbdeff22986d2821c70476179de433058fbd6b0886511f1b97d7665c97",
+      "changes": "Provider inline vector geometry on dark backing; flattened viewBox transform for Qt SVG compatibility"
+    }
+  ]
+}

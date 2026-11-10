@@ -8,6 +8,10 @@ Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/
 
 Verified foundations T15–T24 are accepted as recorded in the backlog. Reopen only a demonstrated regression and preserve applicability evidence.
 
+## Latest user-directed UI audit — 2026-11-10
+
+Current checkpoint: finish the [UI audit and repair report](ui-audit-2026-11-10.md), not the historical next-feature rows. Ten findings are repaired. Full c passes60/60; focused e passes5/5 and both reference journeys pass with reviewed owned-window captures. Final focused f passes5/5 with102 runner checks and19 individual Qt icon images; the final Disney contrast correction is reviewed. The UI batch is ready for its final commit/push; no runner is active. Retain earlier campaign/install/emulator limitations below; acceptance stays63%.
+
 ## Test and repair campaign — 2026-11-10
 
 Current user-directed checkpoint, November10: the whole-project test/repair campaign takes precedence over historical next-feature rows below. Read [the campaign report](test-campaign-2026-11-09.md) first. Original full candidate `campaign-20261110-final-a` passes60/60; the sole subsequent product change, AppGallery, passes focused `campaign-20261110-gallery-c` with strict full-origin reuse and100 runner self-tests. Its payload exactly matches the reviewed Pastel journey in gallery-b; Studio/Lounge staged results remain applicable by scope. Deployment rollback is tested against the actual stale-Android failure and restores both links/service. No runner is active. Normal profile layout hashes are unchanged, service active/running/zero restarts. Installed verification awaits valid VM Android setup/authentication; no password bypass or installed acceptance is claimed. BUG-058's six missing expanded emulator integrations remain software work. Acceptance accounting still1563/25=63%; do not award broad credit or silently resume unrelated feature work from older queue text.

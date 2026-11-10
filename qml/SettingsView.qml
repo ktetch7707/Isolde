@@ -120,11 +120,12 @@ Item {
         visible: !(root.inPage && root.selectedSection === 1)
 
         Column {
-            width: 360
+            id:sectionColumn
+            width: Math.min(360,parent.width*.4)
             height: parent.height
             spacing: 12 * shell.gapScale
-            Text { font.family: shell.fontFamily; text: "SETTINGS"; color: shell.backgroundText; font.pixelSize: 38 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
-            Text { font.family: shell.fontFamily; width:parent.width;wrapMode:Text.Wrap;text: "Theme: " + (root.appearance.themeSource || "Home") + "\n" + (inPage ? "Esc returns to settings" : "↑ ↓ choose    Enter open    Esc home"); color: shell.backgroundMuted; font.pixelSize: 16 * shell.textScale }
+            Text { width:parent.width;wrapMode:Text.Wrap;font.family: shell.fontFamily; text: "SETTINGS"; color: shell.backgroundText; font.pixelSize: 38 * shell.textScale; font.weight: Font.DemiBold; font.letterSpacing: 3 }
+            Text { font.family: shell.fontFamily; width:parent.width;wrapMode:Text.Wrap;text: inPage ? "Back returns to categories" : "Choose a category · Confirm opens · Back returns Home"; color: shell.backgroundMuted; font.pixelSize: 16 * shell.textScale }
             ListView {
                 objectName:"settingsSections"
                 width:parent.width;height:parent.height-y;clip:true
@@ -134,13 +135,13 @@ Item {
                 delegate: Rectangle {
                     required property int index
                     required property var modelData
-                    width: ListView.view.width; height: 76 * shell.textScale; radius: shell.radius
+                    width: ListView.view.width; height: Math.max(76 * shell.textScale,sectionLabels.implicitHeight+28); radius: shell.radius
                     color: root.selectedSection === index ? shell.selected : shell.surface
                     border.width: root.selectedSection === index ? 3 : 1
                     border.color: root.selectedSection === index ? shell.selectedFocus : shell.outline
                     Column {
-                        anchors.fill: parent; anchors.margins: 14; spacing: 6 * shell.gapScale
-                        Text { font.family: shell.fontFamily; text: modelData.name; color: (root.selectedSection === index) ? shell.selectedText : shell.text; font.pixelSize: 22 * shell.textScale; font.weight: Font.DemiBold }
+                        id:sectionLabels;anchors.left:parent.left;anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter;anchors.margins:14;spacing:6*shell.gapScale
+                        Text { font.family: shell.fontFamily; width:parent.width;wrapMode:Text.Wrap;text: modelData.name; color: (root.selectedSection === index) ? shell.selectedText : shell.text; font.pixelSize: 22 * shell.textScale; font.weight: Font.DemiBold }
                         Text { font.family: shell.fontFamily; text: modelData.description; color: (root.selectedSection === index) ? shell.selectedText : shell.muted; font.pixelSize: 13 * shell.textScale; elide: Text.ElideRight; width: parent.width }
                     }
                 }
@@ -148,7 +149,7 @@ Item {
         }
 
         Rectangle {
-            width: parent.width - 360 - parent.spacing
+            width: parent.width - sectionColumn.width - parent.spacing
             height: parent.height
             radius: shell.radius
             color: shell.elevated

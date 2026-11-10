@@ -32,7 +32,9 @@ static bool validIconName(const AppDefinition &app)
 
 static QString appIcon(const AppDefinition &app, bool cutout=false)
 {
-    if((app.type!="web" && app.type!="desktop" && app.type!="android") || !qobject_cast<QGuiApplication *>(QCoreApplication::instance()))return {};
+    if(!qobject_cast<QGuiApplication *>(QCoreApplication::instance()))return {};
+    const auto packaged=":/config/app-icons/"+app.launchConfiguration.value("icon",app.id).toString()+".svg";
+    if(app.type!="web" && app.type!="desktop" && app.type!="android" && !QFile::exists(packaged))return {};
     auto name=app.launchConfiguration.value("icon",app.id).toString();
     const auto roots=QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
     const auto safeFile=[&](const QString &path){
@@ -55,12 +57,12 @@ static QString appIcon(const AppDefinition &app, bool cutout=false)
             if(!safeFile(entry))continue;
             QSettings settings(entry,QSettings::IniFormat);
             const auto supplied=settings.value("Desktop Entry/Icon").toString().trimmed();
-            if(!supplied.isEmpty()){name=supplied;suppliedIcon=true;break;}
+            static const QSet<QString> genericIcons{"application-x-executable","application-default-icon","package-x-generic","system-run"};
+            if(!supplied.isEmpty() && !genericIcons.contains(supplied)){name=supplied;suppliedIcon=true;break;}
         }
         if(suppliedIcon)break;
     }
     QIcon icon;
-    const auto packaged=":/config/app-icons/"+app.launchConfiguration.value("icon",app.id).toString()+".svg";
     if(QFile::exists(packaged))icon=QIcon(packaged);
     else if(QDir::isAbsolutePath(name)){
         if(!safeFile(name))return {};

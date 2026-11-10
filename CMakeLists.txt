@@ -235,12 +235,13 @@ qt_add_qml_module(isolde
         qml/WebKioskView.qml
 )
 
+file(GLOB ISOLDE_APP_ICONS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/config/app-icons/*.svg")
+qt_add_resources(isolde "isolde_app_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ISOLDE_APP_ICONS})
 qt_add_resources(isolde "isolde_config"
     PREFIX "/"
     FILES
         config/apps.json
         config/app-gallery.json
-        config/app-icons/youtube.svg
         config/art-packs.json
         config/catalog.json
         config/default-apps.json
@@ -548,6 +549,7 @@ if(BUILD_TESTING)
         studioPastelPresetUsesEditableButtons studioStartingStylesAreValidatedDraftData)
     set_tests_properties(studio_unit PROPERTIES TIMEOUT 30 LABELS "studio;quick;unit")
     qt_add_executable(isolde_home_navigation_tests tests/tst_home_navigation.cpp)
+    qt_add_resources(isolde_home_navigation_tests "test_app_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ISOLDE_APP_ICONS})
     target_link_libraries(isolde_home_navigation_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
     target_compile_definitions(isolde_home_navigation_tests PRIVATE HOME_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/HomeScreen.qml")
     target_compile_definitions(isolde_home_navigation_tests PRIVATE CUSTOMIZE_QML="${CMAKE_CURRENT_SOURCE_DIR}/qml/CustomizeHomeView.qml")

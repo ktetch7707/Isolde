@@ -146,11 +146,43 @@ Item {
             const menu=findChild(editor,"studioMenuEntries")
             verify(menu!==null)
             tryVerify(()=>menu.contentHeight>0)
-            verify(menu.contentHeight<=menu.height,"one-page menu content="+menu.contentHeight+", viewport="+menu.height+", entries="+editor.menuEntries.length)
+            editor.palette=Object.assign({},editor.palette,{typographyScale:1.5})
+            const reuse=editor.menuEntries.findIndex(entry=>entry.action==="reuse")
+            editor.menuIndex=reuse;settle()
+            tryVerify(()=>findChild(editor,"studioMenuLabel-"+reuse)!==null)
+            const label=findChild(editor,"studioMenuLabel-"+reuse)
+            verify(!label.truncated)
+            verify(label.implicitHeight<=label.height+1,"Long action names must fit their rows")
+            editor.menuIndex=editor.menuEntries.length-1
+            settle()
+            tryVerify(()=>menu.currentItem!==null && menu.currentItem.y+menu.currentItem.height<=menu.contentY+menu.height+1)
             const last=menu.itemAtIndex(editor.menuEntries.length-1)
             verify(last!==null)
             verify(last.y+last.height<=menu.contentY+menu.height)
             compare(editor.menuEntries[editor.menuEntries.length-1].action,"edit")
+            if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-menu-large-text.png")
+            editor.menuIndex=0;settle()
+            tryVerify(()=>menu.currentItem!==null && menu.currentItem.y>=menu.contentY)
+            compare(studioFixture.disk(),diskBaseline)
+        }
+        function test_dialog_choices_stay_inside_short_viewport() {
+            givenPage(false,false)
+            editor.width=800;editor.height=450
+            editor.mode="editorSettings"
+            editor.message="Choose a setting. ".repeat(40)
+            settle()
+            const dialog=findChild(editor,"studioContext")
+            const list=findChild(editor,"studioDialogList")
+            verify(dialog!==null && list!==null)
+            verify(dialog.y>=0 && dialog.y+dialog.height<=editor.height)
+            editor.choice=list.count-1
+            tryVerify(()=>list.currentItem!==null)
+            settle()
+            const point=list.mapToItem(dialog,0,list.height)
+            verify(point.y<=dialog.height,"Choices must fit inside their dialog")
+            verify(list.currentItem.y+list.currentItem.height<=list.contentY+list.height+1)
+            if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-dialog-short.png")
+            command(inputManager.back)
             compare(studioFixture.disk(),diskBaseline)
         }
         function test_studio_colors_use_shared_picker_cancel_and_one_undo() {

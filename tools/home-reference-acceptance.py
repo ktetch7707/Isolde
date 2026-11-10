@@ -429,6 +429,19 @@ def main():
                        "Production history collection requested local artwork")
                 collection_provider.verify_history()
             captured("custom")
+            # Review shared Settings with the actual themed application, including
+            # the final System row after remote scrolling. Browsing writes nothing.
+            settings_before=layout.read_bytes()
+            controls=json.loads(settings_before).get("composition",{}).get("headerControls",["settings","edit"])
+            if "settings" in controls:
+                key("Home");key("Up",30);key("Left",30);key("Right",controls.index("settings"));key("Return")
+                captured("settingscategories")
+                key("Up",30);key("Down",4);key("Return");key("Up",30)
+                captured("settingssystem")
+                key("Down",8)
+                captured("settingslast")
+                key("Escape");key("Escape");key("Home")
+                assert layout.read_bytes()==settings_before,"Settings browsing must not write the layout"
             if collection_provider:
                 capacity = apps[0].get("presentation", {}).get("layout", {}).get("visibleColumns", 4)
                 eligible = [app for app in collection_provider.installed]

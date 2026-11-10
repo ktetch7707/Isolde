@@ -829,7 +829,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         if(mode==="deletePage") {
             if(choice===0){mode="pageContext";choice=7;return}
             deletionRemaps=choice>1;deletionReplacement=deletionRemaps?removalDestinations[choice-2].id:""
-            message="Delete "+(pageEntries.find(p=>p.id===pageId)||{}).name+" and all its components"+(deletionRemaps?", redirecting incoming links to "+(removalDestinations.find(p=>p.id===deletionReplacement)||{}).name:" only if no incoming links remain")+". This is one undoable draft change; Apply saves it."
+            message="Delete "+(pageEntries.find(p=>p.id===pageId)||{}).name+" and all its components"+(deletionRemaps?", redirecting incoming links to "+(removalDestinations.find(p=>p.id===deletionReplacement)||{}).name:" only if no incoming links remain")+". You can Undo before saving. Choose Apply to save."
             mode="confirmDeletePage";choice=0;return
         }
         if(mode==="confirmDeletePage") {
@@ -1159,15 +1159,19 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     }}
                 }
                 ListView {
-                    objectName:"studioMenuEntries"
-                    width:parent.width;height:Math.max(100,parent.height-menuTitle.implicitHeight-menuStatus.implicitHeight-historyControls.height-3*parent.spacing);clip:true
+                    id:studioMenuList;objectName:"studioMenuEntries"
+                    width:parent.width;height:Math.max(1,parent.height-menuTitle.implicitHeight-menuStatus.implicitHeight-historyControls.height-3*parent.spacing);clip:true
                     model:studio.menuEntries;currentIndex:studio.menuIndex;highlightRangeMode:ListView.ApplyRange
+                    highlightMoveDuration:0
+                    onCurrentIndexChanged:Qt.callLater(()=>positionViewAtIndex(currentIndex,ListView.Contain))
+                    onHeightChanged:Qt.callLater(()=>positionViewAtIndex(currentIndex,ListView.Contain))
+                    ScrollIndicator.vertical:ScrollIndicator {}
                     delegate:Rectangle {
                         required property int index;required property var modelData
-                        width:ListView.view.width;height:Math.max(40*studio.textScale,Math.min(48*studio.textScale,Math.floor(ListView.view.height/studio.menuEntries.length)));radius:studio.spacing/3
+                        width:ListView.view.width;height:Math.max(menuLabel.implicitHeight+studio.spacing,40*studio.textScale,Math.min(48*studio.textScale,Math.floor(ListView.view.height/studio.menuEntries.length)));radius:studio.spacing/3
                         color:studio.menuIndex===index?studio.palette.selectedColor:"transparent"
                         border.width:studio.menuIndex===index?2:0;border.color:studio.palette.focusColor
-                        Text {textFormat:Text.PlainText;anchors.fill:parent;anchors.margins:studio.spacing/2;verticalAlignment:Text.AlignVCenter;text:modelData.label;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;elide:Text.ElideRight}
+                        Text {id:menuLabel;objectName:"studioMenuLabel-"+index;textFormat:Text.PlainText;anchors.fill:parent;anchors.margins:studio.spacing/2;verticalAlignment:Text.AlignVCenter;text:modelData.label;color:studio.palette.textColor;font.pixelSize:18*studio.textScale;wrapMode:Text.Wrap}
                         MouseArea {anchors.fill:parent;onClicked:studio.activateMenu(index)}
                     }
                 }
@@ -1532,7 +1536,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         z:3
         readonly property bool contextual:studio.mode==="context" || studio.mode==="properties"
         readonly property real sideRoom:selectionRect?Math.max(selectionRect.x-2*studio.spacing,studio.width-selectionRect.x-selectionRect.width-2*studio.spacing):studio.width
-        readonly property real naturalHeight:Math.min(parent.height-2*studio.spacing,dialogColumn.implicitHeight+2*studio.spacing)
+        readonly property real naturalHeight:Math.min(parent.height-2*studio.spacing,dialogHeading.implicitHeight+dialogMessage.height+dialogChoices.contentHeight+3*studio.spacing)
         readonly property bool compact:contextual && !!selectionRect && sideRoom<studio.layoutModel.studioOptions.menuWidth && Math.max(selectionRect.y,studio.height-selectionRect.y-selectionRect.height)-2*studio.spacing<naturalHeight && !studio.contextExpanded
         width:Math.min(parent.width-2*studio.spacing,560*studio.textScale,contextual && sideRoom>=studio.layoutModel.studioOptions.menuWidth?sideRoom:parent.width)
         height:compact?3*studio.spacing:naturalHeight
@@ -1543,13 +1547,17 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
         color:studio.palette.surfaceColor;border.width:3;border.color:studio.palette.focusColor;radius:studio.spacing
         Column {
             id:dialogColumn;visible:!contextDialog.compact;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:studio.spacing;spacing:studio.spacing/2
-            Text {textFormat:Text.PlainText;id:dialogHeading;width:parent.width;                    text:studio.operationTitle?studio.operationTitle:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="appGallery"?"All Apps":studio.mode.toUpperCase();color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
-            Text {textFormat:Text.PlainText;id:dialogMessage;width:parent.width;text:studio.mode==="apply" ? "Save once atomically: "+studio.changedPages.length+" affected pages/settings, "+studio.findings.length+" design findings. Review the list below. Intentional empty or unavailable content may be kept." : studio.mode==="remove" ? "Remove "+studio.componentName(studio.current)+" and its children? This is one undoable draft change; Apply saves it." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm commits one undoable draft operation." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
+            Text {textFormat:Text.PlainText;id:dialogHeading;width:parent.width;                    text:studio.operationTitle?studio.operationTitle:studio.mode==="context" || studio.mode==="properties"?(studio.current?studio.current.name || studio.current.widgetType || "Component":"Component"):studio.mode==="pageContext"?(studio.pageEntries.find(p=>p.id===studio.pageId)||{}).name:studio.mode==="pageAppearance"?"Page appearance":studio.mode==="appGallery"?"All Apps":studio.mode.replace(/([A-Z])/g," $1").replace(/^./,c=>c.toUpperCase());color:studio.palette.textColor;font.pixelSize:24*studio.textScale;elide:Text.ElideRight}
+            Text {textFormat:Text.PlainText;id:dialogMessage;width:parent.width;maximumLineCount:3;elide:Text.ElideRight;Accessible.description:text;text:studio.mode==="apply" ? "Save changes: "+studio.changedPages.length+" pages or settings, "+studio.findings.length+" design findings. Review the list below. Intentional empty or unavailable content may be kept." : studio.mode==="remove" ? "Remove "+studio.componentName(studio.current)+" and its children? You can Undo before saving. Choose Apply to save." : studio.mode==="collision" && studio.choice!==2 ? (studio.collisionPreview.valid ? "Preview: "+studio.collisionPreview.placements.length+" affected components. Confirm accepts this preview. You can Undo before saving." : "Unavailable: "+studio.collisionPreview.reason) : studio.message;color:studio.palette.mutedColor;wrapMode:Text.Wrap;font.pixelSize:18*studio.textScale}
             ListView {
-                objectName:"studioDialogList"
-                width:parent.width;height:Math.min(Math.max(42*studio.textScale,contentHeight),Math.max(42*studio.textScale,studio.height-dialogHeading.implicitHeight-dialogMessage.implicitHeight-6*studio.spacing))
+                id:dialogChoices;objectName:"studioDialogList"
+                width:parent.width;height:Math.max(1,Math.min(contentHeight,contextDialog.height-dialogHeading.implicitHeight-dialogMessage.height-3*studio.spacing))
                 clip:true;currentIndex:studio.choice;highlightRangeMode:ListView.ApplyRange
                 model:studio.mode==="keyboard" ? []:studio.dialogLabels()
+                highlightMoveDuration:0
+                onCurrentIndexChanged:Qt.callLater(()=>positionViewAtIndex(currentIndex,ListView.Contain))
+                onHeightChanged:Qt.callLater(()=>positionViewAtIndex(currentIndex,ListView.Contain))
+                ScrollIndicator.vertical:ScrollIndicator {}
                 delegate:Rectangle {
                     required property int index;required property string modelData
                     objectName:"studioDialogChoice-"+index

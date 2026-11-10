@@ -24,6 +24,8 @@ Item {
     readonly property string visualState:item.designState || (item.unavailableReason?"unavailable":mouseArea.pressed?"pressed":item.current?"selected":selected?"focused":"normal")
     readonly property var style:Object.assign({},baseStyle,(baseStyle.states || {}).normal || {},(baseStyle.states || {})[visualState] || {})
     readonly property string kind: item.componentType==="shape"?"shape":item.widgetType === "text" ? "text" : (style.variant || variant) === "launcher" ? "source" : (style.variant || variant)
+    readonly property bool launcherArtwork:kind==="source" && !!item.action && item.action.type==="launch-app" && !item.customLogo
+    readonly property bool showLauncherArtwork:launcherArtwork && !!item.logoSource && item.showLogo!==false && !style.icon
     readonly property color ink: appearance.textColor || "#EEEAF0"
     readonly property color muted: appearance.mutedColor || "#AAA4B2"
     readonly property color accent: appearance.focusColor || "#BD8198"
@@ -66,17 +68,24 @@ Item {
             objectName: "cardArtwork"
             animationResolver:root.artworkResolver;managedAsset:root.item.customLogo || ""
             motionEnabled:root.artworkMotionAllowed && root.style.animateArtwork===true;reducedMotion:root.appearance.motionEnabled===false
-            anchors.fill: parent; source: root.kind === "orb" ? "" : root.item.logoSource || ""
+            anchors.fill: parent; source: root.kind === "orb" || root.launcherArtwork ? "" : root.item.logoSource || ""
             crop: root.style.imageCrop || null; radius: surface.radius
             visible:root.item.showLogo!==false
             fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1
         }
         LineIcon {
-            visible: (root.kind === "source" || root.kind === "summary") && root.item.widgetType !== "clock"
+            visible: !root.showLauncherArtwork && (root.kind === "source" || root.kind === "summary") && root.item.widgetType !== "clock"
             name: root.style.icon || "display"; ink: root.style.iconColor || (root.kind === "summary" ? root.accent : root.ink)
             width: (root.style.iconSize===undefined?28:root.style.iconSize) * root.unit; height: width
             x: root.kind === "source" ? (parent.width - width) / 2 : 24 * root.unit
             y: root.kind === "source" ? parent.height * 0.21 : (parent.height - height) / 2
+        }
+        ArtworkImage {
+            objectName:"launcherArtwork"
+            visible:root.showLauncherArtwork;source:visible?root.item.logoSource:""
+            width:(root.style.iconSize===undefined?28:root.style.iconSize)*root.unit;height:width
+            x:(parent.width-width)/2;y:parent.height*.21
+            fit:"contain";radius:0
         }
         Text {id:sourceTitle;textFormat:Text.PlainText;
             visible: root.kind === "source" && root.item.showTitle!==false && !root.customLabel; anchors.bottom: parent.bottom; anchors.bottomMargin: 16 * root.unit
