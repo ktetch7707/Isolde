@@ -10,7 +10,7 @@ Verified foundations T15–T24 are accepted as recorded in the backlog. Reopen o
 
 ## Latest user-directed UI audit — 2026-11-10
 
-Current checkpoint: finish the [UI audit and repair report](ui-audit-2026-11-10.md), not the historical next-feature rows. Ten findings are repaired. Full c passes60/60; focused e passes5/5 and both reference journeys pass with reviewed owned-window captures. Final focused f passes5/5 with102 runner checks and19 individual Qt icon images; the final Disney contrast correction is reviewed. The UI batch is ready for its final commit/push; no runner is active. Retain earlier campaign/install/emulator limitations below; acceptance stays63%.
+Current checkpoint: finish the [UI audit and repair report](ui-audit-2026-11-10.md), not the historical next-feature rows. Ten findings are repaired. Full c passes60/60; focused e passes5/5 and both reference journeys pass with reviewed owned-window captures. Final focused f passes5/5 with102 runner checks and19 individual Qt icon images; the final Disney contrast correction is reviewed. The UI audit is complete and its fixes/evidence are committed on the progress branch; no runner is active. Retain earlier campaign/install/emulator limitations below; acceptance stays63%.
 
 ## Test and repair campaign — 2026-11-10
 
