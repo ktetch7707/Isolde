@@ -605,7 +605,7 @@ class OracleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary).resolve();base=root/'runs/base';current=root/'runs/focused'
             base.mkdir(parents=True);current.mkdir()
-            files={'qml/ComposedHome.qml':b'old','qml/PlacedComponents.qml':b'old',
+            files={'qml/ComposedHome.qml':b'old','qml/PlacedComponents.qml':b'old','qml/AppGallery.qml':b'old',
                    'src/main.cpp':b'core','config/skins/pastel.json':b'config',
                    'tests/tst_home_navigation.cpp':b'tests','CMakeLists.txt':b'build'}
             def write_manifest(run,values):
@@ -614,7 +614,7 @@ class OracleTests(unittest.TestCase):
                     path=source/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
                 (run/'files.sha256').write_text(''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(values.items())))
             write_manifest(base,files)
-            fresh=dict(files,**{'qml/PlacedComponents.qml':b'focus fix','tests/tst_home_navigation.cpp':b'regression'})
+            fresh=dict(files,**{'qml/PlacedComponents.qml':b'focus fix','tests/tst_home_navigation.cpp':b'regression','docs/test-campaign-2026-11-09.md':b'new persistent report'})
             write_manifest(current,fresh)
             for run in (base,current):
                 executable=run/'payload/bin/isolde';executable.parent.mkdir(parents=True);executable.write_bytes(run.name.encode())
@@ -622,10 +622,14 @@ class OracleTests(unittest.TestCase):
             oracle.atomic_json(base/'test-result.json',baseline)
             proof=oracle.focused_qml_coverage(root,current,'base','home_component_navigation')
             self.assertEqual(proof['changedStudioQml'],['qml/PlacedComponents.qml'])
+            write_manifest(current,dict(files,**{'qml/AppGallery.qml':b'bounded app icon fix'}))
+            gallery_proof=oracle.focused_qml_coverage(root,current,'base','home_component_navigation')
+            self.assertEqual(gallery_proof['changedStudioQml'],['qml/AppGallery.qml'])
+            write_manifest(current,fresh)
             runner=oracle.Oracle(root,'focused')
             oracle.atomic_json(current/'test-result.json',{'passed':True,'fullSuite':False,'suite':'home_component_navigation','coverageReuse':proof,'payload':oracle.payload_hashes(current/'payload')})
             self.assertEqual(runner.tested_payload(),current/'payload')
-            for name in ('src/main.cpp','config/skins/pastel.json','CMakeLists.txt','qml/GuideWidget.qml','tools/unreviewed.py'):
+            for name in ('src/main.cpp','config/skins/pastel.json','CMakeLists.txt','qml/GuideWidget.qml','tools/unreviewed.py','docs/unreviewed-new.md'):
                 write_manifest(current,dict(fresh,**{name:b'changed'}))
                 with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','home_component_navigation')
             write_manifest(current,fresh)
@@ -1114,6 +1118,40 @@ class OracleTests(unittest.TestCase):
         self.assertIn('timed out',result['errors'])
         with patch.object(oracle.subprocess,'run',side_effect=PermissionError('denied')):
             with self.assertRaises(PermissionError):oracle.guest_disk_usage_diagnostic([self.root])
+
+    @unittest.skipUnless(sys.platform=='linux','Guest release symlinks')
+    def test_failed_android_registration_restores_release_links_and_service(self):
+        spec=importlib.util.spec_from_file_location('rollback_installer',Path(__file__).resolve().parents[1]/'tools/install-appliance.py')
+        installer=importlib.util.module_from_spec(spec);spec.loader.exec_module(installer)
+        home=self.root/'home';prefix=home/'.local/share/isolde-appliance'
+        for name in ('old','previous'):
+            binary=prefix/'releases'/name/'bin/isolde';binary.parent.mkdir(parents=True);binary.write_bytes(name.encode())
+            installer.set_link(prefix/('current' if name=='old' else 'previous'),binary.parent.parent)
+        payload=self.root/'payload'
+        for name in ('bin/isolde','bin/isolde-native-host','bin/config/native-session-bus.conf'):
+            file=payload/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(b'candidate')
+        runner=oracle.Oracle(self.root/'oracle','failed-deploy');events=[]
+        def stage(name,args,timeout):
+            events.append((name,args))
+            if name=='android-app-registration':raise RuntimeError('stale Android receipt')
+        with patch.object(oracle.Path,'home',return_value=home),patch.object(oracle.os,'geteuid',return_value=1000),patch.object(installer,'ubuntu_supported',return_value=True),patch.object(oracle.importlib.util,'spec_from_file_location',return_value=SimpleNamespace(loader=Mock())),patch.object(oracle.importlib.util,'module_from_spec',return_value=installer),patch.object(runner,'tested_payload',return_value=payload),patch.object(runner,'service',return_value={'ActiveState':'active'}),patch.object(runner,'stage',side_effect=stage):
+            with self.assertRaisesRegex(RuntimeError,'stale Android receipt'):runner.deploy()
+        self.assertEqual((prefix/'current').resolve(),prefix/'releases/old')
+        self.assertEqual((prefix/'previous').resolve(),prefix/'releases/previous')
+        self.assertEqual(events[-1],('restore-deploy-service',['systemctl','--user','restart','isolde.service']))
+        self.assertTrue(json.loads((runner.run/'deploy-failure.json').read_text())['rollbackVerified'])
+        self.assertFalse((runner.run/'deploy-result.json').exists())
+
+    @unittest.skipUnless(sys.platform=='linux','Guest release symlinks')
+    def test_release_transaction_restores_absent_links_on_first_install_failure(self):
+        spec=importlib.util.spec_from_file_location('first_installer',Path(__file__).resolve().parents[1]/'tools/install-appliance.py')
+        installer=importlib.util.module_from_spec(spec);spec.loader.exec_module(installer)
+        prefix=self.root/'installation';binary=prefix/'releases/new/bin/isolde';binary.parent.mkdir(parents=True);binary.write_bytes(b'new')
+        with self.assertRaisesRegex(RuntimeError,'failed'):
+            with oracle.release_link_transaction(installer,prefix):
+                installer.set_link(prefix/'current',binary.parent.parent)
+                raise RuntimeError('failed')
+        self.assertFalse((prefix/'current').is_symlink());self.assertFalse((prefix/'previous').exists())
 
     def test_test_preflight_self_tests_before_cleanup_and_machine_check(self):
         runner=oracle.Oracle(self.root/'oracle','ordered-cleanup');events=[]

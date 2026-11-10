@@ -112,6 +112,13 @@ $captureLine = {
             -Arguments @('controlvm',$VmName,'screenshotpng',$capture) -TimeoutSeconds 20 `
             -Log (Join-Path $outputPath 'capture.log')
         if (!(Test-Path -LiteralPath $capture) -or (Get-Item -LiteralPath $capture).Length -eq 0) { throw "Screenshot missing: $phase" }
+        if ($Case -in @('lounge','pastel')) {
+            $scpArgs = Get-OracleScpArguments $IdentityFile
+            $windowCapture = Join-Path $outputPath "$Case-$phase-window.png"
+            if (Test-Path -LiteralPath $windowCapture) { throw 'Refusing to overwrite owned-window evidence.' }
+            $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @("isolde-dev@127.0.0.1:$evidence/window-$phase.png",$windowCapture)) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'window-capture.log')
+            if (!(Test-Path -LiteralPath $windowCapture) -or !(Get-Item -LiteralPath $windowCapture).Length) { throw 'Owned-window capture missing.' }
+        }
         $vpnInput = $Case -eq 'vpn' -and $phase -in @('vpnnavigation','vpnpermission','vpnprovider','vpnsettings','vpnprotocol','vpnprotocolconfirm','vpnconnection','vpnproviderstate','vpnassign','vpnuspermission','vpnusprovider','vpnussearch','vpnusconnect','cbcvpnpermission')
         $shellInput = $Case -eq 'shell' -and $phase -in @('shellnavigation','shellgallery','shellstore','shellreturn','shellambient','shellwake')
         $androidInput = $Case -eq 'androidapps' -and $phase -in @('androidnavigation','androidgallery','androidlaunch','androidpermission','androidopen','androidremote','androidreturn')

@@ -8,6 +8,10 @@ Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/
 
 Verified foundations T15–T24 are accepted as recorded in the backlog. Reopen only a demonstrated regression and preserve applicability evidence.
 
+## Test and repair campaign — 2026-11-10
+
+Current user-directed checkpoint, November10: the whole-project test/repair campaign takes precedence over historical next-feature rows below. Read [the campaign report](test-campaign-2026-11-09.md) first. Original full candidate `campaign-20261110-final-a` passes60/60; the sole subsequent product change, AppGallery, passes focused `campaign-20261110-gallery-c` with strict full-origin reuse and100 runner self-tests. Its payload exactly matches the reviewed Pastel journey in gallery-b; Studio/Lounge staged results remain applicable by scope. Deployment rollback is tested against the actual stale-Android failure and restores both links/service. No runner is active. Normal profile layout hashes are unchanged, service active/running/zero restarts. Installed verification awaits valid VM Android setup/authentication; no password bypass or installed acceptance is claimed. BUG-058's six missing expanded emulator integrations remain software work. Acceptance accounting still1563/25=63%; do not award broad credit or silently resume unrelated feature work from older queue text.
+
 ## Coding handoff — T10 capture recovery, 2026-11-08
 
 Source base `ac3f2e7702c92b78ff2f3e90afd3a382147afc68`. The existing T25/T26 ownership below is preserved; T10 is the next incomplete Coding% item with completed implementation dependencies. Capture Settings now adjusts the input on its own row; synchronous switch failure keeps a retry path, and camera errors stop preview so it can be restarted. The shared keyboard's malformed binding is repaired, its letter/number/symbol modes are remote-operable, and the unintended always-visible global keyboard overlay is removed; Network Settings retains its own keyboard. No acceptance or Coding% credit is claimed for this partial slice.

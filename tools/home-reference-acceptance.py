@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import runpy
 import shutil
 import sqlite3
 from pathlib import Path
@@ -204,6 +205,10 @@ def main():
     process = None
     desktop_probe = None
     def captured(phase):
+        # Preserve the actual owned X11 surface separately from desktop overlays.
+        time.sleep(2)  # Match framebuffer capture settling before reading XWayland pixels.
+        capture_window = runpy.run_path(str(Path(__file__).with_name("home-components-acceptance.py")))["capture_x11_window"]
+        capture_window(x11, display, int(window, 16), evidence / ("window-" + phase + ".png"))
         print(phase.upper() + "_READY " + str(evidence), flush=True)
         deadline = time.monotonic() + 150
         while not (evidence / (phase + "-captured")).exists():

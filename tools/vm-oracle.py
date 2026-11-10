@@ -21,6 +21,23 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlsplit
 
 
+@contextlib.contextmanager
+def release_link_transaction(installer, prefix):
+    """Caller holds the install lock; failed activation preserves both links."""
+    original = {name: installer.checked_release(prefix, name) for name in ("current", "previous")}
+    try:
+        yield
+    except BaseException:
+        for name, target in original.items():
+            installer.checked_release(prefix, name)
+            if target is None:
+                link = prefix / name
+                if link.is_symlink(): link.unlink()
+            else:
+                installer.set_link(prefix / name, target)
+        raise
+
+
 def guest_disk_usage_diagnostic(locations):
     """Optional inventory; mandatory free-space and cleanup checks remain separate."""
     try:
@@ -761,8 +778,8 @@ def focused_qml_coverage(root, run, base_id, suite):
             {'tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/tv-library-acceptance.py','tools/home-components-acceptance.py'},'StudioInspector')
     if suite=='home_component_navigation':
         return qml_coverage(root,run,base_id,suite,'home_component_navigation',
-            {'qml/ComposedHome.qml','qml/PlacedComponents.qml'},
-            {'tests/tst_home_navigation.cpp','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py'},'Studio')
+            {'qml/ComposedHome.qml','qml/PlacedComponents.qml','qml/AppGallery.qml'},
+            {'tests/tst_home_navigation.cpp','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1'},'Studio',{'docs/test-campaign-2026-11-09.md'})
     return guide_qml_coverage(root,run,base_id,suite)
 
 
@@ -1468,23 +1485,37 @@ class Oracle:
             raise RuntimeError("Deploy requires the regular user on supported Ubuntu")
         prefix = Path.home() / ".local/share/isolde-appliance"
         prefix.mkdir(parents=True, exist_ok=True)
-        before = self.links()
         with exclusive_lock(prefix / ".install.lock"):
-            release = installer.install_payload(payload, prefix)
-        self.stage("android-app-registration", ["python3", str(source/"tools/provision-android.py"), "--source", str(source), "--activate-if-configured"], 30)
-        # Reuse the installer activation contract. No repeat compilation/tests or startup edits.
-        self.stage("restart", ["systemctl", "--user", "restart", "isolde.service"], 30)
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            service = self.service()
-            pid = service.get("MainPID", "0")
-            if service["ActiveState"] == "active" and Path(f"/proc/{pid}/exe").resolve() == release / "bin/isolde":
-                result = {"release": str(release), "before": before, "after": self.links(), "service": service}
-                atomic_json(self.run / "deploy-result.json", result)
-                self.update(**result)
-                return
-            time.sleep(0.5)
-        raise RuntimeError("Selected release failed to start; inspect restart.log and journal. No automatic rollback.")
+            before = self.links()
+            was_active = self.service().get("ActiveState") == "active"
+            activation_started = False
+            try:
+                with release_link_transaction(installer, prefix):
+                    activation_started = True
+                    release = installer.install_payload(payload, prefix)
+                    self.stage("android-app-registration", ["python3", str(source/"tools/provision-android.py"), "--source", str(source), "--activate-if-configured"], 30)
+                    self.stage("restart", ["systemctl", "--user", "restart", "isolde.service"], 30)
+                    deadline = time.monotonic() + 30
+                    while time.monotonic() < deadline:
+                        service = self.service()
+                        pid = service.get("MainPID", "0")
+                        if service["ActiveState"] == "active" and Path(f"/proc/{pid}/exe").resolve() == release / "bin/isolde":
+                            result = {"release": str(release), "before": before, "after": self.links(), "service": service}
+                            atomic_json(self.run / "deploy-result.json", result)
+                            self.update(**result)
+                            return
+                        time.sleep(0.5)
+                    raise RuntimeError("Selected release failed to start; inspect restart.log and journal.")
+            except BaseException as error:
+                failure = {"error": str(error), "before": before, "after": self.links(), "rollbackVerified": self.links() == before}
+                atomic_json(self.run / "deploy-failure.json", failure)
+                if not failure["rollbackVerified"]:
+                    raise RuntimeError("Deploy failed and release links could not be restored; inspect deploy-failure.json") from error
+                if activation_started:
+                    self.stage("restore-deploy-service", ["systemctl", "--user", "restart" if was_active else "stop", "isolde.service"], 30)
+                failure["service"] = self.service()
+                atomic_json(self.run / "deploy-failure.json", failure)
+                raise
 
     def prepare_guest_space(self, target_gib=5, prune_sources=False, prune_payloads=False):
         if self.command("hostname") != "isolde-test":
