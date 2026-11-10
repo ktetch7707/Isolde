@@ -616,6 +616,7 @@ bool StudioSession::execute(const QString &operation, const QVariantMap &a, cons
         const auto values=a.value("value").toMap();auto nested=document[scope].toObject();if(scope=="composition" && nested.isEmpty())nested={{"schemaVersion",1},{"enabled",false}};
         if(scope=="composition")for(const auto &key:QStringList{"moviePage","showsPage"})if(values.contains(key) && !values.value(key).isNull() && !validNewAction({{"type","open-page"},{"pageId",values.value(key)}}))return false;
         for(auto it=values.cbegin();it!=values.cend();++it){if(it.value().isNull())nested.remove(it.key());else nested[it.key()]=QJsonValue::fromVariant(it.value());}
+        if(scope=="composition" && !ComponentSchema::validComposition(nested.toVariantMap())){setError(tr("Page composition is invalid. Nothing changed."));return false;}
         document[scope]=nested;ok=worker.loadDocument(QJsonDocument(document).toJson(),false);
     } else if(operation=="scrolling") {
         if(a.value("enabled").metaType().id()!=QMetaType::Bool){setError(tr("Choose whether this page scrolls."));return false;}

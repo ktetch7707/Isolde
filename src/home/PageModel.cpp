@@ -118,7 +118,7 @@ QVariantMap PageModel::themeDefaults() const
 {
     return {{"focusColor", "#c994a5"}, {"surfaceColor", "#202126"}, {"selectedColor", "#353039"},
             {"textColor", "#f5f1f3"}, {"mutedColor", "#aaa5af"}, {"typographyScale", 1.0},
-            {"homeColumns", 3}, {"spacing", 20}, {"motionEnabled", true}, {"fontFamily", "DejaVu Sans"}};
+            {"homeColumns", 3}, {"spacing", 20}, {"motionEnabled", true}, {"highContrast",false}, {"fontFamily", "DejaVu Sans"}};
 }
 
 QVariantList PageModel::resolveItems(const QJsonArray &components) const
@@ -385,9 +385,9 @@ bool PageModel::setAppearance(const QVariantMap &changes)
                 m_owner->setError(tr("Invalid font family."));
                 return false;
             }
-        } else if (key == "motionEnabled") {
+        } else if (key == "motionEnabled" || key == "highContrast") {
             if (it.value().metaType().id() != QMetaType::Bool) {
-                m_owner->setError(tr("motionEnabled must be a boolean."));
+                m_owner->setError(tr("Motion and contrast choices must be boolean values."));
                 return false;
             }
         } else {
@@ -503,8 +503,12 @@ bool PageModel::addButton()
 {
     if (!m_owner) return false;
     QString id = QStringLiteral("button-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    QJsonObject item{{"kind", "action"}, {"id", id}, {"name", QCoreApplication::translate("PageModel", "Button")},
+    QJsonObject item{{"kind", "widget"}, {"widgetType","button"}, {"componentType","button"}, {"id", id}, {"name", QCoreApplication::translate("PageModel", "Button")},
                      {"action", QJsonObject{{"type", "open-apps"}}}};
+    QString error;
+    const auto normalized=ComponentSchema::component(item.toVariantMap(),true,&error);
+    if(normalized.isEmpty()){m_owner->setError(error);return false;}
+    item=QJsonObject::fromVariantMap(normalized);
     const auto previous = m_pageDocument;
     QJsonArray components;
     if (m_pageDocument.contains("components")) components = m_pageDocument.value("components").toArray();
@@ -533,7 +537,8 @@ bool PageModel::setItemAction(const QString &id, const QVariantMap &action)
         return false;
     }
     return setItemField(id, [normalized](QJsonObject &item) {
-        item.insert("kind", QStringLiteral("action"));
+        if (item.value("componentType") != "button" && item.value("componentType") != "image")
+            item.insert("kind", QStringLiteral("action"));
         item.insert("action", QJsonObject::fromVariantMap(normalized));
         item.remove("appId");
         if (item.value("name").toString().isEmpty()) item.insert("name", QStringLiteral("Link"));
@@ -641,12 +646,10 @@ bool PageModel::setItemField(const QString &id, std::function<void(QJsonObject &
         for (const auto &value : m_pageDocument.value("components").toArray()) {
             auto item = value.toObject();
             if (item.value("id").toString() != id) { components.append(item); continue; }
-            const auto previous = item;
             mutate(item);
-            if (item.value("kind") == QStringLiteral("app") || item.value("kind") == QStringLiteral("action")) {
-                item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true));
-                if (item.isEmpty()) item = previous;
-            }
+            QString error;
+            item = QJsonObject::fromVariantMap(ComponentSchema::component(item.toVariantMap(), true, &error));
+            if (item.isEmpty()) { m_owner->setError(error); return false; }
             components.append(item);
             found = true;
         }

@@ -15,7 +15,7 @@ Item {
     TestCase {
         name:"ContainedSources";when:windowShown
         function press(key){scene.forceActiveFocus();keyClick(key);wait(5)}
-        function init(){scene.target=null;launchSpy.target=null;verify(studioFixture.resetSources(8));wait(10)}
+        function init(){scene.target=null;launchSpy.target=null;launchSpy.clear();verify(studioFixture.resetSources(8));wait(10)}
         function cleanup(){scene.target=null;launchSpy.target=null}
         function test_overflow_is_bounded_and_menu_opens_source_actions(){
             const widget=createTemporaryObject(widgetComponent,scene);verify(widget);scene.target=widget

@@ -314,7 +314,7 @@ Item {
             carousel.restoreFocusState(state);tryCompare(gallery,"opened",true)
             compare(carousel.galleryId,"registered-store")
             carousel.collection={mode:"all",ids:[],showStore:false}
-            compare(carousel.galleryApps.length,3);compare(carousel.galleryId,"one")
+            compare(carousel.galleryApps.length,3);compare(carousel.galleryId,"three")
             carousel.handleCommand(inputManager.back);compare(carousel.selectedId,"__more__")
             launchSpy.target=null
         }
@@ -601,8 +601,9 @@ Item {
             verify(editor.session.execute("composition",{value:Object.assign({},editor.page.composition,{grid:Object.assign({},editor.page.grid,{columns:8,rows:5})})}),editor.session.errorString)
             editor.toolbarFocus=true;editor.menuIndex=0;command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
             compare(editor.mode,"catalog")
-            command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
-            compare(editor.mode,"move");compare(editor.addingType,"recently-viewed")
+            const target=homeLayout.studioOptions.catalog.findIndex(item=>item.id==="recently-viewed");verify(target>=0)
+            for(let index=0;index<target;index++)command(inputManager.navigateRight)
+            command(inputManager.confirm);compare(editor.mode,"move");compare(editor.addingType,"recently-viewed")
             const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
             command(inputManager.confirm);compare(editor.mode,"canvas");compare(editor.session.changeCount,count+1)
             compare(editor.current.family,"recently-viewed");compare(editor.current.source.kind,"recently-viewed")

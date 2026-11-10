@@ -159,9 +159,13 @@ QString HomeLayout::addLibraryWidget(const QString &name,const QString &kind) {
 }
 bool HomeLayout::setItemAction(const QString &id,const QVariantMap &action) {
     const auto normalized=ComponentSchema::action(action);if(normalized.isEmpty()){setError(tr("Choose a valid action and destination."));return false;}
-    for(qsizetype i=0;i<m_items.size();++i){auto item=m_items[i].toObject();if(item["id"]!=id||item["kind"]=="widget")continue;
-        const auto previous=m_items;item["kind"]="action";item["action"]=QJsonObject::fromVariantMap(normalized);item.remove("appId");
-        if(item["name"].toString().isEmpty())item["name"]="Link";m_items[i]=item;
+    for(qsizetype i=0;i<m_items.size();++i){auto item=m_items[i].toObject();if(item["id"]!=id)continue;
+        const bool visualLink=item["componentType"]=="button" || item["componentType"]=="image";
+        if(item["kind"]=="widget" && !visualLink)continue;
+        const auto previous=m_items;if(!visualLink)item["kind"]="action";item["action"]=QJsonObject::fromVariantMap(normalized);item.remove("appId");
+        if(item["name"].toString().isEmpty())item["name"]="Link";
+        QString error;const auto canonical=ComponentSchema::component(item.toVariantMap(),true,&error);
+        if(canonical.isEmpty()){setError(error);return false;}m_items[i]=QJsonObject::fromVariantMap(canonical);
         if(!save()){m_items=previous;return false;}emit layoutChanged();return true;}
     setError(tr("Choose a launcher card."));return false;
 }
@@ -173,7 +177,10 @@ bool HomeLayout::setItemName(const QString &id,const QString &name) {
     return false;
 }
 bool HomeLayout::addButton(){
-    m_items.append(QJsonObject{{"id","button-"+QUuid::createUuid().toString(QUuid::WithoutBraces)},{"kind","action"},{"name","Button"},{"action",QJsonObject{{"type","open-apps"}}}});
+    QString error;
+    const auto item=ComponentSchema::component({{"id","button-"+QUuid::createUuid().toString(QUuid::WithoutBraces)},{"kind","widget"},{"widgetType","button"},{"componentType","button"},{"name","Button"},{"action",QVariantMap{{"type","open-apps"}}}},true,&error);
+    if(item.isEmpty()){setError(error);return false;}
+    m_items.append(QJsonObject::fromVariantMap(item));
     if(!save()){m_items.removeLast();return false;}emit layoutChanged();return true;
 }
 

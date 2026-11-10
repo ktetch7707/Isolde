@@ -849,7 +849,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                     pageId=session.proposalModel.homePageId || "";selectedId="";mode="defaultsReview";choice=0
                     message="Replace the whole interface in the draft, including "+defaultRemovedPages.length+" removed pages. Apps, accounts, device settings and Kodi media are kept. Undo restores the interface; Apply saves."
                 }else message=session.errorString
-            } else {mode="editorSettings";choice=2}
+            } else {mode="editorSettings";choice=3}
             return
         }
         if(mode==="defaultsReview"){

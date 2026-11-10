@@ -231,6 +231,10 @@ private:
     QVariantMap m_defaultTheme;
     QVariantMap m_composition;
     QString m_defaultPath;
+    mutable QString m_optionsPath;
+    mutable QByteArray m_optionsBytes;
+    mutable QVariantMap m_optionsCache;
+    mutable bool m_optionsCached = false;
     QString m_userPath;
     QString m_errorString;
     QVariantList m_collections;

@@ -27,7 +27,7 @@ QVariantMap appearanceDefaults()
 {
     return {{"focusColor", "#c994a5"}, {"surfaceColor", "#202126"}, {"selectedColor", "#353039"},
             {"textColor", "#f5f1f3"}, {"mutedColor", "#aaa5af"}, {"typographyScale", 1.0},
-            {"homeColumns", 3}, {"spacing", 20}, {"motionEnabled", true}, {"fontFamily", "DejaVu Sans"}};
+            {"homeColumns", 3}, {"spacing", 20}, {"motionEnabled", true}, {"highContrast",false}, {"fontFamily", "DejaVu Sans"}};
 }
 
 bool normalizeAppearance(QVariantMap &values)
@@ -50,7 +50,7 @@ bool normalizeAppearance(QVariantMap &values)
         } else if (key == "fontFamily") {
             if (it.value().metaType().id() != QMetaType::QString || it.value().toString().trimmed().isEmpty()
                 || it.value().toString().size() > HomeLayout::MaxPageNameLength || it.value().toString().contains(QChar::Null)) return false;
-        } else if (key == "motionEnabled") {
+        } else if (key == "motionEnabled" || key == "highContrast") {
             if (it.value().metaType().id() != QMetaType::Bool) return false;
         } else {
             if (!defaults.contains(key) && key != "tileRoundness") return false;
@@ -360,7 +360,10 @@ QVariantMap HomeLayout::studioOptions() const
     QFile file(QDir(QFileInfo(m_defaultPath).absolutePath()).filePath("studio-defaults.json"));
     if(!file.open(QIODevice::ReadOnly)) {file.setFileName(":/config/studio-defaults.json");if(!file.open(QIODevice::ReadOnly))return {};}
     if(file.size()>128*1024)return {};
-    const auto object=QJsonDocument::fromJson(file.readAll()).object();
+    const auto bytes=file.readAll();
+    if(m_optionsCached && m_optionsPath==file.fileName() && m_optionsBytes==bytes)return m_optionsCache;
+    m_optionsCached=true;m_optionsPath=file.fileName();m_optionsBytes=bytes;m_optionsCache.clear();
+    const auto object=QJsonDocument::fromJson(bytes).object();
     if (object.contains("referenceViewport")) {
         const auto viewport = object["referenceViewport"].toObject();
         if (viewport.size() != 2) return {};
@@ -502,7 +505,8 @@ QVariantMap HomeLayout::studioOptions() const
         result["referenceViewport"] = QJsonDocument::fromJson(packaged.readAll()).object()["referenceViewport"].toVariant();
     }
     result["guide"]=guide;result["maxScrollableRows"]=ComponentSchema::MaxScrollableRows;
-    return result;
+    m_optionsCache=result;
+    return m_optionsCache;
 }
 
 QVariantMap HomeLayout::studioAppearance() const {

@@ -152,7 +152,7 @@ void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
     QVERIFY(command(InputManager::NavigateDown));
     QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
     QVERIFY(command(InputManager::NavigateDown));
-    QCOMPARE(gallery->property("selectedId").toString(), QString("gamma"));
+    QCOMPARE(gallery->property("selectedId").toString(), QString("delta"));
     QVERIFY(command(InputManager::NavigateUp));
     QCOMPARE(gallery->property("selectedId").toString(), QString("beta"));
     QVERIFY(command(InputManager::NavigateUp));
@@ -286,7 +286,7 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     QVERIFY(command(InputManager::NavigateRight));QCOMPARE(one->selectedIndex(),4);
     QVERIFY(command(InputManager::NavigateLeft));QCOMPARE(one->selectedIndex(),3);
     QVERIFY(command(InputManager::Confirm));QTRY_COMPARE(plays,1);QCOMPARE(played["movieid"].toInt(),4);QCOMPARE(played["resume"].toBool(),true);
-    QVERIFY(QMetaObject::invokeMethod(root.get(),"restoreOrigin",Q_ARG(QVariant,QString("tab-original-home"))));
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"restoreOrigin",Q_ARG(QVariant,QString("tab-original-home")),Q_ARG(QVariant,false)));
     auto *content=root->findChild<QObject *>("pageContent");QVERIFY(content);QVERIFY(!content->property("recoveryFocused").toBool());
     player.playbackControl("stop");QTRY_VERIFY(!player.playbackActive());
     QVERIFY(command(InputManager::Back)); // Leave widget without leaving page.
@@ -388,7 +388,8 @@ void HomeNavigationTests::skinsAndDesignAreReachableFromSettings()
     root->setProperty("actionIndex",23); QVERIFY(command(InputManager::Confirm)); QVERIFY(root->property("editing").toBool());
     QVERIFY(command(InputManager::NavigateDown)); QVERIFY(command(InputManager::NavigateDown)); // Pastel sky
     QVERIFY(command(InputManager::Confirm)); QVERIFY(skins->property("confirming").toBool());
-    QVERIFY(home.composition().isEmpty()); // Confirmation does not mutate Home.
+    HomeLayout packaged(&registry);QVERIFY(packaged.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("packaged.json")));
+    QCOMPARE(home.composition(),packaged.composition()); // Confirmation does not mutate Home.
     QVERIFY(command(InputManager::Confirm)); QCOMPARE(home.composition()["headerMode"].toString(),QString("identity"));
     QVERIFY(command(InputManager::NavigateRight)); QVERIFY(command(InputManager::Confirm));
     auto *keyboard = skins->findChild<QObject *>("skinNameKeyboard"); QVERIFY(keyboard);
@@ -694,7 +695,9 @@ void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
     command(InputManager::NavigateUp);QCOMPARE(root->property("focusArea").toString(),QString("web"));
     root->setProperty("apps",QVariantList{apps[0],QVariantMap{{"id","late"},{"name","Late app"},{"section","Apps"},{"presentationMode","native-tv"},{"networkRequirement","none"},{"accent","#556677"}}});
     QCOMPARE(root->property("focusArea").toString(),QString("web"));QCOMPARE(root->property("selectedIndex").toInt(),0);
-    command(InputManager::NavigateLeft);command(InputManager::Confirm);QVERIFY(root->property("keyboardOpen").toBool());
+    for(int step=0;step<3;++step)command(InputManager::NavigateLeft);
+    QCOMPARE(root->property("focusArea").toString(),QString("query"));
+    command(InputManager::Confirm);QVERIFY(root->property("keyboardOpen").toBool());
     command(InputManager::Back);QVERIFY(!root->property("keyboardOpen").toBool());QVERIFY(root->property("open").toBool());
     root->setProperty("query","zzzz-no-matches");QTRY_COMPARE(list(root->property("results")).size(),0);
     command(InputManager::NavigateRight);command(InputManager::NavigateRight);command(InputManager::NavigateRight);command(InputManager::NavigateDown);command(InputManager::NavigateUp);
@@ -1287,9 +1290,9 @@ void HomeNavigationTests::studioNamedPageViewportMatchesRuntime()
         QVERIFY(QMetaObject::invokeMethod(content,"engageMediaWidget",Q_ARG(QVariant,appOrigin)));
         QVERIFY(content->property("widgetActive").toBool());
         content->setProperty("focusedIndex",1);content->setProperty("focusedItemId",otherOrigin);
-        QVERIFY(QMetaObject::invokeMethod(live.get(),"restoreOrigin",Q_ARG(QVariant,appOrigin)));
+        QVERIFY(QMetaObject::invokeMethod(live.get(),"restoreOrigin",Q_ARG(QVariant,appOrigin),Q_ARG(QVariant,false)));
         QCOMPARE(content->property("focusedItemId").toString(),appOrigin);
-        QVERIFY(QMetaObject::invokeMethod(live.get(),"restoreOrigin",Q_ARG(QVariant,otherOrigin)));
+        QVERIFY(QMetaObject::invokeMethod(live.get(),"restoreOrigin",Q_ARG(QVariant,otherOrigin),Q_ARG(QVariant,false)));
         QCOMPARE(content->property("focusedItemId").toString(),appOrigin);
         qobject_cast<StudioSession *>(draft->property("session").value<QObject *>())->invalidate();
     }
@@ -1338,7 +1341,7 @@ void HomeNavigationTests::studioRemoteGesturesCollisionsAndAnchors()
         {"keyboard",{InputManager::Confirm,InputManager::Confirm,InputManager::Menu,InputManager::Confirm,InputManager::Confirm}},
         {"remove",{InputManager::Confirm,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::Confirm}},
         {"catalog",{InputManager::Search}},
-        {"move",{InputManager::Search,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateRight,InputManager::Confirm,InputManager::Confirm}},
+        {"noRoom",{InputManager::Search,InputManager::NavigateDown,InputManager::NavigateDown,InputManager::NavigateRight,InputManager::Confirm,InputManager::Confirm}},
     };
     for(const auto &entry:cancelCases){
         for(int command:entry.second)QVERIFY(key(command));QCOMPARE(root->property("mode").toString(),entry.first);
@@ -1910,7 +1913,11 @@ void HomeNavigationTests::studioCatalogAndContextualInspector()
     // Inspect every family's content step and cancel without writes/history.
     for(int i=0;i<6;++i){catalog->setProperty("selected",i);QVERIFY(key(InputManager::Confirm));QVERIFY(catalog->property("view").toString()!="families");QVERIFY(key(InputManager::Back));QCOMPARE(session->draft(),baseline);}
     const auto unassigned=session->componentPrototype("button",{{"action",QVariantMap()}});QVERIFY(!unassigned.value("root").toMap().isEmpty());QVERIFY(!unassigned.value("root").toMap().contains("action"));QCOMPARE(session->draft(),baseline);
-    catalog->setProperty("selected",0);QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("variants"));QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));
+    const auto families=list(catalog->property("families"));int buttonFamily=-1;
+    for(int index=0;index<families.size();++index)if(families[index].toMap()["id"]=="button")buttonFamily=index;
+    QVERIFY(buttonFamily>=0);catalog->setProperty("selected",0);
+    for(int index=0;index<buttonFamily;++index)QVERIFY(key(InputManager::NavigateRight));
+    QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("variants"));QVERIFY(key(InputManager::Confirm));QCOMPARE(catalog->property("view").toString(),QString("links"));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("move"));
     QCOMPARE(session->draft(),baseline);QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("canvas"));QCOMPARE(session->changeCount(),1);
     const auto selected=root->property("selectedId").toString();QVERIFY(!selected.isEmpty());
     QVERIFY(key(InputManager::Confirm));QVERIFY(key(InputManager::NavigateDown));QVERIFY(key(InputManager::Confirm));QCOMPARE(root->property("mode").toString(),QString("inspector"));

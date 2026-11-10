@@ -489,13 +489,14 @@ void ComponentTests::gamesContractsRejectExecutableData() {
     QVERIFY(!error.isEmpty());
     QVariantMap shelf{{"schemaVersion",1},{"id","games-shelf"},{"kind","widget"},{"widgetType","library"},{"componentType","library"},
         {"name","Games"},{"presentation",QVariantMap{{"libraryKind","games"},{"libraryView","continue"}}}};
-    QVERIFY(!ComponentSchema::component(shelf,false,&error).isEmpty());
+    QVERIFY(!ComponentSchema::component(shelf,true,&error).isEmpty());
     shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","favorites"}};
-    QVERIFY(!ComponentSchema::component(shelf,false,&error).isEmpty());
+    QVERIFY(!ComponentSchema::component(shelf,true,&error).isEmpty());
     shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue","PSP"}};
-    QVERIFY(!ComponentSchema::component(shelf,false,&error).isEmpty());
+    const auto canonical=ComponentSchema::component(shelf,true,&error);QVERIFY(!canonical.isEmpty());
+    QCOMPARE(ComponentSchema::component(canonical,false,&error),canonical);
     shelf["presentation"]=QVariantMap{{"libraryKind","games"},{"libraryView","platform"},{"libraryValue",""}};
-    QVERIFY(ComponentSchema::component(shelf,false,&error).isEmpty());QVERIFY(!error.isEmpty());
+    QVERIFY(ComponentSchema::component(shelf,true,&error).isEmpty());QVERIFY(!error.isEmpty());
 }
 void ComponentTests::gamesCatalogIsBoundedAtomicAndProfileLocal() {
     QTemporaryDir dir;QVERIFY(dir.isValid());const auto root=dir.filePath("library");QVERIFY(QDir().mkpath(root));
@@ -554,10 +555,15 @@ void ComponentTests::pagesPersistAndRouteAndTravelWithSkins()
     const auto shows=layout.createPage("Television","shows");QVERIFY(!shows.isEmpty());
     auto *page=qobject_cast<PageModel *>(layout.pageModel(movies));QVERIFY(page);
     QCOMPARE(page->sections().size(),1);QCOMPARE(page->sections()[0].toMap()["presentation"].toMap()["variant"].toString(),QString("library"));
-    QVERIFY(page->setAppearance({{"focusColor","#123456"}}));
+    QVERIFY(page->setAppearance({{"focusColor","#123456"},{"highContrast",true}}));
+    QVERIFY(page->appearance().value("highContrast").toBool());
+    QVERIFY(!page->setAppearance({{"highContrast","yes"}}));
     QVERIFY(page->addWidget("text"));QVERIFY(page->addWidget("clock"));
-    QVERIFY(page->addButton());const auto button=page->items().last().toMap()["id"].toString();
+    QVERIFY2(page->addButton(),qPrintable(page->errorString()));const auto button=page->items().last().toMap()["id"].toString();
     QVERIFY(page->setItemName(button,"Visit television"));QVERIFY2(page->setItemAction(button,{{"type","open-page"},{"pageId",shows}}),qPrintable(page->errorString()));
+    const auto beforeInvalid=page->document();
+    QVERIFY(!page->setItemPresentation(button,{{"labelSize",-1}}));
+    QCOMPARE(page->document(),beforeInvalid);
     QVERIFY(page->setItemPresentation("text",{{"variant","text"},{"subtitle","Your own cinema"}}));
     QVERIFY(!page->addLibraryWidget("Keep watching","movies").isEmpty());
     // Page-scoped search sources: the movies preset library section plus the added library widget.
@@ -707,7 +713,9 @@ void ComponentTests::skinSnapshotsSurviveResetAndArtworkChanges()
     const auto live = readFile(dir.filePath("home.json"));
     QVERIFY(restored.deleteSkin(id)); QCOMPARE(readFile(dir.filePath("home.json")),live);
     QVERIFY(!restored.deleteSkin("builtin-default"));
-    QVERIFY(restored.applySkin("builtin-default")); QVERIFY(restored.composition().isEmpty());
+    QVERIFY(restored.applySkin("builtin-default"));
+    HomeLayout packaged(&registry);QVERIFY(packaged.load(defaults,dir.filePath("packaged/home.json")));
+    QCOMPARE(restored.composition(),packaged.composition());
     HomeLayout other(&registry); QVERIFY(other.load(defaults,dir.filePath("other/home.json"))); QCOMPARE(other.skins().size(),7);
 }
 void ComponentTests::starterTemplatesAreEditableAndPreservePages()
@@ -857,12 +865,13 @@ void ComponentTests::sourceFamiliesUseGenericBoundedComposition()
     const auto presets=home.studioOptions().value("componentPresets").toMap();
     for (const auto &family:{"detected-sources","source-notice"}) {
         const auto prototype=presets.value(family).toMap(); QVERIFY(!prototype.isEmpty()); QString error;
-        const auto normalized=ComponentSchema::component(prototype,false,&error); QVERIFY2(!normalized.isEmpty(),qPrintable(error));
+        const auto normalized=ComponentSchema::component(prototype,true,&error); QVERIFY2(!normalized.isEmpty(),qPrintable(error));
+        QCOMPARE(ComponentSchema::component(normalized,false,&error),normalized);
         QCOMPARE(normalized.value("source").toMap().value("provider").toString(),QString("sources"));
-        auto invalid=prototype; auto style=prototype.value("presentation").toMap(); style["sourceMaximum"]=7; invalid["presentation"]=style;
+        auto invalid=normalized; auto style=normalized.value("presentation").toMap(); style["sourceMaximum"]=7; invalid["presentation"]=style;
         QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
         style["sourceMaximum"]=true;invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
-        style=prototype.value("presentation").toMap();style["sourceVariant"]="floating";invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
+        style=normalized.value("presentation").toMap();style["sourceVariant"]="floating";invalid["presentation"]=style;QVERIFY(ComponentSchema::component(invalid,false).isEmpty());
     }
     const auto controls=home.composition().value("headerControls").toList(); QVERIFY(controls.contains("sources"));
     QVERIFY(!home.studioOptions().value("sourcePolicyFields").toList().isEmpty());
@@ -958,6 +967,10 @@ void ComponentTests::compositionPersistenceAndValidation()
     QVERIFY(layout.setGalleryFavorite("gallery-test", true));
     HomeLayout favoritesReloaded(&registry); QVERIFY(favoritesReloaded.load(dir.filePath("default.json"),dir.filePath("user.json")));
     QCOMPARE(favoritesReloaded.composition().value("appGallery").toMap().value("favoriteIds").toList(),QVariantList{"gallery-test"});
+    QVERIFY(layout.setAppearance({{"highContrast",true}}));
+    HomeLayout contrastReloaded(&registry);QVERIFY(contrastReloaded.load(dir.filePath("default.json"),dir.filePath("user.json")));
+    QVERIFY(contrastReloaded.homeAppearance().value("highContrast").toBool());
+    QVERIFY(!layout.setAppearance({{"highContrast",1}}));
     auto invalidDocument = QJsonDocument::fromJson(readFile(dir.filePath("user.json"))).object();
     auto invalidDocumentComposition = invalidDocument.value("composition").toObject();
     auto invalidDocumentGallery = invalidDocumentComposition.value("appGallery").toObject();
@@ -1702,7 +1715,7 @@ void ComponentTests::studioPageLifecycleRepairsLinksAndPreservesRoot()
     QVERIFY(page["layout"].toObject()["components"].toArray().first().toObject()["id"]!=document["components"].toArray().first().toObject()["id"]);
     QVERIFY(session->execute("reorderPage",{{"id",""},{"offset",1}}));
     auto *draft=qobject_cast<HomeLayout *>(session->model());QVERIFY(draft);QCOMPARE(draft->studioPages().last().toMap()["name"].toString(),QString("Landing"));
-    QVERIFY(session->execute("addButton",{},id));
+    QVERIFY2(session->execute("addButton",{},id),qPrintable(session->errorString()));
     document=QJsonDocument::fromJson(session->draft()).object();
     const auto button=document["pages"].toArray().first().toObject()["layout"].toObject()["components"].toArray().last().toObject()["id"].toString();
     QVERIFY2(session->execute("action",{{"id",button},{"value",QVariantMap{{"type","root-page"}}}},id),qPrintable(session->errorString()));
@@ -2353,8 +2366,14 @@ void ComponentTests::studioStartingStylesAreValidatedDraftData()
     auto options=QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/studio-defaults.json"))).object();
     auto familyOptions=options["componentVariants"].toObject();auto buttonOptions=familyOptions["button"].toArray();auto invalid=buttonOptions.first().toObject();
     invalid["span"]=QJsonObject{{"width",17},{"height",1}};buttonOptions[0]=invalid;familyOptions["button"]=buttonOptions;options["componentVariants"]=familyOptions;
-    const auto localOptions=dir.filePath("studio-defaults.json");writeFile(localOptions,QJsonDocument(options).toJson());
+    const auto localOptions=dir.filePath("studio-defaults.json");writeFile(localOptions,QJsonDocument(options).toJson(QJsonDocument::Compact));
     HomeLayout refused(&registry);QVERIFY(refused.load(localDefaults,dir.filePath("refused.json")));QVERIFY(refused.studioOptions().isEmpty());
+    // Same-size rewrites must invalidate the validation cache as well.
+    const auto invalidBytes=QJsonDocument(options).toJson(QJsonDocument::Compact);
+    invalid["span"]=QJsonObject{{"width",16},{"height",1}};buttonOptions[0]=invalid;familyOptions["button"]=buttonOptions;options["componentVariants"]=familyOptions;
+    const auto validBytes=QJsonDocument(options).toJson(QJsonDocument::Compact);QCOMPARE(validBytes.size(),invalidBytes.size());
+    writeFile(localOptions,validBytes);QVERIFY(!refused.studioOptions().isEmpty());
+    writeFile(localOptions,invalidBytes);QVERIFY(refused.studioOptions().isEmpty());
 }
 
 void ComponentTests::studioSafetyVersionsAreBoundedReversibleAndProfileScoped()
