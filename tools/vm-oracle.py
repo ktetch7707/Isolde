@@ -21,6 +21,16 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlsplit
 
 
+def guest_disk_usage_diagnostic(locations):
+    """Optional inventory; mandatory free-space and cleanup checks remain separate."""
+    try:
+        result = subprocess.run(["du", "-x", "-B1", "--max-depth=2",
+            *[str(p) for p in locations if p.is_dir()]], capture_output=True, text=True, timeout=30)
+        return {"usage": result.stdout[:65536], "errors": result.stderr[:2048], "exit": result.returncode}
+    except subprocess.TimeoutExpired:
+        return {"usage": "", "errors": "Optional disk inventory timed out after 30 seconds", "timedOut": True}
+
+
 def repository_dns_probe(host):
     if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", host):
         raise ValueError("Invalid Android repository hostname")
@@ -122,7 +132,9 @@ def guide_backend_probe(home):
         result["reason"]="Active profile's local Kodi bridge is unavailable or incompatible"
     return result
 
-SUITES = {"all": None, "component_contracts": "isolde_component_tests",
+REPAIR_TESTS = {"studio_shell","games_remote_ui","component_contracts","home_component_navigation","studio_navigation","studio_behavior","audio_backend","games_provisioning","steam_games","optical_exec_adapter","native_profile_isolation","isolde_tests"}
+RUNTIME_TESTS = {"games_provisioning","steam_games","portable_game_installer","optical_exec_adapter","native_profile_isolation"}
+SUITES = {"all": None, "runtime_contracts":"isolde_native_sandbox_tests", "campaign_repairs": ("isolde_studio_quick_tests","isolde_games_ui_tests","isolde_component_tests","isolde_home_navigation_tests","isolde_audio_tests","isolde_native_sandbox_tests","isolde_tests"), "component_contracts": "isolde_component_tests",
           "sources": ("isolde_tests", "isolde_component_tests", "isolde_studio_quick_tests"),
           "guide_contracts": "isolde_guide_tests",
           "guide_remote_ui": "isolde_guide_ui_tests",
@@ -190,6 +202,10 @@ def suite_selection(suite):
         pattern = "^(vpn_setup|vpn_launch)$"
     if suite == "store":
         pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote)$"
+    if suite == "campaign_repairs":
+        pattern = "^(" + "|".join(sorted(REPAIR_TESTS)) + ")$"
+    if suite == "runtime_contracts":
+        pattern = "^(" + "|".join(sorted(RUNTIME_TESTS)) + ")$"
     if suite == "games":
         pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning|steam_games)$"
     if suite == "sources":
@@ -939,8 +955,7 @@ class Oracle:
             "portalInterfaces": portal.stdout[:65536], "error": portal.stderr[:2048],
             "desktopIdentity": (Path.home()/".local/share/applications/org.isolde.Isolde.desktop").is_file()})
         locations = [Path.home()/"isolde-runs", Path.home(), Path("/var/cache/apt"), Path("/var/lib/systemd/coredump")]
-        usage = subprocess.run(["du", "-x", "-B1", "--max-depth=2", *[str(p) for p in locations if p.is_dir()]], capture_output=True, text=True, timeout=30)
-        atomic_json(self.run / "guest-disk-usage.json", {"guestHome": str(Path.home()), "usage": usage.stdout[:65536], "errors": usage.stderr[:2048]})
+        atomic_json(self.run / "guest-disk-usage.json", {"guestHome": str(Path.home()), **guest_disk_usage_diagnostic(locations)})
         privileges = subprocess.run(["sudo", "-n", "-l"], capture_output=True, text=True, timeout=10)
         atomic_json(self.run / "guest-privileges.json", {"exit": privileges.returncode, "policy": privileges.stdout[:8192], "error": privileges.stderr[:2048]})
         atomic_json(self.run/"native-admin-tools.json", {name:shutil.which(name) for name in ("pkexec","gnome-terminal","kgx","ptyxis","systemd-run")})
@@ -1067,6 +1082,8 @@ class Oracle:
             if suite == "studio_closure_regressions":expected={"studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance"}
             if suite == "studio_colors":expected={"studio_colors","studio_color_interactions"}
             if suite == "shell_appearance":expected={"studio_selection","studio_shell","surface_appearance_contracts","home_component_navigation"}
+            if suite == "campaign_repairs":expected=REPAIR_TESTS
+            if suite == "runtime_contracts":expected=RUNTIME_TESTS
             if suite == "studio_visuals":expected={"studio_quick","studio_artwork","studio_shell","home_component_navigation","studio_navigation"}
             if suite == "studio_remaining":expected={"studio_quick","studio_performance","studio_design_contracts","component_contracts"}
             if suite == "studio_performance":expected={"studio_performance","studio_design_contracts","component_contracts"}

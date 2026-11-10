@@ -40,6 +40,13 @@ def studio_legacy_menu(layout, key, index):
     studio_page_menu(layout, key, actions[index])
 
 
+def studio_catalog_family(key, identity):
+    options = json.loads((Path(__file__).resolve().parents[1] / "config/studio-defaults.json").read_text())
+    index = next(i for i, family in enumerate(options["catalog"]) if family["id"] == identity)
+    key("Right", index)
+    key("Return")
+
+
 def capture_x11_window(x11, display, window, path):
     """Capture the owned installed window; XWayland's root drawable is not readable."""
     from PIL import Image
@@ -428,7 +435,7 @@ def main():
                 assert layout.read_bytes() == original_bytes
                 key("Return")  # Open the catalog after accepting explicit conversion.
                 capture("catalog")
-                key("Down", 2); key("Right"); key("Return"); key("Return")  # Widgets -> Clock ghost.
+                studio_catalog_family(key, "widgets"); key("Return")  # Named Widgets -> Clock ghost.
                 key("Return")  # Add suggests the first free cell; one draft operation.
                 assert layout.read_bytes() == original_bytes
                 capture("edit")  # Actual full-size editing surface, without a Preview step.
@@ -592,7 +599,7 @@ def main():
                 page_menu(7); key("Return")
                 expect(lambda:layout.read_bytes()==applied,"Delete then Undo restored exact applied component bytes")
                 key("Escape"); key("Return")
-                key("Down", 2); key("Return"); key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")  # Widgets -> packaged eight-slot group.
+                key("Down", 2); key("Return"); studio_catalog_family(key, "widgets"); key("Down", 3); key("Return")  # Named Widgets -> packaged eight-slot group.
                 key("Left", 2); key("Down"); key("Return")  # Place below the original components, with room beside the inspector.
                 assert layout.read_bytes() == applied
                 capture("group")

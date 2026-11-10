@@ -3,7 +3,11 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current scope revision — 2026-11-09
 
-The user removed **T13 and T31** from the project completion requirement. Their rows and historical evidence are retained for reference, but neither task is selectable or included in project Coding% or acceptance averages. The remaining 25 tasks retain equal weight. Overall Coding% is **97%** (2415 / 25, rounded); Overall acceptance is **63%** (1563 / 25, rounded), without awarding any new task credit. The testing agent starts after the remaining project's Coding% reaches 100% and reports every bug found. Older references below to 27 active tasks, mandatory T13/T31 work, and their associated overall totals are historical and superseded.
+The user removed **T13 and T31** from the project completion requirement. Their rows and historical evidence are retained for reference, but neither task is selectable or included in project Coding% or acceptance averages. The remaining 25 tasks retain equal weight. Overall Coding% is **100%** (2500 / 25); Overall acceptance is **63%** (1563 / 25, rounded), without awarding any new task credit. The testing agent starts after the remaining project's Coding% reaches 100% and reports every bug found. Older references below to 27 active tasks, mandatory T13/T31 work, and their associated overall totals are historical and superseded.
+
+## Independent test audit — 2026-11-09
+
+The Coding% figures below are the implementation agents' **pre-campaign claims**, not verified completion. The [test and repair report](test-campaign-2026-11-09.md) records the original frozen campaign (52 passing,8 failing), repairs, and November10 final integration `campaign-20261110-final-a`: all60 registrations pass with zero skips; graphical verification continues separately. Testing confirmed missing expanded-emulator provisioning: the six unprovisioned routes are explicitly notIntegrated, while the ten trusted pinned routes remain supported. T30's expanded-generation requirement remains open; its Coding100% claim needs milestone reconciliation. Preserve unrelated earned credit and award no acceptance merely from these edits or passing checks.
 
 ## Current acceptance authority — VM-only software completion
 
@@ -73,7 +77,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T10 | 22 | Capture/HDMI/audio software and editors | 33% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
 | T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
 | T14 | 24 | Online discovery and Linguist subtitles | 0% | 100% | provider and offline subtitle workflows implemented; VM/live acceptance deferred |
-| T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 100% | implementation integrated through T30 `6afdc3a`; 0/9 software acceptance gates, H02/H03 physical |
+| T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 100% | Coding claim disputed by BUG-058: ten pinned routes; six advertised additions unprovisioned; expanded generations remain open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
 | **Overall** | — | **average of 25 ACTIVE software tasks** | **63%** | **100%** | **1563 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |

@@ -787,6 +787,22 @@ class OracleTests(unittest.TestCase):
         for name in ("studio_quick", "studio_selection", "studio_artwork", "studio_colors", "studio_workflows", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"):
             self.assertIsNotNone(re.fullmatch(pattern, name))
         self.assertIsNone(re.fullmatch(pattern, "home_component_navigation"))
+
+    def test_campaign_repairs_includes_every_failed_registration_without_slow_studio_replay(self):
+        targets,pattern=oracle.suite_selection('campaign_repairs')
+        for name in ('games_remote_ui','studio_navigation','studio_behavior','audio_backend','games_provisioning','steam_games','optical_exec_adapter','native_profile_isolation'):
+            self.assertIsNotNone(re.fullmatch(pattern,name))
+        self.assertIn('isolde_native_sandbox_tests',targets)
+        self.assertIn('isolde_audio_tests',targets)
+        self.assertIsNone(re.fullmatch(pattern,'studio_performance'))
+        self.assertIsNone(re.fullmatch(pattern,'studio_cutover'))
+
+    def test_runtime_contracts_cover_install_process_and_sandbox_boundaries(self):
+        targets,pattern=oracle.suite_selection('runtime_contracts')
+        self.assertEqual(targets,['isolde_native_sandbox_tests'])
+        for name in ('games_provisioning','steam_games','portable_game_installer','optical_exec_adapter','native_profile_isolation'):
+            self.assertIsNotNone(re.fullmatch(pattern,name))
+        self.assertIsNone(re.fullmatch(pattern,'studio_navigation'))
         self.assertIsNone(re.fullmatch(pattern, "studio_quick_extra"))
         self.assertEqual(oracle.suite_selection("studio_quick"), (["isolde_studio_quick_tests"], "^studio_quick$"))
 
@@ -1090,6 +1106,14 @@ class OracleTests(unittest.TestCase):
         with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=1024**3)),patch.object(runner,'maintain_artifacts',side_effect=RuntimeError('unsafe mount')):
             with self.assertRaisesRegex(RuntimeError,'unsafe mount'):runner.automatic_test_cleanup()
         self.assertFalse(json.loads((runner.run/'guest-test-cleanup.json').read_text())['minimumMet'])
+
+    def test_optional_disk_inventory_timeout_is_recorded(self):
+        with patch.object(oracle.subprocess,'run',side_effect=subprocess.TimeoutExpired('du',30)):
+            result=oracle.guest_disk_usage_diagnostic([self.root])
+        self.assertTrue(result['timedOut'])
+        self.assertIn('timed out',result['errors'])
+        with patch.object(oracle.subprocess,'run',side_effect=PermissionError('denied')):
+            with self.assertRaises(PermissionError):oracle.guest_disk_usage_diagnostic([self.root])
 
     def test_test_preflight_self_tests_before_cleanup_and_machine_check(self):
         runner=oracle.Oracle(self.root/'oracle','ordered-cleanup');events=[]

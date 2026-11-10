@@ -93,6 +93,7 @@ private slots:
         QCOMPARE(audio.outputs()[0].toMap().value("name").toString(), QString("TV HDMI"));
         QVERIFY(!audio.selectOutput("isolde_missing"));
         QVERIFY(!audio.selectOutput("@DEFAULT_SINK@"));
+        QTRY_VERIFY(audio.outputs()[0].toMap().value("active").toBool());
         QVERIFY(audio.selectOutput("isolde_usb_speakers"));
         QTRY_VERIFY(audio.outputs()[1].toMap().value("active").toBool());
         QCOMPARE(audio.outputStatus(), QString("Choose with ← →, Enter applies. Restart playback if it stays on the old output."));
