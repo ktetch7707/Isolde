@@ -335,29 +335,58 @@ Item {
             model: root.visibleEntries
             currentIndex: root.selectedIndex
             highlightMoveDuration: 0
-            delegate: HomeCard {
+            delegate: Loader {
+                id: entry
                 required property var modelData
                 width: appGrid.cellWidth - 12
                 height: appGrid.cellHeight - 12
-                item: ({
-                    name: modelData.name,
-                    showTitle: root.galleryPresentation.showLabels !== false,
-                    unavailableReason: "",
-                    logoSource: root.galleryPresentation.showArtwork ? modelData.logoSource || "" : "",
-                    appSymbol: modelData.symbol || modelData.name.slice(0, 1),
-                    presentation: ({
-                        variant: root.galleryPresentation.showLabels === false ? "source" : "summary",
-                        subtitle: root.galleryPresentation.showLabels ? root.stateLabel(modelData) : "",
-                        showLogo: root.layoutMode !== "list"
-                    })
-                })
-                appearance: root.appearance
-                unit: 1
-                selected: root.open && root.focusArea === "grid" && root.selectedId === modelData.id
-                onActivated: {
+                sourceComponent: root.layoutMode === "list" ? listCard : gridCard
+                function activateEntry() {
                     root.focusArea = "grid"
                     root.selectedId = modelData.id
                     root.launchRequested(modelData.id)
+                }
+                Component {
+                    id: gridCard
+                    AppTile {
+                        objectName: "allAppsTile"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: entry.modelData.name
+                        Accessible.description: root.stateLabel(entry.modelData)
+                        app: Object.assign({}, entry.modelData, {
+                            showTitle: root.galleryPresentation.showLabels !== false,
+                            showType: root.galleryPresentation.showLabels !== false,
+                            showLogo: root.galleryPresentation.showArtwork !== false,
+                            logoFill: false,
+                            section: root.stateLabel(entry.modelData)
+                        })
+                        roundness: root.appearance.tileRoundness === undefined ? 0.2 : root.appearance.tileRoundness
+                        appearance: root.appearance
+                        selected: root.open && root.focusArea === "grid" && root.selectedId === entry.modelData.id
+                        onActivated: entry.activateEntry()
+                    }
+                }
+                Component {
+                    id: listCard
+                    HomeCard {
+                        objectName: "allAppsListCard"
+                        item: ({
+                            name: entry.modelData.name,
+                            showTitle: root.galleryPresentation.showLabels !== false,
+                            unavailableReason: "",
+                            logoSource: "",
+                            showLogo: false,
+                            appSymbol: entry.modelData.symbol || entry.modelData.name.slice(0, 1),
+                            presentation: ({
+                                variant: root.galleryPresentation.showLabels === false ? "source" : "summary",
+                                subtitle: root.galleryPresentation.showLabels ? root.stateLabel(entry.modelData) : ""
+                            })
+                        })
+                        appearance: root.appearance
+                        unit: 1
+                        selected: root.open && root.focusArea === "grid" && root.selectedId === entry.modelData.id
+                        onActivated: entry.activateEntry()
+                    }
                 }
             }
         }

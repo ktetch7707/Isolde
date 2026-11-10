@@ -162,6 +162,9 @@ void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
 }
 void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
 {
+    QTemporaryDir artwork;
+    QImage logo(256,256,QImage::Format_RGB32);logo.fill(QColor("#ee3355"));
+    const auto logoPath=artwork.filePath("app.png");QVERIFY(logo.save(logoPath));
     InputManager input;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
@@ -170,7 +173,7 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
     QVariantList apps;
     for (int i = 0; i < 10; ++i) {
         const auto id = QString("app-%1").arg(i);
-        apps.append(QVariantMap{{"id",id},{"name",QString("App %1").arg(i)},{"type","web"}});
+        apps.append(QVariantMap{{"id",id},{"name",QString("App %1").arg(i)},{"type","web"},{"state","ready"},{"logoSource",QUrl::fromLocalFile(logoPath)}});
     }
     QQuickWindow window;
     window.resize(1280,720);
@@ -198,6 +201,36 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
     QCOMPARE(gallery->property("selectedId").toString(), QString("app-5"));
     QVERIFY(command(InputManager::NavigateUp));
     QCOMPARE(gallery->property("selectedId").toString(), QString("app-0"));
+    auto *surface=qobject_cast<QQuickItem *>(gallery.get());
+    std::function<QQuickItem *(QQuickItem *,const std::function<bool(QQuickItem *)> &)> find;
+    find=[&](QQuickItem *item,const std::function<bool(QQuickItem *)> &predicate)->QQuickItem * {
+        if(predicate(item))return item;
+        for(auto *child:item->childItems())if(auto *found=find(child,predicate))return found;
+        return nullptr;
+    };
+    const auto named=[](const QString &name){return [name](QQuickItem *item){return item->objectName()==name;};};
+    QTRY_VERIFY(find(surface,named("allAppsTile")));
+    auto *tile=find(surface,named("allAppsTile"));
+    auto *image=find(tile,[&](QQuickItem *item){return item->property("source").toUrl()==QUrl::fromLocalFile(logoPath);});
+    auto *label=find(tile,[](QQuickItem *item){return item->property("text").toString()=="App 0";});
+    QVERIFY(image);QVERIFY(label);QTRY_VERIFY(image->isVisible());
+    const QRectF imageBounds(image->mapToItem(tile,QPointF()),image->size());
+    const QRectF labelBounds(label->mapToItem(tile,QPointF()),label->size());
+    QVERIFY2(imageBounds.bottom()<=labelBounds.top(),"App artwork overlaps its name");
+    QVERIFY(imageBounds.left()>=0 && imageBounds.right()<=tile->width());
+    const auto artifacts=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+    if(!artifacts.isEmpty())QVERIFY(window.grabWindow().save(artifacts+"/studio-test-app-gallery-grid.png"));
+    gallery->setProperty("galleryPresentation",QVariantMap{{"layout","grid"},{"columns",5},{"showArtwork",false}});
+    QTRY_VERIFY(!tile->property("showLogo").toBool());QVERIFY(!image->isVisible());
+    gallery->setProperty("galleryPresentation",QVariantMap{{"layout","list"},{"showArtwork",true},{"showLabels",true}});
+    QTRY_VERIFY(find(surface,named("allAppsListCard")));
+    auto *list=find(surface,named("allAppsListCard"));
+    auto *listArt=find(list,named("cardArtwork"));QVERIFY(listArt);QVERIFY(!listArt->isVisible());
+    QTest::qWait(100);
+    auto *gridItem=qobject_cast<QQuickItem *>(grid);QVERIFY(gridItem);
+    QVERIFY(gridItem->mapToItem(surface,QPointF()).y()>120);
+    QVERIFY(list->mapToItem(surface,QPointF()).y()>=gridItem->mapToItem(surface,QPointF()).y()-4);
+    if(!artifacts.isEmpty())QVERIFY(window.grabWindow().save(artifacts+"/studio-test-app-gallery-list.png"));
 }
 void HomeNavigationTests::customizeOpensStudioAndPreservesDirtyExit()
 {
