@@ -1084,7 +1084,7 @@ def exercise_studio_workflows(evidence,layout,key,capture,expect):
     saved=layout.read_bytes();shot('headerapplied')
     menu(4);key('Down',30);key('Return');shot('headerreopened');assert layout.read_bytes()==saved
     key('Escape',2);menu(6);key('Return');key('Right');shot('canvaszoom');assert layout.read_bytes()==saved
-    key('Escape');key('Down',2);key('Return');shot('resetcancel');key('Escape');assert layout.read_bytes()==saved
+    key('Escape');key('Down',3);key('Return');shot('resetcancel');key('Escape');assert layout.read_bytes()==saved
     return dict(proportionalSize=True,sizeCancel=True,headerApply=True,headerRecovery=True,cameraNoWrite=True,resetCancel=True,captures=phases)
 
 def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_settings=True):

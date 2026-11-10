@@ -597,3 +597,23 @@ campaign-20261110-final-a passes all60 registered CTest groups, zero failures/sk
 ### BUG-067 — Graphical Studio helper selects obsolete catalog position
 The final-a graphical Studio journey stops at placed[clock]: the saved component is an App carousel because the helper still assumes Widgets is family5, while source-notice/detected-sources make its actual index7. Native application tests pass; the screenshot confirms the carousel was selected. Resolve Widgets by stable family ID from the frozen packaged catalog, then send ordinary remote keys. Keep exact Clock placement, rollback, byte-preservation and group assertions. Only the SHA-addressed graphical helper changes; reuse final-a's passing application without another full suite. Also reviewed97 final native captures:95 exact-hash reuse,2 new Search dark/pastel images reviewed; receipt build/test-campaign-final-review/image-reuse.json. Node navigation44/44 passes.
 
+
+Graphical Studio attempt013707 passes in385 seconds,34 captures reviewed across six sheets in build/test-campaign-final-review/studio. Profile hashes unchanged and normal service restored. Guest updater banners obscure part of the top edge: retain that visual limitation, do not claim those pixels verified. Group/content, move/resize, delete confirmation, Apply failure, color/contrast warnings and header/scrolling state reviewed. No new product defect seen.
+
+### BUG-068 — Reference helper assumes obsolete default header order
+Lounge attempt014336 never applies its first skin: packaged headerControls are sources/settings/edit, but the helper sends only one Right and enters Settings instead of Edit Home. Subsequent blindly scripted keys enter an unrelated external desktop workflow. No credentials entered; failed frame retained. Resolve Edit by ID from packaged defaults and reset header position with bounded Left before selection. Reuse the unchanged passing payload.
+
+### BUG-069 — Graphical reset-cancel claim exercises All Apps instead
+Review of Studio screenshot resetcancel shows All Apps presentation. The helper sends Down2 from Canvas view, but Reset interface is index3; its unchanged-bytes assertion can therefore pass without visiting Reset. Correct to index3 and require the actual Reset confirmation capture on rerun. Native Studio quick already tests the real cancel focus path; no application change or repeat full CTest is needed.
+
+
+### BUG-070 — Reference personal-skin naming uses obsolete keyboard Done route
+After BUG-068 repair, Lounge applies its built-in skin but cannot save the personal skin: Down20 clamps to the final mode control, entering Symbols instead of Done. Screenshot confirms the name keyboard, not a save failure. Reuse the existing production-layout parser from guide_features.keyboard_letters and select the named Done using D-pad row/column moves. Keep personal-file and exact-byte round-trip assertions; no application change or repeat full suite.
+
+
+### BUG-071 — Reference default predicate rejects the exact packaged default
+Lounge attempt014813 applies and saves the personal skin, then fails Default selected because the helper requires composition to be absent. Archived private home-layout.json actually equals the new packaged composition {schemaVersion:1,enabled:false,headerControls:[sources,settings,edit]}, with all16 exact packaged component IDs. Compare composition to packaged defaults, not absence. Apply the same correction to reset verification. Also repair the shared BUG-069 Down2 reset selector in the reference journey to Down3. Save/reapply/reset exact-byte, category, theme and preservation checks remain strict.
+
+
+Reference functional results: Lounge attempt015055 passes102 seconds; Pastel attempt015242 passes182 seconds, including personal-skin exact-byte round trip, app overflow/return, local history artwork and full listing, Kodi albums/tracks, Games/Guide/Search routes, scoped Reset/Apply with preserved pages and native profile hashes. Screenshot review finds a persistent guest keyring dialog obscuring the center, plus updater banner. These frames are NOT accepted as clean visual references. Resolve guest-only obstruction through an existing bounded shell-input checkpoint, then recapture. No password, unlock or host maintenance is authorized/needed. Studio rerun015551 continues solely to verify the corrected real Reset cancel checkpoint; do not interrupt it.
+

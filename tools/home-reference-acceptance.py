@@ -366,8 +366,9 @@ def main():
             if args.skin_from_settings:
                 # Begin with the packaged default. No Home layout is injected.
                 assert not layout.exists()
-                key("Up",30); key("Right"); key("Return")  # Recovery -> Edit Home.
                 defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
+                controls=defaults.get("composition",{}).get("headerControls",["settings","edit"])
+                key("Up",30); key("Left",len(controls)); key("Right",controls.index("edit")); key("Return")
                 visible_pages=len(defaults.get("pages",[]))+int(defaults.get("rootPage",{}).get("visible",True))
                 def menu(action, document=None):
                     document=document if document is not None else json.loads(layout.read_text()) if layout.exists() else defaults
@@ -391,12 +392,15 @@ def main():
                 apply_library_choice(preset_index)
                 expect(layout.exists,"Built-in skin applied from Settings")
                 manage();key("Right");key("Return")  # Save applied design as a personal skin.
-                key("Down",20);key("Return")
+                from guide_features import keyboard_letters
+                _, keyboard_keys = keyboard_letters()
+                done = keyboard_keys.index("Done")
+                key("Down", done // 10); key("Right", done % 10); key("Return")
                 skin_directory = config / "skins"
                 expect(lambda: len(list(skin_directory.glob("user-*.json"))) == 1,"Personal skin saved from Settings")
                 before_switch = layout.read_bytes()
                 key("Left");apply_library_choice(0)
-                expect(lambda: not json.loads(layout.read_bytes()).get("composition"),"Default selected in skin library")
+                expect(lambda: json.loads(layout.read_bytes()).get("composition", {}) == defaults.get("composition", {}),"Default selected in skin library")
                 manage()
                 templates=json.loads((Path(__file__).resolve().parents[1]/"config/skins/templates.json").read_text())["templates"]
                 apply_library_choice(3+len(templates))
@@ -482,7 +486,7 @@ def main():
             current_document=json.loads(layout.read_text())
             editor_index=6+len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
             print(f"Reset Studio Editor settings index: {editor_index}",flush=True)
-            key("Down",editor_index); key("Return"); key("Down",2); key("Return")  # Editor settings -> Reset interface.
+            key("Down",editor_index); key("Return"); key("Down",3); key("Return")  # Editor settings -> Reset interface.
             if args.inspect: captured("resetconfirm")
             key("Down"); key("Return")  # Explicit scoped confirmation.
             assert layout.read_bytes()==original_bytes,"Reset preview wrote before Apply"
@@ -496,7 +500,7 @@ def main():
                     and restored.get("homePageId","")==current_document.get("homePageId","")
                     and restored.get("rootPage")==current_document.get("rootPage")
                     and restored.get("studioAppearance")==current_document.get("studioAppearance")
-                    and not restored.get("composition")
+                    and restored.get("composition", {})==defaults.get("composition", {})
                     and {i["id"] for i in restored["components"]}=={i["id"] for i in defaults["items"]}
                     and restored["categories"]==defaults["categories"]
                     and default_theme_matches(restored["theme"],defaults["theme"]))
