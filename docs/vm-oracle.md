@@ -189,3 +189,11 @@ secrets or modify host settings. A remaining prompt aborts before product input.
 Configure -ConfigureTarget desktop-prompts uses matching runner self-tests and
 records the guest-only preparation. This does not waive storage checks or confer
 visual acceptance; review actual frames. BUG-096's obstructed attempts are excluded.
+Critical disk notifications can survive Do Not Disturb. The guest preflight also
+locates the low-disk notification's Ignore button through bounded AT-SPI traversal.
+When GNOME exposes no click action, it confirms accessibility focus on that exact
+button before the host runner sends only Space make/hold/break; disappearance is
+required. No coordinate guesses or generic confirmation keys are used. Failed
+preparation stops before expensive graphical workflows. Preflight-s and clean
+installed Search captures verify this path; the ineffective tray shortcut is not
+retained. Actual storage floors and unsafe-path/checksum checks stay mandatory.

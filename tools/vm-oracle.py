@@ -274,6 +274,51 @@ def secret_prompt_paths(tree):
     return paths
 
 
+def dismiss_guest_disk_banner():
+    import gi
+    gi.require_version('Atspi','2.0')
+    from gi.repository import Atspi
+    Atspi.set_timeout(100,100)
+    pending=[(Atspi.get_desktop(0),[])];nodes=[];started=time.monotonic()
+    while pending:
+        if len(nodes)>=2048 or time.monotonic()-started>8:raise RuntimeError('Guest desktop accessibility inventory exceeded its bound')
+        node,ancestors=pending.pop()
+        if node is None:continue
+        try:
+            name=(node.get_name() or '')[:256]
+            index=len(nodes);nodes.append((node,name,ancestors))
+            if len(ancestors)<12:
+                count=node.get_child_count()
+                if count>512:raise RuntimeError('Unbounded guest desktop accessibility children')
+                pending.extend((node.get_child_at_index(i),ancestors+[index]) for i in range(count))
+        except gi.repository.GLib.Error:continue
+    warnings=[set(ancestors+[i]) for i,(_,name,ancestors) in enumerate(nodes) if 'low disk space' in name.lower()]
+    for node,name,ancestors in nodes:
+        if name!='Ignore':continue
+        # Require a shared notification container, never the desktop/app root.
+        if not any(any(index in warning for index in ancestors[-4:] if len(nodes[index][2])>=2) for warning in warnings):continue
+        for button in [node]+[nodes[index][0] for index in reversed(ancestors[-2:])]:
+            if button.get_role()!=Atspi.Role.PUSH_BUTTON:continue
+            action=button.get_action_iface()
+            if action and action.get_n_actions()>0 and action.do_action(0):
+                return {'identifiedDiskWarning':True,'ignored':True}
+            component=button.get_component_iface()
+            if component and component.grab_focus() and button.get_state_set().contains(Atspi.StateType.FOCUSED):
+                print('GUEST_DISK_IGNORE_FOCUSED',flush=True)
+                deadline=time.monotonic()+5
+                while time.monotonic()<deadline:
+                    if button.get_state_set().contains(Atspi.StateType.DEFUNCT):
+                        return {'identifiedDiskWarning':True,'ignored':True,'input':'focused-ignore-space'}
+                    time.sleep(.1)
+                raise RuntimeError('Identified guest Ignore button did not dismiss after bounded input')
+        details=[]
+        for target in [node]+[nodes[index][0] for index in reversed(ancestors[-4:])]:
+            action=target.get_action_iface();component=target.get_component_iface()
+            details.append({'role':target.get_role_name(),'actions':action.get_n_actions() if action else 0,'bounds':str(component.get_extents(Atspi.CoordType.SCREEN)) if component else None})
+        raise RuntimeError('Could not dismiss the identified guest disk notification button: '+json.dumps(details))
+    return {'identifiedDiskWarning':bool(warnings),'ignored':False}
+
+
 def visual_result_passed(case, result):
     if case=='studio':
         colors=result.get('colorPicker',{})
@@ -1340,9 +1385,12 @@ class Oracle:
         # Guest desktop notifications must not cover owned-window evidence.
         # This does not change Isolde notification, permission or storage policy.
         run(['gsettings','set','org.gnome.desktop.notifications','show-banners','false'])
+        disk_banner=dismiss_guest_disk_banner()
+        if disk_banner['identifiedDiskWarning'] and not disk_banner['ignored']:
+            raise RuntimeError('Guest disk notification remains; refuse obscured visual evidence')
         if secret_prompt_paths(run(['busctl','--user','--list','tree','org.freedesktop.secrets'])):
             raise RuntimeError('Guest keyring prompts remain; refuse obscured visual evidence')
-        atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
+        atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None):
         if target not in {"native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")

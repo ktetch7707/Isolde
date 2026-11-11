@@ -170,7 +170,15 @@ try {
         $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'games') { 2500 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')
         $seconds += $WaitSeconds
-        $actionResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + $command) -TimeoutSeconds $seconds -Log (Join-Path $local "$remoteAction.log")
+        $desktopPreparation = {
+            param($line)
+            if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'desktop-prompts' -and $line -eq 'GUEST_DISK_IGNORE_FOCUSED') {
+                $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm','Isolde-Test','keyboardputscancode','39') -TimeoutSeconds 20 -Log (Join-Path $local 'guest-keys.log')
+                Start-Sleep -Milliseconds 100
+                $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm','Isolde-Test','keyboardputscancode','b9') -TimeoutSeconds 20 -Log (Join-Path $local 'guest-keys.log')
+            }
+        }
+        $actionResult = Invoke-OracleProcess -File ssh.exe -Arguments ($sshArgs + $command) -TimeoutSeconds $seconds -Log (Join-Path $local "$remoteAction.log") -OnLine $desktopPreparation
         if ($Capture) {
             $stateLine = $actionResult.Lines | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1
             if (!$stateLine) { throw 'No guest guardian status returned.' }

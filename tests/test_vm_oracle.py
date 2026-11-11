@@ -1590,7 +1590,7 @@ class OracleTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'Isolde-Test'):runner.prepare_visual_desktop()
             execute.assert_not_called()
         replies=[SimpleNamespace(stdout='/org/freedesktop/secrets/prompt/p1'),SimpleNamespace(stdout='()'),SimpleNamespace(stdout='true'),SimpleNamespace(stdout=''),SimpleNamespace(stdout='/org/freedesktop/secrets')]
-        with patch.object(oracle.Path,'home',return_value=self.root),patch.object(runner,'command',side_effect=lambda *args:'isolde-test' if args==('hostname',) else ''),patch.object(oracle.subprocess,'run',side_effect=replies) as execute:
+        with patch.object(oracle.Path,'home',return_value=self.root),patch.object(oracle,'dismiss_guest_disk_banner',return_value={'identifiedDiskWarning':False,'ignored':False}),patch.object(runner,'command',side_effect=lambda *args:'isolde-test' if args==('hostname',) else ''),patch.object(oracle.subprocess,'run',side_effect=replies) as execute:
             runner.prepare_visual_desktop()
         commands=[call.args[0] for call in execute.call_args_list]
         self.assertEqual(commands[1],['gdbus','call','--session','--dest','org.freedesktop.secrets','--object-path','/org/freedesktop/secrets/prompt/p1','--method','org.freedesktop.Secret.Prompt.Dismiss'])

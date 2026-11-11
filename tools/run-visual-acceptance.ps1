@@ -81,6 +81,12 @@ $phases = [Collections.Generic.HashSet[string]]::new()
 $captureMeta = @{ executable=$Executable }
 $captureLine = {
     param($line)
+    if ($line -eq 'GUEST_DISK_IGNORE_FOCUSED') {
+        if ($VmName -ne 'Isolde-Test') { throw 'Desktop notification preparation is restricted to Isolde-Test.' }
+        $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm',$VmName,'keyboardputscancode','39') -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
+        Start-Sleep -Milliseconds 100
+        $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm',$VmName,'keyboardputscancode','b9') -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
+    }
     if ($Case -in @('guide-lifecycle','guide-features','guide-reopen') -and $line -match '^Inspect: /tmp/isolde-tv-acceptance-[A-Za-z0-9_-]+$') {
         if ($VmName -ne 'Isolde-Test') { throw 'Guide diagnostics are restricted to Isolde-Test.' }
         # Capture the failed state while the helper still owns its windows.
