@@ -8,6 +8,7 @@ Item {
     property string originId:""
     property var style:({})
     property var appearance:({})
+    SurfacePalette {id:widgetTheme;appearance:root.appearance}
     property var provider:null
     property bool engaged:false
     property bool readOnly:false
@@ -50,20 +51,20 @@ Item {
         if(command===inputManager.confirm){if(selectedIndex<0)openGuide();else activate(selectedIndex);return true}
         return false
     }
-    Rectangle {anchors.fill:parent;color:root.style.surfaceColor || root.appearance.surfaceColor;opacity:root.style.surfaceOpacity===undefined?1:root.style.surfaceOpacity;radius:root.roundness}
+    Rectangle {anchors.fill:parent;color:root.style.surfaceColor || widgetTheme.surface;opacity:root.style.surfaceOpacity===undefined?1:root.style.surfaceOpacity;radius:root.roundness}
     Flow {
         anchors.fill:parent;anchors.margins:root.labelSize/2;spacing:root.labelSize/3
         Rectangle {
             objectName:"guideWidgetHeader"
-            width:parent.width;height:root.labelSize*2.4;color:root.appearance.selectedColor;radius:root.roundness
+            width:parent.width;height:root.labelSize*2.4;color:widgetTheme.selected;radius:root.roundness
             Accessible.role:Accessible.Button
             Accessible.name:root.style.label || "TV Guide · Full guide / Add channel"
             Accessible.description:"Confirm opens the configured guide view. Menu opens the expanded overlay."
             Accessible.focusable:!root.readOnly
             Accessible.focused:root.visible && root.engaged && root.selectedIndex<0
             Accessible.onPressAction:{root.engage();root.select(-1);root.openGuide()}
-            border.width:root.engaged && root.selectedIndex<0?(root.style.focusWidth || 2):0;border.color:root.appearance.focusColor
-            Text {anchors.fill:parent;anchors.margins:root.labelSize/3;verticalAlignment:Text.AlignVCenter;textFormat:Text.PlainText;text:root.style.label || "TV Guide · Full guide / Add channel";font.pixelSize:root.labelSize;color:root.appearance.textColor;elide:Text.ElideRight}
+            border.width:root.engaged && root.selectedIndex<0?(root.style.focusWidth || 2):0;border.color:widgetTheme.focus
+            Text {anchors.fill:parent;anchors.margins:root.labelSize/3;verticalAlignment:Text.AlignVCenter;textFormat:Text.PlainText;text:root.style.label || "TV Guide · Full guide / Add channel";font.pixelSize:root.labelSize;color:widgetTheme.selectedText;elide:Text.ElideRight}
             MouseArea {anchors.fill:parent;onClicked:{root.engage();root.select(-1);root.openGuide()}}
         }
         Repeater {
@@ -81,11 +82,11 @@ Item {
                 Accessible.focusable:!root.readOnly
                 Accessible.focused:root.visible && root.engaged && root.selectedIndex===index
                 Accessible.onPressAction:{root.engage();root.activate(index)}
-                color:"transparent";radius:cardStyle.radius===undefined?root.roundness:cardStyle.radius;border.color:cardStyle.focusColor || root.appearance.focusColor;border.width:root.engaged && root.selectedIndex===index?(cardStyle.focusWidth || 2):0
-                Rectangle {z:-1;anchors.fill:parent;color:parent.cardStyle.surfaceColor || root.appearance.surfaceColor;opacity:parent.cardStyle.surfaceOpacity===undefined?1:parent.cardStyle.surfaceOpacity;radius:parent.radius}
+                color:"transparent";radius:cardStyle.radius===undefined?root.roundness:cardStyle.radius;border.color:cardStyle.focusColor || widgetTheme.focus;border.width:root.engaged && root.selectedIndex===index?(cardStyle.focusWidth || 2):0
+                Rectangle {z:-1;anchors.fill:parent;color:parent.cardStyle.surfaceColor || widgetTheme.surface;opacity:parent.cardStyle.surfaceOpacity===undefined?1:parent.cardStyle.surfaceOpacity;radius:parent.radius}
                 readonly property var art:root.style.guideArtSource==="station" && modelData.logo?{source:root.controller.stationLogo(modelData.logo)}:root.style.guideArtSource!=="none" && root.style.guideArtSource!=="station" && root.provider && !root.readOnly && root.style.artHeight!==0 && (root.variant==="preview" || root.horizontal) && ["movie","episode","musicvideo","song"].indexOf(modelData.current.mediaType)>=0?root.provider.artwork(modelData.current.mediaType,modelData.current.mediaId):null
                 Image {objectName:"guideWidgetArt-"+modelData.id;anchors.fill:parent;source:parent.art?parent.art.source:"";fillMode:parent.cardStyle.artFit==="contain"?Image.PreserveAspectFit:Image.PreserveAspectCrop;opacity:parent.cardStyle.surfaceOpacity===undefined?1:parent.cardStyle.surfaceOpacity;asynchronous:true}
-                Rectangle {anchors.bottom:parent.bottom;width:parent.width;height:Math.min(parent.height,channelLabel.height+channelLabel.anchors.margins*2);visible:!!parent.art;color:root.style.labelSurfaceColor || root.appearance.surfaceColor;opacity:root.style.panelOpacity===undefined?1:root.style.panelOpacity;radius:root.roundness}
+                Rectangle {anchors.bottom:parent.bottom;width:parent.width;height:Math.min(parent.height,channelLabel.height+channelLabel.anchors.margins*2);visible:!!parent.art;color:root.style.labelSurfaceColor || widgetTheme.surface;opacity:root.style.panelOpacity===undefined?1:root.style.panelOpacity;radius:root.roundness}
                 Item {
                     id:channelLabel;objectName:"guideWidgetLabel-"+modelData.id
                     readonly property var lines:[modelData.number+" · "+modelData.name+(root.sourceBadges && modelData.sourceName?" · "+modelData.sourceName:""),root.programLabel(modelData.current)].concat(root.variant==="guide" && (modelData.upcoming || []).length?["Next: "+modelData.upcoming[0].title]:[])
@@ -94,15 +95,15 @@ Item {
                     width:Math.max(0,parent.width-anchors.margins*2);height:Math.max(0,Math.min(parent.height-anchors.margins*2,labelLines.implicitHeight));clip:true;visible:parent.cardStyle.labelPosition!=="hidden"
                     Column {id:labelLines;width:parent.width
                         Repeater {model:channelLabel.lines
-                            Text {required property string modelData;required property int index;objectName:"guideWidgetLabelLine-"+channelLabel.parent.modelData.id+"-"+index;width:labelLines.width;textFormat:Text.PlainText;color:channelLabel.parent.cardStyle.labelColor || root.appearance.labelColor || root.appearance.textColor;font.pixelSize:channelLabel.parent.stationText;elide:Text.ElideRight;text:modelData}
+                            Text {required property string modelData;required property int index;objectName:"guideWidgetLabelLine-"+channelLabel.parent.modelData.id+"-"+index;width:labelLines.width;textFormat:Text.PlainText;color:channelLabel.parent.cardStyle.labelColor || root.appearance.labelColor || widgetTheme.text;font.pixelSize:channelLabel.parent.stationText;elide:Text.ElideRight;text:modelData}
                         }
                     }
                 }
-                Rectangle {anchors.left:parent.left;anchors.bottom:parent.bottom;height:Math.max(2,root.labelSize/7);width:parent.width*root.progressFor(modelData.current);color:root.appearance.focusColor}
+                Rectangle {anchors.left:parent.left;anchors.bottom:parent.bottom;height:Math.max(2,root.labelSize/7);width:parent.width*root.progressFor(modelData.current);color:widgetTheme.focus}
                 Rectangle {objectName:"guideWidgetFocus-"+modelData.id;z:2;anchors.fill:parent;color:"transparent";radius:parent.radius;border.color:parent.border.color;border.width:parent.border.width}
                 MouseArea {anchors.fill:parent;onClicked:{root.engage();root.activate(index)}}
             }
         }
-        Text {visible:!root.rows.length;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.controller && root.controller.errorString?root.controller.errorString:"Create a local channel or add a source in Full guide.";color:root.appearance.mutedColor;font.pixelSize:root.labelSize}
+        Text {visible:!root.rows.length;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.controller && root.controller.errorString?root.controller.errorString:"Create a local channel or add a source in Full guide.";color:widgetTheme.muted;font.pixelSize:root.labelSize}
     }
 }

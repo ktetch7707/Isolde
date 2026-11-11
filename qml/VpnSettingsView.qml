@@ -108,6 +108,10 @@ Item {
         model: root.rows
         currentIndex: root.selectedIndex
         spacing: 8 * shell.gapScale
+        function revealSelection() { if (currentIndex === 0) positionViewAtBeginning(); else positionViewAtIndex(currentIndex, ListView.Contain) }
+        onCurrentIndexChanged: Qt.callLater(revealSelection)
+        onCountChanged: Qt.callLater(revealSelection)
+        Component.onCompleted: Qt.callLater(revealSelection)
         header: Column {
         width: list.width
         spacing: 16 * shell.gapScale

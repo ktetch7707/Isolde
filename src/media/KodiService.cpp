@@ -268,7 +268,9 @@ void KodiService::start()
         "<return>NotifyAll(Isolde,pause)</return><space>NotifyAll(Isolde,pause)</space>"
         "<left>NotifyAll(Isolde,backward)</left><right>NotifyAll(Isolde,forward)</right>"
         "<up>NotifyAll(Isolde,channel-previous)</up><down>NotifyAll(Isolde,channel-next)</down>"
-        "</keyboard></FullscreenVideo></keymap>";
+        "</keyboard></FullscreenVideo>"
+        "<VideoOSD><keyboard><escape>NotifyAll(Isolde,stop)</escape><backspace>NotifyAll(Isolde,stop)</backspace>"
+        "</keyboard></VideoOSD></keymap>";
     if (!keys.open(QIODevice::WriteOnly) || keys.write(keyData) != keyData.size()) { fail("Cannot prepare managed playback keys."); return; }
     keys.close();
     const QStringList extra{"--ro-bind", "/usr/share/kodi/addons", "/run/isolde-original-addons",

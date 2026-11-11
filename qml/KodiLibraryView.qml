@@ -38,7 +38,9 @@ Rectangle {
         if (!item) return ""
         if (item.mediaType === "tvshow" || item.mediaType === "season") return (item.episode || 0) + " episodes · " + (item.watchedepisodes || 0) + " watched"
         const progress = item.resume && item.resume.position > 0 ? "Resume at " + Math.floor(item.resume.position / 60) + " min" : item.playcount > 0 ? "Watched" : "Unwatched"
-        const episode = item.mediaType === "episode" ? (item.showtitle || "") + " · S" + String(item.season).padStart(2, "0") + " E" + String(item.episode).padStart(2, "0") + " · " : item.year ? item.year + " · " : ""
+        const knownEpisode = Number.isInteger(item.season) && item.season >= 0 && Number.isInteger(item.episode) && item.episode > 0
+        const episodeIdentity = knownEpisode ? "S" + String(item.season).padStart(2, "0") + " E" + String(item.episode).padStart(2, "0") : ""
+        const episode = item.mediaType === "episode" ? [item.showtitle || "", episodeIdentity].filter(value => value.length > 0).join(" · ") + (item.showtitle || episodeIdentity ? " · " : "") : item.year ? item.year + " · " : ""
         return episode + progress + (item.runtime > 0 ? " · " + Math.round(item.runtime / 60) + " min" : "")
     }
     function updateArtwork() {

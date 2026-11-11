@@ -83,8 +83,8 @@ Rectangle {
         anchors.margins: root.compact ? 16 : 24
         spacing: root.compact ? 2 : 5
         visible: root.showTitle || root.showType
-        Text { visible: root.showTitle; width: parent.width; elide: Text.ElideRight; text: root.app.name; color: root.appearance.textColor || "#F5F1F3"; font.pixelSize: (root.compact ? 22 : 27) * root.textScale; font.weight: Font.DemiBold }
-        Text { visible: root.showType; width: parent.width; elide: Text.ElideRight; text: root.sectionLabel; color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: (root.compact ? 11 : 13) * root.textScale; font.letterSpacing: 2 }
+        Text { objectName:"appTileTitle"; visible: root.showTitle; width: parent.width; elide: Text.ElideRight; text: root.app.name; color: (root.selected ? root.appearance.selectedTextColor : root.appearance.textColor) || root.appearance.textColor || "#F5F1F3"; font.pixelSize: (root.compact ? 22 : 27) * root.textScale; font.weight: Font.DemiBold }
+        Text { visible: root.showType; width: parent.width; elide: Text.ElideRight; text: root.sectionLabel; color: (root.selected ? root.appearance.selectedTextColor || root.appearance.textColor : root.appearance.mutedColor) || "#AAA5AF"; font.pixelSize: (root.compact ? 11 : 13) * root.textScale; font.letterSpacing: 2 }
     }
 
     MouseArea { id: mouseArea; anchors.fill: parent; hoverEnabled: root.selectTrigger === "hover" || root.selectTrigger === "dwell"; onEntered: if (root.selectTrigger === "hover") root.activated(); onClicked: if (root.selectAction !== "none") root.activated() }

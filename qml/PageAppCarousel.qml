@@ -105,8 +105,8 @@ Item {
             }
         }
     }
-    Text {anchors.centerIn:parent;width:parent.width;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;visible:!root.cards.length;text:root.collectionTooLarge?"Choose up to 128 apps":root.style.subtitle || (root.buttons?"Add buttons in Edit contents":root.collection.mode==="selected"?"Choose apps":"No installed apps");color:root.appearance.textColor;font.pixelSize:18*root.unit}
-    Text {anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;text:root.message;visible:!!text;wrapMode:Text.Wrap;color:root.appearance.textColor;font.pixelSize:(root.style.labelSize || 18)*root.unit}
+    Text {anchors.centerIn:parent;width:parent.width;wrapMode:Text.WordWrap;horizontalAlignment:Text.AlignHCenter;visible:!root.cards.length;text:root.collectionTooLarge?"Choose up to 128 apps":root.style.subtitle || (root.buttons?"Add buttons in Edit contents":root.collection.mode==="selected"?"Choose apps":"No installed apps");color:root.appearance.textColor || galleryTheme.text;font.pixelSize:18*root.unit}
+    Text {anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;text:root.message;visible:!!text;wrapMode:Text.Wrap;color:root.appearance.textColor || galleryTheme.text;font.pixelSize:(root.style.labelSize || 18)*root.unit}
     Popup {
         id:gallery;objectName:"appCarouselGallery";parent:Overlay.overlay
         width:Math.min(parent?parent.width-48:900,900);height:Math.min(parent?parent.height-48:500,500)

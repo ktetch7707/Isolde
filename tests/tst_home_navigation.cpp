@@ -218,6 +218,10 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
     const QRectF labelBounds(label->mapToItem(tile,QPointF()),label->size());
     QVERIFY2(imageBounds.bottom()<=labelBounds.top(),"App artwork overlaps its name");
     QVERIFY(imageBounds.left()>=0 && imageBounds.right()<=tile->width());
+    const auto originalAppearance=gallery->property("appearance");
+    gallery->setProperty("appearance",QVariantMap{{"surfaceColor","#103b38"},{"textColor","#f5e9cd"},{"selectedColor","#f5e9cd"},{"selectedTextColor","#121212"}});
+    QTRY_COMPARE(label->property("color").value<QColor>(),QColor("#121212"));
+    gallery->setProperty("appearance",originalAppearance);
     const auto artifacts=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
     if(!artifacts.isEmpty())QVERIFY(window.grabWindow().save(artifacts+"/studio-test-app-gallery-grid.png"));
     gallery->setProperty("galleryPresentation",QVariantMap{{"layout","grid"},{"columns",5},{"showArtwork",false}});
@@ -1103,6 +1107,11 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QVERIFY2(root, qPrintable(component.errorString()));
     QQuickWindow window; window.resize(1280, 720); qobject_cast<QQuickItem *>(root.get())->setParentItem(window.contentItem()); window.show();
     auto command = [&](int value) { return QMetaObject::invokeMethod(root.get(), "handleCommand", Q_ARG(QVariant, value)); };
+    QVariant missingEpisodeSubtitle;
+    const QVariant unnumberedEpisode=QVariantMap{{"mediaType","episode"},{"showtitle","Known show"}};
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"subtitle",Q_RETURN_ARG(QVariant,missingEpisodeSubtitle),
+        Q_ARG(QVariant,unnumberedEpisode)));
+    QCOMPARE(missingEpisodeSubtitle.toString(),QString("Known show · Unwatched"));
     media.openLibrary("shows"); QTRY_VERIFY(media.connected());
     QVERIFY(command(InputManager::Confirm)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("seasons"));
     QVERIFY(command(InputManager::Confirm)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("episodes"));
