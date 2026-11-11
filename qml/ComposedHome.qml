@@ -86,10 +86,12 @@ Item {
     }
     readonly property int firstVisibleGridRow:scrollingPage?Math.max(0,Math.floor(content.contentY/(placementCell.cellH+placementCell.gap))):0
     readonly property real pageContentHeight:scrollingPage?Math.max(content.height,2*placementCell.margin+contentRows*(placementCell.cellH+placementCell.gap)-placementCell.gap):content.height
-    readonly property var viewportItems:scrollingPage?placedItems.filter(entry=>{
-        const top=placementCell.margin+entry.placement.y*(placementCell.cellH+placementCell.gap)
-        const bottom=top+entry.placement.height*(placementCell.cellH+placementCell.gap)-placementCell.gap
-        return bottom>=content.contentY-content.height && top<=content.contentY+2*content.height
+    readonly property int visibleGridRows:Math.max(1,Math.ceil(content.height/(placementCell.cellH+placementCell.gap)))
+    // Buffer grid rows, not whole screens or every subpixel scroll update.
+    // Hidden page previews retain their data/focus without constructing cards.
+    readonly property var viewportItems:!root.visible?[]:scrollingPage?placedItems.filter(entry=>{
+        return entry.placement.y+entry.placement.height>=firstVisibleGridRow-2
+            && entry.placement.y<=firstVisibleGridRow+visibleGridRows+2
     }):placedItems
     Connections {
         target:host

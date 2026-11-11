@@ -147,9 +147,14 @@ Item {
     readonly property var scopedItems:items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId))
     // Keep pointer delegates alive while the separate proposal model reflows.
     readonly property var pointerItems: {
-        if(!session)return []
+        if(!open || !session)return []
         const model=pageId?session.model.pageModel(pageId):session.model
-        return model?model.items.filter(i=>(i.parentId || "")===parentScopeId && (!sectionMode || scopeOverview || parentScopeId || (i.categoryId || "")===scopeId)):[]
+        return model?model.items.filter(i=>{
+            if((i.parentId || "")!==parentScopeId || sectionMode && !scopeOverview && !parentScopeId && (i.categoryId || "")!==scopeId)return false
+            if(!scrollingEnabled || parentScopeId || !i.placement || i.id===selectedId)return true
+            const first=preview.firstVisibleGridRow
+            return i.placement.y+i.placement.height>=first-2 && i.placement.y<=first+grid.rows+2
+        }):[]
     }
     readonly property var layerRows: StudioTree.layerRows(items, expandedGroups)
     readonly property var gridModes:layoutModel && layoutModel.studioOptions?layoutModel.studioOptions.gridModes || []:[]
@@ -923,7 +928,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
             mode="canvas";toolbarFocus=false;Qt.callLater(()=>preview.revealScope(scopeId));return
         }
         if(mode==="layerItem"){
-            if(choice===0){mode="canvas";toolbarFocus=false}
+            if(choice===0){mode="canvas";toolbarFocus=false;if(current && current.placement)preview.revealPlacement(current.placement,scopeId,current.parentId || "")}
             else if(choice===1)openInspector(false)
             else if(choice===2 || choice===3){const key=choice===2?"hidden":"locked";command("state",{id:selectedId,key:key,value:!current[key]})}
             else{mode="layers";choice=layerOrigin}return
@@ -1345,6 +1350,7 @@ if(mode==="canvas" && !selectedId)return ["Add component","Page appearance","Tem
                         }
                     }
                     Repeater {
+                        objectName:"studioPointerTargets"
                         model:studio.pointerItems.filter(i=>(!studio.gridMode || !!i.placement) && (!i.hidden || i.id===studio.selectedId))
                         delegate:Rectangle {
                             required property var modelData

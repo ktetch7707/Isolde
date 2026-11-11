@@ -213,25 +213,44 @@ Item {
             verify(list.currentItem.height >= label.implicitHeight + 16)
         }
         function test_1024_components_remain_editable_through_virtualized_layers() {
+            const started=studioFixture.monotonicMilliseconds()
+            function phase(name){console.info("CUTOVER_SCALE "+name+" "+(studioFixture.monotonicMilliseconds()-started)+"ms")}
+            phase("begin")
             host.visible = false
+            phase("hidden")
             verify(studioFixture.reset(false, true, false, false, 1024))
+            phase("reset")
             host = createTemporaryObject(customizeComponent, parent)
+            phase("created")
             verify(host !== null)
             const editor = findChild(host, "pageStudio")
             tryVerify(() => editor.open)
+            phase("open")
+            const composed=findChild(editor,"composedHome")
+            verify(composed!==null)
+            verify(composed.viewportItems.length<=(homeLayout.grid.rows+6)*homeLayout.grid.columns,"Rendered rows must remain bounded by the viewport")
+            const targets=findChild(editor,"studioPointerTargets")
+            verify(targets!==null)
+            verify(targets.count<=(homeLayout.grid.rows+6)*homeLayout.grid.columns+1,"Pointer targets must remain bounded by the viewport")
             compare(editor.layerRows.length, 1024)
             const disk = studioFixture.disk()
             editor.mode = "layers"
             editor.choice = 1023
+            phase("selected-last-layer")
             const list = findChild(editor, "studioDialogList")
             tryVerify(() => list.currentItem !== null && list.currentItem.objectName === "studioDialogChoice-1023")
             verify(list.contentItem.children.length < 100)
             send(inputManager.confirm)
+            phase("layer-confirm")
             compare(editor.selectedId, "cell-1023")
             compare(editor.mode, "layerItem")
             send(inputManager.confirm) // Find on page is the explicit default action.
+            phase("find-on-page")
             compare(editor.mode, "canvas")
+            tryVerify(()=>composed.viewportItems.some(entry=>entry.item.id==="cell-1023"))
+            phase("selected-visible")
             compare(studioFixture.disk(), disk)
+            phase("disk-unchanged")
         }
     }
 }
