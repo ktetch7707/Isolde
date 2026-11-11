@@ -26,6 +26,11 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_visual_desktop_prompt_inventory_is_bounded_and_dismiss_only(self):
+        self.assertEqual(oracle.secret_prompt_paths('/org/freedesktop/secrets\n/org/freedesktop/secrets/collection/login\n/org/freedesktop/secrets/prompt/p1\n'),['/org/freedesktop/secrets/prompt/p1'])
+        for tree in ('x'*65537,'/org/freedesktop/secrets/prompt/../../collection/login','\n'.join('/org/freedesktop/secrets/prompt/p'+str(i) for i in range(17))):
+            with self.assertRaises(RuntimeError):oracle.secret_prompt_paths(tree)
+
     def test_reference_default_theme_ignores_object_order_but_rejects_value_changes(self):
         path=Path(__file__).resolve().parents[1]/'tools/home-reference-acceptance.py'
         spec=importlib.util.spec_from_file_location('reference_theme',path)
@@ -1568,7 +1573,8 @@ class OracleTests(unittest.TestCase):
     def test_visual_failure_still_restores_service(self):
         runner = oracle.Oracle(self.root, "visual")
         before = {"ActiveState": "active"}
-        with patch.object(runner, "tested_payload", return_value=self.root), \
+        with patch.object(runner, "prepare_visual_desktop"), \
+                patch.object(runner, "tested_payload", return_value=self.root), \
                 patch.object(runner, "service", return_value=before), \
                 patch.object(runner, "links", return_value={"current": "same"}), \
                 patch.object(runner, "stage", side_effect=TimeoutError("timed out")), \
@@ -1577,6 +1583,18 @@ class OracleTests(unittest.TestCase):
                 runner.visual("studio")
             restore.assert_called_once_with(before)
         self.assertFalse((self.root / "service-lease.json").exists())
+
+    def test_visual_desktop_refuses_host_and_only_cancels_prompt(self):
+        runner=oracle.Oracle(self.root/'isolde-oracle','desktop')
+        with patch.object(runner,'command',return_value='personal-host'),patch.object(oracle.subprocess,'run') as execute:
+            with self.assertRaisesRegex(RuntimeError,'Isolde-Test'):runner.prepare_visual_desktop()
+            execute.assert_not_called()
+        replies=[SimpleNamespace(stdout='/org/freedesktop/secrets/prompt/p1'),SimpleNamespace(stdout='()'),SimpleNamespace(stdout='true'),SimpleNamespace(stdout=''),SimpleNamespace(stdout='/org/freedesktop/secrets')]
+        with patch.object(oracle.Path,'home',return_value=self.root),patch.object(runner,'command',side_effect=lambda *args:'isolde-test' if args==('hostname',) else ''),patch.object(oracle.subprocess,'run',side_effect=replies) as execute:
+            runner.prepare_visual_desktop()
+        commands=[call.args[0] for call in execute.call_args_list]
+        self.assertEqual(commands[1],['gdbus','call','--session','--dest','org.freedesktop.secrets','--object-path','/org/freedesktop/secrets/prompt/p1','--method','org.freedesktop.Secret.Prompt.Dismiss'])
+        self.assertFalse(json.loads((runner.run/'guest-visual-desktop.json').read_text())['credentialsRead'])
 
     @unittest.skipUnless(os.name == "posix", "Linux process groups/selector pipes")
     def test_silent_process_timeout_is_bounded(self):

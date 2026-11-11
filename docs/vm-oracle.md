@@ -179,3 +179,13 @@ dedup byte totals are not physical reclaimed-space claims; use freeBefore/After.
 All runner self-tests must pass before maintenance. The2GiB Test floor remains.
 Storage inventory reports newest candidates first, plus the named synthetic
 media/runtime-bundle and Kodi cache roots; it does not traverse entire profiles.
+
+Visual desktop preflight (November11): each Visual case cancels outstanding
+Secret Service unlock prompts on the native Isolde-Test guest and disables
+GNOME desktop banners so they cannot obscure screenshots. If Dismiss is limited
+to its original caller, restart only the guest user keyring service to cancel
+pending operations, preserving credential files. Never supply passwords, unlock
+secrets or modify host settings. A remaining prompt aborts before product input.
+Configure -ConfigureTarget desktop-prompts uses matching runner self-tests and
+records the guest-only preparation. This does not waive storage checks or confer
+visual acceptance; review actual frames. BUG-096's obstructed attempts are excluded.

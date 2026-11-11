@@ -266,6 +266,14 @@ CASES = {"themecontrols": ("home-components-acceptance.py", ["--studio", "--them
          "emulators": ("games-acceptance.py", ["--emulator"])}
 
 
+def secret_prompt_paths(tree):
+    if len(tree)>65536:raise RuntimeError('Unbounded guest secret-service object inventory')
+    paths=[line.strip() for line in tree.splitlines() if line.strip().startswith('/org/freedesktop/secrets/prompt/')]
+    if len(paths)>16 or any(not re.fullmatch(r'/org/freedesktop/secrets/prompt/[A-Za-z0-9_]+',path) for path in paths):
+        raise RuntimeError('Invalid guest secret-service prompt identity')
+    return paths
+
+
 def visual_result_passed(case, result):
     if case=='studio':
         colors=result.get('colorPicker',{})
@@ -1303,8 +1311,41 @@ class Oracle:
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
+    def prepare_visual_desktop(self):
+        if self.command('hostname')!='isolde-test' or self.root!=Path.home()/'isolde-oracle' or self.root.resolve()!=self.root:
+            raise RuntimeError('Desktop preparation is restricted to the native Isolde-Test guest')
+        environment=dict(os.environ)
+        for line in self.command('systemctl','--user','show-environment').splitlines():
+            key,_,value=line.partition('=')
+            if key in {'DBUS_SESSION_BUS_ADDRESS','XDG_RUNTIME_DIR','DISPLAY','XAUTHORITY'}:environment[key]=value
+        def run(argv):
+            return subprocess.run(argv,env=environment,capture_output=True,text=True,timeout=10,check=True).stdout.strip()
+        # Cancel outstanding unlock requests, never unlock or read credentials.
+        tree=run(['busctl','--user','--list','tree','org.freedesktop.secrets'])
+        paths=secret_prompt_paths(tree)
+        restart=False
+        for path in paths:
+            try:
+                run(['gdbus','call','--session','--dest','org.freedesktop.secrets','--object-path',path,'--method','org.freedesktop.Secret.Prompt.Dismiss'])
+            except subprocess.CalledProcessError as error:
+                # Secret Service can restrict Dismiss to its original caller.
+                # Restart only this disposable guest's user keyring service to
+                # cancel pending operations, without touching credential files.
+                if error.stderr is None:raise
+                atomic_json(self.run/'guest-prompt-dismiss-error.json',{'error':error.stderr[:2048]})
+                run(['systemctl','--user','restart','gnome-keyring-daemon.service'])
+                restart=True
+                break
+        before=run(['gsettings','get','org.gnome.desktop.notifications','show-banners'])
+        # Guest desktop notifications must not cover owned-window evidence.
+        # This does not change Isolde notification, permission or storage policy.
+        run(['gsettings','set','org.gnome.desktop.notifications','show-banners','false'])
+        if secret_prompt_paths(run(['busctl','--user','--list','tree','org.freedesktop.secrets'])):
+            raise RuntimeError('Guest keyring prompts remain; refuse obscured visual evidence')
+        atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
+
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None):
-        if target not in {"native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
         if target=="kodi-demo-art":
             payload=self.tested_payload();self.deployed_release(payload,target)
             if self.command('hostname')!='isolde-test' or not isinstance(demo_art_helper_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',demo_art_helper_digest):raise RuntimeError('Demo artwork setup requires the tested Isolde VM and a verified helper')
@@ -1314,7 +1355,7 @@ class Oracle:
                 self.stage('kodi-demo-art',[sys.executable,str(helper),'--source',str(self.run/'source'),'--receipt',str(self.run/'kodi-demo-art-result.json')],900)
             self.update(service=self.service(),releases=self.links())
             return
-        if target=="artifacts":
+        if target in ("artifacts","desktop-prompts"):
             if self.command("hostname")!="isolde-test" or self.root!=Path.home()/"isolde-oracle" or self.root.resolve()!=self.root:
                 raise RuntimeError("Artifact maintenance is restricted to the native Isolde-Test oracle")
             if not isinstance(maintenance_tests_digest,str) or not re.fullmatch(r"[0-9a-f]{64}",maintenance_tests_digest):
@@ -1332,6 +1373,9 @@ class Oracle:
                 raise RuntimeError("Redirected maintenance self-test dependency")
             verify_tree(bundle,entries)
             self.stage("guest-maintenance-self-tests",[sys.executable,str(tests)],90)
+            if target=='desktop-prompts':
+                self.prepare_visual_desktop()
+                return
             remove_generated_payload_cache(self.run)
             self.maintain_artifacts()
             return
@@ -1443,6 +1487,7 @@ class Oracle:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
     def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None, diagnostic=False):
+        self.prepare_visual_desktop()
         if diagnostic and installed:raise RuntimeError('Diagnostic payloads cannot be deployed or tested as installed')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
@@ -2089,7 +2134,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","kodi-demo-art"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")
