@@ -225,6 +225,11 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
             if(it.value().metaType().id()!=QMetaType::Bool)return false;
         } else if(key=="visibleLabel" || key=="bodyText" || key=="moreLabel" || key=="galleryTitle") {
             if(it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>(key=="bodyText"?4096:160) || it.value().toString().contains(QChar::Null))return false;
+        } else if(key=="appIconStyle" || key=="iconFocus" || key=="iconBacking") {
+            if(it.value().metaType().id()!=QMetaType::QString || !(key=="appIconStyle"?QStringList{"signature","tiles","rail"}:key=="iconFocus"?QStringList{"glow","frame"}:QStringList{"auto","none","surface"}).contains(it.value().toString()))return false;
+        } else if(key=="iconGlow" || key=="iconGlowOpacity" || key=="iconPadding") {
+            if(it.value().metaType().id()==QMetaType::QString || it.value().metaType().id()==QMetaType::Bool)return false;
+            bool ok=false;const auto n=it.value().toDouble(&ok);if(!ok || !std::isfinite(n) || n<0 || n>(key=="iconGlowOpacity"?1:key=="iconPadding"?40:32))return false;
         } else if(key=="artFit" || key=="labelPosition" || key=="textAlign" || key=="logoMode") {
             const auto choices=key=="logoMode"?QStringList{"cutout","original","tile","monochrome"}:key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
             if(it.value().metaType().id()!=QMetaType::QString || !choices.contains(it.value().toString()))return false;

@@ -172,6 +172,7 @@ SUITES = {"all": None, "runtime_contracts":"isolde_native_sandbox_tests", "campa
           "studio_artwork": "isolde_studio_quick_tests",
           "shell_appearance": ("isolde_studio_quick_tests", "isolde_home_navigation_tests", "isolde_surface_appearance_tests"),
           "studio_visuals": ("isolde_studio_quick_tests", "isolde_home_navigation_tests"),
+          "app_icons": ("isolde_tests", "isolde_component_tests", "isolde_studio_quick_tests", "isolde_home_navigation_tests"),
           "studio_colors": "isolde_studio_quick_tests",
           "studio_workflows": "isolde_studio_quick_tests",
           "studio_cutover": "isolde_studio_quick_tests",
@@ -203,6 +204,8 @@ def suite_selection(suite):
         pattern = "^(studio_selection|studio_shell|surface_appearance_contracts|home_component_navigation)$"
     if suite == "studio_visuals":
         pattern = "^(studio_quick|studio_artwork|studio_shell|home_component_navigation|studio_navigation)$"
+    if suite == "app_icons":
+        pattern = "^(isolde_tests|component_contracts|studio_artwork|studio_selection|home_component_navigation|studio_navigation)$"
     if suite == "studio_remaining":
         pattern="^(studio_quick|studio_performance|studio_design_contracts|component_contracts)$"
     if suite == "studio_colors":
@@ -1105,6 +1108,7 @@ class Oracle:
             if suite == "campaign_repairs":expected=REPAIR_TESTS
             if suite == "runtime_contracts":expected=RUNTIME_TESTS
             if suite == "studio_visuals":expected={"studio_quick","studio_artwork","studio_shell","home_component_navigation","studio_navigation"}
+            if suite == "app_icons":expected={"isolde_tests","component_contracts","studio_artwork","studio_selection","home_component_navigation","studio_navigation"}
             if suite == "studio_remaining":expected={"studio_quick","studio_performance","studio_design_contracts","component_contracts"}
             if suite == "studio_performance":expected={"studio_performance","studio_design_contracts","component_contracts"}
             if suite == "studio_reuse":expected={"studio_reuse","studio_design_contracts"}

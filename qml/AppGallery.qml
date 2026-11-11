@@ -6,6 +6,7 @@ Item {
     property bool open: false
     property var entries: []
     property var appearance: ({})
+    property var iconStyle:typeof homeLayout!=="undefined"?(homeLayout.studioOptions.appIconStyles || {}).tiles || {}:({})
     property var galleryPresentation: ({layout:"grid",columns:5,density:"standard",sort:"name",showArtwork:true,showLabels:true,filterEnabled:true,favoritesEnabled:true,title:"All Apps"})
     property bool internetAvailable: false
     property bool localNetworkAvailable: false
@@ -349,6 +350,7 @@ Item {
                 Component {
                     id: gridCard
                     AppTile {
+                        style:root.iconStyle
                         objectName: "allAppsTile"
                         Accessible.role: Accessible.Button
                         Accessible.name: entry.modelData.name

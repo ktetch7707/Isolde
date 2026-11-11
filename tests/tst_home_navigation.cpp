@@ -691,6 +691,12 @@ void HomeNavigationTests::appSuppliedIconsUseManagedArtwork()
         QVERIFY2(inkPixels>100,qPrintable(id+" must render its symbol, not only a blank backing"));
         const auto iconArtifacts=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
         if(!iconArtifacts.isEmpty())QVERIFY(artwork.save(iconArtifacts+"/studio-test-app-icon-"+id+".png"));
+        const auto item=bundledRegistry.apps().first().toMap();
+        for(const auto &role:QStringList{"cutoutLogoSource","inkLogoSource"}){
+            const QImage derived(QUrl(item[role].toString()).toLocalFile());QVERIFY2(!derived.isNull(),qPrintable(id+" "+role));
+            QCOMPARE(derived.size(),QSize(512,512));QCOMPARE(derived.pixelColor(256,32).alpha(),0);
+            if(!iconArtifacts.isEmpty())QVERIFY(derived.save(iconArtifacts+"/studio-test-app-"+role+"-"+id+".png"));
+        }
     }
     QQmlEngine engine;
     QQmlComponent card(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(HOME_QML)).dir().filePath("HomeCard.qml")));

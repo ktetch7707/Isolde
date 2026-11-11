@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "derivation": "isolde-icon-roles-v1",
+  "icons": {
+    "app-store": {
+      "foreground": "foreground/app-store.svg",
+      "inkColour": "#ffffff",
+      "inkExclude": [
+        "#25334b"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#25334b",
+      "foregroundSha256": "e837fa3657333ede1d456ba8f610e0e73d3c2f44a71bf2df67749346c24bc34c",
+      "originalSha256": "82fbf360c451d45390d03ab965fda82300341463abe0f65b6af48ec6cf3bb670"
+    },
+    "cbc-gem": {
+      "foreground": "foreground/cbc-gem.svg",
+      "inkColour": "#E60505",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "e77cf83b70932a2c7ff7bdc978bca9a8f091b785417f2dcbcef6ad774c788542",
+      "originalSha256": "afb0e119f54a6e3fac03f044c56ad48905cfb992d6c3e5e42b1221933db7a4a7"
+    },
+    "crunchyroll": {
+      "foreground": "foreground/crunchyroll.svg",
+      "inkColour": "#FF5E00",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "096362ef0bb99ab3daebcda7c8f7b2a98c13bf5c235c53357113f2b8e5376850",
+      "originalSha256": "4a7f973f60f72e2631e5f6ef5e6f7df42378f4cca900f8ffdd03ae82066ef35b"
+    },
+    "desktop-mode": {
+      "foreground": "foreground/desktop-mode.svg",
+      "inkColour": "#ffffff",
+      "inkExclude": [
+        "#25334b"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#25334b",
+      "foregroundSha256": "7b6d424410017fe82a697d2a7d29948bb75dcc906e6bf96050d0d70b7682f827",
+      "originalSha256": "6321564ac2fdb6ab14452fd744aa0de0b2a08683f97135df668cc118bf7572e9"
+    },
+    "disney-plus": {
+      "foreground": "foreground/disney-plus.svg",
+      "inkColour": "#136878",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "957bf62e2b29860a0c305a853069bb94e5289847fa46882bb2f5a4bfdd0552dc",
+      "originalSha256": "644d056e86cc5ff9643f8dae76b4e67df81f7addb553f6f81fc59d2937813674"
+    },
+    "freetube": {
+      "foreground": "foreground/freetube.svg",
+      "inkColour": "#F04242",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "ad5e00ecead92eb83fbf00ea78c93e718b49e136f973f20064875e9acc63947b",
+      "originalSha256": "e91b8cab9cd7bb91a838b7b4f9eb1c5c4c9c0764a0b9a367ef01ec631781bc01"
+    },
+    "kodi": {
+      "foreground": "foreground/kodi.svg",
+      "inkColour": "#17B2E7",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "d41b0179ac8000f50bfd04189decdd226f572bd3189f4c096fbd6d2f05db2ecc",
+      "originalSha256": "c55c6384a6edd7b3775c688a3e93363633d22236c0d3e8ec9752e9227dc5140d"
+    },
+    "movies": {
+      "foreground": "foreground/movies.svg",
+      "inkColour": "#ffffff",
+      "inkExclude": [
+        "#25334b"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#25334b",
+      "foregroundSha256": "c5571dc04fbc64c7c08fa465d6c7fdd434e3f0e649a8dea7cacf0daf56d3f5b7",
+      "originalSha256": "657a2c07246b90c8e89867bfb6120253204219849a5b633cf532b34e17fe7dca"
+    },
+    "netflix": {
+      "foreground": "foreground/netflix.svg",
+      "inkColour": "#E50914",
+      "inkExclude": [
+        "#141414"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "ca419a7a7e3ca5b43f8c7d716e0fbe42e8ae85d55848c638225eefa400dbc876",
+      "originalSha256": "7a2065fdab979d613aafbe413ea03a34a8b733ceee6f451677be13ccff2686bb"
+    },
+    "paramount-plus": {
+      "foreground": "foreground/paramount-plus.svg",
+      "inkColour": "#FFFFFF",
+      "inkExclude": [
+        "#0064FF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#0064FF",
+      "foregroundSha256": "ac670aee770968af8a6bcfd6e23a67299fa614084f429cf9d03ce7b3114a9058",
+      "originalSha256": "e3b245ae6a5b28ffcbca27d79ad1e3400ab9e44252e9e735ef10bcb1e4a10ca8"
+    },
+    "peacock": {
+      "foreground": "foreground/peacock.svg",
+      "inkColour": "#FFFFFF",
+      "inkExclude": [
+        "#101010"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#101010",
+      "foregroundSha256": "9d40ee1b472a3ba1420aec6d948d878c24c3d81e6d9e4c8594232b01858c99d7",
+      "originalSha256": "c16a04cbdeff22986d2821c70476179de433058fbd6b0886511f1b97d7665c97"
+    },
+    "prime-video": {
+      "foreground": "foreground/prime-video.svg",
+      "inkColour": "#00A8E1",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "1986d536730ae15058d6d02fdc276846899f245ba424e5d74f4ac661d995ee87",
+      "originalSha256": "69ea5373caef69a6c8e0f1c313a74494342c60b988fddc072cc4328d8bc091f5"
+    },
+    "settings": {
+      "foreground": "foreground/settings.svg",
+      "inkColour": "#ffffff",
+      "inkExclude": [
+        "#25334b"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#25334b",
+      "foregroundSha256": "05e2747a3bcb38e3d9fa90cacdc5b087a1f0e85936ee2d3ed91ed73ee2839d78",
+      "originalSha256": "d6f4968d1a86715148df101b2801a0affeed262ec7fb75d39d83bc376a4d2cf8"
+    },
+    "shows": {
+      "foreground": "foreground/shows.svg",
+      "inkColour": "#ffffff",
+      "inkExclude": [
+        "#25334b"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#25334b",
+      "foregroundSha256": "0d390d4e267d355d80226a2a03e766568bc0d29c886ed66d643701db08ec27df",
+      "originalSha256": "00d84aada8754fc698aef8e9240b1e686ccdddbd615e19a1d62706a3f7f3ea89"
+    },
+    "spotify": {
+      "foreground": "foreground/spotify.svg",
+      "inkColour": "#1ED760",
+      "inkExclude": [
+        "#191414"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "9db3d6fe1e3cd7615fd1da07f6cdd63754f2c483affd2870fac5d22afe75ef8a",
+      "originalSha256": "dca0e75ec3dbde0eabed166721416d84b8eec378100c4eb1d11f13e2a68108c8"
+    },
+    "steam": {
+      "foreground": "foreground/steam.svg",
+      "inkColour": "#FFFFFF",
+      "inkExclude": [
+        "#171D25"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#171D25",
+      "foregroundSha256": "d3b5959947d51745f7ba2511df61898beb7886cca89047605ae16a4ecde90b83",
+      "originalSha256": "a3de3c506a4fccc87877f9c4e9c18f7651f454a601cc1e41d8504e197d49258f"
+    },
+    "switch": {
+      "foreground": "foreground/switch.svg",
+      "inkColour": "#ffffff",
+      "inkExclude": [
+        "#25334b"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#25334b",
+      "foregroundSha256": "67a22b9a8dd37ad183e2ea16f5ccf8c0dfe7ad56e2fe7d080919c141c6ec4074",
+      "originalSha256": "b9695eba79c0a4b163efdaed3644a96a4d841d48424abfffe913adb13e5f6812"
+    },
+    "switch2": {
+      "foreground": "foreground/switch2.svg",
+      "inkColour": "#ffffff",
+      "inkExclude": [
+        "#25334b"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "#25334b",
+      "foregroundSha256": "67a22b9a8dd37ad183e2ea16f5ccf8c0dfe7ad56e2fe7d080919c141c6ec4074",
+      "originalSha256": "b9695eba79c0a4b163efdaed3644a96a4d841d48424abfffe913adb13e5f6812"
+    },
+    "youtube-tv": {
+      "foreground": "foreground/youtube-tv.svg",
+      "inkColour": "#FF0000",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "7f1c0c0ba9e89f58cfb3ec2fd84992d42aa8cd9530d200886b2f6a0faa7d0238",
+      "originalSha256": "3477aa8a9f011c8041ef7cea045a17e991f58a479232f84fab7ce9e5863868e3"
+    },
+    "youtube": {
+      "foreground": "foreground/youtube.svg",
+      "inkColour": "#f00",
+      "inkExclude": [
+        "#FFFFFF"
+      ],
+      "opticalScale": 1.0,
+      "contrastBackdrop": "",
+      "foregroundSha256": "0f2ba466dab86483488c424787bd075bc2bda26568d70450dc0faea1329cecb7",
+      "originalSha256": "0f2ba466dab86483488c424787bd075bc2bda26568d70450dc0faea1329cecb7"
+    }
+  }
+}

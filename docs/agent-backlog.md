@@ -26,6 +26,9 @@ The Coding% figures below are the implementation agents' **pre-campaign claims**
 
 ## UI audit and repair — 2026-11-10
 
+App icon design implemented: [report and focused VM evidence](app-icons-implementation-2026-11-10.md). Transparent foregrounds, reviewed theme-ink masks, three Studio styles, silhouette selection glow and recoverable original artwork pass all6 focused registrations in isolated candidate app-icons-20261110-j. No deployment or acceptance percentage increase.
+
+
 The user-directed [UI audit](ui-audit-2026-11-10.md) records ten findings covering packaged app artwork, SVG rendering/contrast, launcher artwork roles, menu overflow and wording. Full integration c passed60/60. Focused e passed5/5 with strict original-full reuse; both owned-window reference journeys passed and the affected screens were reviewed. Final focused f also passes5/5 with102 runner checks; all19 individual Qt icon images were collected, and the corrected Disney backing was reviewed. Existing acceptance remains1563/25=63%; no broad milestone or installed acceptance is awarded from UI repairs.
 
 Android setup/deployment continuation: user authentication refreshed the root-owned receipt. UI candidate f deployed successfully as release `742be8322eff80e0047e9d85`; installed Lounge/Pastel journeys pass with frozen matching helpers, reviewed UI frames and unchanged normal layout hashes. This supersedes the earlier stale-Android installation blocker. Android app launch and remaining project gates are not inferred from setup success.

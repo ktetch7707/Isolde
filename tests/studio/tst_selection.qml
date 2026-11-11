@@ -381,11 +381,14 @@ Item {
             verify(orb!==null);compare(orb.logoOnly,true)
             const art=findChild(orb,"orbArtwork"),surface=findChild(orb,"orbSurface")
             compare(surface.border.width,0);compare(art.radius,0);compare(art.outlineWidth,5)
-            orb.selected=false;compare(art.outlineWidth,0)
+            verify(art.glowWidth>0);const originalWidth=art.width,originalX=art.x
+            orb.selected=false;compare(art.outlineWidth,0);compare(art.glowWidth,0);compare(art.width,originalWidth);compare(art.x,originalX)
             orb.style={logoMode:"tile"};compare(orb.logoOnly,false);verify(art.radius>0)
             orb.style={logoMode:"original"};compare(orb.logoOnly,true)
-            orb.style={logoMode:"monochrome",iconColor:"#35a56f"};compare(orb.logoOnly,true);compare(art.tintColor,"#35a56f")
+            orb.item=Object.assign({},orb.item,{inkAvailable:true});orb.style={logoMode:"monochrome",iconColor:"#35a56f"};compare(orb.logoOnly,true);compare(art.tintColor,"#35a56f")
             orb.style={logoMode:"cutout"};compare(art.tintColor,"#00000000")
+            orb.selected=true;orb.style={logoMode:"cutout",iconFocus:"frame",focusWidth:3};compare(art.glowWidth,0);compare(art.outlineWidth,0);compare(surface.border.width,3)
+            for(const kind of ["signature","tiles","rail"]){orb.style={logoMode:"cutout",appIconStyle:kind,iconGlow:6,iconGlowOpacity:.4};compare(art.glowWidth,6);compare(art.glowOpacity,.4);compare(orb.horizontal,kind!=="signature")}
             orb.item={name:"Missing artwork"};compare(orb.logoOnly,false)
         }
         function test_wallpaper_return_retains_ready_image_and_custom_crop() {

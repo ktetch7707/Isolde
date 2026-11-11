@@ -103,6 +103,7 @@ public:
     Q_INVOKABLE QVariantMap browseArtwork(const QString &directory = {}, int page = 0);
     Q_INVOKABLE QString artworkPreview(const QString &source);
     Q_INVOKABLE QString stageArtwork(const QString &source);
+    Q_INVOKABLE QVariantMap cleanIconArtwork(const QString &source,int strength=1,const QString &background={});
     Q_INVOKABLE QVariantList actionChoices() const;
     Q_INVOKABLE QVariantList sourceChoices(const QString &id, const QString &pageId = {}) const;
     Q_INVOKABLE QVariantMap placementProposal(const QString &id, const QVariantMap &placement,
@@ -184,6 +185,7 @@ private:
     QPointer<HomeLayout> m_live;
     QTemporaryDir *m_assetStage = nullptr;
     QHash<QString,QString> m_stagedAssets;
+    QHash<QString,QString> m_iconOriginals;
     HomeLayout *m_model = nullptr;
     QString m_profilePath;
     QString m_profileId;

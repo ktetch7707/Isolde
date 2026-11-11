@@ -238,7 +238,8 @@ qt_add_qml_module(isolde
         qml/WebKioskView.qml
 )
 
-file(GLOB ISOLDE_APP_ICONS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/config/app-icons/*.svg")
+file(GLOB_RECURSE ISOLDE_APP_ICONS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/config/app-icons/*.svg")
+list(APPEND ISOLDE_APP_ICONS "${CMAKE_CURRENT_SOURCE_DIR}/config/app-icons/roles.json")
 qt_add_resources(isolde "isolde_app_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ISOLDE_APP_ICONS})
 qt_add_resources(isolde "isolde_config"
     PREFIX "/"
@@ -442,6 +443,7 @@ include(CTest)
 if(BUILD_TESTING)
     find_package(Qt6 6.4 REQUIRED COMPONENTS QuickTest)
     qt_add_executable(isolde_studio_quick_tests tests/studio/quicktest.cpp)
+    qt_add_resources(isolde_studio_quick_tests "studio_app_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${ISOLDE_APP_ICONS})
     target_link_libraries(isolde_studio_quick_tests PRIVATE isolde_core Qt6::QuickTest Qt6::Quick)
     target_compile_definitions(isolde_studio_quick_tests PRIVATE
         QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/studio"

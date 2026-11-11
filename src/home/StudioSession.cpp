@@ -2,6 +2,7 @@
 #include "home/ComponentSchema.h"
 #include "home/ManagedGif.h"
 #include "home/HomeLayout.h"
+#include "app/AppArtwork.h"
 
 #include <QJsonArray>
 #include <QCoreApplication>
@@ -73,6 +74,28 @@ QString StudioSession::artworkPreview(const QString &source)
     // Preview passes the very same decoder and private staging boundary as Import.
     const auto relative=stageArtwork(source);
     return relative.isEmpty() || !m_model?QString():m_model->resolveArtwork(relative);
+}
+QVariantMap StudioSession::cleanIconArtwork(const QString &source,int strength,const QString &background)
+{
+    if(strength<0 || strength>2 || (!background.isEmpty() && (!QColor(background).isValid() || QColor(background).alpha()!=255))){setError(tr("Choose a supported cleanup strength and opaque background colour."));return {};}
+    const auto original=stageArtwork(source);if(original.isEmpty())return {};
+    QImageReader reader(m_stagedAssets.value(original));reader.setAutoTransform(true);
+    if(reader.supportsAnimation()){setError(tr("Icon cleanup supports still PNG/JPEG artwork. Keep animated artwork as Original."));return {};}
+    const auto size=reader.size();if(size.width()>512 || size.height()>512)reader.setScaledSize(size.scaled(512,512,Qt::KeepAspectRatio));
+    const auto cleaned=AppArtwork::cleanBackground(reader.read(),strength,QColor(background));
+    if(!cleaned.accepted){setError({});return {{"accepted",false},{"reason",cleaned.reason}};}
+    QByteArray bytes;QBuffer buffer(&bytes);buffer.open(QIODevice::WriteOnly);
+    if(!cleaned.image.save(&buffer,"PNG")){setError(tr("Could not prepare the icon preview. Original retained."));return {};}
+    const auto relative="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(bytes,QCryptographicHash::Sha256).toHex())+".png";
+    const auto target=QDir(m_assetStage->path()).filePath(QFileInfo(relative).fileName());
+    if(!m_stagedAssets.contains(relative)){
+        qint64 total=bytes.size();for(const auto &path:m_stagedAssets)total+=QFileInfo(path).size();
+        if(m_stagedAssets.size()>=128 || total>64*1024*1024){setError(tr("This draft's artwork budget is 128 images / 64 MiB. Original retained."));return {};}
+        QSaveFile output(target);if(!output.open(QIODevice::WriteOnly) || output.write(bytes)!=bytes.size() || !output.commit()){setError(tr("Could not stage icon cleanup. Nothing applied."));return {};}
+        m_stagedAssets[relative]=target;if(m_model){m_model->m_assetPaths[relative]=target;emit m_model->layoutChanged();}
+    }
+    m_iconOriginals[relative]=original;
+    setError({});return {{"accepted",true},{"reason",cleaned.reason},{"source",QUrl::fromLocalFile(m_stagedAssets.value(relative)).toString()},{"preview",m_model?m_model->resolveArtwork(relative):QString()}};
 }
 QString StudioSession::stageArtwork(const QString &source)
 {
@@ -329,7 +352,7 @@ void StudioSession::invalidate()
     clearReferenceImage();
     m_editorLocked = false;
     m_live.clear();
-    m_stagedAssets.clear();delete m_assetStage;m_assetStage=nullptr;
+    m_stagedAssets.clear();m_iconOriginals.clear();delete m_assetStage;m_assetStage=nullptr;
     m_diskBaseline.clear();
     m_profilePath.clear();
     m_profileId.clear();
@@ -379,7 +402,8 @@ bool StudioSession::apply(const QString &focusId)
     const auto cleanup=[&]{for(const auto &path:created)QFile::remove(path);if(!hadArtDirectory)QDir().rmdir(artDirectory);};
     const auto serialized=QString::fromUtf8(m_draft);
     for(auto it=m_stagedAssets.cbegin();it!=m_stagedAssets.cend();++it){
-        if(!serialized.contains(it.key()))continue;
+        bool keepOriginal=false;for(auto origin=m_iconOriginals.cbegin();origin!=m_iconOriginals.cend();++origin)if(origin.value()==it.key() && serialized.contains(origin.key()))keepOriginal=true;
+        if(!serialized.contains(it.key()) && !keepOriginal)continue;
         QFile source(it.value());if(!source.open(QIODevice::ReadOnly)){cleanup();setError(tr("Staged artwork is missing. Choose it again; the draft is retained."));return false;}
         const auto data=source.readAll(),target=QDir(QFileInfo(m_profilePath).absolutePath()).filePath(it.key()).toUtf8();
         const auto expected="artwork/studio-"+QString::fromLatin1(QCryptographicHash::hash(data,QCryptographicHash::Sha256).toHex())+(ManagedGif::matches(data)?".gif":it.key().endsWith(".png")?".png":".jpg");

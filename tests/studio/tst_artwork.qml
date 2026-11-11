@@ -60,6 +60,21 @@ Item {
             compare(JSON.stringify(editor.session.document),before);compare(studioFixture.disk(),diskBaseline)
         }
         Component {id:realMotionImageComponent;App.ArtworkImage {width:160;height:100;z:20000}}
+        Component {id:iconStylesComponent;Rectangle {
+            width:1120;height:580;z:20000;color:"#e8ced8"
+            property var apps:studioFixture.iconAppsFixture()
+            property var palette:({backgroundStart:"#e8ced8",surfaceColor:"#f8eaf0",textColor:"#352b3a",focusColor:"#80526e",iconColor:"#80526e",fontFamily:"DejaVu Sans",typographyScale:1})
+            Repeater {model:["signature","tiles","rail"]
+                delegate:App.PageAppCarousel {required property string modelData;required property int index;x:24;y:24+index*175;width:1072;height:modelData==="signature"?150:100;registry:({apps:parent.apps});highlighted:true;appearance:parent.palette;style:({appIconStyle:modelData,logoMode:"cutout",layout:{visibleColumns:3},cardGap:24})}
+            }
+        }}
+        function test_three_icon_styles_render_and_keep_selected_glow(){
+            editor.visible=false;const scene=createTemporaryObject(iconStylesComponent,tests.parent);verify(scene!==null);settle();wait(160);verify(waitForRendering(scene))
+            if(studioFixture.artifacts)grabImage(scene).save(studioFixture.artifacts+"/studio-test-icon-styles-pastel.png")
+            scene.color="#17191f";scene.palette={backgroundStart:"#17191f",surfaceColor:"#252831",textColor:"#f5f0f4",focusColor:"#efbfd8",iconColor:"#efbfd8",fontFamily:"DejaVu Sans",typographyScale:1};settle();wait(160);verify(waitForRendering(scene))
+            if(studioFixture.artifacts)grabImage(scene).save(studioFixture.artifacts+"/studio-test-icon-styles-dark.png")
+            compare(studioFixture.disk(),diskBaseline)
+        }
         Component {id:tintedIconComponent;Rectangle {width:80;height:80;color:"#112233";z:20000
             App.ArtworkImage {objectName:"tintedIcon";anchors.fill:parent;fit:"contain";tintColor:"#00ff00";outlineWidth:4;outlineColor:"#ffffff"
                 source:"data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><path fill="red" fill-rule="evenodd" d="M16 16H64V64H16Z M32 32H48V48H32Z"/></svg>')}
@@ -75,8 +90,24 @@ Item {
             compare(first.pixel(14,40),Qt.rgba(1,1,1,1))
             image.tintColor="#0000ff";image.requestPaint();wait(80);verify(waitForRendering(image))
             const second=grabImage(card);compare(second.pixel(24,40),Qt.rgba(0,0,1,1));compare(second.pixel(14,40),first.pixel(14,40));compare(second.pixel(40,40),first.pixel(40,40))
+            image.glowWidth=8;image.requestPaint();wait(80);verify(waitForRendering(image));const glowing=grabImage(card)
+            verify(glowing.pixel(8,40)!==second.pixel(8,40),"Selected glow must extend beyond the hard contour")
+            image.glowWidth=0;image.requestPaint();wait(80);verify(waitForRendering(image));compare(grabImage(card).pixel(8,40),second.pixel(8,40))
             if(studioFixture.artifacts)second.save(studioFixture.artifacts+"/studio-test-monochrome-alpha-focus.png")
             compare(studioFixture.disk(),diskBaseline)
+        }
+        function test_icon_cleanup_is_remote_reversible_and_private(){
+            const source=studioFixture.iconArtworkFixture(),folder=source.slice(0,source.lastIndexOf("/")),before=JSON.stringify(editor.session.document)
+            editor.visible=false
+            const picker=createTemporaryObject(artworkPickerComponent,tests.parent,{session:editor.session,appearance:homeLayout.studioAppearance});verify(picker!==null)
+            artworkPickedSpy.target=picker;artworkPickedSpy.clear();verify(picker.browse(folder,0));compare(picker.entries.length,1)
+            picker.handleCommand(inputManager.confirm);compare(picker.candidate,source);const original=picker.preview
+            picker.handleCommand(inputManager.navigateDown);picker.handleCommand(inputManager.navigateDown);picker.handleCommand(inputManager.confirm)
+            compare(picker.cleanEnabled,true);verify(picker.cleanedSource.startsWith("file:"));verify(picker.preview!==original);compare(picker.previewSurfaces.length,3)
+            compare(artworkPickedSpy.count,0);compare(JSON.stringify(editor.session.document),before);compare(studioFixture.disk(),diskBaseline)
+            if(studioFixture.artifacts)grabImage(picker).save(studioFixture.artifacts+"/studio-test-icon-cleanup-preview.png")
+            picker.handleCommand(inputManager.confirm);compare(picker.cleanEnabled,false);compare(picker.preview,original)
+            picker.handleCommand(inputManager.back);compare(picker.candidate,"");compare(artworkPickedSpy.count,0);compare(studioFixture.disk(),diskBaseline)
         }
         Component {id:framingComponent;App.StudioImageFraming {width:1280;height:720}}
         SignalSpy {id:framingSpy;signalName:"previewed"}

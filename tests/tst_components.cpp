@@ -114,6 +114,7 @@ private slots:
     void studioButtonCollectionsAreBoundedAndAtomic();
     void studioCollectionInstallDoesNotAuthorPlacements();
     void studioGifArtworkIsBoundedStagedAndProfileScoped();
+    void studioIconCleanupRetainsOriginalAndCancelsPrivately();
     void studioPastelPresetUsesEditableButtons();
     void studioStartingStylesAreValidatedDraftData();
     void densePlacementValidationPreservesBoundsAndTouchingEdges();
@@ -922,14 +923,14 @@ void ComponentTests::settingsNavigationIsBoundedAndProfileLocal()
     auto row = rows[0].toMap(); row["route"] = "run-command"; rows[0] = row; category["rows"] = rows;
     auto unsafe = categories; unsafe[0] = category; invalid["categories"] = unsafe;
     QVERIFY(!ComponentSchema::validSettingsNavigation(invalid));
-    auto composition = QVariantMap{{"settingsCategoryOrder", order}};
+    auto composition = QVariantMap{{"schemaVersion", 1}, {"settingsCategoryOrder", order}};
     QVERIFY(ComponentSchema::validComposition(composition));
     auto duplicateOrder = order; duplicateOrder[1] = duplicateOrder[0];
-    QVERIFY(!ComponentSchema::validComposition({{"settingsCategoryOrder", duplicateOrder}}));
+    QVERIFY(!ComponentSchema::validComposition({{"schemaVersion", 1}, {"settingsCategoryOrder", duplicateOrder}}));
     auto shortOrder = order; shortOrder.removeLast();
-    QVERIFY(!ComponentSchema::validComposition({{"settingsCategoryOrder", shortOrder}}));
+    QVERIFY(!ComponentSchema::validComposition({{"schemaVersion", 1}, {"settingsCategoryOrder", shortOrder}}));
     auto unknownOrder = order; unknownOrder[0] = "unknown";
-    QVERIFY(!ComponentSchema::validComposition({{"settingsCategoryOrder", unknownOrder}}));
+    QVERIFY(!ComponentSchema::validComposition({{"schemaVersion", 1}, {"settingsCategoryOrder", unknownOrder}}));
 
     QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
     const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
@@ -2342,6 +2343,30 @@ void ComponentTests::studioCollectionInstallDoesNotAuthorPlacements()
         QCOMPARE(home.committedDocument(),canonical); QCOMPARE(changes.count(),0);
         QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(),saved);
     }
+}
+void ComponentTests::studioIconCleanupRetainsOriginalAndCancelsPrivately()
+{
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));HomeLayout home(&registry);
+    const auto saved=dir.filePath("profile/home.json");QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),saved));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    QImage sourceImage(64,64,QImage::Format_ARGB32);sourceImage.fill(Qt::white);
+    for(int y=16;y<48;++y)for(int x=16;x<48;++x)sourceImage.setPixelColor(x,y,Qt::red);
+    const auto source=dir.filePath("original.png");QVERIFY(sourceImage.save(source));
+    const auto baseline=session->draft();const auto original=session->stageArtwork(source);
+    QVERIFY(session->cleanIconArtwork(source,3).isEmpty());QVERIFY(session->cleanIconArtwork(source,1,"#80ffffff").isEmpty());
+    const auto cleaned=session->cleanIconArtwork(source);QVERIFY2(cleaned["accepted"].toBool(),qPrintable(session->errorString()));
+    QCOMPARE(session->draft(),baseline);QVERIFY(!QFile::exists(saved));QVERIFY(!QFile::exists(dir.filePath("profile/"+original)));
+    const auto relative=session->stageArtwork(cleaned["source"].toString());QVERIFY(!relative.isEmpty());QVERIFY(relative!=original);
+    auto blank=QJsonDocument::fromJson(session->draft()).object();blank["components"]=QJsonArray{};blank["categories"]=QJsonArray{};
+    blank["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject::fromVariantMap(home.studioOptions()["defaultGrid"].toMap())}};
+    QVERIFY(session->pushEdit(QJsonDocument(blank).toJson()));
+    QVERIFY(session->execute("addResolved",{{"type","image"},{"placement",QVariantMap{{"x",0},{"y",0},{"width",2},{"height",2}}}}));
+    QVERIFY(session->execute("patch",{{"id","image"},{"value",QVariantMap{{"customLogo",relative}}}}));
+    QVERIFY2(session->apply("image"),qPrintable(session->errorString()));
+    QVERIFY(QFile::exists(dir.filePath("profile/"+relative)));QVERIFY(QFile::exists(dir.filePath("profile/"+original)));
+    QCOMPARE(QImage(dir.filePath("profile/"+original)),sourceImage);QCOMPARE(QImage(source),sourceImage);
+    const auto count=session->artworkChoices().size();QVERIFY(count>=2);
+    session->invalidate();QVERIFY(session->cleanIconArtwork(source).isEmpty());
 }
 void ComponentTests::studioGifArtworkIsBoundedStagedAndProfileScoped()
 {

@@ -277,8 +277,7 @@ private slots:
         int checked=0;
         for(const auto &name:folder.entryList({"*.svg"},QDir::Files)){
             QFile file(folder.filePath(name));QVERIFY(file.open(QIODevice::ReadOnly));
-            const auto original=file.readAll(),foreground=AppArtwork::packagedForegroundSvg(original);
-            if(foreground==original)continue;
+            const auto original=file.readAll();QFile derived(folder.filePath("foreground/"+name));QVERIFY(derived.open(QIODevice::ReadOnly));const auto foreground=derived.readAll();
             QBuffer buffer;buffer.setData(foreground);QVERIFY(buffer.open(QIODevice::ReadOnly));
             QImageReader reader(&buffer,"svg");reader.setScaledSize(QSize(512,512));
             const auto image=reader.read();QVERIFY2(!image.isNull(),qPrintable(name));
@@ -286,10 +285,33 @@ private slots:
             QCOMPARE(image.pixelColor(256,32).alpha(),0);
             int ink=0;for(int y=0;y<512;++y)for(int x=0;x<512;++x)if(image.pixelColor(x,y).alpha()>128)++ink;
             QVERIFY2(ink>100,qPrintable(name));
-            QCOMPARE(AppArtwork::packagedForegroundSvg(foreground),foreground);
             ++checked;
         }
         QVERIFY(checked>=19);
+    }
+    void iconCleanupPreservesDetailsAndRemovesMatteNoise(){
+        QImage image(64,64,QImage::Format_ARGB32);
+        for(int y=0;y<64;++y)for(int x=0;x<64;++x){const int v=240+(x*3+y*7)%16;image.setPixelColor(x,y,QColor(v,v,v));}
+        for(int y=16;y<48;++y)for(int x=16;x<48;++x)image.setPixelColor(x,y,Qt::red);
+        image.setPixelColor(32,32,Qt::white);image.setPixelColor(16,30,QColor(255,180,180));
+        const auto original=image;const auto cleaned=AppArtwork::cleanBackground(image);
+        QVERIFY2(cleaned.accepted,qPrintable(cleaned.reason));QCOMPARE(cleaned.image.pixelColor(0,0).alpha(),0);
+        QCOMPARE(cleaned.image.pixelColor(32,32),QColor(Qt::white));QCOMPARE(cleaned.image.pixelColor(20,20),QColor(Qt::red));
+        QVERIFY(cleaned.image.pixelColor(16,30).alpha()<255);QVERIFY(cleaned.image.pixelColor(16,30).green()<20);QCOMPARE(image,original);
+        image.fill(Qt::transparent);for(int y=20;y<40;++y)for(int x=20;x<40;++x)image.setPixelColor(x,y,Qt::white);
+        QVERIFY(!AppArtwork::cleanBackground(image).accepted);QCOMPARE(AppArtwork::cleanBackground(image).image,image);
+        image.fill(Qt::blue);QVERIFY(!AppArtwork::cleanBackground(image).accepted);
+        QVERIFY(!AppArtwork::cleanBackground(QImage(513,32,QImage::Format_ARGB32)).accepted);
+    }
+    void inkMasksKeepIntentionalNegativeSpace(){
+        QImage image(32,32,QImage::Format_ARGB32);image.fill(Qt::transparent);
+        for(int y=4;y<28;++y)for(int x=4;x<28;++x)image.setPixelColor(x,y,Qt::red);
+        image.setPixelColor(16,16,Qt::white);
+        const auto mask=AppArtwork::inkMask(image,QColor(Qt::red),{QColor(Qt::white)});
+        QCOMPARE(mask.pixelColor(16,16).alpha(),0);QCOMPARE(mask.pixelColor(8,8).alpha(),255);QCOMPARE(mask.pixelColor(0,0).alpha(),0);
+        for(const auto &mode:QStringList{"signature","tiles","rail"})QVERIFY(ComponentSchema::validPresentation({{"appIconStyle",mode},{"iconGlow",8},{"iconGlowOpacity",.65},{"iconFocus","glow"}}));
+        QVERIFY(!ComponentSchema::validPresentation({{"iconGlow",33}}));QVERIFY(!ComponentSchema::validPresentation({{"iconGlowOpacity",1.1}}));
+        QVERIFY(!ComponentSchema::validPresentation({{"iconFocus","unknown"}}));QVERIFY(!ComponentSchema::validPresentation({{"iconPadding","12"}}));
     }
     void setupProgressPersistsAndHandlesFailure();
     void profilesPersistAndIsolatePersonalSettings();

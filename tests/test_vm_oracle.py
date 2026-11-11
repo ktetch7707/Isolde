@@ -74,6 +74,11 @@ class OracleTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','studio_visuals')
             oracle.atomic_json(base/'test-result.json',result);(base/'payload/bin/isolde').write_bytes(b'changed')
             with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','studio_visuals')
+        icon_targets,icon_pattern=oracle.suite_selection('app_icons')
+        self.assertIn('isolde_tests',icon_targets)
+        self.assertIsNotNone(re.match(icon_pattern,'studio_artwork'))
+        self.assertIsNotNone(re.match(icon_pattern,'studio_selection'))
+        self.assertIsNone(re.match(icon_pattern,'games_remote_ui'))
         targets,pattern=oracle.suite_selection('studio_visuals')
         self.assertEqual(targets,['isolde_studio_quick_tests','isolde_home_navigation_tests'])
         for name in ('studio_quick','studio_artwork','studio_shell','home_component_navigation','studio_navigation'):

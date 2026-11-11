@@ -1,8 +1,6 @@
 # Isolde app icon system — design proposal
 
-Status: user-requested design, not application implementation or acceptance.
-The earlier cutout/monochrome patch remains unverified and undeployed. This
-proposal replaces its assumptions where stated below; no stored layout changes.
+Status: implemented; focused VM checks pass6/6. See [implementation and evidence](../app-icons-implementation-2026-11-10.md). Installed acceptance remains separate.
 
 ## Direction
 

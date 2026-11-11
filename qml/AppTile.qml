@@ -6,6 +6,12 @@ Rectangle {
     required property bool selected
     required property real roundness
     property var appearance: ({})
+    property var style: ({})
+    readonly property real glowSpread:style.iconGlow===undefined?8:style.iconGlow
+    readonly property real glowPad:2*glowSpread
+    readonly property real logoSize:style.iconSize || (compact?52:70)
+    readonly property color pageSurface:appearance.surfaceColor || color
+    readonly property bool contrastBacking:!!app.iconContrastBackdrop && (pageSurface.r+pageSurface.g+pageSurface.b)/3>0.65
     property string selectMode: "single"
     property string selectTrigger: "click"
     property string selectAction: "navigate"
@@ -18,8 +24,8 @@ Rectangle {
     readonly property color selColor: root.selectionColor !== "" ? root.selectionColor : (appearance.focusColor || "#C994A5")
     radius: Math.min(width, height) * 0.5 * roundness
     color: selected ? appearance.selectedColor || "#353039" : appearance.surfaceColor || "#202126"
-    border.width: selected ? 4 : 1
-    border.color: selected ? root.selColor : Qt.lighter(color, 1.2)
+    border.width:selected && !app.cutoutLogoSource?4:1
+    border.color:selected && !app.cutoutLogoSource?root.selColor:Qt.lighter(color,1.2)
     scale: selected ? 1.025 : 1.0
     readonly property bool showTitle: app.showTitle === undefined ? true : app.showTitle
     readonly property bool showType: app.showType === undefined ? true : app.showType
@@ -49,15 +55,19 @@ Rectangle {
         }
     }
 
-    Image {
+    Rectangle {visible:root.showLogo && !root.logoFill && root.contrastBacking;x:root.compact?20:24;y:root.compact?16:24;width:root.logoSize;height:width;radius:width/4;color:root.app.iconContrastBackdrop || "transparent"}
+    ArtworkImage {
+        objectName:"appTileArtwork"
         visible: root.showLogo && !!root.app.logoSource
-        source: root.app.logoSource || ""
+        source:!root.logoFill?root.app.cutoutLogoSource || root.app.logoSource || "":root.app.logoSource || ""
         anchors.fill: root.logoFill ? parent : undefined
-        x: compact ? 20 : 24; y: compact ? 16 : 24
-        width: root.logoFill ? parent.width : compact ? 52 : 70
-        height: root.logoFill ? parent.height : compact ? 52 : 70
-        fillMode: root.logoFill ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-        mipmap: true
+        x:(root.compact?20:24)-root.glowPad;y:(root.compact?16:24)-root.glowPad
+        contentInset:root.logoFill?0:root.glowPad+(root.style.iconPadding || 0)
+        width:root.logoFill?parent.width:root.logoSize+2*root.glowPad
+        height:root.logoFill?parent.height:root.logoSize+2*root.glowPad
+        fit:root.logoFill?"cover":"contain"
+        outlineWidth:root.selected && !root.logoFill?(root.style.focusWidth===undefined?2:root.style.focusWidth):0;outlineColor:root.selColor
+        glowWidth:root.selected && !root.logoFill?root.glowSpread:0;glowOpacity:root.style.iconGlowOpacity===undefined?.65:root.style.iconGlowOpacity
     }
 
     Rectangle {

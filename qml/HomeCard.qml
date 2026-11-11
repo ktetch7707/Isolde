@@ -23,7 +23,7 @@ Item {
     readonly property var baseStyle:item.presentation || ({})
     readonly property string visualState:item.designState || (item.unavailableReason?"unavailable":mouseArea.pressed?"pressed":item.current?"selected":selected?"focused":"normal")
     readonly property var style:Object.assign({},baseStyle,(baseStyle.states || {}).normal || {},(baseStyle.states || {})[visualState] || {})
-    readonly property string kind: item.componentType==="shape"?"shape":item.widgetType === "text" ? "text" : (style.variant || variant) === "launcher" ? "source" : (style.variant || variant)
+    readonly property string kind: item.componentType==="shape"?"shape":item.widgetType === "text" ? "text" : style.appIconStyle?"orb":(style.variant || variant) === "launcher" ? "source" : (style.variant || variant)
     readonly property bool launcherArtwork:kind==="source" && !!item.action && item.action.type==="launch-app" && !item.customLogo
     readonly property bool showLauncherArtwork:launcherArtwork && !!item.logoSource && item.showLogo!==false && !style.icon
     readonly property color ink: appearance.labelColor || appearance.textColor || "#EEEAF0"

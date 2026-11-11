@@ -44,8 +44,9 @@ Item {
     signal engage()
     signal launch(var action)
     signal allAppsRequested(string originId)
-    function logoSource(app){return ["cutout","monochrome"].indexOf(style.logoMode || "cutout")>=0?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
-    function cardStyle(gallery){const result=Object.assign({},style);delete result.visibleLabel;delete result.showHeading;delete result.headingSize;if(result.cardGap===undefined)result.cardGap=(style.layout || {}).gap || 0;if(gallery){if(result.labelSurfaceColor===undefined)result.labelSurfaceColor=galleryTheme.surface;if(result.labelColor===undefined)result.labelColor=galleryTheme.text;}return Object.assign(result,gallery?{variant:"orb",diameter:style.diameter || 78}:{},{icon:style.icon || "grid",logoMode:style.logoMode || "cutout",artFit:style.artFit || "contain"})}
+    function logoSource(app){const mode=(app.presentation || {}).logoMode || style.logoMode || "cutout";return mode==="monochrome"?app.inkLogoSource || app.cutoutLogoSource || app.logoSource || "":mode==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
+    function cardStyle(gallery){const options=typeof homeLayout!=="undefined"?homeLayout.studioOptions:{};const preset=(options.appIconStyles || {})[style.appIconStyle] || {};const result=Object.assign({},preset,style);delete result.visibleLabel;delete result.showHeading;delete result.headingSize;if(result.cardGap===undefined)result.cardGap=(style.layout || {}).gap || 0;if(gallery){if(result.labelSurfaceColor===undefined)result.labelSurfaceColor=galleryTheme.surface;if(result.labelColor===undefined)result.labelColor=galleryTheme.text;}return Object.assign(result,gallery?{variant:"orb",diameter:result.diameter || 78}:{},{icon:style.icon || "grid",logoMode:style.logoMode || "cutout",artFit:style.artFit || "contain"})}
+    function artworkItem(app,gallery){const mode=(app.presentation || {}).logoMode || style.logoMode || "cutout";return {name:app.name+(mode==="monochrome" && !app.inkLogoSource && app.logoSource?" · Brand":""),unavailableReason:app.unavailableReason || "",logoSource:logoSource(app),inkAvailable:!!app.inkLogoSource,iconOpticalScale:app.iconOpticalScale || 1,iconContrastBackdrop:app.iconContrastBackdrop || "",appSymbol:app.id==="__more__"?"":app.symbol || (app.name || "").slice(0,1),presentation:Object.assign({},cardStyle(gallery),app.presentation || {})}}
     function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened || pendingGalleryRestore}}
     function restoreFocusState(state){
         if(!state)return
@@ -97,7 +98,7 @@ Item {
                 required property var modelData
                 objectName:"appCarouselCard-"+modelData.id
                 width:(root.width-(root.cardColumns-1)*parent.spacing)/root.cardColumns;height:(root.height-(root.cardRows-1)*parent.spacing)/root.cardRows
-                item:({name:modelData.name,unavailableReason:modelData.unavailableReason || "",logoSource:root.logoSource(modelData),appSymbol:modelData.id==="__more__"?"":modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.cardStyle(false),modelData.presentation || {})})
+                item:root.artworkItem(modelData,false)
                 appearance:root.appearance;unit:root.unit
                 selected:(root.engaged || root.highlighted) && root.selectedId===modelData.id
                 onActivated:{root.engage();root.selectedId=modelData.id;root.activate(modelData.id)}
@@ -122,7 +123,7 @@ Item {
                 delegate:HomeCard {
                     required property var modelData
                     width:galleryGrid.cellWidth;height:galleryGrid.cellHeight
-                    item:({name:modelData.name,unavailableReason:modelData.unavailableReason || "",logoSource:root.logoSource(modelData),appSymbol:modelData.symbol || modelData.name.slice(0,1),presentation:Object.assign({},root.cardStyle(true),modelData.presentation || {})})
+                    item:root.artworkItem(modelData,true)
                     appearance:root.galleryAppearance;selected:root.galleryId===modelData.id
                     onActivated:{root.galleryId=modelData.id;root.activate(modelData.id)}
                 }

@@ -71,6 +71,15 @@ public:
         image.fill(QColor("#6688aa"));
         return image.save(path) ? path : QString();
     }
+    Q_INVOKABLE QVariantList iconAppsFixture() const {
+        AppRegistry icons;for(const auto &id:QStringList{"spotify","netflix","steam"}){AppDefinition app;app.id=id;app.name=id=="spotify"?"Spotify":id=="netflix"?"Netflix":"Steam";app.type="web";if(!icons.addApp(app))return {};}
+        return icons.apps();
+    }
+    Q_INVOKABLE QString iconArtworkFixture() const {
+        const auto path=temp.filePath("icon-artwork-input");QDir().mkpath(path);QImage image(64,64,QImage::Format_ARGB32);image.fill(Qt::white);
+        for(int y=16;y<48;++y)for(int x=16;x<48;++x)image.setPixelColor(x,y,Qt::red);
+        image.setPixelColor(32,32,Qt::white);const auto file=path+"/logo.png";return image.save(file)?file:QString();
+    }
     Q_INVOKABLE QString artworkFixture() const {
         const auto path=temp.filePath("artwork-input");QDir().mkpath(path);
         QFile file(path+"/animation.gif");if(!file.open(QIODevice::WriteOnly))return {};

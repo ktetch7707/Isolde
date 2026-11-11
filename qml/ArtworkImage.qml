@@ -29,6 +29,10 @@ Canvas {
     property real outlineWidth:0
     property color outlineColor:"transparent"
     property color tintColor:"transparent"
+    property real contentInset:0
+    property real contentScale:1
+    property real glowWidth:0
+    property real glowOpacity:0.65
     readonly property int status: probe.status
     onSourceChanged:clearAnimation()
     onManagedAssetChanged:clearAnimation()
@@ -71,6 +75,10 @@ Canvas {
     onOutlineWidthChanged:requestPaint()
     onOutlineColorChanged:requestPaint()
     onTintColorChanged:requestPaint()
+    onContentInsetChanged:requestPaint()
+    onContentScaleChanged:requestPaint()
+    onGlowWidthChanged:requestPaint()
+    onGlowOpacityChanged:requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
     onImageLoaded: requestPaint()
@@ -83,9 +91,9 @@ Canvas {
         c.reset()
         let x = crop ? crop.x : 0, y = crop ? crop.y : 0
         let w = crop ? crop.width : probe.sourceSize.width, h = crop ? crop.height : probe.sourceSize.height
-        const ratio = width/height
-        let dx=0,dy=0,dw=width,dh=height
-        if(fit==="contain") {const factor=Math.min(width/w,height/h);dw=w*factor;dh=h*factor;dx=(width-dw)*focalX;dy=(height-dh)*focalY}
+        const innerWidth=Math.max(1,width-2*contentInset),innerHeight=Math.max(1,height-2*contentInset),ratio=innerWidth/innerHeight
+        let dx=contentInset,dy=contentInset,dw=innerWidth,dh=innerHeight
+        if(fit==="contain") {const factor=Math.min(innerWidth/w,innerHeight/h)*contentScale;dw=w*factor;dh=h*factor;dx=contentInset+(innerWidth-dw)*focalX;dy=contentInset+(innerHeight-dh)*focalY}
         else {
             if (w/h > ratio) { const cut = h*ratio; x += (w-cut)*focalX; w = cut }
             else { const cut = w/ratio; y += (h-cut)*focalY; h = cut }
@@ -100,13 +108,17 @@ Canvas {
             c.save();c.beginPath();c.rect(dx+ox,dy+oy,dw,dh);c.clip()
             c.translate(dx+ox,dy+oy);c.scale(dw/w,dh/h);c.drawImage(displaySource,-x,-y);c.restore()
         }
+        if(glowWidth>0){
+            c.shadowBlur=glowWidth;c.shadowColor=Qt.rgba(outlineColor.r,outlineColor.g,outlineColor.b,glowOpacity);c.shadowOffsetX=0;c.shadowOffsetY=0;draw(0,0)
+            c.shadowBlur=0;c.shadowColor="transparent"
+        }
         if(outlineWidth>0){
             for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++)if(ox || oy)draw(ox*outlineWidth,oy*outlineWidth)
             c.globalCompositeOperation="source-in";c.fillStyle=outlineColor;c.fillRect(0,0,width,height);c.globalCompositeOperation="source-over"
         }
         // Recolour the foreground alpha independently of the focus outline.
         if(tintColor.a>0){
-            const outline=outlineWidth>0?c.getImageData(0,0,width,height):null
+            const outline=outlineWidth>0 || glowWidth>0?c.getImageData(0,0,width,height):null
             c.clearRect(0,0,width,height);draw(0,0)
             const foreground=c.getImageData(0,0,width,height),pixels=foreground.data
             for(let i=0;i<pixels.length;i+=4){
@@ -117,7 +129,8 @@ Canvas {
                 pixels[i+2]=total?(tintColor.b*255*alpha+(outline?outline.data[i+2]:0)*behind)/total:0
                 pixels[i+3]=total*255
             }
-            c.putImageData(foreground,0,0)
+            // Qt's Context2D requires the explicit dirty rectangle as well.
+            c.putImageData(foreground,0,0,0,0,foreground.width,foreground.height)
         } else draw(0,0)
         c.restore()
     }

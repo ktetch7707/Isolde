@@ -30,7 +30,12 @@ static bool validIconName(const AppDefinition &app)
     return !value.isValid() || (value.metaType().id()==QMetaType::QString && name.match(value.toString()).hasMatch());
 }
 
-static QString appIcon(const AppDefinition &app, bool cutout=false)
+static QJsonObject iconRole(const AppDefinition &app)
+{
+    static const auto roles=[](){QFile file(":/config/app-icons/roles.json");if(!file.open(QIODevice::ReadOnly))return QJsonObject();const auto root=QJsonDocument::fromJson(file.readAll()).object();return root["schemaVersion"].toInt()==1?root["icons"].toObject():QJsonObject();}();
+    return roles[app.launchConfiguration.value("icon",app.id).toString()].toObject();
+}
+static QString appIcon(const AppDefinition &app, int role=0)
 {
     if(!qobject_cast<QGuiApplication *>(QCoreApplication::instance()))return {};
     const auto packaged=":/config/app-icons/"+app.launchConfiguration.value("icon",app.id).toString()+".svg";
@@ -64,12 +69,21 @@ static QString appIcon(const AppDefinition &app, bool cutout=false)
     }
     QIcon icon;
     if(QFile::exists(packaged)){
-        if(cutout){
-            QFile file(packaged);
+        if(role){
+            const auto metadata=iconRole(app);const auto relative=metadata["foreground"].toString();
+            if(!QRegularExpression("^foreground/[a-z0-9][a-z0-9-]{0,127}\\.svg$").match(relative).hasMatch())return role==2?QString():appIcon(app);
+            QFile file(":/config/app-icons/"+relative);
             if(!file.open(QIODevice::ReadOnly))return {};
-            auto svg=AppArtwork::packagedForegroundSvg(file.readAll());QBuffer buffer(&svg);buffer.open(QIODevice::ReadOnly);
+            auto svg=file.read(64*1024+1);svg.replace("\r\n","\n");if(svg.size()>64*1024 || QString::fromLatin1(QCryptographicHash::hash(svg,QCryptographicHash::Sha256).toHex())!=metadata["foregroundSha256"].toString())return {};
+            QBuffer buffer(&svg);buffer.open(QIODevice::ReadOnly);
             QImageReader reader(&buffer,"svg");reader.setScaledSize(QSize(512,512));
-            const auto foreground=reader.read();if(foreground.isNull())return {};
+            auto foreground=reader.read();if(foreground.isNull())return {};
+            if(role==2){
+                const QColor ink(metadata["inkColour"].toString());QList<QColor> excluded;
+                if(!ink.isValid() || metadata["inkExclude"].toArray().size()>4)return {};
+                for(const auto &value:metadata["inkExclude"].toArray()){const QColor colour(value.toString());if(!colour.isValid())return {};excluded.append(colour);}
+                foreground=AppArtwork::inkMask(foreground,ink,excluded);
+            }
             icon=QIcon(QPixmap::fromImage(foreground));
         } else icon=QIcon(packaged);
     }
@@ -94,7 +108,8 @@ static QString appIcon(const AppDefinition &app, bool cutout=false)
     }
     if(icon.isNull())return {};
     auto image=icon.pixmap(512,512).toImage();if(image.isNull())return {};
-    if(cutout)image=AppArtwork::cutout(image);
+    if(role==2 && !QFile::exists(packaged))return {}; // Unreviewed rasters have no approved monochrome mask.
+    if(role==1 && !QFile::exists(packaged)){const auto cleaned=AppArtwork::cleanBackground(image);if(cleaned.accepted)image=cleaned.image;}
     QByteArray bytes;QBuffer buffer(&bytes);buffer.open(QIODevice::WriteOnly);
     if(!image.save(&buffer,"PNG") || bytes.size()>1024*1024)return {};
     auto profile=QCoreApplication::instance()->property("isoldeProfile").toString();
@@ -145,7 +160,7 @@ QVariantList AppRegistry::apps() const
                                   {"networkRequirement", app.networkRequirement},
                                   {"handledActions", app.handledActions},
                                   {"section", app.section}, {"symbol", app.symbol},
-                                  {"accent", app.accent.name()},{"logoSource",app.iconSource},{"cutoutLogoSource",app.cutoutIconSource}});
+                                  {"accent", app.accent.name()},{"logoSource",app.iconSource},{"cutoutLogoSource",app.cutoutIconSource},{"inkLogoSource",app.inkIconSource},{"iconOpticalScale",app.iconOpticalScale},{"iconContrastBackdrop",app.iconContrastBackdrop}});
     }
     return result;
 }
@@ -166,7 +181,7 @@ bool AppRegistry::addApp(const AppDefinition &app)
     if (!app.isValid() || find(app.id) || !validIconName(app))
         return false;
     for(const auto &alias:app.legacyIds())if(find(alias))return false;
-    auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,true);m_apps.append(resolved);
+    auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,1);resolved.inkIconSource=appIcon(app,2);resolved.iconContrastBackdrop=iconRole(app)["contrastBackdrop"].toString();resolved.iconOpticalScale=qBound(.5,iconRole(app)["opticalScale"].toDouble(1),1.4);m_apps.append(resolved);
     emit appsChanged();
     return true;
 }
@@ -176,7 +191,7 @@ bool AppRegistry::replaceApp(const AppDefinition &app)
     if(!app.isValid() || !validIconName(app))return false;
     for(auto &existing:m_apps)if(existing.id==app.id){
         if(existing.type!=app.type || existing.legacyIds()!=app.legacyIds())return false;
-        auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,true);
+        auto resolved=app;resolved.iconSource=appIcon(app);resolved.cutoutIconSource=appIcon(app,1);resolved.inkIconSource=appIcon(app,2);resolved.iconContrastBackdrop=iconRole(app)["contrastBackdrop"].toString();resolved.iconOpticalScale=qBound(.5,iconRole(app)["opticalScale"].toDouble(1),1.4);
         existing=resolved;emit appsChanged();return true;
     }
     return false;
@@ -270,7 +285,7 @@ bool AppRegistry::loadFromData(const QByteArray &data)
         }
         if(!validIconName(app)){setError(tr("Choose a local registered app icon name."));return false;}
         app.iconSource=appIcon(app);
-        app.cutoutIconSource=appIcon(app,true);
+        app.cutoutIconSource=appIcon(app,1);app.inkIconSource=appIcon(app,2);app.iconContrastBackdrop=iconRole(app)["contrastBackdrop"].toString();app.iconOpticalScale=qBound(.5,iconRole(app)["opticalScale"].toDouble(1),1.4);
         ids.insert(app.id);
         for(const auto &alias:app.legacyIds()){
             if(ids.contains(alias)){setError(tr("App compatibility IDs must be unique."));return false;}

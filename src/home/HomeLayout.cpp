@@ -179,7 +179,11 @@ QVariantList HomeLayout::items() const
         const auto logoFile = item.value("customLogo").toString();
         auto logo=resolveArtwork(logoFile);
         if(logoFile.isEmpty() && action.value("type")=="launch-app"){
-            if(const auto *app=m_registry->find(action.value("appId").toString()))logo=app->iconSource;
+            if(const auto *app=m_registry->find(action.value("appId").toString())){
+                const auto mode=item.value("presentation").toMap().value("logoMode").toString();
+                logo=mode=="monochrome" && !app->inkIconSource.isEmpty()?app->inkIconSource:mode=="cutout" && !app->cutoutIconSource.isEmpty()?app->cutoutIconSource:app->iconSource;
+                item["cutoutLogoSource"]=app->cutoutIconSource;item["inkLogoSource"]=app->inkIconSource;item["inkAvailable"]=!app->inkIconSource.isEmpty();item["iconOpticalScale"]=app->iconOpticalScale;item["iconContrastBackdrop"]=app->iconContrastBackdrop;
+            }
         }
         item.insert("logoSource", logo);
         auto unavailable = ComponentSchema::unavailable(action.toVariantMap(), m_registry, m_collections);
@@ -368,6 +372,14 @@ QVariantMap HomeLayout::studioOptions() const
     if(m_optionsCached && m_optionsPath==file.fileName() && m_optionsBytes==bytes)return m_optionsCache;
     m_optionsCached=true;m_optionsPath=file.fileName();m_optionsBytes=bytes;m_optionsCache.clear();
     const auto object=QJsonDocument::fromJson(bytes).object();
+    if(object.contains("appIconStyles")){
+        const auto styles=object["appIconStyles"].toObject();if(styles.size()!=3)return {};
+        for(const auto &name:QStringList{"signature","tiles","rail"})if(!styles[name].isObject() || !ComponentSchema::validPresentation(styles[name].toObject().toVariantMap()))return {};
+    }
+    if(object.contains("artworkCleanup")){
+        const auto surfaces=object["artworkCleanup"].toObject()["previewSurfaces"].toArray();if(surfaces.size()!=3)return {};
+        for(const auto &value:surfaces){const auto item=value.toObject();const QColor colour(item["colour"].toString());if(item.size()!=2 || item["name"].toString().isEmpty() || item["name"].toString().size()>40 || !colour.isValid() || colour.alpha()!=255)return {};}
+    }
     if (object.contains("referenceViewport")) {
         const auto viewport = object["referenceViewport"].toObject();
         if (viewport.size() != 2) return {};
