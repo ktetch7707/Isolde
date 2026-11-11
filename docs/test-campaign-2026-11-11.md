@@ -566,3 +566,52 @@ A repeat full integration run is now justified: repair-batch-c failed cutover,
 and the shared editor renderer/pointer lifecycle repair plus Kodi keymap and
 UI/media changes need cross-boundary revalidation together. Run one full batch
 round2-20261111-integration-l; do not rerun full per individual repaired widget.
+
+Integration-l passes61/61 with zero skips. All accumulated UI/media repairs and
+bounded Studio pointer rendering pass together. Native evidence reuses122 exact
+reviewed PNGs; five changed originals are reviewed (icon cleanup preview, three
+Kodi details palettes, Sources custom contrast). Guide/carousel invalid QColor
+warnings are absent from the affected paths. BUG-082 cancellation now passes
+through the actual QML meta-object call; BUG-090 contrast regression passes.
+Deploy succeeds as0838e68c4de00a86ee395580; normal service active/zero restarts.
+Installed studio-search passes network denial and exact Settings recovery with
+normal layout hashes unchanged. References/history are in the same serialized
+visual batch. The new evidence reconciliation credits existing independent
+native outcomes under unchanged Scope weights:1974/25 rounds79%,155/212 children.
+The complete mapping is docs/acceptance-reconciliation-2026-11-11.md. Runtime,
+common gameplay, Power and combined installed gaps remain explicit.
+
+### BUG-095 — Unbounded scrolling editor pointer delegates
+
+T24: the1024-node cutover registration times out after the navigation assertions,
+with all pointer hit-target delegates instantiated despite virtualized cards.
+Fixed by row-bounding pointer delegates and hidden previews, retaining the
+selected drag target and explicit Find on page reveal. Focused render-k and
+integration-l61/61 pass. No deadline was raised.
+
+### BUG-096 — Guest desktop prompts invalidate installed capture evidence
+
+The current Search/Lounge helper flags pass, but agent review of original PNGs
+reveals a GNOME keyring unlock modal and low-disk desktop banner obscuring the
+application. This is a harness/environment failure, not accepted product visuals.
+Cancel the remaining Pastel batch; history is unattempted. Normal service and
+layout hashes restore unchanged. Exclude these installed frames from acceptance;
+the61/61 native pass and five reviewed native changes remain valid.
+
+Repair the runner preflight: only inside the native Isolde-Test oracle, cancel
+outstanding Secret Service Prompt.Dismiss requests (never unlock/read credentials),
+and turn off guest desktop banners that cover owned-window captures. This changes
+no host settings, Isolde permission/notification policy, or2GiB test threshold.
+Use a bounded object inventory and verified runner self-tests. No application
+full rerun is needed for this harness-only correction. Replay only affected
+installed journeys against the exact existing passing payload after checking
+that the desktop is clear. Desktop-probe run: round2-20261111-desktop-preflight-m.
+
+Desktop preflight-o passes with107 runner checks after m identifies the old
+visual-service test fixture's missing preflight stub and n demonstrates D-Bus
+Dismiss rejects a different caller. The bounded fallback restarts only the guest
+user gnome-keyring-daemon service to cancel pending operations; credential files
+are preserved, no unlock/password is supplied, and prompts must be absent after.
+Guest-only notification banners are disabled. No host setting changes occur.
+Replay installed Search/history/references using the existing integration-l
+payload, automatically preparing the guest desktop before each case.
