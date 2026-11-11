@@ -169,3 +169,13 @@ Low-level scripts are implementation details. `run-visual-acceptance.ps1` requir
 Low-space fallback: if verified artifact/runner-cache cleanup still leaves less than2GiB, routine Test may unlink obsolete generated ELF test executables declared by the native incremental build's CMake target list. It preserves the requested suite's executable targets, active processes, all compiled objects, application payloads, profiles and evidence. Redirected/mounted/unknown targets fail safely. Ninja relinks missing test programs when a future suite needs them. `guest-linked-tests-cleanup.json` records the removed guest paths; no host cleanup is performed.
 
 When verifying an older tested or installed Lounge/Pastel candidate while the working folder has newer menu/helper changes, use `Visual -RunId <id> -Installed -Cases lounge,pastel -FrozenReferenceHelpers`. This selects the source-verified helpers frozen with that candidate instead of current working-folder overlays. It is restricted to those reference cases; the existing payload/source/hash checks still apply. Keep failed mismatched-helper attempts as evidence.
+
+Low-space fallback now consolidates identical synthetic clips and immutable
+verified payload artifacts through hardlinks. It preserves every path and byte,
+retains the three newest synthetic fixtures, checks hashes/modes/ownership and
+same-filesystem boundaries, and refuses redirected/mounted/changed candidates.
+Receipts are guest-fixture-media-dedup.json and guest-payload-dedup.json. Logical
+dedup byte totals are not physical reclaimed-space claims; use freeBefore/After.
+All runner self-tests must pass before maintenance. The2GiB Test floor remains.
+Storage inventory reports newest candidates first, plus the named synthetic
+media/runtime-bundle and Kodi cache roots; it does not traverse entire profiles.

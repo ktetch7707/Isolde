@@ -191,7 +191,17 @@ $captureLine = {
                 $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm',$VmName,'keyboardputscancode','aa','b6','9d','e0','9d','b8','e0','b8','e0','db','e0','dc') -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
             }
             foreach ($key in $keys) {
-                $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments (@('controlvm',$VmName,'keyboardputscancode') + $scancodes[[string]$key]) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
+                $codes=$scancodes[[string]$key]
+                if ($Case -in @('games','emulators')) {
+                    # SDL games can poll held state between frames. A zero-time
+                    # make/break pair can disappear before that poll observes it.
+                    $half=[int]($codes.Count/2)
+                    $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments (@('controlvm',$VmName,'keyboardputscancode') + $codes[0..($half-1)]) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
+                    Start-Sleep -Milliseconds 100
+                    $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments (@('controlvm',$VmName,'keyboardputscancode') + $codes[$half..($codes.Count-1)]) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
+                } else {
+                    $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments (@('controlvm',$VmName,'keyboardputscancode') + $codes) -TimeoutSeconds 20 -Log (Join-Path $outputPath 'guest-keys.log')
+                }
                 Start-Sleep -Milliseconds 300
             }
             if ($vpnInput -and $keyDocument.text) {

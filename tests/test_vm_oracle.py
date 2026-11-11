@@ -14,6 +14,7 @@ import time
 import signal
 import threading
 import unittest
+import uuid
 from unittest.mock import patch
 from unittest.mock import Mock
 from types import SimpleNamespace
@@ -109,6 +110,10 @@ class OracleTests(unittest.TestCase):
             self.assertEqual(removed,[str(build/names[0])]);self.assertTrue(obj.exists())
             self.assertTrue(all((build/name).exists() for name in names[1:]))
             with self.assertRaises(RuntimeError):oracle.remove_linked_test_executables(root,mounts=[build/names[1]],target_free=10**18)
+            with (meta/'TargetDirectories.txt').open('a') as listing:listing.write('\n'+str(meta/'isolde_core.dir'))
+            archive=build/'libisolde_core.a';archive.write_bytes(b'!<arch>\ngenerated archive')
+            self.assertEqual(oracle.remove_linked_test_executables(root,active=[build/names[2]],keep=[names[1]],target_free=10**18),[str(archive)])
+            self.assertEqual(obj.read_bytes(),b'compiled object')
 
     def test_runner_test_cache_preserves_recent_and_rejects_unknown_bytes(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -396,6 +401,35 @@ class OracleTests(unittest.TestCase):
             self.assertEqual(result["stagedPayloads"][0]["runId"],"old")
             self.assertGreater(result["stagedPayloads"][0]["payloadBytes"],0)
             self.assertEqual((payload/"binary").read_bytes(),b"evidence payload")
+
+    def test_synthetic_media_dedup_preserves_paths_bytes_and_recent_fixtures(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);fixtures=[]
+            for n in range(4):
+                directory=root/('Isolde-tv-test-'+str(uuid.UUID(int=n+1)))/'Isolde Television Fixture'
+                directory.mkdir(parents=True);fixtures.append(directory)
+                for name in ('Fixture S00E01.ogv','Fixture S01E01.ogv','Fixture S01E02.ogv'):(directory/name).write_bytes(b'OggS'+b'fixture'*100)
+                os.utime(directory.parent,(100+n,100+n))
+            records=oracle.deduplicate_fixture_media(root,target_free=2**63)
+            self.assertEqual(len(records),2)
+            self.assertEqual(len({p.stat().st_ino for p in fixtures[0].glob('*.ogv')}),1)
+            self.assertEqual(len({p.stat().st_ino for p in fixtures[-1].glob('*.ogv')}),3)
+            for directory in fixtures:
+                for path in directory.glob('*.ogv'):self.assertEqual(path.read_bytes(),b'OggS'+b'fixture'*100)
+            self.assertEqual(oracle.deduplicate_fixture_media(root,target_free=2**63),[])
+
+    def test_payload_dedup_keeps_verified_candidates_and_refuses_modified_bytes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);files=[]
+            for name in ('one','two'):
+                run=root/'runs'/name;payload=run/'payload';(payload/'bin').mkdir(parents=True)
+                path=payload/'bin/isolde';path.write_bytes(b'fixed tested artifact');files.append(path)
+                (run/'test-result.json').write_text(json.dumps({'passed':True,'payload':oracle.payload_hashes(payload)}))
+            self.assertEqual(len(oracle.deduplicate_tested_payloads(root,target_free=2**63)),1)
+            self.assertEqual(files[0].stat().st_ino,files[1].stat().st_ino)
+            self.assertEqual(files[0].read_bytes(),b'fixed tested artifact')
+            files[0].write_bytes(b'modified')
+            with self.assertRaises(RuntimeError):oracle.deduplicate_tested_payloads(root,target_free=2**63)
 
     def test_guide_probe_does_not_search_other_profiles_or_claim_playback(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -872,7 +906,7 @@ class OracleTests(unittest.TestCase):
     def test_closure_regressions_cover_all_named_failures_and_performance(self):
         targets,pattern=oracle.suite_selection("studio_closure_regressions")
         self.assertEqual(targets,["isolde_studio_quick_tests","isolde_studio_design_tests","isolde_home_navigation_tests"])
-        for name in ["studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance"]:
+        for name in ["studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance","studio_cutover"]:
             self.assertIsNotNone(re.fullmatch(pattern,name))
         self.assertIsNone(re.fullmatch(pattern,"studio_navigation"))
         self.assertIsNotNone(re.fullmatch(oracle.suite_selection("studio_colors")[1],"studio_color_interactions"))

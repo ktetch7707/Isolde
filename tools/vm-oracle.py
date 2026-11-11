@@ -199,7 +199,7 @@ def suite_selection(suite):
     targets = list(targets) if isinstance(targets, tuple) else [targets] if targets else []
     pattern = "^(studio_quick|studio_safety|studio_selection|studio_artwork|studio_colors|studio_color_interactions|studio_workflows|studio_cutover|studio_performance|studio_reuse|studio_designs|studio_design_contracts|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "studio_closure_regressions":
-        pattern="^(studio_quick|studio_colors|studio_color_interactions|home_component_navigation|studio_design_contracts|studio_performance)$"
+        pattern="^(studio_quick|studio_colors|studio_color_interactions|home_component_navigation|studio_design_contracts|studio_performance|studio_cutover)$"
     if suite == "shell_appearance":
         pattern = "^(studio_selection|studio_shell|surface_appearance_contracts|home_component_navigation)$"
     if suite == "studio_visuals":
@@ -1118,7 +1118,7 @@ class Oracle:
         if suite != "all":
             expected = {"studio_quick", "studio_safety", "studio_selection", "studio_artwork", "studio_colors", "studio_color_interactions", "studio_workflows", "studio_cutover", "studio_performance", "studio_reuse", "studio_designs", "studio_design_contracts", "studio_gestures", "studio_grid", "studio_grid_controls", "studio_destinations", "studio_ordered", "studio_policies", "studio_overlays", "studio_unit", "studio_behavior"} if suite == "studio" else {suite}
             if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors","studio_color_interactions"}
-            if suite == "studio_closure_regressions":expected={"studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance"}
+            if suite == "studio_closure_regressions":expected={"studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance","studio_cutover"}
             if suite == "studio_colors":expected={"studio_colors","studio_color_interactions"}
             if suite == "shell_appearance":expected={"studio_selection","studio_shell","surface_appearance_contracts","home_component_navigation"}
             if suite == "campaign_repairs":expected=REPAIR_TESTS
@@ -1288,12 +1288,18 @@ class Oracle:
                 # fixtures and all config/media/evidence remain protected.
                 removed+=remove_fixture_caches(Path('/tmp'),mounts,active,preserve_recent=0)
             atomic_json(self.run/'guest-fixture-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'fixtureDataPreserved':True,'freeGiB':round(shutil.disk_usage(self.root).free/1024**3,2)})
+            if shutil.disk_usage(self.root).free<3*1024**3:
+                records=deduplicate_fixture_media(Path.home()/'Videos/Isolde-Acceptance',mounts,active)
+                atomic_json(self.run/'guest-fixture-media-dedup.json',{'guest':'isolde-test','files':records,'allPathsAndBytesPreserved':True})
         if shutil.disk_usage(self.root).free<3*1024**3:
             removed=remove_runner_test_bundles(self.root,Path(__file__),mounts)
             atomic_json(self.run/'guest-runner-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'sourceEvidencePreserved':True})
         if shutil.disk_usage(self.root).free<2*1024**3:
             removed=remove_linked_test_executables(self.root,mounts,active,getattr(self,'maintenance_build_targets',()))
             atomic_json(self.run/'guest-linked-tests-cleanup.json',{'guest':'isolde-test','targets':removed,'compiledObjectsPreserved':True})
+        if shutil.disk_usage(self.root).free<3*1024**3:
+            records=deduplicate_tested_payloads(self.root,mounts)
+            atomic_json(self.run/'guest-payload-dedup.json',{'guest':'isolde-test','files':records,'allPathsAndBytesPreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
@@ -1497,7 +1503,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 1740 if case in {"guide-lifecycle","guide-features"} else 900 if case in ("themes","studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 1740 if case in {"themes","guide-lifecycle","guide-features"} else 900 if case in ("studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -1891,6 +1897,13 @@ def remove_linked_test_executables(root,mounts=(),active=(),keep=(),target_free=
         with path.open('rb') as stream:
             if stream.read(4)!=b'\x7fELF':raise RuntimeError('Unknown linked-test executable')
         candidates.append(path)
+    archive=build/'libisolde_core.a'
+    if archive.exists() or archive.is_symlink():
+        if str(build/'CMakeFiles/isolde_core.dir') not in declared or archive.resolve()!=archive or not archive.is_file():raise RuntimeError('Unsafe generated core archive')
+        if any(m!=Path('/') and (m==archive or m.is_relative_to(archive) or archive.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted generated core archive')
+        with archive.open('rb') as stream:
+            if stream.read(8)!=b'!<arch>\n':raise RuntimeError('Unknown generated core archive')
+        if archive not in active:candidates.append(archive)
     removed=[]
     for path in sorted(candidates,key=lambda p:p.stat().st_mtime):
         if shutil.disk_usage(root).free>=target_free:break
@@ -1966,9 +1979,75 @@ def remove_fixture_caches(root, mounts, active, target_free=3*1024**3, preserve_
         shutil.rmtree(cache);removed.append(str(cache))
     return removed
 
+def deduplicate_tested_payloads(root, mounts=(), target_free=3*1024**3):
+    """Share identical immutable artifacts, including pinned candidates, without removing them."""
+    if root.resolve()!=root:raise RuntimeError('Redirected payload dedup root')
+    identical={};records=[]
+    for run in sorted((root/'runs').iterdir(),key=lambda p:p.stat().st_mtime,reverse=True)[:1024]:
+        payload=run/'payload';receipt=run/'test-result.json'
+        if not payload.is_dir() or not receipt.is_file():continue
+        if run.resolve()!=run or payload.resolve()!=payload or receipt.resolve()!=receipt:raise RuntimeError('Redirected payload dedup candidate')
+        if any(m!=Path('/') and (m==payload or m.is_relative_to(payload) or payload.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted payload dedup candidate')
+        tested=json.loads(receipt.read_text())
+        if tested.get('passed') is not True:continue
+        actual=payload_hashes(payload)
+        if actual!=tested.get('payload'):raise RuntimeError('Payload identity mismatch during dedup')
+        for name,checksum in actual.items():
+            if shutil.disk_usage(root).free>=target_free:return records
+            path=payload/name;stat=path.stat();key=(checksum,stat.st_mode,stat.st_uid,stat.st_gid,stat.st_dev)
+            original=identical.setdefault(key,path)
+            if original==path or original.stat().st_ino==stat.st_ino:continue
+            temporary=path.with_name('.'+path.name+'.dedup')
+            if temporary.exists() or temporary.is_symlink():raise RuntimeError('Existing payload dedup transaction')
+            os.link(original,temporary,follow_symlinks=False)
+            try:
+                if digest(path)!=checksum or digest(temporary)!=checksum:raise RuntimeError('Payload changed during dedup')
+                os.replace(temporary,path)
+            finally:
+                if temporary.exists():temporary.unlink()
+            records.append({'path':str(path),'linkedTo':str(original),'sha256':checksum,'bytes':stat.st_size})
+    return records
+
+
+def deduplicate_fixture_media(root, mounts=(), active=(), target_free=3*1024**3, preserve_recent=3):
+    """Hardlink identical old synthetic clips; retain every media path and byte."""
+    if not root.exists():return []
+    if root.resolve()!=root or root.is_symlink():raise RuntimeError('Redirected synthetic media root')
+    fixtures=sorted((p for p in root.iterdir() if re.fullmatch(r'Isolde-tv-test-[a-f0-9-]{36}',p.name) and p.is_dir() and not p.is_symlink()),key=lambda p:p.stat().st_mtime,reverse=True)
+    records=[]
+    for fixture in fixtures[preserve_recent:1024]:
+        if shutil.disk_usage(root).free>=target_free:break
+        if any(p==fixture or p.is_relative_to(fixture) for p in active):continue
+        directory=fixture/'Isolde Television Fixture'
+        if not directory.exists():continue
+        if directory.resolve()!=directory or not directory.is_dir():raise RuntimeError('Redirected synthetic clip directory')
+        if any(m!=Path('/') and (m==directory or m.is_relative_to(directory) or directory.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted synthetic media refused')
+        identical={}
+        for path in sorted(directory.glob('Fixture S*.ogv')):
+            if not re.fullmatch(r'Fixture S0[01]E0[12]\.ogv',path.name):continue
+            if path.resolve()!=path or not path.is_file():raise RuntimeError('Unsafe synthetic clip')
+            stat=path.stat()
+            if not 4<=stat.st_size<=64*1024**2:raise RuntimeError('Unbounded synthetic clip')
+            with path.open('rb') as stream:
+                if stream.read(4)!=b'OggS':raise RuntimeError('Unknown synthetic clip format')
+            checksum=digest(path);original=identical.setdefault(checksum,path)
+            if original==path or original.stat().st_ino==stat.st_ino:continue
+            if original.stat().st_dev!=stat.st_dev or original.read_bytes()!=path.read_bytes():raise RuntimeError('Synthetic clip identity changed')
+            temporary=path.with_name('.'+path.name+'.dedup')
+            if temporary.exists() or temporary.is_symlink():raise RuntimeError('Existing synthetic dedup transaction')
+            os.link(original,temporary,follow_symlinks=False)
+            try:
+                if digest(path)!=checksum or digest(temporary)!=checksum:raise RuntimeError('Synthetic clip changed during dedup')
+                os.replace(temporary,path)
+            finally:
+                if temporary.exists():temporary.unlink()
+            records.append({'path':str(path),'linkedTo':str(original),'sha256':checksum,'bytes':stat.st_size})
+    return records
+
+
 def oracle_storage_inventory(root):
     payloads=[];recovery=[]
-    for run in sorted((root/"runs").iterdir(),key=lambda p:p.stat().st_mtime)[:512]:
+    for run in sorted((root/"runs").iterdir(),key=lambda p:p.stat().st_mtime,reverse=True)[:1024]:
         if not run.is_dir() or run.is_symlink():continue
         if (run/'source').is_dir() and not (run/'source.tar.gz').exists() and len(recovery)<6:
             recovery.append({'runId':run.name,'files':[p.name for p in run.iterdir() if p.is_file()][:24]})
@@ -1986,12 +2065,14 @@ def oracle_storage_inventory(root):
         try:state=json.loads(statefile.read_text()) if statefile.is_file() else {}
         except (OSError,ValueError):state={}
         records.append({"runId":payload.parent.name,"payloadBytes":sizes.get(str(payload),0),"modified":payload.stat().st_mtime,"state":state.get("state","unknown")})
-    usage=subprocess.run(["du","-xk","--max-depth=2","--",str(root),"/tmp"],capture_output=True,text=True,timeout=30)
+    cache_roots=list((Path.home()/'.local/share/Isolde/native-profiles').glob('*/kodi/home/.cache'))[:128]
+    extra=[p for p in [Path.home()/'.cache/isolde/game-runtime-bundles',Path.home()/'Videos/Isolde-Acceptance',*cache_roots] if p.is_dir() and not p.is_symlink() and p.resolve()==p]
+    usage=subprocess.run(["du","-xk","--max-depth=2","--",str(root),"/tmp",*[str(p) for p in extra]],capture_output=True,text=True,timeout=30)
     directories=[]
     for line in usage.stdout.splitlines():
         size,sep,path=line.partition("\t")
         if sep and size.isdigit():directories.append({"path":path,"bytes":int(size)*1024})
-    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"])[:64],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:24]}
+    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
 
 
 def main():
@@ -2032,6 +2113,26 @@ def main():
     if args.action == "status":
         path = root / "runs" / args.run_id / "status.json"
         status = json.loads(path.read_text()) if path.is_file() else {"state": "unknown", "runId": args.run_id}
+        def cpu_ticks():
+            result={}
+            for proc in list(Path('/proc').iterdir())[:4096]:
+                if not proc.name.isdigit():continue
+                try:
+                    raw=(proc/'stat').read_text();fields=raw.rsplit(')',1)[1].split()
+                    result[proc.name]=(fields[19],int(fields[11])+int(fields[12]),raw.split('(',1)[1].rsplit(')',1)[0])
+                except (OSError,ValueError,IndexError):pass
+            return result
+        first=cpu_ticks();sample_started=time.monotonic();time.sleep(.5);second=cpu_ticks();sample_elapsed=time.monotonic()-sample_started
+        cpu=[{'pid':int(pid),'name':value[2],'cpuPercent':round((value[1]-first[pid][1])*100/os.sysconf('SC_CLK_TCK')/sample_elapsed,1)} for pid,value in second.items() if pid in first and first[pid][0]==value[0]]
+        memory={line.split(':',1)[0]:line.split(':',1)[1].strip() for line in Path('/proc/meminfo').read_text().splitlines()}
+        processes=[]
+        for proc in list(Path('/proc').iterdir())[:4096]:
+            if not proc.name.isdigit():continue
+            try:
+                fields={line.split(':',1)[0]:line.split(':',1)[1].strip() for line in (proc/'status').read_text().splitlines() if ':' in line}
+                processes.append({'pid':int(proc.name),'name':fields.get('Name',''),'rssKiB':int(fields.get('VmRSS','0 kB').split()[0])})
+            except (OSError,ValueError):pass
+        status['guestResources']={'memory':{key:memory.get(key) for key in ('MemTotal','MemAvailable','SwapTotal','SwapFree','Dirty','Writeback')},'load':Path('/proc/loadavg').read_text().strip(),'largestProcesses':sorted(processes,key=lambda p:p['rssKiB'],reverse=True)[:12],'cpuSampleSeconds':sample_elapsed,'busiestProcesses':sorted(cpu,key=lambda p:p['cpuPercent'],reverse=True)[:8]}
         if args.storage:status["storage"]=oracle_storage_inventory(root)
         status["activeRuns"]=[]
         if args.guide_diagnostics:status['guideBackend']=guide_backend_diagnostics(root/'runs'/args.run_id)
