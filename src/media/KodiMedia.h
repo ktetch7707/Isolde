@@ -105,7 +105,7 @@ public:
     Q_INVOKABLE void playMovie(int movieId, bool resume = true);
     Q_INVOKABLE void playbackControl(const QString &action);
     void presentationFailed();
-    void invalidate(const QString &reason);
+    Q_INVOKABLE void invalidate(const QString &reason);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void scanMovies();
     void quitIfIdle();

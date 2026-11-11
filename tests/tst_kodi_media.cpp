@@ -1047,7 +1047,10 @@ void KodiMediaTests::cancelledRequestCanRetry()
     media.refresh();
     QTRY_VERIFY(server.hasPendingConnections());
     auto *oldSocket = server.nextPendingConnection();
-    media.invalidate("Stopped for profile switch");
+    // Search closes through QML: exercise its actual meta-object boundary,
+    // rather than a direct C++ call that would hide a missing invokable.
+    QVERIFY(QMetaObject::invokeMethod(&media, "invalidate", Qt::DirectConnection,
+                                     Q_ARG(QString, QStringLiteral("Stopped for profile switch"))));
     QVERIFY(!media.busy());
     QVERIFY(!media.connected());
     delete oldSocket;
