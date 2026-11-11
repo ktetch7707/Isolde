@@ -60,6 +60,24 @@ Item {
             compare(JSON.stringify(editor.session.document),before);compare(studioFixture.disk(),diskBaseline)
         }
         Component {id:realMotionImageComponent;App.ArtworkImage {width:160;height:100;z:20000}}
+        Component {id:tintedIconComponent;Rectangle {width:80;height:80;color:"#112233";z:20000
+            App.ArtworkImage {objectName:"tintedIcon";anchors.fill:parent;fit:"contain";tintColor:"#00ff00";outlineWidth:4;outlineColor:"#ffffff"
+                source:"data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><path fill="red" fill-rule="evenodd" d="M16 16H64V64H16Z M32 32H48V48H32Z"/></svg>')}
+        }}
+        function test_monochrome_preserves_holes_edges_and_focus_colour(){
+            editor.visible=false
+            const card=createTemporaryObject(tintedIconComponent,tests.parent);verify(card!==null)
+            const image=findChild(card,"tintedIcon");tryCompare(image,"status",Image.Ready);tryVerify(()=>image.isImageLoaded(image.displaySource));image.requestPaint();wait(80);verify(waitForRendering(image))
+            const first=grabImage(card)
+            compare(first.pixel(4,40),Qt.rgba(17/255,34/255,51/255,1))
+            compare(first.pixel(40,40),first.pixel(4,40))
+            compare(first.pixel(24,40),Qt.rgba(0,1,0,1))
+            compare(first.pixel(14,40),Qt.rgba(1,1,1,1))
+            image.tintColor="#0000ff";image.requestPaint();wait(80);verify(waitForRendering(image))
+            const second=grabImage(card);compare(second.pixel(24,40),Qt.rgba(0,0,1,1));compare(second.pixel(14,40),first.pixel(14,40));compare(second.pixel(40,40),first.pixel(40,40))
+            if(studioFixture.artifacts)second.save(studioFixture.artifacts+"/studio-test-monochrome-alpha-focus.png")
+            compare(studioFixture.disk(),diskBaseline)
+        }
         Component {id:framingComponent;App.StudioImageFraming {width:1280;height:720}}
         SignalSpy {id:framingSpy;signalName:"previewed"}
         function test_text_body_style_is_independent_plain_and_inherited(){

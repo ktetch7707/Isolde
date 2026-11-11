@@ -226,7 +226,7 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
         } else if(key=="visibleLabel" || key=="bodyText" || key=="moreLabel" || key=="galleryTitle") {
             if(it.value().metaType().id()!=QMetaType::QString || it.value().toString().size()>(key=="bodyText"?4096:160) || it.value().toString().contains(QChar::Null))return false;
         } else if(key=="artFit" || key=="labelPosition" || key=="textAlign" || key=="logoMode") {
-            const auto choices=key=="logoMode"?QStringList{"cutout","original","tile"}:key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
+            const auto choices=key=="logoMode"?QStringList{"cutout","original","tile","monochrome"}:key=="artFit"?QStringList{"cover","contain"}:key=="labelPosition"?QStringList{"inside","below","overlay","hidden"}:QStringList{"left","center","right"};
             if(it.value().metaType().id()!=QMetaType::QString || !choices.contains(it.value().toString()))return false;
         } else if(key=="bodyAlign") {
             if(it.value().metaType().id()!=QMetaType::QString || !QStringList{"left","center","right"}.contains(it.value().toString()))return false;

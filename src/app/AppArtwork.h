@@ -1,10 +1,23 @@
 #pragma once
 #include <QImage>
+#include <QRegularExpression>
 #include <QVector>
 #include <algorithm>
 #include <cmath>
 
 namespace AppArtwork {
+// Only our normalized, bundled SVG wrapper has this exact leading backplate.
+// Remove it before rasterizing: transparent corners otherwise prevent the
+// conservative bitmap fallback from identifying the enclosed rounded plate.
+// User/imported SVGs never enter this path; original artwork stays untouched.
+inline QByteArray packagedForegroundSvg(const QByteArray &svg)
+{
+    static const QRegularExpression wrapper(QStringLiteral("^(<svg\\b[^>]*>)<rect x=\"2\" y=\"2\" width=\"60\" height=\"60\" rx=\"13\" fill=\"#[0-9A-Fa-f]{6}\"/>"));
+    auto text=QString::fromUtf8(svg);
+    const auto match=wrapper.match(text);
+    if(match.hasMatch())text.replace(0,match.capturedLength(),match.captured(1));
+    return text.toUtf8();
+}
 // Remove only a uniform, opaque, edge-connected backdrop. Enclosed white
 // lettering survives; existing transparency and ambiguous artwork are retained.
 inline QImage cutout(const QImage &source)

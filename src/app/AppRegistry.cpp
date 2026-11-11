@@ -63,7 +63,16 @@ static QString appIcon(const AppDefinition &app, bool cutout=false)
         if(suppliedIcon)break;
     }
     QIcon icon;
-    if(QFile::exists(packaged))icon=QIcon(packaged);
+    if(QFile::exists(packaged)){
+        if(cutout){
+            QFile file(packaged);
+            if(!file.open(QIODevice::ReadOnly))return {};
+            auto svg=AppArtwork::packagedForegroundSvg(file.readAll());QBuffer buffer(&svg);buffer.open(QIODevice::ReadOnly);
+            QImageReader reader(&buffer,"svg");reader.setScaledSize(QSize(512,512));
+            const auto foreground=reader.read();if(foreground.isNull())return {};
+            icon=QIcon(QPixmap::fromImage(foreground));
+        } else icon=QIcon(packaged);
+    }
     else if(QDir::isAbsolutePath(name)){
         if(!safeFile(name))return {};
         QImageReader reader(name);const auto size=reader.size();

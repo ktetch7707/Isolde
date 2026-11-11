@@ -5,6 +5,7 @@
 #include "input/InputManager.h"
 #include "sessions/SessionManager.h"
 #include "home/HomeLayout.h"
+#include "home/ComponentSchema.h"
 #include "settings/DisplaySettings.h"
 #include "settings/AudioSettings.h"
 #include "settings/RemoteSettings.h"
@@ -23,6 +24,9 @@
 #include <QDir>
 #include <QTemporaryDir>
 #include <QImage>
+#include <QImageReader>
+#include <QBuffer>
+#include <QFileInfo>
 #include <QSettings>
 #include <QUrl>
 #include <QtTest>
@@ -264,6 +268,28 @@ private slots:
         logo.fill(Qt::blue);QCOMPARE(AppArtwork::cutout(logo),logo);
         logo.fill(Qt::white);logo.setPixelColor(19,0,Qt::black);
         QCOMPARE(AppArtwork::cutout(logo),logo);
+    }
+    void packagedCutoutRetainsVectorResolutionAndTransparency() {
+        for(const auto &mode:QStringList{"cutout","original","tile","monochrome"})
+            QVERIFY(ComponentSchema::validPresentation({{"logoMode",mode},{"iconColor","#35a56f"}}));
+        QVERIFY(!ComponentSchema::validPresentation({{"logoMode","execute"}}));
+        const QDir folder=QFileInfo(QFINDTESTDATA("../config/app-icons/netflix.svg")).dir();
+        int checked=0;
+        for(const auto &name:folder.entryList({"*.svg"},QDir::Files)){
+            QFile file(folder.filePath(name));QVERIFY(file.open(QIODevice::ReadOnly));
+            const auto original=file.readAll(),foreground=AppArtwork::packagedForegroundSvg(original);
+            if(foreground==original)continue;
+            QBuffer buffer;buffer.setData(foreground);QVERIFY(buffer.open(QIODevice::ReadOnly));
+            QImageReader reader(&buffer,"svg");reader.setScaledSize(QSize(512,512));
+            const auto image=reader.read();QVERIFY2(!image.isNull(),qPrintable(name));
+            QCOMPARE(image.size(),QSize(512,512));
+            QCOMPARE(image.pixelColor(256,32).alpha(),0);
+            int ink=0;for(int y=0;y<512;++y)for(int x=0;x<512;++x)if(image.pixelColor(x,y).alpha()>128)++ink;
+            QVERIFY2(ink>100,qPrintable(name));
+            QCOMPARE(AppArtwork::packagedForegroundSvg(foreground),foreground);
+            ++checked;
+        }
+        QVERIFY(checked>=19);
     }
     void setupProgressPersistsAndHandlesFailure();
     void profilesPersistAndIsolatePersonalSettings();

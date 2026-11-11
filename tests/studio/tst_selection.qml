@@ -384,6 +384,8 @@ Item {
             orb.selected=false;compare(art.outlineWidth,0)
             orb.style={logoMode:"tile"};compare(orb.logoOnly,false);verify(art.radius>0)
             orb.style={logoMode:"original"};compare(orb.logoOnly,true)
+            orb.style={logoMode:"monochrome",iconColor:"#35a56f"};compare(orb.logoOnly,true);compare(art.tintColor,"#35a56f")
+            orb.style={logoMode:"cutout"};compare(art.tintColor,"#00000000")
             orb.item={name:"Missing artwork"};compare(orb.logoOnly,false)
         }
         function test_wallpaper_return_retains_ready_image_and_custom_crop() {

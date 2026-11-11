@@ -10,7 +10,7 @@ Item {
     readonly property real diameter: Math.min(width-8*unit,height-28*unit,(style.diameter || 110)*unit)
     readonly property color ink: style.labelColor || appearance.labelColor || appearance.textColor || "#514B67"
     readonly property color surface: style.surfaceColor || appearance.surfaceColor || "#E8D4F8"
-    readonly property bool logoOnly:!!item.logoSource && (style.logoMode==="cutout" || style.logoMode==="original")
+    readonly property bool logoOnly:!!item.logoSource && (style.logoMode==="cutout" || style.logoMode==="original" || style.logoMode==="monochrome")
     readonly property var focusFrame:({x:circle.x,y:circle.y,width:circle.width,height:circle.height,radius:circle.radius,color:style.focusColor || appearance.focusColor || "white",lineWidth:Math.max(2,style.focusWidth===undefined?4:style.focusWidth)*unit})
     signal activated()
     Rectangle {
@@ -23,6 +23,7 @@ Item {
             anchors.fill: parent; anchors.margins: root.selected ? 4*root.unit : 1
             objectName:"orbArtwork"
             radius: root.logoOnly?0:width/2; source: root.item.logoSource || ""; crop: root.style.imageCrop || null
+            tintColor:root.style.logoMode==="monochrome"?root.style.iconColor || root.appearance.iconColor || root.ink:"transparent"
             outlineWidth:root.logoOnly && root.selected && root.style.focusEnabled!==false?(root.style.focusWidth===undefined?4:root.style.focusWidth)*root.unit:0
             outlineColor:root.style.focusColor || root.appearance.focusColor || "white"
             fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1

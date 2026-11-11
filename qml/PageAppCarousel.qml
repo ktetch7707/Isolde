@@ -44,7 +44,7 @@ Item {
     signal engage()
     signal launch(var action)
     signal allAppsRequested(string originId)
-    function logoSource(app){return (style.logoMode || "cutout")==="cutout"?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
+    function logoSource(app){return ["cutout","monochrome"].indexOf(style.logoMode || "cutout")>=0?app.cutoutLogoSource || app.logoSource || "":app.logoSource || ""}
     function cardStyle(gallery){const result=Object.assign({},style);delete result.visibleLabel;delete result.showHeading;delete result.headingSize;if(result.cardGap===undefined)result.cardGap=(style.layout || {}).gap || 0;if(gallery){if(result.labelSurfaceColor===undefined)result.labelSurfaceColor=galleryTheme.surface;if(result.labelColor===undefined)result.labelColor=galleryTheme.text;}return Object.assign(result,gallery?{variant:"orb",diameter:style.diameter || 78}:{},{icon:style.icon || "grid",logoMode:style.logoMode || "cutout",artFit:style.artFit || "contain"})}
     function focusState(){return {selectedId:selectedId,galleryId:galleryId,galleryOpen:gallery.opened || pendingGalleryRestore}}
     function restoreFocusState(state){

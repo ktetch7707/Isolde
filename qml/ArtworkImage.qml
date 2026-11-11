@@ -28,6 +28,7 @@ Canvas {
     property real zoom:1
     property real outlineWidth:0
     property color outlineColor:"transparent"
+    property color tintColor:"transparent"
     readonly property int status: probe.status
     onSourceChanged:clearAnimation()
     onManagedAssetChanged:clearAnimation()
@@ -69,6 +70,7 @@ Canvas {
     onZoomChanged:requestPaint()
     onOutlineWidthChanged:requestPaint()
     onOutlineColorChanged:requestPaint()
+    onTintColorChanged:requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
     onImageLoaded: requestPaint()
@@ -102,6 +104,21 @@ Canvas {
             for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++)if(ox || oy)draw(ox*outlineWidth,oy*outlineWidth)
             c.globalCompositeOperation="source-in";c.fillStyle=outlineColor;c.fillRect(0,0,width,height);c.globalCompositeOperation="source-over"
         }
-        draw(0,0); c.restore()
+        // Recolour the foreground alpha independently of the focus outline.
+        if(tintColor.a>0){
+            const outline=outlineWidth>0?c.getImageData(0,0,width,height):null
+            c.clearRect(0,0,width,height);draw(0,0)
+            const foreground=c.getImageData(0,0,width,height),pixels=foreground.data
+            for(let i=0;i<pixels.length;i+=4){
+                const alpha=pixels[i+3]/255*tintColor.a
+                const behind=outline?outline.data[i+3]/255*(1-alpha):0,total=alpha+behind
+                pixels[i]=total?(tintColor.r*255*alpha+(outline?outline.data[i]:0)*behind)/total:0
+                pixels[i+1]=total?(tintColor.g*255*alpha+(outline?outline.data[i+1]:0)*behind)/total:0
+                pixels[i+2]=total?(tintColor.b*255*alpha+(outline?outline.data[i+2]:0)*behind)/total:0
+                pixels[i+3]=total*255
+            }
+            c.putImageData(foreground,0,0)
+        } else draw(0,0)
+        c.restore()
     }
 }
