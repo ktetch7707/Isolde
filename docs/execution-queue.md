@@ -1,5 +1,23 @@
 # Executable backlog queue
 
+## User-directed T12 interface sound themes — 2026-11-11
+
+Selected: Kodi-compatible audible UI feedback, extending the Settings cleanup.
+Owned new files: `src/settings/InterfaceSounds.{h,cpp}`, `qml/InterfaceSoundSettingsView.qml`,
+`config/interface-sounds.json`, `tests/tst_interface_sounds.cpp` and the linked
+implementation record. Integration edits are limited to sound-related hunks in
+`src/main.cpp`, `qml/Main.qml`, `qml/SettingsView.qml`, `ComponentSchema.cpp`,
+`studio-defaults.json`, CMake and backlog/audio documentation. Preserve the active
+app-icon work, including its staged files. No VM/build/test runs: the user's
+existing deferral remains in force. Outcome: profile-local sound theme/mute/level,
+remote selection and preview, bounded installed Kodi resource-pack import, quiet
+default feedback, mute/playback/external-app suppression and safe error/retry.
+No new dependencies, Kodi settings writes, downloads or binary artwork commits.
+The source batch and prepared regressions are complete; [implementation, limits
+and resume ladder](interface-sounds-2026-11-11.md). Source/JSON/JavaScript syntax
+checks only. Acceptance and percentages remain unchanged until deferred native,
+actual Qt-audio/installed and integration verification.
+
 ## Current user-directed T30 repair — no rerun
 
 The user explicitly selected implementation of the six BUG-058 integrations,

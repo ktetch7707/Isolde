@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "defaults": {"enabled": true, "volume": 20, "duringPlayback": false, "theme": "resource.uisounds.kodi"},
+  "events": [
+    {"id":"up","label":"Move up","tone":"move","kodi":["up"]},
+    {"id":"down","label":"Move down","tone":"move","kodi":["down"]},
+    {"id":"left","label":"Move left","tone":"move","kodi":["left"]},
+    {"id":"right","label":"Move right","tone":"move","kodi":["right"]},
+    {"id":"select","label":"Select","tone":"select","kodi":["select"]},
+    {"id":"back","label":"Back","tone":"back","kodi":["previousmenu","parentdir"]},
+    {"id":"menu","label":"Open menu","tone":"select","kodi":["contextmenu"]},
+    {"id":"search","label":"Open search","tone":"select","kodi":["search"]},
+    {"id":"home","label":"Return Home","tone":"back","kodi":["home"]},
+    {"id":"error","label":"Unavailable or failed action","tone":"error","kodi":["error"]},
+    {"id":"notification","label":"Notification","tone":"select","kodi":["notification"]}
+  ],
+  "tones": {
+    "move":{"frequency":720,"durationMs":24},
+    "select":{"frequency":1040,"durationMs":48},
+    "back":{"frequency":520,"durationMs":42},
+    "error":{"frequency":330,"durationMs":90}
+  },
+  "fields": [
+    {"key":"enabled","label":"Interface sounds","help":"Audible feedback for remote navigation. Visual feedback stays available when sounds are off."},
+    {"key":"theme","label":"Sound theme","help":"Left or Right chooses a theme to preview. Confirm applies it. Kodi packs use their own action sounds; unmapped actions stay silent."},
+    {"key":"volume","label":"Interface sound level","help":"Left or Right adjusts this level separately from playback volume. System mute always silences interface sounds."},
+    {"key":"duringPlayback","label":"Sounds during playback","help":"Off keeps navigation quiet while media is playing. External apps always control their own sounds."},
+    {"key":"preview","label":"Preview theme","help":"Play a short move, select, Back and error sequence at the chosen interface level."},
+    {"key":"refresh","label":"Refresh Kodi themes","help":"Find installed UI sound packs in this profile’s Kodi add-ons and the system Kodi installation. No downloads or Kodi settings changes."}
+  ]
+}

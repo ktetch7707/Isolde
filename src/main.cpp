@@ -9,6 +9,7 @@
 #include "games/GameLibrary.h"
 #include "settings/DisplaySettings.h"
 #include "settings/AudioSettings.h"
+#include "settings/InterfaceSounds.h"
 #include "settings/RemoteSettings.h"
 #include "settings/AmbientSettings.h"
 #include "settings/NetworkSettings.h"
@@ -66,6 +67,7 @@ struct ProfileRuntime {
     HomeLayout homeLayout{&registry};
     DisplaySettings displaySettings;
     AudioSettings &audioSettings;
+    std::unique_ptr<InterfaceSounds> interfaceSounds;
     CaptureController &captureController;
     RemoteSettings remoteSettings;
     AmbientSettings ambientSettings;
@@ -106,6 +108,13 @@ struct ProfileRuntime {
     explicit ProfileRuntime(ProfileManager &profiles, bool initialLaunch, AudioSettings &audio, CaptureController &capture)
         : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()) {
     actions.setAudioSettings(&audioSettings);
+    const auto kodiAddons=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+profiles.activeId()+"/kodi/home/.kodi/addons";
+    interfaceSounds=std::make_unique<InterfaceSounds>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("interface-sounds.json"),
+        QStringList{kodiAddons,"/usr/share/kodi/addons","/usr/local/share/kodi/addons"});
+    interfaceSounds->setMuted(audioSettings.muted());
+    QObject::connect(&audioSettings,&AudioSettings::changed,interfaceSounds.get(),[this]{interfaceSounds->setMuted(audioSettings.muted());});
+    QObject::connect(&actions,&ActionDispatcher::rejected,interfaceSounds.get(),[this](const QString &){interfaceSounds->playEvent("error");});
+    QObject::connect(&sessions,&SessionManager::sessionRejected,interfaceSounds.get(),[this](const QString &){interfaceSounds->playEvent("error");});
     catalog.setStoreProvider(&storeProvider);
     if (initialLaunch && QCoreApplication::arguments().contains("--setup")) setup.restart();
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
@@ -151,7 +160,7 @@ struct ProfileRuntime {
         if(vpnSettings.busy() && app && app->type!="settings" && app->type!="store" && app->type!="customize")
             return "Finish the current VPN setup operation before opening another app.";
         if (id == "kodi" && !kodiService.canOpenApplication())
-            return "Switch to Kodi application mode in Settings → System → Media Library first. This lets Kodi save your setup before opening its interface.";
+            return "Switch to Kodi application mode in Settings → Media & Playback first. This lets Kodi save your setup before opening its interface.";
         return {};
     });
     QObject::connect(&kodiService, &KodiService::probeRequested, &kodi, &KodiMedia::refresh);
@@ -237,6 +246,7 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("homeLayout"), &homeLayout);
     engine.rootContext()->setContextProperty(QStringLiteral("displaySettings"), &displaySettings);
     engine.rootContext()->setContextProperty(QStringLiteral("audioSettings"), &audioSettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("interfaceSounds"), interfaceSounds.get());
     engine.rootContext()->setContextProperty(QStringLiteral("remoteSettings"), &remoteSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("ambientSettings"), &ambientSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("networkSettings"), &networkSettings);
@@ -309,6 +319,7 @@ struct ProfileRuntime {
     }
     }
     ~ProfileRuntime() {
+        interfaceSounds->setSuppressed(true);
         pageData.invalidate("This profile is no longer active.");
         guide->invalidate();
         games->invalidate();

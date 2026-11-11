@@ -175,6 +175,7 @@ Item {
         else if (route === "profiles") profilePage.handleCommand(command)
         else if (route === "vpn") vpnPage.handleCommand(command)
         else if (route === "store-preferences") storePage.handleCommand(command)
+        else if (route === "interface-sounds") interfaceSoundPage.handleCommand(command)
         else if (route === "system") systemPage.handleCommand(command)
     }
 
@@ -280,6 +281,7 @@ Item {
                 NetworkSettingsView {id:networkPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="network"}
                 VpnSettingsView {id:vpnPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="vpn"}
                 StoreSettingsView {id:storePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="store-preferences"}
+                InterfaceSoundSettingsView {id:interfaceSoundPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="interface-sounds"}
                 KodiSettingsView {id:mediaPage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="media"}
                 SourceSettingsView {id:sourcePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="sources"}
                 ProfileSettingsView {id:profilePage;anchors.fill:parent;appearance:root.appearance;visible:root.inPage && root.route==="profiles"}

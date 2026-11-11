@@ -36,6 +36,13 @@ The user-directed [Studio refinement](studio-simplification-2026-11-10.md) imple
 
 ## Current acceptance authority — VM-only software completion
 
+User-directed T12 interface sounds (November 11): [implementation and supported matrix](interface-sounds-2026-11-11.md)
+adds profile-local Kodi-compatible sound themes, independent effect level,
+preview, quiet/mute/external-app policies and declarative generated fallback.
+Native and navigation regressions are prepared; source/syntax/accounting checks
+only, with all build/test/VM reruns still user-deferred. No deployment, audio
+playback proof or acceptance credit: T12 0%, overall1563/25=63%.
+
 User-directed Settings organization (November 11): [hierarchy and handoff](settings-organization-2026-11-11.md)
 regroups nine TV-oriented categories, retains App Store in All Apps and Apps,
 preserves legacy shortcuts and adds profile-local category reorder/atomic retry.

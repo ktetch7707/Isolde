@@ -111,6 +111,8 @@ add_library(isolde_core STATIC
     src/settings/DisplaySettings.h
     src/settings/AudioSettings.cpp
     src/settings/AudioSettings.h
+    src/settings/InterfaceSounds.cpp
+    src/settings/InterfaceSounds.h
     src/settings/RemoteSettings.cpp
     src/settings/RemoteSettings.h
     src/settings/AmbientSettings.cpp
@@ -187,6 +189,7 @@ qt_add_qml_module(isolde
         qml/AmbientSettingsView.qml
         qml/Screensaver.qml
         qml/AudioSettingsView.qml
+        qml/InterfaceSoundSettingsView.qml
         qml/ClockWidget.qml
         qml/CommandCenter.qml
         qml/SubtitleQueue.qml
@@ -247,6 +250,7 @@ qt_add_resources(isolde "isolde_config"
         config/default-apps.json
         config/default-home-layout.json
         config/studio-defaults.json
+        config/interface-sounds.json
         config/skins/lounge.json
         config/skins/pastel.json
         config/skins/templates.json
@@ -608,6 +612,11 @@ if(BUILD_TESTING)
         target_compile_definitions(isolde_audio_tests PRIVATE AUDIO_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fake-mixer.py")
         target_compile_definitions(isolde_audio_tests PRIVATE AUDIO_PLAYER_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fake-audio-player.py")
         add_test(NAME audio_backend COMMAND isolde_audio_tests)
+        qt_add_executable(isolde_interface_sound_tests tests/tst_interface_sounds.cpp)
+        target_link_libraries(isolde_interface_sound_tests PRIVATE isolde_core Qt6::Test)
+        target_compile_definitions(isolde_interface_sound_tests PRIVATE INTERFACE_SOUND_DEFAULTS="${CMAKE_CURRENT_SOURCE_DIR}/config/interface-sounds.json")
+        add_test(NAME interface_sounds COMMAND isolde_interface_sound_tests)
+        set_tests_properties(interface_sounds PROPERTIES TIMEOUT 30)
         add_test(NAME appliance_installation COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_appliance_install.py)
         add_test(NAME default_app_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_default_apps.py)
         add_test(NAME android_provisioning COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_android_provisioning.py)

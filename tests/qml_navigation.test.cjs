@@ -1124,3 +1124,18 @@ test('Settings to Store hands off the session without leaving All Apps active', 
     assert.equal(JSON.stringify(events),JSON.stringify(['exit',['app-store','all-apps',false],'restore']));
     assert.equal(s.settingsStoreReturn.profile,'a'); assert.equal(s.settingsStoreReturn.origin,'all-apps');
 });
+
+test('Interface sound theme arrows remain a draft until Confirm and preview never saves it', () => {
+    const writes=[], previews=[];
+    const s=vm.createContext({
+        choices:[{id:'builtin.soft',name:'Soft'},{id:'resource.uisounds.fixture',name:'Kodi fixture'}],
+        draftTheme:'builtin.soft',selectedIndex:0,rows:[{key:'theme'},{key:'preview'}],
+        controller:{enabled:true,volume:20,duringPlayback:false,previewing:false,stop(){},
+            selectTheme:id=>writes.push(id),preview:id=>previews.push(id)},
+        inputManager:{navigateUp:'up',navigateDown:'down',navigateLeft:'left',navigateRight:'right',confirm:'ok'}
+    });
+    for(const name of ['chooseTheme','handleCommand'])method('InterfaceSoundSettingsView.qml',name,s);
+    s.handleCommand('right');assert.equal(s.draftTheme,'resource.uisounds.fixture');assert.equal(writes.length,0);
+    s.handleCommand('down');s.handleCommand('ok');assert.deepEqual(previews,['resource.uisounds.fixture']);assert.equal(writes.length,0);
+    s.handleCommand('up');s.handleCommand('ok');assert.deepEqual(writes,['resource.uisounds.fixture']);
+});

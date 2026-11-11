@@ -21,6 +21,12 @@ Window {
         allApps.clearLaunchAttempt()
     })
     property bool ambientActive: false
+    Binding {
+        target:interfaceSounds;property:"suppressed"
+        value:!window.active || window.ambientActive || captureSession.open || desktopMode.active
+            || (sessionManager.active && ["settings","store","customize"].indexOf(sessionManager.currentAppType)<0)
+    }
+    Binding {target:interfaceSounds;property:"playbackActive";value:kodiMedia.playbackActive}
     readonly property bool homeArtworkMotionActive:!sessionManager.active && !ambientActive && !commandCenter.open && !allApps.open && !kodiLibrary.open && !captureSession.open && !tvGuide.open && !kodiMedia.playbackActive
     property var galleryReturnPageState: null
     property bool searchFromGallery: false
@@ -182,6 +188,7 @@ Window {
     }
 
     function handleCommand(command) {
+        if (typeof interfaceSounds !== "undefined" && !ambientActive) interfaceSounds.playCommand(command)
         if(appVpn.busy && appVpn.pendingApp){
             if(command===inputManager.back || command===inputManager.home)appVpn.cancel()
             return

@@ -327,7 +327,7 @@ bool ComponentSchema::validSettingsNavigation(const QVariantMap &value)
         || value.value("schemaVersion").toDouble() != 1
         || value.value("categories").metaType().id() != QMetaType::QVariantList) return false;
     const QSet<QString> categoryIds{"network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system"};
-    const QSet<QString> routes{"network", "vpn", "display", "audio", "studio", "ambient", "store", "store-preferences", "capture", "sources", "remotes", "profiles", "media", "system"};
+    const QSet<QString> routes{"network", "vpn", "display", "audio", "interface-sounds", "studio", "ambient", "store", "store-preferences", "capture", "sources", "remotes", "profiles", "media", "system"};
     const auto categories = value.value("categories").toList();
     if (categories.size() != categoryIds.size()) return false;
     QSet<QString> seen, seenRoutes;
