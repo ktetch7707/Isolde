@@ -17,6 +17,19 @@ Item {
         function press(key){scene.forceActiveFocus();keyClick(key);wait(5)}
         function init(){scene.target=null;launchSpy.target=null;launchSpy.clear();verify(studioFixture.resetSources(8));wait(10)}
         function cleanup(){scene.target=null;launchSpy.target=null}
+        function test_custom_elevated_rows_remain_readable(){
+            const center=createTemporaryObject(centerComponent,scene,{appearance:{surfaceColor:"#103b38",textColor:"#f5e9cd",elevatedColor:"#f5e9cd",elevatedTextColor:"#121212",elevatedMutedColor:"#303030"}})
+            verify(center);wait(30)
+            const row=findChild(center,"sourceRow-1"),title=findChild(center,"sourceRowTitle-1")
+            verify(row);verify(title);verify(title.text.length>0)
+            function luminance(color){
+                function linear(value){return value<=0.04045?value/12.92:Math.pow((value+0.055)/1.055,2.4)}
+                return 0.2126*linear(color.r)+0.7152*linear(color.g)+0.0722*linear(color.b)
+            }
+            const foreground=luminance(title.color),background=luminance(row.color)
+            verify((Math.max(foreground,background)+0.05)/(Math.min(foreground,background)+0.05)>=4.5,"Unselected source row needs readable text against its actual surface")
+            if(studioFixture.artifacts)grabImage(center).save(studioFixture.artifacts+"/studio-test-source-custom-contrast.png")
+        }
         function test_overflow_is_bounded_and_menu_opens_source_actions(){
             const widget=createTemporaryObject(widgetComponent,scene);verify(widget);scene.target=widget
             tryCompare(widget,"entries",studioFixture.sources.items)
