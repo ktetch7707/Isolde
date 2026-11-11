@@ -17,9 +17,9 @@ Three compatible presentations use the same artwork pipeline:
 
 | Presentation | Visual and interaction | Intended use |
 |---|---|---|
-| Signature — recommended default | Transparent foreground logos, labels underneath, generous spacing, one stable rounded focus frame around the icon slot | Favourite app rows and a spacious TV Home |
-| Quiet tiles | Small logos in consistent neutral tiles, names beside them, focus around the complete tile | Dense All Apps and busy photographic pages |
-| Compact rail | Small logo and name inside a restrained capsule, focus around the capsule | Narrow rows and secondary app groups |
+| Signature — recommended default | Transparent foreground logos, labels underneath, generous spacing, selected glow following the logo shape | Favourite app rows and a spacious TV Home |
+| Quiet tiles | Small logos in consistent neutral tiles, names beside them, selected logo-shaped glow | Dense All Apps and busy photographic pages |
+| Compact rail | Small logo and name inside a restrained capsule, selected logo-shaped glow | Narrow rows and secondary app groups |
 
 The review board compares these directions using six existing bundled provider
 assets. It demonstrates treatment, surfaces and selection only. It is not a
@@ -135,11 +135,19 @@ wizard. Retain the original so users can always undo extraction.
 - Keep labels readable at TV distance; begin at20–22px at1080p, with authored
   typography/density scaling. Allow a second line in gallery tiles. Never
   shrink long labels to force them into a fixed chip.
-- Focus belongs to the stable interaction slot, not every tiny logo contour.
-  Use a3px high-contrast frame plus a modest surface lift. Avoid white dilation
-  around a coloured mark: it can look exactly like failed background removal.
-  Keep artwork sharp and colour-independent of focus. An optional120ms lift
-  may be disabled by reduced motion; focus is visible without animation.
+- User refinement: retain **glow following the selected icon's actual shape**
+  as the default focus treatment in every presentation. Derive it from clean
+  foreground alpha, never the backing/tile bounds. Combine a narrow defined
+  contour with a restrained soft outer glow; keep the logo itself sharp.
+  Glow colour, contour width, spread and intensity use the shared appearance
+  model. Glow belongs to focus and disappears completely on deselection; it
+  must never be baked into original/foreground/mask files or used to hide noise.
+  Hit targets and layout geometry stay stable as the glow changes. Preserve
+  interior negative space, do not clip the glow at slot boundaries, and ensure
+  only the currently focused icon glows. Frame focus remains an optional
+  accessibility/contrast alternative rather than replacing the requested glow.
+  Reduced motion removes transitions, not the selected glow. A legible selected
+  label supplies a second cue for faint or exceptionally thin logos.
 - Loading/error states retain slot size and label. A missing asset uses an
   existing semantic app symbol with a readable name, not a random package icon.
 
