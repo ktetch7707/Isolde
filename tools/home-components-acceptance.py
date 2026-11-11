@@ -13,6 +13,7 @@ import importlib.util
 import re
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -268,9 +269,32 @@ def main():
         spec.loader.exec_module(offline_module)
     active = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "isolde.service"]).returncode == 0
     process = None
+    sound_module = None
+    sound_original_sink = None
+    sound_sink = "isolde_acceptance_" + evidence.name.rsplit("-", 1)[-1]
+    sound_observations = []
+    if args.themes_controls_only:
+        def cancel_audio_acceptance(_signal, _frame):
+            # Bypass the optional failure-inspection pause so bounded runner
+            # cancellation immediately executes output/service restoration.
+            raise KeyboardInterrupt("Audio acceptance cancelled")
+        signal.signal(signal.SIGTERM,cancel_audio_acceptance)
     try:
         if active:
             run("systemctl", "--user", "stop", "isolde.service")
+        if args.themes_controls_only:
+            # Guest-only temporary output. Restore the exact previous default
+            # before the ordinary service starts; never record physical output.
+            sound_original_sink=run("pactl","get-default-sink",env=env,timeout=10).strip()
+            if not sound_original_sink or "\n" in sound_original_sink:raise RuntimeError("Missing original guest output identity")
+            sound_module = run("pactl", "load-module", "module-null-sink",
+                               "sink_name="+sound_sink, "rate=48000", "channels=2",
+                               env=env, timeout=10).strip()
+            if not sound_module.isdecimal(): raise RuntimeError("Invalid temporary audio module identity")
+            run("pactl","set-default-sink",sound_sink,env=env,timeout=10)
+            run("pactl","set-sink-mute",sound_sink,"0",env=env,timeout=10)
+            env["PULSE_SINK"] = sound_sink
+            env["QT_LOGGING_RULES"] = "qt.multimedia.*=true"
         with (evidence / "shell.log").open("w") as log:
             def start_shell():
                 command = [str(executable), "--windowed"]
@@ -286,10 +310,12 @@ def main():
                             listing=run("wmctrl", "-lp", env=env)
                         except subprocess.CalledProcessError as error:
                             diagnostic=(error.stdout or "")+(error.stderr or "")
-                            if error.returncode!=1 or (diagnostic.strip() and "Cannot get client list properties" not in diagnostic):
+                            transient=("Cannot get client list properties" in diagnostic
+                                       or ("BadWindow (invalid Window parameter)" in diagnostic and "20 (X_GetProperty)" in diagnostic))
+                            if error.returncode!=1 or (diagnostic.strip() and not transient):
                                 print("WMCTRL_DISCOVERY_ERROR "+repr({"code":error.returncode,"stdout":error.stdout,"stderr":error.stderr}),flush=True)
                                 raise
-                            listing=""  # No client list during bounded private-window startup.
+                            listing=""  # Empty/stale client list during the same bounded startup wait.
                         for line in listing.splitlines():
                             fields = line.split(None, 4)
                             if len(fields) >= 3 and fields[2] == str(child.pid):
@@ -360,9 +386,70 @@ def main():
                         tag=("dark","pastel","custom")[case]
                         if sequence:
                             process.terminate();process.wait(timeout=10)
-                            original_bytes=json.dumps(theme_document(case)).encode();layout.write_bytes(original_bytes)
+                            next_document=theme_document(case)
+                            if args.themes_controls_only and case==2:
+                                for document in [next_document]+[page["layout"] for page in next_document["pages"]]:
+                                    document["theme"]["typographyScale"]=1.3
+                            original_bytes=json.dumps(next_document).encode();layout.write_bytes(original_bytes)
                             process,window,focused=start_shell()
                         if args.themes_controls_only:
+                            settings_route("interface-sounds");snap(tag,"sounds")
+                            key("Down");key("Right");key("Return")  # Apply the first available preview choice.
+                            fields=json.loads((Path(__file__).resolve().parents[1]/"config/interface-sounds.json").read_text())["fields"]
+                            preview_index=next(i for i,field in enumerate(fields) if field["key"]=="preview")
+                            def route_owned_audio():
+                                # Qt chooses an explicit QAudioDevice, which may
+                                # override PULSE_SINK. Move only streams whose
+                                # server-reported owner is this private shell.
+                                inputs=json.loads(run("pactl","--format=json","list","sink-inputs",env=env,timeout=5))
+                                owned=[]
+                                for stream in inputs:
+                                    if str(stream.get("properties",{}).get("application.process.id"))!=str(process.pid):continue
+                                    identity=stream.get("index")
+                                    if type(identity)!=int or identity<0:raise RuntimeError("Invalid owned audio stream identity")
+                                    run("pactl","move-sink-input",str(identity),sound_sink,env=env,timeout=5)
+                                    owned.append({key:stream.get(key) for key in ("index","sink","mute","corked","volume")})
+                                (evidence/(tag+"sound-routing.json")).write_text(json.dumps(dict(pid=process.pid,target=sound_sink,owned=owned),indent=2))
+                                return owned
+                            def record_sound(label, stimulus):
+                                import array
+                                target=evidence/(tag+label+".pcm")
+                                route_owned_audio()
+                                with target.open("wb") as audio, (evidence/(tag+label+"-recorder.log")).open("w") as errors:
+                                    recorder=subprocess.Popen(["parec","--device="+sound_sink+".monitor","--format=s16le","--rate=48000","--channels=2","--latency-msec=50","--raw"],env=env,stdout=audio,stderr=errors)
+                                    try:
+                                        time.sleep(.3)
+                                        if recorder.poll() is not None: raise RuntimeError("Audio monitor failed to start")
+                                        stimulus()
+                                        for _ in range(6):route_owned_audio();time.sleep(.1)
+                                        time.sleep(1.4)
+                                        deadline=time.monotonic()+3
+                                        while target.stat().st_size<192000 and time.monotonic()<deadline:
+                                            if recorder.poll() is not None:raise RuntimeError("Audio monitor exited while collecting silence")
+                                            time.sleep(.1)
+                                    finally:
+                                        recorder.terminate()
+                                        try:recorder.wait(timeout=5)
+                                        except subprocess.TimeoutExpired:recorder.kill();recorder.wait(timeout=5)
+                                data=target.read_bytes()
+                                if not 96000<=len(data)<=2*1024*1024 or len(data)%2:
+                                    raise RuntimeError("Audio monitor produced invalid/bounded sample count")
+                                samples=array.array("h");samples.frombytes(data)
+                                if sys.byteorder!="little":samples.byteswap()
+                                observation=dict(palette=tag,case=label,bytes=len(data),peak=max(abs(n) for n in samples),nonzero=sum(n!=0 for n in samples),sha256=hashlib.sha256(data).hexdigest())
+                                sound_observations.append(observation)
+                                (evidence/"sound-output.json").write_text(json.dumps(sound_observations,indent=2))
+                                return observation
+                            key("Up",30);key("Down",preview_index);time.sleep(.5)
+                            audible=record_sound("preview",lambda:key("Return"))
+                            snap(tag,"soundpreview")
+                            assert audible["peak"]>50 and audible["nonzero"]>100,"Qt sound preview produced no audio on its isolated VM output"
+                            key("Up",30);key("Return");time.sleep(.5)  # Disable only this disposable profile's UI sounds.
+                            key("Down",preview_index);time.sleep(.5)
+                            silent=record_sound("disabled",lambda:key("Return"))
+                            assert silent["peak"]==0,"Disabled UI sounds produced output"
+                            snap(tag,"sounddisabled")
+                            key("Up",30);key("Return");key("Escape")
                             for route,name in (("audio","audio"),("ambient","ambient")):
                                 settings_route(route);snap(tag,name);key("Escape")
                             key("Home");snap(tag,"return")
@@ -431,7 +518,9 @@ def main():
                     native_after={str(f.relative_to(native_directory)):hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
                     assert native_before==native_after and native_before,"Appearance changed native Kodi fixture settings"
                     assert not theme_provider.errors,theme_provider.errors
-                    (evidence/"result.json").write_text(json.dumps({"passed":True,"journey":"themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes","executable":str(executable),"freshProfile":True,"normalProfileUsed":False,"palettes":["custom"] if args.themes_custom_only else ["dark","pastel","custom"],"phases":phases,"fixtureOnly":True,"nativeKodiBefore":native_before,"nativeKodiAfter":native_after,"layoutBytesUnchanged":True},indent=2))
+                    result={"passed":True,"journey":"themecontrols" if args.themes_controls_only else "themecustom" if args.themes_custom_only else "themes","executable":str(executable),"freshProfile":True,"normalProfileUsed":False,"palettes":["custom"] if args.themes_custom_only else ["dark","pastel","custom"],"phases":phases,"fixtureOnly":True,"nativeKodiBefore":native_before,"nativeKodiAfter":native_after,"layoutBytesUnchanged":True}
+                    if args.themes_controls_only:result.update(soundAcceptanceVersion=1,soundOutput=sound_observations)
+                    (evidence/"result.json").write_text(json.dumps(result,indent=2))
                     print("Evidence: "+str(evidence),flush=True)
                     return
                 if args.search_only:
@@ -753,9 +842,19 @@ def main():
                 process.kill(); process.wait()
         if theme_provider:
             theme_provider.close()
-        x11.XCloseDisplay(display)
-        if active:
-            run("systemctl", "--user", "start", "isolde.service")
+        try:
+            if sound_original_sink is not None:
+                run("pactl","set-default-sink",sound_original_sink,env=env,timeout=10)
+            if sound_module is not None:
+                run("pactl","unload-module",sound_module,env=env,timeout=10)
+            if sound_original_sink is not None:
+                restored=run("pactl","get-default-sink",env=env,timeout=10).strip()
+                (evidence/"sound-output-restored.json").write_text(json.dumps(dict(original=sound_original_sink,restored=restored,moduleUnloaded=True),indent=2))
+                if restored!=sound_original_sink:raise RuntimeError("Guest default audio output was not restored")
+        finally:
+            x11.XCloseDisplay(display)
+            if active:
+                run("systemctl", "--user", "start", "isolde.service")
         result_path = evidence / "result.json"
         if result_path.is_file():
             result = json.loads(result_path.read_text())

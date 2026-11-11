@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from guide_features import remote_text
 
 
 def main():
@@ -80,24 +81,7 @@ def main():
         if not database.exists():return 0
         with sqlite3.connect('file:'+str(database)+'?mode=ro',uri=True) as db:return db.execute('SELECT count(*) FROM games').fetchone()[0]
     def type_text(text):
-        # Exercise the actual OSK through D-pad/Confirm only. No text injection,
-        # keyboard shortcuts, direct QML invocation or catalog seeding.
-        lower=list('1234567890qwertyuiopasdfghjkl-')+['Shift']+list('zxcvbnm_')+['Del','Space','.','@','#','!','?',',',':','/','Clear','Done']
-        upper=lower[:49]+['{','}','\\','Clear','Done']
-        upper=[value.upper() if len(value)==1 and value.isalpha() else value for value in upper]
-        current=0
-        def choose(index):
-            nonlocal current
-            sequence=[]
-            while index-current>=10:sequence.append('Down');current+=10
-            while current-index>=10:sequence.append('Up');current-=10
-            sequence += ['Right']*max(0,index-current)+['Left']*max(0,current-index)
-            current=index;keys(*(sequence+['Return']))
-        choose(lower.index('Clear'))
-        for character in text:
-            if character.isupper():choose(lower.index('Shift'));choose(upper.index(character))
-            else:choose(lower.index('Space' if character==' ' else character))
-        choose(lower.index('Done'))
+        remote_text(lambda name:keys(name),text)
     def emulator_journey():
         game_root=Path.home()/'Games/Isolde-Acceptance/webfest-1.2/webfest'
         if not (game_root/'EBOOT.PBP').is_file():raise RuntimeError('Provision the pinned Webfest fixture through Configure games first')
@@ -107,8 +91,11 @@ def main():
         before=game_hashes()
         layout_before=(local/'home-layout.json').read_bytes()
         capture('emulatorsempty');keys('Return',*(['Right']*8),'Return');capture('emulatorssetup')
-        keys(*(['Down']*10+['Return']));capture('emulatorsinstallreview');keys('Right','Return')
-        expected={'ppsspp','dolphin','pcsx2','retroarch-nes','retroarch-gb','retroarch-gba','retroarch-snes','retroarch-psx','retroarch-ds','retroarch-vb'}
+        declared_runtimes=json.loads((source/'config/game-runtimes.json').read_text())['runtimes']
+        runtime_count=len(declared_runtimes)
+        if not 1<=runtime_count<=64:raise RuntimeError('Unexpected emulator setup list bound')
+        keys(*(['Down']*runtime_count+['Return']));capture('emulatorsinstallreview');keys('Right','Return')
+        expected={runtime['id'] for runtime in declared_runtimes}
         def activated():
             try:return expected.issubset(json.loads((local/'installed-apps.json').read_text()).get('installed',[]))
             except (OSError,ValueError):return False
@@ -143,7 +130,7 @@ def main():
             expect(find_window,'No Isolde window');subprocess.run(['wmctrl','-ia',window],env=env,check=True,timeout=10);time.sleep(2)
             if args.emulator:emulator_journey();return
             capture('gamesempty');keys('Return','Return','Return');capture('gamesadd')
-            keys('Return');keys(*(['Down']*5+['Right']*9+['Return']));keys(*(['Down']*5+['Right']*9+['Return']))
+            type_text('1');type_text('pc')
             capture('gamesreview')
             if count()!=0:raise RuntimeError('Registration wrote before confirmation')
             keys('Return');expect(lambda:count()==1,'Game registration did not commit')

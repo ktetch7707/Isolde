@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 import signal
 import struct
 import subprocess
+from guide_features import remote_text
 import tempfile
 import time
 import uuid
@@ -545,8 +546,8 @@ provider.setSettingString("searchlanguage","en-US")
                 playlist_capture("playlistname")
                 press("Escape")
                 assert not list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Cancel must not create a playlist"
-                press("Return");press("Return") # Type '1' using the actual remote keyboard.
-                press("Right",80);press("Return") # Bounded movement to Done.
+                press("Return")
+                remote_text(press,"1")  # Production keyboard layout, including its actual Done action.
                 created=wait(lambda:list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Playlist saved from Isolde UI")
                 assert len(created)==1
                 import xml.etree.ElementTree as ET

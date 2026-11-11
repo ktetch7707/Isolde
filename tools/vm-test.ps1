@@ -17,7 +17,7 @@ param(
     [switch]$GuideDiagnostics,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','games','guide','artifacts','kodi-demo-art')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','games','guide','audio-test-tools','artifacts','kodi-demo-art')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
@@ -117,8 +117,8 @@ try {
                 $featureDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-features-$featureDigest.py")) -TimeoutSeconds 30 -Log $transport
             }
-            if ($case -in @('history','pages')) {
-                $helper = Join-Path $PSScriptRoot 'tv-library-acceptance.py'
+            if ($case -in @('history','pages','playlists','games','emulators')) {
+                $helper = Join-Path $PSScriptRoot $(if($case -in @('games','emulators')){'games-acceptance.py'}else{'tv-library-acceptance.py'})
                 $historyDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/history-helper-$historyDigest.py")) -TimeoutSeconds 30 -Log $transport
             }

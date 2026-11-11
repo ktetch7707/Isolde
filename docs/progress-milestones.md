@@ -1,5 +1,19 @@
 # Weighted, independently verifiable milestones
 
+## T14 — provider and subtitle boundary evidence (two original groups unchanged)
+
+Each original group is split equally between its native production-boundary
+proof and its remaining combined UI/runtime acceptance. Native fixtures do not
+prove third-party entitlement or translation/model quality; all inherited
+requirements remain in the second child until actually verified.
+
+| Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
+| --- | --- | --- | --- |
+| T14.1.a | done | Production discovery/subtitle repository HTTP adapters enforce explicit opt-in, region/identity/attribution, no false entitlement, credential-limited downloads and cancellation under controlled provider responses. | docs/test-campaign-2026-11-11.md: round2-b t14_discovery_subtitles passes the actual loopback HTTP/request and OFF/cancellation assertions; provider fixtures are explicit. |
+| T14.1.b | open | Combined installed discovery UI/provider routing, failure/retry/profile/OFF matrix and every remaining T14.1 requirement pass review. | Native HTTP fixtures are not installed end-to-end provider UI or live service proof; BUG-082 search cancellation is open. |
+| T14.2.a | done | Production subtitle queue/service writes and reviews bounded non-overwriting Unicode SRT/provenance, validates input, reports structural quality and uses only explicit local model/backend boundaries. | docs/test-campaign-2026-11-11.md: round2-b native translation/generation/local-pack/quality/input and QML queue/track regressions pass; decoder/model commands are labelled fixtures, not quality certification. |
+| T14.2.b | open | Combined installed Linguist queue/review/cancel, actual supported offline model/runtime workflow and every remaining T14.2 requirement pass agent review. | Real model/content quality is not inferred from deterministic process fixtures; final combined software/runtime acceptance remains open. |
+
 ## T30.6 — integrated emulator routes (original group weight unchanged)
 
 The former broad emulator group is split without changing T30's nine original
@@ -31,23 +45,41 @@ and installed acceptance are separate; no code-presence or abandoned-test credit
 | T25.1.b | open | Remote policy controls cover pages/slots/events/reconnect/lifetime/suppression without new grants. | Settings/Studio actual-input and installed acceptance pending. |
 | T25.2.a | open | Both source families have bounded validated presets and shared presentation controls. | Schema/draft/placement/cancel contracts pending. |
 | T25.2.b | open | Runtime/Studio render matching contained, themed source components with remote controls. | QML and reviewed dark/pastel installed captures pending. |
-| T25.3.a | open | Generic slot projection replaces prepending; overflow, suppression and missing slots preserve layout/focus. | Native/QML containment and no-layout-write evidence pending. |
+| T25.3.a | done | Generic slot projection replaces prepending; overflow, suppression and missing slots preserve layout/focus. | docs/test-campaign-2026-11-11.md: round2-b native source-policy/projection and actual-input sources_remote_ui pass suppression, overflow, missing slots, disconnected recovery and unchanged layout. |
 | T25.3.b | open | Packaged compact default, full Sources recovery and both reference pairs pass installed review. | Exact-candidate VM journeys and captures pending. |
 | T25.4.a | open | Deduplication, reconnect/dismiss/restore/handler/promotion rollback and idempotency pass native tests. | Existing dedup salvage alone does not finish the outcome. |
 | T25.4.b | open | Remote actions, error/retry, unplugged focus and cancel behavior pass actual-input/installed journeys. | QML and installed acceptance pending. |
 | T25.5.a | done | Injected probes and profile-local atomic persistence refuse invalid/corrupt input without mutation. | docs/t25-sources-2026-11-07.md: C native injected-root/independent-store/corrupt-file/write-failure/no-media-mutation assertions pass. |
 | T25.5.b | open | Final source candidate passes required integrated/installed/reference checks and agent review. | Known Studio/history failures must be resolved; final evidence pending. |
-| T26.1.a | open | Typed All Apps/Search routes and read-only legacy compatibility pass native contracts. | Dispatcher/schema/legacy tests pending. |
+| T26.1.a | done | Typed All Apps/Search routes and read-only legacy compatibility pass native contracts. | docs/test-campaign-2026-11-11.md: round2-b component dispatch/legacy schema and native navigation pass distinct apps/search routes, legacy read preservation and hosted More Apps routing. |
 | T26.1.b | open | Every gallery entry point opens All Apps with exact origin, never implicit Search. | QML entry-point audit and installed routes pending. |
-| T26.2.a | open | Bounded deduplicated installed-app adapter and validated gallery preset pass native tests. | Registry/catalog states/counts/fallback tests pending. |
+| T26.2.a | done | Bounded deduplicated installed-app adapter and validated gallery preset pass native tests. | docs/test-campaign-2026-11-11.md: round2-b allAppsProjectionContainsOnlyRegisteredLaunchables, catalog state/removal, schema/default and navigation contracts pass. |
 | T26.2.b | open | Themed live gallery reflects actual states and registry changes in installed VM. | Reviewed runtime/state captures pending. |
-| T26.3.a | open | Existing profile document stores validated gallery layout/presentation/sort/favorites/filter controls. | Studio/schema/draft/atomic bounds tests pending. |
+| T26.3.a | done | Existing profile document stores validated gallery layout/presentation/sort/favorites/filter controls. | docs/test-campaign-2026-11-11.md: round2-b compositionPersistenceAndValidation and generic draft/atomic contracts pass stored gallery presentation/favorites, invalid schema refusal and no rewrite on read. |
 | T26.3.b | open | Remote editing, Preview/Cancel/Apply and packaged fallback pass installed review. | Actual-input and installed evidence pending. |
-| T26.4.a | open | Browse/filter/launch/failure/retry and stable gallery/origin restoration pass QML contracts. | Stable IDs/scroll/empty-state/no-provider-request tests pending. |
+| T26.4.a | done | Browse/filter/launch/failure/retry and stable gallery/origin restoration pass QML contracts. | docs/test-campaign-2026-11-11.md: round2-b native gallery filter/grid/list and actual-input registry-change, VPN-failure/retry/settings-return contracts pass; installed launch remains separate. |
 | T26.4.b | open | Actual app launch/return and gallery Back restore full origin chain in installed VM. | Native app fixture and reviewed captures pending. |
 | T26.5.a | open | Legacy/custom/skin/state/offline/removal cases pass native and actual-input regressions. | Focused route/state matrix pending. |
 | T26.5.b | open | Final gallery candidate passes full/integrated/installed and both reference pairs. | Candidate hashes, reports and agent review pending. |
 
+## T28 — Web header switch (five original groups, weights unchanged)
+
+Each group divides equally between its independently verified native contract
+and remaining installed/integrated acceptance. All inherited requirements stay
+with the second child; BUG-082 blocks real-client cancellation closure.
+
+| Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
+| --- | --- | --- | --- |
+| T28.1.a | done | Header switch is separate from result data, has checked state and no pseudo-result/count participation. | docs/test-campaign-2026-11-11.md: round2-b searchHeaderSwitchRemoteFocusAndStableResults verifies actual QML switch, checked state and unchanged result list/count. |
+| T28.1.b | open | Full presentation/accessibility inventory and integrated installed switch pass review. | All inherited T28.1 requirements remain; partial installed captures alone do not close this child. |
+| T28.2.a | done | Remote and pointer query/header/results/keyboard transitions preserve selection across empty/late results without arrow toggling. | docs/test-campaign-2026-11-11.md: round2-b actual-input searchHeaderSwitchRemoteFocusAndStableResults passes keyboard, region, switch, mouse, late results, empty results and Back assertions. |
+| T28.2.b | open | Installed full-origin chain and every remaining T28.2 requirement pass the combined journey. | Real Kodi cancellation BUG-082 and installed combined acceptance open. |
+| T28.3.a | done | Existing SearchSettings persists default-OFF profile state atomically, isolates profiles and rejects write failure without changing UI/query/focus. | docs/test-campaign-2026-11-11.md: round2-b searchPreferenceProfileIsolationAndWriteFailure and searchHeaderSwitchRemoteFocusAndStableResults pass persistence, restart, profile isolation and actual QML failed-write state. |
+| T28.3.b | open | Installed profile switch/teardown and complete combined query/selection persistence requirements pass. | Native model proofs do not replace installed lifecycle acceptance. |
+| T28.4.a | open | Production late/cached request cancellation, no-provider truth and OFF-denial contracts pass together. | Known BUG-082 cancellation repair remains VM-unverified; no credit. |
+| T28.4.b | open | Installed provider/OFF/network-denial and every remaining T28.4 requirement pass. | Actual combined production-client matrix pending. |
+| T28.5.a | open | All required state/palette/accessibility/no-provider regressions and static-check replacement are audited and pass. | Native dark/pastel frames reviewed; complete requirement audit pending. |
+| T28.5.b | open | Combined T25-T28 installed/reference acceptance and inherited T28.5 requirements pass. | Full source/gallery/toggle installed matrix remains open. |
 ## T24 — installed cutover (five original groups, weights unchanged)
 
 Final installed acceptance completed November4,2026. All five original groups retain their weights and inherited requirements. See docs/studio-batch-acceptance-2026-11-04.md for the final candidate,34-task audit, actual measurements,58 reviewed installed captures and explicit evidence reuse.

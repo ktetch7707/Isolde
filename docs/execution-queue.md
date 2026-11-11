@@ -1,5 +1,15 @@
 # Executable backlog queue
 
+## Round-two verification campaign — 2026-11-11
+
+The user now authorizes testing everything not yet VM verified in the backlog;
+this supersedes the older rerun deferrals below. Resume
+[the round-two record](test-campaign-2026-11-11.md). One VM runner owner;
+`round2-20261111-b` is the frozen full-suite attempt. Preserve the six existing
+Studio test-file edits. Diagnose the first named failure before resuming
+unattempted registrations; then exercise missing/source-affected VM workflows.
+Current acceptance68% (1693/25); native61/61 and103 harness checks pass. No runner is active. Isolde-Test restarted after an unexplained VM abort; supported Recover succeeds. Search cancellation and Sources contrast repairs are prepared with regressions but unverified: focused search-fix-a stops before compilation because safe cleanup leaves1.79GiB, below2GiB. Resume guest-capacity diagnosis, then a focused batch covering kodi_media_client and sources; do not lower thresholds or clean the host. Full application61/61 predates these two repairs; use focused tests and affected installed captures before credit. Combined theme inventory has90 reviewed frames but times out before completion. Every finding BUG-078–094 and the exact evidence/limitations are in the campaign report. Preserve the six pre-existing Studio test changes.
+
 ## User-directed T12 interface sound themes — 2026-11-11
 
 Selected: Kodi-compatible audible UI feedback, extending the Settings cleanup.

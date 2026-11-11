@@ -64,6 +64,13 @@ These are source-reviewed corrections, not newly verified runtime bug closures.
 
 ## Verification and handoff
 
+Round-two authorization supersedes the historical deferral below. Full VM
+`round2-20261111-b` passes61/61, including prepared native/navigation checks;
+both installed Lounge/Pastel journeys pass with48 reviewed screenshots and
+unchanged normal layouts. Settings category and final System-row captures are
+reviewed in both themes. Power is still unimplemented (BUG-078), and broader
+system acceptance remains open. [Campaign evidence](test-campaign-2026-11-11.md).
+
 Respect the standing user deferral: **no VM, native, CTest, remote journey or
 visual rerun was performed**. No deployment or acceptance credit is claimed.
 Prepared native regressions cover menu/schema bounds, malformed routes and
@@ -81,3 +88,10 @@ prepared regressions, one task-closure full suite, and both reference journeys.
 Static checks only: defaults JSON parsing; JavaScript test-file syntax; Python
 helper compilation without execution; diff whitespace inspection; progress-table
 reconciliation. Acceptance remains T12 0%, T29 13%, overall 1563/25 = 63%.
+
+Round-two update supersedes the original test deferral: native61/61 passes,
+both installed reference pairs and actual Audio/Ambient/sound routes are
+reviewed. Combined three-palette inventory has90 reviewed frames but times
+out before completion; source contrast, capture overflow and clipped VPN
+header are recorded in docs/test-campaign-2026-11-11.md. Sources palette repair
+is prepared, VM-unverified. Overall68%; no broad Settings gate is closed.

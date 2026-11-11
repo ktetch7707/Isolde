@@ -107,6 +107,13 @@ preparation/repair. Redirected roots and excessive retained copies are refused.
 
 ## Deferred verification
 
+November11 round-two testing supersedes the earlier rerun deferral. Frozen VM
+`round2-20261111-b` passes all61 registrations, including current Games native,
+QML and Python provisioning regressions. This verifies the prepared boundary
+tests; it does not prove the six expanded artifacts have actually built,
+installed or run. Their signed offline bundle/runtime journeys and T30.6
+milestones remain open. See [the campaign](../test-campaign-2026-11-11.md).
+
 Only Python AST parsing, JSON parsing, diff review and upstream artifact/source
 inspection were performed. No product Python module or test suite was executed.
 Prepared coverage extends the existing games provisioning, native component

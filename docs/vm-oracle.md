@@ -21,6 +21,17 @@ After reviewing `Status -Storage`, use `./tools/vm-test.ps1 Configure -Configure
 Optional bounded archive recovery: `Configure -ConfigureTarget artifacts -RestoreSourceRunIds <up to 32 IDs>` restores saved workspace `build/vm-oracle/<id>/snapshot/source.tar.gz` files only after original archive SHA256 verification. Guest source cleanup then retains the exact originals and verifies extracted bytes before removal. `-BackedUpSourceRunIds <up to 128 IDs>` verifies those workspace originals and sends a hash receipt; guest pruning removes only matching obsolete archives with no source/payload/stopped-profile receipt, preserving logs/manifests. Recover such an archive through the first option when needed. No host archive is removed. Native `/tmp` fixture-cache maintenance preserves data/config/results, recent and active fixtures, and refuses links/shared mounts; this may recover only tmpfs rather than root-disk space. `Status -Storage` reports both usage and recovery candidates.
 ## Commands
 
+Round-two sound verification extends `Visual -Installed -Cases themecontrols`
+with actual Qt preview and disabled-output PCM recordings under dark, pastel
+and enlarged custom palettes. It uses a temporary guest null sink, restores
+the exact previous guest default output before restarting the ordinary service,
+and archives sample hashes/levels plus the restoration receipt. Only streams
+owned by the disposable Isolde process may be rerouted. Mock cue requests do
+not satisfy this output check. Missing `pactl`/`parec` can be provisioned through
+`Configure -ConfigureTarget audio-test-tools -RunId <deployed-full-id>`: this
+installs only guest `pulseaudio-utils` through existing delegated apt permission,
+without changing repositories, the host or application dependencies.
+
 ### One-action suite and results
 
 Run `pwsh -NoProfile -File tools/test-all.ps1` from the repository root. It runs **all registered CTests**, then Studio and both reference fixture journeys against that same frozen build, and opens `build/vm-oracle/<id>/index.html`. The report includes individual test results/output, diagnostic links and every collected screenshot. It stops on the first failure, writes the report even on failure, and returns failure to the caller. No deployment or retry is performed.

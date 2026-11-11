@@ -30,4 +30,11 @@ Remaining deliberately out-of-slice work is `.ass` translation, automated speech
 
 ## Coding/verification status
 
+November11 round-two VM `round2-20261111-b` passes61/61, including all nine
+T14 production adapter/service/QML cases. Controlled loopback provider HTTP,
+actual managed SRT/provenance output and deterministic local process/model
+boundaries are verified. They do not establish real model quality, entitlement
+or combined installed workflows. T14.1.a/.2.a earn independent native credit;
+the other children retain all remaining requirements. [Campaign](test-campaign-2026-11-11.md).
+
 This note records code contracts and provider/model choices; it does not mark task acceptance. Focused native C++ tests cover Web-OFF silence, TMDB and OpenSubtitles request/download boundaries, region and identity, provider routes, cancellation, entitlement claims, offline and repository SRT output, Unicode, timing, quality/provenance, no-overwrite behavior, and invalid input. Kodi bridge Python tests cover local playback ownership for subtitle loading and subtitle-track discovery/selection. A host without CMake/Qt cannot execute the C++ test target; VM/installed acceptance remains deferred, not a prerequisite for implementing the code.

@@ -77,6 +77,15 @@ Primary compatibility references: [Kodi UI sound resource format](https://kodi.w
 
 ## Verification status
 
+Round-two authorization supersedes the deferral below. Full current-source VM
+`round2-20261111-b` passes61/61 including `interface_sounds`; native checks use
+the declared fake sink. Installed sound-page navigation and a real Qt preview
+recording are now exercised by the extended themecontrols helper. A positive
+dark recording has17742 nonzero samples; disabled-output recording and the
+complete palette/policy matrix remain pending. The campaign retains the
+initial wrong-output and recorder-buffering failures without claiming broad
+audio acceptance. See [the campaign](test-campaign-2026-11-11.md).
+
 The user's test/build/VM deferral remains in force. No native compilation,
 unit/CTest execution, installed journey, visual review, sound-capture or audible
 playback result is claimed. Source implementation is complete for this slice;
@@ -103,3 +112,9 @@ from a mock cue-request pass. Reuse unaffected standing evidence where valid.
 
 Source review additionally corrected a stale launch-guard message that still
 directed users to System → Media Library after the Settings reorganization.
+
+Round-two update: current native61/61 suite passes. Installed dark/pastel/
+enlarged-custom preview PCM and disabled silence all pass, exact guest output
+restored. See docs/test-campaign-2026-11-11.md for six sample/hash receipts,
+reviewed captures and scope limits. Remaining mute/external-focus/playback/
+teardown combined assertions stay open; this narrow proof does not close T12.

@@ -530,6 +530,9 @@ def main():
                     and default_theme_matches(restored["theme"],defaults["theme"]))
             expect(reset_verified, "Reset Home to packaged defaults with other pages preserved passed")
             key("Escape"); key("Escape")
+            # Settings-origin Studio restores Settings on exit. Select Home
+            # explicitly before calling the next frame a default-Home capture.
+            key("Home")
             key("Up", 30); key("Down")  # Capture the first default item, not retained bottom focus.
             captured("default")
             assert reset_verified()

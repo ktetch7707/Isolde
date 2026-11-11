@@ -390,6 +390,19 @@ def visual_result_passed(case, result):
                 and result.get("saved_skin_survives_reset") is True)
     if case == "themecontrols":
         phases={tag+phase for tag in ("dark","pastel","custom") for phase in ("audio","ambient","return")} | {"custompolicy","customreset","customcancel"}
+        if "soundAcceptanceVersion" in result:
+            if type(result["soundAcceptanceVersion"])!=int or result["soundAcceptanceVersion"]!=1:return False
+            phases |= {tag+phase for tag in ("dark","pastel","custom") for phase in ("sounds","soundpreview","sounddisabled")}
+            observations=result.get("soundOutput",[])
+            expected={(tag,kind) for tag in ("dark","pastel","custom") for kind in ("preview","disabled")}
+            if not isinstance(observations,list) or len(observations)!=6 or {(o.get("palette"),o.get("case")) for o in observations if isinstance(o,dict)}!=expected:return False
+            for observation in observations:
+                if not isinstance(observation,dict):return False
+                size=observation.get("bytes");peak=observation.get("peak");nonzero=observation.get("nonzero")
+                if type(size)!=int or not 96000<=size<=2*1024*1024 or size%2 or type(peak)!=int or type(nonzero)!=int:return False
+                if not re.fullmatch(r"[a-f0-9]{64}",str(observation.get("sha256",""))):return False
+                if observation["case"]=="preview" and not (50<peak<=32768 and 100<nonzero<=size//2):return False
+                if observation["case"]=="disabled" and (peak!=0 or nonzero!=0):return False
         return (result.get("passed") is True and result.get("journey")==case
             and result.get("freshProfile") is True and result.get("normalProfileUsed") is False
             and set(result.get("phases",[]))==phases and result.get("palettes")==["dark","pastel","custom"]
@@ -473,9 +486,12 @@ def studio_helper_command(source, helper, executable, desktop=False, collections
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+(['--themes-only'] if themes else [])+(['--themes-faults-only'] if themefaults else [])+(['--themes-custom-only'] if themecustom else [])+(['--themes-controls-only'] if themecontrols else [])+['--inspect']
 
 
-def history_helper_command(source, helper, executable, pages=False):
+def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None):
+    if int(pages)+int(playlists)+int(game_case is not None)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/tv-library-acceptance.py'),str(executable),'--pages' if pages else '--history','--inspect']
+    frozen='games-acceptance.py' if game_case else 'tv-library-acceptance.py'
+    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--pages' if pages else '--playlists' if playlists else '--history','--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/frozen),str(executable)]+flags
 
 
 def reference_helper_command(source, helper, executable, flags, collections_helper=None):
@@ -1282,7 +1298,7 @@ class Oracle:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None):
-        if target not in {"native","surfshark","android","android-repair","games","guide","artifacts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
         if target=="kodi-demo-art":
             payload=self.tested_payload();self.deployed_release(payload,target)
             if self.command('hostname')!='isolde-test' or not isinstance(demo_art_helper_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',demo_art_helper_digest):raise RuntimeError('Demo artwork setup requires the tested Isolde VM and a verified helper')
@@ -1327,6 +1343,14 @@ class Oracle:
         self.deployed_release(payload, target)
         if self.command("hostname")!="isolde-test":
             raise RuntimeError("Native configuration is restricted to Isolde-Test")
+        if target=="audio-test-tools":
+            # Test-only guest package, through its pre-existing delegated apt
+            # permission. No repository, host or application dependency change.
+            self.stage("audio-test-tools-install",["sudo","-n","/usr/bin/apt-get","install","-y","--no-install-recommends","pulseaudio-utils"],180)
+            for tool in ("pactl","parec"):
+                if not shutil.which(tool):raise RuntimeError("Missing installed audio test utility: "+tool)
+            atomic_json(self.run/"audio-test-tools.json",{"guest":"isolde-test","package":"pulseaudio-utils","tools":{tool:shutil.which(tool) for tool in ("pactl","parec")}})
+            return
         if target=="android":self.prepare_guest_space(8)
         script=self.run/"source/tools/provision-default-apps.py"
         command=["/usr/bin/python3",str(script),"isolation","--source",str(self.run/"source")]
@@ -1416,7 +1440,7 @@ class Oracle:
         if diagnostic and installed:raise RuntimeError('Diagnostic payloads cannot be deployed or tested as installed')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
-        if history_helper_digest and case not in ('history','pages'):raise RuntimeError('Library helper is history/pages-only')
+        if history_helper_digest and case not in ('history','pages','playlists','games','emulators'):raise RuntimeError('Unsupported library helper case')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
         if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
@@ -1439,9 +1463,9 @@ class Oracle:
             command=reference_helper_command(source,helper,executable,flags,collections_helper)
             if reference_collections_digest:self.update(referenceCollectionsHelperSha256=reference_collections_digest)
             self.update(acceptanceHelperSha256=reference_helper_digest)
-        if case in ('history','pages') and history_helper_digest:
+        if case in ('history','pages','playlists','games','emulators') and history_helper_digest:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
-            command=history_helper_command(source,helper,executable,pages=case=='pages')
+            command=history_helper_command(source,helper,executable,pages=case=='pages',playlists=case=='playlists',game_case=case if case in ('games','emulators') else None)
             self.update(acceptanceHelperSha256=history_helper_digest)
         if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
@@ -1688,6 +1712,10 @@ def collect_evidence(run, case, directories):
             if case in {"studio-designs", "studio-search"}:
                 paths += [directory / name for name in ("network-denial.json", "portable-export.json")]
             if case=="themefaults":paths += [directory/(tag+"loading-frame.png") for tag in ("dark","pastel","custom")]
+            if case=="themecontrols":
+                paths += [directory/"sound-output.json",directory/"sound-output-restored.json"]
+                paths += [directory/(tag+"sound-routing.json") for tag in ("dark","pastel","custom")]
+                paths += [directory/(tag+kind+suffix) for tag in ("dark","pastel","custom") for kind in ("preview","disabled") for suffix in (".pcm","-recorder.log")]
             paths += list((directory / "config/Isolde").glob("home-layout*.json"))
             paths += list((directory / "config/Isolde/skins").glob("*.json"))
             for path in paths[:128]:
@@ -1980,7 +2008,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","artifacts","kodi-demo-art"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","kodi-demo-art"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")

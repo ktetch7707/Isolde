@@ -567,6 +567,16 @@ class OracleTests(unittest.TestCase):
             command=oracle.history_helper_command(source,history_helper,executable,pages=True);command[0]=sys.executable
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(history_frozen),'args':[str(history_frozen),str(executable),'--pages','--inspect'],'dependency':'frozen dependency'})
+            command=oracle.history_helper_command(source,history_helper,executable,playlists=True);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'file':str(history_frozen),'args':[str(history_frozen),str(executable),'--playlists','--inspect'],'dependency':'frozen dependency'})
+            with self.assertRaises(ValueError):oracle.history_helper_command(source,history_helper,executable,pages=True,playlists=True)
+            for case,flags in [('games',[]),('emulators',['--emulator'])]:
+                command=oracle.history_helper_command(source,history_helper,executable,game_case=case);command[0]=sys.executable
+                result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+                game_frozen=folder/'games-acceptance.py'
+                self.assertEqual(result,{'file':str(game_frozen),'args':[str(game_frozen),str(executable)]+flags,'dependency':'frozen dependency'})
+            with self.assertRaises(ValueError):oracle.history_helper_command(source,history_helper,executable,game_case='foreign')
             reference_frozen=folder/'home-reference-acceptance.py';reference_frozen.write_text("raise RuntimeError('frozen reference helper untouched')")
             reference_helper=root/'bin'/('reference-helper-'+expected+'.py');reference_helper.write_bytes(code.encode())
             self.assertEqual(oracle.verified_studio_helper(root,expected,'reference'),reference_helper)
@@ -764,6 +774,17 @@ class OracleTests(unittest.TestCase):
         self.assertIn('--themes-controls-only',command)
         self.assertEqual(oracle.CASES['themecontrols'][0],'home-components-acceptance.py')
 
+    def test_theme_controls_sound_receipt_requires_real_positive_and_silence(self):
+        phases=[tag+phase for tag in ('dark','pastel','custom') for phase in ('audio','ambient','return','sounds','soundpreview','sounddisabled')]+['custompolicy','customreset','customcancel']
+        observations=[dict(palette=tag,case=kind,bytes=192000,peak=1000 if kind=='preview' else 0,nonzero=1000 if kind=='preview' else 0,sha256='a'*64) for tag in ('dark','pastel','custom') for kind in ('preview','disabled')]
+        receipt=dict(passed=True,journey='themecontrols',freshProfile=True,normalProfileUsed=False,palettes=['dark','pastel','custom'],phases=phases,layoutBytesUnchanged=True,nativeKodiBefore={'sources.xml':'kept'},nativeKodiAfter={'sources.xml':'kept'},soundAcceptanceVersion=1,soundOutput=observations)
+        self.assertTrue(oracle.visual_result_passed('themecontrols',receipt))
+        for field,value in [('soundAcceptanceVersion',True),('soundAcceptanceVersion',2),('soundOutput',[]),('phases',phases[1:])]:
+            self.assertFalse(oracle.visual_result_passed('themecontrols',dict(receipt,**{field:value})))
+        for index,field,value in [(0,'peak',0),(1,'peak',1),(1,'nonzero',1),(0,'bytes',0),(0,'sha256',''),(0,'nonzero',True)]:
+            changed=[dict(item) for item in observations];changed[index][field]=value
+            self.assertFalse(oracle.visual_result_passed('themecontrols',dict(receipt,soundOutput=changed)))
+
     def test_owned_x11_frame_capture_preserves_pixels_and_releases_native_image(self):
         import ast,ctypes
         from PIL import Image
@@ -911,6 +932,8 @@ class OracleTests(unittest.TestCase):
         exec(compile(ast.Module(body=[startup],type_ignores=[]),str(helper),'exec'),namespace)
         self.assertEqual(namespace['start_shell'](),(child,'0x123',0x123))
         namespace['run']=Mock(side_effect=[subprocess.CalledProcessError(1,['wmctrl'],output='',stderr=''),'0x123 0 123 isolde',''])
+        self.assertEqual(namespace['start_shell']()[1],'0x123')
+        namespace['run']=Mock(side_effect=[subprocess.CalledProcessError(1,['wmctrl'],stderr='BadWindow (invalid Window parameter)\nMajor opcode of failed request: 20 (X_GetProperty)'),'0x123 0 123 isolde',''])
         self.assertEqual(namespace['start_shell']()[1],'0x123')
         namespace['run']=Mock(side_effect=subprocess.CalledProcessError(1,['wmctrl'],stderr='Cannot open display'))
         with self.assertRaises(subprocess.CalledProcessError):namespace['start_shell']()
