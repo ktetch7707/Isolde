@@ -1,4 +1,5 @@
 #include "HomeLayout.h"
+#include "ThemeColors.h"
 #include "PageModel.h"
 #include "ComponentSchema.h"
 #include <QJsonDocument>
@@ -26,7 +27,7 @@ QVariantMap HomeLayout::homeAppearance() const {
                 result[it.key()]=policies;
             } else result[it.key()]=it.value();
         }
-        return result;
+        auto resolved=ThemeColors::resolve(result,overrides);if(result.contains("surfaceThemes"))resolved["surfaceThemes"]=result["surfaceThemes"];return resolved;
     }
     return appearance();
 }

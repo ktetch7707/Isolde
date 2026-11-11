@@ -389,7 +389,7 @@ Item {
                     width:implicitWidth;x:root.headerStyle.titleAlignment==="right"?parent.width-width:root.headerStyle.titleAlignment==="center"?(parent.width-width)/2:0
                     LineIcon { visible:!root.headerLogo;name:"sparkle"; width:38*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
                     ArtworkImage {visible:!!root.headerLogo;source:root.headerLogo;width:(root.headerStyle.titleSize || 48)*root.unit*2;height:parent.height;fit:"contain"}
-                    Text { visible:!root.headerLogo;anchors.verticalCenter:parent.verticalCenter;width:Math.min(implicitWidth,Math.max(0,navigationStrip.width-48*root.unit));elide:Text.ElideRight;text:root.config.identity===undefined?"Isolde":root.config.identity; color:root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.titleSize || 48)*root.unit; font.weight:Font.Light }
+                    Text { visible:!root.headerLogo;anchors.verticalCenter:parent.verticalCenter;width:Math.min(implicitWidth,Math.max(0,navigationStrip.width-48*root.unit));elide:Text.ElideRight;text:root.config.identity===undefined?"Isolde":root.config.identity; color:root.headerStyle.textColor || host.appearance.headingColor || root.headerInk; font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(root.headerStyle.titleSize || 48)*root.unit; font.weight:Font.Light }
                 }
                 Row {
                     id: navigationRow; visible:!root.identityHeader; height:parent.height; spacing:26*root.unit
@@ -451,7 +451,7 @@ Item {
             ScrollBar.vertical:ScrollBar {
                 visible:root.scrollingPage && content.contentHeight>content.height
                 policy:ScrollBar.AsNeeded
-                contentItem:Rectangle {implicitWidth:5*root.unit;radius:width/2;color:host.appearance.focusColor}
+                contentItem:Rectangle {implicitWidth:5*root.unit;radius:width/2;color:host.appearance.focusColor || root.headerInk}
                 background:Rectangle {color:"transparent"}
             }
             GridLayout {
@@ -490,9 +490,9 @@ Item {
                             Item {
                                 id:heading; visible:sectionView.style.showHeading !== false; width:parent.width
                                 height:visible ? (sectionView.style.headingSize || 27)*root.unit+6*root.unit : 0
-                                LineIcon { visible:!!sectionView.style.icon; name:sectionView.style.icon || "clock"; ink:sectionView.style.iconColor || sectionView.style.headingColor || host.appearance.textColor || "#EEEAF0"; width:20*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
+                                LineIcon { visible:!!sectionView.style.icon; name:sectionView.style.icon || "clock"; ink:sectionView.style.iconColor || host.appearance.iconColor || sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; width:20*root.unit; height:width; anchors.verticalCenter:parent.verticalCenter }
                                 Text { x:sectionView.style.icon ? 30*root.unit : 0; anchors.verticalCenter:parent.verticalCenter; width:parent.width-x-trailing.width
-                                    text:sectionView.modelData.name; color:sectionView.style.headingColor || host.appearance.textColor || "#EEEAF0"; elide:Text.ElideRight
+                                    text:sectionView.modelData.name; color:sectionView.style.headingColor || host.appearance.headingColor || host.appearance.textColor || "#EEEAF0"; elide:Text.ElideRight
                                     font.family:host.appearance.fontFamily || "DejaVu Sans"; font.pixelSize:(sectionView.style.headingSize || 27)*root.unit*host.textScale
                                     font.weight:sectionView.style.headingBold === false ? Font.Normal : Font.DemiBold }
                                 Rectangle {
@@ -559,7 +559,7 @@ Item {
                             Text {
                                 visible:sectionView.style.variant==="library" && !host.libraryProvider
                                 width:parent.width;wrapMode:Text.Wrap;text:"Library preview unavailable · choose or configure its source in Content."
-                                color:host.appearance.mutedColor;font.pixelSize:18*root.unit
+                                color:host.appearance.mutedColor || root.headerInk;font.pixelSize:18*root.unit
                             }
                             Loader {
                                 width:parent.width; height:Math.max(80,parent.height-heading.height-subtitle.height-2*sectionBody.spacing)

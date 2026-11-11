@@ -28,7 +28,7 @@ Item {
             scenario("page-grid",()=>{
                 givenPage(false,false)
                 const before=document()
-                editor.openInspector(true)
+                editor.openInspector(true);findChild(editor,"studioInspector").showDetails()
                 command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
                 const inspector=findChild(editor,"studioInspector")
                 compare(inspector.view,"fields")

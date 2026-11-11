@@ -94,7 +94,7 @@ Item {
                     width:Math.max(0,parent.width-anchors.margins*2);height:Math.max(0,Math.min(parent.height-anchors.margins*2,labelLines.implicitHeight));clip:true;visible:parent.cardStyle.labelPosition!=="hidden"
                     Column {id:labelLines;width:parent.width
                         Repeater {model:channelLabel.lines
-                            Text {required property string modelData;required property int index;objectName:"guideWidgetLabelLine-"+channelLabel.parent.modelData.id+"-"+index;width:labelLines.width;textFormat:Text.PlainText;color:channelLabel.parent.cardStyle.labelColor || root.appearance.textColor;font.pixelSize:channelLabel.parent.stationText;elide:Text.ElideRight;text:modelData}
+                            Text {required property string modelData;required property int index;objectName:"guideWidgetLabelLine-"+channelLabel.parent.modelData.id+"-"+index;width:labelLines.width;textFormat:Text.PlainText;color:channelLabel.parent.cardStyle.labelColor || root.appearance.labelColor || root.appearance.textColor;font.pixelSize:channelLabel.parent.stationText;elide:Text.ElideRight;text:modelData}
                         }
                     }
                 }

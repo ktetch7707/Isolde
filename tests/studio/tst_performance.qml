@@ -115,7 +115,7 @@ Item {
             const rail=findChild(editor,"studioPageMenu")
             verify(rail.width>=data.width*.2,"The page controls must remain TV-readable at every resolution")
             if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-scaling-"+data.tag+".png")
-            editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="reuse"))
+            editor.activateEntry({action:"reuse"})
             verify(waitForRendering(editor))
             if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-scaling-reuse-"+data.tag+".png")
             editor.handleCommand(inputManager.confirm)

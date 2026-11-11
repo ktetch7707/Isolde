@@ -114,7 +114,7 @@ Item {
                 editor.selectedId=editor.items.find(item=>item.componentType==="container").id
                 settle()
                 const before=document(), count=editor.session.changeCount
-                editor.openInspector(false)
+                editor.openInspector(false);findChild(editor,"studioInspector").showDetails()
                 const inspector=findChild(editor,"studioInspector")
                 verify(inspector !== null)
                 if(inspector.collapsed)command(inputManager.confirm)

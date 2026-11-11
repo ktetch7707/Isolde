@@ -25,13 +25,26 @@ def run(*args, **kwargs):
 
 
 def studio_page_menu(layout, key, action, extra_pages=0):
-    """Use the shipped named menu order, including T22 reuse and T23 safety."""
-    document = json.loads(layout.read_text())
-    pages = len(document.get("pages", [])) + int(document.get("rootPage", {}).get("visible", True)) + extra_pages
-    offsets = {"add": 0, "appearance": 1, "layers": 2, "reuse": 3,
-               "designs": 4, "editorSettings": 5, "safety": 6, "apply": 7, "edit": 8}
-    index = 0 if action == "new" else 1 if action == "page" else 1 + pages + offsets[action]
-    key("Up", 30); key("Down"); key("Down", index); key("Return")
+    """Navigate the grouped Studio menu using ordinary remote input."""
+    offsets = {"page":0, "new":0, "edit":1, "add":2, "appearance":3,
+               "layers":4, "designs":5, "reuse":5, "editorSettings":6,
+               "safety":6, "apply":7, "versions":0}
+    key("Up", 30); key("Down")
+    if action == "versions":
+        key("Up"); key("Right",2); key("Return"); return
+    key("Down", offsets[action]); key("Return")
+    if action in ("designs", "reuse"):
+        key("Down", int(action == "reuse")); key("Return")
+    elif action == "editorSettings":
+        key("Return")
+    elif action == "new":
+        document = json.loads(layout.read_text())
+        pages = len(document.get("pages", [])) + int(document.get("rootPage", {}).get("visible", True)) + extra_pages
+        key("Down",pages); key("Return")
+    elif action == "page":
+        document = json.loads(layout.read_text())
+        pages = len(document.get("pages", [])) + int(document.get("rootPage", {}).get("visible", True)) + extra_pages
+        key("Down",pages+1); key("Return")
 
 
 def studio_legacy_menu(layout, key, index):
@@ -42,9 +55,22 @@ def studio_legacy_menu(layout, key, index):
 
 def studio_catalog_family(key, identity):
     options = json.loads((Path(__file__).resolve().parents[1] / "config/studio-defaults.json").read_text())
-    index = next(i for i, family in enumerate(options["catalog"]) if family["id"] == identity)
-    key("Right", index)
-    key("Return")
+    primary = options["simpleStudio"]["basicFamilies"]
+    if identity in primary:
+        index = primary.index(identity)
+    else:
+        key("Right", len(primary)); key("Return")
+        additional = [family for family in options["catalog"] if family["id"] not in primary]
+        index = next(i for i, family in enumerate(additional) if family["id"] == identity)
+    key("Right", index); key("Return")
+
+
+def studio_advanced_inspector(key):
+    key("Down", 30); key("Return")  # Explicit Advanced settings from the short summary.
+
+
+def studio_design_management(key):
+    key("Down", 30); key("Up"); key("Return"); key("Up",30)  # Manage designs, before Back; orient to the first operation.
 
 
 def capture_x11_window(x11, display, window, path):
@@ -540,7 +566,7 @@ def main():
                     return
 
                 def undo_operation():
-                    key("Escape"); key("Up", 30); key("Left"); key("Return")  # Named Undo above the page menu.
+                    key("Escape"); key("Up", 30); key("Left",2); key("Return")  # Named Undo above the page menu.
                     key("Down"); key("Down", 2); key("Right")  # Add menu origin; same selected canvas item.
                     assert layout.read_bytes() == original_bytes
 
@@ -551,21 +577,21 @@ def main():
                 key("Return"); key("Return"); key("Left"); key("Return")
                 undo_operation()  # The whole reflow is one undo operation.
 
-                key("Return"); key("Down"); key("Return")  # Edit component.
+                key("Return"); key("Down"); key("Return"); studio_advanced_inspector(key)  # Advanced component controls.
                 key("Down", 2); key("Return"); key("Return")  # Layout -> Size sliders.
                 key("Right")  # Width slider increases with live preview.
                 capture("resize")
-                key("Escape"); key("Escape"); key("Escape")  # Cancel size, fields, inspector.
+                key("Escape",4)  # Cancel size, category, Advanced settings and component summary.
                 assert layout.read_bytes() == original_bytes
                 key("Return"); key("Return"); key("Right", 20); key("Escape")
                 assert layout.read_bytes() == original_bytes
 
-                key("Escape"); key("Up", 30); key("Left"); key("Return")  # Named Undo.
+                key("Escape"); key("Up", 30); key("Left",2); key("Return")  # Named Undo.
                 key("Right"); key("Return"); key("Down")  # Named Redo, then page menu.
-                studio_page_menu(layout,key,"safety"); key("Return")  # Named Try, versions & safety -> Try interaction.
+                studio_page_menu(layout,key,"apply"); key("Down",3); key("Return")  # Timed unsaved trial.
                 assert layout.read_bytes() == original_bytes
                 capture("studio")
-                key("Escape")
+                key("Escape"); key("Escape")
                 assert layout.read_bytes() == original_bytes
                 archive_block = Path(str(layout) + ".studio-versions.json")
                 assert not archive_block.exists()
@@ -588,7 +614,7 @@ def main():
                 key("Escape"); key("Return")  # Close and reopen Studio from the legacy entry.
                 assert layout.read_bytes() == applied
                 capture("applied")
-                page_menu(4); key("Down"); key("Return")  # Layers selects the original Clock.
+                page_menu(4); key("Down"); key("Return"); key("Return")  # Clock -> Find on page.
                 key("Return"); key("Down",3); key("Return")  # Original component context -> Delete.
                 capture("deleteconfirm")
                 assert layout.read_bytes() == applied
@@ -603,12 +629,12 @@ def main():
                 key("Left", 2); key("Down"); key("Return")  # Place below the original components, with room beside the inspector.
                 assert layout.read_bytes() == applied
                 capture("group")
-                key("Return"); key("Down"); key("Return")  # Context -> Inspector.
+                key("Return"); key("Down"); key("Return"); studio_advanced_inspector(key)  # Context -> Advanced inspector.
                 capture("inspector")  # Controls fit beside this fixture group.
                 key("Return")  # Content properties.
                 capture("content")
                 key("Escape")  # Return to property groups.
-                key("Down", 5); key("Return"); key("Down", 7); key("Return")  # More -> Edit group contents.
+                key("Down", 4); key("Return"); key("Down", 7); key("Return")  # More -> Edit group contents.
                 assert layout.read_bytes() == applied
                 capture("inside")
                 key("Escape")  # Exact containing group selection.
@@ -628,13 +654,13 @@ def main():
                 assert {(item["placement"]["x"], item["placement"]["y"]) for item in children} == {(x, y) for y in range(2) for x in range(4)}
                 grouped_bytes = layout.read_bytes()
                 page_menu(3)  # Named Page appearance from the Apply menu origin.
-                key("Down", 2); key("Return"); key("Return")  # Layout -> scrolling checkbox.
+                key("Down", 3); key("Return"); key("Return")  # Page layout -> scrolling checkbox.
                 key("Return")  # Preview enabled; no saved setting yet.
                 capture("scrollingoption")
                 assert layout.read_bytes() == grouped_bytes
                 key("Down"); key("Return"); key("Escape", 2)  # Done -> canvas.
                 key("Escape"); page_menu(4)  # Named Layers.
-                key("Down"); key("Return")  # Select Clock by its stable layer order.
+                key("Down"); key("Return"); key("Return")  # Clock -> Find on page.
                 key("Return"); key("Return"); key("Down", 15)
                 capture("scrolling")  # Three viewport heights below the first row, same card size.
                 assert layout.read_bytes() == grouped_bytes
@@ -1022,7 +1048,7 @@ def exercise_studio_colors(evidence,layout,key,capture,expect):
     def menu(index):
         studio_legacy_menu(layout,key,index)
     def page_color():
-        menu(3);key('Return');key('Return') # Colors, then Background top / solid.
+        menu(3);key('Return');key('Right');key('Return') # Theme colors -> Background swatch.
     def apply():
         key('Escape',2);menu(7);key('Return')
     key('Up',30);key('Right');key('Return') # Permanent Edit Home recovery.
@@ -1032,7 +1058,7 @@ def exercise_studio_colors(evidence,layout,key,capture,expect):
     key('Return');key('Down');key('Right',2);key('Return');key('Down',10);key('Up',2);key('Return')
     assert layout.read_bytes()==baseline
     apply()
-    expect(lambda:json.loads(layout.read_text()).get('theme',{}).get('backgroundStart')=='#e89ab0','Color Apply persisted the authored page background')
+    expect(lambda:json.loads(layout.read_text()).get('theme',{}).get('colorTheme',{}).get('colors',{}).get('background')=='#e89ab0','Color Apply persisted the authored page background')
     saved=layout.read_bytes();doc=json.loads(saved)
     assert doc['studioAppearance']['recentColors']==['#e89ab0']
     shot('colorapplied')
@@ -1060,20 +1086,20 @@ def exercise_studio_workflows(evidence,layout,key,capture,expect):
         phases.append(name);capture(name)
     def menu(index):
         studio_legacy_menu(layout,key,index)
-    def apply():
-        key('Escape',2);menu(7);key('Return')
-    key('Escape',3);menu(4);key('Up',30);key('Return') # Layers -> first authored shortcut.
-    key('Return');key('Down');key('Return');key('Down',2);key('Return');key('Return') # Edit -> Size & layout -> Outer size.
+    def apply(closing=2):
+        key('Escape',closing);menu(7);key('Return')
+    key('Escape',3);menu(4);key('Up',30);key('Return');key('Return') # First item -> Find on page.
+    key('Return');key('Down');key('Return');studio_advanced_inspector(key);key('Down',2);key('Return');key('Return') # Advanced -> Layout -> Outer size.
     key('Down',6);key('Return');key('Up',6);key('Right');shot('sizepreview')
     assert layout.read_bytes()==saved
     key('Escape');assert layout.read_bytes()==saved
-    key('Return');key('Down',6);key('Return');key('Up',6);key('Right');key('Down',2);key('Return');apply()
+    key('Return');key('Down',6);key('Return');key('Up',6);key('Right');key('Down',2);key('Return');apply(3)
     def sized():
         item=next(i for i in json.loads(layout.read_text())['components'] if i['id']=='personal-source')
         return item['placement']['width']==2 and item['placement']['height']==2 and item['presentation']['sizeAspectLocked'] is True
     expect(sized,'Proportional outer size applied atomically');saved=layout.read_bytes();shot('sizeapplied')
-    menu(3);key('Down',4);key('Return') # Page appearance -> Header.
-    fields=[f for f in json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['inspector']['pageFields'] if f['tab']=='Header' and not f.get('advanced')]
+    menu(3);key('Down',2);key('Return');key('Down',30);key('Up');key('Return') # Header -> Show advanced.
+    fields=[f for f in json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['inspector']['pageFields'] if f['tab']=='Header']
     def field(name):
         key('Up',30);key('Down',next(i for i,f in enumerate(fields) if f['key']==name));key('Return')
     field('headerMode');key('Up',30);key('Down');key('Return')
@@ -1084,7 +1110,7 @@ def exercise_studio_workflows(evidence,layout,key,capture,expect):
     saved=layout.read_bytes();shot('headerapplied')
     menu(4);key('Down',30);key('Return');shot('headerreopened');assert layout.read_bytes()==saved
     key('Escape',2);menu(6);key('Return');key('Right');shot('canvaszoom');assert layout.read_bytes()==saved
-    key('Escape');key('Down',3);key('Return');shot('resetcancel');key('Escape');assert layout.read_bytes()==saved
+    key('Escape',2);studio_page_menu(layout,key,'page');key('Down',9);key('Return');shot('resetcancel');key('Escape');assert layout.read_bytes()==saved
     return dict(proportionalSize=True,sizeCancel=True,headerApply=True,headerRecovery=True,cameraNoWrite=True,resetCancel=True,captures=phases)
 
 def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_settings=True):
@@ -1095,7 +1121,7 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
     def named(action, extra=0):
         studio_page_menu(layout,key,action,extra)
     def name_digit(digit):
-        key("Right",digit-1); key("Return"); key("Down",5); key("Return")
+        remote_text(str(digit))
     def apply(extra=0):
         named("apply",extra); key("Return")
     def current():
@@ -1123,36 +1149,36 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         for character in value:choose(keys.index(character))
         choose(keys.index("Done"))
     def background_rose():
-        named("appearance"); key("Return"); key("Return")
+        named("appearance"); key("Return"); key("Right"); key("Return")
         key("Down"); key("Right",2); key("Return")
         key("Down",10); key("Up",2); key("Return")  # Explicit Use color; Back would cancel the swatch.
         key("Escape",2); apply()
     baseline=layout.read_bytes()
     if enter_from_settings:key("Escape")  # Leave the preceding editor-settings workflow.
-    named("reuse"); key("Return"); name_digit(1)
+    named("reuse"); key("Return"); key("Down"); key("Return"); name_digit(1)
     shot("sharedstyle")
     assert layout.read_bytes()==baseline
     key("Up"); key("Return")  # Accept the one draft definition.
-    key("Down"); key("Return"); key("Return")  # Choose the saved style, keep default Cancel.
+    key("Up"); key("Return"); key("Return")  # Save returns to its row; choose Use, then the saved style.
     shot("sharedstyleimpact")
     assert layout.read_bytes()==baseline
-    key("Up"); key("Return"); key("Escape"); apply()
+    key("Up"); key("Return"); key("Escape",2); apply()
     expect(lambda:len(current()["composition"]["designLibrary"]["styles"])==1,"Named shared style applied through remote controls")
     saved=layout.read_bytes();shot("sharedstyleapplied")
     assert any(node.get("presentation",{}).get("styleId") for node in current()["components"])
-    named("reuse");key("Down",7);key("Return");name_digit(1)
+    named("reuse");key("Down");key("Return");key("Down");key("Return");name_digit(1)
     shot("savedcomponent");assert layout.read_bytes()==saved
-    key("Up");key("Return");key("Down",9);key("Return");key("Return")
+    key("Up");key("Return");key("Down");key("Return");key("Return")
     shot("linkedinstance");assert layout.read_bytes()==saved
-    key("Up");key("Return");key("Escape");apply()
+    key("Up");key("Return");key("Escape",2);apply()
     expect(lambda:any(node.get("linkedDesign") for node in current()["components"]),"Linked instance placed in a free cell and applied")
     linked=next(node for node in current()["components"] if node.get("linkedDesign"));linked_id=linked["id"]
     assert linked_id not in {node["id"] for node in json.loads(saved)["components"]}
     saved=layout.read_bytes();shot("linkedapplied")
-    named("layers");key("Down",100);key("Up",2);key("Return")  # Last component, before reading-order/Header commands.
-    named("reuse");key("Down",11);key("Return");shot("detacheddraft")
+    named("layers");key("Down",100);key("Up",3);key("Return");key("Return")  # Last component, before reading-order/Header commands.
+    named("reuse");key("Down");key("Return");key("Down",3);key("Return");key("Down");key("Return");shot("detacheddraft")
     assert layout.read_bytes()==saved
-    key("Up");key("Return");key("Escape");apply()
+    key("Up");key("Return");key("Escape",3);apply()
     expect(lambda:not next(node for node in current()["components"] if node["id"]==linked_id).get("linkedDesign"),"Detach preserved independent content and identity")
     original_root=current()["components"]
     shot("detachedapplied")
@@ -1163,7 +1189,7 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
     original_ids=[node["id"] for node in original_root]
     templates=json.loads((Path(__file__).resolve().parents[1]/"config/skins/templates.json").read_text())["templates"]
     for index,template in enumerate(templates):
-        saved=layout.read_bytes();named("designs");key("Return");key("Down",3+index);key("Return");key("Return")
+        saved=layout.read_bytes();named("designs");key("Down",3+index);key("Return")
         phase="template"+["compact","scrolling","poster","pastel"][index];shot(phase)
         assert layout.read_bytes()==saved  # Preview is private and Cancel remains the default.
         key("Up");key("Return");apply()
@@ -1171,30 +1197,30 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         assert current()["components"]==original_root
         assert [node["id"] for node in current()["components"]]==original_ids
         background_rose()
-        expect(lambda:page_document()["theme"]["backgroundStart"]=="#e89ab0","Customized template color through named swatches: "+template["name"])
+        expect(lambda:page_document()["theme"].get("backgroundStart",page_document()["theme"].get("colorTheme",{}).get("colors",{}).get("background"))=="#e89ab0","Customized template color through named swatches: "+template["name"])
         assert current()["components"]==original_root
         shot(phase+"customized")
     # A named version is durable metadata; choosing it previews without changing applied bytes.
-    saved=layout.read_bytes();named("safety");key("Down",2);key("Return");key("Return");name_digit(3)
+    saved=layout.read_bytes();named("versions");key("Down",len(json.loads(Path(str(layout)+".studio-versions.json").read_text())["versions"]));key("Return");name_digit(3)
     archive=Path(str(layout)+".studio-versions.json")
     expect(lambda:any(entry["name"]=="3" for entry in json.loads(archive.read_text())["versions"]),"Named milestone saved in the isolated profile")
     assert layout.read_bytes()==saved
     versions=json.loads(archive.read_text())["versions"];version_index=next(i for i,entry in enumerate(versions) if entry["name"]=="3")
-    key("Up",30);key("Down",3+version_index);key("Return");shot("versioncompare")
+    key("Up",30);key("Down",version_index);key("Return");shot("versioncompare")
     assert layout.read_bytes()==saved
     key("Return")  # Cancel is the initial review selection.
     assert layout.read_bytes()==saved
     key("Escape")
-    named("editorSettings");key("Down",2);key("Return");key("Down");key("Return")
+    named("page");key("Down",9);key("Return");key("Down");key("Return")
     shot("defaultsrestore")
     assert layout.read_bytes()==saved
     apply()
     expect(lambda:layout.read_bytes()!=saved,"Current-page defaults saved through normal remote controls")
     assert current()["components"]==original_root
     shot("defaultsapplied")
-    named("safety");key("Down",2);key("Return")
+    named("versions")
     versions=json.loads(archive.read_text())["versions"];version_index=next(i for i,entry in enumerate(versions) if entry["name"]=="3")
-    key("Up",30);key("Down",3+version_index);key("Return");shot("versionrestore")
+    key("Up",30);key("Down",version_index);key("Return");shot("versionrestore")
     key("Up");key("Return");apply()
     expect(lambda:layout.read_bytes()==saved,"Named current-page restore recovered the exact previous design")
     shot("versionrestored")
@@ -1203,14 +1229,14 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         directory=Path(temporary)
         assert directory.resolve()==directory and directory.parent==Path("/tmp")
         portable=directory/"p.json"
-        named("designs");key("Down",2);key("Return");key("Return")
+        named("designs");studio_design_management(key);key("Down",2);key("Return");key("Return")
         remote_text(str(portable))
         expect(portable.is_file,"Portable current-page export saved through the remote keyboard")
         package=portable.read_bytes()
         assert str(directory).encode() not in package
         (evidence/"portable-export.json").write_bytes(package)
-        shot("portableexport");key("Escape")
-        saved=layout.read_bytes();named("designs");key("Down");key("Return");key("Down");key("Return")
+        shot("portableexport");key("Escape",2)
+        saved=layout.read_bytes();named("designs");studio_design_management(key);key("Down");key("Return");key("Down");key("Return")
         remote_text(str(directory),clear=True)
         key("Down",2);key("Return");key("Return");shot("portablepreview")
         assert layout.read_bytes()==saved
@@ -1220,7 +1246,7 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         shot("portableapplied")
         saved=layout.read_bytes()
         Image.new("RGB",(80,45),(80,130,180)).save(directory/"r.png")
-        named("designs");key("Down",3);key("Return");key("Return");key("Down");key("Return")
+        named("designs");studio_design_management(key);key("Down",3);key("Return");key("Return");key("Down");key("Return")
         remote_text(str(directory),clear=True)
         key("Down",2);key("Return");shot("privatereference")
         assert layout.read_bytes()==saved

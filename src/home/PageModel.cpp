@@ -1,4 +1,5 @@
 #include "home/PageModel.h"
+#include "home/ThemeColors.h"
 
 #include "home/HomeLayout.h"
 #include "home/ComponentSchema.h"
@@ -310,46 +311,12 @@ QVariantList PageModel::sections() const
     return result;
 }
 
-QString PageModel::backgroundStart() const
-{
-    if (m_documentLoaded && m_pageDocument.contains("theme")) {
-        const auto theme = m_pageDocument.value("theme").toObject();
-        if (theme.contains("backgroundStart")) return theme.value("backgroundStart").toString();
-    }
-    if (!m_owner) return QString();
-    return m_owner->homeAppearance().value("backgroundStart",m_owner->backgroundStart()).toString();
-}
-
-QString PageModel::backgroundEnd() const
-{
-    if (m_documentLoaded && m_pageDocument.contains("theme")) {
-        const auto theme = m_pageDocument.value("theme").toObject();
-        if (theme.contains("backgroundEnd")) return theme.value("backgroundEnd").toString();
-    }
-    if (!m_owner) return QString();
-    return m_owner->homeAppearance().value("backgroundEnd",m_owner->backgroundEnd()).toString();
-}
+QString PageModel::backgroundStart() const {return appearance().value("backgroundStart").toString();}
+QString PageModel::backgroundEnd() const {return appearance().value("backgroundEnd").toString();}
 
 QVariantMap PageModel::appearance() const
 {
-    QVariantMap result = m_owner?m_owner->homeAppearance():themeDefaults();
-    if (m_documentLoaded && m_pageDocument.contains("theme")) {
-        const auto theme = m_pageDocument.value("theme").toObject();
-        for (const auto &key : theme.keys())
-            result.insert(key, theme.value(key).toVariant());
-    }
-    if (m_documentLoaded && m_pageDocument.contains("theme")) {
-        const auto theme = m_pageDocument.value("theme").toObject();
-        if (theme.contains("backgroundStart")) result["backgroundStart"] = theme.value("backgroundStart").toString();
-        if (theme.contains("backgroundEnd")) result["backgroundEnd"] = theme.value("backgroundEnd").toString();
-        if (theme.contains("tileRoundness")) result["tileRoundness"] = theme.value("tileRoundness").toDouble();
-    }
-    if (!m_owner) return result;
-    const auto ownerAppearance = m_owner->appearance();
-    for (auto it = ownerAppearance.cbegin(); it != ownerAppearance.cend(); ++it) {
-        if (!result.contains(it.key())) result.insert(it.key(), it.value());
-    }
-    return result;
+    return ThemeColors::resolve(m_owner?m_owner->homeAppearance():themeDefaults(),m_documentLoaded?m_pageDocument.value("theme").toObject().toVariantMap():QVariantMap{});
 }
 
 bool PageModel::setAppearance(const QVariantMap &changes)
@@ -359,6 +326,7 @@ bool PageModel::setAppearance(const QVariantMap &changes)
     const auto defaults = themeDefaults();
     for (auto it = normalized.begin(); it != normalized.end(); ++it) {
         const auto key = it.key();
+        if (key=="colorTheme") {if(!ThemeColors::valid(it.value()))return false;continue;}
         if (key=="sourcePolicy") {
             if (it.value().metaType().id()!=QMetaType::QVariantMap || !ComponentSchema::validSourcePolicy(it.value().toMap())) {
                 m_owner->setError(tr("Invalid source display policy.")); return false;
@@ -408,7 +376,7 @@ bool PageModel::setAppearance(const QVariantMap &changes)
                 return false;
             }
         }
-        if (!defaults.contains(key) && key != "backgroundStart" && key != "backgroundEnd" && key != "tileRoundness") {
+        if (!defaults.contains(key) && !ThemeColors::role(key) && key != "tileRoundness") {
             m_owner->setError(tr("Unknown appearance key."));
             return false;
         }

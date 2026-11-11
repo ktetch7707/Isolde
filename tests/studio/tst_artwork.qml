@@ -22,6 +22,7 @@ Item {
             const id=editor.selectedId;editor.handleCommand(inputManager.confirm);compare(editor.mode,"context")
             editor.handleCommand(inputManager.navigateDown);editor.handleCommand(inputManager.confirm);settle();compare(editor.mode,"inspector")
             const inspector=findChild(editor,"studioInspector");verify(inspector!==null);compare(inspector.pageMode,false);compare(editor.selectedId,id)
+                if(inspector.view==="simple")inspector.showDetails()
             compare(studioFixture.disk(),diskBaseline)
         }
         function test_container_move_preview_preserves_the_authored_heading(){
@@ -110,8 +111,9 @@ Item {
         }
         function test_inspector_image_framing_is_one_transaction_and_cancel(){
             verify(editor.session.execute("addResolved",{type:"image",placement:{x:1,y:0,width:3,height:2}}),editor.session.errorString)
-            const added=editor.items.find(i=>i.componentType==="image");verify(added!==undefined);editor.selectedId=added.id;settle();editor.openInspector(false);settle()
+            const added=editor.items.find(i=>i.componentType==="image");verify(added!==undefined);editor.selectedId=added.id;settle();editor.openInspector(false);findChild(editor,"studioInspector").showDetails();settle()
             const inspector=findChild(editor,"studioInspector");verify(inspector!==null)
+                if(inspector.view==="simple")inspector.showDetails()
             const relative=editor.session.stageArtwork(studioFixture.artworkFixture());verify(relative.endsWith(".gif"));verify(editor.session.execute("patch",{id:added.id,value:{customLogo:relative}}));settle()
             const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
             const crop=homeLayout.studioOptions.inspector.fields.find(f=>f.type==="crop");verify(!!crop)

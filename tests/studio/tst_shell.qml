@@ -285,7 +285,8 @@ Item {
         function test_shell_inspector_source_override_reset_and_cancel_are_private(){
             verify(studioFixture.reset(false,false));const disk=studioFixture.disk()
             editor=createTemporaryObject(editorComponent,parent);verify(editor!==null);editor.show("","cell-0");settle()
-            editor.openInspector(true);const inspector=findChild(editor,"studioInspector");verify(inspector!==null)
+            editor.openInspector(true);findChild(editor,"studioInspector").showDetails();const inspector=findChild(editor,"studioInspector");verify(inspector!==null)
+                if(inspector.view==="simple")inspector.showDetails()
             inspector.tab=inspector.tabs.indexOf("Shell");inspector.view="fields";inspector.shellSurface="settings"
             const fields=homeLayout.studioOptions.inspector.pageFields.filter(f=>f.scope==="surfaceTheme")
             const mode=fields.find(f=>f.key==="mode"),text=fields.find(f=>f.key==="textColor")

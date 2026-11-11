@@ -316,6 +316,19 @@ bool StudioSession::saveVersion(const QString &name)
     return archiveVersion(name.trimmed(), m_draft);
 }
 
+bool StudioSession::renameVersion(const QString &id,const QString &name)
+{
+    if(!editingPermitted() || !currentProfile())return false;
+    if(name.trimmed().isEmpty() || name.size()>80 || name.contains(QChar::Null)){setError(tr("Name the version using 1–80 characters."));return false;}
+    QJsonArray entries;QJsonObject assets;
+    if(!readVersions(entries,&assets))return false;
+    for(qsizetype i=0;i<entries.size();++i){
+        auto entry=entries[i].toObject();if(entry["id"]!=id)continue;
+        entry["name"]=name.trimmed();entries[i]=entry;return writeVersions(entries,assets);
+    }
+    setError(tr("This version no longer exists. Refresh the list."));return false;
+}
+
 bool StudioSession::deleteVersion(const QString &id)
 {
     if (!editingPermitted()) return false;

@@ -1,6 +1,7 @@
 #include "home/ComponentSchema.h"
 #include "home/ActionDispatcher.h"
 #include "home/HomeLayout.h"
+#include "home/ThemeColors.h"
 #include "home/PageModel.h"
 #include "sessions/SessionManager.h"
 #include "media/KodiMedia.h"
@@ -104,6 +105,7 @@ private slots:
     void studioOrderedInsertionPreservesSlotsAndIsAtomic();
     void studioOverlayMovementKeepsNeighborsAndBounds();
     void studioCatalogLinksInspectorAndStagedArtwork();
+    void studioFiveColorThemeLinksOverridesAndInvalidRollback();
     void studioHeaderValidationAndDraftRollback();
     void studioPageDefaultsAreDraftOnlyAndScoped();
     void studioShapesLabelsAndReplacementAreAtomic();
@@ -1952,6 +1954,42 @@ void ComponentTests::studioNestedGroupsValidateAndReparentAtomically()
     QVERIFY(!ComponentSchema::hierarchyFits(deep,doc["composition"].toObject().toVariantMap(),{},&error));QVERIFY(error.contains("four"));
     auto invalid=local.toVariantMap();invalid["columns"]=17;QVERIFY(!ComponentSchema::validChildLayout(invalid));invalid=local.toVariantMap();invalid["mode"]="script";QVERIFY(!ComponentSchema::validChildLayout(invalid));
 }
+void ComponentTests::studioFiveColorThemeLinksOverridesAndInvalidRollback()
+{
+    QTemporaryDir dir;AppRegistry registry;QVERIFY(registry.loadFromData(apps));
+    HomeLayout live(&registry);const auto path=dir.filePath("layout.json");
+    QVERIFY(live.load(QFINDTESTDATA("../config/default-home-layout.json"),path));
+    QVERIFY(ThemeColors::valid(live.appearance().value("colorTheme")));
+    QCOMPARE(live.backgroundStart(),live.backgroundEnd());
+    QCOMPARE(live.appearance().value("textColor"),live.appearance().value("mutedColor"));
+    auto *session=qobject_cast<StudioSession *>(live.beginStudio());QVERIFY(session);
+    const auto baseline=session->draft();const auto disk=readFile(path);
+    const QVariantMap colors{{"background","#101e2c"},{"cards","#20384a"},{"text","#f0f7ff"},{"highlight","#89d6ff"},{"accent","#76bddd"}};
+    const QVariantMap palette{{"schemaVersion",1},{"colors",colors}};
+    QVariantMap values{{"colorTheme",palette}};
+    for(const auto &keys:ThemeColors::roles())for(const auto &key:keys)values[key]=QVariant();
+    QVERIFY(session->previewCommand("pagePatch",{{"scope","theme"},{"value",values}}));
+    QCOMPARE(session->draft(),baseline);QCOMPARE(readFile(path),disk);
+    const auto preview=qobject_cast<HomeLayout *>(session->proposalModel());QVERIFY(preview);
+    QCOMPARE(preview->appearance().value("labelColor").toString(),QString("#f0f7ff"));
+    session->cancelPreview();QCOMPARE(session->draft(),baseline);
+    QVERIFY(session->execute("pagePatch",{{"scope","theme"},{"value",values}}));
+    QVERIFY(session->execute("pagePatch",{{"scope","theme"},{"value",QVariantMap{{"headingColor","#ffeedd"}}}}));
+    auto changed=colors;changed["text"]="#ffffff";
+    QVERIFY(session->execute("pagePatch",{{"scope","theme"},{"value",QVariantMap{{"colorTheme",QVariantMap{{"schemaVersion",1},{"colors",changed}}}}}}));
+    auto model=qobject_cast<HomeLayout *>(session->model());QVERIFY(model);
+    QCOMPARE(model->appearance().value("headingColor").toString(),QString("#ffeedd"));
+    QCOMPARE(model->appearance().value("bodyColor").toString(),QString("#ffffff"));
+    QVERIFY(session->execute("pagePatch",{{"scope","theme"},{"value",QVariantMap{{"headingColor",QVariant()}}}}));
+    model=qobject_cast<HomeLayout *>(session->model());QCOMPARE(model->appearance().value("headingColor").toString(),QString("#ffffff"));
+    const auto before=session->draft();auto invalid=palette;invalid["schemaVersion"]=2;
+    QVERIFY(!session->execute("pagePatch",{{"scope","theme"},{"value",QVariantMap{{"colorTheme",invalid}}}}));
+    QCOMPARE(session->draft(),before);QVERIFY(!session->errorString().isEmpty());QCOMPARE(readFile(path),disk);
+    invalid=palette;auto badColors=colors;badColors["script"]="red";invalid["colors"]=badColors;QVERIFY(!ThemeColors::valid(invalid));
+    badColors=colors;badColors["text"]="#80ffffff";invalid["colors"]=badColors;QVERIFY(!ThemeColors::valid(invalid));
+    while(session->canUndo())QVERIFY(session->undo());QCOMPARE(session->draft(),baseline);
+}
+
 void ComponentTests::studioCatalogLinksInspectorAndStagedArtwork()
 {
     QVERIFY(ComponentSchema::validPresentation({{"libraryKind","movies"},{"libraryView","playlist"},{"libraryValue","Family films.xsp"}},true));

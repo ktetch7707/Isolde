@@ -77,12 +77,12 @@ Item {
                 ArtworkImage {anchors.fill:parent;source:node.modelData.item.logoSource || "";crop:node.style.imageCrop || null;radius:parent.radius;fit:node.style.artFit || "cover";focalX:node.style.artFocalX===undefined?.5:node.style.artFocalX;focalY:node.style.artFocalY===undefined?.5:node.style.artFocalY;zoom:node.style.artZoom || 1}
                 readonly property bool selected:node.selected
                 border.width:(selected?Math.max(2,node.style.focusWidth===undefined?3:node.style.focusWidth):node.style.borderWidth || 0)*surface.unit
-                border.color:selected?node.style.focusColor || surface.host.appearance.focusColor || surface.host.appearance.textColor || "transparent":node.style.borderColor || "transparent"
+                border.color:selected?node.style.focusColor || surface.host.appearance.focusColor || surface.host.appearance.textColor || "transparent":node.style.borderColor || surface.host.appearance.borderColor || "transparent"
             }
             Text {
                 visible:(node.group || node.apps) && !!node.style.showHeading;x:node.padding;y:node.padding;width:parent.width-2*node.padding;height:node.headingHeight
                 text:(node.style.visibleLabel===undefined?node.modelData.item.name || "":node.style.visibleLabel)+(node.modelData.item.unavailableReason?"\n"+node.modelData.item.unavailableReason:"");textFormat:Text.PlainText;elide:Text.ElideRight;maximumLineCount:2;wrapMode:Text.Wrap
-                color:node.style.headingColor || node.style.labelColor || surface.host.appearance.textColor || "transparent";font.pixelSize:(node.style.headingSize || 24)*surface.unit
+                color:node.style.headingColor || node.style.labelColor || surface.host.appearance.headingColor || surface.host.appearance.textColor || "transparent";font.pixelSize:(node.style.headingSize || 24)*surface.unit
                 font.bold:!!node.style.headingBold; font.family:surface.host.appearance.fontFamily || "DejaVu Sans"
             }
             MouseArea {anchors.fill:parent;enabled:node.group;onClicked:surface.activated(node.modelData.item)}
@@ -180,7 +180,7 @@ Item {
                 objectName:"studioRecoveryFocus-"+node.modelData.item.id
                 // Selection is editor state; never brighten the user's artwork.
                 visible:surface.host.editMode && node.selected && ((node.modelData.item.opacity===undefined?1:node.modelData.item.opacity)<.35 || node.style.focusEnabled===false)
-                readonly property var frame:!node.group && !node.library && !node.apps ? card.focusFrame : ({x:0,y:0,width:node.width,height:node.height,radius:groupSurface.radius,color:node.style.focusColor || surface.host.appearance.focusColor,lineWidth:Math.max(2,node.style.focusWidth===undefined?3:node.style.focusWidth)*surface.unit})
+                readonly property var frame:!node.group && !node.library && !node.apps ? card.focusFrame : ({x:0,y:0,width:node.width,height:node.height,radius:groupSurface.radius,color:node.style.focusColor || surface.host.appearance.focusColor || surface.host.appearance.textColor || "transparent",lineWidth:Math.max(2,node.style.focusWidth===undefined?3:node.style.focusWidth)*surface.unit})
                 x:frame.x;y:frame.y;width:frame.ellipse?Math.max(frame.width,frame.height):frame.width;height:frame.ellipse?width:frame.height;radius:frame.radius
                 transform:Scale {xScale:recoveryFocus.frame.ellipse && recoveryFocus.width?recoveryFocus.frame.width/recoveryFocus.width:1;yScale:recoveryFocus.frame.ellipse && recoveryFocus.height?recoveryFocus.frame.height/recoveryFocus.height:1}
                 color:"transparent";border.color:frame.color;border.width:frame.lineWidth

@@ -17,7 +17,9 @@ Item {
     property string message:"Choose what to add. Content comes first; placement follows on the full page."
     property string keyboardAction:""
     property string keyboardReturn:""
-    readonly property var families:options.catalog || []
+    property bool moreComponents:false
+    readonly property var primaryFamilies:((options.simpleStudio || {}).basicFamilies || []).map(id=>id==="clock"?{id:"clock",name:"Clock",description:"Time and date"}:(options.catalog || []).find(f=>f.id===id)).filter(f=>!!f).map(f=>Object.assign({},f,{name:((options.simpleStudio || {}).primaryLabels || {})[f.id] || f.name}))
+    readonly property var families:moreComponents?(options.catalog || []).filter(f=>!primaryFamilies.some(p=>p.id===f.id)):primaryFamilies.concat([{id:"more",name:"More components",description:"Shapes, groups, sources and other building blocks"}])
     readonly property var variants:(options.componentVariants || {})[family] || []
     readonly property var actions:(session?session.availableActions:[]).concat([{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}])
     readonly property var apps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
@@ -26,7 +28,7 @@ Item {
     signal picked(string type,var configuration)
     signal canceled()
     function variantItem(entry){const base=(options.componentPresets || {})[family] || {};return Object.assign({},base,{name:entry.name,presentation:Object.assign({},base.presentation || {},entry.presentation || {})})}
-    function begin(){view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page."}
+    function begin(){moreComponents=false;view="families";selected=0;configuration=({});message="Choose what to add. Content comes first; placement follows on the full page."}
     function labels(){
         if(view==="shapes")return (options.shapeChoices || []).map(choice=>choice.name)
         if(view==="widgets")return ["Clock","Text / heading","Section / Group","Input slots · eight editable positions, capture availability required"]
@@ -38,7 +40,8 @@ Item {
         return []
     }
     function chooseFamily(index){
-        const entry=families[index];if(!entry)return;family=entry.id;configuration=({});selected=0
+        const entry=families[index];if(!entry)return;if(entry.id==="more"){moreComponents=true;selected=0;return}family=entry.id;configuration=({});selected=0
+        if(family==="clock"){finish("clock");return}
         if(variants.length){view="variants";return}
         if(family==="button")view="links"
         else if(family==="shape")view="shapes"
@@ -92,7 +95,7 @@ Item {
         if(view==="apps"){if(appPicker)appPicker.handleCommand(command);return}
         if(view==="mediaAction"){media.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
-        if(command===inputManager.back){if(view==="families")canceled();else{view="families";selected=Math.max(0,families.findIndex(f=>f.id===family))}return}
+        if(command===inputManager.back){if(view==="families"){if(moreComponents){moreComponents=false;selected=primaryFamilies.length}else canceled()}else{view="families";selected=Math.max(0,families.findIndex(f=>f.id===family))}return}
         if(command===inputManager.confirm){activate();return}
         const count=view==="families"?families.length:view==="variants"?variants.length:labels().length,step=view==="families" || view==="variants"?2:1
         if(command===inputManager.navigateDown)selected=Math.min(count-1,selected+step)
@@ -151,7 +154,7 @@ Item {
     Loader {
         id:actionLoader;anchors.fill:parent;visible:root.view==="links";active:root.visible && ["links","mediaAction","keyboard"].indexOf(root.view)>=0
         sourceComponent:Component {StudioActionPicker {
-            anchors.fill:parent;actions:[{name:"None · no action",action:{}}].concat(root.actions);appearance:root.appearance;categories:root.options.actionCategories || []
+            anchors.fill:parent;actions:[{name:"None · no action",action:{}}].concat(root.actions);appearance:root.appearance;categories:root.options.actionCategories || [];intents:(root.options.simpleStudio || {}).actionIntents || []
             onCanceled:{root.view="families";root.selected=Math.max(0,root.families.findIndex(f=>f.id===root.family))}
             onPicked:entry=>root.chooseAction(entry)
         }}

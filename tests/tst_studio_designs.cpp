@@ -20,6 +20,7 @@ class StudioDesignTests : public QObject {
     Q_OBJECT
 private slots:
     void pageAndInterfacePreviewsAreAtomicAndCancelable();
+    void damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraft();
     void portableRoundTripStagesArtworkAndRemapsMissingApps();
     void invalidPortablePackagesCannotMutateOrPublish();
     void referenceImagesArePrivateBoundedAndTornDown();
@@ -31,6 +32,30 @@ private slots:
     void navigationOnlyReorderingAppearsInTheApplySummary();
     void appearancePasteAndIndependentArtworkCopiesKeepOwnership();
 };
+void StudioDesignTests::damagedGalleryThumbnailsRemainBoundedAndCannotChangeDraft()
+{
+    QTemporaryDir dir;AppRegistry registry;HomeLayout home(&registry);
+    QVERIFY(home.load(QFINDTESTDATA("../config/default-home-layout.json"),dir.filePath("home.json")));
+    const auto id=home.saveSkin("Damaged preview");QVERIFY(!id.isEmpty());
+    const auto file=dir.filePath("skins/"+id+".json");
+    auto package=QJsonDocument::fromJson(read(file)).object();QVERIFY(!package.isEmpty());
+    auto layout=package["layout"].toObject(),theme=layout["theme"].toObject();theme["backgroundStart"]="invalid-color";layout["theme"]=theme;
+    layout["composition"]=QJsonObject{{"schemaVersion",1},{"enabled",true},{"grid",QJsonObject{{"columns",4},{"rows",3}}}};
+    layout["components"]=QJsonArray{QJsonObject{{"id","bad"},{"placement",QJsonObject{{"x","invalid"},{"y",0},{"width",1},{"height",1}}}}};package["layout"]=layout;
+    QVERIFY(write(file,QJsonDocument(package).toJson()));
+    auto *session=qobject_cast<StudioSession *>(home.beginStudio());QVERIFY(session);
+    const auto draft=session->draft(),disk=read(dir.filePath("home.json"));
+    bool found=false;
+    for(const auto &value:session->designChoices()){
+        const auto entry=value.toMap();if(entry.value("id").toString()!=id)continue;
+        found=true;const auto preview=entry.value("preview").toMap();
+        QVERIFY(QColor(preview.value("background").toString()).isValid());
+        QVERIFY(preview.value("blocks").toList().isEmpty());
+    }
+    QVERIFY(found);QVERIFY(session->previewDesign(id,"page").isEmpty());
+    QCOMPARE(session->draft(),draft);QCOMPARE(read(dir.filePath("home.json")),disk);
+}
+
 void StudioDesignTests::pageAndInterfacePreviewsAreAtomicAndCancelable()
 {
     QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));

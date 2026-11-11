@@ -10,8 +10,7 @@
       "kodi": {"schemaVersion": 1, "mode": "origin"}
     },
     "brandVisible": false,
-    "backgroundStart": "#19191E",
-    "backgroundEnd": "#101014",
+    "colorTheme": {"schemaVersion":1,"colors":{"background":"#19191e","cards":"#202126","text":"#f5f1f3","highlight":"#c994a5","accent":"#c994a5"}},
     "tileRoundness": 0.18
   },
   "categories": [

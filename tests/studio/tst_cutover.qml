@@ -228,6 +228,8 @@ Item {
             verify(list.contentItem.children.length < 100)
             send(inputManager.confirm)
             compare(editor.selectedId, "cell-1023")
+            compare(editor.mode, "layerItem")
+            send(inputManager.confirm) // Find on page is the explicit default action.
             compare(editor.mode, "canvas")
             compare(studioFixture.disk(), disk)
         }

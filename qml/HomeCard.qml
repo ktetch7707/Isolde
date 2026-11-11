@@ -26,10 +26,10 @@ Item {
     readonly property string kind: item.componentType==="shape"?"shape":item.widgetType === "text" ? "text" : (style.variant || variant) === "launcher" ? "source" : (style.variant || variant)
     readonly property bool launcherArtwork:kind==="source" && !!item.action && item.action.type==="launch-app" && !item.customLogo
     readonly property bool showLauncherArtwork:launcherArtwork && !!item.logoSource && item.showLogo!==false && !style.icon
-    readonly property color ink: appearance.textColor || "#EEEAF0"
+    readonly property color ink: appearance.labelColor || appearance.textColor || "#EEEAF0"
     readonly property color muted: appearance.mutedColor || "#AAA4B2"
-    readonly property color accent: appearance.focusColor || "#BD8198"
-    readonly property color selColor: root.selectionColor !== "" ? root.selectionColor : root.accent
+    readonly property color accent: appearance.accentColor || appearance.focusColor || "#BD8198"
+    readonly property color selColor: root.selectionColor !== "" ? root.selectionColor : appearance.focusColor || root.accent
     readonly property real textScale: (appearance.typographyScale || 1) * unit
     readonly property bool ellipse:kind==="shape" && style.shape==="ellipse"
     readonly property real bodyHeight:customLabel && style.labelPosition==="below"?Math.max(0,height-customLabelSurface.height):height
@@ -63,7 +63,7 @@ Item {
             GradientStop {position:0;color:surface.color}
             GradientStop {position:1;color:{const ink=Qt.darker(root.style.fillEndColor || root.surfaceInk,1);return Qt.rgba(ink.r,ink.g,ink.b,root.style.surfaceOpacity===undefined?1:root.style.surfaceOpacity)}}
         }
-        border.width:root.kind==="shape" && root.style.shape==="divider"?0:root.style.borderWidth===undefined?(root.kind === "recent" ? 1 : 0):root.style.borderWidth*root.unit; border.color:root.style.borderColor || "#B0FFFFFF"
+        border.width:root.kind==="shape" && root.style.shape==="divider"?0:root.style.borderWidth===undefined?(root.kind === "recent" ? 1 : 0):root.style.borderWidth*root.unit; border.color:root.style.borderColor || root.appearance.borderColor || "#B0FFFFFF"
         ArtworkImage {
             objectName: "cardArtwork"
             animationResolver:root.artworkResolver;managedAsset:root.item.customLogo || ""
@@ -75,7 +75,7 @@ Item {
         }
         LineIcon {
             visible: !root.showLauncherArtwork && (root.kind === "source" || root.kind === "summary") && root.item.widgetType !== "clock"
-            name: root.style.icon || "display"; ink: root.style.iconColor || (root.kind === "summary" ? root.accent : root.ink)
+            name: root.style.icon || "display"; ink: root.style.iconColor || root.appearance.iconColor || (root.kind === "summary" ? root.accent : root.ink)
             width: (root.style.iconSize===undefined?28:root.style.iconSize) * root.unit; height: width
             x: root.kind === "source" ? (parent.width - width) / 2 : 24 * root.unit
             y: root.kind === "source" ? parent.height * 0.21 : (parent.height - height) / 2
@@ -115,7 +115,7 @@ Item {
         textFormat:Text.PlainText;wrapMode:(root.style.bodyWrap===undefined?root.legacyBody && root.style.labelWrap===false:root.style.bodyWrap===false)?Text.NoWrap:Text.WordWrap
         maximumLineCount:root.style.bodyLines || (root.legacyBody?root.style.labelLines:0) || 4;elide:Text.ElideRight
         horizontalAlignment:(root.style.bodyAlign || (root.legacyBody?root.style.textAlign:""))==="center"?Text.AlignHCenter:(root.style.bodyAlign || (root.legacyBody?root.style.textAlign:""))==="right"?Text.AlignRight:Text.AlignLeft
-        color:root.style.bodyColor || (root.legacyBody?root.style.labelColor:"") || root.ink;font.pixelSize:(root.style.bodySize || root.style.labelSize || 22)*root.textScale
+        color:root.style.bodyColor || (root.legacyBody?root.style.labelColor:"") || root.appearance.bodyColor || root.ink;font.pixelSize:(root.style.bodySize || root.style.labelSize || 22)*root.textScale
         font.bold:root.style.bodyBold===undefined?!!root.style.labelBold:root.style.bodyBold
         font.family:root.appearance.fontFamily || "DejaVu Sans";lineHeight:root.style.bodyLineHeight || 1;verticalAlignment:Text.AlignVCenter
     }
@@ -141,7 +141,7 @@ Item {
         x:0;y:root.style.labelPosition==="below"?(root.ellipse?root.bodyHeight:surface.height):Math.max(0,(root.ellipse?root.bodyHeight:surface.height)-height)
         width:parent.width;height:customTitle.implicitHeight+12*root.unit;radius:root.style.labelPill?height/2:0
         color:root.style.labelSurfaceColor || "transparent"
-        Text {id:customTitle;anchors.centerIn:parent;width:parent.width-12*root.unit;text:root.title;textFormat:Text.PlainText;color:root.style.labelColor || root.ink;horizontalAlignment:root.style.textAlign==="left"?Text.AlignLeft:root.style.textAlign==="right"?Text.AlignRight:Text.AlignHCenter;wrapMode:root.style.labelWrap===false?Text.NoWrap:Text.Wrap;maximumLineCount:root.style.labelLines || 2;elide:Text.ElideRight;font.pixelSize:(root.style.labelSize || 20)*root.textScale;font.bold:!!root.style.labelBold;font.family:root.appearance.fontFamily || "DejaVu Sans"}
+        Text {id:customTitle;anchors.centerIn:parent;width:parent.width-12*root.unit;text:root.title;textFormat:Text.PlainText;color:root.style.labelColor || root.appearance.labelColor || root.ink;horizontalAlignment:root.style.textAlign==="left"?Text.AlignLeft:root.style.textAlign==="right"?Text.AlignRight:Text.AlignHCenter;wrapMode:root.style.labelWrap===false?Text.NoWrap:Text.Wrap;maximumLineCount:root.style.labelLines || 2;elide:Text.ElideRight;font.pixelSize:(root.style.labelSize || 20)*root.textScale;font.bold:!!root.style.labelBold;font.family:root.appearance.fontFamily || "DejaVu Sans"}
     }
     MouseArea { id: mouseArea; anchors.fill: parent;enabled:root.interactive; hoverEnabled: root.selectTrigger === "hover" || root.selectTrigger === "dwell"; onEntered: if (root.selectTrigger === "hover") root.activated(); onExited: dwellTimer.stop(); onClicked: if (root.selectAction !== "none") { if (root.selectAction === "preview") root.selected = true; else root.activated() } }
 }

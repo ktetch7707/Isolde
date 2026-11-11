@@ -378,10 +378,11 @@ def main():
                 def menu(action, document=None):
                     document=document if document is not None else json.loads(layout.read_text()) if layout.exists() else defaults
                     pages=len(document.get("pages",[]))+int(document.get("rootPage",{}).get("visible",True))
-                    offsets={"designs":4,"apply":7}
-                    key("Up",30);key("Down");key("Down",1+pages+offsets[action]);key("Return")
+                    offsets={"designs":5,"apply":7}
+                    key("Up",30);key("Down");key("Down",offsets[action]);key("Return")
+                    if action=="designs":key("Return")
                 def manage():
-                    menu("designs");key("Down",4);key("Return")
+                    menu("designs");key("Down",30);key("Up");key("Return");key("Up",30);key("Down",4);key("Return")
                 def apply_library_choice(index):
                     if index==0: target=defaults
                     elif index in (1,2): target=json.loads((Path(__file__).resolve().parents[1]/('config/skins/'+('lounge' if index==1 else 'pastel')+'.json')).read_text())["layout"]
@@ -391,7 +392,7 @@ def main():
                     key("Up");key("Return")  # Use this draft; no write yet.
                     menu("apply",target);key("Return")
                 # Already in the initial Studio menu at Add page.
-                key("Down",visible_pages+5);key("Return");key("Down",4);key("Return")
+                manage()
                 if args.capture_library: captured("library")
                 preset_index = 2 if case.name == "home-pastel-reference" else 1
                 apply_library_choice(preset_index)
@@ -502,14 +503,13 @@ def main():
             if args.capture_library: captured("editor")
             if args.inspect: captured("resetmenu")
             current_document=json.loads(layout.read_text())
-            editor_index=6+len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
-            print(f"Reset Studio Editor settings index: {editor_index}",flush=True)
-            key("Down",editor_index); key("Return"); key("Down",3); key("Return")  # Editor settings -> Reset interface.
+            pages=len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
+            key("Return");key("Down",pages+1);key("Return");key("Down",9);key("Return")  # Pages -> Manage current page -> Reset.
             if args.inspect: captured("resetconfirm")
             key("Down"); key("Return")  # Explicit scoped confirmation.
             assert layout.read_bytes()==original_bytes,"Reset preview wrote before Apply"
             pages=len(current_document.get("pages",[]))+int(current_document.get("rootPage",{}).get("visible",True))
-            key("Up",30);key("Down");key("Down",1+pages+7);key("Return");key("Return")  # Review & Apply.
+            key("Up",30);key("Down");key("Down",7);key("Return");key("Return")  # Review & Apply.
             defaults=json.loads((Path(__file__).resolve().parent.parent/"config/default-home-layout.json").read_text())
             def reset_verified():
                 if not layout.exists(): return False

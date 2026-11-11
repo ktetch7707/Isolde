@@ -9,13 +9,15 @@ Item {
     property string query:""
     property int category:0
     property int selected:0
-    property bool toolsFocused:true
+    property bool intentMenu:true
+    property bool toolsFocused:false
     property int tool:0
     property bool searching:false
     property string message:""
     readonly property real unit:Math.min(width/1280,height/720)*(appearance.typographyScale || 1)
     readonly property var tools:["Search links",categories[category]?categories[category].name:"All links","Clear search","Cancel"]
-    readonly property var entries:actions.filter(entry=>matches(entry))
+    property var intents:[]
+    readonly property var entries:intentMenu?intents:actions.filter(entry=>matches(entry))
     signal picked(var entry)
     signal canceled()
     function matches(entry){
@@ -27,15 +29,15 @@ Item {
     }
     onEntriesChanged:selected=Math.max(0,Math.min(selected,entries.length-1))
     function activate(){
-        if(!toolsFocused){if(entries[selected])picked(entries[selected]);return}
-        if(tool===0){keyboard.value=query;keyboard.selectedIndex=0;searching=true}
-        else if(tool===1){category=(category+1)%categories.length;selected=0}
+        if(!toolsFocused){if(intentMenu){if(entries[selected].noAction){picked({name:"No action",action:{}});return}category=Math.max(0,categories.findIndex(c=>c.name===entries[selected].categoryName));intentMenu=false;selected=0}else if(entries[selected])picked(entries[selected]);return}
+        if(tool===0){intentMenu=false;keyboard.value=query;keyboard.selectedIndex=0;searching=true}
+        else if(tool===1){intentMenu=false;category=(category+1)%categories.length;selected=0}
         else if(tool===2){query="";category=0;selected=0}
         else canceled()
     }
     function handleCommand(command){
         if(searching){keyboard.handleCommand(command);return}
-        if(command===inputManager.back){canceled();return}
+        if(command===inputManager.back){if(!intentMenu){intentMenu=true;selected=0;toolsFocused=false;query=""}else canceled();return}
         if(command===inputManager.confirm){activate();return}
         if(toolsFocused){
             if(command===inputManager.navigateLeft)tool=Math.max(0,tool-1)

@@ -76,6 +76,7 @@ public:
     Q_INVOKABLE QVariantList versions();
     Q_INVOKABLE bool saveVersion(const QString &name);
     Q_INVOKABLE bool deleteVersion(const QString &id);
+    Q_INVOKABLE bool renameVersion(const QString &id, const QString &name);
     Q_INVOKABLE bool resetVersions();
     Q_INVOKABLE bool previewDefaults(const QString &scope, const QString &pageId = {});
     Q_INVOKABLE bool previewVersion(const QString &id, const QString &scope, const QString &pageId = {});

@@ -1,4 +1,5 @@
 #include "home/HomeLayout.h"
+#include "home/ThemeColors.h"
 #include "home/ComponentSchema.h"
 #include "home/DesignSystem.h"
 #include "home/ManagedGif.h"
@@ -35,6 +36,7 @@ bool normalizeAppearance(QVariantMap &values)
     const auto defaults = appearanceDefaults();
     for (auto it = values.begin(); it != values.end(); ++it) {
         const auto key = it.key();
+        if (key=="colorTheme") {if(!ThemeColors::valid(it.value()))return false;continue;}
         if (key=="sourcePolicy") {
             if (it.value().metaType().id()!=QMetaType::QVariantMap || !ComponentSchema::validSourcePolicy(it.value().toMap())) return false;
             continue;
@@ -67,7 +69,7 @@ bool normalizeAppearance(QVariantMap &values)
             if (!ok || !qIsFinite(number) || number < low || number > high
                 || ((key == "homeColumns" || key == "spacing") && number != qFloor(number))) return false;
         }
-        if (!defaults.contains(key) && key != "backgroundStart" && key != "backgroundEnd" && key != "tileRoundness") return false;
+        if (!defaults.contains(key) && !ThemeColors::role(key) && key != "tileRoundness") return false;
     }
     return true;
 }
@@ -289,17 +291,19 @@ QVariantList HomeLayout::sections() const
 }
 
 bool HomeLayout::brandVisible() const { return m_brandVisible; }
-QString HomeLayout::backgroundStart() const { return m_backgroundStart; }
-QString HomeLayout::backgroundEnd() const { return m_backgroundEnd; }
+QString HomeLayout::backgroundStart() const { return appearance().value("backgroundStart",m_backgroundStart).toString(); }
+QString HomeLayout::backgroundEnd() const { return appearance().value("backgroundEnd",m_backgroundEnd).toString(); }
 double HomeLayout::tileRoundness() const { return m_tileRoundness; }
 QVariantMap HomeLayout::appearance() const
 {
-    auto result = m_owner ? m_owner->homeAppearance() : appearanceDefaults();
-    for (auto it = m_appearance.cbegin(); it != m_appearance.cend(); ++it) if(!m_owner || m_themeKeys.contains(it.key())) result[it.key()] = it.value();
-    if(!m_owner || m_themeKeys.contains("backgroundStart"))result["backgroundStart"] = m_backgroundStart;
-    if(!m_owner || m_themeKeys.contains("backgroundEnd"))result["backgroundEnd"] = m_backgroundEnd;
-    if(!m_owner || m_themeKeys.contains("tileRoundness"))result["tileRoundness"] = m_tileRoundness;
-    return result;
+    QVariantMap authored;
+    for (auto it=m_appearance.cbegin();it!=m_appearance.cend();++it)if(m_themeKeys.contains(it.key()))authored[it.key()]=it.value();
+    if(m_themeKeys.contains("backgroundStart"))authored["backgroundStart"]=m_backgroundStart;
+    if(m_themeKeys.contains("backgroundEnd"))authored["backgroundEnd"]=m_backgroundEnd;
+    if(m_themeKeys.contains("tileRoundness"))authored["tileRoundness"]=m_tileRoundness;
+    auto base=m_owner?m_owner->homeAppearance():m_appearance;
+    if(!m_owner){base["backgroundStart"]=m_backgroundStart;base["backgroundEnd"]=m_backgroundEnd;base["tileRoundness"]=m_tileRoundness;}
+    return ThemeColors::resolve(base,authored);
 }
 bool HomeLayout::setAppearance(const QVariantMap &changes)
 {
@@ -410,6 +414,33 @@ QVariantMap HomeLayout::studioOptions() const
             if(swatch.size()!=2 || !swatch["name"].isString() || swatch["name"].toString().isEmpty() || swatch["name"].toString().size()>40
                 || !swatch["value"].isString() || !color.isValid() || color.alpha()!=255)return {};
         }
+    }
+    const auto simple=object["simpleStudio"].toObject();
+    const auto groups=simple["themeGroups"].toArray();
+    if(groups.size()!=5 || simple["schemes"].toArray().isEmpty() || simple["schemes"].toArray().size()>32)return {};
+    QSet<QString> seenGroups;
+    for(const auto &value:groups){
+        const auto group=value.toObject();const auto id=group["id"].toString();
+        if(!ThemeColors::roles().contains(id) || seenGroups.contains(id) || group["label"].toString().isEmpty())return {};
+        seenGroups.insert(id);QStringList keys;
+        for(const auto &role:group["roles"].toArray()){const auto row=role.toObject();if(row["label"].toString().isEmpty())return {};keys.append(row["key"].toString());}
+        auto expected=ThemeColors::roles().value(id);keys.sort();expected.sort();if(keys!=expected)return {};
+    }
+    for(const auto &value:simple["schemes"].toArray()){
+        const auto scheme=value.toObject();
+        if(scheme["name"].toString().trimmed().isEmpty() || scheme["name"].toString().size()>80
+            || !ThemeColors::valid(QVariantMap{{"schemaVersion",1},{"colors",scheme["colors"].toObject().toVariantMap()}}))return {};
+    }
+    for(const auto &value:simple["stylePresets"].toArray()){
+        const auto preset=value.toObject();if(preset["name"].toString().isEmpty() || !ComponentSchema::validPresentation(preset["presentation"].toObject().toVariantMap()))return {};
+    }
+    const auto trials=object["trialDurations"].toArray();
+    if(trials.size()!=3)return {};
+    for(int i=0;i<trials.size();++i){
+        const auto trial=trials[i].toObject();
+        const int seconds=QList<int>{30,60,300}[i];
+        if(trial.size()!=2 || !trial["label"].isString() || trial["label"].toString().trimmed().isEmpty()
+            || trial["label"].toString().size()>40 || !trial["seconds"].isDouble() || trial["seconds"].toDouble()!=seconds)return {};
     }
     if(!object["menuWidth"].isDouble() || object["menuWidth"].toDouble()<200 || object["menuWidth"].toDouble()>480)return {};
     if(!object["sectionHeight"].isDouble() || object["sectionHeight"].toDouble()<60 || object["sectionHeight"].toDouble()>800)return {};
@@ -878,6 +909,8 @@ bool HomeLayout::loadDocument(const QByteArray &data, bool userDocument)
     if (m_defaultTheme.contains("surfaceThemes")) presentation["surfaceThemes"] = m_defaultTheme["surfaceThemes"];
     if (theme.contains("surfaceThemes")) presentation["surfaceThemes"] = theme["surfaceThemes"].toVariant();
     if (theme.contains("sourcePolicy")) presentation["sourcePolicy"] = theme["sourcePolicy"].toVariant();
+    if(theme.contains("colorTheme"))presentation["colorTheme"]=theme["colorTheme"].toVariant();
+    for(const auto &keys:ThemeColors::roles())for(const auto &key:keys)if(theme.contains(key))presentation[key]=theme[key].toVariant();
     if (!normalizeAppearance(presentation)) { setError(tr("Home appearance contains invalid values.")); return false; }
     if (!m_owner) {
         auto shellBase = presentation;

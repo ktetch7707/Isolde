@@ -8,7 +8,7 @@ Item {
     property bool selected: false
     property real unit: 1
     readonly property real diameter: Math.min(width-8*unit,height-28*unit,(style.diameter || 110)*unit)
-    readonly property color ink: style.labelColor || appearance.textColor || "#514B67"
+    readonly property color ink: style.labelColor || appearance.labelColor || appearance.textColor || "#514B67"
     readonly property color surface: style.surfaceColor || appearance.surfaceColor || "#E8D4F8"
     readonly property bool logoOnly:!!item.logoSource && (style.logoMode==="cutout" || style.logoMode==="original")
     readonly property var focusFrame:({x:circle.x,y:circle.y,width:circle.width,height:circle.height,radius:circle.radius,color:style.focusColor || appearance.focusColor || "white",lineWidth:Math.max(2,style.focusWidth===undefined?4:style.focusWidth)*unit})
@@ -17,7 +17,7 @@ Item {
         id: circle; objectName: "orbSurface"
         width: root.diameter; height: width; radius: width/2; anchors.horizontalCenter: parent.horizontalCenter
         color: root.logoOnly?"transparent":Qt.rgba(root.surface.r,root.surface.g,root.surface.b,root.style.surfaceOpacity === undefined ? 1 : root.style.surfaceOpacity)
-        border.width: root.logoOnly?0:root.selected && root.style.focusEnabled!==false ? (root.style.focusWidth===undefined?4:root.style.focusWidth)*root.unit : root.style.borderWidth || 1; border.color: root.selected ? root.style.focusColor || root.appearance.focusColor || "white" : root.style.borderColor || "#80FFFFFF"
+        border.width: root.logoOnly?0:root.selected && root.style.focusEnabled!==false ? (root.style.focusWidth===undefined?4:root.style.focusWidth)*root.unit : root.style.borderWidth || 1; border.color: root.selected ? root.style.focusColor || root.appearance.focusColor || "white" : root.style.borderColor || root.appearance.borderColor || "#80FFFFFF"
         Rectangle {visible:!root.logoOnly; anchors.fill: parent; anchors.margins: -7*root.unit; radius: width/2; color:"transparent"; border.width: root.selected ? 7*root.unit : 0; border.color: "#30FFFFFF" }
         ArtworkImage {
             anchors.fill: parent; anchors.margins: root.selected ? 4*root.unit : 1
@@ -30,12 +30,12 @@ Item {
         LineIcon {
             visible: !root.item.logoSource && !root.item.appSymbol
             anchors.centerIn: parent; width: (root.style.iconSize || 44)*root.unit; height: width
-            name: root.style.icon || "display"; ink: root.style.iconColor || "white"
+            name: root.style.icon || "display"; ink: root.style.iconColor || root.appearance.iconColor || "white"
         }
         Text {
             anchors.centerIn:parent;visible:!!root.item.appSymbol && !root.item.logoSource
             text:root.item.appSymbol || "";textFormat:Text.PlainText
-            color:root.style.iconColor || root.ink;font.family:root.appearance.fontFamily || "DejaVu Sans"
+            color:root.style.iconColor || root.appearance.iconColor || root.ink;font.family:root.appearance.fontFamily || "DejaVu Sans"
             font.pixelSize:(root.style.iconSize || 32)*root.unit;Accessible.ignored:true
         }
     }

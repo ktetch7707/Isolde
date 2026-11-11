@@ -61,9 +61,54 @@ Item {
             editor.interactionAction({type:"settings",section:0},"")
             verify(editor.message.indexOf("Would invoke")===0)
             command(inputManager.back);settle()
-            compare(editor.mode,"canvas");compare(editor.pageId,origin.pageId)
+            compare(editor.mode,"apply");compare(editor.pageId,origin.pageId)
             compare(editor.selectedId,origin.selectedId);compare(editor.scopeId,origin.scopeId)
             compare(editor.parentScopeId,origin.parentScopeId);compare(editor.toolbarFocus,origin.toolbarFocus)
+            compare(document(),before);compare(studioFixture.disk(),diskBaseline)
+        }
+        function test_timed_trial_presets_expire_and_repeat_without_saving() {
+            givenPage(false,false)
+            verify(editor.session.execute("rename",{id:"cell-0",name:"Unsaved trial"},editor.pageId))
+            const before=document(),origin=editor.editSnapshot()
+            editor.openSaveDialog()
+            const timer=findChild(editor,"studioTrialTimer")
+            verify(timer!==null)
+            for(let i=0;i<3;++i){
+                editor.choice=editor.dialogLabels().findIndex(label=>label.indexOf("Try for:")===0);command(inputManager.confirm)
+                compare(editor.mode,"trialDuration")
+                compare(editor.dialogLabels().join("|"),"30 seconds|1 minute|5 minutes")
+                editor.choice=i;command(inputManager.confirm)
+                compare(editor.mode,"apply");compare(editor.trialDurationIndex,i)
+                timer.interval=Qt.binding(()=>editor.trialDurations[editor.trialDurationIndex].seconds*1000)
+                editor.choice=editor.dialogLabels().indexOf("Try changes");command(inputManager.confirm)
+                compare(editor.mode,"preview");verify(timer.running)
+                compare(timer.interval,[30000,60000,300000][i])
+                // Drive the real Timer signal at a short interval; production presets stay unchanged.
+                timer.interval=20;timer.restart()
+                tryCompare(editor,"mode","apply")
+                verify(!timer.running);verify(editor.trialReturned)
+                compare(editor.operationTitle,"Keep these changes?")
+                compare(editor.pageId,origin.pageId);compare(editor.selectedId,origin.selectedId)
+                compare(document(),before);compare(studioFixture.disk(),diskBaseline)
+                editor.choice=1;command(inputManager.confirm);compare(editor.mode,"canvas")
+                editor.openSaveDialog()
+                // Restore the preset binding value after the accelerated expiry.
+                timer.interval=editor.trialDurations[(i+1)%3].seconds*1000
+            }
+            editor.choice=editor.dialogLabels().indexOf("Try changes");command(inputManager.confirm);verify(timer.running)
+            editor.close();verify(!timer.running)
+            wait(40);compare(studioFixture.disk(),diskBaseline)
+        }
+        function test_named_version_rename_preserves_identity_and_draft(){
+            givenPage(false,false);const before=document()
+            verify(editor.session.saveVersion("Original"))
+            const version=editor.session.versions()[0]
+            verify(!editor.session.renameVersion(version.id," "))
+            compare(editor.session.versions()[0].name,"Original")
+            verify(editor.session.renameVersion(version.id,"Family room"))
+            compare(editor.session.versions()[0].id,version.id)
+            compare(editor.session.versions()[0].name,"Family room")
+            verify(!editor.session.renameVersion("missing-version","Lost"))
             compare(document(),before);compare(studioFixture.disk(),diskBaseline)
         }
         function test_t23_stress_scenarios_are_private_and_editor_lock_blocks_commands() {
@@ -103,7 +148,7 @@ Item {
             editor.mode="canvas"
             verify(editor.session.saveVersion("UI milestone"))
             editor.versionEntries=editor.session.versions()
-            editor.mode="versions";editor.choice=3;editor.activateChoice()
+            editor.mode="versions";editor.choice=0;editor.activateChoice()
             compare(editor.mode,"versionReview");compare(document(),before)
             command(inputManager.back);settle();compare(editor.mode,"versions");compare(editor.selectedId,origin)
             compare(document(),before);compare(studioFixture.disk(),diskBaseline)

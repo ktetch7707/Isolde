@@ -75,22 +75,22 @@ Item {
             catalog.handleCommand(inputManager.back);compare(catalog.view,"families");compare(appPickerSpy.count,0)
             catalog.chooseFamily(family);catalog.handleCommand(inputManager.navigateRight);catalog.handleCommand(inputManager.confirm)
             compare(catalog.configuration.variant,"round");compare(catalog.view,"links")
-            catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm);compare(appPickerSpy.count,1)
+            for(let i=0;i<4;++i)catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm);compare(appPickerSpy.count,1)
             const remote=editor.session.componentPrototype("button",appPickerSpy.signalArguments[0][1]);compare(remote.root.placement.width,2);compare(remote.root.presentation.variant,"orb")
             appPickerSpy.clear();catalog.begin();catalog.chooseFamily(family);const round=findChild(catalog,"studioVariant-round");verify(round!==null)
-            mouseClick(round,round.width/2,round.height/2);compare(catalog.view,"links");catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm)
+            mouseClick(round,round.width/2,round.height/2);compare(catalog.view,"links");for(let i=0;i<4;++i)catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm)
             compare(appPickerSpy.count,1);const pointer=editor.session.componentPrototype("button",appPickerSpy.signalArguments[0][1]);compare(JSON.stringify(pointer),JSON.stringify(remote))
             compare(JSON.stringify(editor.session.document),before);compare(editor.session.changeCount,count);compare(studioFixture.disk(),diskBaseline)
         }
         Component {id:collectionPickerComponent;App.StudioAppPicker {width:1280;height:720;settings:homeLayout.studioOptions.appPicker;appearance:homeLayout.studioAppearance}}
         SignalSpy {id:collectionPickerSpy;signalName:"accepted"}
-        Component {id:actionPickerComponent;App.StudioActionPicker {width:1280;height:720;categories:homeLayout.studioOptions.actionCategories;appearance:homeLayout.studioAppearance}}
+        Component {id:actionPickerComponent;App.StudioActionPicker {width:1280;height:720;categories:homeLayout.studioOptions.actionCategories;intents:homeLayout.studioOptions.simpleStudio.actionIntents;appearance:homeLayout.studioAppearance}}
         SignalSpy {id:actionPickedSpy;signalName:"picked"}
         SignalSpy {id:actionCanceledSpy;signalName:"canceled"}
         function test_action_picker_search_categories_and_cancel(){
             const actions=[{name:"Open Home",action:{type:"root-page"}},{name:"Cinema input",aliases:["HDMI","capture source"],action:{type:"switch-input",input:2}},{name:"Movie",needsMedia:"movies"}]
             const picker=createTemporaryObject(actionPickerComponent,tests.parent,{actions:actions});verify(picker!==null)
-            actionPickedSpy.target=picker;actionCanceledSpy.target=picker;actionPickedSpy.clear();actionCanceledSpy.clear()
+            actionPickedSpy.target=picker;actionCanceledSpy.target=picker;picker.intentMenu=false;actionPickedSpy.clear();actionCanceledSpy.clear()
             picker.query="HDMI source";compare(picker.entries.length,1);compare(picker.entries[0].name,"Cinema input")
             picker.handleCommand(inputManager.navigateDown);picker.handleCommand(inputManager.confirm)
             compare(actionPickedSpy.count,1);compare(actionPickedSpy.signalArguments[0][0].action.input,2)
@@ -99,7 +99,7 @@ Item {
             picker.query="no matching link";compare(picker.entries.length,0);picker.toolsFocused=true;picker.tool=0
             picker.handleCommand(inputManager.confirm);verify(picker.searching)
             picker.handleCommand(inputManager.back);verify(!picker.searching);compare(picker.query,"no matching link")
-            picker.handleCommand(inputManager.back);compare(actionCanceledSpy.count,1);compare(actionPickedSpy.count,1)
+            picker.handleCommand(inputManager.back);verify(picker.intentMenu);picker.handleCommand(inputManager.back);compare(actionCanceledSpy.count,1);compare(actionPickedSpy.count,1)
             compare(actions[1].action.input,2)
         }
         Component {id:backdropComponent;App.PageBackdrop {width:320;height:180;startColor:"black";endColor:"blue"}}
@@ -416,7 +416,7 @@ Item {
             const more=findChild(carousel,"appCarouselCard-__more__")
             compare(more.item.presentation.icon,"grid")
             const before=JSON.stringify(editor.session.document),history=editor.session.changeCount
-            editor.openInspector(false);settle()
+            editor.openInspector(false);findChild(editor,"studioInspector").showDetails();settle()
             const inspector=findChild(editor,"studioInspector")
             if(inspector.collapsed)command(inputManager.confirm)
             command(inputManager.confirm);compare(inspector.view,"fields")
@@ -601,7 +601,7 @@ Item {
             verify(editor.session.execute("composition",{value:Object.assign({},editor.page.composition,{grid:Object.assign({},editor.page.grid,{columns:8,rows:5})})}),editor.session.errorString)
             editor.toolbarFocus=true;editor.menuIndex=0;command(inputManager.navigateDown);command(inputManager.navigateDown);command(inputManager.confirm)
             compare(editor.mode,"catalog")
-            const target=homeLayout.studioOptions.catalog.findIndex(item=>item.id==="recently-viewed");verify(target>=0)
+            const catalog=findChild(editor,"studioCatalog");catalog.selected=catalog.primaryFamilies.length;command(inputManager.confirm);const target=catalog.families.findIndex(item=>item.id==="recently-viewed");verify(target>=0)
             for(let index=0;index<target;index++)command(inputManager.navigateRight)
             command(inputManager.confirm);compare(editor.mode,"move");compare(editor.addingType,"recently-viewed")
             const before=JSON.stringify(editor.session.document),count=editor.session.changeCount
@@ -609,7 +609,7 @@ Item {
             compare(editor.current.family,"recently-viewed");compare(editor.current.source.kind,"recently-viewed")
             compare(editor.current.presentation.libraryKind,"history");compare(editor.current.presentation.libraryView,"watched")
             const added=JSON.stringify(editor.session.document)
-            editor.openInspector(false);settle()
+            editor.openInspector(false);findChild(editor,"studioInspector").showDetails();settle()
             const inspector=findChild(editor,"studioInspector")
             if(inspector.collapsed)command(inputManager.confirm)
             command(inputManager.confirm);compare(inspector.view,"fields")
@@ -686,7 +686,7 @@ Item {
             const before=JSON.stringify(editor.session.document),history=editor.session.changeCount
             command(inputManager.confirm);compare(editor.mode,"context");compare(card.selected,true)
             editor.toolbarFocus=true;compare(card.selected,true)
-            editor.toolbarFocus=false;editor.openInspector(false);compare(card.selected,true)
+            editor.toolbarFocus=false;editor.openInspector(false);findChild(editor,"studioInspector").showDetails();compare(card.selected,true)
             if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-selection-orb.png")
             compare(JSON.stringify(editor.session.document),before);compare(editor.session.changeCount,history)
             compare(studioFixture.disk(),diskBaseline)
@@ -701,12 +701,12 @@ Item {
             const before=JSON.stringify(editor.session.document)
             editor.selectedId="";tryCompare(card,"selected",false)
             editor.selectedId="cell-0";tryCompare(card,"selected",true)
-            editor.openInspector(false);compare(card.selected,true)
+            editor.openInspector(false);findChild(editor,"studioInspector").showDetails();compare(card.selected,true)
             compare(JSON.stringify(editor.session.document),before)
             compare(studioFixture.disk(),diskBaseline)
         }
         function test_switch_pointer_remote_parity_and_undo() {
-            editor.openInspector(false)
+            editor.openInspector(false);findChild(editor,"studioInspector").showDetails()
             const inspector=findChild(editor,"studioInspector")
             inspector.advanced=true;inspector.view="fields"
             inspector.tab=inspector.tabs.indexOf("Appearance")

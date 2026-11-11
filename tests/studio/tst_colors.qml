@@ -15,6 +15,7 @@ Item {
             if(data.kind){verify(editor.session.execute("addResolved",{type:data.kind,placement:{x:1,y:0,width:2,height:1}}));settle();editor.selectedId=editor.items.find(i=>i.id!=="cell-0").id;verify(editor.session.execute("patch",{id:editor.selectedId,value:{presentation:{fillMode:"gradient"}}}));settle()}
             const before=document(),count=editor.session.changeCount;editor.openInspector(data.page)
             const inspector=findChild(editor,"studioInspector");inspector.editorMode=!!data.editor
+                if(inspector.view==="simple")inspector.showDetails()
             const fields=data.editor?homeLayout.studioOptions.inspector.studioFields:data.page?homeLayout.studioOptions.inspector.pageFields:homeLayout.studioOptions.inspector.fields
             const field=fields.find(f=>f.scope===data.scope && f.key===data.key);verify(!!field)
             inspector.activateField(field);const picker=inspector.colorPicker;verify(picker!==null);picker.choose(data.editor?"#ffffff":"#82bce8");settle()

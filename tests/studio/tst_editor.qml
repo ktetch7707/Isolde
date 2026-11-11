@@ -50,7 +50,7 @@ Item {
             scenario("replace-in-place",()=>{
                 givenPage(false,false)
                 const before=document(),placement=JSON.stringify(editor.current.placement)
-                editor.openInspector(false)
+                editor.openInspector(false);findChild(editor,"studioInspector").showDetails()
                 const inspector=findChild(editor,"studioInspector")
                 inspector.view="fields";inspector.controlsShown=true
                 const field=inspector.fields.find(f=>f.type==="replaceComponent");verify(!!field)
@@ -101,15 +101,15 @@ Item {
         function test_named_tools_history_and_draft_default_restore() {
             scenario("named-tools",()=>{
                 givenPage(false,false)
-                verify(!editor.menuEntries.some(e=>e.label==="More tools"))
-                verify(!editor.menuEntries.some(e=>e.action==="more"))
-                verify(editor.menuEntries.some(e=>e.label==="Layers"))
-                verify(editor.menuEntries.some(e=>e.label==="Saved designs"))
-                for(const label of ["Page appearance","Editor settings","Review & Apply"])verify(editor.menuEntries.some(e=>e.label===label),label)
+                verify(editor.menuEntries.some(e=>e.action==="more"))
+                verify(!editor.menuEntries.some(e=>e.action==="page"))
+                verify(editor.menuEntries.some(e=>e.action==="layers"))
+                verify(editor.menuEntries.some(e=>e.action==="library"))
+                for(const label of ["Page appearance","Save changes…"])verify(editor.menuEntries.some(e=>e.label===label),label)
                 const before=document()
                 skinsSpy.target=editor;skinsSpy.clear()
-                editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Saved designs"));compare(editor.mode,"designTools");compare(skinsSpy.count,0);skinsSpy.target=null
-                editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Layers"));compare(editor.mode,"layers")
+                editor.activateEntry({action:"designs"});compare(editor.mode,"designTools");compare(skinsSpy.count,0);skinsSpy.target=null
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="layers"));compare(editor.mode,"layers")
                 command(inputManager.back);compare(editor.mode,"canvas")
                 editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Page appearance"));compare(editor.mode,"inspector")
                 const inspector=findChild(editor,"studioInspector");compare(inspector.pageMode,true);verify(inspector.tabs.includes("Layout"))
@@ -121,23 +121,44 @@ Item {
                 command(inputManager.navigateRight);command(inputManager.confirm);compare(document(),moved)
                 command(inputManager.navigateDown);verify(!editor.historyFocus)
                 const origin=editor.selectedId
-                editor.activateMenu(editor.menuEntries.findIndex(e=>e.label==="Review & Apply"));compare(editor.mode,"apply")
-                verify(editor.dialogLabels()[2].indexOf("Page health")===0)
-                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="safety"));compare(editor.mode,"safety")
-                compare(editor.dialogLabels()[0],"Try interaction")
-                editor.choice=0;command(inputManager.confirm);compare(editor.mode,"preview")
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="apply"));compare(editor.mode,"apply")
+                verify(editor.dialogLabels().some(label=>label.indexOf("Try for:")===0))
+                editor.choice=editor.dialogLabels().indexOf("Try changes");command(inputManager.confirm);compare(editor.mode,"preview")
                 compare(document(),moved);compare(editor.selectedId,origin)
-                command(inputManager.back);compare(editor.mode,"canvas");compare(editor.selectedId,origin)
-                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="editorSettings"))
-                compare(editor.mode,"editorSettings");const resetIndex=editor.dialogLabels().findIndex(label=>label.indexOf("Reset interface")===0);verify(resetIndex>=0);editor.choice=resetIndex;command(inputManager.confirm)
+                command(inputManager.back);compare(editor.mode,"apply");compare(editor.selectedId,origin)
+                editor.mode="pageContext";const resetIndex=9;editor.choice=resetIndex;command(inputManager.confirm)
                 compare(editor.mode,"restoreDefaults");compare(editor.choice,0)
                 compare(editor.dialogLabels().slice(0,2).join("|"),"Cancel|Restore this page in draft; keep other pages");verify(editor.dialogLabels()[2].indexOf("Whole interface")>=0)
-                command(inputManager.confirm);compare(editor.mode,"editorSettings");compare(editor.choice,resetIndex);compare(document(),moved)
+                command(inputManager.confirm);compare(editor.mode,"pageContext");compare(editor.choice,resetIndex);compare(document(),moved)
                 editor.choice=resetIndex;command(inputManager.confirm);editor.choice=1;command(inputManager.confirm)
                 compare(editor.mode,"canvas");compare(editor.toolbarFocus,true);compare(editor.selectedId,"");verify(document()!==moved)
                 verify(editor.session.undo());compare(document(),moved);compare(editor.toolbarFocus,true)
                 compare(studioFixture.disk(),diskBaseline)
             })
+        }
+        function test_grouped_pages_library_and_history_remote_navigation() {
+            givenPage(false,false)
+            const count=editor.menuEntries.length,origin=editor.selectedId
+            verify(editor.session.execute("newPage",{name:"Second page"}))
+            compare(editor.menuEntries.length,count)
+            editor.toolbarFocus=true;editor.menuIndex=0
+            command(inputManager.confirm);compare(editor.mode,"pages")
+            compare(editor.dialogLabels().length,editor.pageEntries.length+2)
+            command(inputManager.navigateDown);command(inputManager.confirm)
+            compare(editor.mode,"canvas");compare(editor.toolbarFocus,false)
+            const destination=editor.pageId
+            verify(destination!=="")
+            editor.toolbarFocus=true;editor.menuIndex=0
+            command(inputManager.confirm);command(inputManager.confirm)
+            compare(editor.pageId,"");compare(editor.selectedId,origin)
+            editor.toolbarFocus=true;editor.menuIndex=0
+            command(inputManager.navigateUp);command(inputManager.navigateRight);command(inputManager.navigateRight)
+            command(inputManager.confirm);compare(editor.mode,"versions")
+            command(inputManager.back);compare(editor.mode,"canvas")
+            editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="library"))
+            compare(editor.dialogLabels().join("|"),"Saved designs|Shared styles & My components")
+            command(inputManager.confirm);compare(editor.mode,"designTools")
+            compare(studioFixture.disk(),diskBaseline)
         }
         function test_studio_menu_last_action_is_not_clipped() {
             givenPage(false,false)
@@ -147,7 +168,7 @@ Item {
             verify(menu!==null)
             tryVerify(()=>menu.contentHeight>0)
             editor.palette=Object.assign({},editor.palette,{typographyScale:1.5})
-            const reuse=editor.menuEntries.findIndex(entry=>entry.action==="reuse")
+            const reuse=editor.menuEntries.findIndex(entry=>entry.action==="library")
             editor.menuIndex=reuse;settle()
             tryVerify(()=>findChild(editor,"studioMenuLabel-"+reuse)!==null)
             const label=findChild(editor,"studioMenuLabel-"+reuse)
@@ -155,11 +176,11 @@ Item {
             verify(label.implicitHeight<=label.height+1,"Long action names must fit their rows")
             editor.menuIndex=editor.menuEntries.length-1
             settle()
-            tryVerify(()=>menu.currentItem!==null && menu.currentItem.y+menu.currentItem.height<=menu.contentY+menu.height+1)
-            const last=menu.itemAtIndex(editor.menuEntries.length-1)
-            verify(last!==null)
-            verify(last.y+last.height<=menu.contentY+menu.height)
-            compare(editor.menuEntries[editor.menuEntries.length-1].action,"edit")
+            const last=findChild(editor,"studioExit"),save=findChild(editor,"studioSaveChanges")
+            verify(last!==null && save!==null)
+            verify(last.mapToItem(editor,0,last.height).y<=editor.height)
+            verify(save.mapToItem(editor,0,0).y>=0)
+            compare(editor.menuEntries[editor.menuEntries.length-1].action,"exit")
             if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-menu-large-text.png")
             editor.menuIndex=0;settle()
             tryVerify(()=>menu.currentItem!==null && menu.currentItem.y>=menu.contentY)
@@ -185,11 +206,18 @@ Item {
             command(inputManager.back)
             compare(studioFixture.disk(),diskBaseline)
         }
+        function test_all_apps_settings_back_restores_page_management() {
+            givenPage(false,false)
+            editor.mode="pageContext";editor.choice=8
+            command(inputManager.confirm);compare(editor.mode,"appGallery")
+            command(inputManager.back);compare(editor.mode,"pageContext");compare(editor.choice,8)
+            compare(studioFixture.disk(),diskBaseline)
+        }
         function test_studio_colors_use_shared_picker_cancel_and_one_undo() {
             scenario("studio-colors",()=>{
                 givenPage(false,false)
                 const before=document()
-                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="editorSettings"))
+                editor.activateEntry({action:"editorSettings"})
                 editor.choice=1;command(inputManager.confirm)
                 const inspector=findChild(editor,"studioInspector")
                 verify(inspector.editorMode)
@@ -327,7 +355,7 @@ Item {
             })
         }
         function pageColor(key) {
-            editor.openInspector(true)
+            editor.openInspector(true);findChild(editor,"studioInspector").showDetails()
             const inspector=findChild(editor,"studioInspector")
             inspector.activateField(homeLayout.studioOptions.inspector.pageFields.find(f=>f.key===key))
             compare(inspector.view,"colorWheel")

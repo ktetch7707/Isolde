@@ -1,4 +1,5 @@
 #include "StudioSession.h"
+#include "ThemeColors.h"
 #include "HomeLayout.h"
 #include "HomeDesignData.h"
 #include "ComponentSchema.h"
@@ -168,7 +169,25 @@ QJsonValue remapApps(QJsonValue value, const QVariantMap &mapping)
 }
 QVariantList StudioSession::designChoices() const
 {
-    return currentProfile() ? m_live->skins() : QVariantList{};
+    if(!currentProfile())return {};
+    auto result=m_live->skins();
+    for(auto &value:result){
+        auto entry=value.toMap();const auto document=m_live->skinSnapshot(entry.value("id").toString()).value("layout").toObject();
+        const auto theme=ThemeColors::resolve(m_live->appearance(),document.value("theme").toObject().toVariantMap());
+        const auto base=m_live->appearance();
+        const auto safeColor=[&](const QString &key){const QColor color(theme.value(key).toString());return color.isValid() && color.alpha()==255?color.name():base.value(key).toString();};
+        const auto grid=document.value("composition").toObject().value("grid").toObject();
+        const int columns=grid.value("columns").toInt(8),rows=grid.value("rows").toInt(5);
+        const bool gridValid=ComponentSchema::validGrid(grid.toVariantMap());
+        QVariantList blocks;
+        for(const auto &node:document.value("components").toArray()){
+            const auto placement=node.toObject().value("placement").toObject().toVariantMap();
+            if(gridValid && blocks.size()<32 && ComponentSchema::validPlacement(placement,columns,ComponentSchema::MaxScrollableRows))blocks.append(placement);
+        }
+        entry["preview"]=QVariantMap{{"background",safeColor("backgroundStart")},{"surface",safeColor("surfaceColor")},{"text",safeColor("textColor")},{"focus",safeColor("focusColor")},{"columns",gridValid?columns:8},{"rows",gridValid?rows:5},{"blocks",blocks}};
+        value=entry;
+    }
+    return result;
 }
 QVariantMap StudioSession::previewDesign(const QString &id, const QString &scope, const QString &pageId)
 {

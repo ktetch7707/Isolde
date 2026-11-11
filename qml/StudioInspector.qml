@@ -23,10 +23,35 @@ Item {
     property int tab:0
     property int selected:0
     property bool advanced:false
+    property string fieldReturnView:"fields"
+    property bool detailsOpen:false
+    property bool simpleSwatch:false
+    property int themeGroupIndex:0
+    readonly property var simpleSettings:options.simpleStudio || ({})
+    readonly property var themeGroups:simpleSettings.themeGroups || []
+    readonly property var themeGroup:themeGroups[themeGroupIndex] || ({roles:[]})
+    readonly property var allFields:((options.inspector || {}).fields || []).filter(f=>(!f.types || current && f.types.indexOf(current.componentType)>=0) && (!f.excludeTypes || !current || f.excludeTypes.indexOf(current.componentType)<0) && (!f.families || current && f.families.indexOf(current.family)>=0) && (!f.excludeFamilies || !current || f.excludeFamilies.indexOf(current.family)<0))
+    readonly property var simpleFields:(simpleSettings.basicFields || []).map(key=>allFields.find(f=>f.key===key)).filter(f=>!!f && (f.key!=="customLogo" || current && ["button","image","launcher","action-tile","media-shelf"].indexOf(current.componentType)>=0) && (f.key!=="visibleLabel" || current && ["text","shape"].indexOf(current.componentType)<0) && (f.key!=="action" || current && ["button","image","action-tile","launcher"].indexOf(current.componentType)>=0))
+    function themeColors(){
+        const stored=((rawPage.theme || {}).colorTheme || {}).colors || (page.appearance.colorTheme || {}).colors || {}
+        const result={}
+        for(const group of themeGroups)result[group.id]=stored[group.id] || page.appearance[group.roles[0].key] || page.appearance.focusColor
+        return result
+    }
+    function themeOverrides(group){return group.roles.filter(role=>(rawPage.theme || {})[role.key]!==undefined).length}
+    function groupField(group){return {scope:"themeGroup",key:group.id,label:group.label,type:"color"}}
+    function showDetails(){detailsOpen=true;view="tabs";fieldReturnView="fields";selected=0;advanced=false;simpleSwatch=false}
+    function openBasicTab(name){detailsOpen=false;tab=tabs.indexOf(name);advanced=false;fieldReturnView="fields";view="fields";selected=0}
+    function applyScheme(index){
+        const scheme=(simpleSettings.schemes || [])[index];if(!scheme)return
+        const value={colorTheme:{schemaVersion:1,colors:scheme.colors}}
+        for(const group of themeGroups)for(const role of group.roles)value[role.key]=null
+        if(run("pagePatch",{scope:"theme",value:value})){view="theme";selected=0}
+    }
     property string editingState:"base"
     property bool controlsShown:false
     property bool hiddenControls:false
-    property string message:"Choose a group of properties. Changes affect the draft; Apply saves them."
+    property string message:"Choose a group of properties. Changes affect the draft; Save changes saves them."
     property var activeField:({})
     property var choices:[]
     property var assets:[]
@@ -67,13 +92,13 @@ Item {
         const revision = session.document
         return model.surfaceAppearance(shellSurface, pageId)
     }
-    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header","Shell"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:["Content","Appearance","Layout","Actions","Accessibility","More"]
+    readonly property var tabs:editorMode?["Colors"]:pageMode?["Colors","Background","Layout","More","Header","Shell"]:structureType==="navigation"?["Content","Actions","More"]:structureType==="section"?["Content","Appearance","Layout","Actions","More"]:["Content","Appearance","Layout","Accessibility","More"]
     readonly property var targets:!page?[]:structureType?((structureType==="section"?page.categories:page.composition.navigation) || []).filter(i=>i.id===structureId).map(i=>Object.assign({},i,{componentType:structureType})):(page.items || []).filter(i=>selectedIds.indexOf(i.id)>=0)
     readonly property var current:targets[0] || null
     readonly property var actions:session?session.availableActions:[]
     readonly property var allApps:actions.filter(a=>a.action && a.action.type==="launch-app" && (a.appType==="web" || a.appType==="desktop" || a.appType==="android"))
     readonly property var apps:allApps.filter(a=>!current || !current.appCollection || !current.appCollection.section || a.appSection===current.appCollection.section)
-    readonly property var fields:((options.inspector || {})[editorMode?"studioFields":pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !f.advanced) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (editorMode || pageMode || targets.length && targets.every(i=>(!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
+    readonly property var fields:((options.inspector || {})[editorMode?"studioFields":pageMode?"pageFields":"fields"] || []).filter(f=>f.tab===tabs[tab] && (advanced || !f.advanced && (pageMode?(f.tab!=="Header" || (simpleSettings.basicHeader || []).indexOf(f.key)>=0) && (f.tab!=="Layout" || (simpleSettings.basicPageLayout || []).indexOf(f.key)>=0):f.tab!=="Appearance" || (simpleSettings.basicAppearance || []).indexOf(f.key)>=0)) && (!f.needsNamedPage || !!pageId) && (!f.needsComposition || page && page.composition.enabled) && (structureType!=="navigation" || f.key==="name" || f.key==="action") && (editingState==="base" || tabs[tab]!=="Appearance" || f.scope==="presentation" && ["surfaceColor","surfaceOpacity","labelColor","iconColor","focusColor","borderColor","borderWidth","focusWidth","radius","labelSize","labelBold","labelSurfaceColor"].indexOf(f.key)>=0) && (editorMode || pageMode || targets.length && targets.every(i=>(!f.types || f.types.indexOf(i.componentType)>=0) && (!f.excludeTypes || f.excludeTypes.indexOf(i.componentType)<0) && (!f.families || f.families.indexOf(i.family)>=0) && (!f.excludeFamilies || f.excludeFamilies.indexOf(i.family)<0))))
     readonly property real unit:(appearance.typographyScale || 1)*Math.min(width/1280,height/720)
     readonly property real panelWidth:Math.min(width-48*unit,540*unit)
     readonly property real panelHeight:Math.min(height-48*unit,650*unit)
@@ -85,8 +110,9 @@ Item {
     signal closed()
     signal operation(string name)
     signal samplesChanged(bool enabled)
-    function begin(asPage){editorMode=false;pageMode=asPage;structureType="";structureId="";view="tabs";tab=0;selected=0;advanced=false;editingState="base";controlsShown=false;hiddenControls=false;message="Choose a property group. Changes affect the draft; Apply saves them."}
+    function begin(asPage){editorMode=false;pageMode=asPage;structureType="";structureId="";detailsOpen=false;view="simple";fieldReturnView="simple";tab=0;selected=0;advanced=false;editingState="base";controlsShown=false;hiddenControls=false;message=""}
     function local(item,f){
+        if(f.scope==="themeGroup")return themeColors()[f.key]
         if(pageMode && f.type==="sourcePolicy")return (rawPage.theme || {}).sourcePolicy
         if(editorMode)return ((session?session.document:{}).studioAppearance || {})[f.key]
         if(pageMode && f.scope==="surfaceTheme")return f.key==="surface"?shellSurface:f.key==="mode"?shellPolicy.mode:(shellPolicy.tokens || {})[f.key]
@@ -96,12 +122,13 @@ Item {
         return f.scope==="accessibility"?(item.accessibility || {})[f.key]:item[f.key]
     }
     function effective(item,f){
+        if(f.scope==="themeGroup")return themeColors()[f.key]
         item=item || {}
         if(!page)return f.fallback!==undefined?f.fallback:""
         const value=local(item,f);if(value!==undefined)return value
         if(pageMode && f.scope==="surfaceTheme")return f.key==="mode"?(shellSurface==="settings"?"home":"origin"):shellPreview[f.key]
         if(editorMode)return (options.appearance || {})[f.key]
-        if(pageMode){if(f.scope==="theme")return page.appearance[f.key];if(f.scope==="background")return (options.backgroundDefaults || {})[f.key];if(f.scope==="headerStyle"){const defaults=(options.headerDefaults || {})[page.composition.headerMode==="identity"?"identity":"navigation"] || {};if(defaults[f.key]!==undefined)return defaults[f.key];if(f.key==="textColor")return page.appearance.textColor;if(f.key==="focusColor")return page.appearance.focusColor;if(f.key==="backgroundColor")return page.appearance.surfaceColor}}
+        if(pageMode){if(f.scope==="theme"){const group=themeGroups.find(g=>g.roles.some(r=>r.key===f.key));return page.appearance[f.key] || (group?themeColors()[group.id]:undefined)}if(f.scope==="background")return (options.backgroundDefaults || {})[f.key];if(f.scope==="headerStyle"){const defaults=(options.headerDefaults || {})[page.composition.headerMode==="identity"?"identity":"navigation"] || {};if(defaults[f.key]!==undefined)return defaults[f.key];if(f.key==="textColor")return page.appearance.textColor;if(f.key==="focusColor")return page.appearance.focusColor;if(f.key==="backgroundColor")return page.appearance.surfaceColor}}
         else if(f.scope==="presentation"){
             const p=item.presentation || {};if(editingState!=="base" && p[f.key]!==undefined)return p[f.key]
             const section=!item.parentId?(page.categories || []).find(s=>s.id===item.categoryId):null
@@ -158,8 +185,8 @@ Item {
             else scalarDraft=Number(effective(current,activeField))
         })
     }
-    function cancelScalar(){scalarPending=false;if(session)session.cancelPreview();scalarTransactionActive=false;view="fields";selected=returnSelection;message=""}
-    function acceptScalar(){flushScalar();if(message)return;if(session.proposalModel && !session.acceptPreview()){message=session.errorString;return}scalarTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied."}
+    function cancelScalar(){scalarPending=false;if(session)session.cancelPreview();scalarTransactionActive=false;view=fieldReturnView;selected=returnSelection;message=""}
+    function acceptScalar(){flushScalar();if(message)return;if(session.proposalModel && !session.acceptPreview()){message=session.errorString;return}scalarTransactionActive=false;view=fieldReturnView;selected=returnSelection;message="Draft updated · nothing applied."}
     function scalarCommand(command){
         if(command===inputManager.back){cancelScalar();return}
         const direction=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
@@ -182,13 +209,19 @@ Item {
         colorTransactionActive=true;colorLoader.active=true;view="colorWheel";selected=0
         colorPicker.begin(effective(current,activeField) || page.appearance.textColor)
     }
-    function cancelColor(){if(colorPicker)colorPicker.previewQueued=false;if(session)session.cancelPreview();colorTransactionActive=false;view="fields";selected=returnSelection;message="";colorLoader.active=false}
+    function cancelColor(){if(colorPicker)colorPicker.previewQueued=false;if(session)session.cancelPreview();colorTransactionActive=false;view=fieldReturnView;selected=returnSelection;message="";colorLoader.active=false}
     function acceptColor(value,reset){
         if(colorPicker.error)return
         if(session.proposalModel && !(reset?session.acceptPreview():session.acceptColorPreview(value))){colorPicker.error=session.errorString;return}
-        colorTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied.";colorLoader.active=false
+        colorTransactionActive=false;view=fieldReturnView;selected=returnSelection;message="Draft updated · nothing applied.";colorLoader.active=false
     }
     function set(f,value,reset){
+        if(f.scope==="themeGroup"){
+            const colors=themeColors(),previous=colors[f.key];colors[f.key]=reset?(simpleSettings.schemes || [])[0].colors[f.key]:value
+            const group=themeGroups.find(g=>g.id===f.key),patch={colorTheme:{schemaVersion:1,colors:colors}}
+            if(!(rawPage.theme || {}).colorTheme)for(const role of group.roles)if((rawPage.theme || {})[role.key]===previous)patch[role.key]=null
+            return run("pagePatch",{scope:"theme",value:patch})
+        }
         if(editorMode){const appearance=Object.assign({},(session.document || {}).studioAppearance || {});if(reset)delete appearance[f.key];else appearance[f.key]=value;return run("studioAppearance",{value:appearance})}
         if(f.scope==="presentation" && f.key==="libraryView" && !pageMode && (value==="playlist" || (current.presentation || {}).libraryView==="playlist")){
             if(structureType==="section")return run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},{libraryView:reset?"all":value,libraryValue:""})})
@@ -224,6 +257,7 @@ Item {
             }
             return run("pagePatch",{scope:"theme",value:{surfaceThemes:Object.keys(policies).length?policies:null}})
         }
+        if(pageMode && f.scope==="theme" && fieldReturnView==="themeRoles" && reset){return run("pagePatch",{scope:"theme",value:{colorTheme:{schemaVersion:1,colors:themeColors()},[f.key]:null}})}
         if(pageMode){let scope=f.scope,key=f.key,change=value
             if(scope==="headerStyle"){scope="composition";key="header";change=Object.assign({},(rawPage.composition || {}).header || {});if(reset)delete change[f.key];else change[f.key]=value}
             if(scope==="background"){scope="composition";key="background";change=Object.assign({},options.backgroundDefaults || {},page.composition.background || {});if(reset)delete change[f.key];else change[f.key]=value}
@@ -245,13 +279,13 @@ Item {
     }
     function openChoices(entries){choices=entries;view="choices";selected=0;if(!entries.length)message="No configured choices are available. Add the corresponding page, tab or source first. Back returns without changes."}
     function beginKeyboard(kind,value){keyboardKind=kind;returnView=view;keyboardSelection=selected;keyboard.value=String(value===undefined?"":value);keyboard.selectedIndex=0;view="keyboard"}
-    function cancelFraming(){session.cancelPreview();framingTransactionActive=false;view="fields";selected=returnSelection;message=""}
+    function cancelFraming(){session.cancelPreview();framingTransactionActive=false;view=fieldReturnView;selected=returnSelection;message=""}
     function framingPreview(value){
         if(pageMode){const background=Object.assign({},options.backgroundDefaults || {},page.composition.background || {},value);run("pagePatch",{scope:"composition",value:{background:background}})}
         else run("patch",{ids:selectedIds,value:{presentation:value}})
     }
-    function acceptFraming(){if(message && message!=="Draft updated · nothing applied.")return;if(session.proposalModel && !session.acceptPreview()){message=session.errorString;return}framingTransactionActive=false;view="fields";selected=returnSelection;message="Draft updated · nothing applied."}
-    function pickArtwork(source){const relative=session.stageArtwork(source);if(!relative){message=session.errorString;return}if(set(activeField,relative,false)){view="fields";selected=returnSelection;message="Artwork staged privately. Apply publishes it; cancel/discard leaves the applied profile unchanged."}}
+    function acceptFraming(){if(message && message!=="Draft updated · nothing applied.")return;if(session.proposalModel && !session.acceptPreview()){message=session.errorString;return}framingTransactionActive=false;view=fieldReturnView;selected=returnSelection;message="Draft updated · nothing applied."}
+    function pickArtwork(source){const relative=session.stageArtwork(source);if(!relative){message=session.errorString;return}if(set(activeField,relative,false)){view=fieldReturnView;selected=returnSelection;message="Artwork staged privately. Apply publishes it; cancel/discard leaves the applied profile unchanged."}}
     function activateField(f){
         if(targets.length>1 && ["geometry","layout","children","apps","order","grid","replaceComponent"].indexOf(f.type)>=0){message="Choose one component for this structural operation. Shared appearance and links can edit all selected items.";return}
         activeField=f;returnSelection=selected
@@ -291,7 +325,13 @@ Item {
         operation(f.type)
     }
     function labels(){
-        if(view==="tabs")return tabs.map(t=>!pageMode && t==="Layout"?"Size & layout":!pageMode && t==="Actions"?"Action":t)
+        if(view==="simple")return pageMode?["Theme colors","Background","Header","Page layout","Advanced page settings"]:simpleFields.map(f=>f.label+": "+summary(f)).concat(["Style","Size & layout","Advanced component settings"])
+        if(view==="theme")return themeGroups.map(g=>g.label+(themeOverrides(g)?" · "+themeOverrides(g)+" custom colors":" · Linked")).concat(["Color schemes","Advanced colors","Back"])
+        if(view==="themeRoles")return themeGroup.roles.map(r=>r.label+" · "+((rawPage.theme || {})[r.key]===undefined?"Uses "+themeGroup.label:"Custom")).concat(["Use theme color for this group","Back"])
+        if(view==="schemes")return (simpleSettings.schemes || []).map(s=>s.name).concat(["Cancel"])
+        if(view==="stylePresets")return (simpleSettings.stylePresets || []).map(p=>p.name).concat(["Customize style…","Back"])
+
+        if(view==="tabs")return tabs.map(t=>pageMode && t==="Shell"?"Interface appearance":pageMode && t==="More"?"Page links and sections":!pageMode && t==="Layout"?"Size & layout":!pageMode && t==="Actions"?"Action":t)
         if(view==="fields"){
             if(tabs[tab]==="More")return pageMode?["Navigation tabs","Sections","Movies destination","Shows destination","Close controls"]:structureType?["Move earlier","Move later","Remove…",...(structureType==="navigation"?["Visible sections…"]:[]),"Close controls"]:["Duplicate","Remove…","Move before…","Move after…","Move to section…","Move to group…","Select / deselect for grouping","Edit group contents","Show design samples for empty media","Close controls"]
             return fields.map(f=>f.label+": "+summary(f)).concat([advanced?"Hide advanced controls":"Show advanced controls",...(tabs[tab]==="Appearance"?["Appearance state: "+editingState]:[]),"Back to property groups"])
@@ -308,15 +348,40 @@ if(view==="colorWheel")return ["Back"]
         return []
     }
     function activate(){
+        if(view==="simple"){
+            if(pageMode){if(selected===0){view="theme";selected=0}else if(selected===1)openBasicTab("Background");else if(selected===2)openBasicTab("Header");else if(selected===3)openBasicTab("Layout");else showDetails();return}
+            if(selected<simpleFields.length){fieldReturnView="simple";activateField(simpleFields[selected]);return}
+            if(selected===simpleFields.length){view="stylePresets";selected=0;return}
+            if(selected===simpleFields.length+1){operation("geometry");return}
+            showDetails();return
+        }
+        if(view==="theme"){
+            if(selected<themeGroups.length){themeGroupIndex=selected;if(simpleSwatch){fieldReturnView="theme";activateField(groupField(themeGroup))}else{view="themeRoles";selected=0}return}
+            if(selected===themeGroups.length){view="schemes";selected=0;return}
+            if(selected===themeGroups.length+1){openBasicTab("Colors");advanced=true;return}
+            view="simple";selected=0;return
+        }
+        if(view==="themeRoles"){
+            if(selected<themeGroup.roles.length){const role=themeGroup.roles[selected];fieldReturnView="themeRoles";activateField({scope:"theme",key:role.key,label:role.label,type:"color"});return}
+            if(selected===themeGroup.roles.length){const value={colorTheme:{schemaVersion:1,colors:themeColors()}};for(const role of themeGroup.roles)value[role.key]=null;run("pagePatch",{scope:"theme",value:value});return}
+            view="theme";selected=themeGroupIndex;simpleSwatch=false;return
+        }
+        if(view==="schemes"){if(selected<(simpleSettings.schemes || []).length)applyScheme(selected);else{view="theme";selected=themeGroups.length}return}
+        if(view==="stylePresets"){
+            const presets=simpleSettings.stylePresets || []
+            if(selected<presets.length){const patch=Object.assign({},presets[selected].presentation);if(selected===0)for(const f of allFields)if(f.tab==="Appearance" && f.scope==="presentation")patch[f.key]=null;if(run("patch",{ids:selectedIds,value:{presentation:patch}}))message="Style updated. Content and size are kept.";return}
+            if(selected===presets.length)openBasicTab("Appearance");else{view="simple";selected=simpleFields.length}return
+        }
+
         if(view==="playlistSource"){
             if(!playlistClient){message="Kodi unavailable. Back returns without changes.";return}
             if(selected===0){provider.refresh(playlistClient);message=playlistClient.status;return}
             const item=(playlistClient.items || [])[selected-1];if(!item)return
             const source={libraryView:"playlist",libraryValue:item.playlistName}
             const saved=structureType==="section"?run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},source)}):run("batch",{commands:targets.map(target=>({operation:"patch",arguments:{id:target.id,value:{presentation:source}},pageId:pageId}))})
-            if(saved){view="fields";selected=returnSelection}return
+            if(saved){view=fieldReturnView;selected=returnSelection}return
         }
-        if(view==="tabs"){tab=selected;selected=0;view="fields";return}
+        if(view==="tabs"){tab=selected;selected=0;fieldReturnView="fields";view="fields";return}
         if(view==="fields"){
             if(tabs[tab]==="More"){
                 const operations=pageMode?["navigation","sections","moviePage","showsPage","close"]:structureType?["structureEarlier","structureLater","structureRemove",...(structureType==="navigation"?["navSections"]:[]),"close"]:["duplicate","remove","orderBefore","orderAfter","destination","groupDestination","selectGroup","contents","samples","close"]
@@ -324,28 +389,28 @@ if(view==="colorWheel")return ["Back"]
             }
             if(selected===fields.length){advanced=!advanced;selected=0;return}
             if(tabs[tab]==="Appearance" && selected===fields.length+1){view="states";selected=0;return}
-            if(selected>=fields.length){view="tabs";selected=tab;return}
+            if(selected>=fields.length){view=detailsOpen?"tabs":"simple";selected=detailsOpen?tab:0;return}
             activateField(fields[selected]);return
         }
         if(view==="states"){editingState=["base","normal","focused","selected","pressed","disabled","unavailable"][selected];view="fields";selected=0;return}
-if(view==="colorWheel"){view="fields";selected=returnSelection;return}
+if(view==="colorWheel"){view=fieldReturnView;selected=returnSelection;return}
         if(view==="choices"){
             const entry=choices[selected];if(!entry)return
             if(entry.kind==="replacement"){operation("replace:"+entry.value);return}
             if(entry.kind==="playlist"){view="playlistSource";selected=0;message="Choose a video playlist saved in Kodi. Back keeps the source unchanged.";return}
             if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
-            if(entry.kind==="repair" || activeField.type==="section"){if(run(entry.kind==="repair"?"repairSource":"assignSection",Object.assign({id:current.id},entry.kind==="repair"?{sourceId:entry.value}:{categoryId:entry.value}))){view="fields";selected=returnSelection}return}
+            if(entry.kind==="repair" || activeField.type==="section"){if(run(entry.kind==="repair"?"repairSource":"assignSection",Object.assign({id:current.id},entry.kind==="repair"?{sourceId:entry.value}:{categoryId:entry.value}))){view=fieldReturnView;selected=returnSelection}return}
             if(entry.kind==="custom" || entry.kind==="text"){beginKeyboard("text","");return}
-            if(entry.kind==="reset"){if(set(activeField,null,true)){view="fields";selected=returnSelection}return}
-            if(entry.kind==="typography"){if(structureType==="section"?run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},entry.value)}):run("patch",{ids:selectedIds,value:{presentation:entry.value}})){view="fields";selected=returnSelection}return}
+            if(entry.kind==="reset"){if(set(activeField,null,true)){view=fieldReturnView;selected=returnSelection}return}
+            if(entry.kind==="typography"){if(structureType==="section"?run("section",{kind:"presentation",id:structureId,value:Object.assign({},current.presentation || {},entry.value)}):run("patch",{ids:selectedIds,value:{presentation:entry.value}})){view=fieldReturnView;selected=returnSelection}return}
             if(entry.needsTarget){pendingAction=entry.value;beginKeyboard("target","");return}
-            if(set(activeField,entry.value,false)){view="fields";selected=returnSelection}return
+            if(set(activeField,entry.value,false)){view=fieldReturnView;selected=returnSelection}return
         }
-        if(view==="artwork"){if(selected===0)view="imageBrowser";else if(selected===1){if(set(activeField,null,true)){view="fields";selected=returnSelection}}else pickArtwork(assets[selected-2].source);return}
+        if(view==="artwork"){if(selected===0)view="imageBrowser";else if(selected===1){if(set(activeField,null,true)){view=fieldReturnView;selected=returnSelection}}else pickArtwork(assets[selected-2].source);return}
         if(view==="crop"){
             if(selected<4){const f=cropField(selected);if(selected===0)set(f,effective(current,f)==="cover"?"contain":"cover",false);else beginKeyboard("cropNumber",effective(current,f));return}
             if(selected===4){if(assetProbe.status!==Image.Ready){message="Choose a readable image before cropping.";return}cropDraft=Object.assign({x:0,y:0,width:assetProbe.sourceSize.width,height:assetProbe.sourceSize.height},effective(current,{scope:pageMode?"background":"presentation",key:"imageCrop"}) || {});view="pixelCrop";selected=0;return}
-            if(selected===5){set({scope:pageMode?"background":"presentation",key:"imageCrop",type:"crop"},null,true);return}view="fields";selected=returnSelection;return
+            if(selected===5){set({scope:pageMode?"background":"presentation",key:"imageCrop",type:"crop"},null,true);return}view=fieldReturnView;selected=returnSelection;return
         }
         if(view==="pixelCrop"){
             if(selected===5){view="crop";selected=4;return}
@@ -354,12 +419,12 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             if(set({scope:pageMode?"background":"presentation",key:"imageCrop",type:"crop"},cropDraft,false)){view="crop";selected=4}return
         }
         if(view==="layout"){
-            if(selected===8){view="fields";selected=returnSelection;return}
-            if(selected===7){if(run("childLayout",{id:current.id,value:layoutDraft})){view="fields";selected=returnSelection}return}
+            if(selected===8){view=fieldReturnView;selected=returnSelection;return}
+            if(selected===7){if(run("childLayout",{id:current.id,value:layoutDraft})){view=fieldReturnView;selected=returnSelection}return}
             adjustLayout(1);return
         }
         if(view==="apps"){
-            if(selected<=1){if(run("setApps",{id:current.id,mode:selected===0?"all":"selected",apps:appSelection})){view="fields";selected=returnSelection}return}
+            if(selected<=1){if(run("setApps",{id:current.id,mode:selected===0?"all":"selected",apps:appSelection})){view=fieldReturnView;selected=returnSelection}return}
             const id=apps[selected-2].action.appId,next=appSelection.slice(),index=next.indexOf(id);if(index>=0)next.splice(index,1);else if(next.length<128)next.push(id);else{message="Choose up to 128 apps.";return}appSelection=next
         }
     }
@@ -374,7 +439,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
     function chooseAction(entry){
         if(entry.needsMedia){media.libraryKind=entry.needsMedia;media.selected=0;view="mediaAction";return}
         if(entry.needsTarget){pendingAction=entry.action;beginKeyboard("target","");return}
-        if(set(activeField,entry.action || {},false)){view="fields";selected=returnSelection}
+        if(set(activeField,entry.action || {},false)){view=fieldReturnView;selected=returnSelection}
     }
     function handleCommand(command){
         if(view==="sourcePolicy"){if(sourcePolicyEditor.item)sourcePolicyEditor.item.handleCommand(command);return}
@@ -387,9 +452,15 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         if(view==="mediaAction"){media.handleCommand(command);return}
         if(view==="keyboard"){keyboard.handleCommand(command);return}
         if(collapsed){if(command===inputManager.back)closed();else if(command===inputManager.confirm){controlsShown=true;hiddenControls=false;}return}
-        if(command===inputManager.back){if(view==="tabs"){closed();return}if(view==="fields"){view="tabs";selected=tab}else if(view==="pixelCrop"){view="crop";selected=4}else{view="fields";selected=returnSelection}return}
+        if(command===inputManager.back){
+            if(view==="simple"){closed();return}
+            if(view==="themeRoles"){view="theme";selected=themeGroupIndex;simpleSwatch=false;return}
+            if(view==="theme" || view==="stylePresets"){view="simple";selected=0;return}
+            if(view==="schemes"){view="theme";selected=themeGroups.length;return}
+            if(view==="tabs"){view="simple";selected=0;return}if(view==="fields"){view=detailsOpen?"tabs":"simple";selected=detailsOpen?tab:0}else if(view==="pixelCrop"){view="crop";selected=4}else{view=fieldReturnView;selected=returnSelection}return}
         if(command===inputManager.search){hiddenControls=!hiddenControls;return}
         if(command===inputManager.menu && view==="fields" && fields[selected]){reset(fields[selected]);return}
+        if(view==="theme" && selected<themeGroups.length && (command===inputManager.navigateLeft || command===inputManager.navigateRight)){simpleSwatch=command===inputManager.navigateRight;return}
         if(command===inputManager.confirm){activate();return}
         const direction=command===inputManager.navigateRight?1:command===inputManager.navigateLeft?-1:0
         if(direction && view==="fields" && fields[selected] && (fields[selected].control==="slider" || fields[selected].control==="stepper")){activeField=fields[selected];returnSelection=selected;beginScalar();scalarCommand(command);return}
@@ -420,14 +491,14 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         id:colorLoader;anchors.fill:parent;active:false;visible:root.view==="colorWheel";z:10
         sourceComponent:Component { StudioColorPicker {
         appearance:Object.keys(root.pickerAppearance).length?root.pickerAppearance:root.appearance;settings:root.options.colorPicker || ({})
-        roleName:root.activeField.label || "Color";selectionRect:root.pageMode?null:root.selectionRect
+        resetLabel:root.activeField.scope==="themeGroup"?"Use default color":root.view==="colorWheel" && root.fieldReturnView==="themeRoles"?"Use theme color":"Reset to theme";roleName:root.activeField.label || "Color";selectionRect:root.pageMode?null:root.selectionRect
         themeColors:root.pickerThemeColors;recentColors:root.recentColors.map((value,index)=>({name:"Recent "+(index+1),value:value}));mixedOriginal:root.pickerMixed
         contrastText:root.contrast()
         onPreview:(value,reset)=>{
             if(root.set(root.activeField,value,reset) && reset)Qt.callLater(()=>{
                 if(root.view!=="colorWheel" || !root.session.proposalModel)return
                 const model=root.pageId?root.session.proposalModel.pageModel(root.pageId):root.session.proposalModel
-                colorPicker.sample=root.pageMode && root.activeField.scope==="theme"?model.appearance[root.activeField.key]:root.effective(root.current,root.activeField)
+                colorPicker.sample=root.pageMode && root.activeField.scope==="themeGroup"?((model.appearance.colorTheme || {}).colors || {})[root.activeField.key]:root.pageMode && root.activeField.scope==="theme"?model.appearance[root.activeField.key]:root.effective(root.current,root.activeField)
             })
         }
         onAccepted:(value,reset)=>root.acceptColor(value,reset)
@@ -527,7 +598,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         Column {
             anchors.fill:parent;anchors.margins:22*root.unit;spacing:10*root.unit
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:titleText;width:parent.width;text:root.pageMode?"Page appearance":root.targets.length>1?root.targets.length+" selected components":root.current?root.current.name || "Component":"Component";color:root.appearance.textColor;font.pixelSize:26*root.unit;elide:Text.ElideRight}
-            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:detailText;width:parent.width;text:root.view==="fields"?root.tabs[root.tab]+" · "+root.contrast():root.view==="tabs"?"Choose what to edit":root.view;color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
+            Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:detailText;width:parent.width;text:root.view==="theme"?"Five shared colors":root.view==="themeRoles"?root.themeGroup.label+" colors":root.view==="simple"?"Choose what to change":root.view==="schemes"?"Choose a color scheme":root.view==="stylePresets"?"Choose a style":root.view==="fields"?(root.tabs[root.tab]==="Shell"?"Interface appearance":root.tabs[root.tab])+" · "+root.contrast():root.view==="tabs"?"Advanced settings":"Choose an option";color:root.appearance.mutedColor;font.pixelSize:17*root.unit;wrapMode:Text.Wrap}
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:statusText;width:parent.width;text:root.view==="playlistSource"?(root.playlistClient?root.playlistClient.status:"Kodi unavailable · Back returns without changes"):root.current && root.current.unavailableReason?root.current.unavailableReason+" · Change its source or On select link.":root.message;color:root.appearance.mutedColor;font.pixelSize:16*root.unit;wrapMode:Text.Wrap;maximumLineCount:3;elide:Text.ElideRight}
             Rectangle {
                 id:shellPreviewCard;objectName:"studioShellThemePreview"
@@ -553,7 +624,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                         text:modelData.name;Accessible.name:text
                         background:Rectangle {radius:8*root.unit;color:root.selected===index?root.appearance.selectedColor:root.appearance.surfaceColor;border.width:root.selected===index?3:1;border.color:root.appearance.focusColor}
                         contentItem:Text {text:parent.text;color:root.appearance.textColor;horizontalAlignment:Text.AlignHCenter;verticalAlignment:Text.AlignVCenter;wrapMode:Text.Wrap;font.pixelSize:18*root.unit}
-                        onClicked:{root.selected=index;root.activate()}
+                        onClicked:{root.selected=index;root.simpleSwatch=false;root.activate()}
                     }
                 }
             }
@@ -565,10 +636,13 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                 onModelChanged:Qt.callLater(()=>{list.currentIndex=Qt.binding(()=>root.selected);list.positionViewAtIndex(root.selected,ListView.Contain)})
                 delegate:Rectangle {
                     required property int index;required property string modelData
-                    readonly property var rowField:root.view==="fields" && root.tabs[root.tab]!=="More"?root.fields[index]:null
+                    readonly property var rowField:root.view==="theme" && index<root.themeGroups.length?root.groupField(root.themeGroups[index]):root.view==="themeRoles" && index<root.themeGroup.roles.length?{scope:"theme",key:root.themeGroup.roles[index].key,type:"color"}:root.view==="fields" && root.tabs[root.tab]!=="More"?root.fields[index]:null
                     width:list.width;height:Math.max(48*root.unit,fieldLabel.implicitHeight+20*root.unit,scrollCheckbox.visible?scrollCheckbox.contentItem.implicitHeight+20*root.unit:0,propertySwitch.visible?propertySwitch.contentItem.implicitHeight+20*root.unit:0);radius:8*root.unit;color:index===root.selected?root.appearance.selectedColor:"transparent";border.width:index===root.selected?2:0;border.color:root.appearance.focusColor
                     Text {id:fieldLabel;visible:!scrollCheckbox.visible && !propertySwitch.visible;textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";anchors.fill:parent;anchors.margins:10*root.unit;anchors.rightMargin:colorSample.visible?48*root.unit:10*root.unit;text:modelData;color:root.appearance.textColor;font.pixelSize:18*root.unit;wrapMode:Text.Wrap}
-                    Rectangle {id:colorSample;visible:!!parent.rowField && parent.rowField.type==="color";anchors.right:parent.right;anchors.rightMargin:12*root.unit;anchors.verticalCenter:parent.verticalCenter;width:26*root.unit;height:width;radius:5*root.unit;color:visible?root.effective(root.current,parent.rowField):"transparent";border.width:1;border.color:root.appearance.textColor}
+                    Rectangle {id:colorSample;objectName:root.view==="theme"?"studioThemeSwatch-"+index:"studioRoleSwatch-"+index;visible:!!parent.rowField && parent.rowField.type==="color";anchors.right:parent.right;anchors.rightMargin:12*root.unit;anchors.verticalCenter:parent.verticalCenter;width:26*root.unit;height:width;radius:5*root.unit;color:visible?root.effective(root.current,parent.rowField):"transparent";border.width:root.view==="theme" && root.simpleSwatch && root.selected===index?3:1;border.color:root.appearance.focusColor;z:3
+                        Accessible.role:Accessible.Button;Accessible.name:parent.rowField?"Change "+(parent.rowField.label || parent.rowField.key)+" color":""
+                        MouseArea {anchors.fill:parent;onClicked:{root.selected=index;if(root.view==="theme"){root.simpleSwatch=true;root.activate()}else{root.fieldReturnView=root.view;root.activateField(parent.parent.rowField)}}}
+                    }
                     CheckBox {
                         id:scrollCheckbox;objectName:"studioScrollingCheckbox";anchors.fill:parent;visible:!!parent.rowField && parent.rowField.type==="scrolling"
                         checkable:false;checked:visible && root.effective(root.current,parent.rowField)===true
@@ -594,7 +668,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
                         onClicked:{root.selected=index;root.activateField(parent.rowField);checked=Qt.binding(()=>propertySwitch.visible && root.effective(root.current,propertySwitch.parent.rowField)===true)}
                     }
                     Accessible.role:Accessible.Button;Accessible.name:modelData;Accessible.ignored:scrollCheckbox.visible || propertySwitch.visible
-                    MouseArea {anchors.fill:parent;enabled:!scrollCheckbox.visible && !propertySwitch.visible;onClicked:{root.selected=index;root.activate()}}
+                    MouseArea {anchors.fill:parent;enabled:!scrollCheckbox.visible && !propertySwitch.visible;onClicked:{root.selected=index;root.simpleSwatch=false;root.activate()}}
                 }
             }
             Text {textFormat:Text.PlainText;font.family:root.appearance.fontFamily || "DejaVu Sans";id:footerText;width:parent.width;text:root.collapseNeeded?"Confirm edits · Back returns":"Adjust · Menu resets · Back returns";color:root.appearance.mutedColor;font.pixelSize:14*root.unit;wrapMode:Text.Wrap}
@@ -605,8 +679,8 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
     Loader {
         id:actionLoader;anchors.fill:parent;visible:root.view==="actionPicker";active:root.visible && root.activeField.type==="action" && ["actionPicker","mediaAction","keyboard"].indexOf(root.view)>=0
         sourceComponent:Component {StudioActionPicker {
-            anchors.fill:parent;actions:[{name:"None · clear link",action:{}}].concat(root.actions,[{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}]);appearance:root.appearance;categories:root.options.actionCategories || []
-            onCanceled:{root.view="fields";root.selected=root.returnSelection}
+            anchors.fill:parent;actions:[{name:"None · clear link",action:{}}].concat(root.actions,[{name:"Play a Kodi movie…",needsMedia:"movies"},{name:"Open a Kodi show…",needsMedia:"shows"}]);appearance:root.appearance;categories:root.options.actionCategories || [];intents:root.simpleSettings.actionIntents || []
+            onCanceled:{root.view=root.fieldReturnView;root.selected=root.returnSelection}
             onPicked:entry=>root.chooseAction(entry)
         }}
     }
@@ -629,7 +703,7 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             onAdvancedPath:root.beginKeyboard("import","")
         }
     }
-    StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="actionPicker";onPicked:action=>{if(root.set(root.activeField,action,false)){root.view="fields";root.selected=root.returnSelection}}}
+    StudioMediaPicker {id:media;collections:root.actions.filter(a=>a.action && a.action.type==="open-collection");anchors.fill:parent;visible:root.view==="mediaAction";provider:root.provider;appearance:root.appearance;onCanceled:root.view="actionPicker";onPicked:action=>{if(root.set(root.activeField,action,false)){root.view=root.fieldReturnView;root.selected=root.returnSelection}}}
     Loader {
         id:appPickerLoader;anchors.fill:parent;active:root.visible && (root.view==="apps" || root.view==="historyApps")
         onLoaded:item.begin(root.appSelection,root.view==="historyApps"?"selected":root.current && root.current.appCollection?root.current.appCollection.mode || "selected":"selected")
@@ -638,8 +712,8 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
             selectionLimit:root.view==="historyApps"?50:128
             heading:root.view==="historyApps"?"App opening sources":""
             description:root.view==="historyApps"?"Openings after opt-in, this session only. Service viewing history is unavailable; no accounts or browser history are read. Clear keeps local media only.":""
-            onCanceled:{root.view="fields";root.selected=root.returnSelection}
-            onAccepted:(mode,ids)=>{const chosen=root.view==="historyApps" && mode==="all"?root.apps.map(a=>a.action.appId):ids;const success=root.view==="historyApps"?root.set(root.activeField,chosen,false):root.run("setApps",{id:root.current.id,mode:mode,apps:chosen});if(success){root.appSelection=chosen.slice();root.view="fields";root.selected=root.returnSelection}else message=root.message}
+            onCanceled:{root.view=root.fieldReturnView;root.selected=root.returnSelection}
+            onAccepted:(mode,ids)=>{const chosen=root.view==="historyApps" && mode==="all"?root.apps.map(a=>a.action.appId):ids;const success=root.view==="historyApps"?root.set(root.activeField,chosen,false):root.run("setApps",{id:root.current.id,mode:mode,apps:chosen});if(success){root.appSelection=chosen.slice();root.view=root.fieldReturnView;root.selected=root.returnSelection}else message=root.message}
         }}
     }
     OnScreenKeyboard {
@@ -671,8 +745,8 @@ if(view==="colorWheel"){view="fields";selected=returnSelection;return}
         sourceComponent:SourceSettingsView {
             appearance:root.appearance;layoutModel:root.session?root.session.model:null;manager:null;policyOnly:true
             Component.onCompleted:{draft=Object.assign({},root.options.sourcePolicyDefaults || {},(root.rawPage.theme || {}).sourcePolicy || {});view="policy";selectedIndex=0}
-            onPolicyAccepted:policy=>{if(root.run("pagePatch",{scope:"theme",value:{sourcePolicy:policy}})){root.view="fields";root.selected=root.returnSelection}}
-            onPolicyCancelled:{root.view="fields";root.selected=root.returnSelection}
+            onPolicyAccepted:policy=>{if(root.run("pagePatch",{scope:"theme",value:{sourcePolicy:policy}})){root.view=root.fieldReturnView;root.selected=root.returnSelection}}
+            onPolicyCancelled:{root.view=root.fieldReturnView;root.selected=root.returnSelection}
         }
     }
 }

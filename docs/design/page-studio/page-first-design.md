@@ -1,5 +1,13 @@
 # Page-first Studio — revised UX direction
 
+## User revision — 2026-11-10: grouped controls and timed trial
+
+This revision supersedes the older flat page list, separate Try command and Review & Apply wording below. The main panel contains the current-page selector, Edit page, Add component, Page appearance, Page items, Design library, More tools, Save changes and Exit Studio. Pages are a submenu with switching, creation and current-page management. Design library groups saved designs and shared styles/My components. More tools contains editor settings, content scenarios and editor locking. Named versions/restore belong beside Undo and Redo under History.
+
+Save changes opens the change summary with Save changes, Keep editing, layout findings, a duration selector (30 seconds, 1 minute or 5 minutes) and Try changes. Try uses the unsaved runtime-rendered draft, removes editing controls and retains the existing interception of external effects. Expiry or Back restores the exact edit origin and reopens the save dialog as “Keep these changes?”. The user may save, try again or keep editing. Expiry never discards the draft or saves it. Closing Studio stops the timer. Saving retains atomic validation/write/rollback and failure recovery.
+
+The subsequent [ten-item simplification and five-color contract](../../studio-simplification-2026-11-10.md) is also user-authorized: task-specific component summaries precede Advanced, design/reuse/item/history tools are grouped, and five shared colors expose individually overrideable roles through their rows. Swatches edit the shared color. Overrides survive shared edits until explicitly reconnected. Fresh defaults link the five colors; stored layouts retain their existing choices without read-time migration.
+
 Follow-up UX requirements (2026-10-20): [the usability audit](usability-audit-2026-10-20.md) now also requires Studio selection to share the authored Home focus appearance, direct header/title/clock/Search/Settings editing, and named homes for tools rather than a mixed More tools menu. Essential interactions must be discoverable from the controls; optional Help and consequence/error feedback must not become operating instructions pasted over the page. T21.12-T21.14 remain unimplemented delivery gates.
 
 Latest usability authority (user, 2026-10-20): [UI audit and revised interaction contract](usability-audit-2026-10-20.md) supersedes the older movement/size/color/context details below. Use Move/Edit component/Duplicate/Delete; put Size & layout inside Edit component; provide a visual wheel/palette; preview automatic neighbor reflow during movement. Earlier Shift/Swap dialogs remain only for exceptional alternatives, not routine occupied drops.
