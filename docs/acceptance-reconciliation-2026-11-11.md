@@ -73,3 +73,37 @@ visual acceptance. Original captures show a guest keyring modal and desktop disk
 banner. The batch is rejected/cancelled under BUG-096; no installed milestone is
 credited from it. Native integration and its reviewed images remain valid.
 Current79% is independently credited native contract evidence, not these captures.
+
+Clean installed Search attempt20261111-142420-318 supersedes the obstructed
+attempts. Both original Search/results and recovery images are agent-reviewed:
+no guest overlays, genuine labelled top-right Web Off Switch, visible results
+focus, readable local results and exact Settings focus recovery. The helper
+proves socketErrnos101/101 with local UNIX sockets available and unchanged layout
+hashes. T28.1.b is complete with this installed presentation, the current native
+switch input/state/result-count/palette tests and generic checked-accessibility
+audit. Combined request/profile/provider acceptance remains in the other groups.
+The initial Search-home image remains separately reviewable, not implied by these
+two frames. No real-Kodi search-result proof is inferred from Settings results.
+
+Final clean installed reference evidence: Lounge attempt20261111-142504-240
+(14 PNGs) and Pastel attempt20261111-142807-740 (34 PNGs) pass recreation,
+saved-design round trip and reset with unrelated pages preserved. All48 frames
+are agent-reviewed through contact sheets; both reference recreation/reset pairs
+retain the generic renderer, normal profile hashes are unchanged and service
+returns active/running with zero restarts. No desktop prompt obscures these frames.
+
+T25.5.b closes the persistence/isolation group's integrated-candidate gate:
+current61/61 contains source injected-root/profile/no-media-mutation/atomic
+rollback proofs, the reviewed custom Sources contrast regression and the repaired
+Studio cutover; installed clean reference pairs pass and actual Kodi stop/history
+replay/return assertions pass. SourceManager production code is unchanged from
+the independently proven native policy/isolation evidence. The combined source
+presentation/action/default-slot requirements remain in T25.1-.4; none is inferred
+from references. T25 is60%, not100%. T28 is60%, with its real installed header
+switch verified separately. Sum1994/25=79.76%, rounded80% under standing rules.
+
+History attempt20261111-141858-974's seven frames were also reviewed: actual
+synthetic color-bar video, history update, focused history replay and repeated
+exact return are visible. The old disk banner limits header/presentation claims
+for that attempt; functional video/ownership/Stop assertions remain evidence for
+BUG-089. No complete media/setup acceptance is inferred from backend fixture setup.

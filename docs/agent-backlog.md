@@ -3,13 +3,13 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-11
 
-Acceptance is **79% (1974/25)**, with155/212 independently evidenced milestones.
+Acceptance is **80% (1994/25)**, with157/212 independently evidenced milestones.
 [Evidence reconciliation](acceptance-reconciliation-2026-11-11.md) credits actual
 VM-native/QML/protocol/storage outcomes under unchanged original group weights;
 installed/runtime remainder stays open. Current integration-l passes61/61, zero
 skips, and deploys release0838e68c4de00a86ee395580. Its five changed native images
-are reviewed;122 unchanged reviewed images reuse exact hashes. Installed Search,
-reference pairs and repaired history workflows are now being exercised. No game
+are reviewed;122 unchanged reviewed images reuse exact hashes. Clean installed
+Search and both reference pairs pass; real Kodi history Stop/replay/return passes. No game
 menu is credited as gameplay and no known missing Power software is waived.
 
 ## Round-two testing authorization — 2026-11-11
@@ -74,7 +74,7 @@ were performed. No deployment or new acceptance: T12 0%, T29 13%, overall63%.
 
 [VM software completion](vm-software-completion.md) is the latest user-approved definition for every task and linked requirement. **100% means reasonable belief that the software is done based entirely on VM-verifiable evidence.** Actual hardware/model/USB/firmware, independent participants, user approval, unavailable paid accounts/entitlement/regions and target-only runtime/performance checks are not T-task prerequisites. Use the prescribed production-boundary fixtures, virtual devices and agent task/guide walkthroughs; retain genuine software errors as blockers. H01–H05 and external-service/usability checks are a separate user-owned post-100% handoff. No formal hardware/release campaign is required by this software backlog. All conflicting historical wording below and in Entry docs is superseded.
 
-Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 1974; Overall is 79% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
+Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 1994; Overall is 80% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
 
 ## Continue command — operating plan, 2026-10-29
 
@@ -94,7 +94,7 @@ Sequencing: [implementation-order.md](implementation-order.md). Requirements/ame
 
 - ACTIVE: **T01,T03–T05,T09–T12,T14–T30 = 25 tasks**. T02/T06–T08/T13/T31 are excluded. H01–H05 remain a separate physical qualification ledger.
 - Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each remaining group and task retains its weight. Overall = half-up round(sum of the 25 rounded task percentages / 25), capped at 99% until every in-scope task reaches 100% in that metric. Acceptance remains separate from Coding%. Reproduce acceptance with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
-- Acceptance sum **1974**, Overall **79%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
+- Acceptance sum **1994**, Overall **80%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
 - **S1 = 100% when all in-scope redesigned VM software groups and required checks pass.** T13/T31 are not prerequisites. Hardware, external account/region and participant approval remain outside S1.
 - Reuse verified foundations with explicit source-applicability checks. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
 - Standing software gates: both generic reference recreation/reset pairs; profile/account/data isolation where promised; atomic save/rollback/no rewrite on read; Kodi media/progress ownership; disconnected VM Generator Test; OFF-gated zero requests; reachable Settings/Edit recovery. Physical repetition is H1.
@@ -125,9 +125,9 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T23 | 9 | Apply, versions, restore and navigation safety | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
 | T24 | 10 | Installed Studio usability and cutover | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
 | T27 | 11 | Shared theme across shell surfaces | 100% | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
-| T25 | 12 | Contained configurable detected sources | 50% | 100% | native policy/storage and projection/containment milestone verified; broader installed acceptance open |
+| T25 | 12 | Contained configurable detected sources | 60% | 100% | native policy/storage and projection/containment milestone verified; broader installed acceptance open |
 | T26 | 13 | Configurable All Apps destination | 50% | 100% | native routes/catalog/persistence and QML lifecycle verified; installed acceptance open |
-| T28 | 14 | Genuine Web search header toggle | 50% | 100% | native header/focus/profile-persistence verified; real-client cancellation repair and combined installed acceptance open |
+| T28 | 14 | Genuine Web search header toggle | 60% | 100% | native header/focus/profile-persistence verified; real-client cancellation repair and combined installed acceptance open |
 | T29 | 15 | Verified Store, Android and Chromium remote | 56% | 100% | Android baseline accepted; source/bridge/playback/lifecycle open |
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
@@ -141,7 +141,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **79%** | **100%** | **1703 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **80%** | **100%** | **1703 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
@@ -375,7 +375,7 @@ Scope:
 - [ ] T25.2 Register contained Detected sources and Source notice slot components with layout, variants, maximum visible items, typography/art/labels/colors/opacity/corners/focus/spacing and bounded region controls in Studio/Settings.
 - [ ] T25.3 Replace unconditional section prepending with validated region projection; default to a compact Home status notice, contain overflow with View all, and never cover/reflow unrelated layout or steal focus. Missing slots route to Sources rather than floating injection.
 - [ ] T25.4 Implement remote source actions, repeat-scan deduplication, reconnect/dismiss/hidden restore, unplugged-origin focus and safe idempotent promotion/error retry; cancel/draft changes leave applied policy/layout intact.
-- [ ] T25.5 Prove per-profile persistence/rollback and fixture isolation with injected roots; no test-folder name special cases, deletion/unmount, Kodi writes, unsolicited launch or automatic entitlement/permission.
+- [x] T25.5 Prove per-profile persistence/rollback and fixture isolation with injected roots; no test-folder name special cases, deletion/unmount, Kodi writes, unsolicited launch or automatic entitlement/permission.
 Done when: a user can configure what appears, where, when and how; multiple detections stay inside a declared themed container and every action/error/empty state remains remote-accessible.
 Verify: extend source-policy/probe tests in `isolde_tests` and schema/draft tests in `component_contracts`; QML containment/focus/remote/unplug tests; full CTest plus actual dark/pastel multi-source captures and both standing fixtures using the VM oracle. Evidence: pending; existing global toggle/hide controls do not satisfy presentation/placement acceptance.
 
@@ -395,7 +395,7 @@ Verify: action-dispatch/legacy-read tests in `component_contracts`, app registry
 Entry docs: `docs/shell-surfaces-design.md` sections 1, 5-6; `docs/unified-master-plan.txt` Section 13 Web OFF boundary.
 Entry files: `qml/CommandCenter.qml`, `qml/Main.qml`, `src/settings/SearchSettings.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, shared search-header/presentation/edit-session helpers, `tests/tst_home_navigation.cpp`, `tests/tst_components.cpp`, `tools/verify-t03-search.py`.
 Scope:
-- [ ] T28.1 Remove the searchToggle pseudo-result and render one genuine labeled On/Off switch in the header's top-right default slot, with themed/stylable presentation, accessible checked state and no result-count/index participation.
+- [x] T28.1 Remove the searchToggle pseudo-result and render one genuine labeled On/Off switch in the header's top-right default slot, with themed/stylable presentation, accessible checked state and no result-count/index participation.
 - [ ] T28.2 Implement query/header/switch/results/keyboard D-pad focus transitions, Confirm/click activation, empty/late-result stability and exact Back origin; no arrow-driven accidental toggle or forced mouse/Tab usage.
 - [ ] T28.3 Use the existing single SearchSettings authority with default OFF, active-profile persistence and atomic rollback on failure; retain query, selection and visible state, and clear old profile context on switch.
 - [ ] T28.4 Preserve request-generation cancellation/network denial when switched OFF, suppress late/cached online matches and distinguish ON from actual provider availability; no provider shows honest header status and local results, not fake result rows.

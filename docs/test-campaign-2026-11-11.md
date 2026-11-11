@@ -615,3 +615,30 @@ are preserved, no unlock/password is supplied, and prompts must be absent after.
 Guest-only notification banners are disabled. No host setting changes occur.
 Replay installed Search/history/references using the existing integration-l
 payload, automatically preparing the guest desktop before each case.
+
+Desktop preflight-s PASSES107 runner checks and actual targeted banner dismissal.
+The GNOME accessible Ignore button exposes zero actions, so the runner verifies
+its exact shared low-disk notification container, focuses it through accessibility,
+confirms FOCUSED, emits a bounded named checkpoint, and sends Space make/hold/break
+through the existing VM input path. It requires the button to become defunct.
+No guessed coordinates, password/Enter input, host settings or credential reads.
+The ineffective notification-tray shortcut workaround is removed. The preflight
+runs automatically for later Visual calls; pending/undismissable warnings fail
+before the expensive product journey. Replace affected Search/reference images
+only; real episode stop/history/replay/exact-return assertions already passed
+on integration-l twice, with no new application full run.
+
+Final checkpoint: integration-l clean Search142420-318, Lounge142504-240 and
+Pastel142807-740 pass; all51 frames reviewed, both generic recreation/reset pairs
+compared, normal layout hashes unchanged and service restored active/zero restarts.
+T28.1 genuine switch and T25.5 profile/persistence isolation close with their
+scoped native/runtime evidence. Acceptance1994/25=79.76% rounds80%,157/212 child
+milestones. No task weight changed, no missing Power/gameplay/source-default
+requirement was waived, and no native full rerun was added for harness recovery.
+No runner remains active. Next: remaining T25 source presentation/action/default
+slot acceptance, then gallery and combined Web-switch installed gates.
+
+Final review ledger/index:185 reviewed scoped captures,58 explicitly excluded
+obstructed/cancelled captures, zero pending pixel reviews. Excluded attempts were
+not individually certified or turned into acceptance. The index now preserves
+explicit exclusions instead of placing rejected attempts back in the review queue.
