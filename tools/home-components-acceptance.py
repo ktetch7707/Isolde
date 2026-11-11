@@ -345,7 +345,17 @@ def main():
                     def origin():
                         key("Home");key("Up",6);key("Down");key("Left",4);key("Return");key("Up",6);key("Down");key("Left",4)
                     def settings_section(index):
-                        origin();key("Up",6);key("Return");key("Up",8);key("Down",index);key("Return")
+                        routes=("network","studio","sources","remotes","system","profiles","vpn","store-preferences","media")
+                        settings_route(routes[index])
+                    def settings_route(route):
+                        categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
+                        matches=[(i,c) for i,c in enumerate(categories) if c.get("route")==route or any(r["route"]==route for r in c.get("rows",[]))]
+                        assert len(matches)==1,"Settings route must have exactly one category: "+route
+                        index,category=matches[0]
+                        origin();key("Up",6);key("Return");key("Up",30);key("Down",index);key("Return")
+                        if "rows" in category:
+                            row=next(i for i,r in enumerate(category["rows"]) if r["route"]==route)
+                            key("Up",30);key("Down",row);key("Return")
                     for sequence,case in enumerate((2,) if args.themes_custom_only else range(3)):
                         tag=("dark","pastel","custom")[case]
                         if sequence:
@@ -353,8 +363,8 @@ def main():
                             original_bytes=json.dumps(theme_document(case)).encode();layout.write_bytes(original_bytes)
                             process,window,focused=start_shell()
                         if args.themes_controls_only:
-                            for row,name in ((1,"audio"),(2,"ambient")):
-                                settings_section(4);key("Up",12);key("Down",row);key("Return");snap(tag,name);key("Escape")
+                            for route,name in (("audio","audio"),("ambient","ambient")):
+                                settings_route(route);snap(tag,name);key("Escape")
                             key("Home");snap(tag,"return")
                             continue
                         if args.themes_faults_only:
@@ -393,9 +403,11 @@ def main():
                         for section,name in ((2,"sources"),(3,"remotes"),(5,"profiles"),(6,"vpn"),(7,"storepreferences")):
                             settings_section(section);snap(tag,name)
                         settings_section(4);snap(tag,"system")
-                        for row,name in ((0,"display"),(1,"audio"),(2,"ambient"),(6,"media"),(7,"components"),(8,"inputs")):
-                            settings_section(4);key("Up",12);key("Down",row);key("Return");snap(tag,name)
-                            if row==6:
+                        for route,name in (("display","display"),("audio","audio"),("ambient","ambient"),("media","media"),("system","components"),("capture","inputs")):
+                            settings_route(route)
+                            if name=="components":key("Up",12);key("Down");key("Return")
+                            snap(tag,name)
+                            if route=="media":
                                 key("Up",12);key("Down",6);key("Return");snap(tag,"folders")
                                 key("Escape");key("Down",2);key("Return");snap(tag,"import");key("Escape")
                             key("Escape")

@@ -530,6 +530,15 @@ QVariantMap HomeLayout::studioOptions() const
         for(auto it=defaults.cbegin();it!=defaults.cend();++it)if(!guide.contains(it.key()))guide[it.key()]=it.value();
     }
     auto result=object.toVariantMap();
+    if (!ComponentSchema::validSettingsNavigation(result.value("settingsNavigation").toMap())) {
+        // Older defaults inherit the packaged menu in memory. Stored layouts
+        // are never rewritten just because the Settings hierarchy changed.
+        QFile packaged(":/config/studio-defaults.json");
+        if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128*1024) return {};
+        const auto navigation = QJsonDocument::fromJson(packaged.readAll()).object()["settingsNavigation"].toObject().toVariantMap();
+        if (!ComponentSchema::validSettingsNavigation(navigation)) return {};
+        result["settingsNavigation"] = navigation;
+    }
     if (!result.contains("referenceViewport")) {
         QFile packaged(":/config/studio-defaults.json");
         if (!packaged.open(QIODevice::ReadOnly) || packaged.size() > 128*1024) return {};

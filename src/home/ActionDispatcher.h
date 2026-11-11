@@ -20,6 +20,7 @@ public:
         KodiService *service, AppCatalog *catalog = nullptr, CaptureController *capture = nullptr, QObject *parent = nullptr);
     Q_INVOKABLE bool dispatch(const QVariantMap &action, const QString &originId = {});
     Q_INVOKABLE bool dispatchEditorAction(const QVariantMap &action);
+    Q_INVOKABLE QString currentOrigin() const { return m_origin; }
     void setAudioSettings(AudioSettings *audio) { m_audio = audio; }
     void setLayout(HomeLayout *layout) { m_layout=layout; }
     void setGames(GameLibrary *games) { m_games=games; }

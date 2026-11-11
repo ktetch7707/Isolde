@@ -25,6 +25,7 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonArray>
+#include <algorithm>
 #include <QImage>
 #include "home/HomeDesignData.h"
 #include <QUrl>
@@ -73,6 +74,7 @@ private slots:
     void studioSafetyHouseholdRestrictionsEnforceBoundaries();
     void studioSafetyPolicyDamageIsRecoverableWithoutRewrite();
     void validatesContracts();
+    void settingsNavigationIsBoundedAndProfileLocal();
     void compositionPersistenceAndValidation();
     void universalGridValidatesAndPersists();
     void migratesAndRepairsWithoutLosingPresentation();
@@ -899,6 +901,55 @@ void ComponentTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
     const auto original=readFile(saved); HomeLayout reload(&registry); QVERIFY(reload.load(defaults,saved));
     QCOMPARE(readFile(saved),original); QCOMPARE(reload.appearance().value("sourcePolicy").toMap().value("mode").toString(),QString("widget"));
     QVERIFY(!reload.setAppearance({{"sourcePolicy",QVariantMap{{"mode","shell"}}}})); QCOMPARE(readFile(saved),original);
+}
+
+void ComponentTests::settingsNavigationIsBoundedAndProfileLocal()
+{
+    const auto options = QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/studio-defaults.json"))).object();
+    const auto navigation = options["settingsNavigation"].toObject().toVariantMap();
+    QVERIFY(ComponentSchema::validSettingsNavigation(navigation));
+    for (const auto &version : QVariantList{0, 2, true, "1", 1.5}) {
+        auto invalid = navigation; invalid["schemaVersion"] = version;
+        QVERIFY(!ComponentSchema::validSettingsNavigation(invalid));
+    }
+    auto categories = navigation["categories"].toList();
+    QVariantList order;
+    for (const auto &category : categories) order.append(category.toMap()["id"]);
+    auto invalid = navigation;
+    auto duplicate = categories; duplicate[1] = duplicate[0]; invalid["categories"] = duplicate;
+    QVERIFY(!ComponentSchema::validSettingsNavigation(invalid));
+    auto category = categories[0].toMap(); auto rows = category["rows"].toList();
+    auto row = rows[0].toMap(); row["route"] = "run-command"; rows[0] = row; category["rows"] = rows;
+    auto unsafe = categories; unsafe[0] = category; invalid["categories"] = unsafe;
+    QVERIFY(!ComponentSchema::validSettingsNavigation(invalid));
+    auto composition = QVariantMap{{"settingsCategoryOrder", order}};
+    QVERIFY(ComponentSchema::validComposition(composition));
+    auto duplicateOrder = order; duplicateOrder[1] = duplicateOrder[0];
+    QVERIFY(!ComponentSchema::validComposition({{"settingsCategoryOrder", duplicateOrder}}));
+    auto shortOrder = order; shortOrder.removeLast();
+    QVERIFY(!ComponentSchema::validComposition({{"settingsCategoryOrder", shortOrder}}));
+    auto unknownOrder = order; unknownOrder[0] = "unknown";
+    QVERIFY(!ComponentSchema::validComposition({{"settingsCategoryOrder", unknownOrder}}));
+
+    QTemporaryDir dir; AppRegistry registry; QVERIFY(registry.loadFromData(apps));
+    const auto defaults = QFINDTESTDATA("../config/default-home-layout.json");
+    const auto user = dir.filePath("a.json"), otherUser = dir.filePath("b.json");
+    HomeLayout home(&registry), other(&registry);
+    QVERIFY(home.load(defaults, user)); QVERIFY(other.load(defaults, otherUser));
+    QVERIFY(!QFile::exists(user)); QVERIFY(!QFile::exists(otherUser));
+    composition = home.composition(); composition["settingsCategoryOrder"] = order;
+    QVERIFY2(home.setComposition(composition), qPrintable(home.errorString()));
+    const auto original = readFile(user);
+    HomeLayout reopened(&registry); QVERIFY(reopened.load(defaults, user));
+    QCOMPARE(reopened.composition()["settingsCategoryOrder"].toList(), order);
+    QCOMPARE(readFile(user), original); QVERIFY(!QFile::exists(otherUser));
+    QVERIFY(!other.composition().contains("settingsCategoryOrder"));
+    const auto before = home.composition();
+    QVERIFY(QFile::rename(user, user + ".held")); QVERIFY(QDir().mkdir(user));
+    std::reverse(order.begin(), order.end()); composition["settingsCategoryOrder"] = order;
+    QVERIFY(!home.setComposition(composition)); QCOMPARE(home.composition(), before);
+    QCOMPARE(readFile(user + ".held"), original);
+    QVERIFY(QDir().rmdir(user)); QVERIFY(QFile::rename(user + ".held", user));
 }
 
 void ComponentTests::validatesContracts()

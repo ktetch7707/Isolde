@@ -36,6 +36,13 @@ The user-directed [Studio refinement](studio-simplification-2026-11-10.md) imple
 
 ## Current acceptance authority — VM-only software completion
 
+User-directed Settings organization (November 11): [hierarchy and handoff](settings-organization-2026-11-11.md)
+regroups nine TV-oriented categories, retains App Store in All Apps and Apps,
+preserves legacy shortcuts and adds profile-local category reorder/atomic retry.
+Native/navigation regressions and matching reference/theme helper changes are
+prepared. Test reruns remain user-deferred; only source/syntax/accounting checks
+were performed. No deployment or new acceptance: T12 0%, T29 13%, overall63%.
+
 [VM software completion](vm-software-completion.md) is the latest user-approved definition for every task and linked requirement. **100% means reasonable belief that the software is done based entirely on VM-verifiable evidence.** Actual hardware/model/USB/firmware, independent participants, user approval, unavailable paid accounts/entitlement/regions and target-only runtime/performance checks are not T-task prerequisites. Use the prescribed production-boundary fixtures, virtual devices and agent task/guide walkthroughs; retain genuine software errors as blockers. H01–H05 and external-service/usability checks are a separate user-owned post-100% handoff. No formal hardware/release campaign is required by this software backlog. All conflicting historical wording below and in Entry docs is superseded.
 
 Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 1563; Overall is 63% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.

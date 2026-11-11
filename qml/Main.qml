@@ -12,7 +12,9 @@ Window {
     readonly property real uiScaleFactor: displaySettings.uiScale / 100
     readonly property int safeAreaPixels: Math.round(Math.min(width, height) * displaySettings.safeArea / 100)
     property string shellProfileId: profileManager.activeId
+    property var settingsStoreReturn: null
     onShellProfileIdChanged: Qt.callLater(() => {
+        settingsStoreReturn = null
         commandCenter.themeOrigin = ""
         kodiLibrary.themeOrigin = ""
         store.themeOrigin = ""
@@ -126,6 +128,27 @@ Window {
         }
     }
 
+    function restoreSettingsFromStore() {
+        const saved = settingsStoreReturn
+        Qt.callLater(() => {
+            if (!saved || settingsStoreReturn !== saved || saved.profile !== profileManager.activeId || sessionManager.active) return
+            settingsStoreReturn = null
+            if (actionDispatcher.dispatch({type:"settings",section:-1}, saved.origin)) {
+                allApps.open = false
+                settings.openAppsSettings()
+            }
+        })
+    }
+
+    function openStoreFromSettings() {
+        const saved = {profile:profileManager.activeId, origin:actionDispatcher.currentOrigin()}
+        sessionManager.exitCurrent()
+        allApps.open = false
+        settingsStoreReturn = saved
+        store.themeOrigin = ""
+        if (!actionDispatcher.dispatch({type:"launch-app",appId:"app-store"}, saved.origin)) restoreSettingsFromStore()
+    }
+
     function closeAllAppsToOrigin(originId) {
         allApps.clearLaunchAttempt()
         allApps.open = false
@@ -136,6 +159,7 @@ Window {
     }
 
     function showDesignatedHome() {
+        settingsStoreReturn = null
         guideSearchReturn=null
         galleryReturnPageState = null
         searchFromGallery = false
@@ -407,6 +431,7 @@ Window {
                 editPageId: pageSurface.open ? pageSurface.activeId : ""
                 editComponentId: pageSurface.open ? pageSurface.focusedComponentId : home.focusedItemId
                 onPreviewAmbientRequested: window.ambientActive = true
+                onStoreRequested: window.openStoreFromSettings()
                 onPageRequested:id=>{ sessionManager.goHome(); actionDispatcher.dispatch({type:"open-page",pageId:id},"") }
             }
 
@@ -752,6 +777,10 @@ Window {
         target: sessionManager
         function onReturnedHome(appId) {
             if(appId && store.returnAppId===appId){store.returnAppId="";Qt.callLater(()=>sessionManager.launch("app-store"))}
+            else if(appId === "app-store" && settingsStoreReturn && !store.returnAppId) {
+                allApps.open=false
+                window.restoreSettingsFromStore()
+            }
         }
         function onSessionRejected(reason) {
             window.launchErrorSteamGame=false

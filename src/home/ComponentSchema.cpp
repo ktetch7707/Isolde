@@ -320,11 +320,63 @@ bool ComponentSchema::validPresentation(const QVariantMap &value, bool section, 
     }
     return true;
 }
+bool ComponentSchema::validSettingsNavigation(const QVariantMap &value)
+{
+    if (value.size() != 2 || value.value("schemaVersion").toInt() != 1
+        || !QJsonValue::fromVariant(value.value("schemaVersion")).isDouble()
+        || value.value("schemaVersion").toDouble() != 1
+        || value.value("categories").metaType().id() != QMetaType::QVariantList) return false;
+    const QSet<QString> categoryIds{"network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system"};
+    const QSet<QString> routes{"network", "vpn", "display", "audio", "studio", "ambient", "store", "store-preferences", "capture", "sources", "remotes", "profiles", "media", "system"};
+    const auto categories = value.value("categories").toList();
+    if (categories.size() != categoryIds.size()) return false;
+    QSet<QString> seen, seenRoutes;
+    const auto validLabel = [](const QVariant &label, int limit) {
+        return label.metaType().id() == QMetaType::QString && !label.toString().trimmed().isEmpty()
+            && label.toString().size() <= limit && !label.toString().contains(QChar::Null);
+    };
+    for (const auto &entry : categories) {
+        if (entry.metaType().id() != QMetaType::QVariantMap) return false;
+        const auto category = entry.toMap();
+        const auto id = category.value("id").toString();
+        if (category.size() != 4 || !categoryIds.contains(id) || seen.contains(id)
+            || !validLabel(category.value("name"), 48) || !validLabel(category.value("description"), 160)) return false;
+        seen.insert(id);
+        QVariantList rows;
+        if (category.contains("route")) rows.append(QVariantMap{{"name", category.value("name")}, {"description", category.value("description")}, {"route", category.value("route")}});
+        else {
+            if (category.value("rows").metaType().id() != QMetaType::QVariantList) return false;
+            rows = category.value("rows").toList();
+            if (rows.isEmpty() || rows.size() > 8) return false;
+        }
+        for (const auto &rowValue : rows) {
+            if (rowValue.metaType().id() != QMetaType::QVariantMap) return false;
+            const auto row = rowValue.toMap();
+            const auto route = row.value("route").toString();
+            if (row.size() != 3 || !validLabel(row.value("name"), 48) || !validLabel(row.value("description"), 160)
+                || !routes.contains(route) || seenRoutes.contains(route)) return false;
+            seenRoutes.insert(route);
+        }
+    }
+    return seen == categoryIds && seenRoutes == routes;
+}
+
 bool ComponentSchema::validComposition(const QVariantMap &value)
 {
     if (value.isEmpty()) return true;
-    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary", "appGallery", "captureInputArtwork"};
+    static const QSet<QString> keys{"schemaVersion", "enabled", "navigation", "initialTab", "margin", "gap", "fit", "showProfile", "columns", "wallpaper", "headerMode", "identity", "headerControls", "showClock", "designHeight", "pageNavigation", "sidebarWidth", "moviePage", "showsPage", "grid", "sectionHeight", "background", "verticalScrolling", "header", "designLibrary", "appGallery", "captureInputArtwork", "settingsCategoryOrder"};
     for (auto it = value.cbegin(); it != value.cend(); ++it) if (!keys.contains(it.key())) return false;
+    if (value.contains("settingsCategoryOrder")) {
+        if (value.value("settingsCategoryOrder").metaType().id() != QMetaType::QVariantList) return false;
+        const QSet<QString> ids{"network", "picture", "home", "apps", "inputs", "remotes", "profiles", "media", "system"};
+        const auto order = value.value("settingsCategoryOrder").toList();
+        if (order.size() != ids.size()) return false;
+        QSet<QString> seen;
+        for (const auto &id : order) {
+            if (id.metaType().id() != QMetaType::QString || !ids.contains(id.toString()) || seen.contains(id.toString())) return false;
+            seen.insert(id.toString());
+        }
+    }
     if (value.contains("captureInputArtwork")) {
         const auto artwork = value.value("captureInputArtwork");
         if (artwork.metaType().id() != QMetaType::QVariantMap || artwork.toMap().size() > 8) return false;

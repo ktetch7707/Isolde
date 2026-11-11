@@ -1,4 +1,15 @@
 {
+  "settingsNavigation":{"schemaVersion":1,"categories":[
+    {"id":"network","name":"Network & Internet","description":"Wi-Fi, connections and VPN","rows":[{"name":"Network connection","description":"Connection status, Wi-Fi and saved networks","route":"network"},{"name":"VPN","description":"Provider setup, locations and connection controls","route":"vpn"}]},
+    {"id":"picture","name":"Picture & Sound","description":"Display, accessibility and audio","rows":[{"name":"Display & accessibility","description":"Safe area, interface scale, contrast and motion","route":"display"},{"name":"Sound","description":"Audio output, volume and startup preferences","route":"audio"}]},
+    {"id":"home","name":"Home & Appearance","description":"Pages, themes and ambient mode","rows":[{"name":"Edit Home & pages","description":"Layouts, components, artwork and themes in Studio","route":"studio"},{"name":"Ambient mode","description":"Idle timing, screensaver pages and preview","route":"ambient"}]},
+    {"id":"apps","name":"Apps","description":"App Store, installed apps and store preferences","rows":[{"name":"App Store","description":"Browse, install and manage apps; set up Android support","route":"store"},{"name":"Store preferences","description":"Online catalog search and refresh","route":"store-preferences"}]},
+    {"id":"inputs","name":"Inputs & Sources","description":"HDMI inputs, drives and detected media","rows":[{"name":"HDMI inputs","description":"Capture device, input names, switching and preview","route":"capture"},{"name":"Detected sources","description":"Discs, drives, folders and source notices","route":"sources"}]},
+    {"id":"remotes","name":"Remotes & Controllers","description":"Pairing, button tests and mappings","route":"remotes"},
+    {"id":"profiles","name":"Profiles","description":"People, personal layouts and permissions","route":"profiles"},
+    {"id":"media","name":"Media & Playback","description":"Kodi library, import and playback preferences","route":"media"},
+    {"id":"system","name":"System & Support","description":"Setup guide, diagnostics and version information","route":"system"}
+  ]},
   "headerLabels":{"sources":"Sources"},"headerActions":{"sources":{"schemaVersion":1,"type":"settings","section":2}},
   "sourcePolicyFields":[
     {"key":"discoveryEnabled","label":"Local discovery","choices":[{"name":"On","value":true},{"name":"Off","value":false}]},

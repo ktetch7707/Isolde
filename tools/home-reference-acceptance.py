@@ -437,7 +437,9 @@ def main():
             if "settings" in controls:
                 key("Home");key("Up",30);key("Left",30);key("Right",controls.index("settings"));key("Return")
                 captured("settingscategories")
-                key("Up",30);key("Down",4);key("Return");key("Up",30)
+                settings_categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
+                system_index=next(i for i,c in enumerate(settings_categories) if c["id"]=="system")
+                key("Up",30);key("Down",system_index);key("Return");key("Up",30)
                 captured("settingssystem")
                 key("Down",8)
                 captured("settingslast")
@@ -495,7 +497,11 @@ def main():
                 key("Up",30); key("Left",3)
                 if case.name == "home-pastel-reference": key("Right")
                 key("Return")  # Header Settings, with remembered Settings selection.
-                key("Up",10); key("Down"); key("Return")  # Select Home explicitly.
+                settings_categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
+                home_index=next(i for i,c in enumerate(settings_categories) if c["id"]=="home")
+                key("Up",30);key("Down",home_index);key("Return")
+                studio_index=next(i for i,r in enumerate(settings_categories[home_index]["rows"]) if r["route"]=="studio")
+                key("Up",30);key("Down",studio_index);key("Return")
             else:
                 for name in interaction.get("editKeys",["Up","Up","Right","Return"]): key(name)
             # Customize opens the full-size Studio directly; no legacy action wall.

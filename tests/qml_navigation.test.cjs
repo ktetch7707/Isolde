@@ -1017,3 +1017,110 @@ test("timed ambient covers internal overlays while leaving playback and external
         object[key]=true;assert.equal(scope.ambientIdleAllowed(),false);object[key]=false;
     }
 });
+
+function settingsNavigationScope() {
+    const defaults = JSON.parse(fs.readFileSync(path.join(__dirname, '../config/studio-defaults.json'), 'utf8'));
+    const scope = vm.createContext({
+        selectedSection: 0, inPage: false, route: '', rowSelections: {}, pendingCategoryOrder: [], navigationError: '',
+        sections: defaults.settingsNavigation.categories,
+        inputManager: {navigateUp: 'up', navigateDown: 'down', navigateLeft: 'left', navigateRight: 'right', confirm: 'ok', back: 'back', menu: 'menu'},
+        systemPage: {activePage: -1, captureReturnPage: -1}, profileManager: {editingAllowed: true},
+        layoutModel: {composition: {}, errorString: 'Write refused', setComposition: () => true},
+        storeRequested() { scope.storeRequests = (scope.storeRequests || 0) + 1; }
+    });
+    Object.defineProperties(scope, {
+        category: {get: () => scope.sections[scope.selectedSection] || {}},
+        categoryRows: {get: () => scope.category.rows || []},
+        selectedRow: {get: () => scope.rowSelections[scope.category.id] || 0},
+        arranging: {get: () => scope.pendingCategoryOrder.length > 0}
+    });
+    scope.root = scope;
+    for (const name of ['selectRow', 'openRoute', 'openCategory', 'openSection', 'backToParent', 'handleCategoryArrangement', 'handleCommand'])
+        method('SettingsView.qml', name, scope);
+    return scope;
+}
+
+test('Settings preserves legacy shortcuts after category reordering and rejects unknown targets', () => {
+    const s = settingsNavigationScope();
+    s.sections.reverse();
+    const routes = ['network', 'studio', 'sources', 'remotes', 'system', 'profiles', 'vpn', 'store-preferences', 'media'];
+    routes.forEach((route, index) => { s.openSection(index); assert.equal(s.route, route); });
+    const before = [s.selectedSection, s.inPage, s.route];
+    for (const invalid of [-1, 9, 1.5, '1']) s.openSection(invalid);
+    s.openCategory('network', 'capture');
+    assert.deepEqual([s.selectedSection, s.inPage, s.route], before);
+});
+
+test('Settings App Store is a destination and Back restores the same Apps row', () => {
+    const s = settingsNavigationScope();
+    s.openCategory('apps', '');
+    s.handleCommand('ok');
+    assert.equal(s.storeRequests, 1);
+    assert.equal(s.route, '');
+    s.selectRow(1); s.handleCommand('ok');
+    assert.equal(s.route, 'store-preferences');
+    s.handleCommand('back');
+    assert.equal(s.route, ''); assert.equal(s.selectedRow, 1); assert.equal(s.inPage, true);
+    s.handleCommand('back'); assert.equal(s.inPage, false);
+});
+
+test('Settings Back lets an open Wi-Fi keyboard and HDMI draft handle cancellation first', () => {
+    const s = settingsNavigationScope();
+    const commands = [];
+    s.networkPage = {keyboardOpen: true, handleCommand: c => commands.push('network:' + c)};
+    s.openSection(0); s.handleCommand('back');
+    assert.deepEqual(commands, ['network:back']); assert.equal(s.route, 'network');
+    s.networkPage.keyboardOpen = false; s.handleCommand('back'); assert.equal(s.route, '');
+    s.openCategory('inputs', 'capture');
+    s.systemPage.handleCommand = () => {}; // dirty draft/keyboard still owns Back
+    s.handleCommand('back'); assert.equal(s.route, 'capture');
+    s.systemPage.handleCommand = () => { s.systemPage.activePage = -1; };
+    s.handleCommand('back'); assert.equal(s.route, ''); assert.equal(s.category.id, 'inputs');
+});
+
+test('Settings category reorder cancels without writes and retains a failed save for retry', () => {
+    const s = settingsNavigationScope();
+    let writes = 0;
+    s.layoutModel.setComposition = () => { writes++; return false; };
+    s.handleCommand('menu'); s.handleCommand('down'); s.handleCommand('back');
+    assert.equal(writes, 0); assert.equal(s.pendingCategoryOrder.length, 0);
+    s.handleCommand('menu'); s.handleCommand('down'); s.handleCommand('ok');
+    assert.equal(writes, 1); assert.equal(s.navigationError, 'Write refused');
+    assert.equal(s.pendingCategoryOrder.length, s.sections.length);
+    s.layoutModel.setComposition = () => { writes++; return true; };
+    s.handleCommand('ok'); assert.equal(writes, 2); assert.equal(s.pendingCategoryOrder.length, 0);
+    s.profileManager.editingAllowed = false; s.handleCommand('menu');
+    assert.equal(s.pendingCategoryOrder.length, 0);
+});
+
+test('App Store return restores Apps with its original origin and cancels across profiles or Home', () => {
+    const calls = [], pending = [];
+    const s = vm.createContext({
+        settingsStoreReturn: {profile:'a', origin:'page-button'}, profileManager:{activeId:'a'},
+        sessionManager:{active:false}, allApps:{open:true}, settings:{openAppsSettings:() => calls.push('apps')},
+        actionDispatcher:{dispatch:(action, origin) => {calls.push([action.type, action.section, origin]);return true;}},
+        Qt:{callLater:fn => pending.push(fn)}
+    });
+    method('Main.qml', 'restoreSettingsFromStore', s);
+    s.restoreSettingsFromStore(); pending.shift()();
+    assert.equal(JSON.stringify(calls), JSON.stringify([['settings',-1,'page-button'],'apps']));
+    assert.equal(s.allApps.open, false);
+    s.settingsStoreReturn={profile:'a',origin:'old'}; s.restoreSettingsFromStore();
+    s.profileManager.activeId='b'; pending.shift()(); assert.equal(calls.length,2);
+    s.profileManager.activeId='a'; s.restoreSettingsFromStore(); s.settingsStoreReturn=null;
+    pending.shift()(); assert.equal(calls.length,2);
+});
+
+test('Settings to Store hands off the session without leaving All Apps active', () => {
+    const events = [];
+    const s = vm.createContext({
+        profileManager:{activeId:'a'}, settingsStoreReturn:null, allApps:{open:false}, store:{themeOrigin:'old'},
+        sessionManager:{exitCurrent:() => { events.push('exit'); s.allApps.open=true; }},
+        actionDispatcher:{currentOrigin:() => 'all-apps', dispatch:(action,origin) => { events.push([action.appId,origin,s.allApps.open]);return false;}},
+        restoreSettingsFromStore:() => events.push('restore')
+    });
+    method('Main.qml','openStoreFromSettings',s);
+    s.openStoreFromSettings();
+    assert.equal(JSON.stringify(events),JSON.stringify(['exit',['app-store','all-apps',false],'restore']));
+    assert.equal(s.settingsStoreReturn.profile,'a'); assert.equal(s.settingsStoreReturn.origin,'all-apps');
+});

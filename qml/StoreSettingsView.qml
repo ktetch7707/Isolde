@@ -21,7 +21,7 @@ Item {
     }
     Column {
         anchors.fill:parent;spacing:24*shell.gapScale
-        Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:qsTr("Online Store");font.pixelSize:30*root.textScale;color:root.ink;font.weight:Font.DemiBold}
+        Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:qsTr("Store preferences");font.pixelSize:30*root.textScale;color:root.ink;font.weight:Font.DemiBold}
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:qsTr("Account-free Android apps from verified repositories. Chromium apps use websites you choose.");wrapMode:Text.WordWrap;font.pixelSize:19*root.textScale;color:root.ink}
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:root.catalog.storeSourceName;wrapMode:Text.WordWrap;font.pixelSize:18*root.textScale;color:shell.muted}
         Repeater {
