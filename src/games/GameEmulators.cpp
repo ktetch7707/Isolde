@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QMap>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
@@ -83,6 +84,49 @@ bool valid(const QVariantMap &value){
         && QStringList{"xbox","xbox-wii-classic"}.contains(value.value("controller").toString()) && (value.value("firmware").toString().isEmpty()
             || QRegularExpression("^[a-f0-9]{64}\\.bin$").match(value.value("firmware").toString()).hasMatch());
 }
+bool setupAssetHeader(const QByteArray &header,const QString &kind){
+    return kind=="xbox-bootset"?header.startsWith("PK\003\004")
+        :header.startsWith("SCEUF") || (kind=="vita-pup" && header.startsWith("PK\003\004"));
+}
+QString importSetupAsset(const QString &root,const QString &sourcePath,const QString &kind,QString *error){
+    const QFileInfo source(sourcePath);
+    const qint64 maximum=kind=="xbox-bootset"?128LL*1024*1024:512LL*1024*1024;
+    if(!MediaGrants::validate(source.absolutePath()).isEmpty() || !source.isFile() || !source.isReadable()
+        || source.canonicalFilePath()!=sourcePath || source.size()<16 || source.size()>maximum){
+        *error="Choose a bounded readable firmware file in an approved folder.";return {};
+    }
+    QFile input(sourcePath);
+    if(!input.open(QIODevice::ReadOnly) || !setupAssetHeader(input.peek(16),kind)){
+        *error="The selected file does not match this runtime's firmware format.";return {};
+    }
+    QCryptographicHash hash(QCryptographicHash::Sha256);qint64 total=0;
+    while(!input.atEnd()){
+        const auto block=input.read(1024*1024);total+=block.size();
+        if(block.isEmpty() || total>maximum){*error="Firmware read failed or exceeded its byte limit.";return {};}
+        hash.addData(block);
+    }
+    if(input.error()!=QFile::NoError || total!=source.size()){*error="Firmware changed while reading; retry the import.";return {};}
+    const auto name=QString::fromLatin1(hash.result().toHex())+".bin";
+    const auto directory=root+"/firmware";const auto destination=directory+'/'+name;
+    if(!protectedPath(destination) || !QDir().mkpath(directory)
+        || (QDir(directory).entryList(QDir::AllEntries|QDir::NoDotAndDotDot|QDir::Hidden|QDir::System).size()>=8 && !QFileInfo::exists(destination))){
+        *error="Private firmware storage is redirected, unavailable or full.";return {};
+    }
+    QSaveFile output(destination);output.setDirectWriteFallback(false);
+    if(!input.seek(0) || !output.open(QIODevice::WriteOnly)){*error="Cannot stage a private firmware copy.";return {};}
+    QCryptographicHash second(QCryptographicHash::Sha256);total=0;
+    while(!input.atEnd()){
+        const auto block=input.read(1024*1024);total+=block.size();
+        if(block.isEmpty() || total>maximum || output.write(block)!=block.size()){
+            *error="Cannot copy firmware; previous settings were preserved.";return {};
+        }
+        second.addData(block);
+    }
+    if(input.error()!=QFile::NoError || total!=source.size() || second.result()!=hash.result() || !output.commit()){
+        *error="Firmware changed or its private copy could not be saved. Previous settings were preserved.";return {};
+    }
+    QFile::setPermissions(destination,QFile::ReadOwner|QFile::WriteOwner);return name;
+}
 }
 QVariantList GameEmulators::definitions(){
     QFile file(":/config/game-runtimes.json");
@@ -119,11 +163,28 @@ QVariantList GameEmulators::definitions(){
     QSet<QString> actualPlatforms,ids;
     for(const auto &entry:runtimes){
         const auto item=entry.toMap();
+        const auto itemKeys=item.keys();
+        const QSet<QString> allowedFields{"id","name","engine","platforms","formats","binary","core","packages","firmwareRequired","setup"};
+        for(const auto &key:itemKeys)if(!allowedFields.contains(key))return {};
         const auto id=item.value("id").toString(),engine=item.value("engine").toString();
         const auto packages=item.value("packages").toStringList();
         const auto formats=item.value("formats").toStringList();
         const auto platforms=item.value("platforms").toStringList();
         static const QSet<QString> engines{"ppsspp","dolphin","pcsx2","retroarch","rpcs3","shadps4","vita3k","xemu","xenia","cemu"};
+        const QMap<QString,QString> expandedKinds{{"rpcs3","ps3-pup"},{"shadps4","none"},{"vita3k","vita-pup"},{"xemu","xbox-bootset"},{"xenia","none"},{"cemu","none"}};
+        if(expandedKinds.contains(engine) && (id!=engine || !item.contains("setup")
+                || item.value("setup").toMap().value("firmwareKind").toString()!=expandedKinds.value(engine)))return {};
+        if(item.contains("setup")){
+            const auto setup=item.value("setup").toMap();const auto setupKeys=setup.keys();
+            if(QSet<QString>(setupKeys.cbegin(),setupKeys.cend())!=QSet<QString>{"videoModes","firmwareKind","firmwareLabel","firmwareHelp","gameHelp","controllerHelp"})return {};
+            const auto modes=setup.value("videoModes").toStringList();
+            if(modes.isEmpty() || QSet<QString>(modes.cbegin(),modes.cend()).size()!=modes.size())return {};
+            for(const auto &mode:modes)if(mode!="automatic" && mode!="software")return {};
+            const auto kind=setup.value("firmwareKind").toString();
+            if(!QStringList{"none","ps3-pup","vita-pup","xbox-bootset"}.contains(kind) || (kind!="none")!=item.value("firmwareRequired").toBool())return {};
+            for(const auto &key:QStringList{"firmwareLabel","firmwareHelp","gameHelp","controllerHelp"})
+                if(setup.value(key).metaType().id()!=QMetaType::QString || setup.value(key).toString().size()>2048 || setup.value(key).toString().contains(QChar::Null))return {};
+        }
         if(item.isEmpty() || !QRegularExpression("^[a-z0-9-]{1,48}$").match(id).hasMatch()
             || ids.contains(id) || !engines.contains(engine) || item.value("binary").toString().isEmpty()
             || !QDir::isAbsolutePath(item.value("binary").toString()) || packages.isEmpty()
@@ -135,17 +196,17 @@ QVariantList GameEmulators::definitions(){
             for(const auto &package:packages)if(package.startsWith("libretro-"))++corePackages;
             if(!item.contains("core") || !packageSet.contains("retroarch") || corePackages!=1)return {};
         }else if(engine=="rpcs3"){
-            if(item.contains("core") || packageSet!=QSet<QString>{"rpcs3"})return {};
+            if(item.contains("core") || packageSet!=QSet<QString>{"isolde-rpcs3"})return {};
         }else if(engine=="shadps4"){
-            if(item.contains("core") || packageSet!=QSet<QString>{"shadps4"})return {};
+            if(item.contains("core") || packageSet!=QSet<QString>{"isolde-shadps4"})return {};
         }else if(engine=="vita3k"){
-            if(item.contains("core") || packageSet!=QSet<QString>{"vita3k"})return {};
+            if(item.contains("core") || packageSet!=QSet<QString>{"isolde-vita3k"})return {};
         }else if(engine=="xemu"){
-            if(item.contains("core") || packageSet!=QSet<QString>{"xemu"})return {};
+            if(item.contains("core") || packageSet!=QSet<QString>{"isolde-xemu"})return {};
         }else if(engine=="xenia"){
-            if(item.contains("core") || packageSet!=QSet<QString>{"xenia"})return {};
+            if(item.contains("core") || packageSet!=QSet<QString>{"isolde-xenia"})return {};
         }else if(engine=="cemu"){
-            if(item.contains("core") || packageSet!=QSet<QString>{"cemu"})return {};
+            if(item.contains("core") || packageSet!=QSet<QString>{"isolde-cemu"})return {};
         }else{
             const QSet<QString> expectedPackage=engine=="ppsspp"?QSet<QString>{"isolde-ppsspp"}
                 :engine=="dolphin"?QSet<QString>{"dolphin-emu"}:QSet<QString>{"pcsx2"};
@@ -218,7 +279,18 @@ bool GameEmulators::configure(const QString &profile,const QString &id,const QVa
     if(options.size()!=2 || !options.contains("video") || !options.contains("controller")){*error="Choose known emulator settings only.";return false;}
     value["video"]=options.value("video");value["controller"]=options.value("controller");
     if(!valid(value) || (id!="dolphin" && value.value("controller").toString()!="xbox")){*error="Choose a supported renderer and controller profile.";return false;}
+    const auto setup=definition(id).value("setup").toMap();
+    if(!setup.isEmpty() && !setup.value("videoModes").toStringList().contains(value.value("video").toString())){*error="This runtime does not provide the selected renderer.";return false;}
     const auto root=home(profile,id);
+    if(!setup.isEmpty()){
+        if(!firmware.isEmpty()){
+            const auto kind=setup.value("firmwareKind").toString();
+            if(kind=="none"){*error="This runtime does not require imported firmware.";return false;}
+            const auto name=importSetupAsset(root,firmware,kind,error);if(name.isEmpty())return false;
+            value["firmware"]=name;
+        }
+        return save(root+"/.config/isolde-emulator/settings.json",QJsonDocument::fromVariant(value).toJson(),error);
+    }
     if(!firmware.isEmpty()){
         if(!definition(id).value("firmwareRequired").toBool()){*error="This runtime does not require imported firmware.";return false;}
         if(!(id=="retroarch-psx"?prunePsxFirmware(root,value.value("firmware").toString(),error)
@@ -243,5 +315,29 @@ bool GameEmulators::configure(const QString &profile,const QString &id,const QVa
     QString cleanupError;
     if(id=="retroarch-psx")prunePsxFirmware(root,value.value("firmware").toString(),&cleanupError);
     else pruneFirmware(root,value.value("firmware").toString(),&cleanupError);
+    return true;
+}
+bool GameEmulators::setupAssetReady(const QString &profile,const QString &id,QString *error){
+    const auto route=definition(id);const auto setup=route.value("setup").toMap();
+    if(setup.isEmpty() || !route.value("firmwareRequired").toBool())return true;
+    const auto value=settings(profile,id,error);if(value.isEmpty())return false;
+    const auto name=value.value("firmware").toString();
+    if(name.isEmpty()){*error="Import this runtime's firmware in Emulator setup before playing.";return false;}
+    const auto path=home(profile,id)+"/firmware/"+name;
+    const qint64 maximum=setup.value("firmwareKind")=="xbox-bootset"?128LL*1024*1024:512LL*1024*1024;
+    QFile file(path);
+    if(!protectedPath(path) || !file.open(QIODevice::ReadOnly) || file.size()<16 || file.size()>maximum
+        || !setupAssetHeader(file.peek(16),setup.value("firmwareKind").toString())){
+        *error="Firmware is missing, redirected or invalid. Import it again.";return false;
+    }
+    QCryptographicHash hash(QCryptographicHash::Sha256);qint64 size=0;
+    while(!file.atEnd()){
+        const auto block=file.read(1024*1024);size+=block.size();
+        if(block.isEmpty() || size>maximum){*error="Firmware could not be verified.";return false;}
+        hash.addData(block);
+    }
+    if(file.error()!=QFile::NoError || QString::fromLatin1(hash.result().toHex())+".bin"!=name){
+        *error="Firmware changed. Import it again before playing.";return false;
+    }
     return true;
 }

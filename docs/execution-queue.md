@@ -1,5 +1,19 @@
 # Executable backlog queue
 
+## Current user-directed T30 repair — no rerun
+
+The user explicitly selected implementation of the six BUG-058 integrations,
+then said continue. [The expanded runtime record](games-page/expanded-runtimes-2026-11-10.md)
+documents the coherent source batch: sixteen declared routes, six exact locked
+upstream artifacts, signed-bundle packaging, private firmware/game preparation,
+typed remote setup, runtime payload checks, same-version repair and retained-data
+rebuild/retry. Source parsing/JSON parsing and static review only. The user's
+instruction still defers tests/builds/VM journeys; do not launch the queued
+verification ladder merely to close this record. Native/installed/bundle and
+gameplay evidence remains open, with no percentage credit. Preserve unrelated
+Studio test changes. The historical checkpoints below retain their evidence
+and are superseded where they still describe these six routes as unimplemented.
+
 **Current scope and handoff:** T13 and T31 are excluded from project requirements and project averages. Continue toward 100% Coding across the remaining 25 tasks; only then start the testing agent, which reports every bug found. Older queue instructions to select T13/T31 are historical.
 
 Operating rules: [backlog-execution.md](backlog-execution.md). Scope/Entry docs/files/percentages: [agent-backlog.md](agent-backlog.md). This queue breaks execution into resumable outcomes without replacing or relaxing any linked requirement. A future selection reads the full owning gate before implementation. Tests below use the F/H/I/V/A ladder in the contract.

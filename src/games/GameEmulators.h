@@ -14,4 +14,5 @@ QVariantMap settings(const QString &profile, const QString &id, QString *error);
 bool configure(const QString &profile, const QString &id, const QVariantMap &options,
                const QString &firmware, QString *error);
 bool playStationFirmwareReady(const QString &profile, QString *error);
+bool setupAssetReady(const QString &profile, const QString &id, QString *error);
 }

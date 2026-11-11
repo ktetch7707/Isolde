@@ -48,7 +48,8 @@ public:
     void setSessionActiveGuard(std::function<bool()> guard) { m_sessionActiveGuard=std::move(guard); }
     bool setupBusy() const { return m_setup.state()!=QProcess::NotRunning; }
     QString setupStatus() const { return m_setupStatus; }
-    Q_INVOKABLE bool installEmulators(bool consent);
+    Q_INVOKABLE bool installEmulators(bool consent, bool update = false, bool offline = false);
+    Q_INVOKABLE bool rebuildEmulatorData(const QString &id);
     Q_INVOKABLE void cancelEmulatorSetup();
     // Explicit registration is also explicit consent to read this specific root.
     Q_INVOKABLE QString addGame(const QVariantMap &registration);

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "packageId": "shadps4",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "shadPS4 · PlayStation 4",
+  "description": "Select eboot.bin or ELF in a decrypted authorized game folder. Titles requiring extra system modules need their own compatibility assessment. SDL Xbox pad uses positional PlayStation mappings. Touch/gyro-dependent titles are outside the pad-only matrix.",
+  "category": "Games",
+  "publisher": "shadps4",
+  "provenance": "Official upstream artifact pinned by SHA-256; no games, accounts or firmware",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "shadps4",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-shadps4",
+    "emulatorRuntime": "shadps4",
+    "windowClass": "shadPS4",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "PlayStation 4",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "bin",
+      "elf"
+    ]
+  }
+}

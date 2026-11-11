@@ -16,6 +16,11 @@ adapter=importlib.util.module_from_spec(adapter_spec);adapter_spec.loader.exec_m
 
 
 class GamesProvisioningTests(unittest.TestCase):
+    def setUp(self):
+        # This class supplies a temporary executable/core boundary. Expanded
+        # payload-tree validation has its own real-filesystem regression below.
+        self.payload_patch=patch.object(games,"upstream_fingerprint",return_value="b"*64)
+        self.payload_patch.start();self.addCleanup(self.payload_patch.stop)
     def launcher_receipt(self,directory):
         source=Path(__file__).parents[1]/"config/game-runtimes.json"
         document=json.loads(source.read_text())
@@ -50,6 +55,14 @@ class GamesProvisioningTests(unittest.TestCase):
                 patch.object(games,"apply_bundle",side_effect=RuntimeError("fixture failure")) as apply:
             with self.assertRaises(RuntimeError):games.provision(["pcsx2"],True)
             apply.assert_called_once_with(Path("bundle"),update=False,offline=False)
+
+    def test_repair_reinstalls_damaged_matching_version_without_upgrading(self):
+        broken={"isolde-xenia":{"ready":False,"installedVersion":games.PACKAGES["isolde-xenia"][0]}}
+        with patch.object(games,"platform"),patch.object(games,"inspect",side_effect=[broken,broken]),\
+                patch.object(games,"recover_package_transaction"),patch.object(games,"prepare_bundle",return_value=Path("bundle")),\
+                patch.object(games,"apply_bundle",side_effect=RuntimeError("fixture failure")) as apply:
+            with self.assertRaises(RuntimeError):games.provision(["isolde-xenia"],True)
+            apply.assert_called_once_with(Path("bundle"),update=False,offline=False,repair=["isolde-xenia"])
 
     def test_changed_installed_runtime_is_preserved_instead_of_silently_downgraded(self):
         state={"pcsx2":{"ready":False,"installedVersion":"2.5.0"}}
@@ -139,6 +152,9 @@ class RuntimeBundleTests(unittest.TestCase):
             item=next(entry for entry in self.entries if entry["file"]==archive.name)
             if args[-1]=="X-Isolde-Source-Commit":
                 return subprocess.CompletedProcess(args,0,"fa50bb1976065c4f8b1b47af227d367fe9771555\n","")
+            if args[-1]=="X-Isolde-Artifact-Sha256":
+                row=next(row for row in games.UPSTREAM_ARTIFACTS.values() if row["package"]==item["package"])
+                return subprocess.CompletedProcess(args,0,row["sha256"]+"\n","")
             return subprocess.CompletedProcess(args,0,
                 "\n".join(item[field] for field in ("package","version","architecture"))+"\n","")
         if args[0]=="apt-cache":
@@ -215,6 +231,66 @@ class RuntimeBundleTests(unittest.TestCase):
         self.assertIn("--simulate",simulation)
         self.assertNotIn("--no-remove",purge)
         self.assertEqual(state,{})
+
+    def test_offline_bundle_refuses_forged_upstream_artifact_identity(self):
+        self.signed_bundle()
+        def forged(*args,**kwargs):
+            if args[-1]=="X-Isolde-Artifact-Sha256":
+                return subprocess.CompletedProcess(args,0,"0"*64+"\n","")
+            if args[0]=="apt-cache":raise AssertionError("Offline validation must not use package indexes")
+            return self.fake_runner(*args,**kwargs)
+        with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"state")}):
+            doc=games.validate_bundle(self.bundle,self.document["runtimeManifestSha256"],self.fake_runner)
+            with self.assertRaisesRegex(ValueError,"pinned upstream artifact"):
+                games.authenticate_bundle(self.bundle,doc,forged)
+
+    def test_same_version_payload_repair_uses_reinstall_without_removal_or_upgrade(self):
+        self.signed_bundle();commands=[]
+        before={name:{"status":"install ok installed","version":version}
+                for name,version in games.emulator_package_pins().items()}
+        def runner(*args,**kwargs):
+            if args[0]=="dpkg-query":
+                state=before[args[-1]]
+                return subprocess.CompletedProcess(args,0,state["status"]+"\n"+state["version"]+"\n","")
+            if args[0]=="sudo":
+                commands.append(args);return subprocess.CompletedProcess(args,0,"","")
+            return self.fake_runner(*args,**kwargs)
+        checkpoint=self.root/"repair.json"
+        with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"state")}):
+            result=games.apply_bundle(self.bundle,installed=before,runner=runner,
+                checkpoint=checkpoint,offline=True,repair=["isolde-xenia"])
+        self.assertTrue(result["ready"]);self.assertEqual(result["installed"],before)
+        self.assertEqual(len(commands),1)
+        for flag in ("--reinstall","--no-download","--no-upgrade","--no-remove"):
+            self.assertIn(flag,commands[0])
+        xenia=next(item for item in self.entries if item["package"]=="isolde-xenia")
+        self.assertEqual(commands[0][-1],str(self.bundle/"archives"/xenia["file"]))
+        self.assertFalse(checkpoint.exists())
+
+    def test_clean_offline_install_passes_local_archives_and_absent_dependencies(self):
+        name="fixture-runtime-dependency";archive=self.bundle/"archives"/(name+"_1.0_amd64.deb")
+        archive.write_bytes(b"inert dependency boundary fixture")
+        self.entries.append({"package":name,"version":"1.0","architecture":"amd64","file":archive.name,
+            "size":archive.stat().st_size,"sha256":__import__("hashlib").sha256(archive.read_bytes()).hexdigest()})
+        (self.bundle/"bundle.json").write_text(json.dumps(self.document));self.signed_bundle()
+        state={};commands=[]
+        def runner(*args,**kwargs):
+            if args[0]=="dpkg-query":
+                value=state.get(args[-1])
+                return subprocess.CompletedProcess(args,0 if value else 1,
+                    "install ok installed\n"+value+"\n" if value else "","")
+            if args[0]=="apt-cache":raise AssertionError("A clean offline target has no package indexes")
+            if args[0]=="sudo":
+                commands.append(args)
+                requested=args[args.index("install")+1:]
+                self.assertEqual(set(requested),{str(self.bundle/"archives"/entry["file"]) for entry in self.entries})
+                state.update({entry["package"]:entry["version"] for entry in self.entries})
+                return subprocess.CompletedProcess(args,0,"","")
+            return self.fake_runner(*args,**kwargs)
+        with patch.dict(os.environ,{"XDG_STATE_HOME":str(self.root/"state")}):
+            result=games.apply_bundle(self.bundle,runner=runner,checkpoint=self.root/"offline.json",offline=True)
+        self.assertTrue(result["ready"]);self.assertIn(name,result["added"])
+        self.assertEqual(len(commands),1);self.assertIn("--no-download",commands[0])
 
     def test_interrupted_transaction_is_recovered_before_retry(self):
         self.signed_bundle()
@@ -410,15 +486,20 @@ class EmulatorAdapterTests(unittest.TestCase):
         return value,str(target)
 
     def test_all_declared_routes_build_identity_only_commands(self):
+        expanded=adapter.expanded_adapter()
         for identity in self.runtime_definitions:
             runtime,target=self.runtime(identity,self.runtime_definitions[identity]["formats"][0])
-            if identity in {"pcsx2","retroarch-psx"}:
-                with self.assertRaisesRegex(ValueError,"firmware is required"):adapter.command(runtime,target,self.home)
+            if runtime["firmwareRequired"]:
+                with patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}),patch.object(adapter,"expanded_adapter",return_value=expanded):
+                    with self.assertRaisesRegex(ValueError,"[Ff]irmware.*required"):adapter.command(runtime,target,self.home)
                 continue
-            with patch.object(adapter,"dolphin_controller",return_value="Xbox Controller"):
+            with patch.object(adapter,"dolphin_controller",return_value="Xbox Controller"),\
+                    patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"}),\
+                    patch.object(adapter,"expanded_adapter",return_value=expanded),\
+                    patch.object(expanded,"gamepad",return_value={"name":"Xbox Controller","guid":"a"*32}):
                 argv=adapter.command(runtime,target,self.home)
-            self.assertEqual(argv[0],str(self.binary));self.assertIn(target,argv)
-            self.assertEqual(argv.count(target),1)
+            self.assertEqual(argv[0],str(self.binary))
+            self.assertEqual(sum(value in (target,"--target="+target) for value in argv),1)
         self.assertFalse((self.home/".config/isolde-emulator/settings.json").exists())
 
     def test_unknown_settings_preserved_and_source_never_written(self):
@@ -571,7 +652,7 @@ class EmulatorAdapterTests(unittest.TestCase):
         manifest=Path(__file__).parents[1]/"config/game-runtimes.json"
         document=json.loads(manifest.read_text())
         self.assertEqual(document["target"]["architectures"],["amd64"])
-        self.assertIn("Original Xbox",document["generationCoverage"]["notIntegrated"])
+        self.assertIn("Original Xbox",document["generationCoverage"]["integratedPlatforms"])
         self.assertEqual(set(document["generationCoverage"]["integratedPlatforms"]),
             {platform for runtime in document["runtimes"] for platform in runtime["platforms"]})
         declared={name for runtime in document["runtimes"] for name in runtime["packages"]}
@@ -633,7 +714,8 @@ class EmulatorAdapterTests(unittest.TestCase):
                 if "core" in runtime:runtime["core"]=str(core)
             packages={name:{"expectedVersion":value[0],"installedVersion":value[0],"ready":True,
                 "executable":value[1],"sha256":"a"*64} for name,value in games.PACKAGES.items()}
-            with patch.object(games,"runtime_manifest",return_value=(source,routes)):
+            with patch.object(games,"runtime_manifest",return_value=(source,routes)),\
+                    patch.object(games,"upstream_fingerprint",return_value="b"*64):
                 manifest_hash,receipt=games.inspect_runtimes(packages)
                 self.assertTrue(all(item["ready"] for item in receipt.values()))
                 report={"schemaVersion":2,"manifestSha256":manifest_hash,"runtimes":receipt,"packages":packages}
@@ -719,6 +801,159 @@ except games.ProvisioningCancelled:print('build-stopped')
             package.write_bytes(b"changed payload")
             with self.assertRaisesRegex(ValueError,"hash mismatch"):builder.build(cache,provisioner)
             run.assert_not_called()
+
+
+@unittest.skipUnless(os.name=="posix","Expanded routes target the Linux appliance")
+class ExpandedRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        import hashlib
+        self.hashlib=hashlib
+        self.directory=tempfile.TemporaryDirectory();self.addCleanup(self.directory.cleanup)
+        self.root=Path(self.directory.name);self.home=self.root/"profile-home";self.home.mkdir()
+        self.binary=self.root/"inert-runtime";self.binary.write_text("external runtime fixture");self.binary.chmod(0o700)
+        self.routes=adapter.definitions(Path(__file__).parents[1]/"config/game-runtimes.json")
+        self.expanded=adapter.expanded_adapter()
+        self.environment=patch.dict(os.environ,{"ISOLDE_NATIVE_NAMESPACE":"1"});self.environment.start();self.addCleanup(self.environment.stop)
+        self.loader=patch.object(adapter,"expanded_adapter",return_value=self.expanded);self.loader.start();self.addCleanup(self.loader.stop)
+        self.pad=patch.object(self.expanded,"gamepad",return_value={"name":"Xbox & test pad","guid":"a"*32})
+        self.pad.start();self.addCleanup(self.pad.stop)
+
+    def route(self,identity,suffix=None):
+        route=dict(self.routes[identity],binary=str(self.binary))
+        target=self.root/("user game."+(suffix or route["formats"][0]));target.write_bytes(b"owned game fixture")
+        return route,target
+
+    def asset(self,content):
+        name=self.hashlib.sha256(content).hexdigest()+".bin"
+        adapter.atomic(self.home/"firmware"/name,content)
+        adapter.atomic(self.home/".config/isolde-emulator/settings.json",json.dumps({
+            "schemaVersion":1,"video":"automatic","controller":"xbox","firmware":name}).encode())
+        return self.home/"firmware"/name
+
+    def zip_bytes(self,entries):
+        import io,zipfile
+        stream=io.BytesIO()
+        with zipfile.ZipFile(stream,"w",compression=zipfile.ZIP_DEFLATED) as archive:
+            for name,content in entries:archive.writestr(name,content)
+        return stream.getvalue()
+
+    def firmware_boundary(self,arguments,private,timeout=300):
+        # Only the upstream firmware decoder is substituted. Production staging,
+        # receipts, hash revalidation, generated config and save paths execute.
+        if "--installfw" in arguments:
+            folder=private/".config/rpcs3/dev_flash/sys/external"
+        elif "--firmware" in arguments:
+            folder=private/".local/share/Vita3K/Vita3K/vs0/sys/external"
+        else:
+            folder=private/".config/rpcs3/dev_hdd0/game/TEST00001/USRDIR"
+        folder.mkdir(parents=True)
+        name="EBOOT.BIN" if "--installpkg" in arguments else "liblv2.sprx" if "--installfw" in arguments else "libhttp.suprx"
+        (folder/name).write_bytes(b"decoded external fixture")
+
+    def test_six_routes_bind_locked_artifacts_and_catalog_entries(self):
+        builder=games.artifact_builder();_,locks=builder.locks()
+        catalog=json.loads((Path(__file__).parents[1]/"config/catalog.json").read_text())
+        self.assertEqual(set(locks),{"rpcs3","shadps4","vita3k","xemu","xenia","cemu"})
+        for identity,row in locks.items():
+            self.assertEqual(self.routes[identity]["packages"],[row["package"]])
+            self.assertEqual(games.PACKAGES[row["package"]],(row["version"],"/usr/bin/isolde-"+identity))
+            self.assertIn("packages/"+identity+"/manifest.json",catalog["packages"])
+            self.assertRegex(row["sha256"],r"^[a-f0-9]{64}$")
+
+    def test_ps3_firmware_preparation_is_private_reusable_and_tamper_checked(self):
+        route,target=self.route("rpcs3");asset=self.asset(b"SCEUF\0\0\0"+b"bounded synthetic PUP")
+        with patch.object(self.expanded.Adapter,"run",autospec=True,
+                side_effect=lambda _self,*args,**kwargs:self.firmware_boundary(*args,**kwargs)) as decoder:
+            argv=adapter.command(route,str(target),self.home)
+            self.assertIn("--no-gui",argv);self.assertIn("--fullscreen",argv)
+            self.assertNotIn("--no-config",argv);decoder.assert_called_once()
+            vfs=json.loads((self.home/".config/rpcs3/vfs.yml").read_text())
+            flash=Path(vfs["/dev_flash/"])
+            self.assertTrue(flash.is_relative_to(self.home));self.assertTrue(flash.is_dir())
+            before=asset.read_bytes();save=self.home/".config/rpcs3/dev_hdd0/home/00000001/savedata/save"
+            save.parent.mkdir(parents=True);save.write_bytes(b"existing save")
+            adapter.command(route,str(target),self.home);decoder.assert_called_once()
+            self.assertEqual(save.read_bytes(),b"existing save");self.assertEqual(asset.read_bytes(),before)
+            (flash/"sys/external/liblv2.sprx").write_bytes(b"changed firmware")
+            with self.assertRaisesRegex(ValueError,"changed"):adapter.command(route,str(target),self.home)
+
+    def test_ps3_package_installs_at_runtime_boundary_without_modifying_source(self):
+        route,target=self.route("rpcs3","pkg");self.asset(b"SCEUF\0\0\0"+b"synthetic PUP")
+        with patch.object(self.expanded.Adapter,"run",autospec=True,
+                side_effect=lambda _self,*args,**kwargs:self.firmware_boundary(*args,**kwargs)) as decoder:
+            argv=adapter.command(route,str(target),self.home)
+            self.assertEqual(decoder.call_count,2)
+            self.assertTrue(argv[-1].endswith("/TEST00001/USRDIR/EBOOT.BIN"))
+            self.assertTrue(Path(argv[-1]).is_relative_to(self.home))
+            adapter.command(route,str(target),self.home);self.assertEqual(decoder.call_count,2)
+            self.assertEqual(target.read_bytes(),b"owned game fixture")
+
+    def test_vita_archive_and_firmware_use_private_storage_and_sdl_frontend(self):
+        route,target=self.route("vita3k")
+        target.write_bytes(self.zip_bytes([("eboot.bin",b"homebrew ELF"),("sce_sys/param.sfo",b"metadata")]))
+        self.asset(b"SCEUF\0\0\0"+b"synthetic Vita PUP")
+        with patch.object(self.expanded.Adapter,"run",autospec=True,
+                side_effect=lambda _self,*args,**kwargs:self.firmware_boundary(*args,**kwargs)):
+            argv=adapter.command(route,str(target),self.home)
+        self.assertEqual(argv[1:3],["--frontend","sdl"])
+        config=json.loads((self.home/".config/isolde-emulator/generated/vita.yml").read_text())
+        root=Path(config["pref-path"]);self.assertTrue(root.is_relative_to(self.home))
+        self.assertTrue((root/"vs0").is_symlink());self.assertTrue((root/"vs0").resolve().is_relative_to(self.home))
+        self.assertFalse(config["check-for-updates"]);self.assertTrue(config["initial-setup"])
+        target.write_bytes(self.zip_bytes([("../escape",b"bad")]))
+        with self.assertRaisesRegex(ValueError,"unsafe"):adapter.command(route,str(target),self.home)
+        self.assertFalse((self.root/"escape").exists())
+        target.write_bytes(b"PK truncated VPK")
+        with self.assertRaisesRegex(ValueError,"archive is invalid"):adapter.command(route,str(target),self.home)
+
+    def test_xbox_qcow_save_and_eeprom_survive_firmware_reselection(self):
+        import struct
+        route,target=self.route("xemu")
+        disc=bytearray(34*2048);disc[32*2048:32*2048+20]=b"MICROSOFT*XBOX*MEDIA";target.write_bytes(disc)
+        disk=bytearray(4096);disk[:4]=b"QFI\xfb";struct.pack_into(">I",disk,4,3);struct.pack_into(">I",disk,20,16);struct.pack_into(">Q",disk,24,8*1024**3)
+        mcpx=b"M"*512
+        archive=self.zip_bytes([("mcpx.bin",mcpx),("flash.bin",bytes(256*1024)),("hdd.qcow2",disk),("eeprom.bin",b"E"*256)])
+        self.asset(archive)
+        with patch.object(self.expanded,"MCPX_MD5",self.hashlib.md5(mcpx).hexdigest()):
+            argv=adapter.command(route,str(target),self.home)
+            self.assertIn("-full-screen",argv);self.assertEqual(argv[-2:], ["-dvd_path",str(target)])
+            save=self.home/"saves/xemu/hdd.qcow2";save.write_bytes(bytes(disk)+b"saved game")
+            eeprom=self.home/"saves/xemu/eeprom.bin";eeprom.write_bytes(b"P"*256)
+            adapter.command(route,str(target),self.home)
+            self.assertEqual(save.read_bytes(),bytes(disk)+b"saved game");self.assertEqual(eeprom.read_bytes(),b"P"*256)
+            bad=bytearray(disk);struct.pack_into(">Q",bad,8,128)
+            save.write_bytes(bad)
+            with self.assertRaisesRegex(ValueError,"backing"):adapter.command(route,str(target),self.home)
+
+    def test_shad_xenia_and_cemu_use_explicit_private_configuration(self):
+        import xml.etree.ElementTree as ET
+        for identity in ("shadps4","xenia","cemu"):
+            route,target=self.route(identity);argv=adapter.command(route,str(target),self.home)
+            if identity=="shadps4":
+                self.assertEqual(argv[1:3],["--fullscreen","true"])
+                self.assertTrue(Path(argv[4]).is_relative_to(self.home))
+            elif identity=="xenia":
+                self.assertIn("--target="+str(target),argv)
+                self.assertIn("--content_root="+str(self.home/"saves/xenia"),argv)
+            else:
+                root=ET.fromstring((self.home/".config/Cemu/controllerProfiles/controller0.xml").read_bytes())
+                self.assertEqual(root.findtext("type"),"Wii U GamePad")
+                self.assertEqual(root.findtext("controller/uuid"),"0_"+"a"*32)
+                self.assertEqual(root.findtext("controller/display_name"),"Xbox & test pad")
+                self.assertEqual(root.findtext("toggle_display"),"1")
+        adapter.atomic(self.home/".config/isolde-emulator/settings.json",json.dumps({
+            "schemaVersion":1,"video":"software","controller":"xbox","firmware":""}).encode())
+        with self.assertRaisesRegex(ValueError,"no software"):adapter.command(route,str(target),self.home)
+
+    def test_backend_fingerprint_rejects_changed_library_and_unlisted_files(self):
+        root=self.root/"payload";root.mkdir();binary=root/"runtime";binary.write_bytes(b"binary")
+        library=root/"library.so";library.write_bytes(b"library")
+        manifest=self.root/"payload.json"
+        manifest.write_text(json.dumps([[p.name,"file",self.hashlib.sha256(p.read_bytes()).hexdigest()] for p in (binary,library)]))
+        self.assertTrue(games.upstream_fingerprint("xenia",root,manifest))
+        library.write_bytes(b"mutated");self.assertIsNone(games.upstream_fingerprint("xenia",root,manifest))
+        library.write_bytes(b"library");(root/"extra").write_bytes(b"unlisted")
+        self.assertIsNone(games.upstream_fingerprint("xenia",root,manifest))
 
 
 if __name__=="__main__":unittest.main()

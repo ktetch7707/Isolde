@@ -7,6 +7,14 @@ The user removed **T13 and T31** from the project completion requirement. Their 
 
 ## Independent test audit — 2026-11-09
 
+Latest user-authorized repair continuation: [six expanded emulator implementations](games-page/expanded-runtimes-2026-11-10.md)
+add trusted artifact packaging, typed setup/firmware/import/launch, private
+storage, matching-version repair and remote rebuild/retry for BUG-058.
+All reruns remain deferred by the user. Only source/JSON parsing and artifact
+inspection were performed; no new VM/native/installed or gameplay pass is
+claimed. T30.6 is now split under its original weight; every new child remains
+open. T30 acceptance stays0%; project acceptance stays63%.
+
 Repair-only follow-up, November 10: the user deferred all reruns. Source review
 found and repaired a PS2 firmware-import profile-grant bypass (BUG-075); its
 positive/negative regression is prepared but unrun. See the repair-only section
@@ -94,7 +102,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T10 | 22 | Capture/HDMI/audio software and editors | 33% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
 | T11 | 23 | Guide / PseudoTV | 100% | 100% | VM Guide acceptance complete; 18/18 milestones, 3/3 groups; return to Studio priority |
 | T14 | 24 | Online discovery and Linguist subtitles | 0% | 100% | provider and offline subtitle workflows implemented; VM/live acceptance deferred |
-| T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 100% | Coding claim disputed by BUG-058: ten pinned routes; six advertised additions unprovisioned; expanded generations remain open; 0/9 software acceptance gates |
+| T30 | 25 | Unified Games, local copies/discs and emulators | 0% | 100% | Six expanded route implementations added for BUG-058; all reruns deferred; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
 | **Overall** | — | **average of 25 ACTIVE software tasks** | **63%** | **100%** | **1563 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |

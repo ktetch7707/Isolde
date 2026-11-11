@@ -390,7 +390,7 @@ void ComponentTests::emulatorSettingsAreAtomicProfileLocalAndPreserveUnknownData
     QVERIFY(QDir(QFileInfo(home).absolutePath()).removeRecursively());
 }
 void ComponentTests::emulatorManifestIsBoundedAndVersioned(){
-    const auto runtimes=GameEmulators::definitions();QCOMPARE(runtimes.size(),10);
+    const auto runtimes=GameEmulators::definitions();QCOMPARE(runtimes.size(),16);
     QSet<QString> ids,platforms;
     for(const auto &entry:runtimes){
         const auto runtime=entry.toMap();const auto id=runtime.value("id").toString();
@@ -399,10 +399,15 @@ void ComponentTests::emulatorManifestIsBoundedAndVersioned(){
         QVERIFY(!runtime.value("formats").toStringList().isEmpty());
         for(const auto &platform:runtime.value("platforms").toStringList())platforms.insert(platform);
     }
-    QCOMPARE(platforms,QSet<QString>({"PSP","GameCube","Wii","PlayStation","PlayStation 2","NES","Game Boy","Game Boy Color","Game Boy Advance","SNES","Nintendo DS","Virtual Boy"}));
+    QCOMPARE(platforms,QSet<QString>({"PSP","GameCube","Wii","PlayStation","PlayStation 2","NES","Game Boy","Game Boy Color","Game Boy Advance","SNES","Nintendo DS","Virtual Boy","PlayStation 3","PlayStation 4","PS Vita","Original Xbox","Xbox 360","Wii U"}));
     QVERIFY(GameEmulators::definition("xbox-360").isEmpty());
     QVERIFY(GameEmulators::definition("pcsx2").value("firmwareRequired").toBool());
     QVERIFY(GameEmulators::definition("retroarch-psx").value("firmwareRequired").toBool());
+    for(const auto &id:QStringList{"rpcs3","shadps4","vita3k","xemu","xenia","cemu"}){
+        const auto route=GameEmulators::definition(id);QVERIFY(!route.isEmpty());
+        QCOMPARE(route.value("packages").toStringList(),QStringList{"isolde-"+id});
+        QCOMPARE(route.value("setup").toMap().value("videoModes").toStringList(),QStringList{"automatic"});
+    }
 }
 void ComponentTests::gamesEditionsKeepOneCardAndSeparateLaunchTargets() {
     QTemporaryDir dir;const auto root=dir.filePath("games");QVERIFY(QDir().mkpath(root));writeFile(root+"/game.iso","one");writeFile(root+"/other.iso","two");

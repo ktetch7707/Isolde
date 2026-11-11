@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "packageId": "xenia",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "Xenia Canary · Xbox 360",
+  "description": "Select an authorized Xbox 360 ISO or default.xex. Native Linux support is experimental and title/GPU-specific. SDL Xbox pad is selected explicitly. Saves and content stay private to this profile.",
+  "category": "Games",
+  "publisher": "xenia",
+  "provenance": "Official upstream artifact pinned by SHA-256; no games, accounts or firmware",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "xenia",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-xenia",
+    "emulatorRuntime": "xenia",
+    "windowClass": "xenia",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "Xbox 360",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "iso",
+      "xex"
+    ]
+  }
+}

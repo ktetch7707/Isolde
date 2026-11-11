@@ -21,7 +21,13 @@
       "Game Boy Advance",
       "SNES",
       "Nintendo DS",
-      "Virtual Boy"
+      "Virtual Boy",
+      "PlayStation 3",
+      "PlayStation 4",
+      "PS Vita",
+      "Original Xbox",
+      "Xbox 360",
+      "Wii U"
     ],
     "notIntegrated": [
       "PlayStation 5",
@@ -31,13 +37,7 @@
       "Nintendo Switch",
       "Nintendo Switch 2",
       "Xbox One",
-      "Xbox Series X|S",
-      "PlayStation 3",
-      "PlayStation 4",
-      "PS Vita",
-      "Original Xbox",
-      "Xbox 360",
-      "Wii U"
+      "Xbox Series X|S"
     ]
   },
   "generations": {
@@ -314,6 +314,90 @@
       },
       "firmwareRequired": false,
       "unsupportedReason": "No verified Linux emulator route; requires owned console or PC edition"
+    },
+    "PlayStation 3": {
+      "architecture": "amd64",
+      "installer": "signed-bundle",
+      "account": "none",
+      "save": "profile-private",
+      "dependency": [
+        "verified-upstream-artifact"
+      ],
+      "budget": {
+        "diskMiB": 8192,
+        "ramMiB": 4096
+      },
+      "firmwareRequired": true
+    },
+    "PlayStation 4": {
+      "architecture": "amd64",
+      "installer": "signed-bundle",
+      "account": "none",
+      "save": "profile-private",
+      "dependency": [
+        "verified-upstream-artifact"
+      ],
+      "budget": {
+        "diskMiB": 8192,
+        "ramMiB": 4096
+      },
+      "firmwareRequired": false
+    },
+    "PS Vita": {
+      "architecture": "amd64",
+      "installer": "signed-bundle",
+      "account": "none",
+      "save": "profile-private",
+      "dependency": [
+        "verified-upstream-artifact"
+      ],
+      "budget": {
+        "diskMiB": 8192,
+        "ramMiB": 4096
+      },
+      "firmwareRequired": true
+    },
+    "Original Xbox": {
+      "architecture": "amd64",
+      "installer": "signed-bundle",
+      "account": "none",
+      "save": "profile-private",
+      "dependency": [
+        "verified-upstream-artifact"
+      ],
+      "budget": {
+        "diskMiB": 8192,
+        "ramMiB": 4096
+      },
+      "firmwareRequired": true
+    },
+    "Xbox 360": {
+      "architecture": "amd64",
+      "installer": "signed-bundle",
+      "account": "none",
+      "save": "profile-private",
+      "dependency": [
+        "verified-upstream-artifact"
+      ],
+      "budget": {
+        "diskMiB": 8192,
+        "ramMiB": 4096
+      },
+      "firmwareRequired": false
+    },
+    "Wii U": {
+      "architecture": "amd64",
+      "installer": "signed-bundle",
+      "account": "none",
+      "save": "profile-private",
+      "dependency": [
+        "verified-upstream-artifact"
+      ],
+      "budget": {
+        "diskMiB": 8192,
+        "ramMiB": 4096
+      },
+      "firmwareRequired": false
     }
   },
   "runtimes": [
@@ -511,6 +595,168 @@
         "libretro-beetle-vb"
       ],
       "firmwareRequired": false
+    },
+    {
+      "id": "rpcs3",
+      "name": "RPCS3 · PlayStation 3",
+      "engine": "rpcs3",
+      "platforms": [
+        "PlayStation 3"
+      ],
+      "formats": [
+        "elf",
+        "self",
+        "bin",
+        "pkg"
+      ],
+      "binary": "/usr/bin/isolde-rpcs3",
+      "packages": [
+        "isolde-rpcs3"
+      ],
+      "firmwareRequired": true,
+      "setup": {
+        "videoModes": [
+          "automatic"
+        ],
+        "firmwareKind": "ps3-pup",
+        "firmwareLabel": "PS3 update PUP",
+        "firmwareHelp": "Import your own PS3 update PUP from an approved folder. Firmware is prepared privately on first Play.",
+        "gameHelp": "Select EBOOT.BIN/ELF in an authorized decrypted game folder, or an unencrypted homebrew PKG. Encrypted titles needing extra licenses are not part of this route.",
+        "controllerHelp": "SDL Xbox pad maps to DualShock 3. Motion and pressure-sensitive controls are title-specific."
+      }
+    },
+    {
+      "id": "shadps4",
+      "name": "shadPS4 · PlayStation 4",
+      "engine": "shadps4",
+      "platforms": [
+        "PlayStation 4"
+      ],
+      "formats": [
+        "bin",
+        "elf"
+      ],
+      "binary": "/usr/bin/isolde-shadps4",
+      "packages": [
+        "isolde-shadps4"
+      ],
+      "firmwareRequired": false,
+      "setup": {
+        "videoModes": [
+          "automatic"
+        ],
+        "firmwareKind": "none",
+        "firmwareLabel": "",
+        "firmwareHelp": "No firmware download or import is included.",
+        "gameHelp": "Select eboot.bin or ELF in a decrypted authorized game folder. Titles requiring extra system modules need their own compatibility assessment.",
+        "controllerHelp": "SDL Xbox pad uses positional PlayStation mappings. Touch/gyro-dependent titles are outside the pad-only matrix."
+      }
+    },
+    {
+      "id": "vita3k",
+      "name": "Vita3K · PS Vita",
+      "engine": "vita3k",
+      "platforms": [
+        "PS Vita"
+      ],
+      "formats": [
+        "vpk"
+      ],
+      "binary": "/usr/bin/isolde-vita3k",
+      "packages": [
+        "isolde-vita3k"
+      ],
+      "firmwareRequired": true,
+      "setup": {
+        "videoModes": [
+          "automatic"
+        ],
+        "firmwareKind": "vita-pup",
+        "firmwareLabel": "Vita update PUP",
+        "firmwareHelp": "Import your own Vita update PUP, or a ZIP with firmware.pup and optional fonts.pup, from an approved folder. Firmware and fonts are prepared privately on first Play; nothing is downloaded.",
+        "gameHelp": "Select an unencrypted VPK. It is validated, installed privately and launched without the emulator desktop.",
+        "controllerHelp": "Xbox pad uses SDL standard buttons. Touch-only, rear-touch and motion-only titles are outside the pad-only matrix."
+      }
+    },
+    {
+      "id": "xemu",
+      "name": "xemu · Original Xbox",
+      "engine": "xemu",
+      "platforms": [
+        "Original Xbox"
+      ],
+      "formats": [
+        "iso"
+      ],
+      "binary": "/usr/bin/isolde-xemu",
+      "packages": [
+        "isolde-xemu"
+      ],
+      "firmwareRequired": true,
+      "setup": {
+        "videoModes": [
+          "automatic"
+        ],
+        "firmwareKind": "xbox-bootset",
+        "firmwareLabel": "Xbox boot ZIP",
+        "firmwareHelp": "Choose a ZIP containing exactly mcpx.bin, flash.bin and hdd.qcow2, with optional eeprom.bin. Use your own compatible boot ROM/BIOS and a standalone QCOW2 disk; disk and EEPROM are copied privately once and retained across firmware changes.",
+        "gameHelp": "Select an XISO image. Ordinary PC ISO files are not Xbox disc images.",
+        "controllerHelp": "SDL Xbox controllers use the standard upstream Xbox mappings."
+      }
+    },
+    {
+      "id": "xenia",
+      "name": "Xenia Canary · Xbox 360",
+      "engine": "xenia",
+      "platforms": [
+        "Xbox 360"
+      ],
+      "formats": [
+        "iso",
+        "xex"
+      ],
+      "binary": "/usr/bin/isolde-xenia",
+      "packages": [
+        "isolde-xenia"
+      ],
+      "firmwareRequired": false,
+      "setup": {
+        "videoModes": [
+          "automatic"
+        ],
+        "firmwareKind": "none",
+        "firmwareLabel": "",
+        "firmwareHelp": "No console firmware is required.",
+        "gameHelp": "Select an authorized Xbox 360 ISO or default.xex. Native Linux support is experimental and title/GPU-specific.",
+        "controllerHelp": "SDL Xbox pad is selected explicitly. Saves and content stay private to this profile."
+      }
+    },
+    {
+      "id": "cemu",
+      "name": "Cemu · Wii U",
+      "engine": "cemu",
+      "platforms": [
+        "Wii U"
+      ],
+      "formats": [
+        "wua",
+        "rpx"
+      ],
+      "binary": "/usr/bin/isolde-cemu",
+      "packages": [
+        "isolde-cemu"
+      ],
+      "firmwareRequired": false,
+      "setup": {
+        "videoModes": [
+          "automatic"
+        ],
+        "firmwareKind": "none",
+        "firmwareLabel": "",
+        "firmwareHelp": "No console firmware is required for decrypted WUA/RPX games.",
+        "gameHelp": "Select a decrypted WUA or an RPX in its authorized game folder. Encrypted WUD/WUX and online accounts are not included.",
+        "controllerHelp": "Connect an SDL Xbox pad before Play. It maps to a Wii U GamePad. Xbox View/Back toggles GamePad view and sends Minus. Touch/gyro-only actions are outside this pad-only matrix."
+      }
     }
   ]
 }

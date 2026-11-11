@@ -1,5 +1,25 @@
 # Weighted, independently verifiable milestones
 
+## T30.6 — integrated emulator routes (original group weight unchanged)
+
+The former broad emulator group is split without changing T30's nine original
+group weights. Existing legacy provisioning and PSP gameplay evidence remains
+in the emulator contract/implementation ledger; it does not finish every
+legacy route or any new route. All children below remain open. The November 10
+expanded batch is source implementation with all test reruns explicitly deferred.
+
+| Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
+| --- | --- | --- | --- |
+| T30.6.a | open | Original ten routes complete their production provision/config/input/session/save/offline VM contracts and required common playable positive route. | docs/games-page/emulator-runtime-contract-2026-11-09.md and prior PSP gameplay; complete legacy route matrix remains open. |
+| T30.6.b | open | Six locked artifacts and dependency closure build/install/repair offline; signature, mutation, exact-version update and rollback contracts pass. | docs/games-page/expanded-runtimes-2026-11-10.md; implementation/regressions prepared, not run. |
+| T30.6.c | open | RPCS3 firmware, decrypted folder/homebrew PKG, generated input/VFS, private saves, safe cancel/error/return pass the VM route boundary. | docs/games-page/expanded-runtimes-2026-11-10.md; native runtime and boundary verification deferred. |
+| T30.6.d | open | shadPS4 private-root SDL launch, declared formats/input, storage isolation, error/cancel/return pass the VM route boundary. | docs/games-page/expanded-runtimes-2026-11-10.md; native runtime and boundary verification deferred. |
+| T30.6.e | open | Vita PUP/font/VPK, safe archive handling, SDL frontend, private firmware/game/save storage and recovery pass the VM route boundary. | docs/games-page/expanded-runtimes-2026-11-10.md; native runtime and boundary verification deferred. |
+| T30.6.f | open | xemu XISO/bootset, standalone disk/EEPROM, private mutable saves, firmware changes and error/return pass the VM route boundary. | docs/games-page/expanded-runtimes-2026-11-10.md; native runtime and boundary verification deferred. |
+| T30.6.g | open | Xenia native Linux version/path/config/input/content/save/session/error contracts pass the declared VM boundary. | docs/games-page/expanded-runtimes-2026-11-10.md; native runtime and boundary verification deferred. |
+| T30.6.h | open | Cemu decrypted WUA/RPX, generated controller/second-view, first-run avoidance, private MLC and return pass the declared VM boundary. | docs/games-page/expanded-runtimes-2026-11-10.md; native runtime and boundary verification deferred. |
+| T30.6.i | open | Installed remote setup, no-write Cancel, rebuild/retry, profile/offline/input/save regression and all inherited T30.6 requirements pass agent review. | docs/games-page/expanded-runtimes-2026-11-10.md; combined installed evidence and review remain open. |
+
 ## T25/T26 — source containment and dedicated gallery
 
 Each original Scope group keeps its weight. Native contracts, remote behavior

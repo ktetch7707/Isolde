@@ -20,6 +20,9 @@
 #ifdef Q_OS_UNIX
 #include <signal.h>
 #include <unistd.h>
+#ifdef Q_OS_LINUX
+#include <sys/file.h>
+#endif
 #endif
 #include "home/ComponentSchema.h"
 #include "media/MediaGrants.h"
@@ -604,9 +607,11 @@ bool GameLibrary::configureEmulator(const QString &id,const QVariantMap &options
     QString error;if(!GameEmulators::configure(m_emulatorProfile,id,options,firmware,&error))return fail(error);
     m_error.clear();emit errorChanged();emit changed();return true;
 }
-bool GameLibrary::installEmulators(bool consent){
+bool GameLibrary::installEmulators(bool consent,bool update,bool offline){
     if(!m_ready || !consent || setupBusy() || !m_catalog)return fail(tr("Review and confirm emulator installation before continuing."));
+    if(m_sessionActiveGuard && m_sessionActiveGuard())return fail(tr("Stop the current game before installing or updating runtimes."));
 #ifndef Q_OS_LINUX
+    Q_UNUSED(update);Q_UNUSED(offline);
     return fail(tr("Managed emulator installation currently requires the Linux appliance."));
 #else
     auto root=QCoreApplication::applicationDirPath()+"/share/isolde";
@@ -622,8 +627,39 @@ bool GameLibrary::installEmulators(bool consent){
     m_setupReceipt=state+"/runtime-install-"+QUuid::createUuid().toString(QUuid::WithoutBraces)+".json";
     m_setupCanceled=false;m_setupOutput.clear();m_setupStatus="Installing the verified runtimes and console cores. First-time PSP preparation may take several minutes. No game or firmware downloads.";
     m_setup.setChildProcessModifier([]{::setsid();});
-    m_setup.start(program,{root+"/provision-games.py","--install","--receipt",m_setupReceipt});
+    QStringList arguments{root+"/provision-games.py","--install","--receipt",m_setupReceipt};
+    if(update)arguments.append("--update");
+    if(offline)arguments.append("--offline");
+    m_setup.start(program,arguments);
     m_setupDeadline.start();emit setupChanged();return true;
+#endif
+}
+bool GameLibrary::rebuildEmulatorData(const QString &id){
+#ifndef Q_OS_LINUX
+    Q_UNUSED(id);return fail(tr("Prepared emulator data is managed on the Linux appliance."));
+#else
+    if(!m_ready || setupBusy() || GameEmulators::definition(id).value("setup").toMap().isEmpty())
+        return fail(tr("Choose an available emulator and wait for setup to finish."));
+    if(m_sessionActiveGuard && m_sessionActiveGuard())return fail(tr("Stop the current game before rebuilding imported data."));
+    const auto home=GameEmulators::home(m_emulatorProfile,id);
+    const auto root=home+"/.local/share/isolde-prepared";
+    if(QFileInfo(root).isSymLink())return fail(tr("Prepared emulator storage is redirected. Nothing was moved."));
+    if(!QFileInfo::exists(root))return true;
+    if(QFileInfo(root).canonicalFilePath()!=root)
+        return fail(tr("Prepared emulator storage is redirected. Nothing was moved."));
+    const auto lockPath=home+"/.config/isolde-emulator/prepare.lock";
+    if(QFileInfo(lockPath).isSymLink() || QFileInfo(QFileInfo(lockPath).absolutePath()).canonicalFilePath()!=QFileInfo(lockPath).absolutePath())
+        return fail(tr("Emulator preparation storage is redirected."));
+    QFile lock(lockPath);
+    if(!lock.open(QIODevice::ReadWrite) || ::flock(int(lock.handle()),LOCK_EX|LOCK_NB)!=0)
+        return fail(tr("Emulator preparation is active. Return after it stops, then retry."));
+    const auto parent=QFileInfo(root).absolutePath();
+    if(QDir(parent).entryList({"isolde-prepared-retired-*"},QDir::Dirs|QDir::NoDotAndDotDot).size()>=4)
+        return fail(tr("Four recovery copies are already retained. Review emulator storage before rebuilding again."));
+    const auto destination=parent+"/isolde-prepared-retired-"+QUuid::createUuid().toString(QUuid::WithoutBraces);
+    if(QFileInfo(destination).exists() || QFileInfo(destination).isSymLink() || !QDir().rename(root,destination))
+        return fail(tr("Prepared emulator data could not be retained for recovery. Existing data is unchanged."));
+    m_error.clear();emit errorChanged();emit changed();return true;
 #endif
 }
 void GameLibrary::cancelEmulatorSetup(){
@@ -1847,6 +1883,10 @@ QVariantMap GameLibrary::resolveLaunch(const QString &id,const QString &editionI
     if (!query.exec() || !query.next()) { fail(tr("Game not found in this profile.")); return {}; }
     const auto runtime=query.value(0).toString(), root=query.value(1).toString(), relative=query.value(2).toString();
     if (!compatibleRuntime(runtime,!root.isEmpty())) { fail(tr("The game runtime is missing or incompatible. Repair it and retry.")); return {}; }
+    if(!GameEmulators::definition(runtime).isEmpty()){
+        QString error;
+        if(!GameEmulators::setupAssetReady(m_emulatorProfile,runtime,&error)){fail(error);return {};}
+    }
     if(runtime=="retroarch-psx"){
         QString error;
         if(!GameEmulators::playStationFirmwareReady(m_emulatorProfile,&error)){fail(error);return {};}

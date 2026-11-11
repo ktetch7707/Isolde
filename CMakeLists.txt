@@ -272,6 +272,12 @@ qt_add_resources(isolde "isolde_config"
         config/packages/retroarch-psx/manifest.json
         config/packages/retroarch-ds/manifest.json
         config/packages/retroarch-vb/manifest.json
+        config/packages/rpcs3/manifest.json
+        config/packages/shadps4/manifest.json
+        config/packages/vita3k/manifest.json
+        config/packages/xemu/manifest.json
+        config/packages/xenia/manifest.json
+        config/packages/cemu/manifest.json
         config/packages/supertux/manifest.json
         config/packages/spotify/manifest.json
         config/packages/steam/manifest.json
@@ -312,6 +318,12 @@ set(ISOLDE_PACKAGE_MANIFESTS
     config/packages/retroarch-psx/manifest.json
     config/packages/retroarch-ds/manifest.json
     config/packages/retroarch-vb/manifest.json
+    config/packages/rpcs3/manifest.json
+    config/packages/shadps4/manifest.json
+    config/packages/vita3k/manifest.json
+    config/packages/xemu/manifest.json
+    config/packages/xenia/manifest.json
+    config/packages/cemu/manifest.json
     config/packages/supertux/manifest.json
     config/packages/ambient-weather/manifest.json
     config/packages/living-room-radio/manifest.json
@@ -346,7 +358,7 @@ install(FILES tools/optical-exec.py DESTINATION share/isolde)
 configure_file(tools/steam-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/steam-games.py COPYONLY)
 configure_file(tools/portable-game-installer.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/portable-game-installer.py COPYONLY)
 configure_file(tools/optical-exec.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/optical-exec.py COPYONLY)
-install(FILES tools/provision-games.py tools/build-ppsspp.py DESTINATION share/isolde)
+install(FILES tools/provision-games.py tools/build-ppsspp.py tools/build-emulator-payloads.py tools/expanded-emulators.py DESTINATION share/isolde)
 set(ISOLDE_GAME_RUNTIME_BUNDLE "" CACHE PATH "Optional prepared Ubuntu 26.04 amd64 emulator bundle root")
 set(ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY "" CACHE FILEPATH "Trusted Ed25519 public key for the prepared emulator bundle")
 if(ISOLDE_GAME_RUNTIME_BUNDLE)
@@ -376,6 +388,10 @@ elseif(ISOLDE_GAME_RUNTIME_BUNDLE_PUBLIC_KEY)
 endif()
 install(FILES tools/fetch-game-fixtures.py DESTINATION share/isolde)
 install(FILES config/game-runtimes.json DESTINATION share/isolde)
+install(FILES config/game-runtime-artifacts.json DESTINATION share/isolde)
+configure_file(config/game-runtime-artifacts.json ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/game-runtime-artifacts.json COPYONLY)
+configure_file(tools/build-emulator-payloads.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/build-emulator-payloads.py COPYONLY)
+configure_file(tools/expanded-emulators.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/expanded-emulators.py COPYONLY)
 configure_file(tools/emulator-session.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/emulator-session.py COPYONLY)
 configure_file(tools/provision-games.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/provision-games.py COPYONLY)
 configure_file(tools/build-ppsspp.py ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/build-ppsspp.py COPYONLY)

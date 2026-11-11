@@ -9,6 +9,7 @@ import ctypes
 import ctypes.util
 import hashlib
 import json
+import importlib.util
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,12 @@ PSX_FIRMWARE = {
     "0555c6fae8906f3f09baf5988f00e55f88e9f30b": "scph5501.bin",
     "f6bc2d1f5eb6593de7d089c425ac681d6fffd3f0": "scph5502.bin",
 }
+
+
+def expanded_adapter():
+    spec=importlib.util.spec_from_file_location("expanded_emulators",Path(__file__).with_name("expanded-emulators.py"))
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
 
 
 def read_json(path, limit=MAX_SETTINGS):
@@ -47,8 +54,8 @@ def definitions(path):
     for item in document["runtimes"]:
         if not isinstance(item, dict):
             raise ValueError("Invalid emulator capability entry")
-        allowed={"id","name","engine","platforms","formats","binary","core","packages","firmwareRequired"}
-        if (set(item)-allowed or not (allowed-{"core"}).issubset(item)
+        allowed={"id","name","engine","platforms","formats","binary","core","packages","firmwareRequired","setup"}
+        if (set(item)-allowed or not (allowed-{"core","setup"}).issubset(item)
                 or not isinstance(item.get("id"),str) or not re.fullmatch(r"[a-z0-9-]{1,48}", item.get("id", ""))
                 or item["id"] in result or not isinstance(item.get("engine"),str)
                 or item.get("engine") not in {"ppsspp", "dolphin", "pcsx2", "retroarch", "rpcs3", "shadps4", "vita3k", "xemu", "xenia", "cemu"}
@@ -68,27 +75,43 @@ def definitions(path):
                 or ("core" in item and (not isinstance(item["core"],str) or not Path(item["core"]).is_absolute()))):
             raise ValueError("Invalid emulator capability entry")
         packages = set(item["packages"])
+        kinds={"rpcs3":"ps3-pup","shadps4":"none","vita3k":"vita-pup","xemu":"xbox-bootset","xenia":"none","cemu":"none"}
+        if item["engine"] in kinds and (item["id"]!=item["engine"] or not isinstance(item.get("setup"),dict)
+                or item["setup"].get("firmwareKind")!=kinds[item["engine"]]):
+            raise ValueError("Expanded emulator route is missing its typed setup contract")
+        if "setup" in item:
+            setup=item["setup"]
+            if (not isinstance(setup,dict) or set(setup)!={"videoModes","firmwareKind","firmwareLabel","firmwareHelp","gameHelp","controllerHelp"}
+                    or not isinstance(setup["videoModes"],list) or not setup["videoModes"]
+                    or any(not isinstance(v,str) for v in setup["videoModes"])
+                    or len(set(setup["videoModes"]))!=len(setup["videoModes"])
+                    or any(v not in OPTIONS["video"] for v in setup["videoModes"])
+                    or not isinstance(setup["firmwareKind"],str) or setup["firmwareKind"] not in {"none","ps3-pup","vita-pup","xbox-bootset"}
+                    or (setup["firmwareKind"]!="none")!=item["firmwareRequired"]
+                    or any(not isinstance(setup[k],str) or len(setup[k])>2048 or "\0" in setup[k]
+                           for k in ("firmwareLabel","firmwareHelp","gameHelp","controllerHelp"))):
+                raise ValueError("Invalid emulator setup contract")
         if item["engine"] == "retroarch":
             if ("core" not in item or "retroarch" not in packages
                     or len([name for name in packages if name.startswith("libretro-")]) != 1):
                 raise ValueError("RetroArch routes must bind one pinned libretro core")
         elif item["engine"] == "rpcs3":
-            if ("core" in item or packages != {"rpcs3"}):
+            if ("core" in item or packages != {"isolde-rpcs3"}):
                 raise ValueError("Emulator route packages do not match its engine")
         elif item["engine"] == "shadps4":
-            if ("core" in item or packages != {"shadps4"}):
+            if ("core" in item or packages != {"isolde-shadps4"}):
                 raise ValueError("Emulator route packages do not match its engine")
         elif item["engine"] == "vita3k":
-            if ("core" in item or packages != {"vita3k"}):
+            if ("core" in item or packages != {"isolde-vita3k"}):
                 raise ValueError("Emulator route packages do not match its engine")
         elif item["engine"] == "xemu":
-            if ("core" in item or packages != {"xemu"}):
+            if ("core" in item or packages != {"isolde-xemu"}):
                 raise ValueError("Emulator route packages do not match its engine")
         elif item["engine"] == "xenia":
-            if ("core" in item or packages != {"xenia"}):
+            if ("core" in item or packages != {"isolde-xenia"}):
                 raise ValueError("Emulator route packages do not match its engine")
         elif item["engine"] == "cemu":
-            if ("core" in item or packages != {"cemu"}):
+            if ("core" in item or packages != {"isolde-cemu"}):
                 raise ValueError("Emulator route packages do not match its engine")
         elif ("core" in item or packages != {
                 "ppsspp": {"isolde-ppsspp"},
@@ -234,6 +257,9 @@ def command(runtime, target, home):
     engine = runtime["engine"]
     if options["controller"]!="xbox" and engine!="dolphin":
         raise ValueError("This controller preset belongs to Dolphin only")
+    if engine in {"rpcs3","shadps4","vita3k","xemu","xenia","cemu"}:
+        module=expanded_adapter()
+        return module.command(runtime,game,home,options,atomic,protected)
     base = home / ".config/isolde-emulator/generated"
     for path in (base, home/"saves", home/"states", home/"firmware"):
         protected(path).mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -325,18 +351,6 @@ def command(runtime, target, home):
         if options["video"]=="software": values["video_driver"]="sdl2"
         atomic(config, "".join(k+' = '+json.dumps(v)+'\n' for k,v in values.items()).encode())
         return [str(binary), "--fullscreen", "--config", str(config), "--libretro", str(core), str(game)]
-    if engine == "rpcs3":
-        return [str(binary), "--fullscreen", "--no-config", str(game)]
-    if engine == "shadps4":
-        return [str(binary), "--fullscreen", str(game)]
-    if engine == "vita3k":
-        return [str(binary), "--fullscreen", str(game)]
-    if engine == "xemu":
-        return [str(binary), "--fullscreen", str(game)]
-    if engine == "xenia":
-        return [str(binary), "--fullscreen", str(game)]
-    if engine == "cemu":
-        return [str(binary), "--fullscreen", str(game)]
     raise ValueError("Unsupported emulator engine")
 
 

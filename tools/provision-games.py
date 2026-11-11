@@ -17,6 +17,14 @@ import sys
 import tempfile
 import importlib.util
 import time
+import types
+
+def artifact_builder():
+    spec=importlib.util.spec_from_file_location("emulator_payloads",Path(__file__).with_name("build-emulator-payloads.py"))
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+
+UPSTREAM_ARTIFACTS=artifact_builder().locks()[1]
 
 PACKAGES = {
     "isolde-ppsspp": ("1.20.4-1", "/usr/bin/PPSSPPSDL"),
@@ -32,6 +40,8 @@ PACKAGES = {
     "libretro-beetle-psx": ("0.9.38.6+git20260227-1", "/usr/lib/x86_64-linux-gnu/libretro/mednafen_psx_libretro.so"),
     "libretro-beetle-vb": ("0.9.36.1+git20160623-2build2", "/usr/lib/x86_64-linux-gnu/libretro/mednafen_vb_libretro.so"),
 }
+PACKAGES.update({row["package"]:(row["version"],"/usr/bin/isolde-"+identity)
+                 for identity,row in UPSTREAM_ARTIFACTS.items()})
 MAX_BUNDLE_FILES=512
 MAX_BUNDLE_BYTES=8*1024**3
 MAX_DEB_BYTES=2*1024**3
@@ -182,8 +192,10 @@ def inspect(packages):
         binary_hash=None
         if binary:
             with binary.open("rb") as stream:binary_hash=hashlib.file_digest(stream,"sha256").hexdigest()
+        upstream=next((identity for identity,row in UPSTREAM_ARTIFACTS.items() if row["package"]==name),None)
+        payload_ready=upstream is None or upstream_fingerprint(upstream) is not None
         result[name] = {"expectedVersion": expected, "installedVersion": lines[1] if installed else None,
-            "ready": installed and lines[1] == expected and binary is not None,
+            "ready": installed and lines[1] == expected and binary is not None and payload_ready,
             "executable": str(binary) if binary else None,
             "sha256": binary_hash,
             "copyright": str(Path("/usr/share/doc") / name / "copyright") if installed else None}
@@ -209,6 +221,39 @@ def file_hash(path):
     with path.open("rb") as stream:return hashlib.file_digest(stream,"sha256").hexdigest()
 
 
+def upstream_fingerprint(identity,root=None,manifest=None):
+    root=Path(root) if root is not None else Path("/usr/lib/isolde-emulators")/identity
+    manifest=Path(manifest) if manifest is not None else Path("/usr/share/doc")/("isolde-"+identity)/"payload.json"
+    if root.is_symlink() or not root.is_dir() or root.resolve()!=root or manifest.is_symlink() or not manifest.is_file() or manifest.stat().st_size>8*1024**2:return None
+    try:
+        rows=json.loads(manifest.read_text());seen=set();total=0
+        if not isinstance(rows,list) or not rows or len(rows)>32768:return None
+        for row in rows:
+            if not isinstance(row,list) or len(row)!=3:return None
+            name,kind,value=row
+            if (not isinstance(name,str) or name in seen or Path(name).is_absolute() or ".." in Path(name).parts
+                    or "\\" in name or Path(name).as_posix()!=name):return None
+            seen.add(name);path=root/name
+            if not path.parent.resolve().is_relative_to(root):return None
+            if kind=="link":
+                if not path.is_symlink() or os.readlink(path)!=value or not path.resolve().is_relative_to(root):return None
+            elif kind!="file" or not isinstance(value,str) or not path.is_file():return None
+            else:
+                total+=path.stat().st_size
+                if total>2*1024**3 or file_hash(path)!=value:return None
+        actual=set();count=0
+        for parent,directories,files in os.walk(root,followlinks=False):
+            for name in directories+files:
+                count+=1
+                if count>32768:return None
+                path=Path(parent)/name
+                if path.is_symlink() or path.is_file():actual.add(path.relative_to(root).as_posix())
+                elif not path.is_dir():return None
+        if actual!=seen:return None
+        return file_hash(manifest)
+    except (OSError,ValueError,TypeError):return None
+
+
 def inspect_runtimes(packages):
     manifest_path,runtimes=runtime_manifest()
     result={}
@@ -219,10 +264,13 @@ def inspect_runtimes(packages):
         ready=(all(packages.get(name,{}).get("ready",False) for name in required)
             and binary.is_file() and not binary.is_symlink() and os.access(binary,os.X_OK)
             and (core is None or core.is_file() and not core.is_symlink()))
+        payload_hash=upstream_fingerprint(identity) if identity in UPSTREAM_ARTIFACTS else None
+        if identity in UPSTREAM_ARTIFACTS and not payload_hash:ready=False
         result[identity]={"platforms":runtime["platforms"],"packages":required,"binary":str(binary),
             "binarySha256":file_hash(binary) if ready else None,
             "core":str(core) if core else None,"coreSha256":file_hash(core) if ready and core else None,
             "ready":bool(ready)}
+        if identity in UPSTREAM_ARTIFACTS:result[identity]["payloadSha256"]=payload_hash
     return hashlib.sha256(manifest_path.read_bytes()).hexdigest(),result
 
 
@@ -369,7 +417,8 @@ def validate_bundle(path, expected_manifest=None, runner=run, allow_historical=F
     if (root_contents!={"bundle.json","bundle.sig","archives"}
             or any((root/name).is_symlink() for name in root_contents)):
         raise ValueError("Runtime bundle contains unlisted or redirected files")
-    if (set(document["runtimePackages"])!=set(emulator_package_pins())
+    if ((not allow_historical and set(document["runtimePackages"])!=set(emulator_package_pins()))
+            or not set(document["runtimePackages"]).issubset(emulator_package_pins())
             or any(not isinstance(name,str) or not re.fullmatch(r"[a-z0-9][a-z0-9+.-]{0,80}",name)
                    or not isinstance(version,str) or not re.fullmatch(r"[A-Za-z0-9.+:~_-]{1,128}",version)
                    for name,version in document["runtimePackages"].items())
@@ -378,7 +427,7 @@ def validate_bundle(path, expected_manifest=None, runner=run, allow_historical=F
     archives=root/"archives"
     if archives.is_symlink() or not archives.is_dir() or archives.resolve()!=archives:
         raise ValueError("Runtime bundle archive directory is missing or redirected")
-    seen=set();total=0;rows=[]
+    seen=set();seen_packages=set();total=0;rows=[]
     for item in document["packages"]:
         if (not isinstance(item,dict) or set(item)!={"package","version","architecture","file","size","sha256"}
                 or not isinstance(item["file"],str) or not re.fullmatch(r"[A-Za-z0-9.+_%~-]{1,180}\.deb",item["file"])
@@ -390,6 +439,8 @@ def validate_bundle(path, expected_manifest=None, runner=run, allow_historical=F
         archive=root/"archives"/item["file"]
         metadata=package_metadata(archive,runner)
         if metadata!=item:raise ValueError("Runtime package archive hash or metadata mismatch")
+        if metadata["package"] in seen_packages:raise ValueError("Runtime bundle contains duplicate package identities")
+        seen_packages.add(metadata["package"])
         rows.append(item)
     contents={p.name for p in archives.iterdir()}
     if contents!=seen or any((archives/name).is_symlink() or not (archives/name).is_file() for name in contents):
@@ -404,6 +455,15 @@ def authenticate_bundle(path, document, runner=run, verify_repository_indices=Fa
     """Verify the trusted bundle signature and optionally its repository provenance."""
     verify_bundle_signature(path)
     for item in document["packages"]:
+        upstream=next((row for row in UPSTREAM_ARTIFACTS.values() if row["package"]==item["package"]),None)
+        if upstream:
+            result=runner("/usr/bin/dpkg-deb","-f",str(Path(path)/"archives"/item["file"]),
+                "X-Isolde-Artifact-Sha256",capture_output=True,text=True,timeout=30)
+            source_hash=(result.stdout or "").strip()
+            if (not re.fullmatch(r"[a-f0-9]{64}",source_hash)
+                    or (item["version"]==upstream["version"] and source_hash!=upstream["sha256"])):
+                raise ValueError("Local emulator payload is not bound to the pinned upstream artifact")
+            continue
         if item["package"]=="isolde-ppsspp":
             # This one package is built locally from the pinned upstream commit;
             # its control metadata binds the payload to that declared source.
@@ -489,7 +549,7 @@ def create_rollback_snapshot(before, requested, runner=run, offline=False):
                 _copy_archive(source,stage/"archives"/entry["file"])
                 metadata=package_metadata(stage/"archives"/entry["file"],runner)
                 if metadata!=entry:raise ValueError("Prior signed runtime rollback archive changed")
-            elif name=="isolde-ppsspp" or offline:
+            elif name=="isolde-ppsspp" or name in {r["package"] for r in UPSTREAM_ARTIFACTS.values()} or offline:
                 raise RuntimeError("A signed prior runtime package bundle is required for a reversible offline update: "+name)
             else:
                 expected=indexed_package_hash(name,version,"amd64",runner)
@@ -694,15 +754,24 @@ def prepare_bundle(destination=None):
     stage=Path(tempfile.mkdtemp(prefix=".runtime-bundle-",dir=base))
     try:
         archives=stage/"archives";archives.mkdir(mode=0o700)
+        run("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","update",
+            "--option=Acquire::Retries=1","--option=Acquire::http::Timeout=60",
+            "--option=Acquire::https::Timeout=60",timeout=180)
+        run("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","install",
+            "--no-upgrade","--no-remove","--no-install-recommends","-y","squashfs-tools",timeout=300,transaction=True)
         builder_spec=importlib.util.spec_from_file_location("ppsspp_builder",Path(__file__).with_name("build-ppsspp.py"))
         builder=importlib.util.module_from_spec(builder_spec);builder_spec.loader.exec_module(builder)
         ppsspp=builder.build(Path.home()/".cache/isolde-emulators/ppsspp-1.20.4")
         _copy_archive(ppsspp,archives/ppsspp.name)
+        local_packages=[ppsspp]
+        upstream_builder=artifact_builder()
+        for identity in sorted(UPSTREAM_ARTIFACTS):
+            payload=upstream_builder.build(identity,types.SimpleNamespace(platform=platform,run=run,
+                check_cancelled=check_cancelled,atomic_receipt=atomic_receipt))
+            _copy_archive(payload,archives/payload.name)
+            local_packages.append(payload)
         if shutil.disk_usage(stage).free<2*1024**3:
             raise RuntimeError("At least 2 GiB free space is required to prepare offline runtime dependencies")
-        run("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","update",
-            "--option=Acquire::Retries=1","--option=Acquire::http::Timeout=60",
-            "--option=Acquire::https::Timeout=60",timeout=180)
         options=["--option=Dir::Cache::archives="+str(archives)+"/",
             "--option=Dir::Cache::archives::partial="+str(archives)+"/partial/",
             "--option=Dir::State::status="+str(stage/"empty-status")]
@@ -711,8 +780,9 @@ def prepare_bundle(destination=None):
             "--no-install-recommends","--no-upgrade","--no-remove","-y",*options,
             "--option=Acquire::Retries=1","--option=Acquire::http::Timeout=60",
             "--option=Acquire::https::Timeout=60","install",
-            *[name+"="+version for name,version in emulator_package_pins().items() if name!="isolde-ppsspp"],
-            str(ppsspp),timeout=1800)
+            *[name+"="+version for name,version in emulator_package_pins().items()
+              if name!="isolde-ppsspp" and name not in {r["package"] for r in UPSTREAM_ARTIFACTS.values()}],
+            *[str(package) for package in local_packages],timeout=1800)
         if (archives/"partial").exists():shutil.rmtree(archives/"partial")
         (stage/"empty-status").unlink(missing_ok=True)
         entries=[package_metadata(archive) for archive in sorted(archives.iterdir())]
@@ -730,7 +800,7 @@ def prepare_bundle(destination=None):
         if stage.exists():shutil.rmtree(stage)
 
 
-def apply_bundle(path, installed=None, runner=run, checkpoint=None, update=False, offline=False):
+def apply_bundle(path, installed=None, runner=run, checkpoint=None, update=False, offline=False, repair=()):
     manifest_path,_=runtime_manifest()
     document=validate_bundle(path,hashlib.sha256(manifest_path.read_bytes()).hexdigest(),runner)
     authenticate_bundle(path,document,runner)
@@ -744,9 +814,20 @@ def apply_bundle(path, installed=None, runner=run, checkpoint=None, update=False
             if current_version!=version and not update:
                 raise RuntimeError("Installed runtime version differs from this bundle; preserve it and use an explicit reviewed update: "+name)
     missing={name:version for name,version in required.items() if installed_version(before.get(name))!=version}
+    repair=set(repair)
+    if any(name not in required or installed_version(before.get(name))!=required[name] for name in repair):
+        raise ValueError("Repair may reinstall only an already installed pinned runtime version")
+    if repair and update:raise ValueError("Repair the current runtime files before requesting a version update")
+    missing.update({name:required[name] for name in repair})
     if update:
         return apply_runtime_update(root,document,before,missing,runner,checkpoint,offline)
     if not missing:return {"ready":True,"installed":before,"added":[],"bundleSha256":hashlib.sha256((root/"bundle.json").read_bytes()).hexdigest()}
+    # A clean offline target has no apt index for local isolde-* packages (or
+    # their absent dependencies). Pass every needed authenticated archive, not
+    # package names that would require a repository lookup. Existing dependency
+    # versions are preserved by omitting their archives and --no-upgrade.
+    install_archives=[str(root/"archives"/item["file"]) for item in document["packages"]
+        if item["package"] in missing or installed_version(before.get(item["package"])) is None]
     if checkpoint is None:
         checkpoint=Path(os.environ.get("XDG_STATE_HOME",str(Path.home()/".local/state")))/"isolde/emulator-provisioning.json"
     checkpoint=Path(checkpoint).absolute()
@@ -758,14 +839,16 @@ def apply_bundle(path, installed=None, runner=run, checkpoint=None, update=False
     try:
         runner("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","--no-download",
             "--no-upgrade","--no-remove","--no-install-recommends","-y",archive_option,
-            "install",*[name+"="+version for name,version in missing.items()],timeout=1800,transaction=True)
+            *(["--reinstall"] if repair else []),
+            "install",*install_archives,timeout=1800,transaction=True)
         after=package_status(before.keys(),runner)
         invalid={name:after.get(name) for name,version in required.items() if installed_version(after.get(name))!=version}
         if invalid:raise RuntimeError("Installed packages did not match the reviewed bundle: "+", ".join(invalid))
         transaction["phase"]="committed";transaction["after"]=after
         atomic_bytes(checkpoint,json.dumps(transaction,indent=2).encode())
         checkpoint.unlink()
-        return {"ready":True,"installed":after,"added":[name for name in missing if before.get(name) is None],
+        return {"ready":True,"installed":after,"added":[name for name,state in after.items()
+                if installed_version(before.get(name)) is None and installed_version(state) is not None],
             "bundleSha256":hashlib.sha256((root/"bundle.json").read_bytes()).hexdigest()}
     except Exception as error:
         try:after=package_status(before.keys(),runner)
@@ -902,6 +985,8 @@ def verify_runtime_receipt(receipt):
             return False
         if not state.get("ready"):
             continue
+        if identity in UPSTREAM_ARTIFACTS and (not state.get("payloadSha256") or state["payloadSha256"]!=upstream_fingerprint(identity)):
+            return False
         if not all(package_states[name]["ready"] for name in runtime["packages"]):return False
         binary_hash=state.get("binarySha256")
         if not isinstance(binary_hash,str) or not re.fullmatch(r"[a-f0-9]{64}",binary_hash) or binary_hash!=file_hash(runtime["binary"]):
@@ -922,6 +1007,7 @@ def provision(packages, install=False, offline=False, bundle_output=None, update
     if update and not install:raise ValueError("Reversible runtime updates require an explicit --install request")
     before = inspect(packages)
     missing = [p for p in packages if not before[p]["ready"]]
+    repair=[p for p in missing if before[p].get("installedVersion")==PACKAGES[p][0]]
     changed=[p for p in missing if before[p].get("installedVersion")
         and before[p]["installedVersion"]!=PACKAGES[p][0]]
     if update and "supertux" in changed:
@@ -933,7 +1019,9 @@ def provision(packages, install=False, offline=False, bundle_output=None, update
         runtime_missing=[name for name in missing if name!="supertux"]
         if runtime_missing:
             bundle=find_bundle() if offline else prepare_bundle(bundle_output)
-            apply_bundle(bundle,update=update,offline=offline)
+            options={"update":update,"offline":offline}
+            if repair:options["repair"]=repair
+            apply_bundle(bundle,**options)
         if "supertux" in missing:
             if offline:raise RuntimeError("The optional SuperTux fixture is not included in the offline emulator bundle")
             run("sudo","-n","env","DEBIAN_FRONTEND=noninteractive","/usr/bin/apt-get","update",

@@ -8,6 +8,49 @@ Candidate: `f10bb57` on `agent-backlog-progress`; working tree clean at start. V
 
 ## Findings
 
+### BUG-058 implementation continuation — rerun still deferred
+
+The user explicitly authorized all six missing emulator integrations. The
+[expanded runtime implementation](games-page/expanded-runtimes-2026-11-10.md)
+adds their artifact pins/local signed-bundle packages, typed remote setup,
+private firmware/package processing, actual per-runtime command/config paths,
+full backend integrity checks, same-version reinstall and recovery controls.
+Prepared regressions extend the existing native/Python/QML registrations.
+Source review also corrected the repair case where matching package versions
+could conceal damaged/missing payload files. No runtime was executed or
+installed, no test/build/VM rerun was launched, and BUG-058 is **awaiting
+verification**, not a new pass. Original failures and later ten-route passing
+evidence remain historical and unchanged. Broad acceptance stays63%.
+
+### BUG-076 — Matching-version runtime repair skips damaged payloads
+
+- Owner: T30; source-confirmed during the six-route implementation review.
+- `inspect` previously considered package version and primary binary presence;
+  supporting payload damage could be missed. Even a missing known binary/core
+  led to `apply_bundle` doing nothing when dpkg reported the expected version.
+- Repair: complete expanded payload fingerprints participate in readiness;
+  explicit Install / repair can request a pinned same-version reinstall.
+  Requested repairs must already have the expected installed version and retain
+  no-download/no-upgrade/no-remove, transaction and failure handling. No new
+  package-version downgrade or dependency removal is authorized by repair.
+- Regression code covers the source-to-installer repair request and actual
+  signed-bundle/apt boundary with preserved installed set and required flags.
+  It is prepared, **not run**. No pass or acceptance credit is claimed.
+
+### BUG-077 — Offline install resolves local runtime names through missing apt indexes
+
+- Owner: T30; source-confirmed during the expanded package integration review.
+- `apply_bundle` supplied `name=version` even for locally built packages. A
+  clean offline target cannot resolve those names, or absent dependency names,
+  from cache filenames alone without repository metadata.
+- Repair: the authenticated bundle's exact local archive paths are passed for
+  requested runtime packages and all dependencies absent from the initial
+  installed set. Existing dependency versions are omitted and no-upgrade,
+  no-remove and no-download remain. Archive hashes/signature/metadata are still
+  validated first; no remote or unlisted package source is introduced.
+- Same-version repair coverage now asserts the exact selected archive. The
+  complete offline clean-target installation remains **unrun**, not accepted.
+
 ### Repair-only follow-up — November 10, no rerun authorized
 
 The user requested repairs with every expectation of passing a later rerun,

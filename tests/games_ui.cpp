@@ -612,7 +612,7 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     QVERIFY(coverage.value("integratedPlatforms").toList().contains("Virtual Boy"));
     QVERIFY(coverage.value("integratedPlatforms").toList().contains("PlayStation"));
     QVERIFY(coverage.value("notIntegrated").toList().contains("Nintendo DSi"));
-    QVERIFY(coverage.value("notIntegrated").toList().contains("Xbox 360"));
+    QVERIFY(coverage.value("integratedPlatforms").toList().contains("Xbox 360"));
     const auto budgets=coverage.value("budgets").toMap();
     QCOMPARE(budgets.value("catalogEntries").toInt(),50000);
     QCOMPARE(budgets.value("pageEntries").toInt(),50);
@@ -635,6 +635,7 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
     for(int i=0;i<3;++i)command(widget.data(),InputManager::NavigateDown);
     command(widget.data(),InputManager::Confirm);QCOMPARE(library.emulatorSettings("ppsspp").value("video").toString(),QString("software"));
     QVERIFY(!library.installEmulators(false));QVERIFY(!library.setupBusy());
+    QVERIFY(!library.installEmulators(false,true,true));QVERIFY(!library.setupBusy());
     for(const auto &id:QStringList{"retroarch-psx","pcsx2"}){
         const auto settingsFile=GameEmulators::home(profile,id)+"/.config/isolde-emulator/settings.json";
         const bool existed=QFileInfo::exists(settingsFile);
@@ -680,6 +681,53 @@ void GamesUiTests::remoteEmulatorSetupCancelsAndSavesWithoutMouse(){
         QVERIFY(widget->setProperty("choice",1));command(widget.data(),InputManager::Confirm);
         QVERIFY(widget->property("message").toString().contains(id=="retroarch-ds"?"right trigger":id=="retroarch-vb"?"right trigger left":"SDL mappings"));
     }
+    for(const auto &id:QStringList{"rpcs3","shadps4","vita3k","xemu","xenia","cemu"}){
+        int index=-1;
+        for(int i=0;i<emulators.size();++i)if(emulators[i].toMap().value("id")==id)index=i;
+        QVERIFY(index>=0);const auto setup=emulators[index].toMap().value("setup").toMap();
+        const auto settingsFile=GameEmulators::home(profile,id)+"/.config/isolde-emulator/settings.json";
+        QVERIFY(!QFileInfo::exists(settingsFile));
+        QVERIFY(widget->setProperty("mode","emulators"));QVERIFY(widget->setProperty("choice",index));
+        command(widget.data(),InputManager::Confirm);
+        QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));
+        QVERIFY(widget->property("message").toString().contains(setup.value("gameHelp").toString()));
+        QVERIFY(widget->setProperty("choice",0));command(widget.data(),InputManager::Confirm);
+        const auto draftValue=widget->property("emulatorDraft");
+        const auto draftMap=draftValue.metaType()==QMetaType::fromType<QJSValue>()?draftValue.value<QJSValue>().toVariant().toMap():draftValue.toMap();
+        QCOMPARE(draftMap.value("video").toString(),QString("automatic"));
+        QVERIFY(widget->setProperty("choice",1));command(widget.data(),InputManager::Confirm);
+        QCOMPARE(widget->property("message").toString(),setup.value("controllerHelp").toString());
+        if(emulators[index].toMap().value("firmwareRequired").toBool()){
+            QVERIFY(widget->setProperty("choice",5));command(widget.data(),InputManager::Confirm);
+            QCOMPARE(widget->property("mode").toString(),QString("emulatorRebuildReview"));
+            command(widget.data(),InputManager::Back);
+            QCOMPARE(widget->property("mode").toString(),QString("emulatorSettings"));QCOMPARE(widget->property("choice").toInt(),5);
+        }
+        QVERIFY(widget->setProperty("choice",4));command(widget.data(),InputManager::Confirm);
+        QCOMPARE(widget->property("mode").toString(),QString("browse"));QVERIFY(!QFileInfo::exists(settingsFile));
+    }
+    QVERIFY(widget->setProperty("mode","emulators"));QVERIFY(widget->setProperty("choice",emulators.size()));
+    command(widget.data(),InputManager::Confirm);QCOMPARE(widget->property("mode").toString(),QString("emulatorInstallReview"));
+    for(int i=0;i<4;++i)command(widget.data(),InputManager::NavigateDown);
+    QCOMPARE(widget->property("choice").toInt(),4);
+    command(widget.data(),InputManager::Back);QCOMPARE(widget->property("mode").toString(),QString("emulators"));
+    QCOMPARE(widget->property("choice").toInt(),int(emulators.size()));QVERIFY(!library.setupBusy());
+#ifdef Q_OS_LINUX
+    const auto expandedHome=GameEmulators::home(profile,"rpcs3");
+    const auto prepared=expandedHome+"/.local/share/isolde-prepared";
+    QVERIFY(QDir().mkpath(prepared+"/firmware"));QVERIFY(QDir().mkpath(expandedHome+"/.config/isolde-emulator"));
+    QVERIFY(QDir().mkpath(expandedHome+"/saves"));
+    QFile sentinel(prepared+"/firmware/inert-copy");QVERIFY(sentinel.open(QIODevice::WriteOnly));sentinel.write("prepared");sentinel.close();
+    QFile saved(expandedHome+"/saves/inert-save");QVERIFY(saved.open(QIODevice::WriteOnly));saved.write("keep save");saved.close();
+    library.setSessionActiveGuard([]{return true;});
+    QVERIFY(!library.rebuildEmulatorData("rpcs3"));QVERIFY(QFileInfo::exists(prepared));
+    library.setSessionActiveGuard([]{return false;});
+    QVERIFY2(library.rebuildEmulatorData("rpcs3"),qPrintable(library.errorString()));
+    QVERIFY(!QFileInfo::exists(prepared));QVERIFY(QFileInfo::exists(saved.fileName()));
+    const auto retired=QDir(expandedHome+"/.local/share").entryList({"isolde-prepared-retired-*"},QDir::Dirs|QDir::NoDotAndDotDot);
+    QCOMPARE(retired.size(),1);QVERIFY(QFileInfo::exists(expandedHome+"/.local/share/"+retired[0]+"/firmware/inert-copy"));
+    QVERIFY(QDir(expandedHome).removeRecursively());
+#endif
     QVERIFY(QDir(QFileInfo(GameEmulators::home(profile,"ppsspp")).absolutePath()).removeRecursively());
     qApp->setProperty("isoldeProfile",QVariant());
 }

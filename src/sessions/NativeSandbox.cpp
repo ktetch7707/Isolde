@@ -360,6 +360,12 @@ NativeSandboxPlan NativeSandbox::prepare(const QString &profileId, const QString
             plan.error="Repair the managed emulator adapter or choose a game from Games.";return plan;
         }
         bind(helper,"/run/emulator-session.py");bind(manifest,"/run/game-runtimes.json");
+        if(runtimeDefinition.contains("setup")){
+            const auto expanded=helperRoot+"/expanded-emulators.py";
+            if(!QFileInfo(expanded).isReadable()){plan.error="Repair the expanded emulator adapter.";return plan;}
+            bind(expanded,"/run/expanded-emulators.py");
+            args << "--unshare-net";
+        }
         // The packaged script accepts identities, never commands from a game.
     }
     bool opticalNoExec=false;

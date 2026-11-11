@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "packageId": "rpcs3",
+  "version": "1.0.0",
+  "minIsoldeVersion": "0.0.1.2",
+  "name": "RPCS3 · PlayStation 3",
+  "description": "Select EBOOT.BIN/ELF in an authorized decrypted game folder, or an unencrypted homebrew PKG. Encrypted titles needing extra licenses are not part of this route. SDL Xbox pad maps to DualShock 3. Motion and pressure-sensitive controls are title-specific.",
+  "category": "Games",
+  "publisher": "rpcs3",
+  "provenance": "Official upstream artifact pinned by SHA-256; no games, accounts or firmware",
+  "capabilities": [
+    "desktop.external",
+    "input.gamepad",
+    "audio.output"
+  ],
+  "app": {
+    "id": "rpcs3",
+    "type": "desktop",
+    "presentationMode": "game-hub",
+    "networkRequirement": "none",
+    "desktopId": "isolde-rpcs3",
+    "emulatorRuntime": "rpcs3",
+    "windowClass": "rpcs3",
+    "containment": "fullscreen",
+    "section": "Games",
+    "accent": "#397DB8",
+    "symbol": "PlayStation 3",
+    "handledActions": [
+      "open-file"
+    ],
+    "actionHandlers": {
+      "open-file": {
+        "appendTarget": true
+      }
+    },
+    "gameFormats": [
+      "elf",
+      "self",
+      "bin",
+      "pkg"
+    ]
+  }
+}
