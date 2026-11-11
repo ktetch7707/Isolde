@@ -411,3 +411,158 @@ records SHA256 and review disposition for406 original PNGs (native126 and
 visual280). Raw generated capture receipts remain unmodified/pending; the
 agent ledger and this report state semantic exclusions explicitly. All
 review sheets are ignored workspace artifacts, not committed artwork.
+
+## Batched repair continuation
+
+The user explicitly requests larger coherent repairs and fewer reruns. The
+current closure batch combines the already committed Search invalidation and
+Sources elevated text fixes with shared AppTile selected-text contrast,
+PageAppCarousel/GuideWidget resolved palette fallbacks, truthful episode labels
+when Kodi omits numbering, VPN first-row/header reveal, and managed Kodi Back
+stop while VideoOSD is open. Extend existing gallery/library regressions rather
+than creating a test per line. Capture/HDMI explanatory overflow remains open;
+no unrelated control is silently dropped.
+
+Storage diagnosis found641257472 bytes of synthetic TV media omitted by the
+old oldest512-run inventory. The corrected bounded inventory shows newest
+payloads and named fixture/cache roots. A new cleanup path hardlinks only
+identical old synthetic clips within each verified native fixture directory;
+all paths and bytes remain, newest three fixtures and active paths are retained,
+links/mounts/unknown formats/oversize or changed bytes fail. The104 runner
+self-tests pass, including path/byte preservation and idempotence. Actual guest
+receipt records400222784 duplicate bytes consolidated. Configure still fails
+its3GiB target honestly; the next Test retains its own2GiB minimum.
+
+One full closure Test is justified for this coherent repair batch: it changes
+a native QML-exposed client method, Kodi runtime keymap generation and shared
+app/guide/shell palette rendering. The previous61/61 baseline does not cover
+these new bytes. Run this once after the batch; subsequent bounded fixes use
+focused regressions unless this closure run exposes an integration failure.
+BUG-094's bound grows from900 to1740 seconds, matching the existing bounded
+large-journey class, because the prior90-phase run was still progressing at
+898 seconds. This changes no application/test assertions.
+
+Storage continuation: repair-batch-a still stops before compilation, at
+2132172800 bytes (about15MiB below the minimum) after its new source upload.
+Fixture dedup records400222784 logical duplicate bytes; actual media tree usage
+falls from641257472 to404606976 bytes, so logical totals are not claimed as
+physical reclaimed space. A broad native-profile size inventory times out at
+30 seconds; narrow named-cache inspection succeeds instead, with no deletion.
+
+Verified immutable payload dedup retains all candidate paths and manifest
+hashes, sharing only same-mode/owner/device artifacts. It refuses redirected/
+mounted/modified candidates and interrupted transactions. Initial self-test
+fails because its synthetic fixture lacks required bin/isolde; corrected
+fixture passes105/105 in3.099 seconds. Real receipt consolidates425 identical
+files (33800214 logical bytes), and verified source cleanup removes an obsolete
+recoverable copy. Configure still reports failure against its3GiB target.
+`round2-20261111-repair-batch-b` then passes its own preflight at2.02GiB and
+starts the application closure test. A never reached app run is not a repeated
+full suite; all stopped preflight and self-test failures remain evidence.
+
+Games harness diagnosis: VirtualBox sends make/break together; an SDL game
+polling held key state may miss that zero-time press. Games/emulators attended
+input now holds each approved existing key100ms between its bounded make and
+break halves, retaining the20-key limit and existing phase review deadlines.
+No arbitrary keys or unreviewed consent are added. Actual menu/gameplay input
+response must verify the hypothesis; no gameplay credit from source inspection.
+
+Repair-batch-b reaches configure/build after passing preflight. Compilation
+stops in the new subtitle regression: a braced QVariantMap argument contains
+commas inside the Q_ARG macro. Move it to a named QVariant before invocation.
+This is an introduced test compilation defect, not a product failure. No CTest
+registration ran. Resume the unchanged production batch with incremental build;
+the prior full-suite decision still applies, rather than starting a new feature.
+
+Existing evidence reconciliation credits T25.4.a from the full round2-b native
+SourceManager cases: repeated scans/roots, reconnect/dismiss, hide/restore,
+handler addition/removal, repeat promotion with identical committed document
+and deterministic failed-decision-write rollback. This is more than dedup alone;
+sourceManager production bytes remain unchanged. T25 becomes40%; acceptance
+sum1703/25 still rounds to68%. Installed remote actions remain separate and open.
+
+Repair-batch-c builds and reaches CTest. Nine registrations pass, then
+studio_cutover times out at60.26s, with only initTestCase logged. Studio performance
+also grows from26.61s in round2-b to101.64s. Its actual frame latency assertions
+still pass; the constructor/lifecycle portion is suspect. The new per-tile and
+per-carousel SurfacePalette objects are the changed repeated-allocation boundary.
+Remove those duplicate resolvers, using already-resolved selected-text roles
+and the carousel's existing palette fallback; retain all contrast behavior.
+The existing closure regression selection now also includes studio_cutover,
+so one focused batch checks the failure plus performance, gallery and design
+contracts before a justified full integration repeat. No timeout is weakened.
+
+Focused-d stops at preflight before build/test: the completed full build has
+recreated many linked test executables. Automatic cleanup reclaims776458240
+bytes but leaves2008477696, still below2GiB. Extend the existing linked-output
+cache cleanup to the single CMake-declared libisolde_core.a archive, requiring
+its archive magic and the same native path/mount/active checks. All individual
+compiled objects remain; Ninja regenerates the missing archive. Extend the
+existing safety regression and named focused-closure selection check.
+
+Focused-e repeats the cutover timeout after removing the duplicate resolvers;
+that hypothesis is not confirmed. Diagnostic Status finds5.2GiB available RAM,
+almost unused swap, and GNOME Shell consuming100% of a CPU core while idle.
+Normal Isolde is not the busy process. Record this as guest desktop contention,
+with causation still requiring the controlled run. The runner now pauses only
+the verified same-user /usr/bin/gnome-shell process during the two offscreen
+scale registrations (studio_performance/cutover), then resumes it before any
+other registration and in finally on failure/cancel. PID/start-time/executable
+identity prevents signals to a reused/foreign PID; Recover handles an unfinished
+lease. All real external-app/session tests keep the live compositor. The new
+mock-process safety regression proves failure restoration and reused-PID refusal.
+
+Batch reporting gains focused Suite selection and an exact-hash capture index.
+Pixel review is reused only from an explicit agent-reviewed ledger, preserving
+prior exclusions and keeping semantic acceptance pending. Baseline self-check
+reuses406/406 identical images with zero new pixels. Focused batches must be
+NativeOnly; a focused receipt cannot silently become installed acceptance.
+
+Focused-f confirms desktop isolation does not fix the slowdown: performance
+103.27s and cutover60.22s timeout, both desktop leases resumed=true. Remove the
+speculative pause/restore workaround and its mock regression; do not ship an
+ineffective process-control change. The controlled negative result is retained.
+The consolidated report automatically reuses19/19 reviewed identical captures,
+with zero new pixel reviews. Add monotonic phase timings to the exact1024-node
+cutover case (no assertion or timeout changes) and run only studio_cutover to
+identify the blocking phase. No further broad test replay for this diagnosis.
+
+Diagnostic-g locates the scale cost: reset616ms, create22175ms, layer confirm
+25674ms; Find on page then exceeds the60s registration deadline. Existing
+ComposedHome viewport filtering depends directly on subpixel contentY and
+preloads three whole screens. Replace this with stable integer-row bounds,
+two buffer rows on each side, and no card construction for hidden previews.
+Data, declared layout, placement and focus state remain in their existing models.
+Extend the same1024-node regression with rendered-row bounds and actual last-
+component visibility after Find on page, retaining its unchanged-disk assertion.
+This is a product rendering repair; no test timeout is raised.
+
+Render-h reaches Find on page at25.2s, then times out at60.5s. Row buffering
+alone is not a proven repair. Find on page only changes mode and relies on an
+earlier deferred reveal; make the action explicitly reveal the current placement.
+Add selected-visible/disk-unchanged phases to separate navigation from teardown.
+Render-i never builds: concurrent queue edits correctly invalidate the source
+snapshot. This packaging error is agent-induced, not an application failure.
+Finish all edits before packaging the next candidate.
+
+Accounting CheckTable confirms1703/25=68%,122/154 milestones. The report/index
+self-check reuses406/406 reviewed identical captures. Baseline ReportOnly still
+returns incomplete because its retained visual failure is not waived by61 native
+passes. The changed-capture gallery is now linked from the consolidated report.
+
+Render-j confirms Find on page and actual selected visibility pass by29.7s,
+with saved bytes unchanged. Timeout follows the test body, exposing lifecycle
+cost rather than failed navigation. Editor pointer targets still instantiate
+all1024 delegates independently of card virtualization. Bound root scrolling
+pointer targets to visible grid rows plus two-row buffers, retaining the selected
+target for drag continuity. Closed editors construct no pointer targets. Extend
+the1024 regression with an actual pointer Repeater count bound. No deadlines or
+existing assertions are removed. Validate this focused before broad integration.
+
+Render-k PASSES studio_cutover, zero failures/skips, including the1024-node
+visibility, bounded card/pointer delegates and unchanged saved data checks.
+The automatic report and capture index complete without separate capture work.
+A repeat full integration run is now justified: repair-batch-c failed cutover,
+and the shared editor renderer/pointer lifecycle repair plus Kodi keymap and
+UI/media changes need cross-boundary revalidation together. Run one full batch
+round2-20261111-integration-l; do not rerun full per individual repaired widget.
