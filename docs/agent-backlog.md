@@ -3,17 +3,20 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-12
 
-Latest installed c2b0ac24fadcf2f7652d986b, web-controls-s, fixes browser overlay
-CSS overflow and external root-Back/forward-history trapping. Real external
-Chrome and embedded WebEngine pass the automated remote matrix; six Store tests
-and120 runner checks pass with strict original feedback-r61/61 reuse. Installed
-Plex install/open/physical Home/exact Store-card return/remove passes after a
-diagnosed guest PipeWire recovery. 27 captures reviewed; failed-launch
-attempt retained without acceptance; normal layouts unchanged, service active/zero restarts.
-T29.6 is accepted; T29=78%, underlying project average86.00% (rounded86%).
-Protected Android transactions and combined offline/profile recovery remain open.
+Latest installed638b0fd8106ac8fd9c54ccf0, store-close-20261112-full-d, passes
+all62 CTests and121 current runner checks. The installed automated Store offline
+matrix passes84 remote actions/15 reviewed captures, three distinct cold processes
+with kernel IPv4/IPv6 denial and two disposable profiles. Cancel writes nothing;
+activation failure removes only new package artifacts; retry, exact saved bytes,
+profile isolation, cold reopening, offline Web error/physical Home/exact card
+return, removal and repository failure/OFF/Settings recovery pass. BUG-123 fixed.
+Normal layouts remain unchanged and service restored active/zero restarts.
+T29=83%; underlying project average86.20% (rounded86%). Protected Android
+install/update/remove/rollback remains open; proposed temporary authorization is
+still unapproved and no rule is installed. Browser acceptance from web-controls-s
+and live signed discovery from store-runtime-f remain applicable.
 
-Acceptance is **86% (2150/25)**, with 178/219 independently evidenced milestones.
+Acceptance is **86% (2155/25)**, with180/221 independently evidenced milestones.
 T25, T26 and T28 are accepted100%. Feedback-r passes full61/61, deploys release
 9e33a01181c41ea8d571f932 and passes installed Sources actions,24 reviewed gallery
 frames/eight real native input/exit cycles,16 reviewed Search cold/profile/save-
@@ -153,7 +156,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T25 | 12 | Contained configurable detected sources | 100% | 100% | installed18-checkpoint source policy/components/actions accepted; four focused tests with strict original61/61 reuse |
 | T26 | 13 | Configurable All Apps destination | 100% | 100% | native Studio edit/Preview/Cancel/Apply plus exact installed saved presentation, artwork/density and eight real native returns accepted |
 | T28 | 14 | Genuine Web search header toggle | 100% | 100% | installed16-checkpoint cold/profile/save-failure/retry/OFF matrix, full61 and clean reference pairs accepted |
-| T29 | 15 | Verified Store, Android and Chromium remote | 78% | 100% | Browser remote controls accepted; Android transactions/offline combined lifecycle open |
+| T29 | 15 | Verified Store, Android and Chromium remote | 83% | 100% | Browser and installed Web offline/profile recovery accepted; protected Android transactions open |
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search installed acceptance | 83% | 100% | native search contracts accepted; installed real-Kodi closure open |

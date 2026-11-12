@@ -26,6 +26,18 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_store_offline_receipt_requires_three_real_cold_socket_probes(self):
+        result={key:True for key in ('passed','freshProfile','profileIsolation','coldReopen','cancelNoWrite','writeFailureRollback','retryVerified','webLifecycle','repositoryFailureRecovered','manifestsRemoved')}
+        result.update(normalProfileUsed=False,androidLifecycle=False,actualInputActions=30,
+            networkProofs=[dict(pid=pid,socketErrnos=[101,101],unixSocketAvailable=True) for pid in (11,12,13)],
+            captures=['offlineentry','offlinecancel','offlinewritefailed','offlineainstalled','offlinebfresh','offlinebinstalled','offlinebremoved','offlineacold','offlinewebopen','offlinewebreturn','offlinearemove','offlineremoved','offlinerepositoryerror','offlineaccessoff','offlinesettings'])
+        self.assertTrue(oracle.visual_result_passed('store-offline',result))
+        result['networkProofs'][2]['pid']=11
+        self.assertFalse(oracle.visual_result_passed('store-offline',result))
+        result['networkProofs'][2]['pid']=13;result['networkProofs'][0]['socketErrnos']=[101,0]
+        self.assertFalse(oracle.visual_result_passed('store-offline',result))
+        result['networkProofs'][0]['socketErrnos']=[101,101];result['writeFailureRollback']=False
+        self.assertFalse(oracle.visual_result_passed('store-offline',result))
     def test_visual_desktop_prompt_inventory_is_bounded_and_dismiss_only(self):
         self.assertEqual(oracle.secret_prompt_paths('/org/freedesktop/secrets\n/org/freedesktop/secrets/collection/login\n/org/freedesktop/secrets/prompt/p1\n'),['/org/freedesktop/secrets/prompt/p1'])
         for tree in ('x'*65537,'/org/freedesktop/secrets/prompt/../../collection/login','\n'.join('/org/freedesktop/secrets/prompt/p'+str(i) for i in range(17))):
@@ -672,6 +684,15 @@ class OracleTests(unittest.TestCase):
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(history_frozen),'args':[str(history_frozen),str(executable),'--history','--inspect'],'dependency':'frozen dependency'})
             self.assertIn('untouched',history_frozen.read_text())
+            store_frozen=folder/'store-acceptance.py';store_frozen.write_text("raise RuntimeError('frozen Store helper untouched')")
+            store_helper=root/'bin'/('store-helper-'+expected+'.py');store_helper.write_bytes(code.encode())
+            self.assertEqual(oracle.verified_studio_helper(root,expected,'store'),store_helper)
+            command=oracle.store_helper_command(source,store_helper,executable,['--offline-matrix']);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'file':str(store_frozen),'args':[str(store_frozen),str(executable),'--offline-matrix'],'dependency':'frozen dependency'})
+            self.assertIn('untouched',store_frozen.read_text())
+            store_helper.write_text('tampered')
+            with self.assertRaises(RuntimeError):oracle.verified_studio_helper(root,expected,'store')
             command=oracle.history_helper_command(source,history_helper,executable,pages=True);command[0]=sys.executable
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(history_frozen),'args':[str(history_frozen),str(executable),'--pages','--inspect'],'dependency':'frozen dependency'})

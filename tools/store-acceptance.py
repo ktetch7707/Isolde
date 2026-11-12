@@ -11,13 +11,14 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);parser.add_argument("--discovery-only",action="store_true");parser.add_argument("--web-only",action="store_true");args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);parser.add_argument("--discovery-only",action="store_true");parser.add_argument("--web-only",action="store_true");parser.add_argument("--offline-matrix",action="store_true");args=parser.parse_args()
     if socket.gethostname()!="isolde-test":raise RuntimeError("Guest-only Store acceptance")
     lock=open("/tmp/isolde-home-components-acceptance.lock","a");fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     evidence=Path(tempfile.mkdtemp(prefix="isolde-components-acceptance-store-"));profile=str(uuid.uuid4())
@@ -47,6 +48,40 @@ def main():
     display=x.XOpenDisplay(env.get("DISPLAY","").encode())
     if not display:raise RuntimeError("Missing guest X11 display")
     process=None;window=None;phases=[];actions=[];state=config/"profiles"/profile/"installed-apps.json"
+    profile_a=profile;profile_b=str(uuid.uuid4());network_proofs=[]
+    offline=None
+    if args.offline_matrix:
+        spec=importlib.util.spec_from_file_location('store_offline',Path(__file__).with_name('guide-soak-acceptance.py'))
+        offline=importlib.util.module_from_spec(spec);spec.loader.exec_module(offline)
+    def launch(log,active):
+        nonlocal process,window,profile,state
+        if process and process.poll() is None:
+            process.terminate();process.wait(timeout=25)
+        profile=active;state=config/"profiles"/profile/"installed-apps.json"
+        (config/"Kodi.conf").write_text("[profiles]\n"+"".join(p+"\\kodi\\autoStart=false\n" for p in (profile_a,profile_b)))
+        state.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+        (config/"profiles.json").write_text(json.dumps({"active":active,"profiles":[{"id":profile_a,"name":"Store A"},{"id":profile_b,"name":"Store B"}]}))
+        command=[str(args.executable.resolve()),"--launch-app=app-store"]
+        if offline:
+            proof=evidence/('offline-'+str(len(network_proofs)));proof.mkdir()
+            probe=offline.SOCKET_PROBE.replace("'--windowed'","'--launch-app=app-store'")
+            command=[sys.executable,'-c',probe,str(proof),str(args.executable.resolve())]
+        process=subprocess.Popen(command,env=env,stdout=log,stderr=log,preexec_fn=offline.install_socket_filter if offline else None)
+        window=None;deadline=time.monotonic()+25
+        while not window and time.monotonic()<deadline:
+            if process.poll() is not None:raise RuntimeError('Isolde exited before opening its Store window')
+            discovered=subprocess.run(["wmctrl","-lp"],env=env,capture_output=True,text=True,timeout=5)
+            for line in discovered.stdout.splitlines():
+                parts=line.split(None,4)
+                if len(parts)>=3 and parts[2]==str(process.pid):window=parts[0];break
+            time.sleep(.2)
+        if not window:raise RuntimeError('Isolde created no test window; inspect shell.log')
+        subprocess.run(["wmctrl","-ia",window],env=env,check=True,timeout=10);time.sleep(3)
+        if offline:
+            network=json.loads((proof/'network-denial.json').read_text())
+            assert network['socketErrnos']==[101,101] and network['unixSocketAvailable'] is True
+            assert network['pid']==process.pid
+            network_proofs.append(network)
     def installed(app):return state.is_file() and app in json.loads(state.read_text()).get("installed",[])
     def expect(predicate,message,timeout=150):
         deadline=time.monotonic()+timeout
@@ -74,16 +109,43 @@ def main():
     try:
         subprocess.run(["systemctl","--user","stop","isolde.service"],check=True,timeout=30)
         with (evidence/"shell.log").open("w") as log:
-            process=subprocess.Popen([str(args.executable.resolve()),"--launch-app=app-store"],env=env,stdout=log,stderr=log)
-            deadline=time.monotonic()+25
-            while not window and time.monotonic()<deadline:
-                discovered=subprocess.run(["wmctrl","-lp"],env=env,capture_output=True,text=True,timeout=5)
-                for line in discovered.stdout.splitlines():
-                    parts=line.split(None,4)
-                    if len(parts)>=3 and parts[2]==str(process.pid):window=parts[0];break
-                time.sleep(.2)
-            if not window:raise RuntimeError("Isolde created no test window")
-            subprocess.run(["wmctrl","-ia",window],env=env,check=True,timeout=10);time.sleep(3)
+            launch(log,profile)
+            if args.offline_matrix:
+                def manifest(active):return evidence/'data/Isolde/packages/profiles'/active/'plex/1.0.0/manifest.json'
+                def activation(active):return config/'profiles'/active/'installed-apps.json'
+                def value(path):return path.read_bytes() if path.is_file() else None
+                def plex():keys('Left','Up','Up','Right','Return','Down','Down')
+                capture('offlineentry');plex()
+                before=value(state)
+                keys('Return');capture('offlinecancel');keys('Escape')
+                assert value(state)==before and not manifest(profile).exists(),'Cancel wrote a Web app'
+                state.parent.chmod(0o500)
+                try:
+                    keys('Return','Right','Return');capture('offlinewritefailed')
+                    assert value(state)==before and not installed('plex') and not manifest(profile).exists(),'Failed activation left an installed package'
+                finally:state.parent.chmod(0o700)
+                keys('Return','Right','Return');expect(lambda:installed('plex'),'Offline retry did not install Plex')
+                capture('offlineainstalled');saved_a=value(state);manifest_a=value(manifest(profile))
+                assert manifest_a
+                launch(log,profile_b);plex();capture('offlinebfresh')
+                assert not installed('plex') and value(activation(profile_a))==saved_a and value(manifest(profile_a))==manifest_a
+                keys('Return','Right','Return');expect(lambda:installed('plex'),'Second profile install failed');capture('offlinebinstalled')
+                keys('Down','Return','Right','Return');expect(lambda:not installed('plex'),'Second profile removal failed');capture('offlinebremoved')
+                saved_b=value(state)
+                assert not manifest(profile_b).exists() and value(activation(profile_a))==saved_a and value(manifest(profile_a))==manifest_a
+                launch(log,profile_a);plex();capture('offlineacold')
+                assert installed('plex') and value(state)==saved_a and value(manifest(profile_a))==manifest_a
+                keys('Return');time.sleep(10);capture('offlinewebopen');capture('offlinewebreturn')
+                keys('Down','Return');capture('offlinearemove');keys('Return')
+                assert installed('plex') and value(state)==saved_a,'Default Cancel removed the Web app'
+                keys('Return','Right','Return');expect(lambda:not installed('plex'),'Offline Web removal failed');capture('offlineremoved')
+                assert not manifest(profile_a).exists() and value(activation(profile_b))==saved_b
+                keys('Left','Up','Up','Left','Return','Down','Return');time.sleep(3);capture('offlinerepositoryerror')
+                assert not any((evidence/'cache/Isolde/profiles').glob('*/fdroid/index-v2.json')),'Disconnected repository unexpectedly obtained an index'
+                keys('Menu','Return');capture('offlineaccessoff')
+                keys('Escape');keys(*(['Up']*30));keys('Return');capture('offlinesettings')
+                result=dict(passed=True,journey='store-offline',freshProfile=True,normalProfileUsed=False,profileIsolation=True,coldReopen=True,cancelNoWrite=True,writeFailureRollback=True,retryVerified=True,webLifecycle=True,repositoryFailureRecovered=True,manifestsRemoved=True,androidLifecycle=False,networkProofs=network_proofs,actualInputActions=len(actions),captures=phases,visualReview='pending')
+                (evidence/'result.json').write_text(json.dumps(result,indent=2));return
             if args.discovery_only:
                 from guide_features import remote_text
                 def key(name,count=1):keys(*([name]*count))

@@ -24,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 if ($Diagnostic -and ($Action -ne 'Visual' -or $Installed)) { throw 'Diagnostic visuals are staged-only; installation/deployment is prohibited.' }
 if ($ResumeRunId -and ($Action -ne 'Test' -or $Suite -ne 'all' -or $ReuseFullRun)) { throw 'Campaign resumption requires Test -Suite all, without coverage reuse.' }
 if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
-$validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-discovery','games','emulators')
+$validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-discovery','games','emulators')
 $Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })
 $invalidCases = @($Cases | Where-Object { $_ -notin $validCases })
 if ($FrozenReferenceHelpers -and ($Action -ne 'Visual' -or @($Cases | Where-Object { $_ -notin @('lounge','pastel') }).Count)) { throw 'FrozenReferenceHelpers requires Visual with Lounge/Pastel only.' }
@@ -99,8 +99,14 @@ try {
             $featureDigest = ''
             $studioDigest = ''
             $historyDigest = ''
+            $storeDigest = ''
             $referenceDigest = ''
             $referenceCollectionsDigest = ''
+            if ($case -in @('store','store-web','store-offline','store-discovery')) {
+                $helper = Join-Path $PSScriptRoot 'store-acceptance.py'
+                $storeDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+                $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/store-helper-$storeDigest.py")) -TimeoutSeconds 30 -Log $transport
+            }
             if (!$FrozenReferenceHelpers -and $case -in @('lounge','pastel')) {
                 $helper = Join-Path $PSScriptRoot 'home-reference-acceptance.py'
                 $referenceDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -134,7 +140,7 @@ try {
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
             & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -Diagnostic:$Diagnostic -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -ReferenceHelperDigest $referenceDigest -ReferenceCollectionsDigest $referenceCollectionsDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -StoreHelperDigest $storeDigest -ReferenceHelperDigest $referenceDigest -ReferenceCollectionsDigest $referenceCollectionsDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
         }
     } else {
         $remoteAction = $Action.ToLowerInvariant()
@@ -154,7 +160,7 @@ try {
             $command += " --demo-art-helper-digest $demoHash"
         }
         if ($Action -eq 'Configure' -and $ConfigureTarget -in @('artifacts','desktop-prompts')) {
-            $maintenanceFiles = @('tools/install-appliance.py','tools/vm-oracle.py','tests/test_vm_oracle.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/reference_collections.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt','config/studio-defaults.json','tests/fixtures/shell-theme-routes.json')
+            $maintenanceFiles = @('tools/install-appliance.py','tools/vm-oracle.py','tests/test_vm_oracle.py','tools/store-acceptance.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/reference_collections.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt','config/studio-defaults.json','tests/fixtures/shell-theme-routes.json')
             $maintenanceLines = foreach ($relative in $maintenanceFiles) {
                 $hash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
                 "$hash  $relative"

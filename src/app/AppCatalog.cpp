@@ -525,8 +525,8 @@ bool AppCatalog::install(const QString &id)
     if (!entry || isInstalled(id)) return false;
     if(busy() && !m_committing)return false;
     if(entry->app.type=="android" && !m_committing)return androidOperation(*entry,"install");
-    if(entry->custom)m_customPackages.insert(id,entry->version);
     const auto packageDirectory = QDir(m_installRoot).filePath(entry->packageId + "/" + entry->version);
+    bool createdPackage=false;
     if (!QFile::exists(QDir(packageDirectory).filePath("manifest.json"))) {
         QDir().mkpath(m_installRoot);
         const auto staging = QDir(m_installRoot).filePath(".staging-" + entry->packageId + "-" + entry->version);
@@ -541,8 +541,14 @@ bool AppCatalog::install(const QString &id)
         if (!QDir().rename(staging, packageDirectory)) {
             QDir(staging).removeRecursively(); setError(tr("Unable to activate package %1.").arg(id)); return false;
         }
+        createdPackage=true;
     }
-    if (!m_registry->addApp(entry->app)) return false;
+    const auto rollbackPackage=[&]{
+        if(createdPackage && !QDir(packageDirectory).removeRecursively())
+            setError(tr("%1 The new package could not be removed; preserve its storage and retry recovery.").arg(m_errorString));
+    };
+    if (!m_registry->addApp(entry->app)) {setError(m_registry->errorString());rollbackPackage();return false;}
+    if(entry->custom)m_customPackages.insert(id,entry->version);
     m_installedIds.insert(id);
     m_packageStates.insert(id, entry->setupRequired ? QStringLiteral("needs-setup") : QStringLiteral("ready"));
     m_failureReasons.remove(id);
@@ -552,6 +558,7 @@ bool AppCatalog::install(const QString &id)
         m_failureReasons.remove(id);
         m_registry->removeApp(id);
         if(entry->custom)m_customPackages.remove(id);
+        rollbackPackage();
         return false;
     }
     emit entriesChanged();

@@ -265,6 +265,7 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "androidapps": ("android-apps-acceptance.py", []),
          "store": ("store-acceptance.py", []),
          "store-web": ("store-acceptance.py", ["--web-only"]),
+         "store-offline": ("store-acceptance.py", ["--offline-matrix"]),
          "store-discovery": ("store-acceptance.py", ["--discovery-only"]),
          "games": ("games-acceptance.py", []),
          "emulators": ("games-acceptance.py", ["--emulator"])}
@@ -425,6 +426,13 @@ def visual_result_passed(case, result):
     if case == "store":
         return (all(result.get(k) is True for k in ("passed","androidLifecycle","chromiumLifecycle","androidPackageRemovalVerified","freshProfile"))
                 and result.get("normalProfileUsed") is False and result.get("playbackVerified") is False and len(result.get("captures",[]))==14)
+    if case == 'store-offline':
+        proofs=result.get('networkProofs',[])
+        return (all(result.get(k) is True for k in ('passed','freshProfile','profileIsolation','coldReopen','cancelNoWrite','writeFailureRollback','retryVerified','webLifecycle','repositoryFailureRecovered','manifestsRemoved'))
+            and result.get('normalProfileUsed') is False and result.get('androidLifecycle') is False and result.get('actualInputActions',0)>0
+            and len(proofs)==3 and all(p.get('socketErrnos')==[101,101] and p.get('unixSocketAvailable') is True for p in proofs)
+            and len({p.get('pid') for p in proofs})==3
+            and result.get('captures')==['offlineentry','offlinecancel','offlinewritefailed','offlineainstalled','offlinebfresh','offlinebinstalled','offlinebremoved','offlineacold','offlinewebopen','offlinewebreturn','offlinearemove','offlineremoved','offlinerepositoryerror','offlineaccessoff','offlinesettings'])
     if case == 'store-web':
         return (all(result.get(k) is True for k in ('passed','chromiumLifecycle','webOnly','freshProfile','manifestsRemoved'))
             and result.get('normalProfileUsed') is False and result.get('androidLifecycle') is False
@@ -556,7 +564,7 @@ def feature_helper_command(source, helper, executable, flags):
 
 
 def verified_studio_helper(root, expected, kind='studio'):
-    if kind not in {'studio','history','reference','reference-collections'}:raise RuntimeError('Unsupported bounded helper kind')
+    if kind not in {'studio','history','reference','reference-collections','store'}:raise RuntimeError('Unsupported bounded helper kind')
     if not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected):raise RuntimeError('Studio requires an exact helper digest')
     path=root/'bin'/(kind+'-helper-'+expected+'.py')
     if path.is_symlink() or path.resolve()!=path or not path.is_file() or digest(path)!=expected:raise RuntimeError('Studio helper identity mismatch')
@@ -586,6 +594,11 @@ def history_helper_command(source, helper, executable, pages=False, playlists=Fa
     frozen='games-acceptance.py' if game_case else 'tv-library-acceptance.py'
     flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--pages' if pages else '--playlists' if playlists else '--history','--inspect']
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/frozen),str(executable)]+flags
+
+
+def store_helper_command(source, helper, executable, flags):
+    bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/store-acceptance.py'),str(executable)]+flags
 
 
 def reference_helper_command(source, helper, executable, flags, collections_helper=None):
@@ -874,7 +887,7 @@ def guide_qml_coverage(root, run, base_id, suite):
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='store':
         proof=qml_coverage(root,run,base_id,suite,'store',{'tools/fdroid-store.py','tools/android-setup.py','tools/provision-android.py','qml/AppStoreView.qml','src/input/web-remote.js','src/sessions/NativeAppHost.cpp','src/sessions/ChromiumRemotePipe.h'},
-            {'tools/backlog-progress.ps1','tests/web_remote.cpp','tools/native-session-smoke.cpp','tools/web-remote-acceptance.py','tests/test_fdroid_store.py','tests/test_android_provisioning.py','tests/test_store_lifecycle.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store',{'tools/web-remote-acceptance.py','docs/store-android-authorization-fixture.md'})
+            {'tools/backlog-progress.ps1','tests/tst_isolde.cpp','tests/web_remote.cpp','tools/native-session-smoke.cpp','tools/web-remote-acceptance.py','tests/test_fdroid_store.py','tests/test_android_provisioning.py','tests/test_store_lifecycle.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store',{'tools/web-remote-acceptance.py','docs/store-android-authorization-fixture.md'})
         proof['changedStoreFiles']=proof.pop('changedStoreQml')
         return proof
     if suite=='sources':
@@ -1512,7 +1525,7 @@ class Oracle:
             if bundle.resolve()!=bundle or hashes.resolve()!=hashes or digest(hashes)!=maintenance_tests_digest:
                 raise RuntimeError("Maintenance self-test bundle checksum mismatch")
             entries=manifest(hashes)
-            if set(entries)!={"tools/install-appliance.py","tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tools/home-components-acceptance.py","tools/reference_collections.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt","config/studio-defaults.json","tests/fixtures/shell-theme-routes.json"} or entries["tools/vm-oracle.py"]!=driver_digest:
+            if set(entries)!={"tools/store-acceptance.py","tools/install-appliance.py","tools/vm-oracle.py","tests/test_vm_oracle.py","tools/home-reference-acceptance.py","tools/home-components-acceptance.py","tools/reference_collections.py","tests/tst_home_navigation.cpp","tools/guide_features.py","tools/guide_lifecycle.py","tools/guide-soak-acceptance.py","qml/OnScreenKeyboard.qml","CMakeLists.txt","config/studio-defaults.json","tests/fixtures/shell-theme-routes.json"} or entries["tools/vm-oracle.py"]!=driver_digest:
                 raise RuntimeError("Unexpected maintenance self-test dependencies")
             if any((bundle/name).resolve()!=bundle/name for name in entries):
                 raise RuntimeError("Redirected maintenance self-test dependency")
@@ -1659,9 +1672,10 @@ class Oracle:
             if self.links()!=links or self.layout_hashes()!=layouts:
                 raise RuntimeError("Native diagnostic changed a release or saved layout")
 
-    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None, diagnostic=False):
+    def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None, diagnostic=False, store_helper_digest=None):
         self.prepare_visual_desktop()
         if diagnostic and installed:raise RuntimeError('Diagnostic payloads cannot be deployed or tested as installed')
+        if store_helper_digest and case not in ('store','store-web','store-offline','store-discovery'):raise RuntimeError('Store helper is Store-only')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
         if history_helper_digest and case not in ('history','pages','playlists','games','emulators'):raise RuntimeError('Unsupported library helper case')
@@ -1681,6 +1695,10 @@ class Oracle:
         source = self.run / "source"
         script, flags = CASES[case]
         command = ["python3", str(source / "tools" / script), str(executable)] + flags
+        if store_helper_digest:
+            helper=verified_studio_helper(self.root,store_helper_digest,'store')
+            command=store_helper_command(source,helper,executable,flags)
+            self.update(acceptanceHelperSha256=store_helper_digest)
         if reference_helper_digest:
             helper=verified_studio_helper(self.root,reference_helper_digest,'reference')
             collections_helper=verified_studio_helper(self.root,reference_collections_digest,'reference-collections') if reference_collections_digest else None
@@ -2036,7 +2054,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -2478,6 +2496,7 @@ def main():
     parser.add_argument("--feature-helper-digest")
     parser.add_argument('--studio-helper-digest')
     parser.add_argument('--history-helper-digest')
+    parser.add_argument('--store-helper-digest')
     parser.add_argument('--reference-helper-digest')
     parser.add_argument('--reference-collections-digest')
     parser.add_argument("--orphan-visual-pid", type=int, default=0)
@@ -2608,7 +2627,7 @@ def main():
             elif args.action == "test":
                 oracle.test(args.suite,args.reuse_full_run,args.resume_run_id)
             elif args.action == "visual":
-                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest,args.reference_collections_digest,args.diagnostic)
+                oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest,args.reference_collections_digest,args.diagnostic,args.store_helper_digest)
             elif args.action == "deploy":
                 oracle.deploy()
             elif args.action == "provision":

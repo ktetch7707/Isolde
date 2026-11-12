@@ -314,3 +314,37 @@ Before selecting any later package: confirm predecessor closure/recorded excepti
 This revision must pass D only: all 27 active IDs appear in the backlog; completed T16–T19 remain foundations, T15 review remains paired with T24, excluded T02/T06–T08 never become selectable. All selectable packages above map to backlog gates; no official completion credit is claimed. Confirm the documents' links and commands against the current runner. No application/VM testing is justified by this documentation batch.
 
 2026-10-29 validation: PASS for local Markdown links, explicit mappings for all 27 active task IDs, all six immediate queue items, focused suite names against the current runner and `git diff --check`. These are static planning checks only; no product gate, percentage or VM result is advanced.
+
+## Selected T29 closure batch — 2026-11-12
+
+Finish Store before returning to the ordinary backlog. Preserve the six Studio
+fixture edits. Current owned files: AppCatalog.cpp/new-package activation
+rollback, tst_isolde.cpp, Store acceptance/runner case and offline receipt guard.
+Offline matrix covers three real cold starts/two disposable profiles under
+AF_INET/AF_INET6 denial, cancel/no-write, activation failure, retry, manifests,
+Web error/owned return and repository OFF/error/recovery. Actual Android
+protected transactions still require native authentication or explicit approval
+of the already documented temporary profile-only test authorization; none is
+installed. Approval question pending; no workaround for the review rejection.
+
+Verification: one integrated full run is now justified because the installed
+write-failure test exposed an orphan package after AppCatalog activation failure,
+and shared package activation plus newly committed InputManager/keyboard changes
+invalidate the old narrow full-origin reuse boundary. Keep AppCatalog.cpp outside
+that bounded reuse allowlist; use the full run as the next installed base. Reuse
+that passing candidate for subsequent harness-only fixes and final Store journeys;
+no full runs for accounting or each capture. Six Store tests passed on b; its
+installed failure captures prove the orphan-manifest defect, not a pass.
+
+T29 current checkpoint: store-close-20261112-full-d passes62/62 and is installed
+as638b0fd8106ac8fd9c54ccf0. Automated offline/profile matrix passes15 reviewed
+captures/84 remote actions/three real cold network-denied processes. BUG-123
+closed; T29.4.c/.5.d credited under unchanged parent weights, T29=83%, project
+2155/25=86.20% rounded86%. Current runner121/121 passes including verified Store
+helper overlay/frozen dependencies/tamper rejection. First second-profile attempt
+was obscured by its fixture's Kodi auto-start; both fresh profile preferences now
+disable it. No product full rerun for that harness repair. Preserve failed evidence.
+Next: actual protected Android install/update/cancel/rollback/remove/SmartTube
+and containment. Explicit approval of the bounded temporary test authorization
+question remains unanswered; no authorization rule installed, no bypass. Reuse
+this full candidate; ordinary backlog resumes after Store closure or user steering.

@@ -1276,3 +1276,66 @@ milestone) is2148/25=85.92%, rounded86%,177/218. No Android install/update/
 protected rollback, combined disconnected Generator or subscription playback
 claim. No policy was installed or approved. Next independent Store work remains
 offline/profile/error recovery, alongside the protected Android lifecycle.
+
+### BUG-123 — Failed Store activation leaves a new package manifest (T29.4)
+
+store-close-20261112-b: installed offline UI reports Unable to save app
+installation state and restores Install, but the new Plex manifest remains.
+The actual config directory was read-only; the previous activation and registry
+were preserved. AppCatalog now records whether it created the package and removes
+only that new artifact after registry/activation failure. Pre-existing staged
+packages remain unchanged; cleanup failure is surfaced. Native regression checks
+new-manifest removal, byte-preserved existing package, unchanged failed activation,
+registry rollback and successful retry. Failed attempt/captures retained.
+
+The new offline journey uses three actual process starts/two profiles, inherited
+kernel IPv4/IPv6 socket denial and unchanged Unix/display ownership. Default Cancel,
+write failure/retry, isolation, cold persisted app, Web error/return, removal and
+explicit failed online opt-in/OFF recovery are one bounded automatic batch.
+Initial a self-test accidentally included concurrent new keyboard expectations in
+the isolated old keyboard tree; b restores the frozen test bytes, retaining the
+receipt guard. c correctly refuses AppCatalog.cpp under old bounded reuse. Keep
+that guard strict. One full integrated candidate now covers the new package
+activation fix plus the coder's committed InputManager/physical keyboard changes.
+No new full run for each subsequent helper correction/accounting step.
+
+### Store offline/profile closure — store-close-20261112-full-d
+
+Full62/62 passes (source c84d65c27c28f1ea7dadd0e9d36e7c2ff238f1647f5eccf4f4ad2ebcb956fcee),
+deployed638b0fd8106ac8fd9c54ccf0. BUG-123 fixed: installed write-failure now
+leaves no new manifest; native test additionally preserves a pre-existing package
+byte-for-byte. No application suite repeated after the passing full candidate.
+First installed attempt101242 fails because fixture profile B omitted Kodi
+AutoStart=false and Kodi covers the Store; not an accepted profile matrix.
+Corrected both disposable profile preferences. Exact SHA-addressed Store helper
+overlay preserves frozen source/dependencies and tested executable. Added path,
+arguments, frozen dependency and tamper refusal coverage. Maintenance bundle's
+first self-test failed because Store helper was omitted; added that exact file to
+both manifest allowlists. Current self-test log guest-maintenance-self-tests-
+1794507692268125399.log passes121/121. Guest-only verified maintenance succeeded.
+
+Installed attempt101748 passes15/15 captures, all agent-reviewed in contact
+sheets store-close-d-pass-00/01/02.jpg. Raw receipt:
+build/vm-oracle/store-close-20261112-full-d/report/evidence-store-offline-1794507612601914050/isolde-components-acceptance-store-ziw8rzv6/result.json.
+Captured frames: same run visual/store-offline/attempt-20261112-101748-723/.
+
+Semantic review: entry Android local list, focused default Cancel install/remove,
+visible save failure and retry to Open app, profile B initially uninstalled then
+installed/removed, profile A cold saved Open app, real embedded Plex offline
+ERR_INTERNET_DISCONNECTED with recovery controls, physical Home restores exact
+Plex/Open app, both confirmed removals restore Install, explicit repository
+resolution failure remains navigable, access OFF returns local list and visible
+Settings network category. No obscuring window in accepted15. All reviewed;
+raw machine visualReview=pending is preserved, with this separate agent ledger.
+Three PIDs369389/369796/370146 each prove IPv4+IPv6 errno101, Unix available,
+root ownership preserved;84 actual remote actions. Activation and manifest bytes
+remain isolated through A→B→A. Normal layout hashes match and service restored
+active/running/zero restarts. No live playback or Android transaction claim.
+
+Under original fixed weights, T29.4 remaining half splits equally into Android
+write/crash/network acceptance and evidenced Web write/profile/offline recovery;
+T29.5 remaining quarter splits equally into Android package lifecycle and the
+Store portion of disconnected Generator. Native/previous children keep weights.
+T29.4.c/.5.d done: Store78→83%, project2155/25=86.20% rounded86%,180/221.
+Protected Android .2.b/.3.c/.4.b/.5.c/.8.b remain open. Explicit scoped
+VM authorization question is unanswered; no rule installed or bypass attempted.

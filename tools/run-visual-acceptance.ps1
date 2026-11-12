@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-discovery','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-discovery','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -12,6 +12,7 @@ param(
     [string]$FeatureHelperDigest,
     [string]$StudioHelperDigest,
     [string]$HistoryHelperDigest,
+    [string]$StoreHelperDigest,
     [string]$ReferenceHelperDigest,
     [string]$ReferenceCollectionsDigest,
     [ValidateRange(30,1800)][int]$TimeoutSeconds = 1000,
@@ -57,6 +58,10 @@ if ($GuestRunner) {
     if ($HistoryHelperDigest) {
         if ($Case -notin @('history','pages','playlists','games','emulators') -or $HistoryHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid library helper identity.' }
         $command += " --history-helper-digest $HistoryHelperDigest"
+    }
+    if ($StoreHelperDigest) {
+        if ($Case -notin @('store','store-web','store-offline','store-discovery') -or $StoreHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid Store helper identity.' }
+        $command += " --store-helper-digest $StoreHelperDigest"
     }
     if ($ReferenceCollectionsDigest) {
         if (!$ReferenceHelperDigest -or $Case -notin @('lounge','pastel') -or $ReferenceCollectionsDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid reference collections identity.' }
@@ -133,7 +138,7 @@ $captureLine = {
         $gamesInput = ($Case -eq 'games' -and $phase -in @('gamespermission','gamesmenu')) -or ($Case -eq 'emulators' -and $phase -in @('emulatorspermission','emulatorsmenu','emulatorsplay'))
         $guideInput = $Case -in @('guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen') -and $phase -in @('guidestartup','guideorigin','guidehome','guideempty','guidesource','guidepvr','guidevideo','guidereturn','guidelocaldraft','guidelocalpreview','guidelocalreview','guidelocalcreated','guidelocalvideo','guidelocalosd','guidelocalreturn','guideduplicatedraft','guidelineup','guidewidgetentry','guidecompact','guideoverlay','guideexpanded','guideoverlayreturn','guidecompactreturn','guidecontinuousready','guidecontinuousvideo','guidecontinuousnext','guidesurfed','guidesurfreturn','guidedeletedready','guidedeletedfile','guidedeletedreturn','guiderepairselect','guiderepaircontext','guiderepairreview','guiderepairconfirm','guiderepaired','guidefeedsetup','guidefeedpreview','guidefeedmapped','guidefeedimported','guidefeednolistings','guidefeedreturn','guidefeedauth','guidefeedoff','guidestationselect','guidestationlogo','guidestationcolor','guideappearanceapplied','guideexport','guideimportdraft','guideimportpreview','guideimported','guidetemplatesaved','guidetemplatereuse','guidecartoonrules','guidecalendarblock','guidecalendarsaved','guidemixedrules','guidemixedpreview','guidemixedcreated','guidedirectdraft','guidedirectpreview','guidedirectimported','guidefeedrefreshfailed','guidesoakhome','guidesoakguide','guidesoakvideo','guidesoakreturn','guidesoaksearch','guidesoakresults','guidesoakrecovery')
         $nativePermission = $gamesInput -or $androidInput -or ($Case -in @('apps','clients') -and $phase -in @('steampermission','freetubepermission','streamingpermission')) -or $vpnInput -or $shellInput -or $guideInput
-        $storeReturn = $Case -in @('store','store-web') -and $phase -in @('storeandroidopen','storechromiumopen')
+        $storeReturn = ($Case -in @('store','store-web') -and $phase -in @('storeandroidopen','storechromiumopen')) -or ($Case -eq 'store-offline' -and $phase -eq 'offlinewebopen')
         $nativeReturn = ($Case -eq 'games' -and $phase -eq 'gamesplay') -or ($Case -eq 'emulators' -and $phase -eq 'emulatorsaction') -or $storeReturn -or ($Case -in @('apps','clients') -and $phase -in @('steam','freetube','streaming')) -or ($Case -eq 'vpn' -and $phase -in @('vpnproviderreturn','vpnusreturn','cbcvpn'))
         if (($Case -eq 'repairs' -and $phase -in @('desktoppermission','desktop')) -or ($Case -eq 'apps' -and $phase -eq 'steaminstall') -or $nativePermission -or $nativeReturn) {
             if ($VmName -ne 'Isolde-Test') { throw 'Compositor input is restricted to the Isolde-Test guest.' }

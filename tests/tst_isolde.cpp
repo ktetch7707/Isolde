@@ -189,6 +189,25 @@ private slots:
         QVERIFY(failed.load(QFINDTESTDATA("../config/catalog.json"),blocked,temp.filePath("failed-packages")));
         QVERIFY(failed.addWebApp("Failure","https://example.edu/","embedded").isEmpty());QVERIFY(failedRegistry.apps().isEmpty());
     }
+    void storeActivationFailureRemovesOnlyNewPackages() {
+        QTemporaryDir temp;QVERIFY(temp.isValid());
+        const auto blocked=temp.filePath("activation");QVERIFY(QDir().mkpath(blocked));
+        const auto packages=temp.filePath("packages"),manifest=packages+"/plex/1.0.0/manifest.json";
+        AppRegistry registry;AppCatalog catalog(&registry);
+        QVERIFY(catalog.load(QFINDTESTDATA("../config/catalog.json"),blocked,packages));
+        QVERIFY(!catalog.install("plex"));QVERIFY(!catalog.isInstalled("plex"));QVERIFY(!registry.find("plex"));
+        QVERIFY(!QFile::exists(manifest));QVERIFY(QFileInfo(blocked).isDir());
+        // An already staged package belongs to the previous state/retry; never
+        // delete it merely because a new activation write was refused.
+        QVERIFY(QDir().mkpath(QFileInfo(manifest).absolutePath()));
+        QVERIFY(QFile::copy(QFINDTESTDATA("../config/packages/plex/manifest.json"),manifest));
+        QFile previous(manifest);QVERIFY(previous.open(QIODevice::ReadOnly));const auto bytes=previous.readAll();previous.close();
+        QVERIFY(!catalog.install("plex"));QVERIFY(!registry.find("plex"));
+        QVERIFY(previous.open(QIODevice::ReadOnly));QCOMPARE(previous.readAll(),bytes);previous.close();
+        QVERIFY(QDir(blocked).removeRecursively());
+        QVERIFY2(catalog.install("plex"),qPrintable(catalog.errorString()));QVERIFY(catalog.isInstalled("plex"));QVERIFY(registry.find("plex"));
+        QVERIFY(previous.open(QIODevice::ReadOnly));QCOMPARE(previous.readAll(),bytes);
+    }
     void onlineStoreRefusesUnknownSourcesAndRequiresOptInAndHash() {
         AppRegistry registry;AppCatalog catalog(&registry);CountingStoreProvider provider;
         provider.identity="unknown";catalog.setStoreProvider(&provider);QVERIFY(!catalog.storeProvider());
