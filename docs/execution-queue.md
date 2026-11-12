@@ -8,22 +8,31 @@ this supersedes the older rerun deferrals below. Resume
 `round2-20261111-b` is the frozen full-suite attempt. Preserve the six existing
 Studio test-file edits. Diagnose the first named failure before resuming
 unattempted registrations; then exercise missing/source-affected VM workflows.
-Current acceptance85% (2131/25),171/212 milestones. T25/T26/T28 accepted100%.
-Latest user feedback is fixed and installed in ceb971fc65a09dd9a9973336:
-Home Settings visible focus/activation, no automatic named-page Edit page,
-and real signed F-Droid Explore/search. Store-zc passes six focused tests and118
-runner checks with strict feedback-r61/61/payload reuse; installed journey91s,
-all five NewPipe results,23 reviewed captures/no pending, normal layouts unchanged.
-T29.1 provider discovery accepted; T29 is63%, broader installed lifecycle open.
-Runner retention/packaging failures and safe guest-only recovery are recorded as
-BUG-115/116. No runner active. Preserve the six unrelated Studio test files.
-Next: T29 actual setup/install/open/return/remove, update/rollback, two-profile
-and offline/browser input matrix. Inspect the missing privileged Android support
-through the supported runner; no credential bypass or fabricated playback.
-Superseded Google Play/GAPPS/credentials/Chrome-extension proposals stay excluded.
-Optional must-have-source question remains pending; current authorized F-Droid/
-web-app scope continues. Reuse r's gallery/Search/reference evidence by scope;
-no full/reference rerun for this bounded Store change or documentation accounting.
+Current acceptance86% (2143/25),175/216 milestones. T25/T26/T28 accepted100%.
+Current installed4b8acad73bafd1cc61ae3c77, store-runtime-f: six Store tests and120
+runner checks pass with strict original feedback-r61/61/source/payload reuse.
+Fixed support package configured, SDK33/x86_64+x86/image-bound trusted metadata;
+actual idle Store Install availability verified. Reviewed Web lifecycle7/50s
+and signed discovery8/101s pass, normal layouts unchanged/service restored.
+T29.2.c/.3.b/.5.b/.6.b independently accepted under unchanged original weights;
+T29=75%. See BUG-117–120/cause-specific failed attempts in the round-two record.
+Guest cache recovery preserves installed/offline runtime packages, current/pinned
+candidates and authored-source evidence; clean pinned upstream checkout removed.
+Clients retry044933 passes8 reviewed frames/192s: actual CBC Gem Browse
+selection via physical Right/Right and Home return; FreeTube ordinary launch/
+return. First attempt timed out at attended freetubepermission (no dialog); its
+three captures are excluded. Explicit ledger38 reviewed/3 excluded/0 pending.
+No runner active, no rebuild/full/reference run for harness inputs/accounting.
+Preserve the six unrelated Studio test files. Next independent T29 work is the
+installed external/embedded text/Menu/explicit-scroll/full-origin matrix and Web
+profile/offline/error recovery. Protected Android setup/update/remove/rollback
+remains separate; no positive Android package claim from these Web/runtime checks.
+Android protected positive transactions await explicit authorization: automatic
+review rejected the proposed profile-only test rule. No rule was installed; do
+not bypass that rejection. Reviewable proposal: store-android-authorization-fixture.md.
+The async approval question remains pending. Ordinary native authentication is
+an alternative; no password may be collected in chat. Continue independent T29
+browser/input/offline/profile work without inventing an Android install pass.
 ## User-directed T12 interface sound themes — 2026-11-11
 
 Selected: Kodi-compatible audible UI feedback, extending the Settings cleanup.

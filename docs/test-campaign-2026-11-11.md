@@ -1110,3 +1110,73 @@ native contracts plus installed fresh opt-in/live browse/search. Remaining actua
 artifact download/install/update/remove and runtime matrices retain their own
 open milestones. T29=63%; sum2131/25 rounds85%,171/212 milestones. No new full or
 reference run is required solely for these bookkeeping updates.
+
+## T29 continuation — idle runtime compatibility and independent Web lifecycle
+
+BUG-117: installed Android is configured, but Status proves every mounted
+rootfs build.prop absent while the idle container service is healthy. Existing
+runtime_target therefore disables all online app installation. Read actual
+metadata from initialized root-owned images during explicit setup/package
+configuration, in private read-only ext4 loop mounts; preserve live runtime and
+profiles. Cache SDK/ABI/features with exact image dev/inode/size/mtime identity,
+root ownership and non-writable permissions. Idle Store reads that bounded cache;
+image replacement/malformed/untrusted metadata refuses compatibility. No host
+ABI guessing, extra dependency or bypassed APK trust.
+
+BUG-118: the earlier terminal runtime setup never installed the newer protected
+Store transaction support. Factor its existing normal .deb builder for reuse;
+package the metadata reader and refresh initialized-image metadata in postinst.
+The VM Configure android-store-support target uses only existing authorized
+sudo -n dpkg, the tested deployed payload and its fixed package. No user-writable
+Python elevates and no authorization policy is included in this package.
+
+Automatic approval review rejected a proposed temporary profile-restricted
+polkit test rule: it would grant privileged authorization without explicit
+approval. The patch was rejected and no such rule was written or installed.
+Do not work around that rejection. Protected Android positive transaction
+acceptance remains pending approved authorization; independent Web Store
+lifecycle runs with its own store-web receipt and makes no Android claim.
+
+Verification batch store-runtime-a: six focused Store registrations, strict
+original feedback-r61/61/payload reuse extended only to android-setup.py and
+provision-android.py plus their tests, deploy, fixed support package configuration,
+installed Web lifecycle and signed discovery with actual idle compatibility.
+No full/reference reruns for the bounded helper correction. Percentages remain
+85%/T29 63% until the corresponding independent evidence is reviewed.
+Store-runtime-a passes118 runner checks but stops at preflight:602849280 bytes reclaimed,2118103040 free,29MB below2GiB. Extend only duplicate source-archive transport cleanup when a matching exact host backup and a complete manifest-verified extracted source tree both remain. Source paths/payloads/logs/pins/current/Guide evidence are preserved; changed source or archive checksum refuses cleanup. Regression proves default retention, modified-source refusal and preserved complete source/staged bytes. No floor reduction or installed-release deletion.
+Milestone reconciliation: T29.2/.3/.5 native children retain exact0.5 weights; their original remaining0.5 splits into two0.25 outcomes. All three new outcomes start open; calculator CheckTable preserves2131/25=85%,171/215 before credit. T29.3.b now credits the already reviewed store-zc live signed-provider UI, unchanged by this helper-only batch: loading, all5 results/provenance/initials/focus and exact return. No package installation is inferred. T29=66%, sum2134/25 still85%,172/215.
+Store-runtime-b passes119 runner checks and5/6 Store registrations, including18 F-Droid tests/new cache cases; first failure is store_lifecycle test looking for package postinst under the source fixture after install_support had cleaned its separate temporary build directory. Capture/assert the actual postinst at the mocked dpkg-deb boundary before cleanup. No production packaging failure or system mutation occurred. Accounting-only script is a named non-production reuse delta; no app full run.
+BUG-119: runtime-c passes119 runner/six Store tests and deploys47f8c6f0fe843a0dbac1b208. Actual support package installation reaches root postinst and correctly refuses legacy /var/lib/isolde mode0775, uid0; supported Status confirms exact path/owner/mode and idle rootfs absence. Explicit setup now seals only this verified root-owned application directory to0755. No parent/personal path changes. Extend actual-image parsing to Android namespaced SDK/ABI properties and root sysconfig, with regression. The half-configured support package will be repaired by the next exact fixed-package install; no success credit yet.
+BUG-120: runtime-d self-tests pass119 but integrity preflight refuses installed payload mismatch. Diagnosis: Configure imported android-setup from the installed release, creating an extra __pycache__ file. Prevent with python -B; extend existing strict generated-cache recovery to passing focused/installed copies only after every tested file still matches and every extra is a named bounded CPython cache for a verified source. Unknown extras/changed code still fail; restoration must equal the exact tested manifest. Regression covers focused installed cache recovery alongside existing unknown/code-corruption refusal.
+Storage inventory also identifies2.57GB managed .cache/isolde-emulators cache. Add last-resort removal of only PPSSPPs generated build directory, after exact pinned sourceCommit/offline .deb checksum/CMake source identity verification, no active process and native path/mount checks. Source checkout, offline .deb/receipt, installed runtime and all evidence remain. This avoids repeatedly retaining a completed runtime build while Store testing is blocked. Regression rejects modified payload/mounts and preserves active build/source/offline recovery.
+Store-runtime-e passes120 runner checks, restores only recognized installed CPython cache and reclaims355667968 bytes, but2040565760 free remains below2GiB. Supported Storage proves the PPSSPP generated build was already removed;2.547GB is its managed upstream checkout. Last-resort cleanup now may remove that checkout only with verified pinned offline .deb/receipt, exact pinned Git HEAD, empty tracked/untracked/ignored status including recursive submodules, no active cache process and no redirected/mounted path. Source is re-fetchable upstream code, not authored workspace snapshots; offline reinstall package and installed runtime remain. Dirty/unknown checks fail and preserve the checkout. Regression proves dirty refusal and exact clean-only removal.
+Store-runtime-f passes120 runner/six focused Store tests, strict original r61/61 payload reuse, deploy4b8acad73bafd1cc61ae3c77. Fixed support package configuration now succeeds: SDK33, x86_64/x86 and exact image identities/features; real read-only mounts return cleanly. Web lifecycle passes7 reviewed frames/50s: actual Plex interface with bridge highlight, same-card Home return, Cancel-first confirmations and package/manifest removal. Signed discovery passes8 reviewed frames/101s,4891 browse matches/all5 NewPipe results, compatible Install action enabled while idle, Settings return, normal layout hashes unchanged, service active/0 restarts. No Android protected install or playback claim. Continue current-candidate installed clients case for external Chrome remote/owned return; no rebuild/full or reference rerun.
+Current-f clients attempt044526 times out at its legacy attended freetubepermission checkpoint; reviewed capture shows FreeTube already open/loading, no Isolde permission dialog. No consent key was sent; service/layouts restored unchanged. This is not an app failure or a pass for external Chrome. Retry the same frozen candidate, review each ordinary app checkpoint and use the existing bounded instruction files (empty keys when no dialog); no OS-auth fixture or polkit change.
+Installed clients retry044933 passes8 reviewed frames/192s. freetubepermission: actual already-open app, empty keys (no consent); streamingpermission: actual CBC Gem, two physical Right keys, next frame visibly selects Browse, physical Home returns to Isolde. Normal layouts unchanged/service active/zero restarts, no account/subscription playback. appsoverflow now genuinely shows All Apps in this attempt. Native+client scope only; broader external/embedded text/Menu/scroll installed matrix stays open. T29.6 retains original native0.5 and splits remaining0.5 into external directional/return0.25 done and all remaining0.25 open. T29=75%, sum2143/25 still86%,175/216; no erased credit or original group weight change.
+
+### Current reviewed closure — 2026-11-12
+
+Installed4b8acad73bafd1cc61ae3c77, sourceDigest
+b2ff543b99bf3f955b9631cd9554b6aaec5e5a4c3ab862f00e593c2068d2e543.
+Store-runtime-f passes120 runner checks and all6 Store registrations, zero
+skips, with strict original feedback-r61/61/source/payload reuse. Production
+deltas remain bounded to AppStoreView and the three named Store/setup helpers;
+no C++/Main/schema/renderer change or new full-suite claim. Unchanged r Gallery,
+Search/Sources/reference evidence remains applicable. Package support installs
+and configures successfully, clearing the earlier half-configured package:
+read-only ext4 image metadata33/x86_64+x86, trusted image identity and root-owned
+cache, sealed application metadata directory. No policy/normal-profile grant
+change. Both Web50s and signed discovery101s pass with15 reviewed captures.
+Clients192s adds8 reviewed captures; first attended-timeout attempt3 captures
+excluded. Explicit ledger38 reviewed/3 excluded/0 pending. All three journeys
+preserve both normal layout hashes and restore active/running/zero-restart service.
+
+T29 is75%; sum2143/25 rounds86%,175/216 independently evidenced milestones.
+Accounting checks preserve old native0.5 weights when splitting original
+remaining0.5; invalid total weights are rejected. No tests are rerun for accounting.
+Remaining Android protected positive lifecycle and installed browser text/Menu/
+scroll/full-origin/software matrices stay open. The authorization proposal is
+pending, not installed or counted as acceptance; do not bypass automatic review.
+If that policy action is not approved, choose a safer non-persistent OS-boundary
+fixture rather than asking to waive a software requirement. Ordinary native
+administrator authentication remains available, never through chat credentials.

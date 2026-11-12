@@ -3,7 +3,7 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-12
 
-Acceptance is **85% (2131/25)**, with 171/212 independently evidenced milestones.
+Acceptance is **86% (2143/25)**, with 175/216 independently evidenced milestones.
 T25, T26 and T28 are accepted100%. Feedback-r passes full61/61, deploys release
 9e33a01181c41ea8d571f932 and passes installed Sources actions,24 reviewed gallery
 frames/eight real native input/exit cycles,16 reviewed Search cold/profile/save-
@@ -12,14 +12,21 @@ source frames with a guest dialog are excluded and reuse j's unchanged source
 rendering. Normal profile layout hashes remain unchanged and service restored.
 
 User VM feedback fixes Home Up-to-Settings/refresh focus, removes automatic named-
-page Edit page controls and exposes online Store Explore/search. Store-zc passes
-six focused registrations and118 runner checks with strict r61/61/payload reuse,
-deploys ceb971fc65a09dd9a9973336 and passes the live signed F-Droid journey:4891
-matching browse entries, all five NewPipe matches, readable initials and visible
-Home Settings selection/activation. All23 captures reviewed, no pending review;
-normal layouts unchanged, service active/running/zero restarts. T29.1 closes;
-T29 is63%. Actual install/update/remove, Android setup and broader runtime gates
-stay open. Full r gallery/Search/reference evidence remains applicable by scope.
+page Edit page controls and exposes online Store Explore/search. Latest installed
+release4b8acad73bafd1cc61ae3c77 (store-runtime-f) passes six focused Store tests,
+120 runner checks and strict feedback-r61/61/payload reuse. Explicit fixed support
+package configuration succeeds: read-only images yield SDK33/x86_64+x86 metadata,
+root-owned cache is bound to exact images, and idle live Store now enables valid
+Install actions. Reviewed Web Store lifecycle7 frames/50s reaches real Plex UI,
+returns to the exact card and removes activation/manifests. Signed discovery8
+frames/101s shows4891 browse/all5 NewPipe results and visible Settings return.
+Normal layouts remain unchanged, service active/running/zero restarts. T29 is75%.
+Protected Android install/update/remove/rollback and remaining runtime matrices
+stay open. Proposed temporary test authorization was rejected by automatic review;
+no rule is installed. No authorization policy or normal-profile grant was changed. See the
+reviewable proposal in docs/store-android-authorization-fixture.md. External-client navigation also passes8 reviewed captures: real CBC Gem Browse
+selection and physical Home return. Full installed text/Menu/scroll matrix stays
+open; no app full/reference rerun.
 ## Round-two testing authorization — 2026-11-11
 
 The user's request to test everything not yet VM verified supersedes the prior
@@ -82,7 +89,7 @@ were performed. No deployment or new acceptance: T12 0%, T29 13%, overall63%.
 
 [VM software completion](vm-software-completion.md) is the latest user-approved definition for every task and linked requirement. **100% means reasonable belief that the software is done based entirely on VM-verifiable evidence.** Actual hardware/model/USB/firmware, independent participants, user approval, unavailable paid accounts/entitlement/regions and target-only runtime/performance checks are not T-task prerequisites. Use the prescribed production-boundary fixtures, virtual devices and agent task/guide walkthroughs; retain genuine software errors as blockers. H01–H05 and external-service/usability checks are a separate user-owned post-100% handoff. No formal hardware/release campaign is required by this software backlog. All conflicting historical wording below and in Entry docs is superseded.
 
-Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 2131; Overall is 85% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
+Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 2143; Overall is 86% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
 
 ## Continue command — operating plan, 2026-10-29
 
@@ -102,7 +109,7 @@ Sequencing: [implementation-order.md](implementation-order.md). Requirements/ame
 
 - ACTIVE: **T01,T03–T05,T09–T12,T14–T30 = 25 tasks**. T02/T06–T08/T13/T31 are excluded. H01–H05 remain a separate physical qualification ledger.
 - Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each remaining group and task retains its weight. Overall = half-up round(sum of the 25 rounded task percentages / 25), capped at 99% until every in-scope task reaches 100% in that metric. Acceptance remains separate from Coding%. Reproduce acceptance with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
-- Acceptance sum **2131**, Overall **85%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
+- Acceptance sum **2143**, Overall **86%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
 - **S1 = 100% when all in-scope redesigned VM software groups and required checks pass.** T13/T31 are not prerequisites. Hardware, external account/region and participant approval remain outside S1.
 - Reuse verified foundations with explicit source-applicability checks. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
 - Standing software gates: both generic reference recreation/reset pairs; profile/account/data isolation where promised; atomic save/rollback/no rewrite on read; Kodi media/progress ownership; disconnected VM Generator Test; OFF-gated zero requests; reachable Settings/Edit recovery. Physical repetition is H1.
@@ -136,7 +143,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T25 | 12 | Contained configurable detected sources | 100% | 100% | installed18-checkpoint source policy/components/actions accepted; four focused tests with strict original61/61 reuse |
 | T26 | 13 | Configurable All Apps destination | 100% | 100% | native Studio edit/Preview/Cancel/Apply plus exact installed saved presentation, artwork/density and eight real native returns accepted |
 | T28 | 14 | Genuine Web search header toggle | 100% | 100% | installed16-checkpoint cold/profile/save-failure/retry/OFF matrix, full61 and clean reference pairs accepted |
-| T29 | 15 | Verified Store, Android and Chromium remote | 63% | 100% | Provider discovery and Android baseline accepted; install/bridge/playback/lifecycle open |
+| T29 | 15 | Verified Store, Android and Chromium remote | 75% | 100% | Provider discovery and Android baseline accepted; install/bridge/playback/lifecycle open |
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search installed acceptance | 83% | 100% | native search contracts accepted; installed real-Kodi closure open |
@@ -149,7 +156,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **85%** | **100%** | **2131 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **86%** | **100%** | **2143 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 

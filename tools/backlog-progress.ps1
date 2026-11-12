@@ -28,6 +28,21 @@ foreach ($m in [regex]::Matches($ledger, '(?m)^\| (T\d{2}\.\d+\.[a-z]+) \| (done
     if ($m.Groups[2].Value -eq 'done' -and $m.Groups[4].Value -notmatch 'J-native|J-runtime|C-runtime|Q-inventory|\.(log|json|md)|/tmp/') { throw "Missing evidence reference for $id" }
 }
 if (!$seen.Count) { throw 'No milestone rows found' }
+$weights=@{}
+foreach ($m in [regex]::Matches($ledger,'(?m)^<!-- milestone-weights (T\d{2}\.\d+): ([a-z0-9=.,]+) -->\r?$')) {
+    $parent=$m.Groups[1].Value
+    if (!$children.ContainsKey($parent) -or $weights.ContainsKey($parent)) { throw "Invalid weighted group $parent" }
+    $group=@{};[decimal]$total=0
+    foreach ($part in $m.Groups[2].Value.Split(',')) {
+        $pair=$part.Split('=');$id=$parent+'.'+$pair[0]
+        if ($pair.Count -ne 2 -or !$seen.ContainsKey($id) -or $group.ContainsKey($id)) { throw "Invalid milestone weight $part" }
+        $value=[decimal]::Parse($pair[1],[Globalization.CultureInfo]::InvariantCulture)
+        if ($value -le 0 -or $value -gt 1) { throw "Invalid weight for $id" }
+        $group[$id]=$value;$total+=$value
+    }
+    if ($total -ne 1 -or $group.Count -ne $children[$parent].Count) { throw "Weights must cover exactly one original group: $parent" }
+    $weights[$parent]=$group
+}
 $results = foreach ($task in $active) {
     $ids = @($parents.Keys | Where-Object { $parents[$_].task -eq $task })
     if (!$ids.Count) { throw "Missing active task $task" }
@@ -35,7 +50,9 @@ $results = foreach ($task in $active) {
     foreach ($id in $ids) {
         if ($children.ContainsKey($id)) {
             $done = @($children[$id] | Where-Object { $_.done }).Count
-            $earned += [decimal]$done / $children[$id].Count
+            if ($weights.ContainsKey($id)) {
+                foreach ($child in $children[$id]) { if ($child.done) { $earned += $weights[$id][$child.id] } }
+            } else { $earned += [decimal]$done / $children[$id].Count }
             if ($parents[$id].accepted -and $done -ne $children[$id].Count) { throw "Parent $id checked despite incomplete milestones" }
         } elseif ($parents[$id].accepted) { $earned++ }
         if ($parents[$id].accepted) { $accepted++ }
