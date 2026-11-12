@@ -262,6 +262,7 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "android": ("android-acceptance.py", []),
          "androidapps": ("android-apps-acceptance.py", []),
          "store": ("store-acceptance.py", []),
+         "store-web": ("store-acceptance.py", ["--web-only"]),
          "store-discovery": ("store-acceptance.py", ["--discovery-only"]),
          "games": ("games-acceptance.py", []),
          "emulators": ("games-acceptance.py", ["--emulator"])}
@@ -422,6 +423,10 @@ def visual_result_passed(case, result):
     if case == "store":
         return (all(result.get(k) is True for k in ("passed","androidLifecycle","chromiumLifecycle","androidPackageRemovalVerified","freshProfile"))
                 and result.get("normalProfileUsed") is False and result.get("playbackVerified") is False and len(result.get("captures",[]))==14)
+    if case == 'store-web':
+        return (all(result.get(k) is True for k in ('passed','chromiumLifecycle','webOnly','freshProfile','manifestsRemoved'))
+            and result.get('normalProfileUsed') is False and result.get('androidLifecycle') is False
+            and result.get('actualInputActions',0)>0 and result.get('captures')==['storechromium','storechromiumconsent','storechromiuminstalled','storechromiumopen','storechromiumclosed','storechromiumremove','storechromiumremoved'])
     if case == "store-discovery":
         return (all(result.get(k) is True for k in ("passed","freshProfile","catalogOnly")) and result.get("journey")=="store-discovery" and result.get("normalProfileUsed") is False and result.get("installedAppsChanged") is False
                 and result.get("provider")=="fdroid-signed-v2" and result.get("query")=="newpipe" and bool(result.get("matches")) and result.get("actualInputActions",0)>0
@@ -776,13 +781,13 @@ def payload_hashes(payload):
     return result
 
 
-def remove_generated_payload_cache(run):
+def remove_generated_payload_cache(run, payload=None):
     """Restore exact tested bytes; never ignore extras in integrity checks."""
-    record=run/'test-result.json';payload=run/'payload'
+    record=run/'test-result.json';payload=payload if payload is not None else run/'payload'
     if not record.is_file() or not payload.is_dir():return []
     if run.resolve()!=run or payload.resolve()!=payload:raise RuntimeError('Redirected payload cache maintenance')
     tested=json.loads(record.read_text());expected=tested.get('payload',{})
-    if tested.get('passed') is not True or tested.get('fullSuite') is not True:return []
+    if tested.get('passed') is not True or not (tested.get('fullSuite') is True or tested.get('coverageReuse')):return []
     actual=payload_hashes(payload)
     if any(actual.get(name)!=value for name,value in expected.items()):raise RuntimeError('Tested payload bytes changed; cache cleanup refused')
     candidates=[]
@@ -794,7 +799,7 @@ def remove_generated_payload_cache(run):
         if source_name not in expected or actual.get(source_name)!=expected[source_name]:raise RuntimeError('Cache source is not a verified tested module')
         candidates.append({'path':str(path),'sha256':actual[name],'source':source_name,'sourceSha256':expected[source_name]})
     if candidates:
-        atomic_json(run/'guest-python-cache-cleanup.json',{'targets':candidates,'testedFilesModified':False})
+        atomic_json(run/('guest-python-cache-cleanup.json' if payload==run/'payload' else 'guest-installed-python-cache-cleanup.json'),{'targets':candidates,'testedFilesModified':False})
         for candidate in candidates:Path(candidate['path']).unlink()
         if payload_hashes(payload)!=expected:raise RuntimeError('Payload did not return to its exact tested identity')
     return candidates
@@ -866,8 +871,8 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='store':
-        proof=qml_coverage(root,run,base_id,suite,'store',{'tools/fdroid-store.py','qml/AppStoreView.qml'},
-            {'tests/test_fdroid_store.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store')
+        proof=qml_coverage(root,run,base_id,suite,'store',{'tools/fdroid-store.py','tools/android-setup.py','tools/provision-android.py','qml/AppStoreView.qml'},
+            {'tools/backlog-progress.ps1','tests/test_fdroid_store.py','tests/test_android_provisioning.py','tests/test_store_lifecycle.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store')
         proof['changedStoreFiles']=proof.pop('changedStoreQml')
         return proof
     if suite=='sources':
@@ -1434,6 +1439,15 @@ class Oracle:
             removed=remove_unselected_test_objects(self.root,mounts,active,getattr(self,'maintenance_build_targets',()))
             atomic_json(self.run/'guest-test-object-cleanup.json',{'guest':'isolde-test','targets':removed,'productionAndSelectedTestObjectsPreserved':True,'evidencePreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            backups=self.run/'host-source-backups.json'
+            if backups.exists():
+                if backups.resolve()!=backups or backups.stat().st_size>262144:raise RuntimeError('Unsafe source backup receipt')
+                removed=remove_backed_up_archives(self.root,json.loads(backups.read_text()),mounts,target_free=minimum_gib*1024**3,protected={self.run,*getattr(self,'maintenance_pins',())},allow_source_copy=True)
+                atomic_json(self.run/'guest-source-transport-cleanup.json',{'guest':'isolde-test','targets':removed,'verifiedHostArchivesAndGuestSourceTreesPreserved':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            removed=remove_packaged_psp_build(Path.home()/'.cache/isolde-emulators/ppsspp-1.20.4',mounts,active,prune_source=True)
+            atomic_json(self.run/'guest-packaged-runtime-build-cleanup.json',{'guest':'isolde-test','targets':removed,'verifiedOfflinePackageAndReceiptPreserved':True,'upstreamCheckoutRemoved':any(Path(p).name=='source' for p in removed)})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
     def prepare_visual_desktop(self):
@@ -1473,7 +1487,7 @@ class Oracle:
         atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None):
-        if target not in {"native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
         if target=="kodi-demo-art":
             payload=self.tested_payload();self.deployed_release(payload,target)
             if self.command('hostname')!='isolde-test' or not isinstance(demo_art_helper_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',demo_art_helper_digest):raise RuntimeError('Demo artwork setup requires the tested Isolde VM and a verified helper')
@@ -1521,6 +1535,16 @@ class Oracle:
         self.deployed_release(payload, target)
         if self.command("hostname")!="isolde-test":
             raise RuntimeError("Native configuration is restricted to Isolde-Test")
+        if target=='android-store-support':
+            release=self.deployed_release(payload,target);support=Path(release)/'share/isolde'
+            package_root=self.run/'android-support-package';package_root.mkdir(mode=0o700)
+            bootstrap="import importlib.util,sys;from pathlib import Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.build_support(Path(sys.argv[1]),Path(sys.argv[2]))"
+            self.stage('android-support-package',['python3','-B','-c',bootstrap,str(support),str(package_root)],90)
+            self.stage('android-support-install',['sudo','-n','/usr/bin/dpkg','-i',str(package_root/'isolde-android-support.deb')],180)
+            check="import importlib.util,json,sys;from pathlib import Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.trusted_support();print(Path('/var/lib/isolde/android-store-capabilities.json').read_text())"
+            self.stage('android-support-verify',['python3','-B','-c',check,str(support)],30)
+            atomic_json(self.run/'android-support-result.json',{'guest':'isolde-test','passed':True,'support':'/usr/lib/isolde-android-setup','imagesReadOnly':True,'runtimeAndProfilesPreserved':True})
+            return
         if target=="audio-test-tools":
             # Test-only guest package, through its pre-existing delegated apt
             # permission. No repository, host or application dependency change.
@@ -1872,6 +1896,37 @@ class Oracle:
             (self.root / "service-lease.json").unlink(missing_ok=True)
 
 
+def remove_packaged_psp_build(cache,mounts=(),active=(),prune_source=False):
+    build=cache/'build';package=cache/'isolde-ppsspp_1.20.4-1_amd64.deb';receipt=cache/'payload.json'
+    source=cache/'source'
+    if not build.exists() and not (prune_source and source.is_dir()):return []
+    if cache.resolve()!=cache or build.resolve()!=build or receipt.resolve()!=receipt or package.resolve()!=package:raise RuntimeError('Redirected PSP build recovery')
+    if any(p==cache or p.is_relative_to(cache) for p in active):return []
+    if any(m!=Path('/') and (m==cache or m.is_relative_to(cache) or cache.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted PSP build recovery')
+    if not receipt.is_file() or receipt.stat().st_size>65536 or not package.is_file():return []
+    value=json.loads(receipt.read_text())
+    if value.get('sourceCommit')!='fa50bb1976065c4f8b1b47af227d367fe9771555' or value.get('sha256')!=digest(package):raise RuntimeError('PSP offline recovery payload checksum mismatch')
+    removed=[]
+    if build.exists():
+        metadata=build/'CMakeCache.txt'
+        if not metadata.is_file() or metadata.resolve()!=metadata or metadata.stat().st_size>1024**2:raise RuntimeError('Unsafe PSP generated build identity')
+        if 'CMAKE_HOME_DIRECTORY:INTERNAL='+str(source) not in metadata.read_text().splitlines():raise RuntimeError('Unknown PSP generated source')
+        remove_guest_build(build,cache,mounts);removed.append(str(build))
+    if prune_source and source.is_dir() and shutil.disk_usage(cache).free<3*1024**3:
+        if source.resolve()!=source:raise RuntimeError('Redirected PSP upstream checkout')
+        git=['git','-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null','-C',str(source)]
+        environment=dict(os.environ,GIT_OPTIONAL_LOCKS='0')
+        def query(args):
+            result=subprocess.run(git+args,capture_output=True,text=True,check=True,timeout=90,env=environment)
+            if len(result.stdout)>1024**2:raise RuntimeError('Unbounded PSP checkout status')
+            return result.stdout.strip()
+        if query(['rev-parse','HEAD'])!=value['sourceCommit']:raise RuntimeError('PSP checkout identity changed')
+        if query(['status','--porcelain','--untracked-files=all','--ignored=matching','--ignore-submodules=none']):raise RuntimeError('PSP checkout has local or ignored files; preserve it')
+        if query(['submodule','foreach','--recursive','--quiet','git -c core.fsmonitor=false -c core.hooksPath=/dev/null status --porcelain --untracked-files=all --ignored=matching']):raise RuntimeError('PSP submodule has local or ignored files; preserve it')
+        shutil.rmtree(source);removed.append(str(source))
+    return removed
+
+
 def remove_guest_build(target, boundary, mounts):
     """Generated legacy build only, with no redirected or mounted descendants."""
     if target.name != "build" or target.is_symlink() or target.resolve() != target.absolute() or not target.resolve().is_relative_to(boundary.resolve()):
@@ -1960,7 +2015,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -2178,7 +2233,7 @@ def remove_runner_test_bundles(root, driver, mounts=(), target_free=3*1024**3):
     return removed
 
 
-def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, target_free=None, protected=()):
+def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, target_free=None, protected=(), allow_source_copy=False):
     if root.resolve()!=root or not isinstance(backups,list) or len(backups)>1024:raise RuntimeError('Invalid backed-up archive maintenance')
     runs=root/'runs';removed=[]
     recent=set()
@@ -2195,7 +2250,14 @@ def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, t
         if not archive.exists():continue
         if run.resolve()!=run or archive.resolve()!=archive or record.resolve()!=record:raise RuntimeError('Redirected archive backup')
         if any(m==archive or m.is_relative_to(archive) or (m!=Path('/') and archive.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted archive backup refused')
-        if any((run/name).exists() or (run/name).is_symlink() for name in ('source','payload','guide-soak-receipt.json')):continue
+        if (run/'guide-soak-receipt.json').exists() or (run/'guide-soak-receipt.json').is_symlink():continue
+        retained=any((run/name).exists() or (run/name).is_symlink() for name in ('source','payload'))
+        if retained and not allow_source_copy:continue
+        if retained:
+            source=run/'source';listing=run/'files.sha256'
+            if source.resolve()!=source or listing.resolve()!=listing:raise RuntimeError('Redirected retained source')
+            if not source.is_dir() or not listing.is_file():continue
+            verify_tree(source,manifest(listing))
         status=run/'status.json'
         if status.resolve()!=status or not status.is_file() or json.loads(status.read_text()).get('state') not in {'passed','failed','cancelled'}:continue
         if record.read_text().split()[0]!=checksum or digest(archive)!=checksum:raise RuntimeError('Backed-up archive checksum mismatch')
@@ -2280,6 +2342,7 @@ def deduplicate_tested_payloads(root, mounts=(), target_free=3*1024**3):
                 if release.exists() or release.is_symlink():
                     if release.resolve()!=release or not release.is_dir():raise RuntimeError('Redirected installed dedup source')
                     if any(m!=Path('/') and (m==release or m.is_relative_to(release) or release.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted installed dedup source')
+                    remove_generated_payload_cache(run,release)
                     if payload_hashes(release)!=actual:raise RuntimeError('Installed payload identity mismatch during dedup')
                     # Only staged destinations are replaced; the running release
                     # remains untouched and supplies already-verified bytes.
@@ -2364,13 +2427,13 @@ def oracle_storage_inventory(root):
         except (OSError,ValueError):state={}
         records.append({"runId":payload.parent.name,"payloadBytes":sizes.get(str(payload),0),"modified":payload.stat().st_mtime,"state":state.get("state","unknown")})
     cache_roots=list((Path.home()/'.local/share/Isolde/native-profiles').glob('*/kodi/home/.cache'))[:128]
-    extra=[p for p in [Path.home()/'.cache/isolde/game-runtime-bundles',Path.home()/'Videos/Isolde-Acceptance',*cache_roots] if p.is_dir() and not p.is_symlink() and p.resolve()==p]
+    extra=[p for p in [Path.home()/'.cache/isolde-emulators',Path.home()/'.cache/isolde/game-runtime-bundles',Path.home()/'Videos/Isolde-Acceptance',*cache_roots] if p.is_dir() and not p.is_symlink() and p.resolve()==p]
     usage=subprocess.run(["du","-xk","--max-depth=2","--",str(root),"/tmp",*[str(p) for p in extra]],capture_output=True,text=True,timeout=30)
     directories=[]
     for line in usage.stdout.splitlines():
         size,sep,path=line.partition("\t")
         if sep and size.isdigit():directories.append({"path":path,"bytes":int(size)*1024})
-    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceCopies":source_copies,"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
+    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceCopies":source_copies,"emulatorCacheEntries":[{"name":p.name,"children":[c.name for c in list(p.iterdir())[:20]] if p.is_dir() and not p.is_symlink() else []} for p in list((Path.home()/".cache/isolde-emulators").iterdir())[:32]] if (Path.home()/".cache/isolde-emulators").is_dir() else [],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
 
 
 def main():
@@ -2387,7 +2450,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")
@@ -2470,6 +2533,16 @@ def main():
             "freeGiB":round(shutil.disk_usage(Path.home()).free/1024**3,2)}
         container_state=subprocess.run(["systemctl","show","waydroid-container.service","-p","ActiveState","-p","SubState","-p","Result","-p","ExecMainStatus"],capture_output=True,text=True,timeout=10)
         status["androidSetup"]["containerService"]=container_state.stdout[:2048]
+        status["androidSetup"]["storeFiles"]=[]
+        for name in ('/var/lib/isolde','/usr/lib/isolde-android-setup/android-setup.py','/var/lib/waydroid/rootfs/system/build.prop','/var/lib/waydroid/rootfs/system/system/build.prop','/var/lib/waydroid/rootfs/vendor/build.prop','/var/lib/waydroid/waydroid.prop'):
+            path=Path(name);record={'path':name}
+            try:
+                info=path.stat();record.update(size=info.st_size,uid=info.st_uid,mode=oct(info.st_mode & 0o777),symlink=path.is_symlink())
+                if path.suffix=='.prop' and info.st_size<=1024**2:
+                    wanted={'ro.build.version.sdk','ro.product.cpu.abilist','ro.system.build.version.sdk','ro.system.product.cpu.abilist'}
+                    record['properties']={key:value for line in path.read_text().splitlines() for key,sep,value in [line.partition('=')] if sep and key in wanted}
+            except OSError as error:record['error']=type(error).__name__
+            status['androidSetup']['storeFiles'].append(record)
         container_log=subprocess.run(["journalctl","-u","waydroid-container.service","--since=-15min","-n","60","--no-pager","-o","cat"],capture_output=True,text=True,timeout=10)
         status["androidSetup"]["containerStartupLog"]=container_log.stdout[-12288:]
         # Inspect only this guardian's descendant tree; never unrelated app

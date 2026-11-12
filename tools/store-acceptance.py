@@ -17,7 +17,7 @@ import uuid
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);parser.add_argument("--discovery-only",action="store_true");args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);parser.add_argument("--discovery-only",action="store_true");parser.add_argument("--web-only",action="store_true");args=parser.parse_args()
     if socket.gethostname()!="isolde-test":raise RuntimeError("Guest-only Store acceptance")
     lock=open("/tmp/isolde-home-components-acceptance.lock","a");fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     evidence=Path(tempfile.mkdtemp(prefix="isolde-components-acceptance-store-"));profile=str(uuid.uuid4())
@@ -116,20 +116,21 @@ def main():
                 keys("Return");capture("storediscoverysettings")
                 result=dict(passed=True,journey="store-discovery",freshProfile=True,normalProfileUsed=False,catalogOnly=True,installedAppsChanged=False,provider="fdroid-signed-v2",query="newpipe",matches=[item["packageName"] for item in matches],indexSha256=hashlib.sha256(index.read_bytes()).hexdigest(),entrySha256=hashlib.sha256(archive.read_bytes()).hexdigest(),actualInputActions=len(actions),captures=phases,visualReview="pending")
                 (evidence/"result.json").write_text(json.dumps(result,indent=2));return
-            capture("storeandroid")
-            keys("Return");capture("storeandroidconsent");keys("Right","Return")
-            expect(lambda:installed("smarttube"),"Store did not install the Android app")
-            capture("storeandroidinstalled")
-            keys("Return")
-            expect(lambda:'Android app session ready "smarttube"' in (evidence/"shell.log").read_text(),"Store did not launch Android")
-            time.sleep(8);capture("storeandroidopen") # Host runner sends only the VM's remote Home key.
-            capture("storeandroidclosed")
-            keys("Down","Return");capture("storeandroidremove");keys("Right","Return")
-            expect(lambda:not installed("smarttube"),"Store did not verify Android removal")
-            packages=evidence/"data/Isolde/android-profiles"/profile/"packages.json"
-            if "smarttube" in json.loads(packages.read_text()):raise RuntimeError("Android receipt remains after removal")
-            capture("storeandroidremoved")
-            keys("Left","Up","Right","Return","Down")
+            if not args.web_only:
+                capture("storeandroid")
+                keys("Return");capture("storeandroidconsent");keys("Right","Return")
+                expect(lambda:installed("smarttube"),"Store did not install the Android app")
+                capture("storeandroidinstalled")
+                keys("Return")
+                expect(lambda:'Android app session ready "smarttube"' in (evidence/"shell.log").read_text(),"Store did not launch Android")
+                time.sleep(8);capture("storeandroidopen") # Host runner sends only the VM's remote Home key.
+                capture("storeandroidclosed")
+                keys("Down","Return");capture("storeandroidremove");keys("Right","Return")
+                expect(lambda:not installed("smarttube"),"Store did not verify Android removal")
+                packages=evidence/"data/Isolde/android-profiles"/profile/"packages.json"
+                if "smarttube" in json.loads(packages.read_text()):raise RuntimeError("Android receipt remains after removal")
+                capture("storeandroidremoved")
+            keys("Left","Up","Up","Right","Return","Down","Down")
             capture("storechromium")
             keys("Return");capture("storechromiumconsent");keys("Right","Return")
             expect(lambda:installed("plex"),"Store did not install Chromium app")
@@ -139,9 +140,9 @@ def main():
             keys("Down","Return");capture("storechromiumremove");keys("Right","Return")
             expect(lambda:not installed("plex"),"Store did not uninstall Chromium app")
             capture("storechromiumremoved")
-            for app,version in (("smarttube","32.68.0"),("plex","1.0.0")):
+            for app,version in (("plex","1.0.0"),) if args.web_only else (("smarttube","32.68.0"),("plex","1.0.0")):
                 if (evidence/"data/Isolde/packages/profiles"/profile/app/version/"manifest.json").exists():raise RuntimeError("Uninstalled manifest remains")
-            result={"passed":True,"androidLifecycle":True,"chromiumLifecycle":True,"androidPackageRemovalVerified":True,"profile":profile,"freshProfile":True,"normalProfileUsed":False,"playbackVerified":False,"captures":phases,"visualReview":"pending"}
+            result={"passed":True,"androidLifecycle":not args.web_only,"chromiumLifecycle":True,"androidPackageRemovalVerified":not args.web_only,"profile":profile,"freshProfile":True,"normalProfileUsed":False,"playbackVerified":False,"captures":phases,"visualReview":"pending","webOnly":args.web_only,"actualInputActions":len(actions),"manifestsRemoved":True}
             (evidence/"result.json").write_text(json.dumps(result,indent=2))
     except Exception:
         # Keep the still-running failure UI reviewable before owned-process cleanup.

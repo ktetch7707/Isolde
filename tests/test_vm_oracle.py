@@ -353,11 +353,38 @@ class OracleTests(unittest.TestCase):
             expected=oracle.payload_hashes(payload);(run/'test-result.json').write_text(json.dumps({'passed':True,'fullSuite':True,'payload':expected}))
             cache=source.parent/'__pycache__';cache.mkdir();generated=cache/'helper.cpython-314.pyc';generated.write_bytes(b'generated runtime cache')
             removed=oracle.remove_generated_payload_cache(run);self.assertEqual(len(removed),1);self.assertFalse(generated.exists());self.assertEqual(oracle.payload_hashes(payload),expected)
+            release=run/'installed';oracle.shutil.copytree(payload,release)
+            installed_cache=release/generated.relative_to(payload);installed_cache.write_bytes(b'generated installed cache')
+            (run/'test-result.json').write_text(json.dumps({'passed':True,'fullSuite':False,'coverageReuse':{'baseRunId':'base'},'payload':expected}))
+            self.assertEqual(len(oracle.remove_generated_payload_cache(run,release)),1)
+            self.assertEqual(oracle.payload_hashes(release),expected)
             generated.write_bytes(b'cache');source.write_bytes(b'changed code')
             with self.assertRaises(RuntimeError):oracle.remove_generated_payload_cache(run)
             self.assertTrue(generated.exists());source.write_bytes(b'verified module');unknown=payload/'unexpected.py';unknown.write_bytes(b'unreviewed')
             with self.assertRaises(RuntimeError):oracle.remove_generated_payload_cache(run)
             self.assertTrue(unknown.exists());self.assertTrue(generated.exists())
+
+    def test_packaged_psp_cleanup_preserves_source_offline_payload_and_active_build(self):
+        with tempfile.TemporaryDirectory() as folder:
+            cache=Path(folder);build=cache/'build';(build/'CMakeFiles').mkdir(parents=True)
+            (build/'CMakeCache.txt').write_text('CMAKE_HOME_DIRECTORY:INTERNAL='+str(cache/'source')+'\n')
+            source=cache/'source';source.mkdir();(source/'source.cpp').write_text('preserve source')
+            package=cache/'isolde-ppsspp_1.20.4-1_amd64.deb';package.write_bytes(b'original offline payload')
+            receipt=cache/'payload.json';receipt.write_text(json.dumps({'sourceCommit':'fa50bb1976065c4f8b1b47af227d367fe9771555','sha256':oracle.digest(package)}))
+            self.assertEqual(oracle.remove_packaged_psp_build(cache,active=[build/'compiler']),[])
+            with self.assertRaisesRegex(RuntimeError,'Mounted'):oracle.remove_packaged_psp_build(cache,mounts=[build])
+            package.write_bytes(b'changed')
+            with self.assertRaisesRegex(RuntimeError,'checksum'):oracle.remove_packaged_psp_build(cache)
+            self.assertTrue(build.exists());package.write_bytes(b'original offline payload')
+            self.assertEqual(oracle.remove_packaged_psp_build(cache),[str(build)])
+            self.assertTrue(source.is_dir());self.assertTrue(package.is_file());self.assertTrue(receipt.is_file())
+            with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=0)):
+                with patch.object(oracle.subprocess,'run',side_effect=[SimpleNamespace(stdout='fa50bb1976065c4f8b1b47af227d367fe9771555'),SimpleNamespace(stdout=' M local.cpp')]):
+                    with self.assertRaisesRegex(RuntimeError,'local'):oracle.remove_packaged_psp_build(cache,prune_source=True)
+                self.assertTrue(source.exists())
+                with patch.object(oracle.subprocess,'run',side_effect=[SimpleNamespace(stdout='fa50bb1976065c4f8b1b47af227d367fe9771555'),SimpleNamespace(stdout=''),SimpleNamespace(stdout='')]):
+                    self.assertEqual(oracle.remove_packaged_psp_build(cache,prune_source=True),[str(source)])
+            self.assertTrue(package.is_file());self.assertTrue(receipt.is_file())
 
     def test_remote_fixture_text_uses_production_keyboard_and_only_dpad(self):
         path=Path(__file__).resolve().parents[1]
@@ -1345,6 +1372,20 @@ class OracleTests(unittest.TestCase):
         source,entries=oracle.extract_snapshot(run);oracle.verify_tree(source,entries)
         self.assertEqual((source/"src/main.cpp").read_bytes(),b"source bytes\n")
 
+    def test_duplicate_source_transport_cleanup_retains_verified_tree_and_payload(self):
+        run,runs=self.recovery_snapshot('transport');(run/'status.json').write_text('{"state":"passed"}')
+        payload=run/'payload';payload.mkdir();(payload/'isolde').write_bytes(b'retain staged candidate')
+        backup=[{'runId':run.name,'sha256':oracle.digest(run/'source.tar.gz')}]
+        self.assertEqual(oracle.remove_backed_up_archives(runs.parent,backup),[])
+        original=(run/'source.tar.gz').read_bytes()
+        (run/'source/src/main.cpp').write_bytes(b'modified')
+        with self.assertRaises(RuntimeError):oracle.remove_backed_up_archives(runs.parent,backup,allow_source_copy=True)
+        self.assertEqual((run/'source.tar.gz').read_bytes(),original)
+        (run/'source/src/main.cpp').write_bytes(b'source bytes\n')
+        self.assertEqual(oracle.remove_backed_up_archives(runs.parent,backup,allow_source_copy=True),backup)
+        self.assertFalse((run/'source.tar.gz').exists());oracle.verify_tree(run/'source',oracle.manifest(run/'files.sha256'))
+        self.assertEqual((payload/'isolde').read_bytes(),b'retain staged candidate')
+
     def test_failed_source_cleanup_preserves_current_pinned_active_and_evidence(self):
         eligible,runs=self.recovery_snapshot('eligible')
         candidates={'eligible':eligible}
@@ -1774,6 +1815,11 @@ class SourcesJourneyContracts(unittest.TestCase):
             changed['qml/AppStoreView.qml']=b'preserve authoritative provider matches'
             write(current,changed)
             self.assertEqual(oracle.focused_qml_coverage(root,current,'base','store')['changedStoreFiles'],['qml/AppStoreView.qml','tools/fdroid-store.py'])
+            for name in ('tools/android-setup.py','tools/provision-android.py'):
+                files[name]=b'original';changed[name]=b'bounded Android metadata/support correction'
+            write(base,files);base_receipt=json.loads((base/'test-result.json').read_text());base_receipt['sourceDigest']=oracle.digest(base/'files.sha256');oracle.atomic_json(base/'test-result.json',base_receipt)
+            write(current,changed)
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','store')['changedStoreFiles'],['qml/AppStoreView.qml','tools/android-setup.py','tools/fdroid-store.py','tools/provision-android.py'])
             targets,pattern=oracle.suite_selection('store')
             self.assertTrue(all(re.fullmatch(pattern,name) for name in ('fdroid_store','store_lifecycle','isolde_tests','studio_selection','android_provisioning','web_remote')))
             for name in ('src/main.cpp','src/app/AppCatalog.cpp','qml/Main.qml','config/catalog.json'):
