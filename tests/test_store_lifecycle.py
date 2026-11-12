@@ -143,11 +143,17 @@ class AndroidSetupTests(unittest.TestCase):
             root = Path(directory)
             for name in setup.FILES:
                 path = root/name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b"fixture")
+            postinst=[]
+            def built(arguments,**kwargs):
+                postinst.append((Path(arguments[-2])/'DEBIAN/postinst').read_text())
             with patch.object(setup, "trusted_support", side_effect=[ValueError("not installed"), None]), \
-                    patch.object(setup, "run_step") as run, patch.object(setup, "emit"):
+                    patch.object(setup, "run_step") as run, patch.object(setup.subprocess,'run',side_effect=built) as package, patch.object(setup, "emit"):
                 setup.install_support(root, root)
-                self.assertEqual(run.call_args_list[0].args[0][:3], ["/usr/bin/dpkg-deb", "--root-owner-group", "--build"])
-                self.assertEqual(run.call_args_list[1].args[0][:3], ["/usr/bin/pkexec", "/usr/bin/dpkg", "-i"])
+                self.assertEqual(package.call_args.args[0][:3], ["/usr/bin/dpkg-deb", "--root-owner-group", "--build"])
+                self.assertEqual(run.call_args_list[0].args[0][:3], ["/usr/bin/pkexec", "/usr/bin/dpkg", "-i"])
+                post=postinst[0]
+                self.assertIn('--refresh-store-metadata',post)
+                self.assertNotIn(str(root),post)
 
     def test_root_setup_refuses_missing_pkexec_caller(self):
         with patch.object(setup, "trusted_support"), patch.dict(os.environ, {"PKEXEC_UID": ""}):

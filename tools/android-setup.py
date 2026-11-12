@@ -22,7 +22,7 @@ import time
 from contextlib import contextmanager
 
 SUPPORT = Path("/usr/lib/isolde-android-setup")
-FILES = ("android-setup.py", "android-store-transaction.py", "provision-android.py", "provision-default-apps.py", "config/android-runtime.json")
+FILES = ("android-setup.py", "android-store-transaction.py", "provision-android.py", "provision-default-apps.py", "fdroid-store.py", "config/android-runtime.json")
 cancelled = False
 
 
@@ -86,31 +86,38 @@ def run_step(arguments, job, timeout):
     check_cancel(job)
 
 
-def install_support(source, job):
+def build_support(source, root):
     payload = {}
     for name in FILES:
         path = source/name
         if not path.is_file() or path.is_symlink() or path.stat().st_size>2*1024**2:
             raise ValueError("Android setup payload is missing or unsafe")
         payload[name] = path.read_bytes()
+    staging=root/'payload'
+    for name, data in payload.items():
+        path = staging/SUPPORT.relative_to("/")/name
+        path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data); path.chmod(0o755 if name=="android-setup.py" else 0o644)
+    metadata = staging/"DEBIAN"; metadata.mkdir()
+    version = "1.0+"+hashlib.sha256(b"".join(payload.values())).hexdigest()[:16]
+    (metadata/"control").write_text("Package: isolde-android-support\nVersion: "+version+
+        "\nArchitecture: all\nMaintainer: Isolde\nDescription: Isolde Android setup support\n")
+    (metadata/'postinst').write_text('#!/bin/sh\nset -eu\n/usr/bin/python3 /usr/lib/isolde-android-setup/provision-android.py --source /usr/lib/isolde-android-setup --refresh-store-metadata\n')
+    (metadata/'postinst').chmod(0o755)
+    for path in (staging, *(p for p in staging.rglob("*") if p.is_dir())): path.chmod(0o755)
+    package = root/"isolde-android-support.deb"
+    subprocess.run(['/usr/bin/dpkg-deb','--root-owner-group','--build',str(staging),str(package)],check=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=60)
+    return package
+
+
+def install_support(source, job):
     try:
         trusted_support()
-        if all((SUPPORT/name).read_bytes()==data for name,data in payload.items()): return
-    except (OSError, ValueError): pass
-    emit("status", message="Administrator approval: install the Android setup support package.")
-    with tempfile.TemporaryDirectory(prefix="isolde-android-support-") as temporary:
-        root = Path(temporary); staging = root/"payload"
-        for name, data in payload.items():
-            path = staging/SUPPORT.relative_to("/")/name
-            path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data); path.chmod(0o755 if name=="android-setup.py" else 0o644)
-        metadata = staging/"DEBIAN"; metadata.mkdir()
-        version = "1.0+"+hashlib.sha256(b"".join(payload.values())).hexdigest()[:16]
-        (metadata/"control").write_text("Package: isolde-android-support\nVersion: "+version+
-            "\nArchitecture: all\nMaintainer: Isolde\nDescription: Isolde Android setup support\n")
-        for path in (staging, *(p for p in staging.rglob("*") if p.is_dir())): path.chmod(0o755)
-        package = root/"isolde-android-support.deb"
-        run_step(["/usr/bin/dpkg-deb", "--root-owner-group", "--build", str(staging), str(package)], job, 60)
-        run_step(["/usr/bin/pkexec", "/usr/bin/dpkg", "-i", str(package)], job, 180)
+        if all((SUPPORT/name).read_bytes()==(source/name).read_bytes() for name in FILES):return
+    except (OSError,ValueError):pass
+    emit('status',message='Administrator approval: install the Android setup support package.')
+    with tempfile.TemporaryDirectory(prefix='isolde-android-support-') as temporary:
+        package=build_support(source,Path(temporary))
+        run_step(['/usr/bin/pkexec','/usr/bin/dpkg','-i',str(package)],job,180)
     trusted_support()
 
 

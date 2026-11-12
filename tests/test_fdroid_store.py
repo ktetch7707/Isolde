@@ -120,6 +120,32 @@ class FdroidBrowsingTests(unittest.TestCase):
         package["maxSdkVersion"] = 29
         self.assertFalse(store.browse(doc, "", 0, TARGET)["results"][0]["compatible"])
 
+    def test_image_metadata_handles_idle_cache_and_invalidates_replaced_images(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'capabilities.json';identity={'system.img':[1,2,3,4],'vendor.img':[1,5,6,7]}
+            value={'schemaVersion':1,'images':identity,'target':TARGET}
+            path.write_text(json.dumps(value));real_stat=Path.stat
+            def info(p,*args,**kwargs):
+                result=real_stat(p,*args,**kwargs)
+                return SimpleNamespace(st_size=result.st_size,st_uid=0,st_mode=0o100644) if p==path else result
+            real_path=Path
+            with patch.object(store,'read_runtime_target',return_value=None),patch.object(store,'image_identity',return_value=identity),patch.object(store,'Path',side_effect=lambda p: path if p=='/var/lib/isolde/android-store-capabilities.json' else real_path(p)),patch.object(Path,'stat',info):
+                self.assertEqual(store.runtime_target(),TARGET)
+                value['images']={};path.write_text(json.dumps(value));self.assertIsNone(store.runtime_target())
+                value['images']=identity;value['target']={**TARGET,'sdk':'35'};path.write_text(json.dumps(value));self.assertIsNone(store.runtime_target())
+                path.write_text('invalid');self.assertIsNone(store.runtime_target())
+
+    def test_image_reader_uses_actual_sdk_abi_and_features(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);system=root/'image';vendor=root/'vendor'
+            (system/'system/etc/permissions').mkdir(parents=True);vendor.mkdir()
+            (system/'system/build.prop').write_text('ro.build.version.sdk=35\nro.product.cpu.abilist=x86_64,x86\n')
+            (system/'system/etc/permissions/features.xml').write_text('<permissions><feature name="android.hardware.touchscreen"/><feature name="removed"/><unavailable-feature name="removed"/></permissions>')
+            self.assertEqual(store.read_runtime_target(system,vendor),{'sdk':35,'abis':['x86_64','x86'],'features':['android.hardware.touchscreen']})
+            (system/'system/build.prop').write_text('ro.system.build.version.sdk=35\nro.system.product.cpu.abilist=x86_64,x86\n')
+            self.assertEqual(store.read_runtime_target(system,vendor),{'sdk':35,'abis':['x86_64','x86'],'features':['android.hardware.touchscreen']})
+
     def test_unsafe_artifacts_and_prereleases_are_not_offered(self):
         entry, raw = fixture()
         original = json.loads(raw)

@@ -190,6 +190,42 @@ def system(source, software_rendering=False):
         "profileAppInstalled": False, "launchVerified": False,
         "configurationSha256": hashlib.sha256((source/"config/android-runtime.json").read_bytes()).hexdigest()
     }, indent=2).encode(), 0o644)
+    refresh_store_metadata(source)
+
+
+def refresh_store_metadata(source):
+    """Read installed images privately and read-only; never start/stop a session."""
+    if os.geteuid()!=0:raise RuntimeError('Android image metadata requires administrator setup')
+    if not Path('/var/lib/waydroid/waydroid.cfg').is_file():return False
+    helper=source/'fdroid-store.py'
+    if not helper.is_file():helper=source/'tools/fdroid-store.py'
+    spec=importlib.util.spec_from_file_location('android_store_metadata',helper)
+    store=importlib.util.module_from_spec(spec);spec.loader.exec_module(store)
+    images=store.image_identity()
+    destination=Path('/var/lib/isolde');destination.mkdir(mode=0o755,exist_ok=True)
+    if destination.resolve()!=destination or destination.stat().st_uid!=0:raise RuntimeError('Untrusted Android metadata storage')
+    # Older provisioners inherited the administrator's group-writable umask.
+    # Seal only this verified root-owned application directory, never its parent.
+    destination.chmod(0o755)
+    root=Path(tempfile.mkdtemp(prefix='android-metadata-',dir=destination))
+    system=root/'system';vendor=root/'vendor';system.mkdir();vendor.mkdir();mounted=[]
+    try:
+        try:
+            for name,path in (('system.img',system),('vendor.img',vendor)):
+                shared.run('mount','-t','ext4','-o','loop,ro,noload',str(Path('/var/lib/waydroid/images')/name),str(path),timeout=30)
+                mounted.append(path)
+            target=store.read_runtime_target(system,vendor)
+            if not target or images!=store.image_identity():raise RuntimeError('Android images changed or lack compatibility metadata')
+            shared.atomic(destination/'android-store-capabilities.json',json.dumps({'schemaVersion':1,'images':images,'target':target}).encode(),0o644)
+        finally:
+            for path in reversed(mounted):
+                shared.run('umount',str(path),timeout=30)
+                mounted.remove(path)
+    finally:
+        # Never recursively clean a directory after an unmount failure.
+        if not mounted:
+            system.rmdir();vendor.rmdir();root.rmdir()
+    return True
 
 
 def system_receipt():
@@ -234,8 +270,11 @@ if __name__ == "__main__":
     parser.add_argument("--software-rendering", action="store_true")
     parser.add_argument("--activate-if-configured", action="store_true", help="Register SmartTube in All Apps as the regular user, if Android setup exists")
     parser.add_argument("--repair-runtime",action="store_true",help="Repair the pinned runtime selector leak and restart only its idle daemon")
+    parser.add_argument('--refresh-store-metadata',action='store_true')
     args = parser.parse_args()
-    if args.repair_runtime:
+    if args.refresh_store_metadata:
+        refresh_store_metadata(args.source.resolve())
+    elif args.repair_runtime:
         repair_runtime(args.source.resolve())
     elif args.activate_if_configured:
         print(json.dumps({"smartTubeRegistered": activate(args.source.resolve())}))

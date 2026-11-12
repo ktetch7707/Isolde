@@ -221,12 +221,13 @@ def plain(value, limit):
     return re.sub(r"[\x00-\x1f<>]", " ", html.unescape(re.sub(r"<[^>]*>", " ", str(value))))[:limit].strip()
 
 
-def runtime_target():
-    """Read the initialized image; absence never starts/takes over an Android session."""
+def read_runtime_target(root=Path('/var/lib/waydroid/rootfs'), vendor=None):
+    """Read image metadata without starting an Android session."""
+    vendor=vendor if vendor is not None else root/'vendor'
     properties = {}
-    for name in ("system/build.prop", "vendor/build.prop"):
-        path = Path("/var/lib/waydroid/rootfs")/name
+    for path in (root/'build.prop',root/'system/build.prop',root/'system/system/build.prop',vendor/'build.prop'):
         try:
+            if not path.resolve().is_relative_to(root.resolve()) and not path.resolve().is_relative_to(vendor.resolve()):continue
             if path.stat().st_size > 1024**2:
                 continue
             for line in path.read_text().splitlines():
@@ -235,17 +236,18 @@ def runtime_target():
                     properties[key.strip()] = value.strip()
         except OSError:
             continue
-    sdk = properties.get("ro.build.version.sdk", "")
-    abis = properties.get("ro.product.cpu.abilist", "").split(",")
+    sdk = properties.get("ro.build.version.sdk") or properties.get('ro.system.build.version.sdk','')
+    abis = (properties.get("ro.product.cpu.abilist") or properties.get('ro.system.product.cpu.abilist') or properties.get('ro.product.system.cpu.abilist','')).split(",")
     if not sdk.isdigit() or not any(abis):
         return None
     features, unavailable = set(), set()
-    for directory in ("system/etc/permissions", "vendor/etc/permissions", "system/etc/sysconfig"):
-        files = sorted((Path("/var/lib/waydroid/rootfs")/directory).glob("*.xml"))
+    for directory in (root/'etc/permissions',root/'system/etc/permissions',vendor/'etc/permissions',root/'etc/sysconfig',root/'system/etc/sysconfig',vendor/'etc/sysconfig'):
+        files = sorted(directory.glob("*.xml"))
         if len(files) > 256:
             return None
         for path in files:
             try:
+                if not path.resolve().is_relative_to(root.resolve()) and not path.resolve().is_relative_to(vendor.resolve()):continue
                 if path.stat().st_size > 256*1024:
                     continue
                 tree = ET.fromstring(path.read_bytes())
@@ -256,6 +258,36 @@ def runtime_target():
             except (OSError, ET.ParseError):
                 continue
     return {"sdk": int(sdk), "abis": abis, "features": sorted(features-unavailable)}
+
+
+def image_identity(root=Path('/var/lib/waydroid/images')):
+    result={}
+    for name in ('system.img','vendor.img'):
+        path=root/name;info=path.stat()
+        if path.resolve()!=path or not path.is_file() or info.st_uid!=0 or info.st_mode & 0o022:raise ValueError('Untrusted Android image')
+        result[name]=[info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns]
+    return result
+
+
+def runtime_target():
+    target=read_runtime_target()
+    if target:return target
+    # Idle Waydroid unmounts rootfs. Setup retains only verified image metadata,
+    # bound to the exact installed root-owned images, never guessed host ABIs.
+    path=Path('/var/lib/isolde/android-store-capabilities.json')
+    try:
+        info=path.stat()
+        if path.resolve()!=path or info.st_uid!=0 or info.st_mode & 0o022 or info.st_size>65536:return None
+        value=json.loads(path.read_text())
+        if value.get('schemaVersion')!=1 or value.get('images')!=image_identity():return None
+        target=value['target']
+        if (set(target)!={'sdk','abis','features'} or type(target['sdk']) is not int or not 16<=target['sdk']<=100
+            or not isinstance(target['abis'],list) or not 1<=len(target['abis'])<=16
+            or any(abi not in {'x86','x86_64','arm64-v8a','armeabi','armeabi-v7a','riscv64'} for abi in target['abis'])
+            or not isinstance(target['features'],list) or len(target['features'])>2048
+            or any(not isinstance(f,str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}',f) for f in target['features'])):return None
+        return target
+    except (OSError,ValueError,KeyError,TypeError):return None
 
 
 def compatible(package, target):
