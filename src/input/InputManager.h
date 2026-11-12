@@ -6,6 +6,8 @@
 #include <QVariantList>
 #include <QMap>
 #include <QTimer>
+#include <QPointer>
+#include <QSet>
 
 class InputManager final : public QObject {
     Q_OBJECT
@@ -29,6 +31,7 @@ class InputManager final : public QObject {
     Q_PROPERTY(bool listening READ listening NOTIFY bindingsChanged)
     Q_PROPERTY(QString bindingStatus READ bindingStatus NOTIFY bindingsChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY bindingsChanged)
+    Q_PROPERTY(bool acceptTextKeys READ acceptTextKeys NOTIFY bindingsChanged)
 
 public:
     enum Command {
@@ -66,6 +69,9 @@ public:
     Q_INVOKABLE void cancelBinding();
     Q_INVOKABLE bool clearBinding(int command);
     Q_INVOKABLE bool resetBindings();
+    bool acceptTextKeys() const { return m_acceptTextKeys; }
+    Q_INVOKABLE bool setAcceptTextKeys(bool enabled);
+    Q_INVOKABLE void setTextInputTarget(QObject *target, bool active);
 
     Command none() const { return None; }
     Command navigateUp() const { return NavigateUp; }
@@ -88,7 +94,7 @@ protected:
     bool eventFilter(QObject *object, QEvent *event) override;
 private:
     static Command defaultCommandForKey(int key);
-    bool persist(const QMap<int, int> &bindings);
+    bool persist(const QMap<int, int> &bindings, bool acceptTextKeys);
     void loadBindings();
     QString m_storagePath, m_status, m_error;
     QMap<int, int> m_bindings; // command -> additional key; standard keys remain available
@@ -96,4 +102,7 @@ private:
     int m_candidate = 0;
     int m_releaseKey = 0;
     QTimer m_captureDeadline;
+    bool m_acceptTextKeys = true;
+    QList<QPointer<QObject>> m_textInputTargets;
+    QSet<int> m_textReleaseKeys;
 };

@@ -85,6 +85,66 @@ native/QML milestone earns one eighth, installed/external remapping retains one
 eighth, and all other remaining requirements retain one quarter. T12 is52%;
 project accounting also preserves the independent concurrent Store evidence.
 
+## Rear physical keyboard / accept keys follow-up
+
+User clarification: the remote has a physical keyboard on its rear. During text
+entry, its keys must be accepted as text rather than remote shortcuts.
+
+The shared OnScreenKeyboard now registers a visible/enabled text target with
+the profile's InputManager. With Accept Keyboard Keys enabled (the default),
+delivered printable key text is consumed before semantic remote mapping. Thus
+H/M, spaces, plus/equal and even a custom letter navigation binding type their
+actual characters while a keyboard is open. Shift and delivered Unicode text
+are preserved; Backspace deletes a Unicode code point without splitting a
+surrogate pair. Both physical and onscreen appends obey the keyboard's4096-unit
+default maximum and refuse overflow visibly. Password values remain masked.
+Input text is neither logged nor persisted in the bindings document.
+
+After physical typing, Enter accepts the text. A D-pad arrow returns to onscreen
+selection, where Confirm selects the highlighted key as before. Back/Escape
+keeps the existing cancel route. Consumed releases and held Enter repeats cannot
+click through to the screen revealed after text acceptance. Once no text
+keyboard is visible, ordinary remote mappings resume. Ctrl/Alt/Meta chords
+cannot fall through into global letter shortcuts while text entry is active;
+delivered GroupSwitch text is allowed. Clipboard shortcuts and composed IME
+sessions are not added by this key-event implementation.
+
+Every shared keyboard includes a remote-operable Accept keys action, displayed
+as Keys: Text / Keys: Controls. Settings → Remotes also has Accept Keyboard Keys.
+Controls mode preserves letter-emitting remotes' navigation bindings inside
+text entry. The preference is profile-local and atomic, using an optional
+boolean `acceptTextKeys` in the existing version1 document. Older documents
+default to true without being rewritten; malformed booleans are refused. A
+failed preference save preserves both stored and active mode and surfaces retry.
+Keyboard target registration is removed on hide/destruction, with guarded
+references preventing profile teardown from retaining a client.
+
+Verification: `remote-keyboard-20261112-a` stops at oracle self-test: four checks
+load an acceptance helper whose parser assumes the old keyboard actions list.
+Both Guide/Home helper parsers now derive the appended Accept keys action, and
+the exact-layout/D-pad-only regression is updated. No application pass was
+claimed from that failed preflight.
+
+`remote-keyboard-20261112-b` passes all120 runner self-tests, the actual
+application build and both focused registrations: studio_shell17 QtTest results
+and remote_bindings8, zero failures/skips. All22 renderer captures reviewed,
+including masked physical typing, selected text/control toggle, short-panel
+Done, three keyboard contrast palettes and unchanged Network/Store surfaces.
+Three AudioSettings Connections warnings are from the existing isolated audio
+double lacking `changed`; they are recorded without claiming a new audio fix.
+Evidence: `build/vm-oracle/remote-keyboard-20261112-b/report/LastTest.log`,
+`ctest.xml`, `oracle-self-test.log` and `studio-test-*.png`.
+
+The focused suite now
+builds the application and runs both remote_bindings and studio_shell, covering
+the shared short-panel keyboard, Network/Store and theme/focus behavior as well
+as physical text precedence, Unicode deletion, mode toggle, repeated Enter,
+cancel, preference compatibility/isolation and deterministic rollback/retry.
+No deployment, full-suite rerun or broad T12 closure is claimed. T12.2 retains
+its previously earned half; the physical-input milestone earns one eighth and
+the other installed requirements retain three eighths. Original group/task
+weights are unchanged. T12 is54%; project acceptance remains86%.
+
 `remote_bindings` exercises capture/review/save/reload, no-write cancel,
 standard/custom conflicts, repeat/chord/invalid input, profile isolation and
 teardown, malformed-file preservation, backup and deterministic write-failure

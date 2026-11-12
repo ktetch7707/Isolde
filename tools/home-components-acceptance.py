@@ -1457,9 +1457,9 @@ def exercise_studio_designs(evidence, layout, key, capture, expect, enter_from_s
         source=(Path(__file__).resolve().parents[1]/"qml/OnScreenKeyboard.qml").read_text()
         letters=json.loads(re.search(r'const letters = shift\s*\?\s*\[[^\n]+\]\s*:\s*(\[[^\n]+\])',source).group(1))
         composition=re.search(r'return (\[[^\n]+?\])\.concat\(letters, (\[[^\n]+?\]), actions\)',source)
-        actions=re.search(r'const actions = (\[[^\n]+?\])\.concat\(modes\)',source)
+        actions=re.search(r'const actions = (\[[^\n]+?\])\.concat\(modes(?:,\s*(\[[^\n]+?\]))?\)',source)
         modes=re.search(r'const modes = (\[[^\n]+?\])',source)
-        keys=json.loads(composition.group(1))+letters+json.loads(composition.group(2))+json.loads(actions.group(1))+json.loads(modes.group(1))
+        keys=json.loads(composition.group(1))+letters+json.loads(composition.group(2))+json.loads(actions.group(1))+json.loads(modes.group(1))+(json.loads(actions.group(2)) if actions.group(2) else [])
         current_index=0
         def choose(index):
             nonlocal current_index

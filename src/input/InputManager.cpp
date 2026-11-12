@@ -164,6 +164,10 @@ bool InputManager::eventFilter(QObject *object, QEvent *event)
     if (event->type() == QEvent::ApplicationDeactivate && bindingActive()) cancelBinding();
     if (event->type() == QEvent::KeyRelease) {
         const auto key = static_cast<QKeyEvent *>(event);
+        if (m_textReleaseKeys.contains(key->key())) {
+            if (!key->isAutoRepeat()) m_textReleaseKeys.remove(key->key());
+            return true;
+        }
         if (key->key() == m_releaseKey) {
             if (!key->isAutoRepeat()) m_releaseKey = 0;
             return true;
@@ -172,6 +176,22 @@ bool InputManager::eventFilter(QObject *object, QEvent *event)
     if (event->type() != QEvent::KeyPress) return false;
     const auto key = static_cast<QKeyEvent *>(event);
     if (m_releaseKey == key->key() && key->isAutoRepeat()) return true;
+    if (!bindingActive() && m_acceptTextKeys) {
+        for (auto it = m_textInputTargets.rbegin(); it != m_textInputTargets.rend(); ++it) {
+            const QPointer<QObject> target = *it;
+            if (!target || !target->property("visible").toBool() || !target->property("enabled").toBool()) continue;
+            QVariant handled;
+            const bool invoked = QMetaObject::invokeMethod(target, "handlePhysicalKey", Qt::DirectConnection,
+                Q_RETURN_ARG(QVariant, handled), Q_ARG(QVariant, key->key()), Q_ARG(QVariant, key->text()),
+                Q_ARG(QVariant, static_cast<int>(key->modifiers())), Q_ARG(QVariant, key->isAutoRepeat()));
+            if (invoked && handled.toBool()) {
+                m_textReleaseKeys.insert(key->key());
+                return true;
+            }
+            break; // only the frontmost visible keyboard receives text
+        }
+    }
+    if (m_textReleaseKeys.contains(key->key()) && key->isAutoRepeat()) return true;
     if (!listening()) return false;
     if (key->isAutoRepeat()) return true;
     m_releaseKey = key->key();
@@ -201,7 +221,7 @@ bool InputManager::saveBinding()
     if (!bindingActive() || !m_candidate) return false;
     auto bindings = m_bindings;
     bindings[m_target] = m_candidate;
-    if (!persist(bindings)) return false;
+    if (!persist(bindings, m_acceptTextKeys)) return false;
     m_bindings = bindings;
     cancelBinding();
     m_status = tr("Binding saved for this profile.");
@@ -224,7 +244,7 @@ bool InputManager::clearBinding(int command)
     if (command <= None || command > Search) return false;
     auto bindings = m_bindings;
     bindings.remove(command);
-    if (!persist(bindings)) return false;
+    if (!persist(bindings, m_acceptTextKeys)) return false;
     m_bindings = bindings;
     cancelBinding();
     return true;
@@ -232,23 +252,40 @@ bool InputManager::clearBinding(int command)
 
 bool InputManager::resetBindings()
 {
-    if (!persist({})) return false;
+    if (!persist({}, m_acceptTextKeys)) return false;
     m_bindings.clear();
     cancelBinding();
     return true;
 }
 
-bool InputManager::persist(const QMap<int, int> &bindings)
+bool InputManager::setAcceptTextKeys(bool enabled)
+{
+    if (enabled == m_acceptTextKeys) return true;
+    if (!persist(m_bindings, enabled)) return false;
+    m_acceptTextKeys = enabled;
+    emit bindingsChanged();
+    return true;
+}
+
+void InputManager::setTextInputTarget(QObject *target, bool active)
+{
+    for (qsizetype i = m_textInputTargets.size(); i-- > 0;)
+        if (!m_textInputTargets[i] || m_textInputTargets[i] == target) m_textInputTargets.removeAt(i);
+    if (active && target && target->metaObject()->indexOfMethod("handlePhysicalKey(QVariant,QVariant,QVariant,QVariant)") >= 0)
+        m_textInputTargets.append(target);
+}
+
+bool InputManager::persist(const QMap<int, int> &bindings, bool acceptTextKeys)
 {
     auto fail = [this] {
-        m_error = tr("Could not save remote bindings. Previous bindings are unchanged. Check storage and retry.");
+        m_error = tr("Could not save remote input settings. Previous settings are unchanged. Check storage and retry.");
         emit bindingsChanged(); return false;
     };
     if (!safeBindingPath(m_storagePath) || !safeBindingPath(m_storagePath + ".bak")
         || !QDir().mkpath(QFileInfo(m_storagePath).absolutePath())) return fail();
     QJsonObject values;
     for (auto it = bindings.cbegin(); it != bindings.cend(); ++it) values[QString::number(it.key())] = it.value();
-    const auto bytes = QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"bindings", values}}).toJson();
+    const auto bytes = QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"bindings", values}, {"acceptTextKeys", acceptTextKeys}}).toJson();
     if (QFileInfo::exists(m_storagePath)) {
         QFile previous(m_storagePath);
         if (!previous.open(QIODevice::ReadOnly) || previous.size() > 8192) return fail();
@@ -270,7 +307,8 @@ void InputManager::loadBindings()
     QFile file(m_storagePath);
     if (!safeBindingPath(m_storagePath) || !file.open(QIODevice::ReadOnly) || file.size() > 8192) { invalid(); return; }
     const auto doc = QJsonDocument::fromJson(file.readAll()).object();
-    if (doc.size() != 2 || doc.value("schemaVersion") != QJsonValue(1) || !doc.value("bindings").isObject()) { invalid(); return; }
+    if ((doc.size() != 2 && doc.size() != 3) || doc.value("schemaVersion") != QJsonValue(1) || !doc.value("bindings").isObject()
+        || (doc.size() == 3 && (!doc.contains("acceptTextKeys") || !doc.value("acceptTextKeys").isBool()))) { invalid(); return; }
     const auto values = doc.value("bindings").toObject();
     if (values.size() > Search) { invalid(); return; }
     QMap<int, int> bindings;
@@ -285,4 +323,5 @@ void InputManager::loadBindings()
         keys.insert(key);
     }
     m_bindings = bindings;
+    m_acceptTextKeys = doc.value("acceptTextKeys").toBool(true);
 }

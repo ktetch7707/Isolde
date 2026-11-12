@@ -151,7 +151,7 @@ def guide_backend_probe(home):
 
 REPAIR_TESTS = {"studio_shell","games_remote_ui","component_contracts","home_component_navigation","studio_navigation","studio_behavior","audio_backend","games_provisioning","steam_games","optical_exec_adapter","native_profile_isolation","isolde_tests"}
 RUNTIME_TESTS = {"games_provisioning","steam_games","portable_game_installer","optical_exec_adapter","native_profile_isolation"}
-SUITES = {"all": None, "remote_bindings":("isolde_remote_binding_tests","isolde"), "runtime_contracts":"isolde_native_sandbox_tests", "campaign_repairs": ("isolde_studio_quick_tests","isolde_games_ui_tests","isolde_component_tests","isolde_home_navigation_tests","isolde_audio_tests","isolde_native_sandbox_tests","isolde_tests"), "component_contracts": "isolde_component_tests",
+SUITES = {"all": None, "remote_bindings":("isolde_remote_binding_tests","isolde_studio_quick_tests","isolde"), "runtime_contracts":"isolde_native_sandbox_tests", "campaign_repairs": ("isolde_studio_quick_tests","isolde_games_ui_tests","isolde_component_tests","isolde_home_navigation_tests","isolde_audio_tests","isolde_native_sandbox_tests","isolde_tests"), "component_contracts": "isolde_component_tests",
           "sources": ("isolde_tests", "isolde_component_tests", "isolde_studio_quick_tests", "isolde_home_navigation_tests"),
           "guide_contracts": "isolde_guide_tests",
           "guide_remote_ui": "isolde_guide_ui_tests",
@@ -200,6 +200,8 @@ def suite_selection(suite):
     pattern = "^(studio_quick|studio_safety|studio_selection|studio_artwork|studio_colors|studio_color_interactions|studio_workflows|studio_cutover|studio_performance|studio_reuse|studio_designs|studio_design_contracts|studio_gestures|studio_grid|studio_grid_controls|studio_destinations|studio_ordered|studio_policies|studio_overlays|studio_unit|studio_behavior)$" if suite == "studio" else "^" + re.escape(suite) + "$"
     if suite == "studio_closure_regressions":
         pattern="^(studio_quick|studio_colors|studio_color_interactions|home_component_navigation|studio_design_contracts|studio_performance|studio_cutover)$"
+    if suite == "remote_bindings":
+        pattern = "^(remote_bindings|studio_shell)$"
     if suite == "shell_appearance":
         pattern = "^(studio_selection|studio_shell|surface_appearance_contracts|home_component_navigation)$"
     if suite == "studio_visuals":
@@ -1220,6 +1222,7 @@ class Oracle:
             if reuse and suite == "studio_artwork":expected={"studio_artwork","studio_selection","studio_quick","studio_colors","studio_color_interactions"}
             if suite == "studio_closure_regressions":expected={"studio_quick","studio_colors","studio_color_interactions","home_component_navigation","studio_design_contracts","studio_performance","studio_cutover"}
             if suite == "studio_colors":expected={"studio_colors","studio_color_interactions"}
+            if suite == "remote_bindings":expected={"remote_bindings","studio_shell"}
             if suite == "shell_appearance":expected={"studio_selection","studio_shell","surface_appearance_contracts","home_component_navigation"}
             if suite == "campaign_repairs":expected=REPAIR_TESTS
             if suite == "runtime_contracts":expected=RUNTIME_TESTS

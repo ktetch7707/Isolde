@@ -392,7 +392,7 @@ class OracleTests(unittest.TestCase):
         source=(path/'qml/OnScreenKeyboard.qml').read_text()
         arrays=re.search(r'const letters = shift\s*\?\s*(\[[^\n]+\])\s*:\s*(\[[^\n]+\])',source)
         self.assertIsNotNone(arrays);upper,lower=(json.loads(arrays.group(index)) for index in (1,2))
-        prefix=list('1234567890');suffix=['-','_','.','@','#','!','?',',',':','/','{','}','\\','Del','Space','Clear','Done','ABC','123','#+=']
+        prefix=list('1234567890');suffix=['-','_','.','@','#','!','?',',',':','/','{','}','\\','Del','Space','Clear','Done','ABC','123','#+=','Accept keys']
         upper=prefix+upper+suffix;lower=prefix+lower+suffix
         self.assertEqual(features.keyboard_letters(),(upper,lower))
         for text in ('/tmp/isolde-tv-acceptance-test/channel.json','/home/isolde-dev/Videos/Isolde-Acceptance/Poster.png','saved tv','http://127.0.0.1:12345/stream.ogv'):

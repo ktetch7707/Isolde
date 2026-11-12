@@ -19,7 +19,8 @@ Item {
         { name: "HDMI-CEC", value: remoteSettings.cecAvailable ? "Available" : "Unavailable", help: remoteSettings.cecStatus },
         { name: "Test TV On", value: "Send", help: "Try to wake the TV through HDMI-CEC." },
         { name: "Test TV Standby", value: "Send", help: "Try to put the TV in standby through HDMI-CEC." },
-        { name: "Reset Remote Setup", value: "Defaults", help: "Return to the simple TV remote profile." }
+        { name: "Reset Remote Setup", value: "Defaults", help: "Return to the simple TV remote profile." },
+        { name: "Accept Keyboard Keys", value: inputManager.acceptTextKeys ? "Text when typing" : "Remote controls", help: "For remotes with a rear keyboard: type characters while a text keyboard is open. Turn off for letter-based controls." }
     ]
     readonly property var rows: inputManager.bindingRows.map(function(row) {
         return {name: row.name, value: row.value, category: row.category, command: row.command,
@@ -67,6 +68,7 @@ Item {
             else if (index === 5) remoteSettings.turnTvOn()
             else if (index === 6) remoteSettings.putTvInStandby()
             else if (index === 7) remoteSettings.reset()
+            else if (index === 8) inputManager.setAcceptTextKeys(!inputManager.acceptTextKeys)
         }
     }
 

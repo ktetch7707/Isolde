@@ -17,12 +17,12 @@ def keyboard_letters():
     source=(Path(__file__).resolve().parents[1]/'qml/OnScreenKeyboard.qml').read_text()
     letters=re.search(r'const letters = shift\s*\?\s*(\[[^\n]+\])\s*:\s*(\[[^\n]+\])',source)
     composition=re.search(r'return (\[[^\n]+?\])\.concat\(letters, (\[[^\n]+?\]), actions\)',source)
-    actions=re.search(r'const actions = (\[[^\n]+?\])\.concat\(modes\)',source)
+    actions=re.search(r'const actions = (\[[^\n]+?\])\.concat\(modes(?:,\s*(\[[^\n]+?\]))?\)',source)
     modes=re.search(r'const modes = (\[[^\n]+?\])',source)
     if not all((letters,composition,actions,modes)):
         raise AssertionError('Production keyboard layout contract changed')
     prefix,suffix=(json.loads(composition.group(i)) for i in (1,2))
-    tail=json.loads(actions.group(1))+json.loads(modes.group(1))
+    tail=json.loads(actions.group(1))+json.loads(modes.group(1))+(json.loads(actions.group(2)) if actions.group(2) else [])
     return tuple(prefix+json.loads(letters.group(i))+suffix+tail for i in (1,2))
 
 UPPER_KEYS,KEYS=keyboard_letters()

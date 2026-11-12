@@ -9,6 +9,12 @@ pairing/CEC reception, reassignment of existing conflicting standard keys and
 custom external-app controls remain outside this implementation's support
 matrix; see its verification ledger for current evidence.
 
+Rear-keyboard follow-up: shared text keyboards accept physical characters
+before remote mappings by default. Select Accept keys to switch Keys: Text /
+Keys: Controls, or use Settings → Remotes → Accept Keyboard Keys. The choice is
+profile-local; remote bindings resume after text entry closes. See the same
+record for Enter/D-pad behavior, supported text events and VM evidence.
+
 Isolde must work with a physical remote in a way that feels friendly to a normal living-room user. A keyboard is acceptable for development and recovery, but not as the primary product experience.
 
 ## Compatibility targets
