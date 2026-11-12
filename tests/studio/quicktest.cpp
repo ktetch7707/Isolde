@@ -124,6 +124,13 @@ public:
         QFile file(saved);
         return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()) : QString();
     }
+    Q_INVOKABLE bool writeGalleryPresentation(const QVariantMap &presentation) const {
+        if (artifacts().isEmpty() || !ComponentSchema::validComposition({{"schemaVersion",1},{"appGallery",presentation}})) return false;
+        const auto bytes=QJsonDocument::fromVariant(presentation).toJson();
+        if (bytes.size()>65536) return false;
+        QSaveFile output(QDir(artifacts()).filePath("studio-gallery-presentation.json"));
+        return output.open(QIODevice::WriteOnly) && output.write(bytes)==bytes.size() && output.commit();
+    }
 signals:
     void sourcesChanged();
 public slots:

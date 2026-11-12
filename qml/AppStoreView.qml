@@ -40,11 +40,12 @@ Item {
  property string returnAppId:""
  property string pendingOperation:""
  readonly property bool busy:!!catalog.busy
+ readonly property var providerMatchIds:catalog.onlineStoreSearch?(catalog.providerResults || []).map(entry=>"provider:"+entry.id):[]
  readonly property var filtered:(entries || []).filter(e=>{
   const type=e.storeType || (e.presentationMode==="web-kiosk"?"web":e.type)
   const matches=deviceApps?type!=="android" && type!=="web":platforms[platformIndex] && type===platforms[platformIndex].type
   const q=searchText.trim().toLowerCase()
-  return matches && (!q || [e.name,e.category,e.description,e.publisher].some(v=>String(v || "").toLowerCase().includes(q)))
+  return matches && (!q || providerMatchIds.includes(e.id) || [e.name,e.category,e.description,e.publisher].some(v=>String(v || "").toLowerCase().includes(q)))
  })
  readonly property var selected:filtered.find(e=>e.id===selectedId) || null
  readonly property var confirmationApp:(entries || []).find(e=>e.id===confirmationAppId) || null
@@ -78,6 +79,10 @@ Item {
  onFilteredChanged:{if(!filtered.some(e=>e.id===selectedId))selectedId=filtered.length?filtered[0].id:"";actionIndex=0}
  function choosePlatform(i){platformIndex=i;deviceApps=false;area="header";headerIndex=i+2;confirmation=""}
  function beginSearch(){keyboardPurpose="search";searchOpen=true;keyboard.value=searchText;keyboard.selectedIndex=0}
+ function exploreOnline(){
+  if(deviceApps || !platforms[platformIndex] || platforms[platformIndex].type!=="android")return
+  searchText="";catalog.browseOnlineStore("");area="grid"
+ }
  function editWeb(field){keyboardPurpose=field===0?"webName":"webAddress";keyboard.value=field===0?webName:webAddress;keyboard.selectedIndex=0;searchOpen=true}
  function storeTool(){
   area="tools";toolIndex=0
@@ -161,14 +166,13 @@ Item {
    else if(cmd===inputManager.navigateUp)area="header"
    else if(cmd===inputManager.navigateLeft)toolIndex=Math.max(0,toolIndex-1)
    else if(cmd===inputManager.navigateRight)toolIndex=Math.min(pager.visible?2:0,toolIndex+1)
-   else if(cmd===inputManager.confirm){if(toolIndex===0)storeTool();else catalog.changeStorePage(toolIndex===1?-1:1)}
+   else if(cmd===inputManager.confirm){if(toolIndex===0){if(platforms[platformIndex].type==="android")exploreOnline();else storeTool()}else catalog.changeStorePage(toolIndex===1?-1:1)}
    return true
   }
   if(area==="header"){
-   if(cmd===inputManager.navigateUp && !deviceApps)area="tools"
    if(cmd===inputManager.navigateLeft)headerIndex=Math.max(0,headerIndex-1)
    if(cmd===inputManager.navigateRight)headerIndex=Math.min(3,headerIndex+1)
-   if(cmd===inputManager.navigateDown && filtered.length)area="grid"
+   if(cmd===inputManager.navigateDown){area=deviceApps?"grid":"tools";toolIndex=0}
    if(cmd===inputManager.confirm){if(headerIndex===0)beginSearch();else if(headerIndex===1){deviceApps=true;area="grid"}else choosePlatform(headerIndex-2)}
    return true
   }
@@ -180,7 +184,7 @@ Item {
    return true
   }
   const i=filtered.findIndex(e=>e.id===selectedId)
-  if(cmd===inputManager.navigateUp && i<columns){area="header";headerIndex=platformIndex+2;return true}
+  if(cmd===inputManager.navigateUp && i<columns){area=deviceApps?"header":"tools";toolIndex=0;headerIndex=platformIndex+2;return true}
   if(cmd===inputManager.navigateRight && (i%columns===columns-1 || i===filtered.length-1)){area="actions";actionIndex=0;return true}
   const d=cmd===inputManager.navigateLeft?-1:cmd===inputManager.navigateRight?1:cmd===inputManager.navigateUp?-columns:cmd===inputManager.navigateDown?columns:0
   if(d && filtered.length){const n=Math.max(0,Math.min(filtered.length-1,i+d));selectedId=filtered[n].id;grid.positionViewAtIndex(n,GridView.Contain)}
@@ -210,8 +214,8 @@ Item {
   Row {width:parent.width;height:50*root.typeScale;spacing:root.gap
    Text {textFormat:Text.PlainText;width:Math.max(0,parent.width-storeToolButton.width-(pager.visible?pager.width+root.gap:0)-root.gap);elide:Text.ElideRight;anchors.verticalCenter:parent.verticalCenter;text:(root.deviceApps?qsTr("Device apps"):root.platforms[root.platformIndex]?root.platforms[root.platformIndex].label+qsTr(" apps"):"")+"  ·  "+root.filtered.length;color:shell.backgroundText;font.pixelSize:23*root.typeScale;font.weight:Font.DemiBold}
    Rectangle {id:storeToolButton;objectName:"storeTool";visible:!root.deviceApps;width:toolLabel.implicitWidth+28;height:parent.height;radius:root.corners;color:root.surface;border.width:root.area==="tools" && root.toolIndex===0?3:1;border.color:root.focusColor
-    Text {id:toolLabel;textFormat:Text.PlainText;anchors.centerIn:parent;text:root.platforms[root.platformIndex] && root.platforms[root.platformIndex].type==="web"?qsTr("Add website"):qsTr("F-Droid search: ")+(root.catalog.onlineStoreSearch?qsTr("On"):qsTr("Off"));color:root.ink;font.pixelSize:18*root.typeScale}
-    MouseArea {anchors.fill:parent;onClicked:{root.area="tools";root.toolIndex=0;root.storeTool()}}
+    Text {id:toolLabel;textFormat:Text.PlainText;anchors.centerIn:parent;text:root.platforms[root.platformIndex] && root.platforms[root.platformIndex].type==="web"?qsTr("Add website"):qsTr("Explore apps online");color:root.ink;font.pixelSize:18*root.typeScale}
+    MouseArea {anchors.fill:parent;onClicked:{if(root.platforms[root.platformIndex].type==="android")root.exploreOnline();else{root.area="tools";root.toolIndex=0;root.storeTool()}}}
    }
    Row {id:pager;visible:!root.deviceApps && root.catalog.onlineStoreSearch && root.platforms[root.platformIndex] && root.platforms[root.platformIndex].type==="android";height:parent.height;spacing:root.gap
     Repeater {model:[qsTr("Previous"),qsTr("Next")]
@@ -230,8 +234,8 @@ Item {
     delegate:Rectangle {required property var modelData;width:grid.cellWidth-root.gap;height:grid.cellHeight-root.gap;radius:root.corners;color:root.surface
      border.width:root.selectedId===modelData.id && root.area==="grid"?3:1;border.color:root.selectedId===modelData.id?root.focusColor:shell.outline
      Row {anchors.fill:parent;anchors.margins:root.gap;spacing:14
-      Rectangle {width:52;height:52;radius:root.corners;color:modelData.accent
-       Text {textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData.symbol || "+";color:"white";font.pixelSize:28;font.weight:Font.DemiBold}}
+      Rectangle {width:52;height:52;radius:root.corners;color:modelData.accent || shell.selected
+       Text {objectName:"storeAppSymbol-"+modelData.id;textFormat:Text.PlainText;anchors.centerIn:parent;text:modelData.symbol || Array.from(modelData.name || "")[0] || "+";color:modelData.accent?"white":shell.selectedText;font.pixelSize:28;font.weight:Font.DemiBold}}
       Column {width:parent.width-66;spacing:8
        Text {textFormat:Text.PlainText;width:parent.width;text:modelData.name;color:root.ink;font.pixelSize:21*root.typeScale;font.weight:Font.DemiBold;elide:Text.ElideRight}
        Text {textFormat:Text.PlainText;width:parent.width;text:modelData.category;color:shell.muted;font.pixelSize:16*root.typeScale;elide:Text.ElideRight}
@@ -327,7 +331,7 @@ Item {
   }
  }
  OnScreenKeyboard {id:keyboard;objectName:"storeKeyboard";appearance:root.appearance;visible:root.searchOpen;z:6;anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;anchors.margins:root.gap;height:Math.min(400,parent.height-root.gap*2)
-  onAccepted:text=>{root.searchOpen=false;if(root.keyboardPurpose==="webName")root.webName=text;else if(root.keyboardPurpose==="webAddress")root.webAddress=text;else{root.searchText=text;root.catalog.searchStore(text);root.area="grid"}}
+  onAccepted:text=>{root.searchOpen=false;if(root.keyboardPurpose==="webName")root.webName=text;else if(root.keyboardPurpose==="webAddress")root.webAddress=text;else{root.searchText=text;if(!root.deviceApps && root.platforms[root.platformIndex] && root.platforms[root.platformIndex].type==="android")root.catalog.browseOnlineStore(text);root.area="grid"}}
   onCanceled:root.searchOpen=false
  }
 }

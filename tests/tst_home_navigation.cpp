@@ -30,6 +30,8 @@
 #include <cmath>
 #include <QTemporaryDir>
 #include <QFile>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QJSValue>
 #include <QJsonDocument>
 
@@ -159,6 +161,12 @@ void HomeNavigationTests::allAppsListNavigationUsesSingleRowStep()
     QCOMPARE(gallery->property("selectedId").toString(), QString("alpha"));
     QVERIFY(command(InputManager::NavigateUp));
     QCOMPARE(gallery->property("focusArea").toString(), QString("filter"));
+    auto *rows=gallery->findChild<QObject *>("allAppsGrid");QVERIFY(rows);
+    const auto standardHeight=rows->property("cellHeight").toReal();
+    gallery->setProperty("galleryPresentation",QVariantMap{{"layout","list"},{"density","compact"}});
+    QTRY_VERIFY(rows->property("cellHeight").toReal()<standardHeight);
+    gallery->setProperty("galleryPresentation",QVariantMap{{"layout","list"},{"density","spacious"}});
+    QTRY_VERIFY(rows->property("cellHeight").toReal()>standardHeight);
 }
 void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
 {
@@ -230,6 +238,18 @@ void HomeNavigationTests::allAppsGridColumnsMatchRemoteNavigationStep()
     QTRY_VERIFY(find(surface,named("allAppsListCard")));
     auto *list=find(surface,named("allAppsListCard"));
     auto *listArt=find(list,named("cardArtwork"));QVERIFY(listArt);QVERIFY(!listArt->isVisible());
+    auto *listIcon=find(list,named("launcherArtwork"));QVERIFY(listIcon);
+    QTRY_VERIFY(listIcon->isVisible());
+    QCOMPARE(listIcon->property("source").toUrl(),QUrl::fromLocalFile(logoPath));
+    auto *listLabel=find(list,[](QQuickItem *item){return item->isVisible() && item->property("text").toString()=="App 0";});
+    QVERIFY(listLabel);
+    QVERIFY(listIcon->mapToItem(list,QPointF(listIcon->width(),0)).x()<=listLabel->mapToItem(list,QPointF()).x());
+    gallery->setProperty("galleryPresentation",QVariantMap{{"layout","list"},{"showArtwork",false},{"showLabels",true}});
+    QTRY_VERIFY(!listIcon->isVisible());
+    gallery->setProperty("galleryPresentation",QVariantMap{{"layout","list"},{"showArtwork",true},{"showLabels",false}});
+    QTRY_VERIFY(listIcon->isVisible());
+    QTRY_VERIFY(!listLabel->isVisible());
+    gallery->setProperty("galleryPresentation",QVariantMap{{"layout","list"},{"showArtwork",true},{"showLabels",true}});
     QTest::qWait(100);
     auto *gridItem=qobject_cast<QQuickItem *>(grid);QVERIFY(gridItem);
     QVERIFY(gridItem->mapToItem(surface,QPointF()).y()>120);
@@ -549,6 +569,27 @@ void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton()
         QVERIFY(content->height() > 0);
         QVERIFY(content->y() + content->height() <= content->parentItem()->height() + 1);
     }
+    root->setProperty("width",1280);
+    root->setProperty("composition",QVariantMap{{"enabled",true},{"headerMode","identity"},{"headerControls",QVariantList{"sources","settings","edit"}}});
+    root->setProperty("sections",QVariantList{QVariantMap{{"id","library"},{"name","Library"},{"presentation",QVariantMap{{"variant","library"}}}}});
+    root->setProperty("items",QVariantList{});
+    root->setProperty("recoveryFocused",false);
+    QVERIFY(command(InputManager::NavigateUp));
+    QVERIFY(root->property("recoveryFocused").toBool());QCOMPARE(root->property("recoveryIndex").toInt(),1);
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"repairFocus"));
+    QVERIFY(root->property("recoveryFocused").toBool());
+    QVERIFY(command(InputManager::Confirm));QCOMPARE(settings.last()[0].toInt(),-1);
+    root->setProperty("showEditHeaderControl",false);
+    auto *composed=root->findChild<QObject *>("composedHome");QVERIFY(composed);
+    const auto headerValue=composed->property("headerControls");
+    const auto controls=headerValue.metaType()==QMetaType::fromType<QJSValue>()?headerValue.value<QJSValue>().toVariant().toList():headerValue.toList();
+    QVERIFY(!controls.contains("edit"));QVERIFY(controls.contains("settings"));
+    std::function<QQuickItem *(QQuickItem *)> settingsControl;
+    settingsControl=[&](QQuickItem *item)->QQuickItem *{if(item->objectName()=="pageHeader-settings")return item;for(auto *child:item->childItems())if(auto *found=settingsControl(child))return found;return nullptr;};
+    auto *settingsButton=settingsControl(qobject_cast<QQuickItem *>(root.get()));QVERIFY(settingsButton);
+    QTRY_VERIFY(settingsButton->isVisible() && QQmlProperty(settingsButton,"border.width").read().toReal()>0);
+    const auto artifacts=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
+    if(!artifacts.isEmpty())QVERIFY(window.grabWindow().save(artifacts+"/studio-test-home-settings-focus.png"));
 }
 void HomeNavigationTests::repairsSourceWithRemoteAndCanCancel()
 {
@@ -741,6 +782,18 @@ void HomeNavigationTests::searchPreferenceProfileIsolationAndWriteFailure()
     failed.toggleWebEnabled();QVERIFY(!failed.webEnabled());QVERIFY(!failed.errorString().isEmpty());
     QVERIFY(blocked.open(QIODevice::ReadOnly));QCOMPARE(blocked.readAll(),QByteArray("retain"));
     SearchSettings invalid(nullptr,path,"../other");invalid.toggleWebEnabled();QVERIFY(!invalid.webEnabled());QVERIFY(!invalid.errorString().isEmpty());
+    const auto organization=QCoreApplication::organizationName();
+    const auto settingsRoot=QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QSettings::setPath(QSettings::NativeFormat,QSettings::UserScope,dir.path());
+    QCoreApplication::setOrganizationName({});
+    const auto restore=qScopeGuard([&]{QSettings::setPath(QSettings::NativeFormat,QSettings::UserScope,settingsRoot);QCoreApplication::setOrganizationName(organization);});
+    const auto productionPath=QSettings().fileName();
+    QVERIFY(productionPath.startsWith(dir.path()+"/"));
+    SearchSettings production(nullptr,{},"default");
+    production.toggleWebEnabled();QVERIFY(production.webEnabled());QVERIFY(production.errorString().isEmpty());
+    production.setDiscoveryRegion("CA");QCOMPARE(production.discoveryRegion(),QString("CA"));QVERIFY(production.errorString().isEmpty());
+    SearchSettings cold(nullptr,{},"default");QVERIFY(cold.webEnabled());QCOMPARE(cold.discoveryRegion(),QString("CA"));
+    QSettings saved(productionPath,QSettings::IniFormat);QVERIFY(saved.value("search/webEnabled").toBool());
 }
 void HomeNavigationTests::searchHeaderSwitchRemoteFocusAndStableResults()
 {
@@ -1043,7 +1096,8 @@ void HomeNavigationTests::pastelReferenceNavigationAndGeometry()
     QVERIFY(QMetaObject::invokeMethod(root.get(),"restoreFocus",Q_ARG(QVariant,QString("hdmi1"))));
     QVERIFY(command(InputManager::NavigateUp)); QVERIFY(composed->property("navigationFocused").toBool());
     QVERIFY(command(InputManager::NavigateUp)); QVERIFY(root->property("recoveryFocused").toBool());
-    QVERIFY(command(InputManager::Confirm)); QCOMPARE(search.size(),1);
+    QVERIFY(command(InputManager::Confirm)); QCOMPARE(settings.last()[0].toInt(),-1);
+    QVERIFY(command(InputManager::NavigateLeft)); QVERIFY(command(InputManager::Confirm)); QCOMPARE(search.size(),1);
     QVERIFY(command(InputManager::NavigateRight)); QVERIFY(command(InputManager::Confirm)); QCOMPARE(settings.last()[0].toInt(),-1);
     auto missing = home.composition(); missing["wallpaper"] = "artwork/missing.png";
     QVERIFY(home.setComposition(missing)); root->setProperty("wallpaperSource",home.wallpaperSource());

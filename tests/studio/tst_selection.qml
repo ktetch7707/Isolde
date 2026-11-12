@@ -14,6 +14,52 @@ Item {
         Component {id:commandCenterComponent;App.CommandCenter {width:1280;height:720;apps:[];packages:[]}}
         Component {id:allAppsComponent;App.AppGallery {width:1280;height:720;entries:[{id:"sample",name:"Sample",type:"web"}]}}
         SignalSpy {id:appPickerSpy;signalName:"picked"}
+        QtObject {
+            id:discoveryCatalog
+            property var storeOptions:({platforms:[{type:"android",label:"Android"},{type:"web",label:"Chromium"}],columns:2})
+            property bool busy:false
+            property bool onlineStoreSearch:false
+            property var providerResults:[]
+            property string errorString:""
+            property int searches:0
+            property string query:""
+            signal packageInstalled(string appId)
+            function browseOnlineStore(text){onlineStoreSearch=true;searches++;query=text}
+            function setOnlineStoreSearch(enabled){onlineStoreSearch=enabled}
+        }
+        Component {id:storeDiscoveryComponent;App.AppStoreView {width:1280;height:720;catalog:discoveryCatalog;entries:[{id:"sample",name:"Sample",type:"android",storeType:"android",installed:false}]}}
+        function test_store_explore_and_search_are_direct_online_actions(){
+            discoveryCatalog.searches=0;discoveryCatalog.query="";discoveryCatalog.onlineStoreSearch=false;discoveryCatalog.providerResults=[]
+            const store=createTemporaryObject(storeDiscoveryComponent,tests.parent);verify(store!==null)
+            editor.visible=false;store.z=10000;verify(waitForRendering(store))
+            store.handleCommand(inputManager.navigateUp);compare(store.area,"tools")
+            store.handleCommand(inputManager.confirm);compare(discoveryCatalog.searches,1);compare(discoveryCatalog.query,"");verify(discoveryCatalog.onlineStoreSearch)
+            store.handleCommand(inputManager.search);verify(store.searchOpen)
+            const keyboard=findChild(store,"storeKeyboard");verify(keyboard!==null)
+            keyboard.canceled();compare(discoveryCatalog.searches,1)
+            store.handleCommand(inputManager.search);keyboard.accepted("newpipe")
+            compare(discoveryCatalog.searches,2);compare(discoveryCatalog.query,"newpipe");compare(store.area,"grid")
+            store.deviceApps=true;store.handleCommand(inputManager.search);keyboard.accepted("local")
+            compare(discoveryCatalog.searches,2)
+            store.choosePlatform(1);store.handleCommand(inputManager.search);keyboard.accepted("website")
+            compare(discoveryCatalog.searches,2)
+            store.choosePlatform(0);store.area="header";store.handleCommand(inputManager.navigateDown);compare(store.area,"tools")
+            store.handleCommand(inputManager.navigateUp);compare(store.area,"header")
+            if(studioFixture.artifacts)grabImage(store).save(studioFixture.artifacts+"/studio-test-store-discovery.png")
+        }
+        function test_store_keeps_provider_package_and_unicode_matches(){
+            discoveryCatalog.onlineStoreSearch=true;discoveryCatalog.providerResults=[{id:"online-match"}]
+            const store=createTemporaryObject(storeDiscoveryComponent,tests.parent,{entries:[
+                {id:"provider:online-match",name:"Straße",type:"android",category:"Video",description:"",publisher:""},
+                {id:"local-match",name:"strasse local",type:"android",category:"Video",description:"",publisher:""},
+                {id:"unrelated",name:"Other",type:"android",category:"Video",description:"",publisher:""}]})
+            verify(store!==null);store.searchText="strasse"
+            compare(store.filtered.length,2);compare(store.filtered[0].id,"provider:online-match")
+            const glyph=findChild(store,"storeAppSymbol-provider:online-match");tryVerify(()=>findChild(store,"storeAppSymbol-provider:online-match")!==null)
+            compare(findChild(store,"storeAppSymbol-provider:online-match").text,"S")
+            discoveryCatalog.onlineStoreSearch=false;compare(store.filtered.length,1);compare(store.filtered[0].id,"local-match")
+            discoveryCatalog.providerResults=[]
+        }
         function test_gallery_vpn_deferred_failure_retry_and_settings_return(){
             const gallery=createTemporaryObject(allAppsComponent,tests.parent);verify(gallery!==null)
             gallery.showForOrigin("page-apps")
@@ -191,6 +237,7 @@ Item {
             property var entries:[]
             function setOnlineStoreSearch(value){onlineStoreSearch=value}
             function searchStore(query){}
+            function browseOnlineStore(query){onlineStoreSearch=true}
             function addWebApp(name,url,backend){webAdds++;entries=[{id:"web-custom",name:name,type:"web",storeType:"web",category:"Web",publisher:"example.org",description:url,symbol:"W",accent:"#347d9c",installed:true}];return "web-custom"}
             function install(id){entries=entries.map(e=>Object.assign({},e,{installed:e.id===id?true:e.installed}));return true}
             function uninstall(id){entries=entries.map(e=>Object.assign({},e,{installed:e.id===id?false:e.installed}));return true}
@@ -233,7 +280,7 @@ Item {
             storeOpenSpy.target=store
             for(let platform=0;platform<2;++platform){
                 store.choosePlatform(platform);compare(store.filtered.length,1)
-                store.handleCommand(inputManager.navigateDown);store.handleCommand(inputManager.confirm)
+                store.handleCommand(inputManager.navigateDown);compare(store.area,"tools");store.handleCommand(inputManager.navigateDown);store.handleCommand(inputManager.confirm)
                 compare(store.confirmation,"install");store.handleCommand(inputManager.back);compare(store.selected.installed,false)
                 store.handleCommand(inputManager.confirm);store.handleCommand(inputManager.navigateRight);store.handleCommand(inputManager.confirm)
                 compare(store.selected.installed,true);const id=store.selectedId

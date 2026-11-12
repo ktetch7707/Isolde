@@ -8,7 +8,12 @@
 
 static std::unique_ptr<QSettings> searchStore(const QString &path)
 {
-    return path.isEmpty() ? std::make_unique<QSettings>() : std::make_unique<QSettings>(path,QSettings::IniFormat);
+    // Retain the existing profile preference file. The application has no
+    // organization name, so default QSettings reports AccessError even when
+    // its fallback file is writable. Explicit file access avoids that error
+    // without relocating or rewriting existing preferences on load.
+    const auto file = path.isEmpty() ? QSettings().fileName() : path;
+    return std::make_unique<QSettings>(file,QSettings::IniFormat);
 }
 
 SearchSettings::SearchSettings(QObject *parent,const QString &settingsPath,const QString &profile) : QObject(parent),m_settingsPath(settingsPath)

@@ -195,8 +195,9 @@ private slots:
         QVERIFY(catalog.errorString().contains("Unknown"));
         provider.identity="fdroid";catalog.setStoreProvider(&provider);
         catalog.searchStore("test");QCOMPARE(provider.searches,0);
+        catalog.browseOnlineStore(QString(129,'x'));QCOMPARE(provider.searches,0);QVERIFY(!catalog.onlineStoreSearch());
         QVERIFY(!catalog.downloadAndInstall("test-app"));QCOMPARE(provider.artifacts,0);
-        catalog.setOnlineStoreSearch(true);QCOMPARE(provider.searches,1);
+        catalog.browseOnlineStore("  newpipe  ");QCOMPARE(provider.searches,1);QCOMPARE(provider.lastQuery,QString("newpipe"));
         QCOMPARE(catalog.providerResults().size(),1);
         QVERIFY(!catalog.downloadAndInstall("test-app"));QVERIFY(catalog.errorString().contains("SHA-256"));
         QVERIFY(!catalog.isInstalled("test-app"));QVERIFY(registry.find("test-app")==nullptr);

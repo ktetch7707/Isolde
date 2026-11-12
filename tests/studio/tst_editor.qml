@@ -213,6 +213,47 @@ Item {
             command(inputManager.back);compare(editor.mode,"pageContext");compare(editor.choice,8)
             compare(studioFixture.disk(),diskBaseline)
         }
+        function test_all_apps_remote_presentation_preview_discard_apply_and_reopen() {
+            scenario("gallery-presentation",()=>{
+                givenPage(false,false)
+                const originalGallery=JSON.stringify(homeLayout.composition.appGallery || {})
+                function editGallery(){
+                    editor.mode="pageContext";editor.choice=8;command(inputManager.confirm);compare(editor.mode,"appGallery")
+                    for(let field=0;field<8;++field){editor.choice=field;command(inputManager.navigateRight)}
+                    const presentation=editor.appGalleryPresentation()
+                    compare(presentation.layout,"list");compare(presentation.columns,6);compare(presentation.density,"spacious");compare(presentation.sort,"favorites")
+                    for(const key of ["showArtwork","showLabels","filterEnabled","favoritesEnabled"])compare(presentation[key],false)
+                    return JSON.stringify(editor.page.composition.appGallery)
+                }
+                const draft=editGallery();compare(studioFixture.disk(),diskBaseline)
+                if(studioFixture.artifacts)grabImage(editor).save(studioFixture.artifacts+"/studio-test-gallery-controls.png")
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="apply"));compare(editor.mode,"apply")
+                editor.choice=editor.dialogLabels().indexOf("Try changes");command(inputManager.confirm);compare(editor.mode,"preview")
+                compare(JSON.stringify(findChild(editor,"studioPreview").composition.appGallery),draft)
+                compare(JSON.stringify(homeLayout.composition.appGallery || {}),originalGallery);compare(studioFixture.disk(),diskBaseline)
+                command(inputManager.back);compare(editor.mode,"apply")
+                editor.choice=1;command(inputManager.confirm);compare(editor.mode,"canvas")
+                for(let back=0;back<3 && editor.mode==="canvas";++back)command(inputManager.back)
+                compare(editor.mode,"dirty");command(inputManager.navigateDown);command(inputManager.confirm);compare(editor.mode,"discard")
+                command(inputManager.navigateDown);command(inputManager.confirm);verify(!editor.open);compare(studioFixture.disk(),diskBaseline);settle()
+                editor.show("","cell-0");tryVerify(()=>editor.current!==null)
+                compare(JSON.stringify(editor.page.composition.appGallery || {}),originalGallery)
+                editGallery()
+                for(let field=4;field<8;++field){editor.choice=field;command(inputManager.navigateRight)}
+                const applied=JSON.stringify(editor.page.composition.appGallery)
+                editor.activateMenu(editor.menuEntries.findIndex(e=>e.action==="apply"));editor.choice=0;command(inputManager.confirm);compare(editor.mode,"canvas")
+                verify(studioFixture.disk()!==diskBaseline);compare(JSON.stringify(homeLayout.composition.appGallery),applied)
+                const saved=studioFixture.disk();compare(JSON.stringify(JSON.parse(saved).composition.appGallery),applied)
+                if(studioFixture.artifacts)verify(studioFixture.writeGalleryPresentation(homeLayout.composition.appGallery))
+                editor.close();settle();editor.show("","cell-0");tryVerify(()=>editor.current!==null)
+                compare(JSON.stringify(editor.page.composition.appGallery),applied);compare(studioFixture.disk(),saved)
+                editor.mode="pageContext";editor.choice=8;command(inputManager.confirm);editor.choice=9;command(inputManager.confirm)
+                verify(!editor.page.composition.appGallery);compare(studioFixture.disk(),saved)
+                compare(editor.mode,"pageContext");compare(editor.choice,8)
+                command(inputManager.confirm);compare(editor.mode,"appGallery");editor.choice=10;command(inputManager.confirm)
+                compare(editor.mode,"pageContext");compare(editor.choice,8);compare(studioFixture.disk(),saved)
+            })
+        }
         function test_studio_colors_use_shared_picker_cancel_and_one_undo() {
             scenario("studio-colors",()=>{
                 givenPage(false,false)

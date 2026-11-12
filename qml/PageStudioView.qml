@@ -583,8 +583,8 @@ Item {
     }
     function changeAppGallerySetting(index,direction) {
         if(index===8){beginKeyboard("appGalleryTitle",appGalleryPresentation().title || "All Apps");return}
-        if(index===9){if(command("pagePatch",{scope:"composition",value:{appGallery:null}})){mode="editorSettings";choice=2;message="This page inherits the profile's All Apps presentation."}else message=session.errorString;return}
-        if(index===10){mode="editorSettings";choice=2;return}
+        if(index===9){if(command("pagePatch",{scope:"composition",value:{appGallery:null}})){mode="pageContext";choice=8;message="This page inherits the profile's All Apps presentation."}else message=session.errorString;return}
+        if(index===10){mode="pageContext";choice=8;return}
         const presentation=appGalleryPresentation()
         if(index===0)patchAppGallery("layout",presentation.layout==="grid"?"list":"grid")
         else if(index===1)patchAppGallery("columns",Math.max(2,Math.min(8,Number(presentation.columns || 5)+direction)))

@@ -43,7 +43,7 @@ Item {
         else if (event.key === Qt.Key_Minus) { zoom = Math.max(0.5, zoom - 0.1); event.accepted = true }
         else if (event.key === Qt.Key_0) { zoom = 1.0; event.accepted = true }
     }
-    readonly property var headerControls: config.headerControls || (config.headerMode === "identity" ? ["search", "settings"] : ["settings", "edit"])
+    readonly property var headerControls: host.visibleHeaderControls(config.headerControls || (config.headerMode === "identity" ? ["search", "settings"] : ["settings", "edit"]))
     readonly property bool identityHeader: config.headerMode === "identity"
     readonly property var headerStyle:Object.assign({},(host.headerDefaults || {})[identityHeader?"identity":"navigation"] || {},config.header || {})
     readonly property var headerOrder:headerStyle.order || ["title","controls","clock"]
@@ -331,12 +331,12 @@ Item {
             if (command === inputManager.navigateLeft) focusedTab = Math.max(0, focusedTab - 1)
             else if (command === inputManager.navigateRight) focusedTab = Math.min(tabs.length - 1, focusedTab + 1)
             else if (command === inputManager.confirm) activateTab(focusedTab)
-            else if (command === inputManager.navigateUp) host.recoveryFocused = true
+            else if (command === inputManager.navigateUp) host.focusRecoveryHeader()
             else if (command === inputManager.navigateDown) { const first = focusEntries()[0]; if (first) { focusEntry(first); navigationFocused = false } }
             return
         }
         const entries = focusEntries(), current = entries.find(e => sectionActionId ? e.id === sectionActionId : !e.sectionAction && host.itemIndex(e.id) === host.focusedIndex) || entries[0]
-        if (!current) { host.recoveryFocused = true; return }
+        if (!current) { host.focusRecoveryHeader(); return }
         const focusedItem=(host.items || []).find(i=>i.id===current.id)
         const pageMenu=focusedItem && focusedItem.family==="page-menu"
         if((current.widget || focusedItem && (focusedItem.componentType==="library" || focusedItem.appCollection || ["page-menu","carousel","detected-sources","source-notice"].indexOf(focusedItem.family)>=0)) && widgets[current.id]
@@ -367,7 +367,7 @@ Item {
         } else if (command === inputManager.navigateUp || command === inputManager.navigateDown) {
             const direction = command === inputManager.navigateUp ? -1 : 1
             const rows = entries.filter(e => (e.row-current.row)*direction > 0).map(e => e.row)
-            if (!rows.length && direction < 0) { navigationFocused = tabs.length > 0; host.recoveryFocused = !tabs.length; return }
+            if (!rows.length && direction < 0) { navigationFocused = tabs.length > 0; if(!tabs.length)host.focusRecoveryHeader(); return }
             const row = direction < 0 ? Math.max(...rows) : Math.min(...rows)
             candidates = entries.filter(e => e.row === row).sort((a,b) => Math.abs(a.x-current.x)-Math.abs(b.x-current.x))
         }

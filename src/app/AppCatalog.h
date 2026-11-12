@@ -49,6 +49,7 @@ public:
     Q_INVOKABLE StoreProvider *storeProvider() const { return m_provider; }
     Q_INVOKABLE void setOnlineStoreSearch(bool enabled);
     Q_INVOKABLE void searchStore(const QString &query);
+    Q_INVOKABLE void browseOnlineStore(const QString &query);
     Q_INVOKABLE void changeStorePage(int direction);
     Q_INVOKABLE bool checkForUpdates();
     Q_INVOKABLE bool setUpdatesEnabled(const QString &id, bool enabled);

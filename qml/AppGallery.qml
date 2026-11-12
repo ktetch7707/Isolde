@@ -330,9 +330,8 @@ Item {
             height: parent.height - 120
             clip: true
             cellWidth: root.layoutMode === "list" ? width : width / root.columns
-            cellHeight: root.layoutMode === "list" ? 82 : Math.min(
-                height,
-                210 * (root.galleryPresentation.density === "compact" ? 0.82 : root.galleryPresentation.density === "spacious" ? 1.15 : 1))
+            cellHeight: Math.min(height, (root.layoutMode === "list" ? 82 : 210)
+                * (root.galleryPresentation.density === "compact" ? 0.82 : root.galleryPresentation.density === "spacious" ? 1.15 : 1))
             model: root.visibleEntries
             currentIndex: root.selectedIndex
             highlightMoveDuration: 0
@@ -376,8 +375,9 @@ Item {
                             name: entry.modelData.name,
                             showTitle: root.galleryPresentation.showLabels !== false,
                             unavailableReason: "",
-                            logoSource: "",
-                            showLogo: false,
+                            action: ({type: "launch-app", appId: entry.modelData.id}),
+                            logoSource: entry.modelData.logoSource || "",
+                            showLogo: root.galleryPresentation.showArtwork !== false,
                             appSymbol: entry.modelData.symbol || entry.modelData.name.slice(0, 1),
                             presentation: ({
                                 variant: root.galleryPresentation.showLabels === false ? "source" : "summary",

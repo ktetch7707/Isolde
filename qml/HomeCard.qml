@@ -24,7 +24,7 @@ Item {
     readonly property string visualState:item.designState || (item.unavailableReason?"unavailable":mouseArea.pressed?"pressed":item.current?"selected":selected?"focused":"normal")
     readonly property var style:Object.assign({},baseStyle,(baseStyle.states || {}).normal || {},(baseStyle.states || {})[visualState] || {})
     readonly property string kind: item.componentType==="shape"?"shape":item.widgetType === "text" ? "text" : style.appIconStyle?"orb":(style.variant || variant) === "launcher" ? "source" : (style.variant || variant)
-    readonly property bool launcherArtwork:kind==="source" && !!item.action && item.action.type==="launch-app" && !item.customLogo
+    readonly property bool launcherArtwork:(kind==="source" || kind==="summary") && !!item.action && item.action.type==="launch-app" && !item.customLogo
     readonly property bool showLauncherArtwork:launcherArtwork && !!item.logoSource && item.showLogo!==false && !style.icon
     readonly property color ink: appearance.labelColor || appearance.textColor || "#EEEAF0"
     readonly property color muted: appearance.mutedColor || "#AAA4B2"
@@ -70,7 +70,7 @@ Item {
             motionEnabled:root.artworkMotionAllowed && root.style.animateArtwork===true;reducedMotion:root.appearance.motionEnabled===false
             anchors.fill: parent; source: root.kind === "orb" || root.launcherArtwork ? "" : root.item.logoSource || ""
             crop: root.style.imageCrop || null; radius: surface.radius
-            visible:root.item.showLogo!==false
+            visible:root.item.showLogo!==false && !root.launcherArtwork
             fit:root.style.artFit || "cover";focalX:root.style.artFocalX===undefined?0.5:root.style.artFocalX;focalY:root.style.artFocalY===undefined?0.5:root.style.artFocalY;zoom:root.style.artZoom || 1
         }
         LineIcon {
@@ -84,7 +84,8 @@ Item {
             objectName:"launcherArtwork"
             visible:root.showLauncherArtwork;source:visible?root.item.logoSource:""
             width:(root.style.iconSize===undefined?28:root.style.iconSize)*root.unit;height:width
-            x:(parent.width-width)/2;y:parent.height*.21
+            x:root.kind==="summary"?24*root.unit:(parent.width-width)/2
+            y:root.kind==="summary"?(parent.height-height)/2:parent.height*.21
             fit:"contain";radius:0
         }
         Text {id:sourceTitle;textFormat:Text.PlainText;

@@ -236,6 +236,14 @@ void AppCatalog::searchStore(const QString &query)
     if(m_provider && (!m_provider->isOnline() || m_onlineStoreSearch)){setError({});m_provider->requestSearch(m_storeQuery);}
 }
 
+void AppCatalog::browseOnlineStore(const QString &query)
+{
+    if(query.size()>128){setError(tr("Use a search of at most 128 characters."));return;}
+    m_storeQuery=query.trimmed();
+    if(m_onlineStoreSearch)searchStore(m_storeQuery);
+    else setOnlineStoreSearch(true);
+}
+
 void AppCatalog::changeStorePage(int direction)
 {
     if(!busy() && m_onlineStoreSearch && m_provider){m_operationStatus.clear();setError({});m_provider->requestPage(direction);}

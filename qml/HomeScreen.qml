@@ -160,7 +160,7 @@ Item {
     property var sourceWorkflow:({editing:editMode})
     readonly property var headerControlLabels:typeof homeLayout!=="undefined" && homeLayout?(homeLayout.studioOptions.headerLabels || {}):({})
     readonly property var headerControlActions:typeof homeLayout!=="undefined" && homeLayout?(homeLayout.studioOptions.headerActions || {}):({})
-    readonly property var legacyHeaderControls:composition.headerControls || ["settings","edit"]
+    readonly property var legacyHeaderControls:visibleHeaderControls(composition.headerControls || ["settings","edit"])
     readonly property int headerSourceCount:{const revision=sourceProvider?sourceProvider.revision:0;return sourceProvider?sourceProvider.projected(menuActiveId,"header-sources",true,sourceWorkflow).length:0}
     function headerControlLabel(control){return control==="sources"?(headerControlLabels.sources || "Sources")+(headerSourceCount?" · "+headerSourceCount:""):control==="edit"?editLabel:control==="search"?"Search":"Settings"}
     function activateHeaderControl(control){if(control==="sources"){if(sourceProvider)sourceProvider.requestSource("");actionActivated(headerControlActions.sources || {},"header-sources")}else if(control==="search")searchRequested();else settingsRequested(control==="edit"?1:-1)}
@@ -188,6 +188,13 @@ Item {
         actionActivated(page.id?{type:"open-page",pageId:page.id}:{type:"root-page"},"legacy-page-menu")
     }
     property string editLabel: "Edit Home"
+    property bool showEditHeaderControl: true
+    function visibleHeaderControls(controls){return (controls || []).filter(control=>showEditHeaderControl || control!=="edit")}
+    function focusRecoveryHeader(){
+        const controls=composition.enabled?composed.headerControls:legacyHeaderControls
+        recoveryIndex=Math.max(0,controls.indexOf("settings"))
+        recoveryFocused=true
+    }
     property string selectMode: "single"
     property string selectTrigger: "click"
     property string selectAction: "navigate"
@@ -195,7 +202,7 @@ Item {
     readonly property bool widgetActive: composed.activeWidget !== ""
     readonly property string activeMediaWidgetId:composed.activeWidget
     readonly property bool groupActive: composed.activeGroup !== ""
-    readonly property bool contextualMenuAvailable:widgetActive || groupActive || (composition.enabled && !editMode && !recoveryFocused && ["detected-sources","source-notice"].indexOf((items[focusedIndex] || {}).family)>=0)
+    readonly property bool contextualMenuAvailable:widgetActive || groupActive || (!!composition.enabled && !editMode && !recoveryFocused && ["detected-sources","source-notice"].indexOf((items[focusedIndex] || {}).family)>=0)
     property string wallpaperSource: ""
     property var wallpaperItem: null
     readonly property var backdropItem: wallpaperItem || localWallpaper
@@ -222,7 +229,7 @@ Item {
         focusedItemId = items[focusedIndex] ? items[focusedIndex].id : ""
         repairFocus()
     }
-    Component.onCompleted:{if (items[focusedIndex])focusedItemId=items[focusedIndex].id;repairFocus();Qt.callLater(updatePageViewport)}
+    Component.onCompleted:{if (items[focusedIndex])focusedItemId=items[focusedIndex].id;repairFocus();viewportUpdate.restart()}
     onEditModeChanged:repairFocus()
     readonly property int columns: Math.min(appearance.homeColumns || 3, (width < 1000 ? 2 : Math.floor(width / 200)))
     readonly property int gridUnits: columns * 2
@@ -246,7 +253,7 @@ Item {
         return ""
     }
     function focusable(item){return editMode || item && item.componentType!=="shape" && item.componentType!=="text" && !(item.componentType==="image" && !item.action)}
-    function repairFocus(){if(editMode)return;if(composition.enabled && (sections || []).some(s=>(s.presentation || {}).variant==="library")){recoveryFocused=false;return;}if(items[focusedIndex] && focusable(items[focusedIndex]))return;const first=items.findIndex(i=>focusable(i));if(first<0){recoveryFocused=true;return}focusedIndex=first;focusedItemId=items[first].id;recoveryFocused=false}
+    function repairFocus(){if(editMode)return;if(composition.enabled && (sections || []).some(s=>(s.presentation || {}).variant==="library"))return;if(items[focusedIndex] && focusable(items[focusedIndex]))return;const first=items.findIndex(i=>focusable(i));if(first<0){if(!recoveryFocused)focusRecoveryHeader();return}focusedIndex=first;focusedItemId=items[first].id;recoveryFocused=false}
 
     function visualEntries() {
         let result = []
@@ -346,7 +353,7 @@ Item {
             next = moveHorizontal(1)
         else if (command === inputManager.navigateUp) {
             next = moveVertical(-1)
-            if (next === focusedIndex) recoveryFocused = true
+            if (next === focusedIndex) focusRecoveryHeader()
         }
         else if (command === inputManager.navigateDown)
             next = moveVertical(1)
@@ -575,9 +582,10 @@ Item {
             }
         }
     }
+    Timer {id:viewportUpdate;interval:0;onTriggered:root.updatePageViewport()}
     Connections {
         target:composed
-        function onViewportGeometryChanged(){Qt.callLater(root.updatePageViewport)}
+        function onViewportGeometryChanged(){viewportUpdate.restart()}
     }
     PageNavigation {
         id:legacyMenu;objectName:"legacyPageNavigation"

@@ -7,6 +7,7 @@ fetches icons. The caller owns consent, cancellation, and the profile cache.
 """
 import argparse
 import base64
+import gzip
 import hashlib
 import html
 import io
@@ -21,6 +22,7 @@ import tempfile
 import time
 import urllib.request
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 
 REPOSITORY = "https://f-droid.org/repo/"
@@ -180,18 +182,38 @@ class RepositoryRedirect(urllib.request.HTTPRedirectHandler):
 
 def download(name, maximum):
     opener = urllib.request.build_opener(RepositoryRedirect())
-    request = urllib.request.Request(REPOSITORY+name, headers={"User-Agent": "Isolde Store"})
+    request = urllib.request.Request(REPOSITORY+name, headers={"User-Agent": "Isolde Store", "Accept-Encoding": "gzip"})
     with opener.open(request, timeout=20) as response:
-        if response.status != 200 or int(response.headers.get("Content-Length", "0")) > maximum:
+        length=int(response.headers.get("Content-Length", "0"))
+        if response.status != 200 or not 0 <= length <= maximum:
             raise ValueError("F-Droid returned an invalid index download")
+        encoding=response.headers.get("Content-Encoding", "identity").strip().lower()
+        if encoding not in {"identity", "gzip"}:
+            raise ValueError("F-Droid returned an unsupported transfer encoding")
         chunks, total, deadline = [], 0, time.monotonic()+120
-        while True:
-            block = response.read(65536)
-            if not block:
-                break
-            chunks.append(block); total += len(block)
-            if total > maximum or time.monotonic() > deadline:
-                raise ValueError("F-Droid index download exceeded its size or time limit")
+        class BoundedResponse:
+            transferred=0
+            def read(self, size=-1):
+                block=response.read(min(65536, size if size>=0 else 65536, maximum-self.transferred+1))
+                self.transferred+=len(block)
+                if self.transferred>maximum:
+                    raise ValueError("F-Droid transfer exceeded its size limit")
+                if time.monotonic()>deadline:
+                    raise ValueError("F-Droid download exceeded 120 seconds after %d bytes; search again to retry"%self.transferred)
+                return block
+        wire=BoundedResponse()
+        stream=gzip.GzipFile(fileobj=wire,mode="rb") if encoding=="gzip" else wire
+        try:
+            while True:
+                block=stream.read(min(65536,maximum-total+1))
+                if not block:break
+                chunks.append(block);total+=len(block)
+                if total>maximum:raise ValueError("F-Droid expanded index exceeded its size limit")
+                if time.monotonic()>deadline:raise ValueError("F-Droid metadata expansion exceeded its time limit")
+        except (gzip.BadGzipFile,EOFError,zlib.error) as error:
+            raise ValueError("F-Droid returned invalid compressed metadata") from error
+        finally:
+            if encoding=="gzip":stream.close()
         return b"".join(chunks)
 
 

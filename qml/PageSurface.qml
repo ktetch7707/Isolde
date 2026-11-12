@@ -117,6 +117,7 @@ Item {
         sourceWorkflow:root.sourceWorkflow
         selectMode:model && model.selectMode || "single"; selectTrigger:model && model.selectTrigger || "click"; selectAction:model && model.selectAction || "navigate"; selectionColor:model && model.selectionColor || ""
         editLabel:"Edit page"
+        showEditHeaderControl:false
         menuPages:root.pageEntries;menuActiveId:root.activeId
         appearance:root.model?root.model.appearance:({});brandVisible:root.model?root.model.brandVisible:false
         backgroundStart:root.model?root.model.backgroundStart:"#101014";backgroundEnd:root.model?root.model.backgroundEnd:"#101014";tileRoundness:root.model?root.model.tileRoundness:0.18

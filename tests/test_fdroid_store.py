@@ -1,5 +1,6 @@
 import base64
 import copy
+import gzip
 import hashlib
 import importlib.util
 import io
@@ -38,6 +39,35 @@ def fixture(count=1):
 
 
 class FdroidBrowsingTests(unittest.TestCase):
+    def test_compressed_download_retains_signed_index_identity(self):
+        entry,raw=fixture(103)
+        class Reply(io.BytesIO):
+            status=200
+            headers={"Content-Encoding":"gzip"}
+        with patch.object(store.urllib.request,"build_opener") as build:
+            build.return_value.open.return_value=Reply(gzip.compress(raw))
+            downloaded=store.download("index-v2.json",len(raw))
+            self.assertEqual(downloaded,raw)
+            self.assertEqual(len(store.verified_index(entry,downloaded)["apps"]),103)
+            self.assertEqual(build.return_value.open.call_args.args[0].get_header("Accept-encoding"),"gzip")
+
+    def test_download_bounds_wire_expansion_encoding_and_deadline(self):
+        class Reply(io.BytesIO):
+            status=200
+            def __init__(self,data,encoding="gzip"):
+                super().__init__(data);self.headers={"Content-Encoding":encoding}
+        def rejected(data,maximum,encoding="gzip"):
+            with patch.object(store.urllib.request,"build_opener") as build:
+                build.return_value.open.return_value=Reply(data,encoding)
+                with self.assertRaises(ValueError):store.download("index-v2.json",maximum)
+        rejected(gzip.compress(b"x"*10000),100)
+        rejected(gzip.compress(b"data")[:-4],100)
+        rejected(b"data",100,"br")
+        rejected(b"x"*101,100,"identity")
+        with patch.object(store.urllib.request,"build_opener") as build,patch.object(store.time,"monotonic",side_effect=[0,121]):
+            build.return_value.open.return_value=Reply(b"data","identity")
+            with self.assertRaisesRegex(ValueError,"120 seconds"):store.download("entry.jar",100)
+
     def test_update_check_includes_only_requested_subscriptions(self):
         entry, raw = fixture(103)
         doc=store.verified_index(entry,raw)
