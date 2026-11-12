@@ -157,7 +157,7 @@ SUITES = {"all": None, "runtime_contracts":"isolde_native_sandbox_tests", "campa
           "guide_remote_ui": "isolde_guide_ui_tests",
           "guide": ("isolde_guide_tests", "isolde_guide_ui_tests", "isolde_kodi_media_tests"),
           "games": ("isolde_component_tests", "isolde_games_ui_tests", "isolde_tests"),
-          "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests"),
+          "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests", "isolde_native_smoke"),
           "store_remote_ui": "isolde_studio_quick_tests",
           "audio_backend": "isolde_audio_tests",
           "profile_browser_isolation": "isolde_profile_browser_tests",
@@ -857,7 +857,7 @@ def qml_coverage(root, run, base_id, suite, expected_suite, qml, harness, label,
     if not qml.intersection(changed) or any(name not in qml|harness and not name.startswith('docs/') for name in changed):
         raise RuntimeError('Source changes exceed the focused '+label+' QML coverage boundary')
     if any(name not in after or (name not in before and name not in added_harness) for name in changed):
-        raise RuntimeError('Guide QML reuse cannot add or remove source files')
+        raise RuntimeError('Focused reuse cannot add or remove source files outside its named harness boundary')
     return {'baseRunId':base_id,'baseSourceDigest':result['sourceDigest'],
             'sourceDigest':digest(run/'files.sha256'),'changedPaths':changed,'changed'+label+'Qml':sorted(qml.intersection(changed))}
 
@@ -871,8 +871,8 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='store':
-        proof=qml_coverage(root,run,base_id,suite,'store',{'tools/fdroid-store.py','tools/android-setup.py','tools/provision-android.py','qml/AppStoreView.qml'},
-            {'tools/backlog-progress.ps1','tests/test_fdroid_store.py','tests/test_android_provisioning.py','tests/test_store_lifecycle.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store')
+        proof=qml_coverage(root,run,base_id,suite,'store',{'tools/fdroid-store.py','tools/android-setup.py','tools/provision-android.py','qml/AppStoreView.qml','src/input/web-remote.js','src/sessions/NativeAppHost.cpp','src/sessions/ChromiumRemotePipe.h'},
+            {'tools/backlog-progress.ps1','tests/web_remote.cpp','tools/native-session-smoke.cpp','tools/web-remote-acceptance.py','tests/test_fdroid_store.py','tests/test_android_provisioning.py','tests/test_store_lifecycle.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store',{'tools/web-remote-acceptance.py','docs/store-android-authorization-fixture.md'})
         proof['changedStoreFiles']=proof.pop('changedStoreQml')
         return proof
     if suite=='sources':
@@ -1487,7 +1487,7 @@ class Oracle:
         atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None):
-        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
         if target=="kodi-demo-art":
             payload=self.tested_payload();self.deployed_release(payload,target)
             if self.command('hostname')!='isolde-test' or not isinstance(demo_art_helper_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',demo_art_helper_digest):raise RuntimeError('Demo artwork setup requires the tested Isolde VM and a verified helper')
@@ -1544,6 +1544,24 @@ class Oracle:
             check="import importlib.util,json,sys;from pathlib import Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.trusted_support();print(Path('/var/lib/isolde/android-store-capabilities.json').read_text())"
             self.stage('android-support-verify',['python3','-B','-c',check,str(support)],30)
             atomic_json(self.run/'android-support-result.json',{'guest':'isolde-test','passed':True,'support':'/usr/lib/isolde-android-setup','imagesReadOnly':True,'runtimeAndProfilesPreserved':True})
+            return
+        if target=='audio-test-recover':
+            if self.command('hostname')!='isolde-test':raise RuntimeError('Audio test recovery is restricted to Isolde-Test')
+            before=self.service()
+            try:
+                self.stage('audio-recover-stop-shell',['systemctl','--user','stop','isolde.service'],30)
+                self.stage('audio-recover-guest-services',['systemctl','--user','restart','pipewire.service','pipewire-pulse.service','wireplumber.service'],45)
+                states=self.command('systemctl','--user','show','pipewire.service','pipewire-pulse.service','wireplumber.service','--property=Id,ActiveState,SubState')
+                if states.count('ActiveState=active')!=3:raise RuntimeError('Guest audio services did not recover')
+                atomic_json(self.run/'guest-audio-recovery.json',{'guest':'isolde-test','serviceBefore':before,'audioServices':states,'settingsChanged':False,'hostChanged':False})
+            finally:
+                if before.get('ActiveState')=='active':self.stage('audio-recover-restore-shell',['systemctl','--user','start','isolde.service'],30)
+            return
+        if target=="browser-test-tools":
+            if self.command('hostname')!='isolde-test':raise RuntimeError('Browser test setup is restricted to Isolde-Test')
+            self.stage('browser-test-tools-install',['sudo','-n','/usr/bin/apt-get','install','-y','--no-install-recommends','xvfb'],180)
+            if not shutil.which('Xvfb'):raise RuntimeError('Guest Xvfb installation did not supply its executable')
+            atomic_json(self.run/'browser-test-tools.json',{'guest':'isolde-test','package':'xvfb','tool':shutil.which('Xvfb'),'hostChanged':False})
             return
         if target=="audio-test-tools":
             # Test-only guest package, through its pre-existing delegated apt
@@ -2450,7 +2468,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","artifacts","desktop-prompts","kodi-demo-art"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")

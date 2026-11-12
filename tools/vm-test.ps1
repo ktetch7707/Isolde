@@ -17,7 +17,7 @@ param(
     [switch]$GuideDiagnostics,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','artifacts','desktop-prompts','kodi-demo-art')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','browser-test-tools','audio-test-recover','artifacts','desktop-prompts','kodi-demo-art')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'

@@ -1180,3 +1180,99 @@ pending, not installed or counted as acceptance; do not bypass automatic review.
 If that policy action is not approved, choose a safer non-persistent OS-boundary
 fixture rather than asking to waive a software requirement. Ordinary native
 administrator authentication remains available, never through chat credentials.
+
+### Browser controls batch — 2026-11-12 (verification in progress)
+
+BUG-121 (T29.6): real external Chrome inherits the page's ordinary `button`
+margin/content-box rules in Isolde's injected page actions. In web-controls-k,
+all controls work, but the reviewed Menu image shows its buttons extending
+past the panel's right edge. The shared bridge now resets its own boxes, rows,
+caption and buttons and uses bounded border-box/flex geometry. The controlled
+page keeps its interfering CSS; keyboard/menu containment is now an actual DOM
+assertion, alongside physical-key text Cancel/Done, explicit scrolling, history
+Back and owned sandbox exit. No pointer, external debugger listener, account,
+normal-profile data or authorization-policy change is involved.
+
+The new repeatable fixture uses a private guest Xvfb display and production
+NativeSandbox/native-host/pipe bridge. Existing guest apt delegation installs
+only xvfb through Configure browser-test-tools; the host is unchanged. The page
+is a declared loopback service boundary, not a claim of subscription playback.
+The embedded WebEngine tests remain actual engine/input tests. Previous installed
+CBC Gem/Home and Plex/Store origin evidence is retained by source applicability.
+
+Cause-specific preparation failures are retained: a is host sandbox-denied Git/
+SSH (no VM run); b rejects the new helper; c additionally identifies the newly
+committed authorization-proposal document as absent from the old full manifest;
+d's self-test rejects broad documentation additions. The final guard preserves
+that restriction and names only those two additions for Store. e's diagnostic
+was consumed by the test assertion; f retains the exact missing-Xvfb traceback.
+Guest-only xvfb setup passes. g/h identify private display/window naming; i
+identifies an unmapped Chrome helper (BadMatch); j lacks the actual page-focus
+readiness barrier. k passes six focused registrations/120 runner checks and25
+actual X keys with five reviewed external frames, then reveals BUG-121 during
+visual review. No failed attempt earns acceptance. l verifies the repaired
+shared JS, with no full-suite or unrelated reference rerun.
+
+BUG-122 (T29.6): external Chrome had no owned-session return when remote Back
+reached its first browser-history entry. The shared bridge also used total
+history length, which includes forward entries after Back. A source review of
+that final route kept T29.6.c open despite l's passing text/Menu/scroll/history
+journey. The fix uses the browser Navigation API's actual canGoBack capability
+(with the existing legacy fallback) and one fixed `return` binding restricted
+to the IsoldeRemote isolated world and attached owned sessions. It exposes no
+arbitrary command/data interface or listener. Native-host return reuses the
+existing graceful stop/owned-group cleanup. m's extended actual Escape test
+correctly fails on missing Runtime event delivery; n enables that delivery and
+retains actual history/focus/key observations and failure screenshots. Empty
+appearance still fails closed. No missing Back behavior is labelled external.
+
+l itself passes120 runner checks/all6 Store registrations, sourceDigest
+120223c7b2595ac9cec99cafcbd63b45f4ec078d2077ad9e45b5ea85ea3165a7;
+installed67e84ef799df04ef880721b0. Seven installed Web lifecycle captures pass
+and are reviewed: actual Plex interface, physical Home return to Open on Plex,
+Cancel-first remove and verified absent manifest. Normal layouts unchanged;
+service active/running/zero restarts. Twenty native captures are reviewed by
+new images or exact prior pixels. This is the intermediate overflow fix, not
+acceptance of the as-yet-unverified root-Back addition. T29.6.c remains open
+until the complete corrected production route and source applicability pass.
+
+### Browser batch accepted — final web-controls-s
+
+S passes120 runner/all6 focused Store tests with strict original feedback-r61/61
+coverage reuse. SourceDigest b05da56a1c67e69ca3b8a9973a31e38221b0fd2770be7b1855befb1cf4106bc4;
+installed c2b0ac24fadcf2f7652d986b. Actual external Chrome records26 physical X
+keys, text Cancel/no-write and Done/1, contained keyboard/Menu under interfering
+page CSS, explicit scroll, real second-page navigation/history Back, then an
+additional Escape closes the owned sandbox with rootBackExitVerified=true.
+Actual embedded WebEngine covers controls/dialog keyboard/top-layer/shelf.
+Shared Main/SessionManager/DesktopSession/NativeSandbox origin restoration is
+unchanged from accepted installed f CBC/Home and r collections native exits.
+
+Final installed Plex/Store journey passes7 reviewed captures after a diagnosed
+guest PipeWire timeout: install, real public interface, physical Home returns to
+Plex/Open, confirmed remove and manifests absent. The first attempt creates no
+application window and earns nothing; its log retains pw_core_sync timed out.
+Guest-only, locked audio-test-recover stops the shell, restarts/verifies PipeWire,
+PipeWire-Pulse/WirePlumber and restores prior shell-active state without changing
+settings. The same candidate then passes. Audio-service-denial startup resilience
+remains broader T12 work, not new credit here. Both normal layout hashes unchanged;
+service restored active/running, PID341290, zero restarts. Explicit ledger27
+reviewed/0 pending; failed attempt retained separately, no failed PNG credit.
+
+n's regression catches an independent key listener closing the session during
+keyboard Cancel. The final single shared handler handles keyboard/Menu/history
+before invoking root return. o stops before VM tests on concurrent new input
+files. A detached workspace-only test checkout preserves that coder's work;
+p/q refuse checkout byte/EOL differences, corrected by restoring frozen l bytes
+and applying only this batch. r meets another healthy run's lock; s waits through
+the bounded runner and passes. No healthy run is interrupted. Its unused
+remote_bindings runner registration is harness-only and not selected; the
+concurrent input application/QML/config/CMake changes are excluded from the
+installed candidate and this batch's commits. Preserve their staged files.
+
+T29.6.c and its parent accepted under unchanged weights; Store75→78%. Combined
+working-ledger accounting (including the independently recorded T12 binding
+milestone) is2148/25=85.92%, rounded86%,177/218. No Android install/update/
+protected rollback, combined disconnected Generator or subscription playback
+claim. No policy was installed or approved. Next independent Store work remains
+offline/profile/error recovery, alongside the protected Android lifecycle.

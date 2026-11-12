@@ -8,14 +8,27 @@ this supersedes the older rerun deferrals below. Resume
 `round2-20261111-b` is the frozen full-suite attempt. Preserve the six existing
 Studio test-file edits. Diagnose the first named failure before resuming
 unattempted registrations; then exercise missing/source-affected VM workflows.
-Current acceptance86% (2143/25),175/216 milestones. T25/T26/T28 accepted100%.
-Current installed4b8acad73bafd1cc61ae3c77, store-runtime-f: six Store tests and120
+Current acceptance86% (2146/25),176/216 milestones.
+Latest browser candidate web-controls-s installed c2b0ac24fadcf2f7652d986b.
+Six Store/120 runner tests pass with original r61/61 reuse;26 physical remote
+keys verify real Chrome text Cancel/Done, Menu, explicit scroll, history Back and
+root-Back owned exit. BUG-121 overlay overflow and BUG-122 root-Back/history
+are fixed; actual embedded WebEngine tests and installed Plex lifecycle pass.
+27 captures reviewed/0 pending, unchanged normal layouts, service active/0 restarts.
+T29.6 accepted; T29=78%. The initial installed attempt hit a guest PipeWire timeout;
+locked audio-test-recover restores the three user services without settings/host
+changes, then the same installed candidate passes. Preserve the concurrent T12
+input-controls batch. Detached browser-controls-check is the isolated test checkout;
+its final evidence is also copied to build/vm-oracle/round2-20261112-web-controls-s.
+No browser runner remains active. Next T29 work is combined offline/profile/error
+recovery and protected Android transactions; the proposed policy remains unapproved. T25/T26/T28 accepted100%.
+Previous installed4b8acad73bafd1cc61ae3c77, store-runtime-f: six Store tests and120
 runner checks pass with strict original feedback-r61/61/source/payload reuse.
 Fixed support package configured, SDK33/x86_64+x86/image-bound trusted metadata;
 actual idle Store Install availability verified. Reviewed Web lifecycle7/50s
 and signed discovery8/101s pass, normal layouts unchanged/service restored.
 T29.2.c/.3.b/.5.b/.6.b independently accepted under unchanged original weights;
-T29=75%. See BUG-117–120/cause-specific failed attempts in the round-two record.
+At runtime-f T29=75%. See BUG-117–120/cause-specific failed attempts in the round-two record.
 Guest cache recovery preserves installed/offline runtime packages, current/pinned
 candidates and authored-source evidence; clean pinned upstream checkout removed.
 Clients retry044933 passes8 reviewed frames/192s: actual CBC Gem Browse
@@ -24,7 +37,7 @@ return. First attempt timed out at attended freetubepermission (no dialog); its
 three captures are excluded. Explicit ledger38 reviewed/3 excluded/0 pending.
 No runner active, no rebuild/full/reference run for harness inputs/accounting.
 Preserve the six unrelated Studio test files. Next independent T29 work is the
-installed external/embedded text/Menu/explicit-scroll/full-origin matrix and Web
+combined Web
 profile/offline/error recovery. Protected Android setup/update/remove/rollback
 remains separate; no positive Android package claim from these Web/runtime checks.
 Android protected positive transactions await explicit authorization: automatic
@@ -32,7 +45,7 @@ review rejected the proposed profile-only test rule. No rule was installed; do
 not bypass that rejection. Reviewable proposal: store-android-authorization-fixture.md.
 The async approval question remains pending. Ordinary native authentication is
 an alternative; no password may be collected in chat. Continue independent T29
-browser/input/offline/profile work without inventing an Android install pass.
+offline/profile work without inventing an Android install pass.
 ## User-directed T12 interface sound themes — 2026-11-11
 
 Selected: Kodi-compatible audible UI feedback, extending the Settings cleanup.

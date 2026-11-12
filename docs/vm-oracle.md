@@ -213,3 +213,16 @@ SHA256 may be removed, retaining newest three bundles and all raw guest evidence
 Host files, installed releases, source and compiled-object caches stay untouched.
 Checksums, redirected paths and mount failures remain hard errors. This is used
 only after the existing safer cache/source cleanup cannot meet the2GiB floor.
+
+Browser automation setup: `Configure -ConfigureTarget browser-test-tools`
+installs guest-only xvfb through existing apt delegation. The real external
+Chrome remote regression uses its own X display, production NativeSandbox and
+native-host private pipe bridge, a controlled loopback page and physical X keys;
+no logged-in browser data or debugger listener is used. Bounded Store reuse now
+also names `src/input/web-remote.js`, `src/sessions/ChromiumRemotePipe.h` and
+`src/sessions/NativeAppHost.cpp`; both real browser engines and owned root-Back
+exit must pass, retaining strict original full payload/source checks. Other
+C++/build changes are still refused. `Configure -ConfigureTarget audio-test-recover`
+is guest-only recovery for a diagnosed PipeWire timeout: it holds the VM lock,
+stops the shell, restarts the three guest audio user services, verifies them and
+restores the previous shell-active state. No audio settings or host changes.

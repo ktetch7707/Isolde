@@ -231,7 +231,7 @@ int main(int argc, char **argv)
         if(QFileInfo(data).isSymLink() || QFileInfo(QFileInfo(data).absolutePath()).isSymLink())return 2;
         if(!QDir().mkpath(data))return 2;
         arguments<<"--remote-debugging-pipe"<<"--user-data-dir="+data;
-        remote=std::make_unique<ChromiumRemotePipe>(app,child,remoteAppearance,[&]{remoteFailed=true;stop();});
+        remote=std::make_unique<ChromiumRemotePipe>(app,child,remoteAppearance,[&]{remoteFailed=true;stop();},stop);
         if(!remote->valid)return 2;
     }
     #endif

@@ -4,6 +4,9 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QProcess>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QtTest>
 #include <QtWebEngineQuick/qtwebenginequickglobal.h>
 
@@ -19,6 +22,21 @@ signals:
 class WebRemoteTest final : public QObject {
     Q_OBJECT
 private slots:
+    void externalChromeRemoteBoundary(){
+        QProcess check;
+        QTemporaryDir fallback;
+        const auto artifacts=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS",fallback.path());
+        auto environment=QProcessEnvironment::systemEnvironment();environment.insert("ISOLDE_TEST_ARTIFACTS",artifacts);check.setProcessEnvironment(environment);
+        check.setStandardErrorFile(artifacts+"/external-web-remote-driver.log");
+        check.start("python3",{QFileInfo(QString::fromUtf8(__FILE__)).absolutePath()+"/../tools/web-remote-acceptance.py",QCoreApplication::applicationDirPath()+"/isolde_native_smoke"});
+        QVERIFY(check.waitForStarted(3000));
+        QVERIFY(check.waitForFinished(55000));
+        QCOMPARE(check.exitStatus(),QProcess::NormalExit);
+        QFile diagnostics(artifacts+"/external-web-remote-driver.log");
+        diagnostics.open(QIODevice::ReadOnly);
+        const auto message=diagnostics.readAll();
+        QVERIFY2(check.exitCode()==0,message.constData());
+    }
     void directionalActivationKeyboardCancelAndPageActions(){
         InputManager input;RemoteReport report;QQmlApplicationEngine engine;
         engine.rootContext()->setContextProperty("inputManager",&input);engine.rootContext()->setContextProperty("remoteTest",&report);

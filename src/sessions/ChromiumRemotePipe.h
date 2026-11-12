@@ -18,8 +18,8 @@
 // remote listener, arbitrary command API, or browser-data export is provided.
 class ChromiumRemotePipe {
 public:
-    ChromiumRemotePipe(QCoreApplication &app,QProcess &process,const QVariantMap &appearance,std::function<void()> failed)
-        :owner(app),child(process),failure(std::move(failed)),source(webRemoteScript(appearance)) {
+    ChromiumRemotePipe(QCoreApplication &app,QProcess &process,const QVariantMap &appearance,std::function<void()> failed,std::function<void()> returned)
+        :owner(app),child(process),failure(std::move(failed)),returnToOwner(std::move(returned)),source(webRemoteScript(appearance)) {
         valid=!source.isEmpty() && ::pipe2(input,O_CLOEXEC)==0 && ::pipe2(output,O_CLOEXEC)==0;
         if(!valid)return;
         ::fcntl(input[1],F_SETFL,::fcntl(input[1],F_GETFL)|O_NONBLOCK);
@@ -65,6 +65,11 @@ private:
     }
     void receive(const QJsonObject &message){
         const auto method=message.value("method").toString();const auto params=message.value("params").toObject();
+        if(method=="Runtime.bindingCalled" && sessions.contains(message.value("sessionId").toString())
+                && params.value("name").toString()=="__isoldeReturnToOwner" && params.value("payload").toString()=="return"){
+            qInfo("Isolde remote root Back requested owned return");
+            returnToOwner();return;
+        }
         if(method=="Target.targetCreated"){
             const auto target=params.value("targetInfo").toObject();const auto type=target.value("type").toString(),id=target.value("targetId").toString();
             if((type=="page" || type=="iframe") && !attached.contains(id) && attached.size()<32){
@@ -74,12 +79,15 @@ private:
         const auto id=message.value("id").toInt();
         if(attaching.remove(id)){
             const auto session=message.value("result").toObject().value("sessionId").toString();if(session.isEmpty())return;
+            sessions.insert(session);
+            send("Runtime.enable",{},session);
+            send("Runtime.addBinding",{{"name","__isoldeReturnToOwner"},{"executionContextName","IsoldeRemote"}},session);
             send("Page.enable",{},session);
             scripts.insert(send("Page.addScriptToEvaluateOnNewDocument",{{"source",source},{"worldName","IsoldeRemote"},{"runImmediately",true}},session));
         }else if(scripts.remove(id) && !message.contains("error")){ready=true;}
     }
-    QCoreApplication &owner;QProcess &child;std::function<void()> failure;QString source;
+    QCoreApplication &owner;QProcess &child;std::function<void()> failure,returnToOwner;QString source;
     int input[2]={-1,-1},output[2]={-1,-1},sequence=0;bool ready=false;
-    QSocketNotifier *reader=nullptr,*writer=nullptr;QByteArray incoming,outgoing;QHash<int,QString> attaching;QSet<int> scripts;QSet<QString> attached;
+    QSocketNotifier *reader=nullptr,*writer=nullptr;QByteArray incoming,outgoing;QHash<int,QString> attaching;QSet<int> scripts;QSet<QString> attached,sessions;
 };
 #endif

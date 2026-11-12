@@ -7,7 +7,7 @@ function isoldeRemote(options) {
     let current=null,keyboard=null,pageMenu=null,menuIndex=0,draft="",original="",keyIndex=0,upper=false;
     const owned=new WeakSet();
     function overlayParent(){return current && current.closest('dialog[open]') || root;}
-    function box(style){const item=document.createElement("div");owned.add(item);Object.assign(item.style,{fontFamily:"sans-serif",...style});overlayParent().appendChild(item);return item;}
+    function box(style){const item=document.createElement("div");owned.add(item);Object.assign(item.style,{all:"initial",display:"block",boxSizing:"border-box",fontFamily:"sans-serif",lineHeight:"normal",...style});overlayParent().appendChild(item);return item;}
     const ring=box({position:"fixed",pointerEvents:"none",zIndex:"2147483646",boxSizing:"border-box",border:"3px solid "+options.focusColor,borderRadius:corners+"px",display:"none"});
     const hint=box({position:"fixed",pointerEvents:"none",zIndex:"2147483646",bottom:"0",left:"0",right:"0",padding:"12px 20px",background:options.surfaceColor,color:options.textColor,fontSize:(17*scale)+"px",textAlign:"center"});
     function tell(){hint.textContent="D-pad Move highlight · OK Select · Menu Page actions · Home Isolde";}
@@ -52,12 +52,13 @@ function isoldeRemote(options) {
     }
     function closeMenu(){if(pageMenu){pageMenu.remove();pageMenu=null;paint();}return true;}
     function menuPaint(){Array.from(pageMenu.children).forEach((button,index)=>button.style.outline=index===menuIndex?"3px solid "+options.focusColor:"none");}
-    function menuSelect(){const index=menuIndex;closeMenu();if(index===1)scrollPage(-0.6);else if(index===2)scrollPage(0.6);else if(index===3 && history.length>1)history.back();}
+    function canGoBack(){return globalThis.navigation && typeof navigation.canGoBack==="boolean"?navigation.canGoBack:history.length>1;}
+    function menuSelect(){const index=menuIndex;closeMenu();if(index===1)scrollPage(-0.6);else if(index===2)scrollPage(0.6);else if(index===3 && canGoBack())history.back();}
     function openMenu(){
         if(pageMenu)return closeMenu();menuIndex=0;
         pageMenu=box({position:"fixed",zIndex:"2147483647",top:"20%",left:"30%",right:"30%",padding:"20px",background:options.surfaceColor,color:options.textColor,border:"3px solid "+options.focusColor,borderRadius:corners+"px"});
         pageMenu.setAttribute("data-isolde-remote-menu","");pageMenu.setAttribute("role","dialog");pageMenu.setAttribute("aria-label","Page actions");
-        ["Return to page","Scroll up","Scroll down","Back a page"].forEach((label,index)=>{const button=document.createElement("button");button.type="button";button.textContent=label;Object.assign(button.style,{display:"block",width:"100%",padding:"16px",marginBottom:"10px",fontSize:(22*scale)+"px",color:options.textColor,background:options.surfaceColor,border:"2px solid "+options.focusColor,borderRadius:corners+"px"});button.addEventListener("click",()=>{menuIndex=index;menuSelect();});pageMenu.appendChild(button);});
+        ["Return to page","Scroll up","Scroll down","Back a page"].forEach((label,index)=>{const button=document.createElement("button");button.type="button";button.textContent=label;Object.assign(button.style,{all:"initial",display:"block",boxSizing:"border-box",fontFamily:"sans-serif",textAlign:"center",width:"100%",padding:"16px",margin:"0 0 10px",fontSize:(22*scale)+"px",color:options.textColor,background:options.surfaceColor,border:"2px solid "+options.focusColor,borderRadius:corners+"px"});button.addEventListener("click",()=>{menuIndex=index;menuSelect();});pageMenu.appendChild(button);});
         menuPaint();paint();return true;
     }
     function closeKeyboard(apply){
@@ -74,14 +75,14 @@ function isoldeRemote(options) {
     let keys=[];
     function renderKeyboard(){
         keyboard.replaceChildren();
-        const caption=document.createElement("div");caption.textContent=current.type==="password"?"•".repeat(Math.min(80,draft.length)):draft;Object.assign(caption.style,{minHeight:"1.4em",padding:"6px",overflow:"hidden",whiteSpace:"nowrap"});keyboard.appendChild(caption);
+        const caption=document.createElement("div");caption.textContent=current.type==="password"?"•".repeat(Math.min(80,draft.length)):draft;Object.assign(caption.style,{all:"initial",display:"block",boxSizing:"border-box",font:"inherit",color:"inherit",minHeight:"1.4em",padding:"6px",overflow:"hidden",whiteSpace:"nowrap"});keyboard.appendChild(caption);
         keys=[];
         for(let row=0;row<rows.length;row++){
-            const line=document.createElement("div");Object.assign(line.style,{display:"flex",gap:"6px",marginTop:"6px"});keyboard.appendChild(line);
+            const line=document.createElement("div");Object.assign(line.style,{all:"initial",display:"flex",boxSizing:"border-box",gap:"6px",marginTop:"6px"});keyboard.appendChild(line);
             const labels=typeof rows[row]==="string"?Array.from(rows[row]):rows[row];
             for(let col=0;col<labels.length;col++){
                 const value=labels[col],button=document.createElement("button");button.type="button";button.textContent=upper && value.length===1?value.toUpperCase():value;
-                Object.assign(button.style,{flex:"1",padding:"8px",fontSize:(19*scale)+"px",color:options.textColor,background:options.surfaceColor,border:"2px solid "+options.focusColor,borderRadius:corners+"px"});
+                Object.assign(button.style,{all:"initial",display:"block",boxSizing:"border-box",minWidth:"0",flex:"1",textAlign:"center",fontFamily:"sans-serif",padding:"8px",fontSize:(19*scale)+"px",color:options.textColor,background:options.surfaceColor,border:"2px solid "+options.focusColor,borderRadius:corners+"px"});
                 const index=keys.length;keys.push({button,value,row,col});button.addEventListener("click",()=>{keyIndex=index;typeKey();});line.appendChild(button);
             }
         }
@@ -119,7 +120,7 @@ function isoldeRemote(options) {
                 highlightKey();return true;
             }
             if(command==="menu")return openMenu();
-            if(command==="back"){if(history.length>1){history.back();return true;}return false;}
+            if(command==="back"){if(canGoBack()){history.back();return true;}return false;}
             if(command==="confirm"){activate();return true;}
             if(command==="search")return openKeyboard();
             if(!["up","down","left","right"].includes(command))return false;
@@ -141,7 +142,16 @@ function isoldeRemote(options) {
     addEventListener("keydown",event=>{
         if(event.ctrlKey || event.altKey || event.metaKey || event.key==="Home")return;
         const commands={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Enter:"confirm",Escape:"back",BrowserBack:"back",ContextMenu:"menu",F2:"menu",BrowserSearch:"search"};
-        if(commands[event.key] && api.handle(commands[event.key])){event.preventDefault();event.stopImmediatePropagation();}
+        const command=commands[event.key];
+        if(command){
+            let handled=api.handle(command);
+            // External Chrome supplies only this fixed isolated-world binding.
+            // Embedded views keep their existing owning-view Back fallback.
+            if(!handled && command==="back" && typeof globalThis.__isoldeReturnToOwner==="function"){
+                globalThis.__isoldeReturnToOwner("return");handled=true;
+            }
+            if(handled){event.preventDefault();event.stopImmediatePropagation();}
+        }
     },true);
     addEventListener("scroll",paint,true);addEventListener("resize",paint);addEventListener("focusin",event=>{if(!keyboard && !pageMenu && candidates().includes(event.target)){current=event.target;paint();}},true);
     return api;
