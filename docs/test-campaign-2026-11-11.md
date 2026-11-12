@@ -814,3 +814,299 @@ profile proofs and this installed renderer/lifecycle matrix. T26 is90%; its
 remote gallery presentation edit/Preview/Cancel/Apply milestone remains open.
 Total2074/25=82.96%, rounded83%,165/212 milestones. Source/reference applicability
 and normal-layout/service preservation are unchanged. No runner remains active.
+
+### BUG-102 — All Apps Done/Reset strand Studio focus on an absent row (T26)
+
+Source review finds both Done and Reset return to editorSettings choice2, but
+that dialog now has only choices0/1. Return to the owning pageContext choice8,
+matching Back. New actual QtQuick Studio input covers all eight gallery controls,
+private Preview, discard/no-write, atomic Apply/reopen, Reset and Done origins.
+A bounded native evidence writer exports the actual applied presentation; its
+SHA256 is bound to the passing candidate. The installed collections journey
+loads that exact saved presentation, then repeats the live registry/filter/native
+input/return matrix. Modified/missing/unpassed evidence is refused.
+
+The existing Sources focused suite now also runs studio_quick (five registrations)
+for this local Studio handler change. Strict original full61/61 reuse allows only
+the earlier four source QML files plus PageStudioView and named regression/helper
+paths; production C++/schema/provider bytes cannot change. No new full run.
+
+Search matrix version2 adds sixteen installed checkpoints: All Apps -> Search ->
+local controlled UNIX Kodi metadata, genuine Web On/Off without arrow toggling,
+cold saved state, real in-app profile switch/new owned windows/default-OFF
+isolation/restored default state, read-only private preference save failure and
+retry, then exact Gallery -> Home origin recovery. IPv4/IPv6 remain denied for
+the actual child, UNIX works, both layouts and native Kodi XML are unchanged.
+The local metadata server is an explicit production-client boundary fixture;
+no real Kodi-server or online-provider/account acceptance is fabricated.
+
+Prepared surfaces-k batches the five focused source/Home/Studio registrations,
+exact Deploy, installed collections using the checksum-bound actual Studio output,
+and the expanded Search/profile matrix. Source18/reference evidence reuses j's
+unchanged source behaviors; no duplicate source tour or full CTest is scheduled.
+The native helper parse check, evidence identity/negative contracts and complete
+Search-matrix receipt tests run before any installed journey. X11 identity is
+PID plus window ID: a cold process may legitimately reuse the old X11 number.
+
+Surfaces-k passes113 runner checks but stops before build at storage: cleanup
+reclaims523702272 bytes and leaves2121641984, still below2GiB. Installed per-user
+releases duplicate already verified staged payloads. Extend existing dedup to
+use a release only when its deployment receipt, canonical24-hex native path,
+whole payload hash, mode/uid/gid/device all match the passing staged candidate.
+Replace staged duplicate paths only; never replace live installed files. Paths,
+bytes, current/pinned candidates and evidence remain. Regression refuses mounted
+or modified installed data and verifies the installed inode itself is unchanged.
+This repairs the diagnosed space cause; surfaces-l resumes the prepared batch.
+
+### BUG-103 — All Apps list ignores artwork presentation (T26)
+Installed surfaces-l loads the exact Studio-applied list configuration, but every
+row discards its logo and forces showLogo=false. Fix passes the registered app
+artwork and declarative visibility into HomeCard, whose generic summary launcher
+art now shares the icon position. Native regression checks visible source,
+non-overlap, artwork OFF and labels OFF. Acceptance remains pending.
+
+### BUG-104 — Installed Search preferences always roll back (T28)
+Surfaces-l expanded installed Search stops at Web On. The reviewed diagnostic
+frame shows the production save-error message; the preference returns to false.
+SearchSettings uses default QSettings with no application organization name,
+which reports AccessError despite a writable fallback preference file. Existing
+native tests supplied an explicit path and missed this production constructor.
+Use explicit INI access to the same resolved legacy file, preserving profile
+keys and read-only load behavior. Add an isolated default-constructor/cold-read
+regression with an empty organization. No migration or normal-profile writes.
+
+The next candidate surfaces-m runs one full suite because the batch now changes
+shared HomeCard rendering and production preference storage access beyond the
+bounded Sources reuse coverage. This is the task-closure integration run; no
+additional full run is scheduled for helper-only fixes. It then deploys once,
+runs installed collections/Search and both generic reference pairs, stopping at
+the first failure. All captures still require review; current acceptance83%.
+
+### BUG-105 — VM Studio frame deadline failure, reproduction pending
+Surfaces-m full attempt stops at studio_performance after six registrations pass.
+1080p sample7 takes659.953ms input-to-visible, violating the unchanged250ms bound.
+The corresponding production command takes5.086ms; adjacent samples take7.579
+and13.863ms; p95 is33.486ms and maximum command32.434ms. 720p max44.517ms.
+This isolates a single render/event-loop stall, not slow gesture validation.
+No passing full receipt or deployment was produced. Keep the failed evidence;
+reproduce on the next integration run without relaxing timing requirements.
+Search boundary fixture also now honors title/contains filtering, with negative,
+case-folding and immutable-response contracts. This corrects the test server;
+it is not an application search defect. No unfiltered fixture result is accepted
+as a title match. The next full attempt is justified by this named full-suite
+failure and includes all pending native Search/artwork checks.
+
+### BUG-106 — All Apps list ignores density (T26)
+Source review of BUG-103 finds that the same list branch fixes row height at82,
+ignoring Compact/Spacious even though Studio persists those choices. Apply the
+existing validated density multiplier to both grid and list, and assert real
+list cell geometry for all three densities. Prepared while the frozen n suite
+runs; n does NOT include this last local fix. After n, use five focused Sources/
+Home/Studio checks with exact n full-origin reuse, then installed collections.
+The reuse allowlist gains AppGallery.qml only; no C++/shared HomeCard allowance.
+No third full run is needed for this isolated gallery geometry correction.
+
+## User VM feedback priority — Home navigation and Store discovery
+User November11 reports lost/invisible Home Settings focus, rejects the automatic
+Edit page button on other pages, and requests discoverable online app browsing/
+search rather than a preloaded-only catalog. This explicitly prioritizes the
+related Home/PageSurface and T29 Store changes within the active batch.
+BUG-107: entering recovery header after Sources was added selects Sources first;
+Up must select Settings when present. Library refresh repairFocus also clears an
+explicit header selection. Fix both and assert actual Settings signal/focus ring.
+BUG-108: named-page runtime injects Edit page. Hide that control on named browsing
+surfaces without rewriting stored pages; Home's existing Edit Home and Settings
+Studio entry remain available. Tests cover effective controls and visible focus.
+BUG-109: online Store provider is hidden behind F-Droid opt-in; Search silently
+filters local entries while OFF. Add explicit Explore apps online and submitted
+Android Search as one-request opt-in actions, preserve cancellation/no requests,
+keep Device apps/Web filtering local, retain explicit Menu disconnect. This is
+real signed F-Droid catalog discovery, not a claim of Google Play/Chrome support;
+user's must-have sources/apps question is pending and independent work continues.
+Store D-pad follows visual header -> tools -> grid order. Native catalog tests
+check one request with the submitted query and reject overlong input before opt-in.
+QML regression covers Explore, accepted/cancelled search and local platform filters.
+
+Surfaces-n passes34 registrations including unchanged Studio performance and the
+new production default-path Search save/cold regression, but navigation stops at
+an empty background ArtworkImage still marked visible after BUG-103. Hide that
+empty launcher background explicitly; keep the actual launcher icon test. Failed
+m/n receipts are retained and neither candidate is deployed. The next focused
+app_icons family exercises actual Store QML, catalog, artwork and navigation;
+then one full integration run is justified by the named full failure plus user-
+requested shared navigation/AppCatalog changes. Preserve the six unrelated tests.
+
+Feedback-focus-p stops at old Store test mock missing browseOnlineStore. Update
+that owned test double and its header -> tools -> grid sequence. Focus-q passes
+Store discovery/old lifecycle UI, artwork, component contracts and the new Home
+Settings/refresh/hidden-edit regression. Navigation then finds two test mistakes:
+the artwork assertion picked a hidden source label instead of visible summary;
+Pastel still expects Up -> Search. Select the visible label and assert new
+Up -> Settings, Left -> Search, Right -> Settings behavior. No limit is loosened.
+Viewport callbacks also move from free queued calls to a Home-owned zero-delay
+Timer, cancelling pending work on teardown (BUG-081 viewport branch). Explicit
+boolean conversion removes the undefined composed-menu warning. Remaining
+scroll.reveal/isolated-context warnings remain open unless new evidence closes.
+
+The installed store-discovery case uses the normal production Store/provider,
+fresh profile and actual remote input. It verifies the live signed entry/index,
+browses and searches NewPipe, captures the actual results, checks no installation
+was committed, and returns through Home's visible Settings focus into Settings.
+This is online listing/search evidence only, not APK install or Google Play.
+Prepared final feedback-r runs full61 once, deploys, then sources/collections/
+Search/Store discovery and both reference pairs under stop-on-first-failure.
+
+Agent review of focused-q: studio-test-home-settings-focus.png shows the actual
+Settings ring, Sources to its left and no Edit page control; accepted for that
+narrow native regression. studio-test-store-discovery.png is excluded: the
+Studio fixture was above the newly created Store, although its logic assertions
+passed. Hide the fixture editor and raise the Store before capture in that test.
+This screenshot-only correction is after r's frozen snapshot; no application
+bytes change and no full rerun is warranted. Installed live Store captures, not
+the obscured mock image, will supply final visual evidence.
+
+Feedback-r full61/61 passes, sourceDigest a2017aaa8f8f60605b52eb961bd393c69fb26ec14dfca8e79a950f7e5538ff2a,
+and deploys release9e33a01181c41ea8d571f932. Native Settings/visible list artwork/
+controls/contrast/import/Store Explore images are reviewed; obscured mock Store
+image excluded. Installed sources passes18 actions with unchanged normal layout
+hashes. Its last six dark/pastel captures contain a guest low-disk dialog that
+appeared mid-case (BUG-096 recurrence); exclude those for final clean UI evidence.
+Reuse accepted j's clean source component/action views: PageSourcesWidget and
+SourceSettingsView bytes are unchanged, source actions are not launch-app summary
+artwork, and the new global header default is independently exercised by actual
+r inputs/native Settings-ring proof. Do not infer a fresh clean18-image review.
+The next-case bounded desktop preparation dismisses the identified guest warning;
+r collections-selectedgallery.png is reviewed clean with real app logos,
+spacious rows, visible label/state and restored selected FreeTube. No host files,
+storage thresholds or unsafe-path/checksum safeguards changed.
+
+### BUG-111 — Collections helper uses obsolete Store focus order
+r installed collections completes four actual native input/normal-exit launches,
+then its Store shortcut sends Up/Left/Confirm assuming grid -> header. New visual
+navigation is grid -> tools -> header, so it chooses Explore and then SmartTube
+Install confirmation instead of Device apps/FreeTube. Reviewed failure frame
+shows Cancel selected; no Android install was confirmed. Update this helper to
+Up twice before choosing Device apps. Product source/full61 and installed release
+remain unchanged. Reuse r's passing candidate/helper overlay, with no rebuild,
+redeploy or full rerun; resume collections/Search/live discovery/references.
+
+### BUG-112 — Live Store cold index times out without compression
+The new installed r Store check reaches real Explore, but fails to fetch its
+signed index within the existing120-second download budget. Reviewed failure UI
+reports the time/size limit. Official entry metadata on November11 declares
+72930200 bytes,4987 packages, below the128MiB size bound: this is the transfer
+time path, not a license/account/entitlement gate. Native Store opening/navigation
+and the no-install-before-confirmation boundary work; no live listing pass yet.
+
+Add Accept-Encoding:gzip and bounded streaming decompression with separate wire
+and expanded size enforcement, CRC/truncation/unsupported-encoding rejection,
+and the unchanged120-second deadline and pinned signer/index hash validation.
+New transport tests verify identical signed index bytes after decompression and
+refuse expansion bombs, raw overflow, truncated gzip, unknown coding and timeout.
+No unsigned search/display API replaces trusted installation metadata.
+
+Store-s uses six focused Store/catalog/QML/Android/Web/F-Droid/lifecycle checks
+with exact original r61/61/payload reuse. Its sole production delta is the one
+fdroid-store.py transport helper; C++/QML/catalog/unknown changes and modified
+base bytes are explicitly refused by regression. This is no new full-suite pass.
+The post-r Store test screenshot-layering fix is also exercised. Deploy once
+then rerun the actual live Store journey; unchanged gallery/Search/reference
+runtime evidence remains attributable to r's matching C++/QML/config payload.
+
+### BUG-113 — Store hides valid provider matches and draws blank fallback icons
+Review of store-s live NewPipe search shows provider5 matches but only4 cards:
+the view applies a second narrower filter that omits package identity and uses
+lowercase instead of the provider's Unicode case-folding. Honor IDs in the
+current active provider result generation while retaining local filtering for
+local entries and clearing authority on OFF. Regression covers a Unicode-only
+provider match, an independent local match and OFF behavior. Missing online
+symbol/accent also draws a white blank square; derive the app initial with the
+shared selected-surface/text fallback. No unsigned artwork download is added.
+
+### BUG-114 — New Store discovery receipt omitted from host report
+The guest validates its passing signed live result, but write_report's explicit
+case archive allowlist omitted store-discovery. Add only that named case and
+extend the report isolation regression (unknown archives/cookies/source remain
+excluded). The next bounded Store run exports the complete receipt. Native r
+reference frames14/34 and collections24/Search16 are now agent-reviewed; source
+six guest-dialog frames and the old Store mock/obsolete helper failure retain
+explicit exclusions. T26/T28 close; calculator confirms2124/25=85%,170/212.
+
+Store-t retains exact r full-origin reuse for only fdroid-store.py plus
+AppStoreView.qml and named harness/tests. Six Store checks cover both; no global
+C++/configuration changes or new full run. Actual installed live discovery is
+repeated for this meaningful query/presentation correction, not for accounting.
+
+Store-t self-tests pass but preflight stops before build: verified cleanup
+reclaims436326400 bytes, leaving2144784384,2699264 bytes below the2GiB floor.
+One supported Status/Storage inventory confirms terminal duplicate report
+transports remain. Their latest-three retention is a speed optimization; only
+the outer report.tar.gz copies may be reclaimed when the floor still fails,
+after exact host-backup verification. Raw per-case archives/logs/screenshots,
+source, pinned payloads, compiled objects, running/soak receipts and the current
+run remain. Extend the existing report-cleanup fallback; checksum/mount/path
+failures still stop it. Regression proves recent transport cleanup preserves a
+pinned executable, raw evidence and the running report. No host deletion and no
+lowered threshold. Store-u resumes the same bounded six-check/Deploy/live batch.
+
+Store-u self-tests pass, but archived recent failed source copies leave free
+space2124455936 bytes after10.8MB of verified transport cleanup. Store-v adds a
+narrow final fallback: only ended failed/cancelled runs with no tested payload,
+no test-result/Guide receipt, no active process and no current/pinned identity
+may lose their extracted source copy. The existing primitive verifies the
+recovery archive, every manifest/member and source byte, links and mounts before
+removal. Recovery archives, raw evidence and compiled objects remain. Regression
+covers current/pinned/active/running/payload/tested/Guide preservation, successful
+re-extraction and tampered-archive refusal. No test-space floor is lowered.
+Store-v stops at the new harness self-test: missing shutil name in its fixture copy. Corrected to the imported oracle.shutil; no application build/test was attempted. Store-w resumes the same bounded batch.
+Store-w self-tests pass116, safely removes failed u/v source copies and retains their archives; free2133618688 still misses2GiB. Diagnosis: pruning only fullSuite payloads permanently retains obsolete passing focused payloads. Accept focused payloads only after revalidating their original complete coverage proof and exact payload hashes; existing newest-three/base/Guide/current pins stay. Regression rejects changed proof and then prunes only the obsolete focused payload while retaining pinned/newest payloads and raw evidence. Store-x repeats focused Store only.
+Store-x passes116 runner/six Store tests, deploys d5aa5b72a5a662642f1b696d and passes91s live journey; named raw receipt now exported. Visual review catches BUG-113 still showing4/5: merged provider IDs have the production provider: prefix, absent from the mock. Correct the lookup and regression IDs to actual AppCatalog merged format. No percentage credit for the incomplete correction; Store-y repeats bounded Store/installed journey only.
+Store-y self-tests pass116; cleanup reclaims487305216 but free2091540480 misses2GiB. Generated build/isolde was omitted from linked-binary cleanup even though its staged and installed copies remain. Extend the existing exact declared-target ELF/mount/link/active-process checks to only isolde, isolde-recovery and isolde-native-host in work/build; retain objects, staged and installed copies. Regression proves active executable preservation and independent installed bytes. Store-z verifies unchanged product correction.
+Store-z passes116 runner/six Store tests but staging fails because focused builds only named isolde and assumed recovery already existed. Cleanup exposed that dependency. Explicitly rebuild all three already-declared shipped executable targets for every reuse payload (incremental relink only); no new application registration or full run. Store-za retries this diagnosed packaging failure.
+Store-za again stops at2GiB before build after retaining z partial-stage bytes. No unknown payload deletion is allowed. Add a final bounded cache fallback for declared unselected Isolde test-target ELF .o files only, largest first. Preserve main/core/production objects, selected test objects, active files, generated sources/metadata, staged/installed data and all evidence. Reject redirected/mounted/unknown trees before mutation. Regression covers each preservation boundary and unknown bytes. This permits later tests to recompile affected test objects instead of blocking; no app full rerun. Store-zb completes the same correction.
+
+### BUG-115 — Guest artifact retention prevents focused Store verification
+Store-t/u/w/y/za stopped at the unchanged2GiB minimum. Exact terminal transport
+backups and archived failed source copies were insufficient because obsolete
+focused payloads were never eligible for existing passed-payload pruning and
+generated application/test artifacts remained. The diagnosed fixes above retain
+current/newest/pinned/active candidates and reject checksum/mount/path failures.
+Final fallback may regenerate only unrelated declared test-object cache; core,
+application and selected-test objects remain. No acceptance pass is awarded to a
+space-blocked attempt. Store-x demonstrates safe obsolete focused pruning;
+store-z demonstrates declared inactive build-binary cleanup. Final zb tests the
+unselected-object fallback and packaging correction together.
+
+### BUG-116 — Focused staging assumes cached recovery executable exists
+Store-z passes all six selected registrations but cmake install cannot find the
+recovery executable after verified generated-cache cleanup. Focused reuse builds
+now explicitly include all three shipped executables, instead of assuming a
+previous build left them behind. This is an incremental packaging dependency
+correction; original r full-suite/payload proof remains required.
+Store-zb passes117 runner tests; unrelated test objects recover93MB but leave2122838016 bytes, still24.6MB below floor. Add source dedup before object fallback: terminal inactive snapshot files only, exact whole-source manifests, matching checksum/size/mode/uid/gid/device, safe atomic hardlinks. Every source path/archive/manifest stays and candidate bytes do not change; current and active snapshots are skipped, mounts/links/modified source fail. Linux regression verifies preserved/revalidated paths and shared identical inode, refuses modified/mounted source. Store-zc resumes the same tested product correction.
+
+### Installed feedback closure — Store-zc, 2026-11-12
+All118 runner checks and six focused Store registrations pass, zero skips,
+with strict full feedback-r61/61/source/payload reuse. Only AppStoreView.qml and
+fdroid-store.py are production deltas from r; unknown changes remain refused.
+Source digest9b58ffcc1a3480db09c1dadd98daaf0d0ac75bc0b3e47b2ce5490ccb3c5f7d16;
+installed release ceb971fc65a09dd9a9973336. Live signed discovery passes91s and
+81 actual input actions: fresh local-only entry, explicit Explore,4891 eligible
+browse matches, OSK NewPipe search showing all five returned packages including
+PipePipe, readable initial fallback, Home return/visible Settings/activation.
+The exported named case archive retains raw result.json and shell.log. Both
+index/entry hashes and package IDs are recorded there; no app is installed by
+browsing. Android runtime availability/setup remains an actual open limitation,
+not a successful APK install. Both normal layout hashes remain unchanged;
+service restored active/running/zero restarts.
+
+Agent reviewed all eight live frames (store-zc-discovery-00/01 contact sheets
+and full search-result frame), reuses15 identical native pixels from s, and
+records23 reviewed/zero pending in the explicit ledger. BUG-113 result count and
+BUG-114 export are fixed. BUG-115/116 retention and recovery-target packaging fixes
+pass118 runner checks; source dedup retains every original path and byte.
+T29.1 provider/local/default-OFF/result-model audit now closes using production
+native contracts plus installed fresh opt-in/live browse/search. Remaining actual
+artifact download/install/update/remove and runtime matrices retain their own
+open milestones. T29=63%; sum2131/25 rounds85%,171/212 milestones. No new full or
+reference run is required solely for these bookkeeping updates.

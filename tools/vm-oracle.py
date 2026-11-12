@@ -221,7 +221,7 @@ def suite_selection(suite):
     if suite == "vpn":
         pattern = "^(vpn_setup|vpn_launch)$"
     if suite == "store":
-        pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote)$"
+        pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote|fdroid_store|store_lifecycle)$"
     if suite == "campaign_repairs":
         pattern = "^(" + "|".join(sorted(REPAIR_TESTS)) + ")$"
     if suite == "runtime_contracts":
@@ -229,7 +229,7 @@ def suite_selection(suite):
     if suite == "games":
         pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning|steam_games)$"
     if suite == "sources":
-        pattern = "^(isolde_tests|component_contracts|sources_remote_ui|home_component_navigation)$"
+        pattern = "^(studio_quick|isolde_tests|component_contracts|sources_remote_ui|home_component_navigation)$"
     if suite == "guide":
         pattern = "^(guide_contracts|guide_remote_ui|kodi_local_bridge|kodi_playback|kodi_media_client)$"
     if suite == "home_component_navigation":
@@ -262,6 +262,7 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "android": ("android-acceptance.py", []),
          "androidapps": ("android-apps-acceptance.py", []),
          "store": ("store-acceptance.py", []),
+         "store-discovery": ("store-acceptance.py", ["--discovery-only"]),
          "games": ("games-acceptance.py", []),
          "emulators": ("games-acceptance.py", ["--emulator"])}
 
@@ -329,6 +330,14 @@ def visual_result_passed(case, result):
             and workflows.get('captures')==['sizepreview','sizeapplied','headerpreview','headerorder','headerapplied','headerreopened','canvaszoom','resetcancel'])
     if case=='studio-search':
         network=result.get('network',{})
+        if 'searchMatrixVersion' in result:
+            phases=['searchhome','searchgallery','offlinemedia','offlinesearch','offlinewebon','offlineweboff','offlinewebpersisted','offlineprofilefresh','offlineprofileoff','offlineprofileon','offlinedefaulton','offlinewebsavefailed','offlinewebretry','offlinewebrestored','searchgalleryreturn','offlinerecovery']
+            surfaces=result.get('ownedRuntimeWindows',[])
+            if type(result['searchMatrixVersion'])!=int or result['searchMatrixVersion']!=2 or result.get('phases')!=phases:return False
+            if not all(result.get(k) is True for k in ('webToggleVerified','coldPreferenceVerified','profileSwitchVerified','preferenceWriteFailureVerified','localKodiBoundaryVerified','galleryOriginVerified','layoutBytesUnchanged')):return False
+            if not result.get('nativeKodiBefore') or result['nativeKodiBefore']!=result.get('nativeKodiAfter') or result.get('kodiBoundary')!='controlled-unix-rpc':return False
+            if not isinstance(surfaces,list) or len(surfaces)!=4 or any(not isinstance(s,dict) or type(s.get('pid'))!=int or s['pid']<=0 or not re.fullmatch(r'0x[0-9a-f]+',str(s.get('window'))) for s in surfaces):return False
+            if len({(s['pid'],s['window']) for s in surfaces})!=4:return False
         return (result.get('passed') is True and result.get('journey')=='studio-search' and result.get('freshProfile') is True and result.get('normalProfileUsed') is False and network.get('socketErrnos')==[101,101] and network.get('unixSocketAvailable') is True and result.get('actualInputActions',0)>0 and len(result.get('captureTrace',[]))>=3)
     if case=='studio-designs':
         designs=result.get('designs',{})
@@ -350,6 +359,7 @@ def visual_result_passed(case, result):
         phases=["collectionhome","selectedgallery","collectionclient","selectedreturn","collectionrepeat","buttongallery","buttonclient","buttonreturn","buttonrepeat","storeclient","collectionuninstall","allremoved","selectedmissing","missingrefused","allrestored","reinstalledclient","reinstalledreturn"]
         if result.get("localFilterVerified") is True:
             phases.insert(2,"collectionfilter");phases.insert(phases.index("buttongallery"),"collectionfiltercleared")
+        if 'galleryPresentationApplied' in result and (result['galleryPresentationApplied'] is not True or not isinstance(result.get('galleryPresentation'),dict) or not 1<=len(result['galleryPresentation'])<=10 or not re.fullmatch(r'[a-f0-9]{64}',str(result.get('galleryPresentationSha256')))):return False
         if result.get("appHistoryVerified") is True:
             if result.get("appHistorySessionOnly") is not True or result.get("appHistoryReopenCycles")!=2:return False
             phases += ["historyapp","historyclient","historyreturned","historyrepeat","historyrepeatreturn"]
@@ -412,6 +422,11 @@ def visual_result_passed(case, result):
     if case == "store":
         return (all(result.get(k) is True for k in ("passed","androidLifecycle","chromiumLifecycle","androidPackageRemovalVerified","freshProfile"))
                 and result.get("normalProfileUsed") is False and result.get("playbackVerified") is False and len(result.get("captures",[]))==14)
+    if case == "store-discovery":
+        return (all(result.get(k) is True for k in ("passed","freshProfile","catalogOnly")) and result.get("journey")=="store-discovery" and result.get("normalProfileUsed") is False and result.get("installedAppsChanged") is False
+                and result.get("provider")=="fdroid-signed-v2" and result.get("query")=="newpipe" and bool(result.get("matches")) and result.get("actualInputActions",0)>0
+                and all(re.fullmatch(r'[a-f0-9]{64}',str(result.get(k,''))) for k in ('indexSha256','entrySha256'))
+                and result.get("captures")==['storediscoveryentry','storediscoveryloading','storediscoverybrowse','storediscoverykeyboard','storediscoveryresults','storediscoveryreturn','storediscoverysettingsfocus','storediscoverysettings'])
     if case == "androidapps":
         return (all(result.get(k) is True for k in ("passed", "sharedSessionLaunch", "ownedSessionStopped"))
                 and result.get("playbackVerified") is False
@@ -541,9 +556,21 @@ def verified_studio_helper(root, expected, kind='studio'):
     return path
 
 
-def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False, designs=False, search=False, themes=False, themefaults=False, themecustom=False, themecontrols=False, sources=False):
+def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False, designs=False, search=False, themes=False, themefaults=False, themecustom=False, themecontrols=False, sources=False, gallery_evidence=None, gallery_digest=None):
+    if gallery_evidence is not None and (not collections or not re.fullmatch(r'[a-f0-9]{64}',str(gallery_digest))):raise RuntimeError('Gallery evidence is collections-only and requires an exact digest')
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+(['--themes-only'] if themes else [])+(['--themes-faults-only'] if themefaults else [])+(['--themes-custom-only'] if themecustom else [])+(['--themes-controls-only'] if themecontrols else [])+(['--sources-only'] if sources else [])+['--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+(['--themes-only'] if themes else [])+(['--themes-faults-only'] if themefaults else [])+(['--themes-custom-only'] if themecustom else [])+(['--themes-controls-only'] if themecontrols else [])+(['--sources-only'] if sources else [])+(['--gallery-presentation-evidence',str(gallery_evidence),'--gallery-presentation-digest',gallery_digest] if gallery_evidence is not None else [])+['--inspect']
+
+
+def verified_gallery_evidence(run, result):
+    record=result.get('galleryPresentationEvidence')
+    if record is None:return None,None
+    if result.get('passed') is not True or not isinstance(record,dict) or record.get('file')!='studio-gallery-presentation.json' or not re.fullmatch(r'[a-f0-9]{64}',str(record.get('sha256'))):raise RuntimeError('Invalid native gallery evidence receipt')
+    path=run/record['file']
+    if path.resolve()!=path or not path.is_file() or path.stat().st_size>65536 or digest(path)!=record['sha256']:raise RuntimeError('Native gallery evidence identity mismatch')
+    value=json.loads(path.read_text())
+    if not isinstance(value,dict) or not 1<=len(value)<=10:raise RuntimeError('Invalid native gallery presentation')
+    return path,record['sha256']
 
 
 def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None):
@@ -838,9 +865,14 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 
 def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='store':
+        proof=qml_coverage(root,run,base_id,suite,'store',{'tools/fdroid-store.py','qml/AppStoreView.qml'},
+            {'tests/test_fdroid_store.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store')
+        proof['changedStoreFiles']=proof.pop('changedStoreQml')
+        return proof
     if suite=='sources':
-        return qml_coverage(root,run,base_id,suite,'sources',{'qml/PageSourcesWidget.qml','qml/HomeScreen.qml','qml/Main.qml','qml/SourceSettingsView.qml'},
-            {'tests/studio/tst_sources.qml','tests/tst_home_navigation.cpp','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/vm-process.ps1','tools/test-all.ps1','tools/index-vm-review.ps1','tools/run-visual-acceptance.ps1','tools/home-components-acceptance.py'},'Sources',{'docs/acceptance-reconciliation-2026-11-11.md'})
+        return qml_coverage(root,run,base_id,suite,'sources',{'qml/PageSourcesWidget.qml','qml/HomeScreen.qml','qml/Main.qml','qml/SourceSettingsView.qml','qml/PageStudioView.qml','qml/AppGallery.qml'},
+            {'tests/studio/quicktest.cpp','tests/studio/tst_editor.qml','tests/studio/tst_sources.qml','tests/tst_home_navigation.cpp','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/vm-process.ps1','tools/test-all.ps1','tools/index-vm-review.ps1','tools/run-visual-acceptance.ps1','tools/home-components-acceptance.py'},'Sources',{'docs/acceptance-reconciliation-2026-11-11.md'})
     if suite=='shell_appearance':
         return qml_coverage(root,run,base_id,suite,'shell_appearance',{'qml/NetworkSettingsView.qml','qml/PageAppCarousel.qml','qml/OrbCard.qml','qml/AudioSettingsView.qml','qml/AmbientSettingsView.qml'},
             {'tests/studio/tst_shell.qml','tests/tst_surface_appearance.cpp','tests/fixtures/shell-theme-routes.json',
@@ -1157,7 +1189,7 @@ class Oracle:
                                  "-DBUILD_TESTING=ON", "-DCMAKE_BUILD_TYPE=Debug"], 120)
         command = ["cmake", "--build", str(build), "--parallel", "2"]
         targets, pattern = suite_selection(suite)
-        if reuse:targets=targets+['isolde']
+        if reuse:targets=targets+['isolde','isolde-recovery','isolde-native-host']
         if reuse and suite=='studio_artwork':pattern='^(studio_artwork|studio_selection|studio_quick|studio_colors|studio_color_interactions)$'
         if targets:
             command += ["--target"] + targets
@@ -1200,9 +1232,9 @@ class Oracle:
             if suite == "vpn":
                 expected = {"vpn_setup", "vpn_launch"}
             if suite == "sources":
-                expected = {"isolde_tests", "component_contracts", "sources_remote_ui", "home_component_navigation"}
+                expected = {"studio_quick", "isolde_tests", "component_contracts", "sources_remote_ui", "home_component_navigation"}
             if suite == "store":
-                expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote"}
+                expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote", "fdroid_store", "store_lifecycle"}
             if suite == "games":
                 expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning", "steam_games"}
             if suite == "guide":
@@ -1223,6 +1255,12 @@ class Oracle:
                   "serviceBefore": service_before, "serviceAfter": service_after,
                   "releasesBefore": releases_before, "releasesAfter": releases_after}
         if reuse:result['coverageReuse']=reuse
+        gallery=self.run/'studio-gallery-presentation.json'
+        if suite=='sources' and not gallery.is_file():raise RuntimeError('Missing production Studio gallery edit/apply evidence')
+        if gallery.is_file():
+            if gallery.resolve()!=gallery or gallery.stat().st_size>65536:raise RuntimeError('Unsafe native gallery presentation evidence')
+            result['galleryPresentationEvidence']={'file':gallery.name,'sha256':digest(gallery)}
+            verified_gallery_evidence(self.run,result)
         if suite == "all" or reuse:
             self.stage("stage-payload", ["cmake", "--install", str(build), "--prefix", str(self.run / "payload")], 120)
             result["payload"] = payload_hashes(self.run / "payload")
@@ -1376,6 +1414,25 @@ class Oracle:
             record=self.run/'guest-linked-tests-cleanup.json'
             prior=json.loads(record.read_text()).get('targets',[]) if record.exists() else []
             atomic_json(record,{'guest':'isolde-test','targets':prior+removed,'compiledObjectsPreserved':True,'selectedTargetsRelinked':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            reports=self.run/'host-report-backups.json'
+            if reports.exists():
+                if reports.resolve()!=reports or reports.stat().st_size>262144:raise RuntimeError('Unsafe report backup receipt')
+                # Only duplicate outer transports: pinned source, payload,
+                # logs and case archives remain, with exact host backups.
+                removed=remove_backed_up_reports(self.root,json.loads(reports.read_text()),mounts,protected={self.run},target_free=minimum_gib*1024**3,preserve_recent=False)
+                record=self.run/'guest-report-cleanup.json'
+                prior=json.loads(record.read_text()).get('targets',[]) if record.exists() else []
+                atomic_json(record,{'guest':'isolde-test','targets':prior+removed,'hostBackupsVerified':True,'rawEvidencePreserved':True,'pinnedSourceAndPayloadPreserved':True,'recentTransportsPruned':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            removed=remove_failed_source_copies(self.root,self.run,mounts,active,getattr(self,'maintenance_pins',()),minimum_gib*1024**3)
+            atomic_json(self.run/'guest-failed-source-cleanup.json',{'guest':'isolde-test','targets':removed,'verifiedRecoveryArchivesPreserved':True,'payloadsAndEvidencePreserved':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            records=deduplicate_source_snapshots(self.root,self.run,mounts,active)
+            atomic_json(self.run/'guest-source-dedup.json',{'guest':'isolde-test','files':records,'allSourcePathsAndBytesPreserved':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            removed=remove_unselected_test_objects(self.root,mounts,active,getattr(self,'maintenance_build_targets',()))
+            atomic_json(self.run/'guest-test-object-cleanup.json',{'guest':'isolde-test','targets':removed,'productionAndSelectedTestObjectsPreserved':True,'evidencePreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
@@ -1591,7 +1648,8 @@ class Oracle:
             self.update(acceptanceHelperSha256=history_helper_digest)
         if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
-            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search',themes=case=='themes',themefaults=case=='themefaults',themecustom=case=='themecustom',themecontrols=case=='themecontrols',sources=case=='sources')
+            gallery_path,gallery_digest=verified_gallery_evidence(self.run,json.loads((self.run/'test-result.json').read_text())) if case=='collections' else (None,None)
+            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search',themes=case=='themes',themefaults=case=='themefaults',themecustom=case=='themecustom',themecontrols=case=='themecontrols',sources=case=='sources',gallery_evidence=gallery_path,gallery_digest=gallery_digest)
             self.update(acceptanceHelperSha256=studio_helper_digest)
         if case=='guide-features' and feature_helper_digest:
             helper=verified_guide_helper(self.root,feature_helper_digest,'features')
@@ -1726,7 +1784,12 @@ class Oracle:
                 record=candidate/'test-result.json'
                 if not record.is_file() or record.is_symlink():continue
                 tested=json.loads(record.read_text())
-                if tested.get('passed') is not True or tested.get('fullSuite') is not True:continue
+                if tested.get('passed') is not True:continue
+                if tested.get('fullSuite') is not True:
+                    proof=tested.get('coverageReuse')
+                    if not isinstance(proof,dict) or not proof:continue
+                    if proof!=focused_qml_coverage(self.root,candidate,proof.get('baseRunId'),tested.get('suite')):
+                        raise RuntimeError('Obsolete focused payload coverage changed; preserve for inspection')
                 remove_generated_payload_cache(candidate)
                 if payload_hashes(target)!=tested.get('payload'):raise RuntimeError('Obsolete payload identity mismatch; preserve for inspection')
             removed.append(str(target))
@@ -1897,7 +1960,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -1998,14 +2061,14 @@ def cancel_owned(root, run_id):
 
 
 def remove_linked_test_executables(root,mounts=(),active=(),keep=(),target_free=3*1024**3):
-    """Ninja can relink these generated tests; never remove their compiled objects."""
+    """Ninja can relink generated binaries; retain objects, staged and installed files."""
     build=root/'work/build';targets=build/'CMakeFiles/TargetDirectories.txt'
     if not targets.exists():return []
     if root.resolve()!=root or build.resolve()!=build or targets.resolve()!=targets:raise RuntimeError('Redirected linked-test cache')
     if targets.stat().st_size>1024**2:raise RuntimeError('Unbounded build target list')
     declared=set(targets.read_text().splitlines());candidates=[]
     for path in build.iterdir():
-        if not re.fullmatch(r'isolde(?:_[A-Za-z0-9]+)*_tests',path.name) or path.name in keep:continue
+        if not (re.fullmatch(r'isolde(?:_[A-Za-z0-9]+)*_tests',path.name) or path.name in {'isolde','isolde-recovery','isolde-native-host'}) or path.name in keep:continue
         if str(build/'CMakeFiles'/(path.name+'.dir')) not in declared:continue
         if path.resolve()!=path or not path.is_file():raise RuntimeError('Unsafe linked-test executable')
         if any(m!=Path('/') and (m==path or m.is_relative_to(path) or path.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted linked-test executable')
@@ -2022,6 +2085,66 @@ def remove_linked_test_executables(root,mounts=(),active=(),keep=(),target_free=
         if archive not in active:candidates.append(archive)
     removed=[]
     for path in sorted(candidates,key=lambda p:p.stat().st_mtime):
+        if shutil.disk_usage(root).free>=target_free:break
+        path.unlink();removed.append(str(path))
+    return removed
+
+
+def deduplicate_source_snapshots(root,current,mounts=(),active=(),target_free=3*1024**3):
+    """Share identical immutable source bytes without removing any candidate path."""
+    runs=root/'runs'
+    if root.resolve()!=root or runs.resolve()!=runs:raise RuntimeError('Unsafe source dedup root')
+    identical={};records=[]
+    for run in sorted(runs.iterdir(),key=lambda p:p.stat().st_mtime,reverse=True)[:1024]:
+        if shutil.disk_usage(root).free>=target_free:break
+        source=run/'source';state=run/'status.json'
+        if run==current or not source.is_dir() or not state.is_file():continue
+        if run.resolve()!=run or source.resolve()!=source or state.resolve()!=state:raise RuntimeError('Redirected source dedup candidate')
+        if json.loads(state.read_text()).get('state') not in {'passed','failed','cancelled'}:continue
+        if any(p==run or p==source or p.is_relative_to(source) for p in active):continue
+        if any(m!=Path('/') and (m==source or m.is_relative_to(source) or source.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted source dedup candidate')
+        listing=run/'files.sha256'
+        if listing.resolve()!=listing or not listing.is_file():raise RuntimeError('Unsafe source dedup manifest')
+        entries=manifest(listing);verify_tree(source,entries)
+        for name,checksum in entries.items():
+            path=source/name
+            if path.resolve()!=path or not path.is_file():raise RuntimeError('Unsafe source dedup member')
+            stat=path.stat();key=(checksum,stat.st_size,stat.st_mode,stat.st_uid,stat.st_gid,stat.st_dev)
+            original=identical.setdefault(key,path)
+            if original==path or original.stat().st_ino==stat.st_ino:continue
+            if digest(original)!=checksum or digest(path)!=checksum:raise RuntimeError('Source dedup bytes changed')
+            temporary=path.with_name('.'+path.name+'.dedup')
+            if temporary.exists() or temporary.is_symlink():raise RuntimeError('Existing source dedup transaction')
+            os.link(original,temporary,follow_symlinks=False)
+            try:
+                if digest(temporary)!=checksum or digest(path)!=checksum:raise RuntimeError('Source changed during dedup')
+                os.replace(temporary,path)
+            finally:
+                temporary.unlink(missing_ok=True)
+            records.append({'path':str(path),'linkedTo':str(original),'sha256':checksum,'bytes':stat.st_size})
+    return records
+
+
+def remove_unselected_test_objects(root,mounts=(),active=(),keep=(),target_free=3*1024**3):
+    """Last resort: regenerate only unrelated test objects, retaining production cache."""
+    build=root/'work/build';meta=build/'CMakeFiles';listing=meta/'TargetDirectories.txt'
+    if not listing.exists():return []
+    if root.resolve()!=root or meta.resolve()!=meta or listing.resolve()!=listing or listing.stat().st_size>1024**2:raise RuntimeError('Unsafe test object cache')
+    candidates=[]
+    for name in listing.read_text().splitlines():
+        directory=Path(name)
+        if directory.parent!=meta or not re.fullmatch(r'isolde(?:_[A-Za-z0-9]+)*_tests\.dir',directory.name) or directory.name[:-4] in keep:continue
+        if not directory.is_dir():continue
+        if directory.resolve()!=directory:raise RuntimeError('Redirected test object directory')
+        if any(m!=Path('/') and (m==directory or m.is_relative_to(directory) or directory.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted test object directory')
+        for index,path in enumerate(directory.rglob('*')):
+            if index>=10000 or path.resolve()!=path or path.is_symlink():raise RuntimeError('Unsafe test object tree')
+            if path.suffix!='.o' or not path.is_file() or path in active:continue
+            with path.open('rb') as stream:
+                if stream.read(4)!=b'\x7fELF':raise RuntimeError('Unknown generated test object')
+            candidates.append(path)
+    removed=[]
+    for path in sorted(candidates,key=lambda p:p.stat().st_size,reverse=True):
         if shutil.disk_usage(root).free>=target_free:break
         path.unlink();removed.append(str(path))
     return removed
@@ -2079,11 +2202,12 @@ def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, t
         archive.unlink();removed.append({'runId':identity,'sha256':checksum})
     return removed
 
-def remove_backed_up_reports(root, backups, mounts=(), protected=(), target_free=3*1024**3):
+def remove_backed_up_reports(root, backups, mounts=(), protected=(), target_free=3*1024**3, preserve_recent=True):
     """Remove only duplicate transport bundles; keep raw evidence and verified host copies."""
     if root.resolve()!=root or not isinstance(backups,list) or len(backups)>1024:raise RuntimeError('Invalid report backup maintenance')
     runs=root/'runs';removed=[]
-    recent=set(sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink() and (p/'report.tar.gz').is_file()),key=lambda p:(p/'report.tar.gz').stat().st_mtime,reverse=True)[:3])
+    if type(preserve_recent) is not bool:raise RuntimeError('Invalid report retention policy')
+    recent=set(sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink() and (p/'report.tar.gz').is_file()),key=lambda p:(p/'report.tar.gz').stat().st_mtime,reverse=True)[:3]) if preserve_recent else set()
     for entry in backups:
         if shutil.disk_usage(root).free>=target_free:break
         identity=entry.get('runId','');checksum=entry.get('sha256','')
@@ -2095,6 +2219,25 @@ def remove_backed_up_reports(root, backups, mounts=(), protected=(), target_free
         if not status.is_file() or json.loads(status.read_text()).get('state') not in {'passed','failed','cancelled'}:continue
         if digest(archive)!=checksum:raise RuntimeError('Backed-up report checksum mismatch')
         archive.unlink();removed.append({'runId':identity,'sha256':checksum})
+    return removed
+
+
+def remove_failed_source_copies(root, current, mounts=(), active=(), protected=(), target_free=2*1024**3):
+    """Drop only archived copies from ended, untested failures, never their evidence."""
+    runs=root/'runs'
+    if root.resolve()!=root or runs.resolve()!=runs or current.parent!=runs:raise RuntimeError('Unsafe failed source root')
+    removed=[]
+    for candidate in sorted(runs.iterdir(),key=lambda p:p.stat().st_mtime)[:1024]:
+        if shutil.disk_usage(root).free>=target_free:break
+        source=candidate/'source';state=candidate/'status.json'
+        if candidate==current or candidate in protected or not source.is_dir():continue
+        if any((candidate/name).exists() or (candidate/name).is_symlink() for name in ('payload','test-result.json','guide-soak-receipt.json')):continue
+        if any(p==candidate or p==source or p.is_relative_to(source) for p in active):continue
+        if state.resolve()!=state or not state.is_file():raise RuntimeError('Unsafe failed source state')
+        if json.loads(state.read_text()).get('state') not in {'failed','cancelled'}:continue
+        if any(not (candidate/name).is_file() for name in ('source.tar.gz','archive.sha256','files.sha256')):continue
+        remove_guest_source_snapshot(candidate,runs,mounts)
+        removed.append(str(source))
     return removed
 
 
@@ -2127,6 +2270,22 @@ def deduplicate_tested_payloads(root, mounts=(), target_free=3*1024**3):
         if tested.get('passed') is not True:continue
         actual=payload_hashes(payload)
         if actual!=tested.get('payload'):raise RuntimeError('Payload identity mismatch during dedup')
+        deployment=run/'deploy-result.json'
+        if deployment.exists() or deployment.is_symlink():
+            if deployment.resolve()!=deployment or deployment.stat().st_size>262144:raise RuntimeError('Unsafe payload deployment receipt')
+            deployed=json.loads(deployment.read_text()).get('release')
+            if deployed:
+                releases=root.parent/'.local/share/isolde-appliance/releases';release=Path(deployed)
+                if releases.resolve()!=releases or release.parent!=releases or not re.fullmatch(r'[a-f0-9]{24}',release.name):raise RuntimeError('Unsafe installed dedup source')
+                if release.exists() or release.is_symlink():
+                    if release.resolve()!=release or not release.is_dir():raise RuntimeError('Redirected installed dedup source')
+                    if any(m!=Path('/') and (m==release or m.is_relative_to(release) or release.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted installed dedup source')
+                    if payload_hashes(release)!=actual:raise RuntimeError('Installed payload identity mismatch during dedup')
+                    # Only staged destinations are replaced; the running release
+                    # remains untouched and supplies already-verified bytes.
+                    for name,checksum in actual.items():
+                        original=release/name;stat=original.stat()
+                        identical.setdefault((checksum,stat.st_mode,stat.st_uid,stat.st_gid,stat.st_dev),original)
         for name,checksum in actual.items():
             if shutil.disk_usage(root).free>=target_free:return records
             path=payload/name;stat=path.stat();key=(checksum,stat.st_mode,stat.st_uid,stat.st_gid,stat.st_dev)

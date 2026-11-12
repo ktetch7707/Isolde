@@ -4,6 +4,8 @@ import argparse
 import ctypes
 import ctypes.util
 import fcntl
+import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -15,7 +17,7 @@ import uuid
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);parser.add_argument("--discovery-only",action="store_true");args=parser.parse_args()
     if socket.gethostname()!="isolde-test":raise RuntimeError("Guest-only Store acceptance")
     lock=open("/tmp/isolde-home-components-acceptance.lock","a");fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     evidence=Path(tempfile.mkdtemp(prefix="isolde-components-acceptance-store-"));profile=str(uuid.uuid4())
@@ -44,7 +46,7 @@ def main():
     x.XSendEvent.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctypes.c_long,ctypes.POINTER(Event)]
     display=x.XOpenDisplay(env.get("DISPLAY","").encode())
     if not display:raise RuntimeError("Missing guest X11 display")
-    process=None;window=None;phases=[];state=config/"profiles"/profile/"installed-apps.json"
+    process=None;window=None;phases=[];actions=[];state=config/"profiles"/profile/"installed-apps.json"
     def installed(app):return state.is_file() and app in json.loads(state.read_text()).get("installed",[])
     def expect(predicate,message,timeout=150):
         deadline=time.monotonic()+timeout
@@ -55,6 +57,8 @@ def main():
         raise RuntimeError(message)
     def keys(*names):
         for name in names:
+            if len(actions)>=5000:raise RuntimeError("Store input exceeded its bound")
+            actions.append(name)
             code=x.XKeysymToKeycode(display,x.XStringToKeysym(name.encode()))
             if not code:raise RuntimeError("Missing keycode")
             for kind,mask in ((2,1),(3,2)):
@@ -80,6 +84,38 @@ def main():
                 time.sleep(.2)
             if not window:raise RuntimeError("Isolde created no test window")
             subprocess.run(["wmctrl","-ia",window],env=env,check=True,timeout=10);time.sleep(3)
+            if args.discovery_only:
+                from guide_features import remote_text
+                def key(name,count=1):keys(*([name]*count))
+                cache=evidence/"cache/Isolde/profiles"/profile/"fdroid"
+                index=cache/"index-v2.json";archive=cache/"entry.jar"
+                capture("storediscoveryentry")
+                assert not index.exists(),"Opening Store unexpectedly contacted its repository"
+                keys("Up","Return");capture("storediscoveryloading")
+                expect(lambda:index.is_file() and archive.is_file(),"Live signed repository was not loaded",180)
+                def provider_idle():
+                    children=Path(f"/proc/{process.pid}/task/{process.pid}/children").read_text().split()
+                    for child in children:
+                        try:command=Path(f"/proc/{child}/cmdline").read_bytes()
+                        except FileNotFoundError:continue
+                        if b"fdroid-store.py" in command:return False
+                    return True
+                expect(provider_idle,"Live catalog request did not settle",60)
+                capture("storediscoverybrowse")
+                keys("Up","Up","Left","Left","Return");capture("storediscoverykeyboard")
+                remote_text(key,"newpipe");expect(provider_idle,"Live title search did not settle",60)
+                capture("storediscoveryresults")
+                spec=importlib.util.spec_from_file_location("verified_store",Path(__file__).with_name("fdroid-store.py"))
+                repository=importlib.util.module_from_spec(spec);spec.loader.exec_module(repository)
+                document=repository.verified_index(repository.verified_entry(archive.read_bytes()),index.read_bytes())
+                matches=repository.browse(document,"newpipe",0,repository.runtime_target())["results"]
+                assert matches and any("newpipe" in item["name"].casefold() for item in matches),"Signed live search has no NewPipe result"
+                assert not state.exists(),"Browsing installed an app without confirmation"
+                keys("Escape");capture("storediscoveryreturn")
+                key("Up",30);capture("storediscoverysettingsfocus")
+                keys("Return");capture("storediscoverysettings")
+                result=dict(passed=True,journey="store-discovery",freshProfile=True,normalProfileUsed=False,catalogOnly=True,installedAppsChanged=False,provider="fdroid-signed-v2",query="newpipe",matches=[item["packageName"] for item in matches],indexSha256=hashlib.sha256(index.read_bytes()).hexdigest(),entrySha256=hashlib.sha256(archive.read_bytes()).hexdigest(),actualInputActions=len(actions),captures=phases,visualReview="pending")
+                (evidence/"result.json").write_text(json.dumps(result,indent=2));return
             capture("storeandroid")
             keys("Return");capture("storeandroidconsent");keys("Right","Return")
             expect(lambda:installed("smarttube"),"Store did not install the Android app")

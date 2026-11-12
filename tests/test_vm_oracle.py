@@ -119,6 +119,32 @@ class OracleTests(unittest.TestCase):
             archive=build/'libisolde_core.a';archive.write_bytes(b'!<arch>\ngenerated archive')
             self.assertEqual(oracle.remove_linked_test_executables(root,active=[build/names[2]],keep=[names[1]],target_free=10**18),[str(archive)])
             self.assertEqual(obj.read_bytes(),b'compiled object')
+            with (meta/'TargetDirectories.txt').open('a') as listing:listing.write('\n'+str(meta/'isolde.dir'))
+            app=build/'isolde';app.write_bytes(b'\x7fELFgenerated app')
+            installed=root/'installed/isolde';installed.parent.mkdir();installed.write_bytes(app.read_bytes())
+            self.assertEqual(oracle.remove_linked_test_executables(root,active=[build/names[2],app],keep=[names[1]],target_free=10**18),[])
+            self.assertEqual(oracle.remove_linked_test_executables(root,active=[build/names[2]],keep=[names[1]],target_free=10**18),[str(app)])
+            self.assertTrue(installed.is_file());self.assertTrue(obj.is_file())
+
+    def test_object_cleanup_preserves_production_selected_active_and_metadata(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);meta=root/'work/build/CMakeFiles';meta.mkdir(parents=True)
+            names=['isolde_old_tests','isolde_keep_tests','isolde_core','isolde','unknown_tests']
+            objects=[]
+            for name in names:
+                directory=meta/(name+'.dir');directory.mkdir()
+                obj=directory/'source.cpp.o';obj.write_bytes(b'\x7fELFobject');objects.append(obj)
+            listing=meta/'TargetDirectories.txt';listing.write_text('\n'.join(str(meta/(name+'.dir')) for name in names))
+            active=objects[0].with_name('active.cpp.o');active.write_bytes(b'\x7fELFactive')
+            generated=objects[0].with_name('moc.cpp');generated.write_text('generated source')
+            with self.assertRaisesRegex(RuntimeError,'Mounted'):oracle.remove_unselected_test_objects(root,mounts=[objects[0].parent],keep=[names[1]],target_free=10**18)
+            self.assertTrue(objects[0].exists())
+            removed=oracle.remove_unselected_test_objects(root,active=[active],keep=[names[1]],target_free=10**18)
+            self.assertEqual(removed,[str(objects[0])])
+            self.assertTrue(all(p.exists() for p in [*objects[1:],active,generated,listing]))
+            objects[0].write_bytes(b'unknown bytes')
+            with self.assertRaisesRegex(RuntimeError,'Unknown'):oracle.remove_unselected_test_objects(root,active=[active],keep=[names[1]],target_free=10**18)
+            self.assertTrue(objects[0].exists())
 
     def test_runner_test_cache_preserves_recent_and_rejects_unknown_bytes(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -436,6 +462,22 @@ class OracleTests(unittest.TestCase):
             files[0].write_bytes(b'modified')
             with self.assertRaises(RuntimeError):oracle.deduplicate_tested_payloads(root,target_free=2**63)
 
+    def test_payload_dedup_shares_verified_installed_bytes_without_replacing_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home=Path(folder);root=home/'isolde-oracle';run=root/'runs/passed';payload=run/'payload';(payload/'bin').mkdir(parents=True)
+            staged=payload/'bin/isolde';staged.write_bytes(b'fixed installed candidate')
+            release=home/'.local/share/isolde-appliance/releases'/('a'*24);(release/'bin').mkdir(parents=True)
+            installed=release/'bin/isolde';installed.write_bytes(staged.read_bytes());inode=installed.stat().st_ino
+            (run/'test-result.json').write_text(json.dumps(dict(passed=True,payload=oracle.payload_hashes(payload))))
+            (run/'deploy-result.json').write_text(json.dumps(dict(release=str(release))))
+            with self.assertRaisesRegex(RuntimeError,'Mounted'):oracle.deduplicate_tested_payloads(root,[release],target_free=2**63)
+            installed.write_bytes(b'modified deployed candidate')
+            with self.assertRaisesRegex(RuntimeError,'Installed payload identity'):oracle.deduplicate_tested_payloads(root,target_free=2**63)
+            self.assertEqual(staged.read_bytes(),b'fixed installed candidate');installed.write_bytes(staged.read_bytes())
+            records=oracle.deduplicate_tested_payloads(root,target_free=2**63)
+            self.assertEqual(len(records),1);self.assertEqual(installed.stat().st_ino,inode)
+            self.assertEqual(staged.stat().st_ino,inode);self.assertEqual(installed.read_bytes(),b'fixed installed candidate')
+
     def test_guide_probe_does_not_search_other_profiles_or_claim_playback(self):
         with tempfile.TemporaryDirectory() as folder:
             home=Path(folder)
@@ -744,10 +786,30 @@ class OracleTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
 
     def test_theme_journey_fixture_and_required_receipt_boundaries(self):
+        phases=['storediscoveryentry','storediscoveryloading','storediscoverybrowse','storediscoverykeyboard','storediscoveryresults','storediscoveryreturn','storediscoverysettingsfocus','storediscoverysettings']
+        live=dict(passed=True,journey='store-discovery',freshProfile=True,normalProfileUsed=False,catalogOnly=True,installedAppsChanged=False,provider='fdroid-signed-v2',query='newpipe',matches=['org.schabi.newpipe'],indexSha256='a'*64,entrySha256='b'*64,actualInputActions=30,captures=phases)
+        self.assertTrue(oracle.visual_result_passed('store-discovery',live))
+        self.assertFalse(oracle.visual_result_passed('store-discovery',dict(live,installedAppsChanged=True)))
+        self.assertFalse(oracle.visual_result_passed('store-discovery',dict(live,indexSha256='unsigned')))
+        self.assertFalse(oracle.visual_result_passed('store-discovery',dict(live,captures=phases[:-1])))
+        self.assertEqual(oracle.CASES['store-discovery'],('store-acceptance.py',['--discovery-only']))
+        store_helper=Path(__file__).resolve().parents[1]/'tools/store-acceptance.py'
+        compile(store_helper.read_bytes(),str(store_helper),'exec')
         source=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
         spec=importlib.util.spec_from_file_location('theme_fixture',source)
         helper=importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules,{'fcntl':Mock()}):spec.loader.exec_module(helper)
+        response={'movies':[{'title':'Moonlit Harbor'},{'title':'The Glass Garden'}],'limits':{'start':0,'end':2,'total':2}}
+        request={'params':{'filter':{'field':'title','operator':'contains','value':'MOONLIT'}}}
+        filtered=helper.filter_title_response(request,response)
+        self.assertEqual(filtered['movies'],[{'title':'Moonlit Harbor'}])
+        self.assertEqual(filtered['limits'],{'start':0,'end':1,'total':1})
+        self.assertEqual(len(response['movies']),2)
+        request['params']['filter']['value']='settings'
+        self.assertEqual(helper.filter_title_response(request,response)['movies'],[])
+        self.assertIs(helper.filter_title_response({},response),response)
+        request['params']['filter']['operator']='execute'
+        with self.assertRaises(ValueError):helper.filter_title_response(request,response)
         for index in range(3):
             doc=helper.theme_document(index)
             self.assertNotEqual(doc['theme'],doc['pages'][0]['layout']['theme'])
@@ -1198,7 +1260,7 @@ class OracleTests(unittest.TestCase):
         self.assertIsNotNone(re.fullmatch(pattern,'component_contracts'))
         self.assertIsNotNone(re.fullmatch(pattern,'sources_remote_ui'))
         self.assertIsNotNone(re.fullmatch(pattern,'home_component_navigation'))
-        self.assertIsNone(re.fullmatch(pattern,'studio_quick'))
+        self.assertIsNotNone(re.fullmatch(pattern,'studio_quick'))
 
     def test_automatic_cleanup_records_failure_without_hiding_it(self):
         runner=oracle.Oracle(self.root/'oracle','cleanup-failure')
@@ -1283,6 +1345,46 @@ class OracleTests(unittest.TestCase):
         source,entries=oracle.extract_snapshot(run);oracle.verify_tree(source,entries)
         self.assertEqual((source/"src/main.cpp").read_bytes(),b"source bytes\n")
 
+    def test_failed_source_cleanup_preserves_current_pinned_active_and_evidence(self):
+        eligible,runs=self.recovery_snapshot('eligible')
+        candidates={'eligible':eligible}
+        for name in ('current','pinned','active','running','payload','tested','guide'):
+            candidate=runs/name;oracle.shutil.copytree(eligible,candidate);candidates[name]=candidate
+        for name,candidate in candidates.items():
+            (candidate/'status.json').write_text(json.dumps({'state':'running' if name=='running' else 'failed'}))
+            (candidate/'evidence.log').write_text('keep evidence')
+        (candidates['payload']/'payload').mkdir()
+        (candidates['tested']/'test-result.json').write_text('{}')
+        (candidates['guide']/'guide-soak-receipt.json').write_text('{}')
+        with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=0)):
+            removed=oracle.remove_failed_source_copies(runs.parent,candidates['current'],active=[candidates['active']/'source/src/main.cpp'],protected=[candidates['pinned']])
+        self.assertEqual(removed,[str(eligible/'source')])
+        for name,candidate in candidates.items():
+            self.assertEqual((candidate/'source').exists(),name!='eligible')
+            self.assertTrue((candidate/'source.tar.gz').is_file())
+            self.assertEqual((candidate/'evidence.log').read_text(),'keep evidence')
+        oracle.extract_snapshot(eligible)
+        (eligible/'source.tar.gz').write_bytes(b'tampered')
+        with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=0)):
+            with self.assertRaises(RuntimeError):oracle.remove_failed_source_copies(runs.parent,candidates['current'],protected=list(candidates.values())[1:])
+        self.assertTrue((eligible/'source/src/main.cpp').is_file())
+
+    @unittest.skipUnless(sys.platform=='linux','Guest source hardlinks')
+    def test_source_dedup_preserves_paths_and_refuses_modified_or_mounted_source(self):
+        first,runs=self.recovery_snapshot('first')
+        second=runs/'second';oracle.shutil.copytree(first,second)
+        for run in (first,second):(run/'status.json').write_text('{"state":"passed"}')
+        files=[run/'source/src/main.cpp' for run in (first,second)]
+        before=[p.read_bytes() for p in files]
+        with self.assertRaisesRegex(RuntimeError,'Mounted'):oracle.deduplicate_source_snapshots(runs.parent,runs/'current',mounts=[first/'source'],target_free=10**18)
+        files[0].write_bytes(b'modified')
+        with self.assertRaises(RuntimeError):oracle.deduplicate_source_snapshots(runs.parent,runs/'current',target_free=10**18)
+        files[0].write_bytes(before[0])
+        records=oracle.deduplicate_source_snapshots(runs.parent,runs/'current',target_free=10**18)
+        self.assertEqual(len(records),1);self.assertEqual(files[0].stat().st_ino,files[1].stat().st_ino)
+        for index,path in enumerate(files):self.assertEqual(path.read_bytes(),before[index])
+        for run in (first,second):self.assertTrue((run/'source.tar.gz').is_file());oracle.verify_tree(run/'source',oracle.manifest(run/'files.sha256'))
+
     @unittest.skipUnless(sys.platform=="linux","Guest-only maintenance orchestration")
     def test_source_maintenance_preserves_unrecoverable_payload_and_recent_runs(self):
         home=self.root/"home";home.mkdir();runner=oracle.Oracle(home/"isolde-oracle","current");runs=runner.root/"runs"
@@ -1321,9 +1423,15 @@ class OracleTests(unittest.TestCase):
             if path==Path('/proc/self/mountinfo'):return '1 0 0:1 / / rw - ext4 /dev/unit-test rw\n'
             return original(path,*args,**kwargs)
         (runs/'recent-a/test-result.json').write_text(json.dumps({'coverageReuse':{'baseRunId':'1'}}))
+        proof={'baseRunId':'1','verified':True}
+        focused=old[1]/'test-result.json'
+        tested=json.loads(focused.read_text());tested.update(fullSuite=False,suite='store',coverageReuse=proof);focused.write_text(json.dumps(tested))
         # All generated trees are old by directory mtime, while payload 3–5 are
         # the latest actual staged candidates. Directory cleanup must not unpin them.
-        with patch.object(runner,'command',return_value='isolde-test'),patch.object(runner,'stage'),patch.object(oracle.Path,'home',return_value=home),patch.object(oracle.Path,'read_text',read_text),patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=2*1024**3)):
+        with patch.object(runner,'command',return_value='isolde-test'),patch.object(runner,'stage'),patch.object(oracle.Path,'home',return_value=home),patch.object(oracle.Path,'read_text',read_text),patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=2*1024**3)),patch.object(oracle,'focused_qml_coverage',return_value={'changed':True}):
+            with self.assertRaisesRegex(RuntimeError,'coverage changed'):runner.prepare_guest_space(3,prune_payloads=True)
+        self.assertTrue((old[1]/'payload').is_dir())
+        with patch.object(runner,'command',return_value='isolde-test'),patch.object(runner,'stage'),patch.object(oracle.Path,'home',return_value=home),patch.object(oracle.Path,'read_text',read_text),patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=2*1024**3)),patch.object(oracle,'focused_qml_coverage',return_value=proof):
             runner.prepare_guest_space(3,prune_payloads=True)
         for run in old[2:]:self.assertTrue((run/'payload/bin/isolde').is_file())
         for run in old:self.assertEqual((run/'source.log').read_text(),'retain evidence')
@@ -1409,10 +1517,11 @@ class OracleTests(unittest.TestCase):
         (run / "evidence-desktop-1.tar.gz").write_bytes(b"bounded desktop result")
         (run / "evidence-studio-designs-1.tar.gz").write_bytes(b"bounded offline design result")
         (run / "evidence-collections-1.tar.gz").write_bytes(b"bounded collection result")
+        (run / "evidence-store-discovery-1.tar.gz").write_bytes(b"bounded signed online listing result")
         (run / "evidence-unknown-1.tar.gz").write_bytes(b"not allowlisted")
         oracle.write_report(run)
         with tarfile.open(run / "report.tar.gz") as archive:
-            self.assertEqual(set(archive.getnames()), {"status.json", "build.log", "studio-test-move-cancel.png", "evidence-desktop-1.tar.gz", "evidence-studio-designs-1.tar.gz", "evidence-collections-1.tar.gz"})
+            self.assertEqual(set(archive.getnames()), {"status.json", "build.log", "studio-test-move-cancel.png", "evidence-desktop-1.tar.gz", "evidence-studio-designs-1.tar.gz", "evidence-collections-1.tar.gz", "evidence-store-discovery-1.tar.gz"})
 
     @unittest.skipUnless(os.name == "posix", "Linux /tmp evidence paths")
     def test_visual_evidence_is_allowlisted(self):
@@ -1466,6 +1575,10 @@ class OracleTests(unittest.TestCase):
         filtered=dict(history,localFilterVerified=True,captures=filtered_phases)
         self.assertTrue(oracle.visual_result_passed('collections',filtered))
         self.assertFalse(oracle.visual_result_passed('collections',dict(filtered,captures=history['captures'])))
+        authored=dict(filtered,galleryPresentationApplied=True,galleryPresentation={'layout':'list','columns':6},galleryPresentationSha256='a'*64)
+        self.assertTrue(oracle.visual_result_passed('collections',authored))
+        self.assertFalse(oracle.visual_result_passed('collections',dict(authored,galleryPresentationSha256='wrong')))
+        self.assertFalse(oracle.visual_result_passed('collections',dict(authored,galleryPresentationApplied=False)))
 
     def test_visual_results_use_each_harness_contract(self):
         history=dict.fromkeys(("passed","freshProfile","realKodiPlayback","kodiOwnedLastplayed","historyCardPlayback","exactHistoryReturn","layoutUnchanged","mediaUnchanged"),True)
@@ -1644,10 +1757,64 @@ class OracleTests(unittest.TestCase):
 
 
 class SourcesJourneyContracts(unittest.TestCase):
+    def test_store_transport_reuse_refuses_unrelated_source_and_changed_full_payload(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);base=root/'runs/base';current=root/'runs/current'
+            files={name:b'original' for name in ('tools/fdroid-store.py','tests/test_fdroid_store.py','src/main.cpp','src/app/AppCatalog.cpp','qml/AppStoreView.qml','qml/Main.qml','config/catalog.json')}
+            def write(run,values):
+                for name,data in values.items():
+                    path=run/'source'/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+                (run/'files.sha256').write_text(''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(values.items())))
+            write(base,files)
+            executable=base/'payload/bin/isolde';executable.parent.mkdir(parents=True);executable.write_bytes(b'original full executable')
+            oracle.atomic_json(base/'test-result.json',dict(passed=True,fullSuite=True,sourceDigest=oracle.digest(base/'files.sha256'),payload=oracle.payload_hashes(base/'payload')))
+            changed=dict(files,**{'tools/fdroid-store.py':b'bounded compressed transport','tests/test_fdroid_store.py':b'signature and expansion regressions'})
+            write(current,changed)
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','store')['changedStoreFiles'],['tools/fdroid-store.py'])
+            changed['qml/AppStoreView.qml']=b'preserve authoritative provider matches'
+            write(current,changed)
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','store')['changedStoreFiles'],['qml/AppStoreView.qml','tools/fdroid-store.py'])
+            targets,pattern=oracle.suite_selection('store')
+            self.assertTrue(all(re.fullmatch(pattern,name) for name in ('fdroid_store','store_lifecycle','isolde_tests','studio_selection','android_provisioning','web_remote')))
+            for name in ('src/main.cpp','src/app/AppCatalog.cpp','qml/Main.qml','config/catalog.json'):
+                write(current,dict(changed,**{name:b'outside transport scope'}))
+                with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','store')
+            write(current,changed);executable.write_bytes(b'tampered')
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','store')
+
+    def test_current_acceptance_helper_parses_before_vm_journeys(self):
+        helper=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
+        compile(helper.read_bytes(),str(helper),'exec')
+
+    def test_native_gallery_evidence_is_bound_to_a_passing_run_and_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run=Path(temporary);path=run/'studio-gallery-presentation.json';path.write_text('{"layout":"list","columns":6}')
+            result=dict(passed=True,galleryPresentationEvidence=dict(file=path.name,sha256=oracle.digest(path)))
+            self.assertEqual(oracle.verified_gallery_evidence(run,result),(path,oracle.digest(path)))
+            command=oracle.studio_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),collections=True,gallery_evidence=path,gallery_digest=oracle.digest(path))
+            self.assertIn('--gallery-presentation-evidence',command)
+            with self.assertRaises(RuntimeError):oracle.studio_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),gallery_evidence=path,gallery_digest=oracle.digest(path))
+            with self.assertRaises(RuntimeError):oracle.verified_gallery_evidence(run,dict(result,passed=False))
+            with self.assertRaises(RuntimeError):oracle.verified_gallery_evidence(run,dict(result,galleryPresentationEvidence=dict(file='../outside',sha256=oracle.digest(path))))
+            path.write_text('{"layout":"grid"}')
+            with self.assertRaises(RuntimeError):oracle.verified_gallery_evidence(run,result)
+
+    def test_installed_search_matrix_requires_profile_cold_save_failure_and_origin_proof(self):
+        phases=['searchhome','searchgallery','offlinemedia','offlinesearch','offlinewebon','offlineweboff','offlinewebpersisted','offlineprofilefresh','offlineprofileoff','offlineprofileon','offlinedefaulton','offlinewebsavefailed','offlinewebretry','offlinewebrestored','searchgalleryreturn','offlinerecovery']
+        fields=('webToggleVerified','coldPreferenceVerified','profileSwitchVerified','preferenceWriteFailureVerified','localKodiBoundaryVerified','galleryOriginVerified','layoutBytesUnchanged')
+        result=dict.fromkeys(fields,True)
+        surfaces=[dict(pid=11,window='0x100'),dict(pid=12,window='0x100'),dict(pid=12,window='0x200'),dict(pid=12,window='0x300')]
+        result.update(passed=True,journey='studio-search',freshProfile=True,normalProfileUsed=False,network=dict(socketErrnos=[101,101],unixSocketAvailable=True),actualInputActions=1,captureTrace=[dict(phase=p) for p in phases],phases=phases,searchMatrixVersion=2,nativeKodiBefore={'sources.xml':'unchanged'},nativeKodiAfter={'sources.xml':'unchanged'},kodiBoundary='controlled-unix-rpc',ownedRuntimeWindows=surfaces)
+        self.assertTrue(oracle.visual_result_passed('studio-search',result))
+        for field in fields:self.assertFalse(oracle.visual_result_passed('studio-search',dict(result,**{field:False})))
+        self.assertFalse(oracle.visual_result_passed('studio-search',dict(result,phases=phases[:-1])))
+        self.assertFalse(oracle.visual_result_passed('studio-search',dict(result,ownedRuntimeWindows=surfaces[:3]+[surfaces[0]])))
+        self.assertFalse(oracle.visual_result_passed('studio-search',dict(result,nativeKodiAfter={'sources.xml':'rewritten'})))
+
     def test_sources_reuse_accepts_only_its_registered_widget_and_regressions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);base=root/'runs/base';current=root/'runs/current'
-            files={'qml/Main.qml':b'original routing','qml/SourceSettingsView.qml':b'original guidance','qml/HomeScreen.qml':b'original Home','qml/PageSourcesWidget.qml':b'original','tests/studio/tst_sources.qml':b'original tests','src/main.cpp':b'unchanged','config/studio-defaults.json':b'unchanged'}
+            files={'qml/PageStudioView.qml':b'original gallery controls','qml/Main.qml':b'original routing','qml/SourceSettingsView.qml':b'original guidance','qml/HomeScreen.qml':b'original Home','qml/PageSourcesWidget.qml':b'original','tests/studio/tst_sources.qml':b'original tests','src/main.cpp':b'unchanged','config/studio-defaults.json':b'unchanged'}
             def write(run,values):
                 for name,data in values.items():
                     path=run/'source'/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
@@ -1666,6 +1833,8 @@ class SourcesJourneyContracts(unittest.TestCase):
             self.assertEqual(oracle.focused_qml_coverage(root,current,'base','sources')['changedSourcesQml'],['qml/HomeScreen.qml','qml/PageSourcesWidget.qml'])
             write(current,dict(changed,**{'qml/Main.qml':b'source Menu route','qml/SourceSettingsView.qml':b'explicit action guidance'}))
             self.assertEqual(oracle.focused_qml_coverage(root,current,'base','sources')['changedSourcesQml'],['qml/Main.qml','qml/PageSourcesWidget.qml','qml/SourceSettingsView.qml'])
+            write(current,dict(changed,**{'qml/PageStudioView.qml':b'gallery Done/Reset origin fix'}))
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','sources')['changedSourcesQml'],['qml/PageSourcesWidget.qml','qml/PageStudioView.qml'])
             for path in ('src/main.cpp','config/studio-defaults.json'):
                 write(current,dict(changed,**{path:b'outside scope'}))
                 with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','sources')
@@ -1690,6 +1859,15 @@ class SourcesJourneyContracts(unittest.TestCase):
             for index in range(7):
                 self.assertEqual((runs/str(index)/'raw-evidence.log').read_text(),'retained')
                 self.assertEqual((runs/str(index)/'report.tar.gz').exists(),index!=0)
+            payload=runs/'5/payload/bin/isolde';payload.parent.mkdir(parents=True);payload.write_bytes(b'pinned tested executable')
+            with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=0)):
+                with self.assertRaisesRegex(RuntimeError,'checksum'):
+                    oracle.remove_backed_up_reports(root,[dict(backups[4],sha256='0'*64)],preserve_recent=False)
+                removed=oracle.remove_backed_up_reports(root,backups,protected={runs/'1',runs/'3'},preserve_recent=False)
+            self.assertEqual(removed,backups[4:])
+            self.assertEqual(payload.read_bytes(),b'pinned tested executable')
+            self.assertTrue(all((runs/str(index)/'raw-evidence.log').exists() for index in range(7)))
+            self.assertTrue((runs/'2/report.tar.gz').exists())
 
     def test_sources_requires_complete_receipt_and_verified_helper_flag(self):
         phases=["sourcesdefault","sourceslist","sourcesdraft","sourceshidden","sourcesrestored","sourceshandlers","sourcesdisconnected","sourcesretry","sourcespolicy","sourcespolicysaved","sourceskeep","sourceskept","darksourcesbounded","darksourcesactions","darksourcesnotice","pastelsourcesbounded","pastelsourcesactions","pastelsourcesnotice"]

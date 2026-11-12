@@ -114,6 +114,8 @@ def main():
     parser.add_argument("--sources-only", action="store_true", help="Exercise contained source policy and actions in a private XDG movie directory")
     parser.add_argument("--catalog", action="store_true", help="Exercise real remote image import, framing, GIF Apply and reopen")
     parser.add_argument("--collections", action="store_true", help="Exercise real collection registry/session lifecycle in a private profile")
+    parser.add_argument("--gallery-presentation-evidence", type=Path)
+    parser.add_argument("--gallery-presentation-digest")
     parser.add_argument("--themes-controls-only", action="store_true", help="Review Audio/Ambient values and explicit private draft discard")
     parser.add_argument("--themes-custom-only", action="store_true", help="Complete only the custom palette and private policy controls")
     parser.add_argument("--themes-faults-only", action="store_true", help="Review installed loading, RPC error and retry under three palettes")
@@ -123,6 +125,7 @@ def main():
     parser.add_argument("--desktop", action="store_true", help="Compare actual X11 pointer drag and remote saved output in the Studio fixture")
     parser.add_argument("--preview-seconds", type=int, default=0, choices=range(31), help="Hold the appearance preview for visual inspection")
     args = parser.parse_args()
+    if bool(args.gallery_presentation_evidence)!=bool(args.gallery_presentation_digest) or (args.gallery_presentation_evidence and not args.collections):parser.error("Verified gallery evidence is collections-only")
     if args.themes_faults_only or args.themes_custom_only or args.themes_controls_only: args.themes_only = True
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a")
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -137,6 +140,15 @@ def main():
         original["composition"]={"schemaVersion":1,"enabled":True,"grid":{"columns":4,"rows":3,"mode":"screen"}}
         original["items"][0].update(name="Design source",placement={"x":0,"y":0,"width":1,"height":1},presentation={"labelColor":"#e89ab0","radius":16})
     original_bytes = json.dumps(original).encode()
+    search_profile=None
+    if args.search_only:
+        import uuid
+        search_profile=str(uuid.uuid4())
+        original["items"]=[dict(id="apps-origin",kind="action",name="All Apps",size="wide",action=dict(type="open-apps"))]
+        original_bytes=json.dumps(original).encode()
+        (config/"profiles.json").write_text(json.dumps(dict(active="default",profiles=[dict(id="default",name="Household"),dict(id=search_profile,name="Other")])) )
+        other_layout=config/"profiles"/search_profile/"home-layout.json"
+        other_layout.parent.mkdir(parents=True);other_layout.write_bytes(original_bytes)
     if args.sources_only:
         original = json.loads((Path(__file__).resolve().parents[1]/"config/default-home-layout.json").read_text())
         original_bytes = json.dumps(original).encode()
@@ -144,16 +156,25 @@ def main():
         for index in range(8): (movies/("Source %02d"%index)).mkdir()
         (evidence/"config/user-dirs.dirs").write_text('XDG_VIDEOS_DIR="'+str(movies)+'"\n')
     if args.collections:
-        original_bytes, collection_fixture = prepare_collections(evidence, executable)
+        gallery_presentation=None
+        if args.gallery_presentation_evidence:
+            artifact=args.gallery_presentation_evidence
+            if artifact.resolve()!=artifact or not artifact.is_file() or artifact.stat().st_size>65536 or hashlib.sha256(artifact.read_bytes()).hexdigest()!=args.gallery_presentation_digest:raise RuntimeError("Native gallery presentation identity mismatch")
+            gallery_presentation=json.loads(artifact.read_text())
+            if not isinstance(gallery_presentation,dict) or not 1<=len(gallery_presentation)<=10:raise RuntimeError("Invalid native gallery presentation")
+        original_bytes, collection_fixture = prepare_collections(evidence, executable,gallery_presentation)
+        collection_fixture["galleryEvidenceDigest"]=args.gallery_presentation_digest
     if args.catalog:
         prepare_catalog(evidence)
-    theme_provider = prepare_theme_provider(evidence) if args.themes_only else None
+    theme_provider = prepare_theme_provider(evidence) if args.themes_only or args.search_only else None
     if args.themes_only:
         original = theme_document(2 if args.themes_custom_only else 0)
         original_bytes = json.dumps(original).encode()
     layout.write_bytes(original_bytes)
     (config / "device-setup.json").write_text(json.dumps({"version": 1, "step": 6, "complete": True}))
     (config / "Kodi.conf").write_text("[profiles]\ndefault\\kodi\\autoStart=false\n")
+    if args.search_only:
+        with (config/"Kodi.conf").open("a") as settings:settings.write(search_profile+"\\kodi\\autoStart=false\n")
     (config / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
     # SourceManager currently uses default QSettings (no organization set),
     # whereas device audio/Kodi use explicit Isolde namespaces.
@@ -617,15 +638,88 @@ def main():
                     print("Evidence: "+str(evidence),flush=True)
                     return
                 if args.search_only:
-                    key("Up",30); capture("searchhome")
-                    key("Menu"); key("Return"); offline_module.remote_text(key,"settings")
-                    time.sleep(1); capture("offlinesearch")
-                    assert layout.read_bytes() == original_bytes
-                    key("Escape"); capture("offlinerecovery")
-                    assert layout.read_bytes() == original_bytes
+                    import configparser
+                    phases=[];owned_windows=[dict(pid=process.pid,window=window)]
+                    native_directory=evidence/"data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
+                    native_before={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
+                    def snap_search(phase):
+                        time.sleep(.35);capture(phase);phases.append(phase)
+                        assert layout.read_bytes()==original_bytes and other_layout.read_bytes()==original_bytes,"Search/profile workflow rewrote a layout"
+                    def preference(profile="default"):
+                        matches=[]
+                        section,option=("search","webEnabled") if profile=="default" else ("profiles",profile+"\\search\\webEnabled")
+                        for path in (config/"Isolde.conf",default_settings/"Isolde.conf"):
+                            settings=configparser.ConfigParser(interpolation=None,strict=False);settings.read(path,encoding="utf-8-sig")
+                            if settings.has_option(section,option):matches.append((path,settings.getboolean(section,option)))
+                        if len(matches)>1:raise RuntimeError("Ambiguous profile Search preference store")
+                        return matches[0] if matches else (None,False)
+                    def type_query(text):
+                        key("Return");offline_module.remote_text(key,text);time.sleep(.7)
+                    def open_gallery_search(gallery_phase=None,fresh_phase=None):
+                        key("Up",30);key("Down");key("Return")
+                        if gallery_phase:snap_search(gallery_phase)
+                        key("XF86Search")
+                        if fresh_phase:snap_search(fresh_phase)
+                    def profiles_screen():
+                        key("Escape",2);key("Home");key("Up",30);key("Return")
+                        categories=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())["settingsNavigation"]["categories"]
+                        index=next(i for i,c in enumerate(categories) if c.get("route")=="profiles")
+                        key("Up",30);key("Down",index);key("Return")
+                    title=next(line.split(None,4)[4] for line in run("wmctrl","-lp",env=env).splitlines() if line.split(None,4)[0]==window)
+                    def switch_profile(index,identity):
+                        nonlocal window,focused
+                        previous=window;key("Up",30);key("Down",index);key("Return")
+                        expect(lambda:json.loads((config/"profiles.json").read_text())["active"]==identity,"Production profile selection saved")
+                        def replacement():
+                            matches=[]
+                            for line in run("wmctrl","-lp",env=env).splitlines():
+                                fields=line.split(None,4)
+                                if len(fields)==5 and fields[2]==str(process.pid) and fields[4]==title and fields[0]!=previous:matches.append(fields[0])
+                            if len(matches)>1:raise RuntimeError("Ambiguous replacement profile window")
+                            return matches[0] if matches else None
+                        expect(replacement,"New owned profile runtime window")
+                        window=replacement();focused=focus_window(window);owned_windows.append(dict(pid=process.pid,window=window))
+                    key("Up",30);snap_search("searchhome")
+                    open_gallery_search("searchgallery");type_query("moonlit")
+                    expect(lambda:theme_provider.completed_movies>0 and any(r.get("method")=="VideoLibrary.GetMovies" and r.get("params",{}).get("filter",{}).get("value")=="moonlit" for r in theme_provider.requests),"Production Kodi Search client completed controlled UNIX metadata")
+                    snap_search("offlinemedia")
+                    key("Left");type_query("settings");snap_search("offlinesearch")
+                    key("Up");key("Right",3);key("Return")
+                    snap_search("offlinewebon")
+                    expect(lambda:preference()[1] is True,"Web On saved")
+                    key("Left");key("Right");assert preference()[1] is True,"Arrow navigation toggled Web"
+                    key("Return")
+                    expect(lambda:preference()[1] is False,"Web Off saved");snap_search("offlineweboff")
+                    key("Return");expect(lambda:preference()[1] is True,"Web On saved before cold restart")
+                    process.terminate();process.wait(timeout=10);process,window,focused=start_shell();owned_windows.append(dict(pid=process.pid,window=window))
+                    assert preference()[1] is True
+                    open_gallery_search();type_query("settings");snap_search("offlinewebpersisted")
+                    profiles_screen();switch_profile(1,search_profile)
+                    assert preference()[1] is True and preference(search_profile)[1] is False
+                    open_gallery_search(fresh_phase="offlineprofilefresh");type_query("settings");snap_search("offlineprofileoff")
+                    key("Up");key("Right",3);key("Return")
+                    expect(lambda:preference(search_profile)[1] is True,"Other profile Web On saved")
+                    assert preference()[1] is True;snap_search("offlineprofileon")
+                    profiles_screen();switch_profile(0,"default")
+                    open_gallery_search();type_query("settings");snap_search("offlinedefaulton")
+                    key("Up");key("Right",3);key("Return");expect(lambda:preference()[1] is False,"Default Web Off restored")
+                    store,_=preference()
+                    if store is None or store.resolve()!=store or not store.resolve().is_relative_to((evidence/"config").resolve()):raise RuntimeError("Unsafe fixture Search store")
+                    before_store=store.read_bytes();permissions=store.parent.stat().st_mode & 0o777
+                    try:
+                        store.parent.chmod(0o500);key("Return")
+                        assert preference()[1] is False and store.read_bytes()==before_store,"Failed Web save changed preference bytes"
+                        snap_search("offlinewebsavefailed")
+                    finally:store.parent.chmod(permissions)
+                    key("Return");expect(lambda:preference()[1] is True,"Web preference retry saved");snap_search("offlinewebretry")
+                    key("Return");expect(lambda:preference()[1] is False,"Default Web Off saved after retry");snap_search("offlinewebrestored")
+                    key("Escape");snap_search("searchgalleryreturn");key("Escape");snap_search("offlinerecovery")
                     network=json.loads((evidence/"network-denial.json").read_text())
                     assert network["socketErrnos"] == [101,101] and network["unixSocketAvailable"] is True
-                    (evidence/"result.json").write_text(json.dumps({"passed":True,"journey":"studio-search","freshProfile":True,"normalProfileUsed":False,"network":network},indent=2))
+                    native_after={f.name:hashlib.sha256(f.read_bytes()).hexdigest() for f in native_directory.glob("*.xml")}
+                    assert native_before and native_before==native_after and not theme_provider.errors
+                    assert preference()[1] is False and preference(search_profile)[1] is True and len({(s['pid'],s['window']) for s in owned_windows})==4
+                    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="studio-search",freshProfile=True,normalProfileUsed=False,network=network,searchMatrixVersion=2,phases=phases,webToggleVerified=True,coldPreferenceVerified=True,profileSwitchVerified=True,preferenceWriteFailureVerified=True,localKodiBoundaryVerified=True,galleryOriginVerified=True,layoutBytesUnchanged=True,nativeKodiBefore=native_before,nativeKodiAfter=native_after,kodiBoundary="controlled-unix-rpc",ownedRuntimeWindows=owned_windows),indent=2))
                     print("Evidence: "+str(evidence),flush=True)
                     return
                 key("Return")  # Existing missing source -> Home editor.
@@ -989,6 +1083,22 @@ def theme_document(index):
                                      dict(id="theme-origin",name="Theme origin",layout=origin)])
 
 
+def filter_title_response(request, response):
+    """Honor the production title query at this controlled RPC boundary."""
+    query=request.get("params",{}).get("filter",{})
+    if query.get("field")!="title":return response
+    if query.get("operator")!="contains" or not isinstance(query.get("value"),str):
+        raise ValueError("Unsupported title filter in controlled Kodi fixture")
+    result=dict(response)
+    for field in ("movies","episodes","tvshows"):
+        if field not in result:continue
+        items=[item for item in result[field] if query["value"].casefold() in item.get("title","").casefold()]
+        result[field]=items
+        start=request.get("params",{}).get("limits",{}).get("start",0)
+        result["limits"]={"start":start,"end":start+len(items),"total":len(items)}
+    return result
+
+
 def prepare_theme_provider(evidence):
     from reference_collections import ReferenceCollections
     repository=Path(__file__).resolve().parents[1]
@@ -1032,8 +1142,8 @@ def prepare_theme_provider(evidence):
             if method in {"VideoLibrary.GetTVShows","VideoLibrary.GetSeasons"}:
                 key="tvshows" if method.endswith("TVShows") else "seasons"
                 identity="tvshowid" if key=="tvshows" else "seasonid"
-                return {key:[{identity:7,"tvshowid":7,"title":"Isolated theme television", "season":1,"episode":1,"watchedepisodes":0}],"limits":{"start":0,"end":1,"total":1}}
-            return super().reply(request)
+                return filter_title_response(request,{key:[{identity:7,"tvshowid":7,"title":"Isolated theme television", "season":1,"episode":1,"watchedepisodes":0}],"limits":{"start":0,"end":1,"total":1}})
+            return filter_title_response(request,super().reply(request))
     provider=ThemeProvider(evidence,fixture,repository)
     native=evidence/"data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
     for name in ("guisettings.xml","sources.xml"):
@@ -1043,7 +1153,7 @@ def prepare_theme_provider(evidence):
 
 # Collection acceptance stays in this helper so the SHA-addressed overlay
 # cannot import an unfrozen or accidentally modified dependency.
-def prepare_collections(evidence, executable):
+def prepare_collections(evidence, executable, gallery_presentation=None):
     repository = Path(__file__).resolve().parents[1]
     presets = json.loads((repository / "config/studio-defaults.json").read_text())["componentPresets"]
     def collection(identity, y, mode, ids, capacity):
@@ -1080,6 +1190,7 @@ def prepare_collections(evidence, executable):
         if item["id"]!="app-openings":item["source"]=dict(schemaVersion=1,provider="shell",kind=item["componentType"])
     document=dict(schemaVersion=2,rootPage=dict(name="Home",visible=True,position=0),theme=dict(backgroundStart="#19191E",backgroundEnd="#101014",textColor="#FFFFFF",focusColor="#FFD166",surfaceColor="#28262F",motionEnabled=False),categories=[],components=items,
         composition=dict(schemaVersion=1,enabled=True,grid=dict(columns=8,rows=5,mode="screen"),headerControls=["settings"],showClock=False,navigation=[dict(id="home",name="Home")],initialTab="home"))
+    if gallery_presentation is not None:document["composition"]["appGallery"]=gallery_presentation
     package=repository/"config/packages/freetube/manifest.json"
     destination=evidence/"data/Isolde/packages/profiles/default/freetube/1.0.0/manifest.json"
     destination.parent.mkdir(parents=True);destination.write_bytes(package.read_bytes())
@@ -1099,7 +1210,7 @@ def prepare_collections(evidence, executable):
         manifest=json.loads((repository/"config"/relative).read_text())
         app=manifest["app"]
         if app["type"] not in ("android","web") and app.get("presentationMode")!="web-kiosk":native.append(app["id"])
-    return json.dumps(document).encode(),dict(state=state,home=home,nativeIndex=native.index("freetube"),document=document)
+    return json.dumps(document).encode(),dict(state=state,home=home,nativeIndex=native.index("freetube"),document=document,galleryPresentation=gallery_presentation)
 
 
 COLLECTION_CLIENT = r'''
@@ -1184,8 +1295,8 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
         key("Up",12);key("Down",2)
     def store():
         top();key("Down",3);key("Return");time.sleep(1)
-        # Initial Android grid -> header -> Device apps, then catalog order.
-        key("Up");key("Left");key("Return")
+        # Initial Android grid -> tools -> header -> Device apps.
+        key("Up",2);key("Left");key("Return")
         index=fixture["nativeIndex"]
         key("Down",index//2)
         if index%2:key("Right")
@@ -1193,7 +1304,7 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     capture("collectionhome")
     top();key("Return");capture("selectedgallery")
     def filter_gallery(text):
-        key("Up");key("Return");remote_text(key,text);key("Down")
+        key("Up",8);key("Return");remote_text(key,text);key("Down")
         assert layout.read_bytes()==original,"Local gallery filter authored layout data"
     filter_gallery("free");capture("collectionfilter")
     key("Return");native_cycle(1,"collectionclient")
@@ -1224,7 +1335,9 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     key("Escape",2);top();key("Down",4);capture("historyapp")
     key("Return");native_cycle(7,"historyclient");capture("historyreturned")
     key("Return");native_cycle(8,"historyrepeat");capture("historyrepeatreturn")
-    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,localFilterVerified=True,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state()),indent=2))
+    result=dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,localFilterVerified=True,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state())
+    if fixture.get("galleryPresentation") is not None:result.update(galleryPresentationApplied=True,galleryPresentation=fixture["galleryPresentation"],galleryPresentationSha256=fixture["galleryEvidenceDigest"])
+    (evidence/"result.json").write_text(json.dumps(result,indent=2))
     print("Evidence: "+str(evidence),flush=True)
 
 

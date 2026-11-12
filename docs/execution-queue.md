@@ -8,8 +8,22 @@ this supersedes the older rerun deferrals below. Resume
 `round2-20261111-b` is the frozen full-suite attempt. Preserve the six existing
 Studio test-file edits. Diagnose the first named failure before resuming
 unattempted registrations; then exercise missing/source-affected VM workflows.
-Current acceptance83% (2074/25),165/212 milestones. No VM runner active. T25 accepted100% in sources-staged-j: four focused registrations with strict original integration-l61/61 reuse, installed release03ff1010746b189b470ed74f,18 reviewed Sources phases,24 reviewed collections phases with8 real native input/normal-exit cycles and3 reviewed offline Search frames. Normal layout hashes unchanged; service active/running/zero restarts. BUG-097–100 product repairs and BUG-101 collections helper verified. T26 is90%; only remote gallery editing/Preview/Cancel/Apply remains before T28 combined Web-switch persistence/profile workflow. Reuse the installed j payload; tests/helpers/docs alone require no application full run. Preserve six unrelated Studio test changes.
-
+Current acceptance85% (2131/25),171/212 milestones. T25/T26/T28 accepted100%.
+Latest user feedback is fixed and installed in ceb971fc65a09dd9a9973336:
+Home Settings visible focus/activation, no automatic named-page Edit page,
+and real signed F-Droid Explore/search. Store-zc passes six focused tests and118
+runner checks with strict feedback-r61/61/payload reuse; installed journey91s,
+all five NewPipe results,23 reviewed captures/no pending, normal layouts unchanged.
+T29.1 provider discovery accepted; T29 is63%, broader installed lifecycle open.
+Runner retention/packaging failures and safe guest-only recovery are recorded as
+BUG-115/116. No runner active. Preserve the six unrelated Studio test files.
+Next: T29 actual setup/install/open/return/remove, update/rollback, two-profile
+and offline/browser input matrix. Inspect the missing privileged Android support
+through the supported runner; no credential bypass or fabricated playback.
+Superseded Google Play/GAPPS/credentials/Chrome-extension proposals stay excluded.
+Optional must-have-source question remains pending; current authorized F-Droid/
+web-app scope continues. Reuse r's gallery/Search/reference evidence by scope;
+no full/reference rerun for this bounded Store change or documentation accounting.
 ## User-directed T12 interface sound themes — 2026-11-11
 
 Selected: Kodi-compatible audible UI feedback, extending the Settings cleanup.

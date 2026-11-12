@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-discovery','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -69,6 +69,8 @@ if ($GuestRunner) {
 } elseif ($Case -in @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog')) {
     $desktopFlag = if ($Case -eq 'desktop') { ' --desktop' } elseif ($Case -eq 'collections') { ' --collections' } elseif ($Case -eq 'catalog') { ' --catalog' } elseif ($Case -eq 'themecontrols') { ' --themes-controls-only' } else { '' }
     $command = "python3 $SourceRoot/tools/home-components-acceptance.py $Executable --studio --inspect$desktopFlag"
+} elseif ($Case -eq 'store-discovery') {
+    $command = "python3 $SourceRoot/tools/store-acceptance.py $Executable --discovery-only"
 } elseif ($Case -eq 'pages') {
     $command = "python3 $SourceRoot/tools/tv-library-acceptance.py $Executable --pages --inspect"
 } elseif ($Case -eq 'playlists') {

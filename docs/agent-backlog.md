@@ -1,19 +1,25 @@
 # Isolde Agent Backlog — first-product software completion
 Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
-## Current acceptance reconciliation — 2026-11-11
+## Current acceptance reconciliation — 2026-11-12
 
-Acceptance is **83% (2074/25)**, with165/212 independently evidenced milestones.
-T25 Sources is **100% accepted**: sources-staged-j passes four focused native/Home
-registrations with strict integration-l61/61 origin reuse and18 reviewed installed
-checkpoints. Release03ff1010746b189b470ed74f fixes the legacy banner, compact-summary
-details, first Menu routing and immediate-action instructions. Policy/cancel,
-handler/Keep persistence, unplug/retry, contained dark/pastel families and unchanged
-normal profiles pass. Generic reference pairs reuse their unchanged composed
-paths. No newer full61-test pass or gameplay/Power completion is implied.
-Gallery is90% after24 reviewed installed/native-launch checkpoints; remaining bugs and
-runtime requirements are recorded in the campaign and execution checkpoint.
+Acceptance is **85% (2131/25)**, with 171/212 independently evidenced milestones.
+T25, T26 and T28 are accepted100%. Feedback-r passes full61/61, deploys release
+9e33a01181c41ea8d571f932 and passes installed Sources actions,24 reviewed gallery
+frames/eight real native input/exit cycles,16 reviewed Search cold/profile/save-
+failure/retry checkpoints and both clean reference pairs14/34 frames. Six new
+source frames with a guest dialog are excluded and reuse j's unchanged source
+rendering. Normal profile layout hashes remain unchanged and service restored.
 
+User VM feedback fixes Home Up-to-Settings/refresh focus, removes automatic named-
+page Edit page controls and exposes online Store Explore/search. Store-zc passes
+six focused registrations and118 runner checks with strict r61/61/payload reuse,
+deploys ceb971fc65a09dd9a9973336 and passes the live signed F-Droid journey:4891
+matching browse entries, all five NewPipe matches, readable initials and visible
+Home Settings selection/activation. All23 captures reviewed, no pending review;
+normal layouts unchanged, service active/running/zero restarts. T29.1 closes;
+T29 is63%. Actual install/update/remove, Android setup and broader runtime gates
+stay open. Full r gallery/Search/reference evidence remains applicable by scope.
 ## Round-two testing authorization — 2026-11-11
 
 The user's request to test everything not yet VM verified supersedes the prior
@@ -76,7 +82,7 @@ were performed. No deployment or new acceptance: T12 0%, T29 13%, overall63%.
 
 [VM software completion](vm-software-completion.md) is the latest user-approved definition for every task and linked requirement. **100% means reasonable belief that the software is done based entirely on VM-verifiable evidence.** Actual hardware/model/USB/firmware, independent participants, user approval, unavailable paid accounts/entitlement/regions and target-only runtime/performance checks are not T-task prerequisites. Use the prescribed production-boundary fixtures, virtual devices and agent task/guide walkthroughs; retain genuine software errors as blockers. H01–H05 and external-service/usability checks are a separate user-owned post-100% handoff. No formal hardware/release campaign is required by this software backlog. All conflicting historical wording below and in Entry docs is superseded.
 
-Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 2074; Overall is 83% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
+Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 2131; Overall is 85% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
 
 ## Continue command — operating plan, 2026-10-29
 
@@ -96,7 +102,7 @@ Sequencing: [implementation-order.md](implementation-order.md). Requirements/ame
 
 - ACTIVE: **T01,T03–T05,T09–T12,T14–T30 = 25 tasks**. T02/T06–T08/T13/T31 are excluded. H01–H05 remain a separate physical qualification ledger.
 - Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each remaining group and task retains its weight. Overall = half-up round(sum of the 25 rounded task percentages / 25), capped at 99% until every in-scope task reaches 100% in that metric. Acceptance remains separate from Coding%. Reproduce acceptance with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
-- Acceptance sum **2074**, Overall **83%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
+- Acceptance sum **2131**, Overall **85%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
 - **S1 = 100% when all in-scope redesigned VM software groups and required checks pass.** T13/T31 are not prerequisites. Hardware, external account/region and participant approval remain outside S1.
 - Reuse verified foundations with explicit source-applicability checks. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
 - Standing software gates: both generic reference recreation/reset pairs; profile/account/data isolation where promised; atomic save/rollback/no rewrite on read; Kodi media/progress ownership; disconnected VM Generator Test; OFF-gated zero requests; reachable Settings/Edit recovery. Physical repetition is H1.
@@ -128,9 +134,9 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T24 | 10 | Installed Studio usability and cutover | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
 | T27 | 11 | Shared theme across shell surfaces | 100% | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
 | T25 | 12 | Contained configurable detected sources | 100% | 100% | installed18-checkpoint source policy/components/actions accepted; four focused tests with strict original61/61 reuse |
-| T26 | 13 | Configurable All Apps destination | 90% | 100% | installed gallery/filter/registry/native return accepted; remote gallery edit Preview/Cancel/Apply remains |
-| T28 | 14 | Genuine Web search header toggle | 60% | 100% | native header/focus/profile-persistence verified; real-client cancellation repair and combined installed acceptance open |
-| T29 | 15 | Verified Store, Android and Chromium remote | 56% | 100% | Android baseline accepted; source/bridge/playback/lifecycle open |
+| T26 | 13 | Configurable All Apps destination | 100% | 100% | native Studio edit/Preview/Cancel/Apply plus exact installed saved presentation, artwork/density and eight real native returns accepted |
+| T28 | 14 | Genuine Web search header toggle | 100% | 100% | installed16-checkpoint cold/profile/save-failure/retry/OFF matrix, full61 and clean reference pairs accepted |
+| T29 | 15 | Verified Store, Android and Chromium remote | 63% | 100% | Provider discovery and Android baseline accepted; install/bridge/playback/lifecycle open |
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search installed acceptance | 83% | 100% | native search contracts accepted; installed real-Kodi closure open |
@@ -143,7 +149,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **83%** | **100%** | **2074 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **85%** | **100%** | **2131 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
@@ -387,7 +393,7 @@ Entry files: `src/home/ActionDispatcher.{h,cpp}`, `src/home/ComponentSchema.{h,c
 Scope:
 - [x] T26.1 Define distinct typed All Apps and Search routes; resolve legacy app-drawer to the gallery without rewriting stored layouts/skins and audit every More Apps/card/header/page entry point.
 - [x] T26.2 Register an app-catalog adapter and themed gallery page preset using existing page/layout machinery, stable deduplicated app IDs and real installed/registered states; exclude uninstalled Store offers and internal navigation from app counts.
-- [ ] T26.3 Expose gallery layout/grid/list/density/art/labels/sort/favorites/local-filter controls through Studio; preserve packaged fallback and profile/page/document limits, with no parallel persisted app library or layout file.
+- [x] T26.3 Expose gallery layout/grid/list/density/art/labels/sort/favorites/local-filter controls through Studio; preserve packaged fallback and profile/page/document limits, with no parallel persisted app library or layout file.
 - [x] T26.4 Implement remote browsing, first/remembered selection, empty-state Store/Settings, real launch/failure/retry and exact gallery/origin focus+scroll restoration; local filtering never opens universal Search or triggers web requests.
 - [x] T26.5 Test legacy/current/custom-page/skin routes, duplicate entries, offline/needs-setup/failed states and registry changes/uninstall of selected app; gallery opening requires neither a query nor automatic keyboard focus.
 Done when: All Apps/More Apps reliably opens a configurable installed-app page, and opening Search is a separate explicit action; app launches and Back preserve the complete origin chain.
@@ -398,10 +404,10 @@ Entry docs: `docs/shell-surfaces-design.md` sections 1, 5-6; `docs/unified-maste
 Entry files: `qml/CommandCenter.qml`, `qml/Main.qml`, `src/settings/SearchSettings.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, shared search-header/presentation/edit-session helpers, `tests/tst_home_navigation.cpp`, `tests/tst_components.cpp`, `tools/verify-t03-search.py`.
 Scope:
 - [x] T28.1 Remove the searchToggle pseudo-result and render one genuine labeled On/Off switch in the header's top-right default slot, with themed/stylable presentation, accessible checked state and no result-count/index participation.
-- [ ] T28.2 Implement query/header/switch/results/keyboard D-pad focus transitions, Confirm/click activation, empty/late-result stability and exact Back origin; no arrow-driven accidental toggle or forced mouse/Tab usage.
-- [ ] T28.3 Use the existing single SearchSettings authority with default OFF, active-profile persistence and atomic rollback on failure; retain query, selection and visible state, and clear old profile context on switch.
-- [ ] T28.4 Preserve request-generation cancellation/network denial when switched OFF, suppress late/cached online matches and distinguish ON from actual provider availability; no provider shows honest header status and local results, not fake result rows.
-- [ ] T28.5 Replace string-pattern-only toggle checks with state/focus/results/persistence tests; verify dark/pastel/custom palette, reduced-motion, long-label and offline/no-provider behavior, then rerun the combined T25-T28 surface journeys against the accepted Studio without regressing T24.
+- [x] T28.2 Implement query/header/switch/results/keyboard D-pad focus transitions, Confirm/click activation, empty/late-result stability and exact Back origin; no arrow-driven accidental toggle or forced mouse/Tab usage.
+- [x] T28.3 Use the existing single SearchSettings authority with default OFF, active-profile persistence and atomic rollback on failure; retain query, selection and visible state, and clear old profile context on switch.
+- [x] T28.4 Preserve request-generation cancellation/network denial when switched OFF, suppress late/cached online matches and distinguish ON from actual provider availability; no provider shows honest header status and local results, not fake result rows.
+- [x] T28.5 Replace string-pattern-only toggle checks with state/focus/results/persistence tests; verify dark/pastel/custom palette, reduced-motion, long-label and offline/no-provider behavior, then rerun the combined T25-T28 surface journeys against the accepted Studio without regressing T24.
 Done when: Web search is visibly and behaviorally a real top-right header switch, its persisted state is truthful and accessible, and its control never masquerades as a search result or enables unintended external requests.
 Verify: QML header-switch/query/results/empty/keyboard/late-callback tests in `home_component_navigation`, preference/profile/write-failure tests, runtime network-denial regression plus updated static helper, full CTest and installed themed remote captures. Evidence: pending; T14 still owns real provider implementation/terms, and T03's existing preference model is not header-control acceptance.
 
@@ -418,7 +424,7 @@ Entry docs: `docs/android-apps-2026-10-25.md`, `docs/store-lifecycle-2026-10-25.
 Entry files: `src/app/StoreProvider.h`, `src/app/LocalCatalogProvider.{h,cpp}`, `src/app/AppCatalog.{h,cpp}`, `qml/AppStoreView.qml`, `qml/SettingsView.qml`, `tests/tst_isolde.cpp`, `CMakeLists.txt`.
 
 Scope:
-- [ ] T29.1 StoreProvider abstract base class + LocalCatalogProvider wrapping the existing curated catalog; StoreSearchResult data model; no external requests when offline toggle is OFF (default)
+- [x] T29.1 StoreProvider abstract base class + LocalCatalogProvider wrapping the existing curated catalog; StoreSearchResult data model; no external requests when offline toggle is OFF (default)
 - [ ] T29.2 AppCatalog provider integration: setProvider(), onlineStoreSearch toggle (default OFF), merged local+provider results, F-Droid verified metadata with pinned signature/trust policy, ABI/capability filtering and SHA-256 artifact verification, atomic download→verify→install into profile package root
 - [ ] T29.3 QML wiring: AppStoreView shows provider results with store badge/provenance, download progress, Install/Open/Uninstall confirmations (default Cancel), focus restoration to same card; Settings exposes online store search toggle
 - [ ] T29.4 Tests: provider rejection of unknown source, download+verify+rollback, hash mismatch, write-failure regression, profile isolation, offline-zero-requests in tst_isolde.cpp
