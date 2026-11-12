@@ -152,7 +152,7 @@ def guide_backend_probe(home):
 REPAIR_TESTS = {"studio_shell","games_remote_ui","component_contracts","home_component_navigation","studio_navigation","studio_behavior","audio_backend","games_provisioning","steam_games","optical_exec_adapter","native_profile_isolation","isolde_tests"}
 RUNTIME_TESTS = {"games_provisioning","steam_games","portable_game_installer","optical_exec_adapter","native_profile_isolation"}
 SUITES = {"all": None, "runtime_contracts":"isolde_native_sandbox_tests", "campaign_repairs": ("isolde_studio_quick_tests","isolde_games_ui_tests","isolde_component_tests","isolde_home_navigation_tests","isolde_audio_tests","isolde_native_sandbox_tests","isolde_tests"), "component_contracts": "isolde_component_tests",
-          "sources": ("isolde_tests", "isolde_component_tests", "isolde_studio_quick_tests"),
+          "sources": ("isolde_tests", "isolde_component_tests", "isolde_studio_quick_tests", "isolde_home_navigation_tests"),
           "guide_contracts": "isolde_guide_tests",
           "guide_remote_ui": "isolde_guide_ui_tests",
           "guide": ("isolde_guide_tests", "isolde_guide_ui_tests", "isolde_kodi_media_tests"),
@@ -229,13 +229,13 @@ def suite_selection(suite):
     if suite == "games":
         pattern = "^(component_contracts|games_remote_ui|isolde_tests|games_provisioning|steam_games)$"
     if suite == "sources":
-        pattern = "^(isolde_tests|component_contracts|sources_remote_ui)$"
+        pattern = "^(isolde_tests|component_contracts|sources_remote_ui|home_component_navigation)$"
     if suite == "guide":
         pattern = "^(guide_contracts|guide_remote_ui|kodi_local_bridge|kodi_playback|kodi_media_client)$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     return targets, pattern
-CASES = {"themecontrols": ("home-components-acceptance.py", ["--studio", "--themes-controls-only", "--inspect"]), "themecustom": ("home-components-acceptance.py", ["--studio", "--themes-custom-only", "--inspect"]), "themefaults": ("home-components-acceptance.py", ["--studio", "--themes-faults-only", "--inspect"]), "themes": ("home-components-acceptance.py", ["--studio", "--themes-only", "--inspect"]),
+CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-only", "--inspect"]), "themecontrols": ("home-components-acceptance.py", ["--studio", "--themes-controls-only", "--inspect"]), "themecustom": ("home-components-acceptance.py", ["--studio", "--themes-custom-only", "--inspect"]), "themefaults": ("home-components-acceptance.py", ["--studio", "--themes-faults-only", "--inspect"]), "themes": ("home-components-acceptance.py", ["--studio", "--themes-only", "--inspect"]),
          "catalog": ("home-components-acceptance.py", ["--studio", "--catalog", "--inspect"]),
          "collections": ("home-components-acceptance.py", ["--studio", "--collections", "--inspect"]),
          "history": ("tv-library-acceptance.py", ["--history", "--inspect"]),
@@ -348,6 +348,8 @@ def visual_result_passed(case, result):
     if case == "collections":
         required=("passed","freshProfile","actualNativeInput","normalExit","exactGalleryReturn","buttonReturn","storeRemoveReinstall","layoutUnchanged")
         phases=["collectionhome","selectedgallery","collectionclient","selectedreturn","collectionrepeat","buttongallery","buttonclient","buttonreturn","buttonrepeat","storeclient","collectionuninstall","allremoved","selectedmissing","missingrefused","allrestored","reinstalledclient","reinstalledreturn"]
+        if result.get("localFilterVerified") is True:
+            phases.insert(2,"collectionfilter");phases.insert(phases.index("buttongallery"),"collectionfiltercleared")
         if result.get("appHistoryVerified") is True:
             if result.get("appHistorySessionOnly") is not True or result.get("appHistoryReopenCycles")!=2:return False
             phases += ["historyapp","historyclient","historyreturned","historyrepeat","historyrepeatreturn"]
@@ -441,6 +443,11 @@ def visual_result_passed(case, result):
                 and result.get("reset_verified") is True
                 and result.get("settings_skin_round_trip") is True
                 and result.get("saved_skin_survives_reset") is True)
+    if case == "sources":
+        phases={"sourcesdefault","sourceslist","sourcesdraft","sourceshidden","sourcesrestored","sourceshandlers","sourcesdisconnected","sourcesretry","sourcespolicy","sourcespolicysaved","sourceskeep","sourceskept","darksourcesbounded","darksourcesactions","darksourcesnotice","pastelsourcesbounded","pastelsourcesactions","pastelsourcesnotice"}
+        return (result.get("journey")==case and set(result.get("phases",[]))==phases
+                and all(result.get(key) is True for key in ("passed","freshProfile","noUnintendedLayoutWrites","explicitPolicySave","remoteHandlerSaved","remoteKeepSaved","fixtureOnly","remoteHideRestore","policyCancelNoWrite"))
+                and result.get("normalProfileUsed") is False)
     if case == "themecontrols":
         phases={tag+phase for tag in ("dark","pastel","custom") for phase in ("audio","ambient","return")} | {"custompolicy","customreset","customcancel"}
         if "soundAcceptanceVersion" in result:
@@ -534,9 +541,9 @@ def verified_studio_helper(root, expected, kind='studio'):
     return path
 
 
-def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False, designs=False, search=False, themes=False, themefaults=False, themecustom=False, themecontrols=False):
+def studio_helper_command(source, helper, executable, desktop=False, collections=False, catalog=False, designs=False, search=False, themes=False, themefaults=False, themecustom=False, themecontrols=False, sources=False):
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
-    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+(['--themes-only'] if themes else [])+(['--themes-faults-only'] if themefaults else [])+(['--themes-custom-only'] if themecustom else [])+(['--themes-controls-only'] if themecontrols else [])+['--inspect']
+    return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools/home-components-acceptance.py'),str(executable),'--studio']+(['--desktop'] if desktop else [])+(['--collections'] if collections else [])+(['--catalog'] if catalog else [])+(['--designs-only'] if designs else [])+(['--search-only'] if search else [])+(['--themes-only'] if themes else [])+(['--themes-faults-only'] if themefaults else [])+(['--themes-custom-only'] if themecustom else [])+(['--themes-controls-only'] if themecontrols else [])+(['--sources-only'] if sources else [])+['--inspect']
 
 
 def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None):
@@ -831,6 +838,9 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 
 def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='sources':
+        return qml_coverage(root,run,base_id,suite,'sources',{'qml/PageSourcesWidget.qml','qml/HomeScreen.qml','qml/Main.qml','qml/SourceSettingsView.qml'},
+            {'tests/studio/tst_sources.qml','tests/tst_home_navigation.cpp','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/vm-process.ps1','tools/test-all.ps1','tools/index-vm-review.ps1','tools/run-visual-acceptance.ps1','tools/home-components-acceptance.py'},'Sources',{'docs/acceptance-reconciliation-2026-11-11.md'})
     if suite=='shell_appearance':
         return qml_coverage(root,run,base_id,suite,'shell_appearance',{'qml/NetworkSettingsView.qml','qml/PageAppCarousel.qml','qml/OrbCard.qml','qml/AudioSettingsView.qml','qml/AmbientSettingsView.qml'},
             {'tests/studio/tst_shell.qml','tests/tst_surface_appearance.cpp','tests/fixtures/shell-theme-routes.json',
@@ -1190,7 +1200,7 @@ class Oracle:
             if suite == "vpn":
                 expected = {"vpn_setup", "vpn_launch"}
             if suite == "sources":
-                expected = {"isolde_tests", "component_contracts", "sources_remote_ui"}
+                expected = {"isolde_tests", "component_contracts", "sources_remote_ui", "home_component_navigation"}
             if suite == "store":
                 expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote"}
             if suite == "games":
@@ -1353,6 +1363,19 @@ class Oracle:
         if shutil.disk_usage(self.root).free<3*1024**3:
             records=deduplicate_tested_payloads(self.root,mounts)
             atomic_json(self.run/'guest-payload-dedup.json',{'guest':'isolde-test','files':records,'allPathsAndBytesPreserved':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            reports=self.run/'host-report-backups.json'
+            if reports.exists():
+                if reports.resolve()!=reports or reports.stat().st_size>262144:raise RuntimeError('Unsafe report backup receipt')
+                removed=remove_backed_up_reports(self.root,json.loads(reports.read_text()),mounts,protected={self.run,*getattr(self,'maintenance_pins',())})
+                atomic_json(self.run/'guest-report-cleanup.json',{'guest':'isolde-test','targets':removed,'hostBackupsVerified':True,'rawEvidencePreserved':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            # Keeping selected linked tests is only a speed optimization. When
+            # it prevents preflight, relink them from retained compiled objects.
+            removed=remove_linked_test_executables(self.root,mounts,active)
+            record=self.run/'guest-linked-tests-cleanup.json'
+            prior=json.loads(record.read_text()).get('targets',[]) if record.exists() else []
+            atomic_json(record,{'guest':'isolde-test','targets':prior+removed,'compiledObjectsPreserved':True,'selectedTargetsRelinked':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
@@ -1541,7 +1564,7 @@ class Oracle:
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
         if history_helper_digest and case not in ('history','pages','playlists','games','emulators'):raise RuntimeError('Unsupported library helper case')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
-        if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
+        if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
             raise RuntimeError("The explicit Studio Demo repair journey requires the verified installed release")
         payload = self.tested_payload(diagnostic=diagnostic) if diagnostic else self.tested_payload()
@@ -1566,9 +1589,9 @@ class Oracle:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
             command=history_helper_command(source,helper,executable,pages=case=='pages',playlists=case=='playlists',game_case=case if case in ('games','emulators') else None)
             self.update(acceptanceHelperSha256=history_helper_digest)
-        if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','desktop','collections','catalog') and studio_helper_digest:
+        if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
-            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search',themes=case=='themes',themefaults=case=='themefaults',themecustom=case=='themecustom',themecontrols=case=='themecontrols')
+            command=studio_helper_command(source,helper,executable,desktop=case=='desktop',collections=case=='collections',catalog=case=='catalog',designs=case=='studio-designs',search=case=='studio-search',themes=case=='themes',themefaults=case=='themefaults',themecustom=case=='themecustom',themecontrols=case=='themecontrols',sources=case=='sources')
             self.update(acceptanceHelperSha256=studio_helper_digest)
         if case=='guide-features' and feature_helper_digest:
             helper=verified_guide_helper(self.root,feature_helper_digest,'features')
@@ -1874,7 +1897,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -2056,6 +2079,25 @@ def remove_backed_up_archives(root, backups, mounts=(), preserve_recent=False, t
         archive.unlink();removed.append({'runId':identity,'sha256':checksum})
     return removed
 
+def remove_backed_up_reports(root, backups, mounts=(), protected=(), target_free=3*1024**3):
+    """Remove only duplicate transport bundles; keep raw evidence and verified host copies."""
+    if root.resolve()!=root or not isinstance(backups,list) or len(backups)>1024:raise RuntimeError('Invalid report backup maintenance')
+    runs=root/'runs';removed=[]
+    recent=set(sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink() and (p/'report.tar.gz').is_file()),key=lambda p:(p/'report.tar.gz').stat().st_mtime,reverse=True)[:3])
+    for entry in backups:
+        if shutil.disk_usage(root).free>=target_free:break
+        identity=entry.get('runId','');checksum=entry.get('sha256','')
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',identity) or not re.fullmatch(r'[a-f0-9]{64}',checksum):raise RuntimeError('Unsafe report backup identity')
+        run=runs/identity;archive=run/'report.tar.gz';status=run/'status.json'
+        if run in recent or run in protected or (run/'guide-soak-receipt.json').exists() or not archive.exists():continue
+        if run.resolve()!=run or archive.resolve()!=archive or status.resolve()!=status:raise RuntimeError('Redirected report backup')
+        if any(m!=Path('/') and (m==archive or m.is_relative_to(archive) or archive.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted report backup refused')
+        if not status.is_file() or json.loads(status.read_text()).get('state') not in {'passed','failed','cancelled'}:continue
+        if digest(archive)!=checksum:raise RuntimeError('Backed-up report checksum mismatch')
+        archive.unlink();removed.append({'runId':identity,'sha256':checksum})
+    return removed
+
+
 def remove_fixture_caches(root, mounts, active, target_free=3*1024**3, preserve_recent=3):
     if root.resolve()!=root or root.is_symlink():raise RuntimeError("Redirected fixture cache root")
     fixtures=sorted((p for p in root.iterdir() if re.fullmatch(r"isolde-(?:tv-acceptance|components-acceptance|reference-config)-[A-Za-z0-9_-]+",p.name) and p.is_dir() and not p.is_symlink()),key=lambda p:p.stat().st_mtime,reverse=True)
@@ -2139,9 +2181,13 @@ def deduplicate_fixture_media(root, mounts=(), active=(), target_free=3*1024**3,
 
 
 def oracle_storage_inventory(root):
-    payloads=[];recovery=[]
+    payloads=[];recovery=[];source_copies=[]
     for run in sorted((root/"runs").iterdir(),key=lambda p:p.stat().st_mtime,reverse=True)[:1024]:
         if not run.is_dir() or run.is_symlink():continue
+        if (run/'source').is_dir() and len(source_copies)<64:
+            statefile=run/'status.json'
+            state=json.loads(statefile.read_text()) if statefile.is_file() else {}
+            source_copies.append(dict(runId=run.name,state=state.get('state'),archive=(run/'source.tar.gz').is_file(),payload=(run/'payload').exists()))
         if (run/'source').is_dir() and not (run/'source.tar.gz').exists() and len(recovery)<6:
             recovery.append({'runId':run.name,'files':[p.name for p in run.iterdir() if p.is_file()][:24]})
         payload=run/"payload"
@@ -2165,7 +2211,7 @@ def oracle_storage_inventory(root):
     for line in usage.stdout.splitlines():
         size,sep,path=line.partition("\t")
         if sep and size.isdigit():directories.append({"path":path,"bytes":int(size)*1024})
-    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
+    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceCopies":source_copies,"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
 
 
 def main():

@@ -195,6 +195,7 @@ Item {
     readonly property bool widgetActive: composed.activeWidget !== ""
     readonly property string activeMediaWidgetId:composed.activeWidget
     readonly property bool groupActive: composed.activeGroup !== ""
+    readonly property bool contextualMenuAvailable:widgetActive || groupActive || (composition.enabled && !editMode && !recoveryFocused && ["detected-sources","source-notice"].indexOf((items[focusedIndex] || {}).family)>=0)
     property string wallpaperSource: ""
     property var wallpaperItem: null
     readonly property var backdropItem: wallpaperItem || localWallpaper
@@ -434,16 +435,6 @@ Item {
                 }
             }
             Text { anchors.verticalCenter: parent.verticalCenter; text: root.items.length ? "↑ Settings · Menu Search" : "Home is empty · OK opens Settings"; color: root.appearance.mutedColor || "#AAA5AF"; font.pixelSize: 16 * root.textScale }
-        }
-
-        Text {
-            visible: root.hasContextualSources
-            width: parent.width
-            text: "New source detected. Enter opens it · K keeps it on Home · Delete hides it"
-            color: "#A7F3D0"
-            font.pixelSize: 15 * root.textScale
-            font.weight: Font.DemiBold
-            horizontalAlignment: Text.AlignRight
         }
 
         Row {

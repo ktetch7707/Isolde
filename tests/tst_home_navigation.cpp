@@ -540,8 +540,12 @@ void HomeNavigationTests::retainsExactOriginAndRecoversWithoutHomeButton()
     QVERIFY(content);
     for (const bool brand : {false, true}) for (const bool sources : {false, true}) {
         root->setProperty("brandVisible", brand);
+        root->setProperty("hasContextualSources", false);
+        QVERIFY(QMetaObject::invokeMethod(content->parentItem(), "forceLayout"));
+        const auto withoutNotice = content->y();
         root->setProperty("hasContextualSources", sources);
-        QTest::qWait(10);
+        QVERIFY(QMetaObject::invokeMethod(content->parentItem(), "forceLayout"));
+        QCOMPARE(content->y(), withoutNotice); // Discovery never inserts a legacy banner above the measured page.
         QVERIFY(content->height() > 0);
         QVERIFY(content->y() + content->height() <= content->parentItem()->height() + 1);
     }

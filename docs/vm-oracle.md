@@ -197,3 +197,19 @@ required. No coordinate guesses or generic confirmation keys are used. Failed
 preparation stops before expensive graphical workflows. Preflight-s and clean
 installed Search captures verify this path; the ineffective tray shortcut is not
 retained. Actual storage floors and unsafe-path/checksum checks stay mandatory.
+
+Focused Sources acceptance: `Visual -Installed -Cases sources` reuses an already
+passing full payload. A disposable XDG Videos directory exercises the production
+probe (eight local folders), packaged reserved header, policy cancel/atomic Save,
+hide/restore, Keep/handler cancellation and confirmed persistence, disconnect/retry, and both registered
+source families under dark/pastel. It never invokes the test-only probe setter.
+Eighteen ordered screenshots require agent review; helper pass is not semantic
+acceptance. Invalid saved capability bindings must fall back without rewriting
+files; default Home images cannot be accepted as source-component evidence.
+
+Low-space preflight also checks exact workspace backups of old guest report
+transport bundles. Only terminal unpinned/noncurrent duplicates with matching
+SHA256 may be removed, retaining newest three bundles and all raw guest evidence.
+Host files, installed releases, source and compiled-object caches stay untouched.
+Checksums, redirected paths and mount failures remain hard errors. This is used
+only after the existing safer cache/source cleanup cannot meet the2GiB floor.

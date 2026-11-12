@@ -107,3 +107,33 @@ synthetic color-bar video, history update, focused history replay and repeated
 exact return are visible. The old disk banner limits header/presentation claims
 for that attempt; functional video/ownership/Stop assertions remain evidence for
 BUG-089. No complete media/setup acceptance is inferred from backend fixture setup.
+
+Continuation: installed sources-staged-h, release4575d95d831341b8b04da93f,
+accepts T25.1.b and T25.3.b. All eleven remote policy fields round-trip through
+one Save; cancel/open/hide/restore/retry phases preserve applied layout bytes.
+The receipt's old layoutBytesUnchanged field is overbroad: explicit policy Save
+and fixture preparation are intentional writes, so only named no-write assertions
+are reused. The revised helper uses noUnintendedLayoutWrites and explicit saves.
+
+The packaged Sources header shows eight detections without injecting a banner;
+full Sources stays reachable with notices Off. Both contained families are
+reviewed under dark/pastel. SourceManager/schema/profile/persistence are unchanged
+from original integration-l61/61; h reruns four Sources/Home registrations and
+strictly stages only its bounded QML delta. Both reference recreation/reset pairs
+reuse their unchanged composed-render path: removal touches legacy-only content,
+and neither fixture instantiates a source family. No new full-suite pass claim.
+
+BUG-099's two Menu-to-Search frames are excluded from source-action acceptance;
+T25.2/.4 stay open while the focused native/installed fix runs. T25 is80%,
+acceptance2014/25=80.56%, rounded81%,159/212 milestones. No weight changes.
+
+Sources closes100% in installed sources-staged-j:18 reviewed frames, actual
+handler/Keep persistence and first Menu routing, four passing focused Home/source
+registrations under the original full61-test proof. BUG-097–100 are verified.
+Its installed collections pass24 reviewed frames and8 actual native X11 input/
+normal-exit cycles, filter/clear, removal/reinstall and exact gallery/history
+return. Three reviewed Search frames prove Settings query/OFF/network-denial/
+origin recovery only. T26.1/.2/.4/.5 close; T26 is90%, with remote presentation
+editing/Preview/Cancel/Apply still open. Total2074/25 rounds83%,165/212 milestones.
+Final j review ledger/index:73 scoped reviewed captures, zero pending pixel
+reviews;27 unchanged native frames reuse exact original pixel hashes.

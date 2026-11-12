@@ -1193,10 +1193,11 @@ class OracleTests(unittest.TestCase):
 
     def test_source_policy_suite_runs_registered_native_contracts(self):
         targets,pattern=oracle.suite_selection('sources')
-        self.assertEqual(targets,['isolde_tests','isolde_component_tests','isolde_studio_quick_tests'])
+        self.assertEqual(targets,['isolde_tests','isolde_component_tests','isolde_studio_quick_tests','isolde_home_navigation_tests'])
         self.assertIsNotNone(re.fullmatch(pattern,'isolde_tests'))
         self.assertIsNotNone(re.fullmatch(pattern,'component_contracts'))
         self.assertIsNotNone(re.fullmatch(pattern,'sources_remote_ui'))
+        self.assertIsNotNone(re.fullmatch(pattern,'home_component_navigation'))
         self.assertIsNone(re.fullmatch(pattern,'studio_quick'))
 
     def test_automatic_cleanup_records_failure_without_hiding_it(self):
@@ -1460,6 +1461,11 @@ class OracleTests(unittest.TestCase):
         self.assertTrue(oracle.visual_result_passed("collections",history))
         self.assertFalse(oracle.visual_result_passed("collections",dict(history,appHistoryReopenCycles=1)))
         self.assertFalse(oracle.visual_result_passed("collections",dict(history,appHistorySessionOnly=False)))
+        filtered_phases=list(history['captures'])
+        filtered_phases.insert(2,'collectionfilter');filtered_phases.insert(filtered_phases.index('buttongallery'),'collectionfiltercleared')
+        filtered=dict(history,localFilterVerified=True,captures=filtered_phases)
+        self.assertTrue(oracle.visual_result_passed('collections',filtered))
+        self.assertFalse(oracle.visual_result_passed('collections',dict(filtered,captures=history['captures'])))
 
     def test_visual_results_use_each_harness_contract(self):
         history=dict.fromkeys(("passed","freshProfile","realKodiPlayback","kodiOwnedLastplayed","historyCardPlayback","exactHistoryReturn","layoutUnchanged","mediaUnchanged"),True)
@@ -1636,6 +1642,64 @@ class OracleTests(unittest.TestCase):
                 with oracle.exclusive_lock(lock,.05):self.fail("Interrupted an active owner")
             self.assertLess(time.monotonic()-started,.5)
 
+
+class SourcesJourneyContracts(unittest.TestCase):
+    def test_sources_reuse_accepts_only_its_registered_widget_and_regressions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);base=root/'runs/base';current=root/'runs/current'
+            files={'qml/Main.qml':b'original routing','qml/SourceSettingsView.qml':b'original guidance','qml/HomeScreen.qml':b'original Home','qml/PageSourcesWidget.qml':b'original','tests/studio/tst_sources.qml':b'original tests','src/main.cpp':b'unchanged','config/studio-defaults.json':b'unchanged'}
+            def write(run,values):
+                for name,data in values.items():
+                    path=run/'source'/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(data)
+                (run/'files.sha256').write_text(''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n' for name,data in sorted(values.items())))
+            write(base,files)
+            executable=base/'payload/bin/isolde';executable.parent.mkdir(parents=True);executable.write_bytes(b'original full executable')
+            baseline=dict(passed=True,fullSuite=True,sourceDigest=oracle.digest(base/'files.sha256'),payload=oracle.payload_hashes(base/'payload'))
+            oracle.atomic_json(base/'test-result.json',baseline)
+            changed=dict(files,**{'qml/PageSourcesWidget.qml':b'details fix','tests/studio/tst_sources.qml':b'visible text regression'})
+            write(current,changed)
+            proof=oracle.focused_qml_coverage(root,current,'base','sources')
+            self.assertEqual(proof['changedSourcesQml'],['qml/PageSourcesWidget.qml'])
+            write(current,dict(changed,**{'docs/acceptance-reconciliation-2026-11-11.md':b'new evidence report'}))
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','sources')['changedSourcesQml'],['qml/PageSourcesWidget.qml'])
+            write(current,dict(changed,**{'qml/HomeScreen.qml':b'remove legacy source banner'}))
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','sources')['changedSourcesQml'],['qml/HomeScreen.qml','qml/PageSourcesWidget.qml'])
+            write(current,dict(changed,**{'qml/Main.qml':b'source Menu route','qml/SourceSettingsView.qml':b'explicit action guidance'}))
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','sources')['changedSourcesQml'],['qml/Main.qml','qml/PageSourcesWidget.qml','qml/SourceSettingsView.qml'])
+            for path in ('src/main.cpp','config/studio-defaults.json'):
+                write(current,dict(changed,**{path:b'outside scope'}))
+                with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','sources')
+            write(current,changed);executable.write_bytes(b'tampered')
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','sources')
+
+    def test_report_cleanup_requires_backups_and_preserves_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);runs=root/'runs';runs.mkdir();backups=[]
+            for index in range(7):
+                run=runs/str(index);run.mkdir();archive=run/'report.tar.gz';archive.write_bytes(b'verified report '+str(index).encode())
+                os.utime(archive,(index,index));(run/'status.json').write_text(json.dumps(dict(state='running' if index==2 else 'passed')))
+                (run/'raw-evidence.log').write_text('retained')
+                backups.append(dict(runId=str(index),sha256=oracle.digest(archive)))
+            with patch.object(oracle.shutil,'disk_usage',return_value=SimpleNamespace(free=0)):
+                with self.assertRaisesRegex(RuntimeError,'checksum'):
+                    oracle.remove_backed_up_reports(root,[dict(backups[0],sha256='0'*64)])
+                with self.assertRaisesRegex(RuntimeError,'Mounted'):
+                    oracle.remove_backed_up_reports(root,[backups[0]],[runs/'0'])
+                removed=oracle.remove_backed_up_reports(root,backups,protected={runs/'1',runs/'3'})
+            self.assertEqual(removed,[backups[0]])
+            for index in range(7):
+                self.assertEqual((runs/str(index)/'raw-evidence.log').read_text(),'retained')
+                self.assertEqual((runs/str(index)/'report.tar.gz').exists(),index!=0)
+
+    def test_sources_requires_complete_receipt_and_verified_helper_flag(self):
+        phases=["sourcesdefault","sourceslist","sourcesdraft","sourceshidden","sourcesrestored","sourceshandlers","sourcesdisconnected","sourcesretry","sourcespolicy","sourcespolicysaved","sourceskeep","sourceskept","darksourcesbounded","darksourcesactions","darksourcesnotice","pastelsourcesbounded","pastelsourcesactions","pastelsourcesnotice"]
+        receipt=dict(passed=True,journey="sources",freshProfile=True,normalProfileUsed=False,phases=phases,noUnintendedLayoutWrites=True,explicitPolicySave=True,remoteHandlerSaved=True,remoteKeepSaved=True,fixtureOnly=True,remoteHideRestore=True,policyCancelNoWrite=True)
+        self.assertTrue(oracle.visual_result_passed("sources",receipt))
+        for field in ("passed","freshProfile","noUnintendedLayoutWrites","explicitPolicySave","remoteHandlerSaved","remoteKeepSaved","fixtureOnly","remoteHideRestore","policyCancelNoWrite"):
+            self.assertFalse(oracle.visual_result_passed("sources",dict(receipt,**{field:False})))
+        self.assertFalse(oracle.visual_result_passed("sources",dict(receipt,phases=phases[:-1])))
+        self.assertFalse(oracle.visual_result_passed("sources",dict(receipt,normalProfileUsed=True)))
+        self.assertIn("--sources-only",oracle.studio_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),sources=True))
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ Item {
     property int selectedIndex: 0
     property string view: "list"
     readonly property bool editing: view!=="list"
+    readonly property string instructions:view==="policy" || view==="options"?"Confirm chooses · Back cancels this screen. Policy changes are private until Save.":view==="handlers"?"Confirm saves the chosen handler for this source · Back cancels.":view==="keep"?"Confirm adds a permanent Home tile · Back cancels without changing Home.":view==="actions"?"Confirm chooses an action · Back returns to Sources.":"Confirm / Menu opens source actions. Sources never change your media or Kodi library."
     property bool showHidden: false
     property var draft: ({})
     property var activeField: ({})
@@ -102,7 +103,7 @@ Item {
     Column {
         anchors.fill:parent;spacing:12*shell.gapScale
         Text {width:parent.width;text:root.view==="policy" || root.view==="options"?"Source display policy · draft":root.view==="list"?"Sources":root.source?root.source.name:"Source disconnected";textFormat:Text.PlainText;color:shell.text;font.family:shell.fontFamily;font.pixelSize:28*shell.textScale;wrapMode:Text.Wrap}
-        Text {width:parent.width;text:root.message || (root.manager?root.manager.errorString:"") || (root.editing?"Confirm chooses · Back cancels this screen. Policy changes are private until Save.":root.policyNotice || "Confirm / Menu opens source actions. Sources never change your media or Kodi library.");textFormat:Text.PlainText;color:shell.muted;font.family:shell.fontFamily;font.pixelSize:16*shell.textScale;wrapMode:Text.Wrap}
+        Text {objectName:"sourceInstructions";width:parent.width;text:root.message || (root.manager?root.manager.errorString:"") || (root.view==="list"?root.policyNotice || root.instructions:root.instructions);textFormat:Text.PlainText;color:shell.muted;font.family:shell.fontFamily;font.pixelSize:16*shell.textScale;wrapMode:Text.Wrap}
         ListView {
             id:list;objectName:"sourceRows";width:parent.width;height:Math.max(0,root.height-y);clip:true;spacing:6*shell.gapScale;model:root.rows
             delegate:Rectangle {

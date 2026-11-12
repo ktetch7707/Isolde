@@ -258,7 +258,7 @@ Window {
         if (kodiLibrary.open && !sessionManager.active) { kodiLibrary.handleCommand(command); return }
         if (!sessionManager.active && pageSurface.open) {
             pageSurface.handleCommand(command)
-        } else if (!sessionManager.active && command===inputManager.menu && (home.widgetActive || home.groupActive)) {
+        } else if (!sessionManager.active && command===inputManager.menu && home.contextualMenuAvailable) {
             home.handleCommand(command)
         } else if (!sessionManager.active && (command === inputManager.menu || command === inputManager.search)) {
             window.openSearchFromPage()

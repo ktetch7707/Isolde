@@ -111,6 +111,7 @@ def main():
     parser.add_argument("executable", type=Path)
     parser.add_argument("--inspect", action="store_true", help="Pause briefly on failure for a VM screenshot")
     parser.add_argument("--studio", action="store_true", help="Exercise draft canvas, remote editing, history, preview and Apply")
+    parser.add_argument("--sources-only", action="store_true", help="Exercise contained source policy and actions in a private XDG movie directory")
     parser.add_argument("--catalog", action="store_true", help="Exercise real remote image import, framing, GIF Apply and reopen")
     parser.add_argument("--collections", action="store_true", help="Exercise real collection registry/session lifecycle in a private profile")
     parser.add_argument("--themes-controls-only", action="store_true", help="Review Audio/Ambient values and explicit private draft discard")
@@ -136,6 +137,12 @@ def main():
         original["composition"]={"schemaVersion":1,"enabled":True,"grid":{"columns":4,"rows":3,"mode":"screen"}}
         original["items"][0].update(name="Design source",placement={"x":0,"y":0,"width":1,"height":1},presentation={"labelColor":"#e89ab0","radius":16})
     original_bytes = json.dumps(original).encode()
+    if args.sources_only:
+        original = json.loads((Path(__file__).resolve().parents[1]/"config/default-home-layout.json").read_text())
+        original_bytes = json.dumps(original).encode()
+        movies=evidence/"movies"; movies.mkdir()
+        for index in range(8): (movies/("Source %02d"%index)).mkdir()
+        (evidence/"config/user-dirs.dirs").write_text('XDG_VIDEOS_DIR="'+str(movies)+'"\n')
     if args.collections:
         original_bytes, collection_fixture = prepare_collections(evidence, executable)
     if args.catalog:
@@ -153,6 +160,9 @@ def main():
     default_settings = evidence / "config" / "Unknown Organization"
     default_settings.mkdir()
     (default_settings / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
+    if args.sources_only:
+        for settings in (config,default_settings):
+            (settings/"Isolde.conf").write_text("")
     env = dict(os.environ)
     for line in run("systemctl", "--user", "show-environment").splitlines():
         key, _, value = line.partition("=")
@@ -360,6 +370,89 @@ def main():
                         if process.poll() is not None:
                             raise RuntimeError("Studio exited during capture")
                         time.sleep(0.1)
+
+                if args.sources_only:
+                    phases=[]
+                    def snap(phase):
+                        time.sleep(.3);capture(phase);phases.append(phase)
+                    def source_center():
+                        key("Home");key("Up",30);key("Left",10);key("Return")
+                    # Use the packaged default, including its reserved Sources header.
+                    snap("sourcesdefault")
+                    source_center();snap("sourceslist")
+                    assert layout.read_bytes()==original_bytes,"Opening Sources changed the layout"
+                    # Mode is the second policy field; editing and cancelling must write nothing.
+                    key("Return");key("Down");key("Return");key("Return")
+                    snap("sourcesdraft");key("Escape",2)
+                    assert layout.read_bytes()==original_bytes,"Cancelled policy changed the layout"
+                    # Hide and restore through real remote actions, checking the durable decision.
+                    key("Up",30);key("Down",3);key("Return");key("Down",3);key("Return")
+                    decisions=config/"sources.json"
+                    expect(lambda:decisions.exists() and any(v.get("hidden") is True for v in json.loads(decisions.read_text())["decisions"].values()),"Remote Hide persisted")
+                    snap("sourceshidden")
+                    key("Up",30);key("Down",2);key("Return");key("Down");key("Return");key("Return")
+                    expect(lambda:not any(v.get("hidden") for v in json.loads(decisions.read_text())["decisions"].values()),"Remote Restore persisted")
+                    snap("sourcesrestored")
+                    assert layout.read_bytes()==original_bytes,"Hide/restore changed the layout"
+                    key("Up",30);key("Down",2);key("Return");key("Down");key("Return")
+                    key("Down");key("Return");key("Escape") # Keep confirmation is a private, cancellable step.
+                    assert layout.read_bytes()==original_bytes,"Cancelling Keep changed the layout"
+                    key("Down",4);key("Return");snap("sourceshandlers");key("Escape")
+                    disconnected=evidence/"disconnected";disconnected.mkdir()
+                    for path in movies.iterdir():path.rename(disconnected/path.name)
+                    time.sleep(6);key("Up",30);key("Return");snap("sourcesdisconnected")
+                    key("Escape")
+                    for path in disconnected.iterdir():path.rename(movies/path.name)
+                    key("Up",30);key("Down");key("Return");snap("sourcesretry")
+                    assert layout.read_bytes()==original_bytes,"Disconnect/retry changed the layout"
+                    # Render the same generic bounded component under dark and pastel palettes.
+                    defaults=json.loads((Path(__file__).resolve().parents[1]/"config/studio-defaults.json").read_text())
+                    key("Up",30);key("Return")
+                    for field_index,field in enumerate(defaults["sourcePolicyFields"]):
+                        key("Up",30);key("Down",field_index);key("Return")
+                        if field["key"] in ("reconnect","suppressPlayback","suppressSetup","suppressEditing"):key("Down")
+                        key("Return");key("Escape")
+                        assert layout.read_bytes()==original_bytes,"Policy field edited applied data before Save"
+                    snap("sourcespolicy")
+                    key("Down",len(defaults["sourcePolicyFields"]));key("Return")
+                    def saved_policy():return json.loads(layout.read_text()).get("theme",{}).get("sourcePolicy",{})
+                    expect(lambda:saved_policy().get("mode")=="off","Remote policy saved")
+                    applied=saved_policy()
+                    assert applied["pages"]==[] and applied["slots"]==["header-sources"] and applied["duration"]==0
+                    assert all(applied[field] is False for field in ("reconnect","suppressPlayback","suppressSetup","suppressEditing"))
+                    assert "movie-disc" not in applied["events"] and "movie-disc" not in applied["types"]
+                    snap("sourcespolicysaved")
+                    # Explicit handler/Keep confirmation uses the real durable model.
+                    before_keep=json.loads(layout.read_text())
+                    key("Up",30);key("Down",3);key("Return");key("Down",4);key("Return");key("Return")
+                    expect(lambda:any(v.get("handler") for v in json.loads(decisions.read_text())["decisions"].values()),"Remote handler saved")
+                    key("Down");key("Return");snap("sourceskeep")
+                    assert json.loads(layout.read_text())==before_keep,"Keep confirmation wrote before Confirm"
+                    key("Return")
+                    expect(lambda:len(json.loads(layout.read_text()).get("components",[]))==len(before_keep["components"])+1,"Remote Keep saved one tile")
+                    assert any(v.get("permanent") is True for v in json.loads(decisions.read_text())["decisions"].values())
+                    snap("sourceskept")
+                    for index,tag in enumerate(("dark","pastel")):
+                        process.terminate();process.wait(timeout=10)
+                        component=defaults["componentPresets"]["detected-sources"].copy()
+                        component.update(schemaVersion=1,id="contained-sources",name="Detected sources",source=dict(schemaVersion=1,provider="sources",kind="detected-sources"),placement=dict(x=0,y=0,width=4,height=2))
+                        notice=defaults["componentPresets"]["source-notice"].copy()
+                        notice.update(schemaVersion=1,id="source-status",source=dict(schemaVersion=1,provider="sources",kind="source-notice"),placement=dict(x=0,y=2,width=3,height=1))
+                        palette=theme_palettes()[index].copy()
+                        palette["sourcePolicy"]=dict(defaults["sourcePolicyDefaults"],mode="widget",duration=0)
+                        document=dict(schemaVersion=2,theme=palette,composition=dict(schemaVersion=1,enabled=True,headerControls=["sources","settings","edit"],grid=dict(columns=4,rows=3,mode="screen")),categories=[],components=[component,notice])
+                        original_bytes=json.dumps(document).encode();layout.write_bytes(original_bytes)
+                        process,window,focused=start_shell()
+                        snap(tag+"sourcesbounded")
+                        key("Menu");snap(tag+"sourcesactions");key("Escape")
+                        assert layout.read_bytes()==original_bytes,"Source Menu changed layout"
+                        process.terminate();process.wait(timeout=10)
+                        palette["sourcePolicy"]["mode"]="compact"
+                        original_bytes=json.dumps(document).encode();layout.write_bytes(original_bytes)
+                        process,window,focused=start_shell();snap(tag+"sourcesnotice")
+                        assert layout.read_bytes()==original_bytes,"Compact notice changed layout"
+                    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="sources",freshProfile=True,normalProfileUsed=False,phases=phases,noUnintendedLayoutWrites=True,explicitPolicySave=True,remoteHandlerSaved=True,remoteKeepSaved=True,fixtureOnly=True,remoteHideRestore=True,policyCancelNoWrite=True),indent=2))
+                    return
 
                 if args.themes_only:
                     native_directory = evidence / "data/Isolde/native-profiles/default/kodi/home/.kodi/userdata"
@@ -1059,6 +1152,7 @@ x.XDestroyWindow(d,w);x.XFlush(d)
 
 
 def exercise_collections(evidence, executable, layout, original, fixture, key, pointer, run, env, poll, shell_window):
+    from guide_features import remote_text
     phases=[]
     def expect(predicate,message,timeout=30):
         deadline=time.monotonic()+timeout
@@ -1098,10 +1192,15 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
         key("Return")
     capture("collectionhome")
     top();key("Return");capture("selectedgallery")
-    key("Right");key("Return");native_cycle(1,"collectionclient")
+    def filter_gallery(text):
+        key("Up");key("Return");remote_text(key,text);key("Down")
+        assert layout.read_bytes()==original,"Local gallery filter authored layout data"
+    filter_gallery("free");capture("collectionfilter")
+    key("Return");native_cycle(1,"collectionclient")
     capture("selectedreturn")
     # Confirm without navigation must launch the exact remembered gallery app.
     key("Return");native_cycle(2,"collectionrepeat")
+    filter_gallery("");capture("collectionfiltercleared")
     key("Escape");key("Escape");key("Down",2);key("Return");capture("buttongallery")
     key("Right");key("Return");native_cycle(3,"buttonclient")
     capture("buttonreturn")
@@ -1112,18 +1211,20 @@ def exercise_collections(evidence, executable, layout, original, fixture, key, p
     expect(lambda:"freetube" not in json.loads(fixture["state"].read_text())["installed"],"Store removal failed")
     key("Escape",2);top();key("Down");capture("allremoved")
     key("Up");key("Return");capture("selectedmissing")
-    key("Right");key("Return");assert state()["launches"]==5
+    # The dedicated gallery removes uninstalled entries; do not press Confirm
+    # on the surviving neighbor and mistake a different app for a failed launch.
+    assert state()["launches"]==5
     capture("missingrefused");key("Escape");key("Escape")
     top();key("Down",3);key("Return");key("Return");key("Right");key("Return")
     expect(lambda:"freetube" in json.loads(fixture["state"].read_text())["installed"],"Store reinstall failed")
     key("Escape",2);top();key("Down");capture("allrestored")
     assert layout.read_bytes()==original,"Registry installation authored unexpected page placements"
-    key("Up");key("Return");key("Right");key("Return");native_cycle(6,"reinstalledclient")
+    key("Up");key("Return");filter_gallery("free");key("Return");native_cycle(6,"reinstalledclient")
     capture("reinstalledreturn")
     key("Escape",2);top();key("Down",4);capture("historyapp")
     key("Return");native_cycle(7,"historyclient");capture("historyreturned")
     key("Return");native_cycle(8,"historyrepeat");capture("historyrepeatreturn")
-    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state()),indent=2))
+    (evidence/"result.json").write_text(json.dumps(dict(passed=True,journey="collections",executable=str(executable),freshProfile=True,actualNativeInput=True,normalExit=True,exactGalleryReturn=True,buttonReturn=True,storeRemoveReinstall=True,layoutUnchanged=True,localFilterVerified=True,appHistoryVerified=True,appHistorySessionOnly=True,appHistoryReopenCycles=2,physicalHardwareVerified=False,thirdPartyClientVerified=False,captures=phases,clientState=state()),indent=2))
     print("Evidence: "+str(evidence),flush=True)
 
 

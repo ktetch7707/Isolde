@@ -642,3 +642,175 @@ Final review ledger/index:185 reviewed scoped captures,58 explicitly excluded
 obstructed/cancelled captures, zero pending pixel reviews. Excluded attempts were
 not individually certified or turned into acceptance. The index now preserves
 explicit exclusions instead of placing rejected attempts back in the review queue.
+
+### BUG-097 — Legacy source banner bypasses declared containment (T25)
+
+The installed populated-source walkthrough exposed a legacy Home Text banner
+outside the declared Sources header. It reflows content, survives policy notice
+suppression and advertises desktop-only K/Delete actions. Removed that obsolete
+banner; actual Home navigation regression now asserts unchanged content position
+when discovery changes. The compact reserved header remains data-driven.
+
+New bounded `sources` journey batches packaged-header entry, policy cancel,
+persisted hide/restore, Keep cancellation, handler cancellation, unplug/retry,
+all policy fields with one atomic Save, and both source families in dark/pastel.
+Its first installed attempt175158-265 proves default/header and hide/restore, but
+four component frames are EXCLUDED: harness used an invalid shell source binding
+and the application correctly preserved it while falling back to defaults.
+Corrected to the registered sources capability binding; no component pass claimed.
+Harness maintenance-a passes108 runner contracts. Product closure requires one
+full task-level run because HomeScreen changes must be in the next staged and
+installed artifact; integration-l still covers unchanged production boundaries.
+No additional full run is authorized merely for helper/document changes.
+
+Closure-a stops before build: automatic cleanup recovered only1.81GiB. The bounded
+inventory identifies obsolete report transport bundles as duplicate storage.
+Extend preflight to remove only terminal, non-current/non-pinned guest report
+archives whose exact SHA256 matches a verified workspace backup. Retain newest
+three bundles, raw guest evidence, source/payload bytes and all host files.
+Regression rejects checksum/mount failures and preserves active/protected/recent
+runs and raw evidence. This repair addresses the diagnosed capacity failure;
+closure-b resumes the same application batch, with no unchanged test retry.
+
+### BUG-098 — Compact source details ignore the configured visibility (T25)
+
+Source review while closure-b runs finds the compact card always populates its
+first-source subtitle even with sourceDetails=false. Respect the declared flag;
+actual QML regression checks visible text while toggling details and count badge,
+including returning to the original setting with unchanged layout bytes.
+A strict Sources-only QML reuse boundary rebuilds/stages the correction and runs
+isolde_tests, component_contracts and sources_remote_ui; only PageSourcesWidget
+and named regression/harness paths may change from the original full candidate.
+Contract regressions reject changed core/config and tampered base executables.
+Closure-b remains the original full proof; no second full run for this local fix.
+
+Closure-b reaches34 passing registrations then stops at the new banner regression.
+The fixture changes brand visibility then samples child y after only10ms; its
+first sample is the old58px layout, second the correct190px branded layout.
+This is a new test synchronization error, not a source-driven reflow. Invoke the
+parent Column's forceLayout before each measurement, so the comparison isolates
+discovery without a timing guess. Sources focused selection now includes actual
+Home navigation (four registrations). Verify both local repairs there first,
+then repeat the failed integration for the final payload; b remains failed.
+
+Sources-focused-c stopped in runner self-tests before application build: the
+suite-registration expectation still listed three targets after adding Home
+navigation. Update that explicit expectation to four, including the exact new
+registration; preserve the failure. BUG-098's visible-text regression explicitly
+uses the supported compact-summary presentation (the default icon-card variant
+does not paint the subtitle). No claim that default icon cards exposed the name.
+
+Final verification budget: after the focused repairs pass, use original passing
+integration-l61/61 as the full-origin proof and rerun the four Sources/Home
+registrations with strict payload/source-manifest reuse. The entire product
+delta is HomeScreen's removed legacy-only banner and PageSourcesWidget's compact
+subtitle flag; no C++, schema, registry, persistence or provider bytes changed.
+The explicit allowlist covers those two QML files and named tests/helpers only;
+changed core/config and base-payload tampering are rejected. This resolves the
+failed new fixture and rebuilds/stages the actual fixes without replaying the
+unchanged slow Studio registrations. Failed closure-b remains failed and no new
+full61/61 pass is claimed from four focused registrations.
+
+Sources-focused-d passes4/4 and110 runner checks. Staged-e stops before build:
+verified cleanup leaves2143973376 bytes,3.35MiB below the unchanged2GiB floor.
+Selected test executables were retained only as a linking-speed optimization.
+When all safer cleanup remains insufficient, permit the same checked linked-test
+cleanup to remove those regenerable selected executables too, preserving compiled
+objects, active processes, payloads and evidence. Existing safety contracts cover
+this cleanup function. Staged-f batches Test with strict61-test-origin reuse,
+Deploy, and installed Sources/collections/Search using the same corrected payload;
+any runner failure stops the batch. No hidden full-suite rerun or threshold change.
+
+Staged-f refuses reuse before building: the manifest also includes the already
+committed review-index exclusion repair from the previous checkpoint. It changes
+only tools/index-vm-review.ps1, not the installed application. The complete local
+manifest comparison confirms exactly the two declared QML changes plus named
+regressions/helpers/docs, with no other product/config delta. Include this exact
+review-only helper in the harness allowlist; keep core/config refusals intact.
+Batch-g repeats only the focused selection and intended installed workflows.
+
+Staged-g passes the product-path allowlist, then correctly rejects a new evidence
+file absent from the original candidate: docs/acceptance-reconciliation-2026-11-11.md.
+Permit only that named added document; the same guard still rejects application
+file additions/removals. Added a contract for this exact documentation case.
+This checkpoint's full local manifest inventory now reconciles both changed and
+added paths against integration-l before batch-h. No application check ran in
+f/g and neither failed attempt is represented as test completion.
+
+### BUG-099 — Outer Home Menu routing ignores focused source components (T25)
+
+Installed h contains valid bounded dark/pastel sources, but both sourcesactions
+frames show Search. Main routes Menu to Home only for an already active widget
+or group, so the first Menu bypasses the focused source. Exclude these two frames
+from source-action acceptance. Home now exposes a contextual-menu eligibility
+property including focused source families outside editing/header recovery;
+Main uses that property. New Home-level actual-input regression verifies first
+Menu dispatch, Settings/Sources destination, source identity, no write and the
+editing/header guards. Explicit Search remains separate.
+
+### BUG-100 — Source handler/Keep instructions falsely promise deferred policy Save
+
+Installed handler frame says changes remain private until Save, but handler
+Confirm immediately persists the choice. SourceSettings now explains immediate
+handler Save, permanent-tile confirmation and Back cancellation separately from
+policy drafts. Actual QML instruction tests cover both screens. Final Sources
+journey also persists a handler and explicitly confirms exactly one durable tile.
+The receipt now says noUnintendedLayoutWrites, not layoutBytesUnchanged: policy
+Save, explicit Keep and fixture preparation intentionally write the private file.
+The older h flag is not evidence of total byte preservation; only its named
+cancel/open/hide/restore/no-write assertions are retained.
+
+Final bounded Sources reuse adds only Main's one contextual routing condition
+and SourceSettings' instructions to the earlier two QML paths. Core/schema/
+provider/profile/storage bytes remain identical to integration-l. Four focused
+registrations plus the actual installed Menu/positive-action journey verify the
+repair; no new full-suite run is needed for this local source boundary.
+
+### BUG-101 — Collections helper assumes the obsolete gallery's app order (harness)
+
+Installed h collections fails waiting for the native client. Reviewed three
+frames: dedicated All Apps correctly has FreeTube first, YouTube second; the
+helper presses Right and actually opens YouTube. No native-launch pass claimed.
+Select FreeTube through the real local Filter control/OSK instead, verify filter
+return/clear and unchanged layout, and keep the expected native input receipt.
+After uninstall, the dedicated gallery removes the app and selects a survivor;
+never Confirm that different app while asserting the removed app was refused.
+The explicit button-carousel remains ordered and retains its existing steps.
+Search was not attempted after this failure. Normal service/layouts restored.
+
+Staged-i stops at the new Home-level source test: the fixture supplies components
+but omits HomeLayout's separate placements/grid projection, so no widget can be
+created. Supply the same three inputs as production Main and the existing
+page-menu Home regression. This is a fixture setup failure; action guidance and
+compact-details tests pass. No deployment or installed i pass occurred. Stage-j
+verifies the complete corrected fixture before repeating the Sources journey.
+
+T25 ACCEPTED: sources-staged-j passes4/4 (original integration-l61/61 reused by
+strict changed-file/payload proof), installs03ff1010746b189b470ed74f, and passes
+18 installed Sources checkpoints. All18 frames are agent-reviewed, including
+both palette action screens, both bounded source families, policy draft/save,
+explicit handler/Keep confirmation and unplug/retry. The custom native contrast
+frame is reviewed and27 unchanged native pixel reviews reuse exact hashes.
+BUG-097–100 are repaired and verified. No user media/grants/Kodi writes or real
+playback claims arise from tile promotion. Normal profile layout hashes remain
+unchanged and the service restores active/running/zero restarts after Sources.
+Both reference pairs reuse unchanged composed code paths as documented above.
+T25 becomes100%; total2034/25=81.36%, rounded81%,161/212 milestones. Gallery
+continues in the same runner; its acceptance is not inferred from Sources.
+
+Gallery installed acceptance: sources-staged-j collections attempt185044-623
+passes24 reviewed checkpoints,8 real isolated native X11 input/normal-exit cycles,
+local filter/clear, stable return, actual Store removal/reinstall and app-opening
+history replay. The dedicated gallery contains3 registered apps, then2 after
+removal, then3 after reinstall; package offers/internal routes are excluded.
+No gameplay or real FreeTube/provider claim: the lifecycle client is an explicit
+production-boundary fixture. BUG-101's positional helper repair is verified.
+Three reviewed installed Search frames also pass Settings query, genuine OFF
+switch, denied IPv4/IPv6 sockets and exact origin return. No real Kodi result or
+ON/profile lifecycle proof is inferred from those frames.
+
+Credit T26.1.b/.2.b/.4.b/.5.b with the unchanged full-origin native/legacy/state/
+profile proofs and this installed renderer/lifecycle matrix. T26 is90%; its
+remote gallery presentation edit/Preview/Cancel/Apply milestone remains open.
+Total2074/25=82.96%, rounded83%,165/212 milestones. Source/reference applicability
+and normal-layout/service preservation are unchanged. No runner remains active.

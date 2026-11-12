@@ -3,14 +3,16 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-11
 
-Acceptance is **80% (1994/25)**, with157/212 independently evidenced milestones.
-[Evidence reconciliation](acceptance-reconciliation-2026-11-11.md) credits actual
-VM-native/QML/protocol/storage outcomes under unchanged original group weights;
-installed/runtime remainder stays open. Current integration-l passes61/61, zero
-skips, and deploys release0838e68c4de00a86ee395580. Its five changed native images
-are reviewed;122 unchanged reviewed images reuse exact hashes. Clean installed
-Search and both reference pairs pass; real Kodi history Stop/replay/return passes. No game
-menu is credited as gameplay and no known missing Power software is waived.
+Acceptance is **83% (2074/25)**, with165/212 independently evidenced milestones.
+T25 Sources is **100% accepted**: sources-staged-j passes four focused native/Home
+registrations with strict integration-l61/61 origin reuse and18 reviewed installed
+checkpoints. Release03ff1010746b189b470ed74f fixes the legacy banner, compact-summary
+details, first Menu routing and immediate-action instructions. Policy/cancel,
+handler/Keep persistence, unplug/retry, contained dark/pastel families and unchanged
+normal profiles pass. Generic reference pairs reuse their unchanged composed
+paths. No newer full61-test pass or gameplay/Power completion is implied.
+Gallery is90% after24 reviewed installed/native-launch checkpoints; remaining bugs and
+runtime requirements are recorded in the campaign and execution checkpoint.
 
 ## Round-two testing authorization — 2026-11-11
 
@@ -74,7 +76,7 @@ were performed. No deployment or new acceptance: T12 0%, T29 13%, overall63%.
 
 [VM software completion](vm-software-completion.md) is the latest user-approved definition for every task and linked requirement. **100% means reasonable belief that the software is done based entirely on VM-verifiable evidence.** Actual hardware/model/USB/firmware, independent participants, user approval, unavailable paid accounts/entitlement/regions and target-only runtime/performance checks are not T-task prerequisites. Use the prescribed production-boundary fixtures, virtual devices and agent task/guide walkthroughs; retain genuine software errors as blockers. H01–H05 and external-service/usability checks are a separate user-owned post-100% handoff. No formal hardware/release campaign is required by this software backlog. All conflicting historical wording below and in Entry docs is superseded.
 
-Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 1994; Overall is 80% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
+Acceptance redesign alone awarded no credit. The current in-scope acceptance sum is 2074; Overall is 83% across 25 tasks. Original group/child weights within each remaining task are unchanged. Actual installed VM journeys, isolation/security/atomicity, local playback, offline behavior and agent-reviewed generic reference pairs remain required where specified by in-scope tasks.
 
 ## Continue command — operating plan, 2026-10-29
 
@@ -94,7 +96,7 @@ Sequencing: [implementation-order.md](implementation-order.md). Requirements/ame
 
 - ACTIVE: **T01,T03–T05,T09–T12,T14–T30 = 25 tasks**. T02/T06–T08/T13/T31 are excluded. H01–H05 remain a separate physical qualification ledger.
 - Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each remaining group and task retains its weight. Overall = half-up round(sum of the 25 rounded task percentages / 25), capped at 99% until every in-scope task reaches 100% in that metric. Acceptance remains separate from Coding%. Reproduce acceptance with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
-- Acceptance sum **1994**, Overall **80%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
+- Acceptance sum **2074**, Overall **83%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
 - **S1 = 100% when all in-scope redesigned VM software groups and required checks pass.** T13/T31 are not prerequisites. Hardware, external account/region and participant approval remain outside S1.
 - Reuse verified foundations with explicit source-applicability checks. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
 - Standing software gates: both generic reference recreation/reset pairs; profile/account/data isolation where promised; atomic save/rollback/no rewrite on read; Kodi media/progress ownership; disconnected VM Generator Test; OFF-gated zero requests; reachable Settings/Edit recovery. Physical repetition is H1.
@@ -125,8 +127,8 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T23 | 9 | Apply, versions, restore and navigation safety | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
 | T24 | 10 | Installed Studio usability and cutover | 100% | 100% | accepted final installed Studio batch; source-bound34-task audit and reviewed VM evidence |
 | T27 | 11 | Shared theme across shell surfaces | 100% | 100% | accepted installed theme/state/contrast matrix; source-bound full/focused and both reference pairs reviewed |
-| T25 | 12 | Contained configurable detected sources | 60% | 100% | native policy/storage and projection/containment milestone verified; broader installed acceptance open |
-| T26 | 13 | Configurable All Apps destination | 50% | 100% | native routes/catalog/persistence and QML lifecycle verified; installed acceptance open |
+| T25 | 12 | Contained configurable detected sources | 100% | 100% | installed18-checkpoint source policy/components/actions accepted; four focused tests with strict original61/61 reuse |
+| T26 | 13 | Configurable All Apps destination | 90% | 100% | installed gallery/filter/registry/native return accepted; remote gallery edit Preview/Cancel/Apply remains |
 | T28 | 14 | Genuine Web search header toggle | 60% | 100% | native header/focus/profile-persistence verified; real-client cancellation repair and combined installed acceptance open |
 | T29 | 15 | Verified Store, Android and Chromium remote | 56% | 100% | Android baseline accepted; source/bridge/playback/lifecycle open |
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
@@ -141,7 +143,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **80%** | **100%** | **1703 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **83%** | **100%** | **2074 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
@@ -371,23 +373,23 @@ Verify: token precedence/profile/invalid-override tests in `component_contracts`
 Entry docs: `docs/shell-surfaces-design.md` sections 1-2, 6; `docs/page-studio-redesign.md` sections 5-8.
 Entry files: `src/sources/SourceManager.{h,cpp}`, `qml/SourceSettingsView.qml`, `qml/Main.qml`, `qml/HomeScreen.qml`, `qml/ComposedHome.qml`, `src/home/ComponentSchema.{h,cpp}`, Studio/edit-session files from T16-T21, `tests/tst_isolde.cpp`, `tests/tst_home_navigation.cpp`.
 Scope:
-- [ ] T25.1 Separate discovery facts from active-profile display policy and presentation; retain existing enable/hide/keep/handler choices and introduce allowed-page/slot/event/lifetime/suppression controls without broader scans or new media grants.
-- [ ] T25.2 Register contained Detected sources and Source notice slot components with layout, variants, maximum visible items, typography/art/labels/colors/opacity/corners/focus/spacing and bounded region controls in Studio/Settings.
-- [ ] T25.3 Replace unconditional section prepending with validated region projection; default to a compact Home status notice, contain overflow with View all, and never cover/reflow unrelated layout or steal focus. Missing slots route to Sources rather than floating injection.
-- [ ] T25.4 Implement remote source actions, repeat-scan deduplication, reconnect/dismiss/hidden restore, unplugged-origin focus and safe idempotent promotion/error retry; cancel/draft changes leave applied policy/layout intact.
+- [x] T25.1 Separate discovery facts from active-profile display policy and presentation; retain existing enable/hide/keep/handler choices and introduce allowed-page/slot/event/lifetime/suppression controls without broader scans or new media grants.
+- [x] T25.2 Register contained Detected sources and Source notice slot components with layout, variants, maximum visible items, typography/art/labels/colors/opacity/corners/focus/spacing and bounded region controls in Studio/Settings.
+- [x] T25.3 Replace unconditional section prepending with validated region projection; default to a compact Home status notice, contain overflow with View all, and never cover/reflow unrelated layout or steal focus. Missing slots route to Sources rather than floating injection.
+- [x] T25.4 Implement remote source actions, repeat-scan deduplication, reconnect/dismiss/hidden restore, unplugged-origin focus and safe idempotent promotion/error retry; cancel/draft changes leave applied policy/layout intact.
 - [x] T25.5 Prove per-profile persistence/rollback and fixture isolation with injected roots; no test-folder name special cases, deletion/unmount, Kodi writes, unsolicited launch or automatic entitlement/permission.
 Done when: a user can configure what appears, where, when and how; multiple detections stay inside a declared themed container and every action/error/empty state remains remote-accessible.
-Verify: extend source-policy/probe tests in `isolde_tests` and schema/draft tests in `component_contracts`; QML containment/focus/remote/unplug tests; full CTest plus actual dark/pastel multi-source captures and both standing fixtures using the VM oracle. Evidence: pending; existing global toggle/hide controls do not satisfy presentation/placement acceptance.
+Verify: extend source-policy/probe tests in `isolde_tests` and schema/draft tests in `component_contracts`; QML containment/focus/remote/unplug tests; full CTest plus actual dark/pastel multi-source captures and both standing fixtures using the VM oracle. Evidence: docs/test-campaign-2026-11-11.md: sources-staged-j four focused tests with strict integration-l61/61 reuse, installed release03ff1010746b189b470ed74f and18 reviewed source phases; inherited reference/profile/atomic proofs reconciled. T25 accepted100%.
 
 ## T26 — Dedicated configurable All Apps destination (M, depends: T27)
 Entry docs: `docs/shell-surfaces-design.md` sections 1, 3-4, 6; `docs/navigation.md` planned route amendment; `docs/page-studio-redesign.md` sections 6-9.
 Entry files: `src/home/ActionDispatcher.{h,cpp}`, `src/home/ComponentSchema.{h,cpp}`, `src/app/AppRegistry.{h,cpp}`, `src/app/AppCatalog.{h,cpp}`, `src/home/HomePages.cpp`, `src/home/PageModel.{h,cpp}`, `qml/Main.qml`, `qml/CommandCenter.qml`, shared page/Studio views, `tests/tst_components.cpp`, `tests/tst_home_navigation.cpp`.
 Scope:
-- [ ] T26.1 Define distinct typed All Apps and Search routes; resolve legacy app-drawer to the gallery without rewriting stored layouts/skins and audit every More Apps/card/header/page entry point.
-- [ ] T26.2 Register an app-catalog adapter and themed gallery page preset using existing page/layout machinery, stable deduplicated app IDs and real installed/registered states; exclude uninstalled Store offers and internal navigation from app counts.
+- [x] T26.1 Define distinct typed All Apps and Search routes; resolve legacy app-drawer to the gallery without rewriting stored layouts/skins and audit every More Apps/card/header/page entry point.
+- [x] T26.2 Register an app-catalog adapter and themed gallery page preset using existing page/layout machinery, stable deduplicated app IDs and real installed/registered states; exclude uninstalled Store offers and internal navigation from app counts.
 - [ ] T26.3 Expose gallery layout/grid/list/density/art/labels/sort/favorites/local-filter controls through Studio; preserve packaged fallback and profile/page/document limits, with no parallel persisted app library or layout file.
-- [ ] T26.4 Implement remote browsing, first/remembered selection, empty-state Store/Settings, real launch/failure/retry and exact gallery/origin focus+scroll restoration; local filtering never opens universal Search or triggers web requests.
-- [ ] T26.5 Test legacy/current/custom-page/skin routes, duplicate entries, offline/needs-setup/failed states and registry changes/uninstall of selected app; gallery opening requires neither a query nor automatic keyboard focus.
+- [x] T26.4 Implement remote browsing, first/remembered selection, empty-state Store/Settings, real launch/failure/retry and exact gallery/origin focus+scroll restoration; local filtering never opens universal Search or triggers web requests.
+- [x] T26.5 Test legacy/current/custom-page/skin routes, duplicate entries, offline/needs-setup/failed states and registry changes/uninstall of selected app; gallery opening requires neither a query nor automatic keyboard focus.
 Done when: All Apps/More Apps reliably opens a configurable installed-app page, and opening Search is a separate explicit action; app launches and Back preserve the complete origin chain.
 Verify: action-dispatch/legacy-read tests in `component_contracts`, app registry/catalog state tests, QML gallery launch/return/filter/empty tests and an assertion that app-drawer never opens Command Center; full CTest, installed remote journey and both visual fixtures. Evidence: pending; changing only the All Apps label is insufficient.
 

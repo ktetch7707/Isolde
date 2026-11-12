@@ -1,6 +1,6 @@
 # Bounded process transport. PowerShell 7. No blocking ReadLine()/WaitForExit().
 function Get-OracleSourceBackups {
-    param([Parameter(Mandatory)][string]$Root, [string[]]$RunIds = @())
+    param([Parameter(Mandatory)][string]$Root, [string[]]$RunIds = @(), [switch]$Reports)
     $boundary = [IO.Path]::GetFullPath($Root)
     $ancestor = $boundary
     while ($ancestor) {
@@ -20,9 +20,9 @@ function Get-OracleSourceBackups {
     foreach ($sourceRun in $RunIds) {
         if ($sourceRun -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$') { throw 'Unsafe backup run ID.' }
         $run = Join-Path $boundary $sourceRun
-        $snapshot = Join-Path $run 'snapshot'
-        $archive = Join-Path $snapshot 'source.tar.gz'
-        $record = Join-Path $snapshot 'archive.sha256'
+        $snapshot = if ($Reports) { $run } else { Join-Path $run 'snapshot' }
+        $archive = Join-Path $snapshot $(if ($Reports) { 'report.tar.gz' } else { 'source.tar.gz' })
+        $record = if ($Reports) { $archive } else { Join-Path $snapshot 'archive.sha256' }
         foreach ($path in @($run, $snapshot, $archive, $record)) {
             if (Test-Path -LiteralPath $path) {
                 if ((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) {
@@ -31,8 +31,8 @@ function Get-OracleSourceBackups {
             }
         }
         if (!(Test-Path -LiteralPath $archive -PathType Leaf) -or !(Test-Path -LiteralPath $record -PathType Leaf)) { continue }
-        if ((Get-Item -LiteralPath $archive).Length -gt 256MB -or (Get-Item -LiteralPath $record).Length -gt 1024) { throw 'Source backup exceeds bounds.' }
-        $expected = ((Get-Content -LiteralPath $record -Raw) -split '\s+')[0]
+        if ((Get-Item -LiteralPath $archive).Length -gt 256MB -or (!$Reports -and (Get-Item -LiteralPath $record).Length -gt 1024)) { throw 'Source backup exceeds bounds.' }
+        $expected = if ($Reports) { (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() } else { ((Get-Content -LiteralPath $record -Raw) -split '\s+')[0] }
         if ($expected -notmatch '^[a-f0-9]{64}$' -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
             throw "Host backup checksum mismatch: $sourceRun"
         }
