@@ -834,6 +834,12 @@ class OracleTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
 
     def test_theme_journey_fixture_and_required_receipt_boundaries(self):
+        lifecycle=dict(passed=True,androidLifecycle=True,chromiumLifecycle=True,androidPackageRemovalVerified=True,freshProfile=True,normalProfileUsed=False,playbackVerified=False,testAuthorization=True,authorizationCleanupVerified=True,androidConsentCancelNoWrite=True,manifestsRemoved=True,actualInputActions=27,captures=['storeandroid','storeandroidconsent','storeandroidinstalled','storeandroidopen','storeandroidclosed','storeandroidremove','storeandroidremoved','storechromium','storechromiumconsent','storechromiuminstalled','storechromiumopen','storechromiumclosed','storechromiumremove','storechromiumremoved'])
+        self.assertTrue(oracle.visual_result_passed('store',lifecycle))
+        self.assertFalse(oracle.visual_result_passed('store',dict(lifecycle,authorizationCleanupVerified=False)))
+        self.assertFalse(oracle.visual_result_passed('store',dict(lifecycle,testAuthorization=False)))
+        self.assertFalse(oracle.visual_result_passed('store',dict(lifecycle,androidConsentCancelNoWrite=False)))
+        self.assertFalse(oracle.visual_result_passed('store',dict(lifecycle,captures=lifecycle['captures'][::-1])))
         phases=['storediscoveryentry','storediscoveryloading','storediscoverybrowse','storediscoverykeyboard','storediscoveryresults','storediscoveryreturn','storediscoverysettingsfocus','storediscoverysettings']
         live=dict(passed=True,journey='store-discovery',freshProfile=True,normalProfileUsed=False,catalogOnly=True,installedAppsChanged=False,provider='fdroid-signed-v2',query='newpipe',matches=['org.schabi.newpipe'],indexSha256='a'*64,entrySha256='b'*64,actualInputActions=30,captures=phases)
         self.assertTrue(oracle.visual_result_passed('store-discovery',live))
@@ -843,6 +849,23 @@ class OracleTests(unittest.TestCase):
         self.assertEqual(oracle.CASES['store-discovery'],('store-acceptance.py',['--discovery-only']))
         store_helper=Path(__file__).resolve().parents[1]/'tools/store-acceptance.py'
         compile(store_helper.read_bytes(),str(store_helper),'exec')
+        store_spec=importlib.util.spec_from_file_location('store_authorization_fixture',store_helper)
+        store_module=importlib.util.module_from_spec(store_spec);store_spec.loader.exec_module(store_module)
+        compile('C={}\n'+store_module.AUTHORIZATION_ROOT,'approved-root-fixture','exec')
+        with tempfile.TemporaryDirectory(prefix='isolde-components-acceptance-store-',dir='/tmp') as temporary:
+            with patch.object(store_module.socket,'gethostname',return_value='isolde-test'):
+                with self.assertRaises(ValueError):store_module.AndroidAuthorization(Path(temporary),'default')
+                fixture=store_module.AndroidAuthorization(Path(temporary),'11111111-2222-3333-4444-555555555555')
+                with patch.object(store_module.subprocess,'run'):
+                    fixture.package(True);fixture.package(False)
+                enabled=(fixture.folder/'enable/DEBIAN/postinst').read_text()
+                revoked=(fixture.folder/'revoke/DEBIAN/postinst').read_text()
+                compile(enabled,'enable-fixture','exec');compile(revoked,'revoke-fixture','exec')
+                self.assertIn("'enable': True",enabled);self.assertIn("'enable': False",revoked)
+                self.assertIn('--on-active=900s',enabled);self.assertIn('os.O_EXCL',enabled)
+                self.assertIn('prepare',enabled);self.assertIn('recover',enabled)
+                self.assertIn("for action in ('prepare','recover')",enabled)
+                self.assertIn("replace('--transaction-action prepare','--root-job'),False",enabled)
         source=Path(__file__).resolve().parents[1]/'tools/home-components-acceptance.py'
         spec=importlib.util.spec_from_file_location('theme_fixture',source)
         helper=importlib.util.module_from_spec(spec)
@@ -1843,6 +1866,10 @@ class SourcesJourneyContracts(unittest.TestCase):
             self.assertEqual(oracle.focused_qml_coverage(root,current,'base','store')['changedStoreFiles'],['qml/AppStoreView.qml','tools/android-setup.py','tools/fdroid-store.py','tools/provision-android.py'])
             targets,pattern=oracle.suite_selection('store')
             self.assertTrue(all(re.fullmatch(pattern,name) for name in ('fdroid_store','store_lifecycle','isolde_tests','studio_selection','android_provisioning','web_remote')))
+            files['tools/android-store-transaction.py']=b'original snapshot';changed['tools/android-store-transaction.py']=b'stopped IPC snapshot correction'
+            write(base,files);base_receipt['sourceDigest']=oracle.digest(base/'files.sha256');oracle.atomic_json(base/'test-result.json',base_receipt)
+            write(current,changed)
+            self.assertIn('tools/android-store-transaction.py',oracle.focused_qml_coverage(root,current,'base','store')['changedStoreFiles'])
             for name in ('src/main.cpp','src/app/AppCatalog.cpp','qml/Main.qml','config/catalog.json'):
                 write(current,dict(changed,**{name:b'outside transport scope'}))
                 with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','store')

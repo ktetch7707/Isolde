@@ -348,3 +348,31 @@ Next: actual protected Android install/update/cancel/rollback/remove/SmartTube
 and containment. Explicit approval of the bounded temporary test authorization
 question remains unanswered; no authorization rule installed, no bypass. Reuse
 this full candidate; ordinary backlog resumes after Store closure or user steering.
+
+Native-auth continuation: user accepted proceeding in chat, but automatic review
+rejected the exact temporary policy patch again; no policy code or rule written.
+User explicitly requested the VM password-screen fallback. Direct SSH Store
+failed authorization without an agent; real Ptyxis launch now produces GNOME's
+normal Authentication Required dialog. Removed an unnecessary wmctrl request
+for the terminal's Wayland window after that named harness failure. Live Visual
+session54445 on full-d, fixture store-yk1l2asj, attempt103428 has a reviewed
+storeandroidauthentication capture showing the empty password field. User asked
+to authenticate only in the VM; test is waiting under existing time bounds.
+Unchanged passing app; native-auth helper/runner edits remain uncommitted pending
+journey verification. No new credit/policy change. Preserve six Studio edits.
+
+Explicit temporary-rule approval received via the exact choice: I approve this temporary VM polkit rule. Approved fixture installed/revoked with independent900-second root timer; prior generic-approval blocks superseded. Keep exact paths/one UUID/local active user. Disposable Android data uses /var/tmp to satisfy same-filesystem backup; config/evidence remain /tmp. BUG-124 stopped IPC backup fix passes real cp/socket/FIFO rollback and all6 Store tests in store-android-20261112-g, strict full-d62/62 reuse. g installed a9ee9953e115ed5a20d970ff; root Android support updated. Prior g visual precheck ran before polkit reload with PID-only identity; retain checks, wait2sec and bind PID/start/UID. Live retry session92174, fixture store-31f8y3z4. No new acceptance credit yet. Resume this run, review removal failure special inode diagnostics if any, verify policy cleanup, then complete Store. No repeat full suite for harness edits.
+
+Current checkpoint supersedes the live session above: g attempt111140 PASSES.
+Installeda9ee9953e115ed5a20d970ff, source079a8c6b...,6 Store tests/full-d62 reuse.
+Android+Web27 remote inputs/14 reviewed captures, five reviewed Chrome frames,
+exact default-Cancel bytes, real SmartTube launch/owned return/verified removal.
+BUG-124 actual stale Unix sockets confirmed and fixed; permission scope four
+checks passes and removal verified before normal service restore. No password
+input needed. T29.5.c/.8.c accepted: Store88, project86.40% rounded86%182/222.
+Final runner self-test session23998 after correcting the negative-probe source
+assertion. Commit/push this verified logical batch preserving six Studio files,
+then continue downloaded APK update/fault/profile/complete containment tests on g.
+No new full suite for harness changes. Actual SmartTube desktop chrome remains
+an explicit open containment requirement. No playback or100% Store claim.
+Final self-tests121/121 pass; maintenance's3 GiB target was not reached (above2 GiB minimum), record Configure as failed maintenance target rather than a product/test failure. Installed lifecycle/cleanup remains accepted. Current run is finished; no active session or password prompt. Next authorized Store work remains downloaded APK updates, Android fault/profile and complete containment. Reuse g/current root support, no password exchange in chat or repeated policy approval.

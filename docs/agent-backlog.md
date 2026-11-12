@@ -3,20 +3,25 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-12
 
-Latest installed638b0fd8106ac8fd9c54ccf0, store-close-20261112-full-d, passes
-all62 CTests and121 current runner checks. The installed automated Store offline
-matrix passes84 remote actions/15 reviewed captures, three distinct cold processes
-with kernel IPv4/IPv6 denial and two disposable profiles. Cancel writes nothing;
-activation failure removes only new package artifacts; retry, exact saved bytes,
-profile isolation, cold reopening, offline Web error/physical Home/exact card
-return, removal and repository failure/OFF/Settings recovery pass. BUG-123 fixed.
-Normal layouts remain unchanged and service restored active/zero restarts.
-T29=83%; underlying project average86.20% (rounded86%). Protected Android
-install/update/remove/rollback remains open; proposed temporary authorization is
-still unapproved and no rule is installed. Browser acceptance from web-controls-s
-and live signed discovery from store-runtime-f remain applicable.
+Latest installeda9ee9953e115ed5a20d970ff, store-android-20261112-g, passes
+all6 affected Store tests with strict full-d62/62 reuse. Actual Linux cp preserves
+stopped Unix socket/FIFO inodes and rolls back saves/receipts. BUG-124 fixed.
+The installed Android+Web Store journey passes27 remote actions/14 reviewed
+captures: cancel/no-write, actual Android package install/SmartTube open/physical
+Home/exact card return/verified removal, Plex install/open/return/remove and
+manifests absent. Expiring permission is explicitly approved for one disposable
+profile, passes two allow/two deny scope probes, and is removed before normal
+service restoration. This automated test needs no password and grants no
+normal-profile authorization.
+Same-filesystem private guest test data is retained separately under /var/tmp.
+Normal layout hashes remain unchanged; service active/running/zero restarts.
+T29=88%; project2160/25=86.40% (rounded86%),182/222 milestones accepted.
+Downloaded APK update/fault/profile/complete containment matrices remain open.
+Prior full-d installed offline/profile15 captures and browser/live discovery
+remain applicable. SmartTube's normal menus are visible; desktop chrome around
+its window is retained as an open containment requirement, no playback claim.
 
-Acceptance is **86% (2155/25)**, with180/221 independently evidenced milestones.
+Acceptance is **86% (2160/25)**, with182/222 independently evidenced milestones.
 T25, T26 and T28 are accepted100%. Feedback-r passes full61/61, deploys release
 9e33a01181c41ea8d571f932 and passes installed Sources actions,24 reviewed gallery
 frames/eight real native input/exit cycles,16 reviewed Search cold/profile/save-
@@ -156,7 +161,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T25 | 12 | Contained configurable detected sources | 100% | 100% | installed18-checkpoint source policy/components/actions accepted; four focused tests with strict original61/61 reuse |
 | T26 | 13 | Configurable All Apps destination | 100% | 100% | native Studio edit/Preview/Cancel/Apply plus exact installed saved presentation, artwork/density and eight real native returns accepted |
 | T28 | 14 | Genuine Web search header toggle | 100% | 100% | installed16-checkpoint cold/profile/save-failure/retry/OFF matrix, full61 and clean reference pairs accepted |
-| T29 | 15 | Verified Store, Android and Chromium remote | 83% | 100% | Browser and installed Web offline/profile recovery accepted; protected Android transactions open |
+| T29 | 15 | Verified Store, Android and Chromium remote | 88% | 100% | Android/Web lifecycle and offline recovery accepted; downloaded updates/fault/profile/containment open |
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search installed acceptance | 83% | 100% | native search contracts accepted; installed real-Kodi closure open |
@@ -448,7 +453,7 @@ Scope:
 - [ ] T29.2 AppCatalog provider integration: setProvider(), onlineStoreSearch toggle (default OFF), merged local+provider results, F-Droid verified metadata with pinned signature/trust policy, ABI/capability filtering and SHA-256 artifact verification, atomic download→verify→install into profile package root
 - [ ] T29.3 QML wiring: AppStoreView shows provider results with store badge/provenance, download progress, Install/Open/Uninstall confirmations (default Cancel), focus restoration to same card; Settings exposes online store search toggle
 - [ ] T29.4 Tests: provider rejection of unknown source, download+verify+rollback, hash mismatch, write-failure regression, profile isolation, offline-zero-requests in tst_isolde.cpp
-- [ ] T29.5 VM Store install/launch/return/uninstall and web-app URL validation/lifecycle through production paths; use actual available account-free sources and controlled signed-repository/package fixtures for unavailable live-service responses. Generator Test passes disconnected with zero OFF-gated external requests.
+- [x] T29.5 VM Store install/launch/return/uninstall and web-app URL validation/lifecycle through production paths; use actual available account-free sources and controlled signed-repository/package fixtures for unavailable live-service responses. Generator Test passes disconnected with zero OFF-gated external requests.
 - [x] T29.6 Chromium remote bridge: directional visible focus on meaningful controls/cards/fields, Confirm, remote text entry, explicit remote page scrolling, Back/Home and exact origin restoration in both existing external Chrome apps and embedded web apps. User clarification (2026-10-25): no pointer or mouse emulation; Menu offers page actions. No mousepad needed for the acceptance fixture.
 - [x] T29.7 Android baseline: repeatable pinned/checksummed runtime/APK setup and ordinary SmartTube catalog registration, actual installed menu navigation, owned-session shutdown and exact Home return with normal layouts preserved. Excludes playback, full setup UI, actual two-profile account acceptance and appliance containment.
 - [ ] T29.8 Shared remote Store/setup/update/removal lifecycle: actual VM package presence/absence before metadata changes, repeat/cancel/failure/rollback, provenance/progress, exact focus/large-text, two-profile data isolation and runtime containment. Verify SmartTube launch/controls/owned return and available real content; unavailable provider content uses controlled production-boundary playback/session/error proof with an explicit live-content handoff item. No fake entitlement or playback claim.

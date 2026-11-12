@@ -154,7 +154,10 @@ def main():
             x.XSetInputFocus(display,window,1,0);x.XFlush(display)
             expect(lambda:state.get('remoteHint') is True,'production remote bridge is visibly ready',15)
             expect(lambda:state.get('focused') is True,'owned Chrome page has keyboard focus')
-            key('Right');expect(lambda:state.get('selected')=='start','semantic first control')
+            # The mutation observer may already select the first control while
+            # Chrome maps its window. Up establishes the same visible origin
+            # whether focus is unset or already on that first control.
+            key('Up');expect(lambda:state.get('selected')=='start','semantic first control')
             key('Down');expect(lambda:state.get('selected')=='entry','semantic text field')
             key('Return');expect(lambda:state.get('keyboard') is True and state.get('keyboardFits') is True,'remote keyboard opens without inherited page overflow');capture('keyboard')
             key('Return','Escape');expect(lambda:state.get('keyboard') is False and state.get('value')=='','Back cancels text without writing')

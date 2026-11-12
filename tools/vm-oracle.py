@@ -263,7 +263,7 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "playlists": ("tv-library-acceptance.py", ["--playlists", "--inspect"]),
          "android": ("android-acceptance.py", []),
          "androidapps": ("android-apps-acceptance.py", []),
-         "store": ("store-acceptance.py", []),
+         "store": ("store-acceptance.py", ['--test-authorization']),
          "store-web": ("store-acceptance.py", ["--web-only"]),
          "store-offline": ("store-acceptance.py", ["--offline-matrix"]),
          "store-discovery": ("store-acceptance.py", ["--discovery-only"]),
@@ -425,7 +425,11 @@ def visual_result_passed(case, result):
                 and result.get("gameplayVerified") is False and result.get("physicalControllerVerified") is False and len(result.get("captures",[]))==9)
     if case == "store":
         return (all(result.get(k) is True for k in ("passed","androidLifecycle","chromiumLifecycle","androidPackageRemovalVerified","freshProfile"))
-                and result.get("normalProfileUsed") is False and result.get("playbackVerified") is False and len(result.get("captures",[]))==14)
+                and result.get("normalProfileUsed") is False and result.get("playbackVerified") is False
+                and result.get('testAuthorization') is True and result.get('authorizationCleanupVerified') is True
+                and result.get('androidConsentCancelNoWrite') is True and result.get('manifestsRemoved') is True
+                and result.get('actualInputActions',0)>0
+                and result.get('captures')==['storeandroid','storeandroidconsent','storeandroidinstalled','storeandroidopen','storeandroidclosed','storeandroidremove','storeandroidremoved','storechromium','storechromiumconsent','storechromiuminstalled','storechromiumopen','storechromiumclosed','storechromiumremove','storechromiumremoved'])
     if case == 'store-offline':
         proofs=result.get('networkProofs',[])
         return (all(result.get(k) is True for k in ('passed','freshProfile','profileIsolation','coldReopen','cancelNoWrite','writeFailureRollback','retryVerified','webLifecycle','repositoryFailureRecovered','manifestsRemoved'))
@@ -886,7 +890,7 @@ def guide_qml_coverage(root, run, base_id, suite):
 
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='store':
-        proof=qml_coverage(root,run,base_id,suite,'store',{'tools/fdroid-store.py','tools/android-setup.py','tools/provision-android.py','qml/AppStoreView.qml','src/input/web-remote.js','src/sessions/NativeAppHost.cpp','src/sessions/ChromiumRemotePipe.h'},
+        proof=qml_coverage(root,run,base_id,suite,'store',{'tools/android-store-transaction.py','tools/fdroid-store.py','tools/android-setup.py','tools/provision-android.py','qml/AppStoreView.qml','src/input/web-remote.js','src/sessions/NativeAppHost.cpp','src/sessions/ChromiumRemotePipe.h'},
             {'tools/backlog-progress.ps1','tests/tst_isolde.cpp','tests/web_remote.cpp','tools/native-session-smoke.cpp','tools/web-remote-acceptance.py','tests/test_fdroid_store.py','tests/test_android_provisioning.py','tests/test_store_lifecycle.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store',{'tools/web-remote-acceptance.py','docs/store-android-authorization-fixture.md'})
         proof['changedStoreFiles']=proof.pop('changedStoreQml')
         return proof
@@ -1750,6 +1754,11 @@ class Oracle:
                         visualAcceptance="diagnostic_only" if diagnostic else "pending", semanticAcceptance="not_verified", executable=str(executable))
         finally:
             # This guard also runs on timeouts/SIGHUP when a harness cannot reach its own finally.
+            if case=='store' and store_helper_digest:
+                for directory in evidence:
+                    if (directory/'authorization.json').is_file():
+                        cleanup=store_helper_command(source,helper,executable,['--revoke-authorization',str(directory)])
+                        self.stage('store-authorization-cleanup',cleanup,90)
             restored = self.restore(before)
             self.update(service=restored, normalLayoutsBefore=layouts, normalLayoutsAfter=self.layout_hashes())
             if self.links() != links:
@@ -1982,7 +1991,7 @@ def collect_evidence(run, case, directories):
         for directory in sorted(directories):
             if not re.fullmatch(r"/tmp/isolde-(?:components-acceptance|reference-config|tv-acceptance)-[A-Za-z0-9_-]+", str(directory)):
                 raise RuntimeError("Unexpected evidence root")
-            paths = [directory / name for name in ("result.json", "shell.log", "android.log", "window-discovery.json", "attempt-config.json", "provider-requests.json")]
+            paths = [directory / name for name in ("result.json", "shell.log", "android.log", "window-discovery.json", "attempt-config.json", "provider-requests.json", "authorization.json", "authorization-enabled.json", "authorization-cleanup.json")]
             if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
                 paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json","guide-soak-ready.json")]
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]

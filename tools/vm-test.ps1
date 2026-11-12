@@ -193,7 +193,9 @@ try {
             $stateLine = $actionResult.Lines | Where-Object { $_.StartsWith('{') } | Select-Object -Last 1
             if (!$stateLine) { throw 'No guest guardian status returned.' }
             $captureState = $stateLine | ConvertFrom-Json
-            if ($captureState.runId -ne $RunId -or $captureState.state -ne 'running' -or $captureState.action -ne 'configure' -or $captureState.stage -ne 'native-configure-policy' -or !$captureState.guardianAlive) { throw 'Capture requires this live setup guardian.' }
+            $setupCapture = $captureState.action -eq 'configure' -and $captureState.stage -eq 'native-configure-policy' -and $captureState.guardianAlive
+            $storeCapture = $captureState.action -eq 'visual' -and $captureState.stage -eq 'visual-store'
+            if ($captureState.runId -ne $RunId -or $captureState.state -ne 'running' -or !($setupCapture -or $storeCapture)) { throw 'Capture requires this live setup guardian or Store journey.' }
             $capturePath = Join-Path $local ('setup-status-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '.png')
             $null = Invoke-OracleProcess -File 'C:/Program Files/Oracle/VirtualBox/VBoxManage.exe' -Arguments @('controlvm','Isolde-Test','screenshotpng',$capturePath) -TimeoutSeconds 20 -Log (Join-Path $local 'setup-capture.log')
             Write-Host "Captured $capturePath"

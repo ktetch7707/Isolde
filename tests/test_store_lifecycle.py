@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import socket
+import stat
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -70,6 +72,20 @@ class AndroidTransactionTests(unittest.TestCase):
         self.assertEqual((self.root/"data/app/save").read_text(), "changed by update")
         transaction.recover(self.root, self.activation)
         self.assertEqual(json.loads((self.root/"packages.json").read_text()), {"example": "new-hash"})
+
+    @unittest.skipUnless(sys.platform=='linux','Actual Linux archive and IPC inode semantics')
+    def test_real_archive_rolls_back_stale_android_socket_and_fifo_without_opening_them(self):
+        sock=self.root/'data/app/idle.sock';pipe=self.root/'data/app/idle.pipe'
+        endpoint=socket.socket(socket.AF_UNIX);endpoint.bind(str(sock));endpoint.close();os.mkfifo(pipe)
+        token=transaction.prepare(self.root,self.activation,lambda:None)
+        self.assertTrue(token)
+        backup=self.root/'.store-transaction/data/app'
+        self.assertTrue(stat.S_ISSOCK((backup/'idle.sock').lstat().st_mode))
+        self.assertTrue(stat.S_ISFIFO((backup/'idle.pipe').lstat().st_mode))
+        self.mutate()
+        self.assertFalse(transaction.recover(self.root,self.activation))
+        self.assertEqual((self.root/'data/app/save').read_text(),'previous save')
+        self.assertTrue(stat.S_ISSOCK(sock.lstat().st_mode));self.assertTrue(stat.S_ISFIFO(pipe.lstat().st_mode))
 
     def test_cancel_first_install_removes_only_the_new_android_data(self):
         shutil.rmtree(self.root/"data");(self.root/"packages.json").unlink()

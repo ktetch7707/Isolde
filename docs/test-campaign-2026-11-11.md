@@ -1339,3 +1339,81 @@ Store portion of disconnected Generator. Native/previous children keep weights.
 T29.4.c/.5.d done: Store78→83%, project2155/25=86.20% rounded86%,180/221.
 Protected Android .2.b/.3.c/.4.b/.5.c/.8.b remain open. Explicit scoped
 VM authorization question is unanswered; no rule installed or bypass attempted.
+### Android automation authorization repaired; BUG-124 stopped IPC snapshot
+
+User explicitly selected I approve this temporary VM polkit rule after the full
+single-profile prepare/recover/15-minute/removal scope was stated. Earlier policy
+patches were rejected and wrote nothing. The approved fixture now installs only
+inside Isolde-Test via a separate test package, validates the active local user,
+root-owned production helper and exact private UUID/path commands; independent
+root monotonic expiry precedes rule publication, with wall-clock expiry too.
+Helper and runner both verify removal before ordinary service restoration.
+No normal-profile grant or host policy change. Native terminal fallback also
+reaches the actual GNOME administrator dialog; its unapproved attempt expired.
+
+Fixture fixes: create Android parent directory0700; keep disposable data under
+guest /var/tmp (same filesystem as protected /var/lib backups), config/evidence
+under /tmp. Kernel mount separation is not waived. Authorization remains bound
+to exact paths for one UUID. Operations now detect early helper exit instead of
+waiting another150 seconds after a displayed failure.
+
+Installed full-d attempt105421 verifies protected Android install, actual
+SmartTube launch and owned return, then fails removal because its stopped Android
+data contains an IPC special inode. Retained failure screenshot shows unsupported
+live file even though the owned session has stopped. BUG-124: snapshot preparation
+rejects persistent Unix sockets/FIFOs and would block opening a FIFO during fsync.
+Allow stopped IPC inode types through cp --archive (no stream read); fsync only
+regular files. Devices/unknown types remain rejected and root entrypoint still
+requires idle runtime. New Linux regression creates an actual Unix socket/FIFO,
+uses actual cp rather than the old copy mock, verifies preserved types and exact
+save/receipt rollback. Focused Store candidate store-android-20261112-e reuses
+full-d62/62; no new full-suite run. No lifecycle acceptance awarded yet.
+Focused e correctly refused the previously unlisted transaction module before building. Add only tools/android-store-transaction.py to the Store boundary, alongside its required store_lifecycle actual-IPC regression. This isolated Python inode/snapshot fix changes no shared AppCatalog, schema, input or renderer. Self-tests still reject unrelated AppCatalog/Main/config changes and changed base payload. Use f with the same original full-d62/62; this is an explicit tested boundary extension, not a full-suite claim.
+
+Focused f stops at web_remote: the real Chrome mutation observer already selected the first control before the fixture's initial Right, so Right correctly moved to the entry field. Embedded matrix passes. Normalize initial origin with physical Up (unset or first control both yield first), retaining all actual text/Menu/scroll/Back assertions. This is a diagnosed fixture race, not a browser pass or a production change. Retry g once with both IPC and origin fixes.
+
+### Installed Android lifecycle now automated and accepted — g / attempt111140
+
+Releasea9ee9953e115ed5a20d970ff; six affected Store registrations pass, including
+the actual Linux archive/socket/FIFO rollback test. Original full-d62/62 reuse
+is verified under source079a8c6bb023a27af22e0276cdfaf38cbee7df768866e09a8d49672e94f5d6ad.
+No additional full run. Root Android support updated from that tested payload.
+Raw installed receipt:
+build/vm-oracle/store-android-20261112-g/report/evidence-store-1794510941294490934/isolde-components-acceptance-store-x_i22lnw/result.json.
+All14 frames in visual/store/attempt-20261112-111140-469 reviewed via
+store-android-g-00/01/02.jpg; five new real external Chrome frames reviewed via
+store-android-g-browser-00.jpg. No pending semantic review for these19 images;
+raw machine visualReview=pending remains unchanged, this is the agent ledger.
+
+Observed: SmartTube local card, Cancel-first install consent, installed badge and
+Open app focus, actual SmartTube public menu, physical Home returns exact card,
+Cancel-first removal and verified Install state; Plex consent/Open/public page/
+physical Home/exact Store card/confirmed removal. Both Android confirmation
+cancels preserve exact activation bytes.27 ordinary remote inputs. Actual
+package presence/absence is verified before activation by production helper.
+SmartTube menu is not playback proof. Guest desktop chrome is visible around
+SmartTube and remains an open full-containment item. Long details scroll when
+Uninstall is selected; selected Open is fully visible in reviewed return frames.
+
+Permission receipts: exact UUID7e8680f9-7fdd-43b6-a15b-985634d1ee37, uid1000,
+active local session1, created1794510713/expires1794511613, only exact prepare/
+recover commands, independent monotonic root timer. Two positive and two negative
+scope probes allpass. Probes run from trusted installer against the live test
+PID/start/UID because current polkit refuses unprivileged CheckAuthorization
+requests with action details; first probe failure was correctly diagnosed and
+retained, not waived. Normal profile and root-job probes are denied. Rule removal
+verified at1794510938, again by finally and runner at1794510940, before service
+restore. Cleanup also identifies actual stale Unix sockets49152:
+waydroid/data/system/unsolzygotesocket and ndebugsocket. This confirms BUG-124's
+cause and the real installed fix. No persistent authorization left enabled.
+Normal layouts byte-identical; ordinary service active/running/zero restarts.
+
+T29.5.c accepted and parent complete. T29.8 original remaining half splits into
+independent curated installed lifecycle (.c,quarter) and remaining downloaded
+updates/fault/profile/setup/containment (.b,quarter), native .a retains half.
+T29.8.c accepted. Store83→88%, project2160/25=86.40% rounded86%,182/222. No claim
+that the rest of Store or backlog is100%; next work is downloaded APK update and
+fault/profile/containment acceptance. One final runner assertion initially
+misclassified the deliberately denied --root-job probe as a grant; it now checks
+that the grant list contains only prepare/recover and root-job is a false probe.
+Final runner self-tests pass121/121 in guest-maintenance-self-tests-1794511182821065611.log (first false assertion retained separately). Maintenance itself reports unable to reach its3 GiB cleanup target; do not label Configure as passed. Free space remains above the2 GiB test minimum. No host cleanup, lowered gate or extra application run. All temporary rules removed; installed lifecycle evidence remains valid.

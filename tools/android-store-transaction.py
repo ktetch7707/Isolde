@@ -108,7 +108,8 @@ def prepare(root, activation, check_stop, runner=subprocess.Popen, storage=None)
             for name in directories+names:
                 info = (Path(parent)/name).lstat(); count += 1
                 if stat.S_ISREG(info.st_mode): total += info.st_size
-                elif not (stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode)):
+                elif not (stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode)
+                          or stat.S_ISSOCK(info.st_mode) or stat.S_ISFIFO(info.st_mode)):
                     raise ValueError("Android data contains an unsupported live file; close Android and retry")
                 if total > LIMIT or count > FILES:
                     raise ValueError("Android rollback backup exceeds 8 GiB or 100,000 files")
@@ -139,7 +140,11 @@ def prepare(root, activation, check_stop, runner=subprocess.Popen, storage=None)
                 check_stop()
                 for name in names:
                     path=Path(parent)/name
-                    if path.is_symlink(): continue
+                    # Idle Android leaves Unix sockets/FIFOs in its data tree.
+                    # cp --archive preserves their inode types without reading
+                    # streams. Only regular files support durable file fsync;
+                    # opening a FIFO here would block forever.
+                    if not stat.S_ISREG(path.lstat().st_mode): continue
                     fd=os.open(path,os.O_RDONLY|getattr(os,"O_NOFOLLOW",0))
                     try: os.fsync(fd)
                     finally: os.close(fd)
