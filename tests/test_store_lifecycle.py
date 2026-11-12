@@ -11,6 +11,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
+from contextlib import ExitStack
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -195,9 +196,102 @@ class AndroidSetupTests(unittest.TestCase):
 
 
 class AndroidInstalledArtifactTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Production Linux session boundary')
+    def test_content_session_return_error_and_two_profile_data_boundary(self):
+        # This is a controlled external-runtime fixture, not decoded provider video.
+        for profile,failed in [('default',False),('6b30896f-2192-47f4-bc93-f71977515e95',True)]:
+            with self.subTest(profile=profile),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve();bundle=root/'bundle';(bundle/'config').mkdir(parents=True)
+                (bundle/'config/android-runtime.json').write_text('{"schemaVersion":1}')
+                shutil.copyfile(ROOT/'tools/android-store-transaction.py',bundle/'android-store-transaction.py')
+                config=root/'config';(config/'Isolde').mkdir(parents=True)
+                (config/'Isolde/profiles.json').write_text(json.dumps({'active':profile}))
+                runtime=root/'runtime';runtime.mkdir(mode=0o700);data=root/'data'
+                private=self.session.profile_root(profile,config,data)
+                other='default' if profile!='default' else '6b30896f-2192-47f4-bc93-f71977515e95'
+                foreign=data/'Isolde/android-profiles'/other;foreign.mkdir(mode=0o700)
+                (foreign/'account-canary').write_bytes(b'other profile account fixture')
+                events=[];state={};child=Mock(pid=23456);child.poll.side_effect=lambda:None if state else 0
+                compositor=Mock();compositor.poll.return_value=None
+                compositor_log=Mock();compositor_log.tell.return_value=0
+                def spawn(*args,**kwargs):
+                    self.assertEqual(kwargs['env']['HOME'],str(private/'home'))
+                    self.assertEqual(kwargs['env']['WAYLAND_DISPLAY'],'fixture-kiosk')
+                    state.update(state='RUNNING',pid=child.pid,user_id=os.getuid(),waydroid_data=str(private/'data/waydroid/data'))
+                    return child
+                child.send_signal.side_effect=lambda signal:state.clear()
+                manager=Mock();manager.GetSession.side_effect=lambda **kwargs:dict(state)
+                dbus=SimpleNamespace(Interface=lambda *args:manager,SystemBus=Mock(),SessionBus=Mock())
+                dbus.SessionBus.return_value.name_has_owner.return_value=False
+                def command(env,*args,**kwargs):
+                    if args==('app','list'):return 'packageName: org.example.video'
+                    if args==('app','launch','org.example.video'):
+                        if failed:raise RuntimeError('Controlled provider decoder/session failure')
+                        return ''
+                    raise AssertionError(args)
+                def sleep(seconds):raise self.session.Stopped()
+                with ExitStack() as stack:
+                    stack.enter_context(patch.dict(sys.modules,{'dbus':dbus}))
+                    stack.enter_context(patch.dict(os.environ,{'XDG_CONFIG_HOME':str(config),'XDG_DATA_HOME':str(data),'XDG_RUNTIME_DIR':str(runtime),'WAYLAND_DISPLAY':'wayland-0'}))
+                    stack.enter_context(patch.object(sys,'argv',['android-session','--profile',profile,'--app','fixture','--store-version','1']))
+                    stack.enter_context(patch.object(self.session,'__file__',str(bundle/'android-session.py')))
+                    stack.enter_context(patch.object(self.session,'store_package',return_value=({'packageName':'org.example.video','sha256':'fixture'},root/'fixture.apk')))
+                    stack.enter_context(patch.object(self.session,'validate_store_apk'))
+                    stack.enter_context(patch.object(self.session,'presentation_mode',return_value='fullscreen'))
+                    stack.enter_context(patch.object(self.session,'start_compositor',return_value=(compositor,compositor_log,'fixture-kiosk')))
+                    stop=stack.enter_context(patch.object(self.session,'stop_compositor'))
+                    stack.enter_context(patch.object(self.session.subprocess,'Popen',side_effect=spawn))
+                    stack.enter_context(patch.object(self.session,'command',side_effect=command))
+                    stack.enter_context(patch.object(self.session.time,'sleep',side_effect=sleep))
+                    stack.enter_context(patch.object(self.session,'emit',side_effect=lambda event,**fields:events.append(event)))
+                    # Already-installed fixture avoids claiming mocked package installation.
+                    (private/'packages.json').write_text('{"fixture":"fixture"}')
+                    if failed:
+                        with self.assertRaisesRegex(RuntimeError,'Controlled provider'):self.session.main()
+                    else:self.session.main()
+                    stop.assert_called_once();child.send_signal.assert_called_once()
+                self.assertEqual('ready' in events,not failed)
+                self.assertEqual((foreign/'account-canary').read_bytes(),b'other profile account fixture')
+                self.assertFalse((private/'account-canary').exists());self.assertFalse(state)
+
     def setUp(self):
-        with patch.dict(sys.modules, {"fcntl": SimpleNamespace()}):
+        if sys.platform=='linux':
             self.session = module("android_session_artifact_test", "android-session.py")
+        else:
+            with patch.dict(sys.modules, {"fcntl": SimpleNamespace()}):
+                self.session = module("android_session_artifact_test", "android-session.py")
+
+    @unittest.skipUnless(sys.platform=='linux','Linux display socket and ownership')
+    def test_owned_compositor_has_private_socket_no_user_config_and_bounded_shutdown(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve();original=self.session.Path.stat;endpoint=None
+            def metadata(path,*args,**kwargs):
+                if str(path) in ('/usr/bin/weston','/usr/bin','/usr','/'):return SimpleNamespace(st_uid=0,st_mode=0o755)
+                return original(path,*args,**kwargs)
+            child=Mock();child.poll.return_value=None;child.wait.return_value=0
+            def spawn(command,**kwargs):
+                nonlocal endpoint
+                self.assertIn('--fullscreen',command);self.assertIn('--shell=kiosk-shell.so',command);self.assertIn('--no-config',command)
+                name=next(arg.split('=',1)[1] for arg in command if arg.startswith('--socket='))
+                endpoint=socket.socket(socket.AF_UNIX);endpoint.bind(str(root/name));return child
+            try:
+                with patch.object(self.session.Path,'stat',metadata),patch.object(self.session,'emit'):
+                    process,log,name=self.session.start_compositor({},root,root,runner=spawn)
+                    self.assertTrue(name.startswith('isolde-android-'));self.assertEqual(process,child)
+                    self.session.stop_compositor(process,log)
+                child.terminate.assert_called_once();child.kill.assert_not_called()
+            finally:
+                if endpoint:endpoint.close()
+
+    @unittest.skipUnless(sys.platform=='linux','Linux active preference ownership')
+    def test_presentation_pref_rejects_unknown_modes_and_redirects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state=Path(directory)/'state.json';state.write_text('{"androidContainment":"windowed"}')
+            self.assertEqual(self.session.presentation_mode(state),'windowed')
+            state.write_text('{"androidContainment":"exec"}')
+            with self.assertRaises(ValueError):self.session.presentation_mode(state)
+            linked=Path(directory)/'redirect.json';linked.symlink_to(state)
+            with self.assertRaises(ValueError):self.session.presentation_mode(linked)
 
     def test_old_package_presence_does_not_prove_new_apk_is_installed(self):
         with tempfile.TemporaryDirectory() as directory:

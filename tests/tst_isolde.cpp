@@ -208,6 +208,19 @@ private slots:
         QVERIFY2(catalog.install("plex"),qPrintable(catalog.errorString()));QVERIFY(catalog.isInstalled("plex"));QVERIFY(registry.find("plex"));
         QVERIFY(previous.open(QIODevice::ReadOnly));QCOMPARE(previous.readAll(),bytes);
     }
+    void androidPresentationIsTypedAtomicAndProfileLocal() {
+        QCoreApplication::setApplicationVersion("0.0.1.2");QTemporaryDir temp;QVERIFY(temp.isValid());
+        AppRegistry aRegistry,bRegistry;AppCatalog a(&aRegistry),b(&bRegistry);
+        const auto source=QFINDTESTDATA("../config/catalog.json"),aState=temp.filePath("a/state.json");
+        QVERIFY(a.load(source,aState,temp.filePath("a/packages")));QVERIFY(b.load(source,temp.filePath("b/state.json"),temp.filePath("b/packages")));
+        QCOMPARE(a.androidContainment(),QString("fullscreen"));QVERIFY(a.setAndroidContainment("windowed"));QCOMPARE(b.androidContainment(),QString("fullscreen"));
+        QFile file(aState);QVERIFY(file.open(QIODevice::ReadOnly));const auto before=file.readAll();file.close();
+        QVERIFY(!a.setAndroidContainment("shell-command"));QCOMPARE(a.androidContainment(),QString("windowed"));
+        QVERIFY(a.load(source,aState,temp.filePath("a/packages")));QCOMPARE(a.androidContainment(),QString("windowed"));
+        QVERIFY(file.open(QIODevice::ReadOnly));QCOMPARE(file.readAll(),before);file.close();
+        const auto blocked=temp.filePath("blocked");QVERIFY(QDir().mkpath(blocked));AppRegistry failedRegistry;AppCatalog failed(&failedRegistry);
+        QVERIFY(failed.load(source,blocked,temp.filePath("failed-packages")));QVERIFY(!failed.setAndroidContainment("windowed"));QCOMPARE(failed.androidContainment(),QString("fullscreen"));QVERIFY(QFileInfo(blocked).isDir());
+    }
     void onlineStoreRefusesUnknownSourcesAndRequiresOptInAndHash() {
         AppRegistry registry;AppCatalog catalog(&registry);CountingStoreProvider provider;
         provider.identity="unknown";catalog.setStoreProvider(&provider);QVERIFY(!catalog.storeProvider());

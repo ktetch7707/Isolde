@@ -25,3 +25,8 @@ Current state: software is still in development (see current backlog/calculator)
 | U02 personal usability | Preferred colors/layout/density, comfort at actual TV distance, whether the workflow labels and guide make sense to the user; no prior participant sign-off was required for S1 |
 
 Record the artifact/version, steps, expected and actual result, and useful diagnostics for any finding. A concrete application defect becomes a normal software regression; do not interpret a past VM pass as proof that the user's observation is wrong. This checklist imposes no formal release/qualification campaign or requirement to publish.
+
+Store j (2026-11-12) U01 detail: real fullscreen SmartTube menus and physical
+Confirm reach the content loading spinner; Home/owned shutdown/removal pass.
+Live decoded SmartTube playback remains unverified. See
+`store-final-acceptance-2026-11-12.md`; no provider outage or playback is claimed.

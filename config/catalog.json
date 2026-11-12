@@ -16,6 +16,7 @@
     "cardHeight": 142,
     "detailRatio": 0.42,
     "webBackend": "chromium",
+    "androidContainment": "fullscreen",
     "webDesktopId": "google-chrome",
     "webCategory": "Web apps",
     "appSection": "Apps",

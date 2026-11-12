@@ -5,6 +5,15 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 
+bool AppCatalog::setAndroidContainment(const QString &mode)
+{
+    if(busy() || (mode!="fullscreen" && mode!="windowed")){setError(tr("Choose Fullscreen or Windowed after the current operation finishes."));return false;}
+    if(mode==m_androidContainment)return true;
+    const auto previous=m_androidContainment;m_androidContainment=mode;
+    if(!saveState()){m_androidContainment=previous;return false;}
+    emit entriesChanged();return true;
+}
+
 bool AppCatalog::checkForUpdates()
 {
     if(busy() || !m_onlineStoreSearch || !m_provider){setError(tr("Enable F-Droid access before checking for updates."));return false;}

@@ -14,6 +14,8 @@ import tempfile
 import time
 import importlib.util
 import select
+import uuid
+import stat
 
 stopping = False
 
@@ -35,6 +37,64 @@ def private_directory(path):
     info = path.stat()
     if info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise RuntimeError("Android profile storage must be private to this Linux user.")
+
+
+def presentation_mode(activation):
+    mode=None
+    if activation.exists():
+        if activation.is_symlink() or not activation.is_file() or activation.stat().st_uid!=os.getuid() or activation.stat().st_size>1024**2:raise ValueError('Invalid active profile presentation preference')
+        state=json.loads(activation.read_text())
+        if not isinstance(state,dict):raise ValueError('Invalid active profile presentation preference')
+        if 'androidContainment' in state:
+            mode=state['androidContainment']
+            if not isinstance(mode,str):raise ValueError('Invalid Android presentation mode')
+    if mode is None:
+        defaults=Path(__file__).with_name('config')/'catalog.json'
+        if defaults.is_symlink() or defaults.stat().st_size>4*1024**2:raise ValueError('Invalid Android presentation defaults')
+        mode=json.loads(defaults.read_text()).get('store',{}).get('androidContainment','fullscreen')
+    if mode not in ('fullscreen','windowed'):raise ValueError('Invalid Android presentation mode')
+    return mode
+
+
+def start_compositor(env, runtime, root, runner=subprocess.Popen):
+    executable=Path('/usr/bin/weston')
+    for path in (executable,*executable.parents):
+        try:info=path.stat()
+        except FileNotFoundError:raise RuntimeError('Android fullscreen support is missing. Use Store actions > Set up / repair Android.')
+        if path.is_symlink() or info.st_uid!=0 or info.st_mode & 0o022:raise ValueError('Android fullscreen support must be root-owned and protected')
+    name='isolde-android-'+uuid.uuid4().hex
+    socket_path=runtime/name
+    log=tempfile.TemporaryFile()
+    child=runner([str(executable),'--backend=wayland','--shell=kiosk-shell.so','--fullscreen','--no-config','--idle-time=0','--socket='+name],env=env,stdout=log,stderr=log)
+    try:
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            check_stop()
+            if child.poll() is not None:raise RuntimeError('Android fullscreen display could not start. Return Home and retry.')
+            if log.tell()>1024**2:raise RuntimeError('Android fullscreen display exceeded its diagnostic limit')
+            if socket_path.exists():
+                info=socket_path.lstat()
+                if not stat.S_ISSOCK(info.st_mode) or info.st_uid!=os.getuid():raise ValueError('Android fullscreen display socket is unsafe')
+                emit('containment',mode='fullscreen',backend='owned-wayland-kiosk',owned=True)
+                return child,log,name
+            time.sleep(.1)
+        raise RuntimeError('Android fullscreen display did not become ready. Return Home and retry.')
+    except BaseException:
+        try:
+            log.seek(0)
+            fd,diagnostic=tempfile.mkstemp(prefix='compositor-error-',dir=root)
+            with os.fdopen(fd,'wb') as stream:stream.write(log.read(65536));stream.flush();os.fsync(stream.fileno())
+            os.replace(diagnostic,root/'containment-error.log')
+        finally:stop_compositor(child,log)
+        raise
+
+
+def stop_compositor(child,log):
+    if child.poll() is None:
+        child.terminate()
+        try:child.wait(timeout=5)
+        except subprocess.TimeoutExpired:child.kill();child.wait(timeout=3)
+    log.close()
 
 
 def profile_root(profile, config, data):
@@ -284,9 +344,14 @@ def main():
         if len(sockets) != 1: raise RuntimeError("Android needs an active Wayland desktop. Sign into the Wayland session and retry.")
         env["WAYLAND_DISPLAY"] = sockets[0].name
     data = Path(env["XDG_DATA_HOME"])/"waydroid/data"
+    compositor=None;compositor_log=None
+    if args.operation=='launch' and presentation_mode(activation)=='fullscreen':
+        compositor,compositor_log,display=start_compositor(env,runtime,root)
+        env['WAYLAND_DISPLAY']=display
     child = None
     def verify():
         check_stop()
+        if compositor and (compositor.poll() is not None or compositor_log.tell()>1024**2):raise RuntimeError('Android fullscreen display closed. Return Home and retry.')
         profile_root(args.profile, config_home, data_home)
         if child.poll() is not None or not owned(session(), child.pid, data):
             raise RuntimeError("Android session ownership changed. Return Home and retry.")
@@ -339,29 +404,32 @@ def main():
     except Stopped:
         emit("cancelled", operation=args.operation)
     finally:
-        if child is not None and child.poll() is None:
-            child.send_signal(signal.SIGTERM if owned(session(), child.pid, data) else signal.SIGUSR1)
-            try: child.wait(timeout=10)
-            except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
-        if child is not None and owned(session(), child.pid, data):
-            raise RuntimeError("Android did not release this profile's session. Retry after closing Android.")
-        if token:
-            if not stopping and sys.exc_info()[0] is None:
-                emit("prepared", operation=args.operation, token=token,
+        try:
+            if child is not None and child.poll() is None:
+                child.send_signal(signal.SIGTERM if owned(session(), child.pid, data) else signal.SIGUSR1)
+                try: child.wait(timeout=10)
+                except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=3)
+            if child is not None and owned(session(), child.pid, data):
+                raise RuntimeError("Android did not release this profile's session. Retry after closing Android.")
+            if token:
+                if not stopping and sys.exc_info()[0] is None:
+                    emit("prepared", operation=args.operation, token=token,
+                         packagePresent=args.operation=="install", packageAbsent=args.operation=="uninstall")
+                    deadline = time.monotonic()+30
+                    while not stopping and time.monotonic()<deadline:
+                        if select.select([sys.stdin], [], [], .1)[0]:
+                            sys.stdin.readline()  # Activation token on disk decides commit vs rollback.
+                            break
+                committed = administrator_transaction("recover",root,activation,args.profile).get("committed",False)
+                if not committed:
+                    emit("cancelled", operation=args.operation, rolledBack=True)
+            else:
+                committed = True
+            if committed and not stopping and sys.exc_info()[0] is None:
+                emit("completed", operation=args.operation,
                      packagePresent=args.operation=="install", packageAbsent=args.operation=="uninstall")
-                deadline = time.monotonic()+30
-                while not stopping and time.monotonic()<deadline:
-                    if select.select([sys.stdin], [], [], .1)[0]:
-                        sys.stdin.readline()  # Activation token on disk decides commit vs rollback.
-                        break
-            committed = administrator_transaction("recover",root,activation,args.profile).get("committed",False)
-            if not committed:
-                emit("cancelled", operation=args.operation, rolledBack=True)
-        else:
-            committed = True
-        if committed and not stopping and sys.exc_info()[0] is None:
-            emit("completed", operation=args.operation,
-                 packagePresent=args.operation=="install", packageAbsent=args.operation=="uninstall")
+        finally:
+            if compositor:stop_compositor(compositor,compositor_log)
 
 
 if __name__ == "__main__":

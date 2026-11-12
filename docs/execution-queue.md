@@ -376,3 +376,16 @@ then continue downloaded APK update/fault/profile/complete containment tests on 
 No new full suite for harness changes. Actual SmartTube desktop chrome remains
 an explicit open containment requirement. No playback or100% Store claim.
 Final self-tests121/121 pass; maintenance's3 GiB target was not reached (above2 GiB minimum), record Configure as failed maintenance target rather than a product/test failure. Installed lifecycle/cleanup remains accepted. Current run is finished; no active session or password prompt. Next authorized Store work remains downloaded APK updates, Android fault/profile and complete containment. Reuse g/current root support, no password exchange in chat or repeated policy approval.
+
+Current: signed Store updates attempt113406 passes and ten frames reviewed.
+T29=97%, project86.76% rounded87%,185/222. Fullscreen containment batch ready
+for one full Test store-final-20261112-h (shared persistence/runtime change).
+Then Deploy, Configure android-store-support, installed Store/containment review.
+No password/permission question; exact temporary test rule remains approved.
+
+T29 CLOSED100%: final installed j full62/62; attempts150605/151112 reviewed14+16
+frames; o6/6 focused Store and native external-session/error/two-profile fixtures
+pass. Explicit decoded live-content U01 handoff, no playback claim. BUG-126
+physical X press/release sequencing fixed; BUG-125 non-reproduced timing retained.
+Overall2172/25=86.88% rounded87%,186/222. Commit/push Store batch, then T03
+installed real-Kodi scoped search/paging/cancel/return. No full rerun for docs.

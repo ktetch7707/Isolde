@@ -17,6 +17,8 @@ import time
 import uuid
 import pwd
 import re
+import copy
+import select
 
 
 class AndroidAuthorization:
@@ -35,11 +37,11 @@ class AndroidAuthorization:
         self.root=Path('/var/tmp')/self.evidence.name/'data/Isolde/android-profiles'/profile
         self.activation=self.evidence/'config/Isolde/profiles'/profile/'installed-apps.json'
 
-    def package(self, enable):
+    def package(self, enable, discard=False):
         stage=self.folder/('enable' if enable else 'revoke');stage.mkdir(mode=0o700,exist_ok=True)
         metadata=stage/'DEBIAN';metadata.mkdir(exist_ok=True)
         (metadata/'control').write_text('Package: isolde-store-test-fixture\nVersion: 1.0\nArchitecture: all\nMaintainer: Isolde VM tests\nDescription: Temporary explicitly approved single-profile test authorization\n')
-        config=dict(enable=enable,evidence=str(self.evidence),profile=self.profile,uid=os.getuid(),user=pwd.getpwuid(os.getuid()).pw_name,
+        config=dict(enable=enable,discard=discard,evidence=str(self.evidence),profile=self.profile,uid=os.getuid(),user=pwd.getpwuid(os.getuid()).pw_name,
                     root=str(self.root),activation=str(self.activation),rule=str(self.rule),receipt=str(self.receipt),subjectPid=os.getpid(),subjectStart=Path('/proc/self/stat').read_text().split()[21])
         (metadata/'postinst').write_text('#!/usr/bin/python3\nC='+repr(config)+'\n'+AUTHORIZATION_ROOT)
         (metadata/'postinst').chmod(0o755)
@@ -59,9 +61,10 @@ class AndroidAuthorization:
         (self.evidence/'authorization-enabled.json').write_text(json.dumps(receipt,indent=2))
         print('AUTHORIZATION_ENABLED '+json.dumps(receipt),flush=True);time.sleep(2)
 
-    def revoke(self):
+    def revoke(self, discard=False):
         package=self.folder/'revoke.deb'
         if not package.exists():return
+        if discard:package=self.package(False,True)
         subprocess.run(['sudo','-n','/usr/bin/dpkg','-i',str(package)],check=True,timeout=60)
         receipt=json.loads(self.receipt.read_text())
         assert receipt['enabled'] is False and receipt['cleanupVerified'] is True,'Temporary authorization cleanup was not verified'
@@ -70,7 +73,7 @@ class AndroidAuthorization:
 
 
 AUTHORIZATION_ROOT=r'''
-import json,os,pwd,re,socket,stat,subprocess,time
+import json,os,pwd,re,shutil,socket,stat,subprocess,time
 from pathlib import Path
 if os.geteuid()!=0 or socket.gethostname()!='isolde-test':raise RuntimeError('Isolde VM root fixture only')
 profile=C['profile'];uid=C['uid'];base=Path(C['evidence'])
@@ -138,6 +141,16 @@ else:
             if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode) or stat.S_ISLNK(mode)) and len(special)<32:
                 special.append(dict(path=str(p.relative_to(root/'data')),type=stat.S_IFMT(mode)))
     value['specialDataInodes']=special
+    if C['discard'] and root.exists():
+        import importlib.util
+        spec=importlib.util.spec_from_file_location('fixture_idle','/usr/lib/isolde-android-setup/provision-android.py');provision=importlib.util.module_from_spec(spec);spec.loader.exec_module(provision);provision.require_idle_runtime(True)
+        if root.resolve()!=root or root.is_symlink() or root.stat().st_uid!=uid or root.stat().st_mode & 0o077:raise ValueError('Unsafe disposable data cleanup path')
+        if root.stat().st_dev!=Path('/var/lib/isolde').stat().st_dev:raise ValueError('Disposable cleanup is not on the guest appliance filesystem')
+        for line in Path('/proc/self/mountinfo').read_text().splitlines():
+            mount=line.split()[4]
+            if '\\' in mount and mount.startswith('/var/tmp/'):raise ValueError('Encoded fixture mount is unsafe')
+            if mount==str(root) or mount.startswith(str(root)+'/'):raise ValueError('Mounted disposable data is not removable')
+        shutil.rmtree(root);value['profileDataRemoved']=not root.exists()
 receipt.parent.mkdir(mode=0o755,parents=True,exist_ok=True)
 for p in (receipt.parent,*receipt.parent.parents):
     s=p.stat()
@@ -148,8 +161,15 @@ with os.fdopen(fd,'w') as stream:json.dump(value,stream);stream.flush();os.fsync
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);parser.add_argument("--discovery-only",action="store_true");parser.add_argument("--web-only",action="store_true");parser.add_argument("--offline-matrix",action="store_true");parser.add_argument('--native-auth',action='store_true');parser.add_argument('--test-authorization',action='store_true');parser.add_argument('--revoke-authorization',type=Path);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument("executable",type=Path);parser.add_argument("--discovery-only",action="store_true");parser.add_argument("--web-only",action="store_true");parser.add_argument("--offline-matrix",action="store_true");parser.add_argument('--native-auth',action='store_true');parser.add_argument('--test-authorization',action='store_true');parser.add_argument('--android-updates',action='store_true');parser.add_argument('--revoke-authorization',type=Path);parser.add_argument('--discard-completed-data',action='store_true');args=parser.parse_args()
     if socket.gethostname()!="isolde-test":raise RuntimeError("Guest-only Store acceptance")
+    if args.discard_completed_data:
+        for folder in sorted(Path('/tmp').glob('isolde-components-acceptance-store-*'))[:128]:
+            receipt=folder/'authorization-cleanup.json'
+            if receipt.is_file() and not receipt.is_symlink() and receipt.stat().st_uid==os.getuid():
+                record=json.loads(receipt.read_text())
+                if record.get('cleanupVerified') is True:AndroidAuthorization(folder,record['profile']).revoke(discard=True)
+        return
     if args.revoke_authorization:
         record=args.revoke_authorization/'authorization.json'
         if record.is_file():AndroidAuthorization(args.revoke_authorization,json.loads(record.read_text())['profile']).revoke()
@@ -272,7 +292,103 @@ def main():
     try:
         subprocess.run(["systemctl","--user","stop","isolde.service"],check=True,timeout=30)
         with (evidence/"shell.log").open("w") as log:
-            launch(log,profile)
+            if not args.android_updates:launch(log,profile)
+            if args.android_updates:
+                print('STORE_UPDATE_PREPARING verified official APK baseline',flush=True)
+                runtime=args.executable.resolve().parent.parent/'share/isolde'
+                spec=importlib.util.spec_from_file_location('store_update_repository',runtime/'fdroid-store.py');repository=importlib.util.module_from_spec(spec);spec.loader.exec_module(repository)
+                cache=evidence/'cache/Isolde/profiles'/profile/'fdroid'
+                fetched=subprocess.run([sys.executable,str(runtime/'fdroid-store.py'),'--query','newpipe','--cache',str(cache)],env=env,check=True,capture_output=True,text=True,timeout=120)
+                document=repository.verified_index(repository.verified_entry((cache/'entry.jar').read_bytes()),(cache/'index-v2.json').read_bytes())
+                target=repository.runtime_target();identity='org.schabi.newpipe'
+                latest=next(item for item in repository.browse(document,'newpipe',0,target)['results'] if item['packageName']==identity)
+                older=sorted([p for p in document['packages'][identity] if repository.compatible(p,target) and int(p['versionCode'])<int(latest['versionCode'])],key=lambda p:int(p['versionCode']))[-1]
+                previous=copy.deepcopy(document);previous['packages'][identity]=[older]
+                baseline=next(item for item in repository.browse(previous,'newpipe',0,target)['results'] if item['packageName']==identity)
+                local_id='fdroid-'+hashlib.sha256(identity.encode()).hexdigest()[:24]
+                artifact=repository.download(older['apkName'],128*1024**2)
+                assert len(artifact)==older['size'] and hashlib.sha256(artifact).hexdigest()==older['hash']
+                package=data_home/'Isolde/packages/profiles'/profile/local_id/str(older['versionCode']);package.mkdir(parents=True,mode=0o700)
+                manifest=dict(schemaVersion=1,kind='fdroid',id=local_id,name=baseline['name'],version=str(older['versionCode']),packageName=identity,sha256=older['hash'],provenance=baseline['provenance'])
+                (package/'manifest.json').write_text(json.dumps(manifest));(package/'app.apk').write_bytes(artifact)
+                authorization=AndroidAuthorization(evidence,profile);authorization.enable()
+                events=[]
+                def saved(path):return path.read_bytes() if path.is_file() else None
+                def atomic_state(value):
+                    temporary=state.with_suffix('.fixture-tmp')
+                    with temporary.open('w') as stream:json.dump(value,stream);stream.flush();os.fsync(stream.fileno())
+                    os.replace(temporary,state)
+                    fd=os.open(state.parent,os.O_RDONLY|os.O_DIRECTORY)
+                    try:os.fsync(fd)
+                    finally:os.close(fd)
+                def transaction(app,operation,version=None,crash=False):
+                    command=[sys.executable,str(runtime/'android-session.py'),'--profile',profile,'--app',app,'--operation',operation,'--transaction']
+                    if version:command+=['--store-version',version]
+                    child=subprocess.Popen(command,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=log)
+                    buffer=b'';deadline=time.monotonic()+250;prepared=False;completed=False
+                    try:
+                        while time.monotonic()<deadline:
+                            ready,_,_=select.select([child.stdout],[],[],.2)
+                            if ready:
+                                chunk=os.read(child.stdout.fileno(),65536)
+                                if not chunk:break
+                                buffer+=chunk
+                                if len(buffer)>65536:raise RuntimeError('Android fixture event bound exceeded')
+                                while b'\n' in buffer:
+                                    line,buffer=buffer.split(b'\n',1)
+                                    event=json.loads(line);events.append(event)
+                                    if event.get('event')=='error':raise RuntimeError(event.get('message','Android transaction failed'))
+                                    if event.get('event')=='prepared':
+                                        prepared=True
+                                        assert event.get('packagePresent' if operation=='install' else 'packageAbsent') is True
+                                        if crash:
+                                            child.kill();child.wait(timeout=5);return
+                                        installed_ids=[app] if operation=='install' else []
+                                        atomic_state(dict(schemaVersion=1,installed=installed_ids,packageStates={app:'ready'} if installed_ids else {},customPackages={app:version} if installed_ids and version else {},updatesDisabled=[],storeTransaction=event['token']))
+                                        child.stdin.write(b'commit\n');child.stdin.flush()
+                                    if event.get('event')=='completed':completed=True
+                            if child.poll() is not None and not ready:break
+                        assert child.wait(timeout=5)==0 and prepared and completed,'Actual Android transaction did not complete'
+                    finally:
+                        if child.poll() is None:child.terminate();child.wait(timeout=30)
+                canary=authorization.root/'data/fixture-save';canary.parent.mkdir(mode=0o700);canary.write_bytes(b'previous save before interrupted installation')
+                original=canary.read_bytes()
+                transaction(local_id,'install',str(older['versionCode']),crash=True)
+                assert (authorization.root/'.store-recovery').is_file() and not state.exists()
+                bootstrap="import importlib.util,json,sys;from pathlib import Path;s=importlib.util.spec_from_file_location('recovery',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(json.dumps(m.administrator_transaction('recover',Path(sys.argv[2]),Path(sys.argv[3]),sys.argv[4])))"
+                recovery=subprocess.run([sys.executable,'-c',bootstrap,str(runtime/'android-session.py'),str(authorization.root),str(state),profile],env=env,check=True,capture_output=True,text=True,timeout=180)
+                assert json.loads(recovery.stdout.splitlines()[-1])['committed'] is False
+                assert canary.read_bytes()==original and not (authorization.root/'data/waydroid').exists() and not (authorization.root/'packages.json').exists()
+                transaction(local_id,'install',str(older['versionCode']))
+                launch(log,profile);keys('Right');capture('updatebaseline')
+                keys('Menu','Return');keys('Menu','Down','Down','Down','Return');time.sleep(4);capture('updateoffer')
+                keys('Down','Right','Down','Down','Return');capture('updateconsent');keys('Return')
+                assert json.loads(state.read_text())['customPackages'][local_id]==str(older['versionCode'])
+                keys('Return','Right','Return');capture('updateprogress')
+                expect(lambda:json.loads(state.read_text()).get('customPackages',{}).get(local_id)==latest['versionCode'],'Actual Store update did not commit',240,android=True)
+                capture('updateinstalled')
+                assert json.loads((authorization.root/'packages.json').read_text())[local_id]==latest['sha256'] and canary.read_bytes()==original
+                # The download/Android helper verifies the installed base.apk hash
+                # before committing. Retain the actual committed package manifest too.
+                updated=data_home/'Isolde/packages/profiles'/profile/local_id/latest['versionCode']/'manifest.json'
+                assert json.loads(updated.read_text())['sha256']==latest['sha256']
+                keys('Down','Down','Return','Right','Return');capture('updatesunsubscribed')
+                assert local_id in json.loads(state.read_text())['updatesDisabled']
+                saved_a=state.read_bytes();receipt_a=(authorization.root/'packages.json').read_bytes()
+                authorization.revoke();launch(log,profile_b);capture('updateprofilefresh')
+                assert not installed(local_id) and saved(config/'profiles'/profile_a/'installed-apps.json')==saved_a
+                mismatch=subprocess.run([sys.executable,str(runtime/'android-session.py'),'--profile',profile_a,'--app',local_id,'--store-version',latest['versionCode'],'--operation','install','--transaction'],env=env,capture_output=True,text=True,timeout=30)
+                assert mismatch.returncode and 'selected Isolde profile changed' in mismatch.stdout
+                assert (data_home/'Isolde/android-profiles'/profile_a/'packages.json').read_bytes()==receipt_a
+                launch(log,profile_a);authorization=AndroidAuthorization(evidence,profile);authorization.enable();keys('Right','Right');capture('updatecold')
+                assert json.loads(state.read_text())['customPackages'][local_id]==latest['versionCode'] and local_id in json.loads(state.read_text())['updatesDisabled']
+                keys('Down','Return');capture('updateremove');keys('Right','Return')
+                expect(lambda:not installed(local_id),'Updated Android package removal failed',180,android=True);capture('updateremoved')
+                authorization.revoke()
+                evidence_record=dict(baseline=dict(version=baseline['versionCode'],sha256=baseline['sha256']),updated=dict(version=latest['versionCode'],sha256=latest['sha256']),events=events,crashRecoveryOutput=recovery.stdout)
+                (evidence/'store-update-evidence.json').write_text(json.dumps(evidence_record,indent=2))
+                result=dict(passed=True,journey='store-updates',freshProfile=True,normalProfileUsed=False,signedBaselineFixture=True,actualStoreUpdate=True,preparedCrashRollback=True,savedDataPreserved=True,subscriptionPersisted=True,profileIsolation=True,packageRemovalVerified=True,authorizationCleanupVerified=True,actualInputActions=len(actions),captures=phases,visualReview='pending')
+                (evidence/'result.json').write_text(json.dumps(result,indent=2));return
             if args.offline_matrix:
                 def manifest(active):return evidence/'data/Isolde/packages/profiles'/active/'plex/1.0.0/manifest.json'
                 def activation(active):return config/'profiles'/active/'installed-apps.json'
@@ -357,7 +473,9 @@ def main():
                 capture("storeandroidinstalled")
                 keys("Return")
                 expect(lambda:'Android app session ready "smarttube"' in (evidence/"shell.log").read_text(),"Store did not launch Android")
-                time.sleep(8);capture("storeandroidopen") # Host runner sends only the VM's remote Home key.
+                time.sleep(8);capture("storeandroidmenu") # Host sends physical Confirm to selected public content.
+                time.sleep(15);capture("storeandroidcontent")
+                capture("storeandroidopen") # Host runner sends only the VM's remote Home key.
                 capture("storeandroidclosed")
                 before=state.read_bytes()
                 keys("Down","Return");capture("storeandroidremove");keys('Return')

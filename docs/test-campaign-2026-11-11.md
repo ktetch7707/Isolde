@@ -1417,3 +1417,58 @@ fault/profile/containment acceptance. One final runner assertion initially
 misclassified the deliberately denied --root-job probe as a grant; it now checks
 that the grant list contains only prepare/recover and root-job is a false probe.
 Final runner self-tests pass121/121 in guest-maintenance-self-tests-1794511182821065611.log (first false assertion retained separately). Maintenance itself reports unable to reach its3 GiB cleanup target; do not label Configure as passed. Free space remains above the2 GiB test minimum. No host cleanup, lowered gate or extra application run. All temporary rules removed; installed lifecycle evidence remains valid.
+
+### T29 installed signed updates and crash recovery — 2026-11-12
+Installed g attempt20261112-113406-693 passes store-updates. Evidence:
+`build/vm-oracle/store-android-20261112-g/report/evidence-store-updates-1794512334084308841/isolde-components-acceptance-store-3nbwe4zh/result.json`
+and adjacent `store-update-evidence.json`. All ten captures reviewed in contact
+sheets store-updates-g-00/01.jpg. Actual signed NewPipe1014 fixture baseline,
+prepared transaction SIGKILL before activation, production recover preserving
+save and removing uncommitted package/runtime; actual Store1015 update, visible
+progress, cancel-first consent, subscription persistence, cold reopening,
+second-profile absence/stale request refusal and verified removal pass.
+Temporary exact-profile rule removed before normal service restoration. Normal
+layout hashes unchanged; service active/zero restarts. Fixture baseline is not
+claimed as UI install; g's prior real SmartTube install/open/remove remains
+applicable. No playback or actual Android ENOSPC claim. T29.2.b/.3.c/.4.b credited:
+T29=97%, overall2169/25=86.76% rounded87%,185/222 milestones.
+
+Fullscreen containment batch introduces a typed per-profile Store preference,
+owned nested Wayland kiosk compositor and guest Weston setup dependency. One
+new full CTest run is required because shared AppCatalog persistence and the
+runtime/display boundary changed; narrow g reuse is insufficient. Subsequent
+harness-only installed retries reuse that passing candidate.
+
+Full h stopped at studio_performance after six passes:1080p one input498.67ms,
+limit250ms; remaining inputs/commands mostly single-digit ms. Store settings
+selection passed. No Studio movement/render source changed in this batch.
+Retain failure as BUG-125 pending diagnosis; isolated studio_performance rerun
+uses unchanged250ms gate to distinguish repeatable regression from VM stall.
+Isolated i passes all3 registrations (performance/component contracts), unchanged
+application and250ms gate. BUG-125 remains retained as non-reproduced timing
+failure, not an implementation fix. Full integration j is justified by h's named
+full-suite failure; no threshold change, Studio code change or suppressed test.
+Focused k refused reuse before compilation because no application QML delta;
+not a test failure. Direct l stopped at externalChromeRemoteBoundary: initial
+physical Up was not observed (selected/lastKey empty after native window startup).
+Embedded control test passed. BUG-126 fixture X focus readiness race: establish
+owned window focus after visible bridge readiness and XSync before first input;
+no product input change, command retry or weakened semantic assertion. Focused m
+reuses original full j applicability manually; no repeated full suite required
+for this harness/test-only batch. New Android runtime fixture not yet executed.
+m reproduces initial no-key observation despite X focus barrier: BUG-126 remains
+open. Capture shows actual page/bridge, no focus ring. Physical fixture now
+checks XTest press/release success, synchronizes each edge and holds30ms instead
+of sending both edges before any server/client processing. Semantic expectations
+unchanged; this is not a successful diagnosis until the focused run passes.
+n passes actual external Chrome and the other four Store registrations; BUG-126
+physical press/release synchronization now verified. New lifecycle fixture fails
+because its pre-existing cross-platform setUp replaces Linux fcntl with an empty
+stub. Use actual fcntl on Linux and keep the import stub only on other platforms;
+this exercises real private lock ownership rather than mocking it away.
+Final o passes all6 Store registrations, including lifecycle22 and real external
+Chrome. j original62/62 and installed14+16-frame reviews remain applicable to
+unchanged application bytes. T29 accepted100%, project2172/25=86.88% rounded87%,
+186/222 milestones. Exact scope/matrix/fixture limits in
+`store-final-acceptance-2026-11-12.md`. BUG-126 fixed; BUG-125 not reproduced and
+retained. Live-content spinner is not playback evidence; U01 handoff explicit.

@@ -21,6 +21,9 @@ Item {
             property bool onlineStoreSearch:false
             property var providerResults:[]
             property string errorString:""
+            property string androidContainment:"fullscreen"
+            property string storeSourceName:"Verified fixture"
+            function setAndroidContainment(mode){androidContainment=mode;return true}
             property int searches:0
             property string query:""
             signal packageInstalled(string appId)
@@ -28,6 +31,15 @@ Item {
             function setOnlineStoreSearch(enabled){onlineStoreSearch=enabled}
         }
         Component {id:storeDiscoveryComponent;App.AppStoreView {width:1280;height:720;catalog:discoveryCatalog;entries:[{id:"sample",name:"Sample",type:"android",storeType:"android",installed:false}]}}
+        Component {id:storePreferencesComponent;App.StoreSettingsView {width:900;height:700;catalog:discoveryCatalog}}
+        function test_android_presentation_preference_is_remote_operable(){
+            discoveryCatalog.androidContainment="fullscreen"
+            const settings=createTemporaryObject(storePreferencesComponent,tests.parent);verify(settings!==null)
+            settings.handleCommand(inputManager.navigateDown);settings.handleCommand(inputManager.navigateDown)
+            compare(settings.selectedIndex,2);settings.handleCommand(inputManager.confirm);compare(discoveryCatalog.androidContainment,"windowed")
+            settings.handleCommand(inputManager.confirm);compare(discoveryCatalog.androidContainment,"fullscreen")
+            settings.handleCommand(inputManager.navigateUp);compare(settings.selectedIndex,1)
+        }
         function test_store_explore_and_search_are_direct_online_actions(){
             discoveryCatalog.searches=0;discoveryCatalog.query="";discoveryCatalog.onlineStoreSearch=false;discoveryCatalog.providerResults=[]
             const store=createTemporaryObject(storeDiscoveryComponent,tests.parent);verify(store!==null)

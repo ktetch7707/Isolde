@@ -266,6 +266,7 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "store": ("store-acceptance.py", ['--test-authorization']),
          "store-web": ("store-acceptance.py", ["--web-only"]),
          "store-offline": ("store-acceptance.py", ["--offline-matrix"]),
+         "store-updates": ("store-acceptance.py", ["--android-updates","--test-authorization"]),
          "store-discovery": ("store-acceptance.py", ["--discovery-only"]),
          "games": ("games-acceptance.py", []),
          "emulators": ("games-acceptance.py", ["--emulator"])}
@@ -429,7 +430,11 @@ def visual_result_passed(case, result):
                 and result.get('testAuthorization') is True and result.get('authorizationCleanupVerified') is True
                 and result.get('androidConsentCancelNoWrite') is True and result.get('manifestsRemoved') is True
                 and result.get('actualInputActions',0)>0
-                and result.get('captures')==['storeandroid','storeandroidconsent','storeandroidinstalled','storeandroidopen','storeandroidclosed','storeandroidremove','storeandroidremoved','storechromium','storechromiumconsent','storechromiuminstalled','storechromiumopen','storechromiumclosed','storechromiumremove','storechromiumremoved'])
+                and result.get('captures')==['storeandroid','storeandroidconsent','storeandroidinstalled','storeandroidmenu','storeandroidcontent','storeandroidopen','storeandroidclosed','storeandroidremove','storeandroidremoved','storechromium','storechromiumconsent','storechromiuminstalled','storechromiumopen','storechromiumclosed','storechromiumremove','storechromiumremoved'])
+    if case == 'store-updates':
+        return (all(result.get(key) is True for key in ('passed','freshProfile','signedBaselineFixture','actualStoreUpdate','preparedCrashRollback','savedDataPreserved','subscriptionPersisted','profileIsolation','packageRemovalVerified','authorizationCleanupVerified'))
+            and result.get('normalProfileUsed') is False and result.get('actualInputActions',0)>0
+            and result.get('captures')==['updatebaseline','updateoffer','updateconsent','updateprogress','updateinstalled','updatesunsubscribed','updateprofilefresh','updatecold','updateremove','updateremoved'])
     if case == 'store-offline':
         proofs=result.get('networkProofs',[])
         return (all(result.get(k) is True for k in ('passed','freshProfile','profileIsolation','coldReopen','cancelNoWrite','writeFailureRollback','retryVerified','webLifecycle','repositoryFailureRecovered','manifestsRemoved'))
@@ -1506,8 +1511,15 @@ class Oracle:
             raise RuntimeError('Guest keyring prompts remain; refuse obscured visual evidence')
         atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
-    def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None):
-        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art"}: raise ValueError("Unsupported guest configuration target")
+    def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None, store_helper_digest=None):
+        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data"}: raise ValueError("Unsupported guest configuration target")
+        if target=='store-test-data':
+            payload=self.tested_payload();release=self.deployed_release(payload,target)
+            if self.command('hostname')!='isolde-test':raise RuntimeError('Guest-only fixture cleanup')
+            helper=verified_studio_helper(self.root,store_helper_digest,'store')
+            with exclusive_lock(Path('/tmp/isolde-home-components-acceptance.lock')):
+                self.stage('store-test-data',store_helper_command(self.run/'source',helper,Path(release)/'bin/isolde',['--discard-completed-data']),300)
+            return
         if target=="kodi-demo-art":
             payload=self.tested_payload();self.deployed_release(payload,target)
             if self.command('hostname')!='isolde-test' or not isinstance(demo_art_helper_digest,str) or not re.fullmatch(r'[a-f0-9]{64}',demo_art_helper_digest):raise RuntimeError('Demo artwork setup requires the tested Isolde VM and a verified helper')
@@ -1556,6 +1568,7 @@ class Oracle:
         if self.command("hostname")!="isolde-test":
             raise RuntimeError("Native configuration is restricted to Isolde-Test")
         if target=='android-store-support':
+            self.stage('android-compositor-install',['sudo','-n','/usr/bin/apt-get','install','-y','--no-install-recommends','weston'],180)
             release=self.deployed_release(payload,target);support=Path(release)/'share/isolde'
             package_root=self.run/'android-support-package';package_root.mkdir(mode=0o700)
             bootstrap="import importlib.util,sys;from pathlib import Path;s=importlib.util.spec_from_file_location('setup',Path(sys.argv[1])/'android-setup.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);m.build_support(Path(sys.argv[1]),Path(sys.argv[2]))"
@@ -1679,7 +1692,7 @@ class Oracle:
     def visual(self, case, installed=False, reopen_helper_digest=None, feature_helper_digest=None, studio_helper_digest=None, history_helper_digest=None, reference_helper_digest=None, reference_collections_digest=None, diagnostic=False, store_helper_digest=None):
         self.prepare_visual_desktop()
         if diagnostic and installed:raise RuntimeError('Diagnostic payloads cannot be deployed or tested as installed')
-        if store_helper_digest and case not in ('store','store-web','store-offline','store-discovery'):raise RuntimeError('Store helper is Store-only')
+        if store_helper_digest and case not in ('store','store-web','store-offline','store-updates','store-discovery'):raise RuntimeError('Store helper is Store-only')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
         if history_helper_digest and case not in ('history','pages','playlists','games','emulators'):raise RuntimeError('Unsupported library helper case')
@@ -1744,7 +1757,7 @@ class Oracle:
                 evidence.add(Path(match.group()))
         try:
             # The existing harness lock is still authoritative for the graphical session.
-            self.stage("visual-" + case, command, 1740 if case in {"themes","guide-lifecycle","guide-features"} else 900 if case in ("studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","emulators") else 480, on_line=line_output)
+            self.stage("visual-" + case, command, 1740 if case in {"themes","guide-lifecycle","guide-features"} else 900 if case in ("studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","store-updates","emulators") else 480, on_line=line_output)
             results = [json.loads((p / "result.json").read_text()) for p in evidence if (p / "result.json").is_file()]
             if not results or not all(visual_result_passed(case, r) for r in results):
                 raise RuntimeError("Harness exited without a passing result.json")
@@ -1754,7 +1767,7 @@ class Oracle:
                         visualAcceptance="diagnostic_only" if diagnostic else "pending", semanticAcceptance="not_verified", executable=str(executable))
         finally:
             # This guard also runs on timeouts/SIGHUP when a harness cannot reach its own finally.
-            if case=='store' and store_helper_digest:
+            if case in ('store','store-updates') and store_helper_digest:
                 for directory in evidence:
                     if (directory/'authorization.json').is_file():
                         cleanup=store_helper_command(source,helper,executable,['--revoke-authorization',str(directory)])
@@ -1991,7 +2004,7 @@ def collect_evidence(run, case, directories):
         for directory in sorted(directories):
             if not re.fullmatch(r"/tmp/isolde-(?:components-acceptance|reference-config|tv-acceptance)-[A-Za-z0-9_-]+", str(directory)):
                 raise RuntimeError("Unexpected evidence root")
-            paths = [directory / name for name in ("result.json", "shell.log", "android.log", "window-discovery.json", "attempt-config.json", "provider-requests.json", "authorization.json", "authorization-enabled.json", "authorization-cleanup.json")]
+            paths = [directory / name for name in ("result.json", "shell.log", "android.log", "window-discovery.json", "attempt-config.json", "provider-requests.json", "authorization.json", "authorization-enabled.json", "authorization-cleanup.json", "store-update-evidence.json")]
             if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
                 paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json","guide-soak-ready.json")]
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
@@ -2063,7 +2076,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-updates|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
@@ -2498,7 +2511,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")
@@ -2644,7 +2657,7 @@ def main():
             elif args.action == "diagnose":
                 oracle.diagnose(args.native_app)
             elif args.action == "configure":
-                oracle.configure_native(args.configure_target,args.maintenance_tests_digest,args.demo_art_helper_digest)
+                oracle.configure_native(args.configure_target,args.maintenance_tests_digest,args.demo_art_helper_digest,args.store_helper_digest)
             elif args.action == "recover":
                 if args.orphan_visual_pid:
                     layouts = oracle.layout_hashes();service = oracle.service();links = oracle.links()

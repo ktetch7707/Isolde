@@ -79,6 +79,7 @@ def main():
     x.XFetchName.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.POINTER(ctypes.c_char_p)]
     x.XFree.argtypes=[ctypes.c_void_p]
     x.XSetInputFocus.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.c_int,ctypes.c_ulong]
+    x.XSync.argtypes=[ctypes.c_void_p,ctypes.c_int]
     class Attributes(ctypes.Structure):
         _fields_=[('x',ctypes.c_int),('y',ctypes.c_int),('width',ctypes.c_int),('height',ctypes.c_int),('border',ctypes.c_int),('depth',ctypes.c_int),('visual',ctypes.c_void_p),('root',ctypes.c_ulong),('class_',ctypes.c_int),('bit_gravity',ctypes.c_int),('win_gravity',ctypes.c_int),('backing_store',ctypes.c_int),('backing_planes',ctypes.c_ulong),('backing_pixel',ctypes.c_ulong),('save_under',ctypes.c_int),('colormap',ctypes.c_ulong),('map_installed',ctypes.c_int),('map_state',ctypes.c_int),('all_event_masks',ctypes.c_long),('your_event_mask',ctypes.c_long),('do_not_propagate_mask',ctypes.c_long),('override_redirect',ctypes.c_int),('screen',ctypes.c_void_p)]
     x.XGetWindowAttributes.argtypes=[ctypes.c_void_p,ctypes.c_ulong,ctypes.POINTER(Attributes)]
@@ -113,7 +114,10 @@ def main():
                 for name in names:
                     code=x.XKeysymToKeycode(display,x.XStringToKeysym(name.encode()))
                     if not code:raise RuntimeError('Missing physical key '+name)
-                    xt.XTestFakeKeyEvent(display,code,1,0);xt.XTestFakeKeyEvent(display,code,0,0);x.XFlush(display)
+                    if not xt.XTestFakeKeyEvent(display,code,1,0):raise RuntimeError('Physical key press failed: '+name)
+                    x.XSync(display,0);time.sleep(.03)
+                    if not xt.XTestFakeKeyEvent(display,code,0,0):raise RuntimeError('Physical key release failed: '+name)
+                    x.XSync(display,0)
                     actions.append(name);time.sleep(.1)
             def capture(name):
                 # Read only our Xvfb framebuffer. Encode RGB PNG without an image dependency.
@@ -153,6 +157,11 @@ def main():
             if not window:raise RuntimeError('Private Chrome window not found: '+json.dumps(names))
             x.XSetInputFocus(display,window,1,0);x.XFlush(display)
             expect(lambda:state.get('remoteHint') is True,'production remote bridge is visibly ready',15)
+            # Chrome may finish mapping/activating its native window after discovery.
+            # Establish focus after bridge readiness, then drain the X server request
+            # before the first physical key; a page-ready report is not an X barrier.
+            x.XSetInputFocus(display,window,1,0);x.XSync(display,0)
+            expect(lambda:state.get('focused') is True,'owned browser document has input focus')
             expect(lambda:state.get('focused') is True,'owned Chrome page has keyboard focus')
             # The mutation observer may already select the first control while
             # Chrome maps its window. Up establishes the same visible origin

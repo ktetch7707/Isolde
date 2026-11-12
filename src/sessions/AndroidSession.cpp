@@ -34,6 +34,7 @@ void AndroidSession::launch()
             const auto event = QJsonDocument::fromJson(m_events.left(split)).object();
             m_events.remove(0, split+1);
             if (event.value("event").toString() == "ready") { qInfo() << "Android app session ready" << definition().id; setState(State::Running); }
+            if(event.value("event").toString()=="containment")qInfo()<<"Android containment ready"<<definition().id<<event.value("backend").toString()<<event.value("owned").toBool();
             if (event.value("event").toString() == "error") setError(event.value("message").toString().left(512));
         }
     });

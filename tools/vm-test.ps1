@@ -17,14 +17,14 @@ param(
     [switch]$GuideDiagnostics,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','browser-test-tools','audio-test-recover','artifacts','desktop-prompts','kodi-demo-art')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','browser-test-tools','audio-test-recover','artifacts','desktop-prompts','kodi-demo-art','store-test-data')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
 if ($Diagnostic -and ($Action -ne 'Visual' -or $Installed)) { throw 'Diagnostic visuals are staged-only; installation/deployment is prohibited.' }
 if ($ResumeRunId -and ($Action -ne 'Test' -or $Suite -ne 'all' -or $ReuseFullRun)) { throw 'Campaign resumption requires Test -Suite all, without coverage reuse.' }
 if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
-$validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-discovery','games','emulators')
+$validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-updates','store-discovery','games','emulators')
 $Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })
 $invalidCases = @($Cases | Where-Object { $_ -notin $validCases })
 if ($FrozenReferenceHelpers -and ($Action -ne 'Visual' -or @($Cases | Where-Object { $_ -notin @('lounge','pastel') }).Count)) { throw 'FrozenReferenceHelpers requires Visual with Lounge/Pastel only.' }
@@ -102,7 +102,7 @@ try {
             $storeDigest = ''
             $referenceDigest = ''
             $referenceCollectionsDigest = ''
-            if ($case -in @('store','store-web','store-offline','store-discovery')) {
+            if ($case -in @('store','store-web','store-offline','store-updates','store-discovery')) {
                 $helper = Join-Path $PSScriptRoot 'store-acceptance.py'
                 $storeDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/store-helper-$storeDigest.py")) -TimeoutSeconds 30 -Log $transport
@@ -153,6 +153,12 @@ try {
         if ($ReuseFullRun) { $command += " --reuse-full-run $ReuseFullRun" }
         if ($Action -eq 'Diagnose') { $command += " --native-app $NativeApp" }
         if ($Action -eq 'Configure') { $command += " --configure-target $ConfigureTarget" }
+        if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'store-test-data') {
+            $helper = Join-Path $PSScriptRoot 'store-acceptance.py'
+            $helperHash = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
+            $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/store-helper-$helperHash.py")) -TimeoutSeconds 30 -Log $transport
+            $command += " --store-helper-digest $helperHash"
+        }
         if ($Action -eq 'Configure' -and $ConfigureTarget -eq 'kodi-demo-art') {
             $demoHelper = Join-Path $PSScriptRoot 'kodi-demo-art.py'
             $demoHash = (Get-FileHash -LiteralPath $demoHelper -Algorithm SHA256).Hash.ToLowerInvariant()

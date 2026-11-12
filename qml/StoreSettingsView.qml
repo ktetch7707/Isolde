@@ -12,11 +12,12 @@ Item {
     readonly property color focusColor:shell.focus
     readonly property real textScale:shell.textScale
     function handleCommand(command) {
-        if(command===inputManager.navigateUp)selectedIndex=0
-        else if(command===inputManager.navigateDown)selectedIndex=1
+        if(command===inputManager.navigateUp)selectedIndex=Math.max(0,selectedIndex-1)
+        else if(command===inputManager.navigateDown)selectedIndex=Math.min(2,selectedIndex+1)
         else if(command===inputManager.confirm){
             if(selectedIndex===0)catalog.setOnlineStoreSearch(!catalog.onlineStoreSearch)
-            else if(catalog.onlineStoreSearch)catalog.searchStore("")
+            else if(selectedIndex===1 && catalog.onlineStoreSearch)catalog.searchStore("")
+            else if(selectedIndex===2)catalog.setAndroidContainment(catalog.androidContainment==="fullscreen"?"windowed":"fullscreen")
         }
     }
     Column {
@@ -25,7 +26,7 @@ Item {
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:qsTr("Account-free Android apps from verified repositories. Chromium apps use websites you choose.");wrapMode:Text.WordWrap;font.pixelSize:19*root.textScale;color:root.ink}
         Text {font.family:shell.fontFamily;textFormat:Text.PlainText;width:parent.width;text:root.catalog.storeSourceName;wrapMode:Text.WordWrap;font.pixelSize:18*root.textScale;color:shell.muted}
         Repeater {
-            model:[qsTr("Online search: ")+(root.catalog.onlineStoreSearch?qsTr("On"):qsTr("Off")),qsTr("Refresh online catalog")]
+            model:[qsTr("Online search: ")+(root.catalog.onlineStoreSearch?qsTr("On"):qsTr("Off")),qsTr("Refresh online catalog"),qsTr("Android view: ")+(root.catalog.androidContainment==="windowed"?qsTr("Windowed"):qsTr("Fullscreen"))]
             delegate:Rectangle {
                 required property int index;required property string modelData
                 objectName:"storePreferenceRow-"+index

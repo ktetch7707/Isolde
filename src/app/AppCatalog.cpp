@@ -331,7 +331,7 @@ bool AppCatalog::load(const QString &catalogPath, const QString &statePath, cons
 
     const auto options=document.object().value("store").toObject();
     if(!options.isEmpty()) {
-        const QSet<QString> allowed{"platforms","columns","spacing","cardHeight","detailRatio","webBackend","webDesktopId","webCategory","appSection","appAccent"};
+        const QSet<QString> allowed{"platforms","columns","spacing","cardHeight","detailRatio","webBackend","webDesktopId","webCategory","appSection","appAccent","androidContainment"};
         for(const auto &key:options.keys())if(!allowed.contains(key)){setError(tr("Unknown Store presentation field."));return false;}
         for(const auto &key:QStringList{"columns","spacing","cardHeight"})
             if(!options.value(key).isDouble() || options.value(key).toDouble()!=options.value(key).toInt()){setError(tr("Store sizes must use whole numbers."));return false;}
@@ -349,7 +349,10 @@ bool AppCatalog::load(const QString &catalogPath, const QString &statePath, cons
             for(const auto &key:p.keys())if(key!="type" && key!="label"){setError(tr("Unknown Store platform field."));return false;}
             if((type!="web" && type!="android") || types.contains(type) || p.value("label").toString().isEmpty() || p.value("label").toString().size()>40){setError(tr("Invalid Store platforms."));return false;}types.insert(type);}
     }
+    if(options.contains("androidContainment") && !options.value("androidContainment").isString()){setError(tr("Invalid Android presentation mode."));return false;}
     m_storeOptions=options.toVariantMap();
+    m_androidContainment=options.value("androidContainment").toString("fullscreen"); // Legacy catalog compatibility.
+    if(m_androidContainment!="fullscreen" && m_androidContainment!="windowed"){setError(tr("Invalid Android presentation mode."));return false;}
     QVector<Entry> loaded;
     QSet<QString> ids;
     const QDir catalogDirectory(QFileInfo(source).absolutePath());
@@ -454,6 +457,11 @@ bool AppCatalog::load(const QString &catalogPath, const QString &statePath, cons
         if(state.size()>1024*1024){setError(tr("App activation state exceeds its limit."));return false;}
         const auto stateObject = QJsonDocument::fromJson(state.readAll()).object();
         if(stateReadPath==m_statePath){
+            const auto presentation=stateObject.value("androidContainment");
+            if(!presentation.isUndefined()){
+                if(!presentation.isString() || (presentation!="fullscreen" && presentation!="windowed")){setError(tr("Invalid Android presentation preference."));return false;}
+                m_androidContainment=presentation.toString();
+            }
             const auto disabled=stateObject.value("updatesDisabled");
             if(!disabled.isUndefined() && (!disabled.isArray() || disabled.toArray().size()>256)){setError(tr("Invalid update preferences."));return false;}
             for(const auto &value:disabled.toArray()){
@@ -924,7 +932,7 @@ bool AppCatalog::saveState()
     QSaveFile file(m_statePath);
     const auto data = QJsonDocument(QJsonObject{{"schemaVersion", 1}, {"installed", installed},
                                                 {"packageStates", packageStates},
-                                                {"failureReasons", failureReasons},{"customPackages",customPackages},{"updatesDisabled",disabled},{"storeTransaction",m_storeTransaction}}).toJson();
+                                                {"failureReasons", failureReasons},{"customPackages",customPackages},{"updatesDisabled",disabled},{"storeTransaction",m_storeTransaction},{"androidContainment",m_androidContainment}}).toJson();
     if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
         setError(tr("Unable to save app installation state."));
         emit operationFailed(m_errorString);

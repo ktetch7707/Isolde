@@ -834,7 +834,12 @@ class OracleTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'inspector-base','studio_selection')
 
     def test_theme_journey_fixture_and_required_receipt_boundaries(self):
-        lifecycle=dict(passed=True,androidLifecycle=True,chromiumLifecycle=True,androidPackageRemovalVerified=True,freshProfile=True,normalProfileUsed=False,playbackVerified=False,testAuthorization=True,authorizationCleanupVerified=True,androidConsentCancelNoWrite=True,manifestsRemoved=True,actualInputActions=27,captures=['storeandroid','storeandroidconsent','storeandroidinstalled','storeandroidopen','storeandroidclosed','storeandroidremove','storeandroidremoved','storechromium','storechromiumconsent','storechromiuminstalled','storechromiumopen','storechromiumclosed','storechromiumremove','storechromiumremoved'])
+        updates=dict.fromkeys(('passed','freshProfile','signedBaselineFixture','actualStoreUpdate','preparedCrashRollback','savedDataPreserved','subscriptionPersisted','profileIsolation','packageRemovalVerified','authorizationCleanupVerified'),True)
+        updates.update(normalProfileUsed=False,actualInputActions=30,captures=['updatebaseline','updateoffer','updateconsent','updateprogress','updateinstalled','updatesunsubscribed','updateprofilefresh','updatecold','updateremove','updateremoved'])
+        self.assertTrue(oracle.visual_result_passed('store-updates',updates))
+        for field in ('actualStoreUpdate','preparedCrashRollback','profileIsolation','authorizationCleanupVerified'):
+            self.assertFalse(oracle.visual_result_passed('store-updates',dict(updates,**{field:False})))
+        lifecycle=dict(passed=True,androidLifecycle=True,chromiumLifecycle=True,androidPackageRemovalVerified=True,freshProfile=True,normalProfileUsed=False,playbackVerified=False,testAuthorization=True,authorizationCleanupVerified=True,androidConsentCancelNoWrite=True,manifestsRemoved=True,actualInputActions=27,captures=['storeandroid','storeandroidconsent','storeandroidinstalled','storeandroidmenu','storeandroidcontent','storeandroidopen','storeandroidclosed','storeandroidremove','storeandroidremoved','storechromium','storechromiumconsent','storechromiuminstalled','storechromiumopen','storechromiumclosed','storechromiumremove','storechromiumremoved'])
         self.assertTrue(oracle.visual_result_passed('store',lifecycle))
         self.assertFalse(oracle.visual_result_passed('store',dict(lifecycle,authorizationCleanupVerified=False)))
         self.assertFalse(oracle.visual_result_passed('store',dict(lifecycle,testAuthorization=False)))

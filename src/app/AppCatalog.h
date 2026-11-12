@@ -36,6 +36,9 @@ class AppCatalog final : public QObject {
     Q_PROPERTY(QString operationName READ operationName NOTIFY entriesChanged)
 
 public:
+    Q_PROPERTY(QString androidContainment READ androidContainment NOTIFY entriesChanged)
+    QString androidContainment() const { return m_androidContainment; }
+    Q_INVOKABLE bool setAndroidContainment(const QString &mode);
     explicit AppCatalog(AppRegistry *registry, QObject *parent = nullptr);
     ~AppCatalog() override;
     QVariantMap storeOptions() const { return m_storeOptions; }
@@ -125,6 +128,7 @@ private:
     QHash<QString, QString> m_packageStates;
     QHash<QString, QString> m_failureReasons;
     QString m_statePath;
+    QString m_androidContainment;
     QString m_installRoot;
     QString m_errorString;
     QString m_legacyInstallRoot;
