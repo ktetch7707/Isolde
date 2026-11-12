@@ -8,7 +8,7 @@ this supersedes the older rerun deferrals below. Resume
 `round2-20261111-b` is the frozen full-suite attempt. Preserve the six existing
 Studio test-file edits. Diagnose the first named failure before resuming
 unattempted registrations; then exercise missing/source-affected VM workflows.
-Current acceptance86% (2146/25),176/216 milestones.
+Current acceptance86% (2148/25),177/218 milestones.
 Latest browser candidate web-controls-s installed c2b0ac24fadcf2f7652d986b.
 Six Store/120 runner tests pass with original r61/61 reuse;26 physical remote
 keys verify real Chrome text Cancel/Done, Menu, explicit scroll, history Back and

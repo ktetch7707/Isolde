@@ -3,6 +3,9 @@
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
+#include <QVariantList>
+#include <QMap>
+#include <QTimer>
 
 class InputManager final : public QObject {
     Q_OBJECT
@@ -21,6 +24,11 @@ class InputManager final : public QObject {
     Q_PROPERTY(Command playPause READ playPause CONSTANT)
     Q_PROPERTY(Command menu READ menu CONSTANT)
     Q_PROPERTY(Command search READ search CONSTANT)
+    Q_PROPERTY(QVariantList bindingRows READ bindingRows NOTIFY bindingsChanged)
+    Q_PROPERTY(bool bindingActive READ bindingActive NOTIFY bindingsChanged)
+    Q_PROPERTY(bool listening READ listening NOTIFY bindingsChanged)
+    Q_PROPERTY(QString bindingStatus READ bindingStatus NOTIFY bindingsChanged)
+    Q_PROPERTY(QString errorString READ errorString NOTIFY bindingsChanged)
 
 public:
     enum Command {
@@ -43,9 +51,21 @@ public:
     Q_ENUM(Command)
 
     explicit InputManager(QObject *parent = nullptr);
+    explicit InputManager(const QString &storagePath, QObject *parent = nullptr);
+    ~InputManager() override;
     Q_INVOKABLE Command commandForKey(int key) const;
     Q_INVOKABLE QString labelForCommand(Command command) const;
     Q_INVOKABLE QString webRemoteScript(const QVariantMap &appearance) const;
+    QVariantList bindingRows() const;
+    bool bindingActive() const { return m_target != None; }
+    bool listening() const { return bindingActive() && !m_candidate; }
+    QString bindingStatus() const { return m_status; }
+    QString errorString() const { return m_error; }
+    Q_INVOKABLE bool beginBinding(int command);
+    Q_INVOKABLE bool saveBinding();
+    Q_INVOKABLE void cancelBinding();
+    Q_INVOKABLE bool clearBinding(int command);
+    Q_INVOKABLE bool resetBindings();
 
     Command none() const { return None; }
     Command navigateUp() const { return NavigateUp; }
@@ -62,4 +82,18 @@ public:
     Command playPause() const { return PlayPause; }
     Command menu() const { return Menu; }
     Command search() const { return Search; }
+signals:
+    void bindingsChanged();
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+private:
+    static Command defaultCommandForKey(int key);
+    bool persist(const QMap<int, int> &bindings);
+    void loadBindings();
+    QString m_storagePath, m_status, m_error;
+    QMap<int, int> m_bindings; // command -> additional key; standard keys remain available
+    Command m_target = None;
+    int m_candidate = 0;
+    int m_releaseKey = 0;
+    QTimer m_captureDeadline;
 };

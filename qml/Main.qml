@@ -188,6 +188,9 @@ Window {
     }
 
     function handleCommand(command) {
+        if (sessionManager.active && sessionManager.currentAppType === "settings" && settings.remoteEditing) {
+            settings.handleCommand(command); return
+        }
         if (typeof interfaceSounds !== "undefined" && !ambientActive) interfaceSounds.playCommand(command)
         if(appVpn.busy && appVpn.pendingApp){
             if(command===inputManager.back || command===inputManager.home)appVpn.cancel()

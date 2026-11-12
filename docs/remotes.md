@@ -1,5 +1,14 @@
 # Remote compatibility and setup plan
 
+November12 controller-style binding implementation: [Remote Setup flow and
+supported matrix](remote-bindings-2026-11-12.md). Categorized action rows now
+capture additional key-event bindings with explicit review/save/cancel,
+conflict refusal, profile isolation and default recovery. This supersedes the
+older statement below that all remapping is future work. Raw-device discovery,
+pairing/CEC reception, reassignment of existing conflicting standard keys and
+custom external-app controls remain outside this implementation's support
+matrix; see its verification ledger for current evidence.
+
 Isolde must work with a physical remote in a way that feels friendly to a normal living-room user. A keyboard is acceptable for development and recovery, but not as the primary product experience.
 
 ## Compatibility targets

@@ -106,7 +106,8 @@ struct ProfileRuntime {
     QQmlApplicationEngine engine;
 
     explicit ProfileRuntime(ProfileManager &profiles, bool initialLaunch, AudioSettings &audio, CaptureController &capture)
-        : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()) {
+        : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()),
+          input(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("remote-bindings.json")) {
     actions.setAudioSettings(&audioSettings);
     const auto kodiAddons=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+profiles.activeId()+"/kodi/home/.kodi/addons";
     interfaceSounds=std::make_unique<InterfaceSounds>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("interface-sounds.json"),

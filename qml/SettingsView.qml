@@ -131,8 +131,10 @@ Item {
         if (categoryRows.length && route) route = ""
         else { route = ""; inPage = false }
     }
+    readonly property bool remoteEditing: inPage && route === "remotes" && remotePage.editing
 
     function handleCommand(command) {
+        if (remoteEditing) { remotePage.handleCommand(command); return }
         if (arranging) { handleCategoryArrangement(command); return }
         if (!inPage) {
             if (command === inputManager.navigateUp) selectedSection = Math.max(0, selectedSection - 1)

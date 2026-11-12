@@ -151,7 +151,7 @@ def guide_backend_probe(home):
 
 REPAIR_TESTS = {"studio_shell","games_remote_ui","component_contracts","home_component_navigation","studio_navigation","studio_behavior","audio_backend","games_provisioning","steam_games","optical_exec_adapter","native_profile_isolation","isolde_tests"}
 RUNTIME_TESTS = {"games_provisioning","steam_games","portable_game_installer","optical_exec_adapter","native_profile_isolation"}
-SUITES = {"all": None, "runtime_contracts":"isolde_native_sandbox_tests", "campaign_repairs": ("isolde_studio_quick_tests","isolde_games_ui_tests","isolde_component_tests","isolde_home_navigation_tests","isolde_audio_tests","isolde_native_sandbox_tests","isolde_tests"), "component_contracts": "isolde_component_tests",
+SUITES = {"all": None, "remote_bindings":("isolde_remote_binding_tests","isolde"), "runtime_contracts":"isolde_native_sandbox_tests", "campaign_repairs": ("isolde_studio_quick_tests","isolde_games_ui_tests","isolde_component_tests","isolde_home_navigation_tests","isolde_audio_tests","isolde_native_sandbox_tests","isolde_tests"), "component_contracts": "isolde_component_tests",
           "sources": ("isolde_tests", "isolde_component_tests", "isolde_studio_quick_tests", "isolde_home_navigation_tests"),
           "guide_contracts": "isolde_guide_tests",
           "guide_remote_ui": "isolde_guide_ui_tests",

@@ -142,6 +142,7 @@ add_library(isolde_core STATIC
 target_include_directories(isolde_core PUBLIC src)
 target_compile_definitions(isolde_core PRIVATE ISOLDE_GAME_RUNTIME_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/config/game-runtimes.json")
 target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort Qt6::Sql)
+qt_add_resources(isolde_core "remote_buttons" PREFIX "/" FILES config/remote-buttons.json)
 
 qt_add_executable(isolde src/main.cpp)
 qt_add_executable(isolde-recovery src/recovery/main.cpp)
@@ -507,6 +508,11 @@ if(BUILD_TESTING)
         tests/tst_isolde.cpp
     )
     target_link_libraries(isolde_tests PRIVATE isolde_core Qt6::Test)
+    qt_add_executable(isolde_remote_binding_tests tests/remote_bindings.cpp)
+    target_link_libraries(isolde_remote_binding_tests PRIVATE isolde_core Qt6::Test Qt6::Qml Qt6::Quick)
+    target_compile_definitions(isolde_remote_binding_tests PRIVATE REMOTE_TEST_QML="${CMAKE_CURRENT_SOURCE_DIR}/tests/RemoteBindingTest.qml")
+    add_test(NAME remote_bindings COMMAND isolde_remote_binding_tests)
+    set_tests_properties(remote_bindings PROPERTIES TIMEOUT 45 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
     qt_add_executable(isolde_t14_tests tests/tst_t14.cpp)
     target_link_libraries(isolde_t14_tests PRIVATE isolde_core Qt6::Test Qt6::Network Qt6::Qml Qt6::Quick)
     target_compile_definitions(isolde_t14_tests PRIVATE
