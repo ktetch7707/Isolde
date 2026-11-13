@@ -147,8 +147,8 @@ class Playlists:
                 raise ValueError("Only .m3u and .m3u8 playlists can be reordered.")
             lines=text.split("\n")
             members=[line for line in lines if line and not line.startswith("#")]
-            if any(i>=len(members) for i in order):
-                raise ValueError("Order references items beyond the playlist's members.")
+            if len(order)!=len(members) or set(order)!=set(range(len(members))):
+                raise ValueError("Order must include every playlist member exactly once.")
             reordered=[members[i] for i in order]
             out_lines=[]
             member_idx=0

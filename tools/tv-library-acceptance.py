@@ -183,8 +183,11 @@ if ''' + repr(str(imported)) + ''' in selected:
         provider_setup = '''import xbmc, xbmcaddon, time
 deadline=time.monotonic()+45
 while True:
-    provider=xbmcaddon.Addon("metadata.themoviedb.org.python")
-    if provider.getSetting("fetch_posters") in ("true","false"): break
+    try:
+        provider=xbmcaddon.Addon("metadata.themoviedb.org.python")
+        if provider.getSetting("fetch_posters") in ("true","false"): break
+    except RuntimeError:
+        pass  # Kodi registers bundled providers asynchronously on a fresh profile.
     if time.monotonic()>deadline: raise RuntimeError("TMDB provider artwork settings unavailable")
     xbmc.sleep(500)
 for setting in ("fetch_posters","fanart","landscape","keyart"):
@@ -489,7 +492,7 @@ provider.setSettingString("searchlanguage","en-US")
                 # Return to the shell's real Movies view, without playing the clip.
                 run("wmctrl","-i","-a",shell,env=env)
                 key(shell,"Home"); key(shell,"m",modifiers=4); time.sleep(1)
-                key(shell,"Return"); time.sleep(2); key(shell,"Down"); time.sleep(2)
+                key(shell,"Down"); time.sleep(2)
                 print("MOVIEART_READY "+str(evidence),flush=True)
                 wait(lambda:(evidence/"movieart-captured").exists(),"Movie artwork frame captured",seconds=110)
                 for path,digest in hashes.items(): assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
@@ -603,20 +606,27 @@ provider.setSettingString("searchlanguage","en-US")
                 assert any(p["playlistName"]=="Fixture episodes.xsp" for p in catalog)
                 created_index=next(i for i,p in enumerate(catalog) if p["playlistName"]==created[0].name)
                 press("Down",created_index+2);press("Return");time.sleep(1)
-                playlist_capture("playlistlibrary")
                 saved_items=rpc(directory,"Isolde.GetPlaylistItems",{"name":created[0].name,"kind":"shows","start":0,"end":50})["tvshows"]
                 assert {i["tvshowid"] for i in saved_items}=={show_id}
                 result=rpc(directory,"Isolde.GetPlaylistItems",{"name":"Fixture episodes.xsp","kind":"shows","start":0,"end":50})
                 items=result["tvshows"]
                 assert len(items)==3 and {i["episodeid"] for i in items}=={i["episodeid"] for i in eps}
                 assert all(i["playlistMediaType"]=="episode" and "file" not in i for i in items)
-                rpc(directory,"Isolde.PlayEpisode",{"episodeid":items[0]["episodeid"],"resume":False})
+                # Open the real episode playlist through the existing management UI.
+                press("Escape");press("Up",20)
+                fixture_index=next(i for i,p in enumerate(catalog) if p["playlistName"]=="Fixture episodes.xsp")
+                press("Down",fixture_index+2);press("Return");press("Return");time.sleep(2)
+                playlist_capture("playlistlibrary")
+                press("Down");press("Return")
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Real playlist episode playing")
                 playlist_capture("playlistplaying")
-                rpc(directory,"Isolde.PlaybackControl",{"action":"pause"})
+                key("kodi","Return")  # Focused on-screen Pause control.
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Real playlist episode paused")
                 playlist_capture("playlistpaused")
-                rpc(directory,"Isolde.PlaybackControl",{"action":"stop"})
+                # Kodi logs rejected input during the OSD closing animation.
+                # Let that animation settle before the managed Back -> Stop key.
+                time.sleep(3)
+                key("kodi","Escape")
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Real playlist episode stopped")
                 run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
                 playlist_capture("playlistreturned")

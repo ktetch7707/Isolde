@@ -117,6 +117,11 @@ struct ProfileRuntime {
     QObject::connect(&actions,&ActionDispatcher::rejected,interfaceSounds.get(),[this](const QString &){interfaceSounds->playEvent("error");});
     QObject::connect(&sessions,&SessionManager::sessionRejected,interfaceSounds.get(),[this](const QString &){interfaceSounds->playEvent("error");});
     catalog.setStoreProvider(&storeProvider);
+    kodiImporter.setBackendGuard([this]{
+        if(kodi.playbackActive() || sessions.currentAppId()=="kodi" || desktopMode.active())return false;
+        kodiService.suspend(true);return kodiService.canOpenApplication();
+    },[this]{if(setup.complete())kodiService.suspend(false);});
+    if(kodiImporter.recoveryPending())QTimer::singleShot(0,&kodiImporter,&KodiImporter::scanExistingKodi);
     if (initialLaunch && QCoreApplication::arguments().contains("--setup")) setup.restart();
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
     engine.rootContext()->setContextProperty(QStringLiteral("componentHealth"), &componentHealth);
@@ -304,8 +309,8 @@ struct ProfileRuntime {
             window->requestActivate();
         }
     });
-    QObject::connect(&setup, &SetupState::changed, &kodiService, [this] { if (setup.complete()) kodiService.start(); });
-    if (setup.complete()) QTimer::singleShot(1500, &kodiService, &KodiService::start);
+    QObject::connect(&setup, &SetupState::changed, &kodiService, [this] { if (setup.complete() && !kodiImporter.importInProgress() && !kodiImporter.recoveryPending()) kodiService.start(); });
+    if (setup.complete()) QTimer::singleShot(1500, &kodiService, [this]{if(!kodiImporter.importInProgress() && !kodiImporter.recoveryPending())kodiService.start();});
     const QStringList arguments = QCoreApplication::arguments();
     for (const auto &argument : arguments) {
         if (initialLaunch && setup.complete() && argument.startsWith(QStringLiteral("--launch-app="))) {
@@ -320,6 +325,7 @@ struct ProfileRuntime {
     }
     }
     ~ProfileRuntime() {
+        kodiImporter.shutdown();
         interfaceSounds->setSuppressed(true);
         pageData.invalidate("This profile is no longer active.");
         guide->invalidate();

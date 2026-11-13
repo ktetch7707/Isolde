@@ -425,3 +425,30 @@ passes. BUG-127/128 fixed. Overall87.56% rounded88%,188/222. Retain BUG-125
 intermittent Studio frame timing diagnostic for final risk review; no fake fix.
 Commit/push this T03 logical batch preserving six Studio files, then T04 current
 Scope/Entry docs only. No live tests or authorization rule remain active.
+
+T04.1 SELECTED: split into four outcomes under unchanged1/7 task weight before
+implementation. BUG-130 importer emits success but transfers no configuration.
+BUG-131 rollback writes original-source files with QFile::copy over existing
+files and shallow backups omit nested/versioned data. Batch recursive immutable
+snapshot + isolated-profile target transaction/rollback/crash recovery, accurate
+inventory and remote UI, idle backend guard, native filesystem regression matrix.
+Never mutate original desktop Kodi, media, other profile or host data. Use one
+full task-closure run after meaningful batches; focused Kodi tests first. Current
+source full software scope is NOT implemented despite Coding100 claim; report
+actual defects, no false percentage credit. No active VM runner.
+T04.1 implementation batch ready for focused native test: snapshot helper and
+async C++/UI/backend/cancel/teardown integration,13 filesystem/SQLite/crash tests.
+Test -Suite kodi_media_client builds app plus client and runs import contracts.
+Track only new helper/test before runner snapshot. No full run until T04 closure
+or material integration need. Never infer installed/import completion from source.
+User steering: prioritize the existing acceptance journeys and fixing feature
+failures; no further test expansion except a direct existing-requirement blocker.
+T04 d focused passes both registrations (14 filesystem contracts/35 C++ media).
+Credit .1.b/.1.c independent native snapshot/import/rollback proofs; inventory and
+installed workflow stay separate. Existing installed x remains full-proven base
+for unchanged playlist feature acceptance. Run existing playlists case next;
+new import code is not installed/accepted yet. No new tests needed for that run.
+
+T04 current checkpoint: installed f release58a7c894d6ffc1b1e158d68e full63/63. Playlist attempt203323 all7 frames reviewed, actual episode play/pause/Back/exact return passes (.4.c done). Movieart attempt204701 reviewed actual Movies poster/metadata; read/display only. T04=45%, project87.92 rounded88,191/228. Native import .1.b/.1.c done; .1.a inventory and .1.d installed remain open. Complete .4.b/.4.d/.5.b/.6/.7 next; do not equate coding table with verified requirements. BUG-138 extra Studio desktop stale nested-group path retained after top-level byte-equality pass; not Kodi DesktopSession. See docs/t04-kodi-verification-2026-11-12.md. No live application test; supported artifacts maintenance pending for low guest disk/current runner self-tests. Commit/push owned batch, preserving six unrelated Studio files.
+
+Maintenance finished:123/123 current runner self-tests pass. Cleanup reclaimed1,552,723,968 bytes;2,147,745,792 free meets2 GiB test minimum, misses3 GiB maintenance target (Configure failed only that target). No unsafe cleanup or suppressed checksum/path failure. Current application service restored. No live runner. Next selected work remains T04 incomplete requirements; no routine permission needed.

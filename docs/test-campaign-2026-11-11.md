@@ -1562,3 +1562,56 @@ Normal layout hashes unchanged/service active/zero restarts. T03.4.c accepted,
 T03=100%, overall2189/25=87.56% rounded88%,188/222. Evidence and retained BUG-125
 intermittent offscreen frame-stall diagnostic in t03-search-acceptance-2026-11-12.md.
 No claimed fix/pass for the retained Studio timing failures. Next T04 by priority.
+
+T04.1 batch in progress: BUG-130 no-op import and BUG-131 shallow/ineffective
+original-source rollback replaced by unprivileged snapshot/transaction helper,
+async bounded C++ adapter, own-backend suspension/shared native lock, startup
+journal recovery and teardown cancellation. Source desktop .kodi is read-only;
+private profile replacement/rollback uses rename+fsync/journal, checksums,
+profile/source binding, no links/shared mounts/special files,4GiB/20000 entries.
+Native actual SQLite/nested-addons fixtures, deterministic write/cancel boundary
+failures and real subprocess crash recovery added. No new acceptance credit yet.
+T04.1 split adds4 open milestones under unchanged parent weight (188/226).
+Focused Kodi batch builds app and runs media client + new import contracts before
+any task-level full run. Installed workflow and remaining T04 groups stay open.
+T04 a application build passes; import-contracts fail at destination group-write
+refusal because Qt/test roots inherit VM umask002. Harden only verified
+user-owned Isolde destination/config/backup directories0700, never original
+source; source-mode preservation and destination-private assertions added.
+C++ integration now exercises real helper scan/backup/preview/import/cold read/
+rollback, complete nested files, backend guard refusal and original source bytes.
+A failure retained; run b focused after this complete permission/integration batch.
+T04 b stops at QML cache compilation after compressed confirmation callback
+changes (reserved import property/statement boundary). Use explicit bracket
+method access and statement terminators. The same batch now keeps the owned
+Kodi backend paused/locked through Backup→Preview→Import so automatic restart
+cannot stale the prior-profile snapshot; Back/hidden panel resumes without
+import, active copy Back requests safe cancellation. Complete native C++ guard/
+copy/cold/rollback test remains pending. No extra full test for this focused fix.
+T04 c native tests actually pass: import-contracts13/13 and media-client35/35,
+including real C++ scan/backup/preview/import/cold/rollback and guard refusal.
+Runner rejects count because its expected-suite set still held only the original
+media-client registration; update it to exact two names, no skip allowed.
+Final d batch adds actual stopped bridge socket/FIFO exclusion (generated IPC
+only; full config/DB data stays hashed), held backup review lock, and simulated
+private backend writes on resume so premature restart invalidates the test.
+Native tests first; installed workflow and whole-task full run still pending.
+
+BUG-132: existing playlist acceptance captures management controls during claimed playback; UI lacks Open playlist. Add actual Open action and use physical UI launch/pause/stop in the existing journey. BUG-133: management drops catalog during rename typing and refresh races async mutation; retain catalog and defer refresh to completion. BUG-134: partial reorder can index past submitted order; reject any incomplete permutation atomically. Batch fixes pending full integration and installed acceptance; no playlist credit yet.
+T04 integration full run justified by material shared backend lifecycle/import, helper packaging and playlist UI/bridge changes; prior T03 full cannot cover those boundaries. Run t04-integration-20261112-e once, then reuse its payload for existing acceptance journeys.
+
+T04 e full63/63 passed and deployed release b1acaa32277bf53597c4a145, source5137b5ffdeef379fae1681417a11a0ae06c50c73bb7c690feb849dd55c3e71af. Installed playlists attempt200832 shows actual episode list but fails physical Confirm playback. BUG-135: KodiMedia activate/playSelected dispatch by container shows rather than validated episode member type. Fix episode playlist dispatch and extend existing savedKodiPlaylistCatalogAndShelf case with exact origin return. Also route importer Back to cancellation/confirmation handling rather than closing parent immediately (BUG-136). Repeat full justified by shared playback dispatch invalidating e's movie/episode/navigation coverage; no harness/reuse expansion. Desktop/movieart were unattempted after first failure. No acceptance credit.
+
+T04 f full63/63 passed, installed58a7c894d6ffc1b1e158d68e, sourced0b2e32ed2689dd2728ce188cece041a974dd7e644ff7e8f35673f75ec10bf9b. Attempt202743 shows actual fullscreen color bars and paused OSD; episode dispatch fixed. Existing helper incorrectly used Kodi Escape as Stop (Escape dismisses OSD); use actual focused Pause and adjacent Stop via Confirm/Right/Confirm. Helper-only correction reuses f installed payload, no application suite rerun. Reviewed playing+paused frames; return still pending.
+
+Correction to Stop diagnosis: managed KodiService explicitly maps Escape/Back to Isolde Stop. Both failed logs show CGUIWindowManager ignoring input while OSD closing animation runs (action122 in first, action2 in second). Existing helper now waits3s after paused capture then sends managed Back. Do not claim default Escape behavior as root cause, or mark Stop accepted yet. No application change/full rerun.
+
+Installed playlist attempt203323-181 passes all7 reviewed frames and exact Episode1x1 return; .4.c credited under preserved original weight. Desktop selected case is Studio pointer parity, not Kodi DesktopSession: BUG-137 fixture reopen_clock stops at Page item panel, so its following move sequence never enters movement. Normalize through Find on page before repeating existing pointer journey; no application change/full run. Movieart remains unattempted after first desktop failure. Current acceptance2198/25=87.92% rounded88,191/228 milestones.
+
+BUG-138 retained: desktop Studio journey now proves top-level pointer/remote byte equality and cancel, then fails its old positional catalog path while authoring the packaged nested input group (component count never reaches11). This is an obsolete authoring-path assumption requiring named current catalog/group flow; no nested-pointer pass and no Kodi DesktopSession claim. Keep failed attempts; do not rerun blindly. This was an extra Studio check, not T04 import/desktop acceptance. Return to selected T04 movieart existing journey; all T04 unresolved requirements remain open.
+
+BUG-139 movieart failure is local fixture readiness, not yet a provider/network failure: xbmcaddon.Addon raises Unknown addon id before asynchronous registration completes (later log shows installation). Existing45s settings loop now retries that readiness exception within its original deadline. Extend the existing SHA-verified library-helper route to existing movieart case so frozen f application can be reused without rebuilding. No new acceptance scenario, no credit yet.
+
+Movieart attempt204525 passes live Kodi TMDB identity/artwork decoding and original media hashes, but reviewed capture is playback instead of the promised Movies poster view. BUG-140: helper sends Confirm after the Movies shortcut, launching the selected item despite playbackVerified=false. Remove that Confirm and repeat only this existing case. No Isolde poster/editor UI credit from the playback capture.
+
+Movieart attempt204701-920 passes actual Kodi provider matching, managed image decode, unchanged media and reviewed Movies poster/title/details. No title-art editing/source-management credit; no new percentage. Summary: docs/t04-kodi-verification-2026-11-12.md. Current f application full63/63 remains exact installed release; helper-only fixes do not require application full rerun.

@@ -10,7 +10,7 @@ Item {
     property bool showingPlayback: false
     function back() {
         if (showingPlayback) { showingPlayback=false; return true }
-        if (showingImport) { showingImport = false; return true }
+        if (showingImport) { if (!importPage.back()) showingImport = false; return true }
         if (!editingFolders) return false
         if (!folderPage.back()) editingFolders = false
         return true

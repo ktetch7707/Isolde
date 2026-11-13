@@ -304,7 +304,9 @@ void KodiMedia::activate(int index)
     if (m_busy || !m_connected || m_playbackActive || index < 0 || index >= m_movies.size()) return;
     selectIndex(index);
     const auto item = m_movies[index].toMap();
-    if (m_mediaKind == "albums") {
+    if (m_viewKind == "playlist" && item.value("mediaType").toString() == "episode") {
+        playSelected(true);
+    } else if (m_mediaKind == "albums") {
         const int album=item.value("albumid").toInt();if(album<1)return;
         m_history.append(browseState());
         restoreBrowse({"songs","album",QString::number(album),item.value("title").toString(),-1,-1,0,0});
@@ -332,7 +334,9 @@ void KodiMedia::playSelected(bool resume)
 {
     if (m_selectedIndex < 0 || m_selectedIndex >= m_movies.size()) return;
     const auto item = m_movies[m_selectedIndex].toMap();
-    if (m_mediaKind == "movies") playLibraryItem("movie", item.value("movieid").toInt(), resume);
+    if (m_viewKind == "playlist" && item.value("mediaType").toString() == "episode")
+        playLibraryItem("episode", item.value("episodeid").toInt(), resume);
+    else if (m_mediaKind == "movies") playLibraryItem("movie", item.value("movieid").toInt(), resume);
     else if (m_mediaKind == "episodes") playLibraryItem("episode", item.value("episodeid").toInt(), resume);
     else if (m_mediaKind == "songs") playLibraryItem("song", item.value("songid").toInt(), false);
     else if (m_mediaKind == "channels") playLibraryItem("channel", item.value("channelid").toInt(), false);

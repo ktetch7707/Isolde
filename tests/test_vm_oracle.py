@@ -724,6 +724,10 @@ class OracleTests(unittest.TestCase):
             command=oracle.history_helper_command(source,history_helper,executable,playlists=True);command[0]=sys.executable
             result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
             self.assertEqual(result,{'file':str(history_frozen),'args':[str(history_frozen),str(executable),'--playlists','--inspect'],'dependency':'frozen dependency'})
+            command=oracle.history_helper_command(source,history_helper,executable,movie_art=True);command[0]=sys.executable
+            result=json.loads(subprocess.run(command,check=True,capture_output=True,text=True).stdout)
+            self.assertEqual(result,{'file':str(history_frozen),'args':[str(history_frozen),str(executable),'--movie-art','--inspect'],'dependency':'frozen dependency'})
+            with self.assertRaises(ValueError):oracle.history_helper_command(source,history_helper,executable,movie_art=True,playlists=True)
             with self.assertRaises(ValueError):oracle.history_helper_command(source,history_helper,executable,pages=True,playlists=True)
             for case,flags in [('games',[]),('emulators',['--emulator'])]:
                 command=oracle.history_helper_command(source,history_helper,executable,game_case=case);command[0]=sys.executable

@@ -1,365 +1,155 @@
 #include "KodiImporter.h"
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QStandardPaths>
-#include <QDateTime>
-#include <QTextStream>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QSaveFile>
-#include <QDebug>
+#include <QStandardPaths>
+#include <QUuid>
 
-KodiImporter::KodiImporter(const QString &profile, QObject *parent)
-    : QObject(parent), m_profile(profile) {
+namespace {
+bool ordinaryPath(QString path)
+{
+    for(;!path.isEmpty();){if(QFileInfo(path).isSymLink())return false;const auto parent=QFileInfo(path).absolutePath();if(parent==path)break;path=parent;}
+    return true;
+}
+}
+
+KodiImporter::KodiImporter(const QString &profile,QObject *parent):QObject(parent),m_profile(profile)
+{
+    m_valid=profile=="default" || (!QUuid(profile).isNull() && QUuid(profile).toString(QUuid::WithoutBraces)==profile);
+    m_deadline.setSingleShot(true);m_deadline.setInterval(180000);
+    connect(&m_process,&QProcess::readyReadStandardOutput,this,[this]{
+        m_output+=m_process.readAllStandardOutput();
+        if(m_output.size()>65536){m_importStatus=tr("Kodi import returned excessive status data.");m_process.kill();}
+    });
+    connect(&m_process,&QProcess::readyReadStandardError,this,[this]{m_process.readAllStandardError();});
+    connect(&m_process,&QProcess::started,this,[this]{if(m_cancelled)m_process.terminate();});
+    connect(&m_deadline,&QTimer::timeout,this,[this]{
+        m_importStatus=tr("Kodi import timed out. Choose Scan to verify recovery before retrying.");
+        const auto pid=m_process.processId();m_process.terminate();
+        QTimer::singleShot(7000,this,[this,pid]{if(pid && m_process.processId()==pid && m_process.state()!=QProcess::NotRunning)m_process.kill();});
+    });
+    connect(&m_process,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](int code,QProcess::ExitStatus exit){finish(code==0 && exit==QProcess::NormalExit);});
+    connect(&m_process,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){if(error==QProcess::FailedToStart){m_importStatus=tr("Kodi import support could not start. Repair the Isolde installation.");finish(false);}});
     loadImportState();
 }
 
-KodiImporter::~KodiImporter() = default;
-
-QString KodiImporter::kodiUserdataDir() const {
-    return QDir::homePath() + QLatin1String("/.kodi/userdata");
+KodiImporter::~KodiImporter()
+{
+    shutdown();
 }
 
-QString KodiImporter::backupDir() const {
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
-        + QLatin1String("/kodi-import-backups/") + m_profile;
+void KodiImporter::shutdown()
+{
+    m_deadline.stop();m_releaseBackend={};m_prepareBackend={};
+    disconnect(&m_process,nullptr,this,nullptr);
+    if(m_process.state()!=QProcess::NotRunning){m_process.terminate();if(!m_process.waitForFinished(7000)){m_process.kill();m_process.waitForFinished(3000);}}
+    m_lock.reset();m_importInProgress=false;
 }
 
-QString KodiImporter::importStateFile() const {
-    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
-        + QLatin1String("/kodi-import-state-") + m_profile + QLatin1String(".json");
+QString KodiImporter::backupDir() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)+"/kodi-import-backups/"+m_profile;
 }
 
-bool KodiImporter::loadImportState() {
-    QFile file(importStateFile());
-    if (!file.open(QIODevice::ReadOnly)) return false;
-    auto doc = QJsonDocument::fromJson(file.readAll());
-    file.close();
-    if (!doc.isObject()) return false;
-    auto obj = doc.object();
-    m_backupAvailable = obj.value(QStringLiteral("backupAvailable")).toBool();
-    m_backupPath = obj.value(QStringLiteral("backupPath")).toString();
-    m_conflicts.clear();
-    for (const auto &conflict : obj.value(QStringLiteral("conflicts")).toArray())
-        m_conflicts.append(conflict.toString());
-    m_previewText = obj.value(QStringLiteral("previewText")).toString();
-    m_canImport = obj.value(QStringLiteral("canImport")).toBool();
-    m_canRollback = obj.value(QStringLiteral("canRollback")).toBool();
-    m_importStatus = obj.value(QStringLiteral("importStatus")).toString();
-    m_scanResults = obj.value(QStringLiteral("scanResults")).toObject().toVariantMap();
-    return true;
-}
+bool KodiImporter::recoveryPending() const {return m_valid && QFileInfo::exists(backupDir()+"/transaction.json");}
 
-bool KodiImporter::saveImportState() {
-    QJsonObject obj;
-    obj.insert(QStringLiteral("backupAvailable"), m_backupAvailable);
-    obj.insert(QStringLiteral("backupPath"), m_backupPath);
-    QJsonArray conflicts;
-    for (const auto &c : m_conflicts) conflicts.append(c);
-    obj.insert(QStringLiteral("conflicts"), conflicts);
-    obj.insert(QStringLiteral("previewText"), m_previewText);
-    obj.insert(QStringLiteral("canImport"), m_canImport);
-    obj.insert(QStringLiteral("canRollback"), m_canRollback);
-    obj.insert(QStringLiteral("importStatus"), m_importStatus);
-    QJsonObject scanResults;
-    for (auto it = m_scanResults.begin(); it != m_scanResults.end(); ++it)
-        scanResults.insert(it.key(), QJsonValue::fromVariant(it.value()));
-    obj.insert(QStringLiteral("scanResults"), scanResults);
-
-    QSaveFile file(importStateFile());
-    const QByteArray data = QJsonDocument(obj).toJson(QJsonDocument::Indented);
-    if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
-        m_importStatus = "Could not save import state.";
-        emit changed();
-        return false;
+void KodiImporter::loadImportState()
+{
+    if(!m_valid){m_importStatus=tr("Invalid Kodi import profile.");return;}
+    if(!ordinaryPath(backupDir())){m_importStatus=tr("Kodi import storage must not use redirected paths.");return;}
+    QFile file(backupDir()+"/receipt.json");
+    if(file.exists()){
+        if(QFileInfo(file).isSymLink() || file.size()>8*1024*1024 || !file.open(QIODevice::ReadOnly)){m_importStatus=tr("Kodi import receipt is invalid. Choose Scan to inspect recovery.");return;}
+        const auto state=QJsonDocument::fromJson(file.readAll()).object();
+        const auto token=state.value("token").toString();
+        if(state.value("schemaVersion").toInt()!=1 || state.value("profile").toString()!=m_profile || QUuid(token).isNull() || QUuid(token).toString(QUuid::WithoutBraces)!=token){m_importStatus=tr("Kodi import receipt belongs to another profile or version.");return;}
+        m_backupAvailable=true;m_backupPath=backupDir()+"/"+token;m_canImport=true;
+        m_canRollback=state.value("imported").toBool();
+        m_importStatus=m_canRollback?tr("Imported into this Isolde profile. Desktop Kodi is unchanged."):tr("Snapshot ready for preview and import.");
     }
-    return true;
+    if(recoveryPending()){m_canImport=false;m_canRollback=false;m_importStatus=tr("Interrupted Kodi import needs recovery. Choose Scan before using the library.");}
 }
 
-void KodiImporter::resetState() {
-    m_backupAvailable = false;
-    m_backupPath.clear();
-    m_importInProgress = false;
-    m_importStatus = "Not started";
-    m_conflicts.clear();
-    m_previewText.clear();
-    m_canImport = false;
-    m_canRollback = false;
-    m_scanResults.clear();
+void KodiImporter::runAction(const QString &action)
+{
+    if(!m_valid || m_importInProgress)return;
+    QString helper;
+    for(const auto &candidate:{QCoreApplication::applicationDirPath()+"/../share/isolde/kodi-import.py",QCoreApplication::applicationDirPath()+"/share/isolde/kodi-import.py"})
+        if(QFileInfo(candidate).isFile()){helper=QFileInfo(candidate).absoluteFilePath();break;}
+    const auto python=QStandardPaths::findExecutable("python3");
+    if(helper.isEmpty() || python.isEmpty()){m_importStatus=tr("Kodi import support is missing. Repair the Isolde installation.");emit changed();return;}
+    if(!m_lock){
+        if(m_prepareBackend && !m_prepareBackend()){m_importStatus=tr("Stop playback and close the Kodi application before importing or restoring its configuration.");emit changed();return;}
+        m_backendPrepared=true;
+    }
+    const auto home=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+m_profile+"/kodi/home";
+    if(!ordinaryPath(home)){m_importStatus=tr("Private Kodi storage must not use redirected paths.");releaseBackend();emit changed();return;}
+    if(!QDir().mkpath(home)){m_importStatus=tr("Could not prepare private Kodi storage.");releaseBackend();emit changed();return;}
+    const auto dataRoot=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if(!QFile::setPermissions(dataRoot,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner) || !QFile::setPermissions(home,QFile::ReadOwner|QFile::WriteOwner|QFile::ExeOwner)){
+        m_importStatus=tr("Could not protect private Kodi storage.");releaseBackend();emit changed();return;
+    }
+    if(!m_lock){
+        m_lock=std::make_unique<QLockFile>(home+"/.isolde-managed.lock");
+        if(!m_lock->tryLock()){m_lock.reset();m_importStatus=tr("This profile's Kodi is still in use. Close it and retry.");releaseBackend();emit changed();return;}
+    }
+    m_action=action;++m_generation;m_cancelled=false;m_releaseRequested=false;m_output.clear();m_importInProgress=true;m_importStatus=tr("Working on the private Kodi snapshot…");emit changed();
+    m_process.setProgram(python);
+    m_process.setArguments({helper,"--profile",m_profile,"--config-root",QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation),"--data-root",QStandardPaths::writableLocation(QStandardPaths::AppDataLocation),action});
+    m_deadline.start();m_process.start();
+}
+
+void KodiImporter::finish(bool success)
+{
+    if(!m_importInProgress)return;
+    m_deadline.stop();m_output+=m_process.readAllStandardOutput();
+    const auto result=QJsonDocument::fromJson(m_output).object();success=success && result.value("ok").toBool();
+    m_importInProgress=false;
+    if(success){
+        m_backupAvailable=result.value("backupAvailable").toBool();m_backupPath=result.value("backupPath").toString();
+        m_canImport=result.value("canImport").toBool();m_canRollback=result.value("canRollback").toBool();
+        if(!result.value("previewText").toString().isEmpty())m_previewText=result.value("previewText").toString();
+        m_conflicts.clear();for(const auto &entry:result.value("conflicts").toArray())m_conflicts.append(entry.toString());
+        m_importStatus=result.value("importStatus").toString();
+        if(m_cancelled)m_importStatus=tr("The operation finished before cancellation. Use Rollback to restore an imported profile.");
+    }else{
+        loadImportState();
+        m_importStatus=result.value("error").toString(tr("Kodi import did not complete. Choose Scan to verify recovery, then retry."));
+    }
+    const bool held=success && !m_cancelled && !m_releaseRequested && m_backupAvailable && !m_canRollback && (m_action=="backup" || m_action=="preview");
+    if(recoveryPending()){m_lock.reset();m_canImport=false;m_canRollback=false;m_importStatus+=tr(" Recovery is pending; choose Scan before restarting Kodi.");}
+    else if(!held)releaseBackend();
+    else m_importStatus=tr("Verified snapshot ready. The library is paused during review. Back resumes without importing.");
+    if(m_action=="backup" && success)emit backupCreated(m_backupPath);
+    if(m_action=="import")emit importCompleted(success,m_importStatus);
+    if(m_action=="rollback")emit rollbackCompleted(success,m_importStatus);
     emit changed();
 }
 
-QString KodiImporter::readSetting(const QString &file, const QString &key) const {
-    QFile f(file);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
-    QString content = QString::fromUtf8(f.readAll());
-    f.close();
-    const QString marker = key + QLatin1String("=\"");
-    int pos = content.indexOf(marker);
-    if (pos < 0) return {};
-    pos += marker.size();
-    int end = content.indexOf(QLatin1String("\""), pos);
-    if (end < 0) return {};
-    return content.mid(pos, end - pos);
+void KodiImporter::scanExistingKodi(){runAction("scan");}
+void KodiImporter::createBackup(){runAction("backup");}
+void KodiImporter::previewImport(){runAction("preview");}
+void KodiImporter::import(){runAction("import");}
+void KodiImporter::rollback(){runAction("rollback");}
+void KodiImporter::clearConflicts(){m_conflicts.clear();emit changed();}
+void KodiImporter::releaseBackend()
+{
+    m_lock.reset();const bool prepared=m_backendPrepared;m_backendPrepared=false;
+    if(prepared && m_releaseBackend)m_releaseBackend();
 }
-
-void KodiImporter::scanExistingKodi() {
-    resetState();
-    const QString userdata = kodiUserdataDir();
-    QDir dir(userdata);
-    if (!dir.exists()) {
-        m_importStatus = "No existing Kodi userdata found at " + userdata;
-        emit changed();
-        return;
-    }
-
-    QVariantMap results;
-
-    QString skin = readSetting(userdata + QLatin1String("/guisettings.xml"), QStringLiteral("skin"));
-    results.insert(QStringLiteral("skin"), skin.isEmpty() ? QStringLiteral("(default)") : skin);
-
-    QString sourcesFile = userdata + QLatin1String("/sources.xml");
-    int sourceCount = 0;
-    QFile sf(sourcesFile);
-    if (sf.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QString src = QString::fromUtf8(sf.readAll());
-        sf.close();
-        sourceCount = src.count(QLatin1String("<source"));
-    }
-    results.insert(QStringLiteral("sourceCount"), sourceCount);
-    results.insert(QStringLiteral("sourcesFile"), QFileInfo::exists(sourcesFile));
-
-    QString addonsDir = userdata + QLatin1String("/addons");
-    int addonCount = 0;
-    QDir ad(addonsDir);
-    if (ad.exists()) addonCount = ad.entryList(QDir::Dirs | QDir::NoDotAndDotDot).size();
-    results.insert(QStringLiteral("addonCount"), addonCount);
-    results.insert(QStringLiteral("addonsDir"), ad.exists());
-
-    QString dbFile = userdata + QLatin1String("/Database/MyVideos.db");
-    results.insert(QStringLiteral("watchStateDb"), QFileInfo::exists(dbFile));
-
-    QString keymapsDir = userdata + QLatin1String("/keymaps");
-    results.insert(QStringLiteral("keymapsDir"), QDir(keymapsDir).exists());
-
-    m_scanResults = results;
-
-    QStringList lines;
-    lines << "Existing Kodi setup found at " + userdata;
-    lines << QString("Skin: %1").arg(results.value(QStringLiteral("skin")).toString());
-    lines << QString("Configured media sources: %1").arg(results.value(QStringLiteral("sourceCount")).toInt());
-    lines << QString("Installed add-ons: %1").arg(results.value(QStringLiteral("addonCount")).toInt());
-    lines << QString("Watch/resume database: %1")
-        .arg(results.value(QStringLiteral("watchStateDb")).toBool() ? "Yes" : "No");
-    lines << QString("Keymaps: %1")
-        .arg(results.value(QStringLiteral("keymapsDir")).toBool() ? "Present" : "None");
-    m_previewText = lines.join(QLatin1String("\n"));
-
-    m_conflicts.clear();
-    if (results.value(QStringLiteral("sourcesFile")).toBool())
-        m_conflicts << "Existing sources.xml detected: Isolde preserves Kodi's sources by reference; configure media sources natively in Kodi → Videos → Files → Add videos.";
-    if (results.value(QStringLiteral("watchStateDb")).toBool())
-        m_conflicts << "Existing watch/resume state detected: Isolde does not edit Kodi databases or watched/progress state.";
-    if (results.value(QStringLiteral("addonCount")).toInt() > 0)
-        m_conflicts << "Existing add-ons detected: skin and add-on settings are read-only references, not imported by Isolde.";
-
-    m_canImport = true;
-    m_canRollback = false;
-    m_importStatus = "Scan complete. Ready to backup and import.";
-    emit changed();
-    saveImportState();
+void KodiImporter::releasePreview()
+{
+    m_releaseRequested=true;
+    if(m_importInProgress)cancel();else if(!recoveryPending())releaseBackend();
 }
-
-void KodiImporter::createBackup() {
-    if (!m_canImport) {
-        m_importStatus = "Scan existing Kodi setup first before backing up.";
-        emit changed();
-        return;
-    }
-
-    const QString userdata = kodiUserdataDir();
-    const QString dest = backupDir();
-    QDir().mkpath(dest);
-
-    const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
-    const QString backupPath = dest + QLatin1String("/kodi-backup-") + timestamp;
-
-    QStringList filesToBackup{
-        QStringLiteral("guisettings.xml"),
-        QStringLiteral("sources.xml"),
-        QStringLiteral("keymaps"),
-        QStringLiteral("addons"),
-        QStringLiteral("Database")
-    };
-
-    bool ok = true;
-    for (const auto &name : filesToBackup) {
-        QFileInfo srcInfo(userdata + QLatin1String("/") + name);
-        if (!srcInfo.exists()) continue;
-        if (srcInfo.isDir()) {
-            if (!QDir(backupPath).mkpath(name)) { ok = false; break; }
-            QDir srcDir(srcInfo.absoluteFilePath());
-            for (const auto &entry : srcDir.entryList(QDir::Files | QDir::NoDotAndDotDot)) {
-                if (!QFile::copy(srcDir.absoluteFilePath(entry),
-                                 backupPath + QLatin1String("/") + name + QLatin1String("/") + entry)) {
-                    ok = false; break;
-                }
-            }
-            if (!ok) break;
-        } else {
-            if (!QFile::copy(srcInfo.absoluteFilePath(), backupPath + QLatin1String("/") + name)) {
-                ok = false; break;
-            }
-        }
-    }
-
-    if (!ok) {
-        m_importStatus = "Backup failed: could not copy all Kodi config files.";
-        emit changed();
-        return;
-    }
-
-    m_backupPath = backupPath;
-    m_backupAvailable = true;
-    m_canRollback = true;
-    m_importStatus = "Backup created at " + backupPath;
-    emit backupCreated(backupPath);
-    emit changed();
-    saveImportState();
-}
-
-void KodiImporter::previewImport() {
-    if (!m_canImport) {
-        m_importStatus = "Scan existing Kodi setup first before previewing.";
-        emit changed();
-        return;
-    }
-    m_importStatus = "Preview: " + m_previewText;
-    if (!m_conflicts.isEmpty()) {
-        m_importStatus += QLatin1String("\n\nConflicts:\n") + m_conflicts.join(QLatin1String("\n"));
-    }
-    emit changed();
-}
-
-void KodiImporter::import() {
-    if (!m_canImport || m_importInProgress) {
-        m_importStatus = "Cannot import: scan first, or an import is already in progress.";
-        emit changed();
-        return;
-    }
-
-    if (!m_backupAvailable) {
-        m_importStatus = "Create a backup before importing.";
-        emit changed();
-        return;
-    }
-
-    m_importInProgress = true;
-    m_importStatus = "Importing Kodi settings...";
-    emit changed();
-
-    const QString userdata = kodiUserdataDir();
-    bool ok = true;
-
-    const QString addonsSrc = userdata + QLatin1String("/addons");
-    const QString keymapsSrc = userdata + QLatin1String("/keymaps");
-
-    QFileInfo sourcesInfo(userdata + QLatin1String("/sources.xml"));
-    if (sourcesInfo.exists()) {
-        m_conflicts << "Existing sources.xml detected: Isolde preserves its own source grants; "
-                     "configure Kodi sources natively in Kodi → Videos → Files → Add videos.";
-    }
-
-    if (!ok) {
-        m_importStatus = "Import failed during file copy.";
-        m_importInProgress = false;
-        emit changed();
-        return;
-    }
-
-    m_importInProgress = false;
-    m_canRollback = true;
-    m_importStatus = "Import complete. Kodi skin, add-ons, keymaps, and watch/resume state "
-                     "are preserved by reference. Isolde does not edit Kodi databases or media files.";
-    emit importCompleted(true, m_importStatus);
-    emit changed();
-    saveImportState();
-}
-
-void KodiImporter::rollback() {
-    if (!m_canRollback || m_backupPath.isEmpty()) {
-        m_importStatus = "No backup available to roll back.";
-        emit changed();
-        return;
-    }
-
-    m_importInProgress = true;
-    m_importStatus = "Rolling back...";
-    emit changed();
-
-    const QString userdata = kodiUserdataDir();
-    QDir backup(m_backupPath);
-    if (!backup.exists()) {
-        m_importStatus = "Backup directory not found: " + m_backupPath;
-        m_importInProgress = false;
-        emit changed();
-        return;
-    }
-
-    bool ok = true;
-    QString rollbackTemp = backupDir() + QLatin1String("/rollback-temp-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
-    QDir().mkpath(rollbackTemp);
-
-    QStringList filesToRestore{
-        QStringLiteral("guisettings.xml"),
-        QStringLiteral("sources.xml")
-    };
-
-    // Before overwriting any existing Kodi config, back up the current files
-    // to a temporary location so a failed rollback cannot destroy both copies.
-    for (const auto &name : filesToRestore) {
-        QFileInfo currentInfo(userdata + QLatin1String("/") + name);
-        if (currentInfo.exists()) {
-            if (!QFile::copy(currentInfo.absoluteFilePath(),
-                             rollbackTemp + QLatin1String("/") + name)) {
-                ok = false; break;
-            }
-        }
-    }
-
-    if (ok) {
-        for (const auto &name : filesToRestore) {
-            QFileInfo backupInfo(m_backupPath + QLatin1String("/") + name);
-            if (!backupInfo.exists()) continue;
-            if (!QFile::copy(backupInfo.absoluteFilePath(),
-                             userdata + QLatin1String("/") + name)) {
-                ok = false; break;
-            }
-        }
-    }
-
-    // Clean up the temporary current-config backup regardless of outcome.
-    QDir(rollbackTemp).removeRecursively();
-
-    m_importInProgress = false;
-    if (ok) {
-        m_canRollback = false;
-        m_backupAvailable = false;
-        m_backupPath.clear();
-        m_importStatus = "Rollback complete. Kodi config restored from backup.";
-        emit rollbackCompleted(true, m_importStatus);
-    } else {
-        m_importStatus = "Rollback partially failed. Some files may not have been restored.";
-        emit rollbackCompleted(false, m_importStatus);
-    }
-    emit changed();
-    saveImportState();
-}
-
-void KodiImporter::clearConflicts() {
-    m_conflicts.clear();
-    emit changed();
-    saveImportState();
+void KodiImporter::cancel()
+{
+    if(!m_importInProgress)return;
+    m_cancelled=true;m_importStatus=tr("Cancelling and restoring the private Kodi configuration…");emit changed();
+    m_process.terminate();const auto generation=m_generation;
+    QTimer::singleShot(7000,this,[this,generation]{if(m_importInProgress && m_cancelled && m_generation==generation)m_process.kill();});
 }

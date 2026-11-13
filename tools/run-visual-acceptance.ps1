@@ -56,7 +56,7 @@ if ($GuestRunner) {
         $command += " --studio-helper-digest $StudioHelperDigest"
     }
     if ($HistoryHelperDigest) {
-        if ($Case -notin @('local-search','history','pages','playlists','games','emulators') -or $HistoryHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid library helper identity.' }
+        if ($Case -notin @('local-search','history','pages','playlists','movieart','games','emulators') -or $HistoryHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid library helper identity.' }
         $command += " --history-helper-digest $HistoryHelperDigest"
     }
     if ($StoreHelperDigest) {

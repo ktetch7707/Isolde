@@ -127,7 +127,7 @@ try {
                 $featureDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-features-$featureDigest.py")) -TimeoutSeconds 30 -Log $transport
             }
-            if ($case -in @('local-search','history','pages','playlists','games','emulators')) {
+            if ($case -in @('local-search','history','pages','playlists','movieart','games','emulators')) {
                 $helper = Join-Path $PSScriptRoot $(if($case -in @('games','emulators')){'games-acceptance.py'}else{'tv-library-acceptance.py'})
                 $historyDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/history-helper-$historyDigest.py")) -TimeoutSeconds 30 -Log $transport

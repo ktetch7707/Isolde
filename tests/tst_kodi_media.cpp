@@ -4,6 +4,7 @@
 #include <QImage>
 #include <QBuffer>
 #include "media/KodiService.h"
+#include "media/KodiImporter.h"
 #include "media/MediaGrants.h"
 #include <QFile>
 #include <QDir>
@@ -13,10 +14,13 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QtTest>
+#include <QScopeGuard>
+#include <QStandardPaths>
 
 class KodiMediaTests : public QObject {
     Q_OBJECT
 private slots:
+    void desktopImportIsRecursivePrivateReversibleAndGuarded();
     void startupPreferenceIsPerProfile();
     void frontendPreferenceRoundTrip();
     void localPlaybackPreferenceIsPersistedAndProfileScoped();
@@ -187,6 +191,7 @@ static void serve(QLocalServer &server, int version)
                     server.setProperty("playlistParams",request.value("params").toObject().toVariantMap());
                     const auto params=request.value("params").toObject();const int start=params["start"].toInt();
                     result=QJsonObject{{"movies",QJsonArray{QJsonObject{{"movieid",start+41},{"title","Local film"},{"playlistMediaType","movie"}}}},{"limits",QJsonObject{{"start",start},{"end",start+1},{"total",51}}}};
+                    if(params["kind"]=="shows")result=QJsonObject{{"tvshows",QJsonArray{QJsonObject{{"episodeid",41},{"title","Playlist episode"},{"playlistMediaType","episode"}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
                 }
                 else if (request.value("method") == "VideoLibrary.Scan") {
                     result = server.property("rejectScan").toBool() ? "rejected" : "OK";
@@ -261,6 +266,15 @@ void KodiMediaTests::savedKodiPlaylistCatalogAndShelf()
     server.setProperty("rejectPlaylist",true);shelf.savePlaylist("Refused");QTRY_VERIFY(!shelf.busy());
     QCOMPARE(saved.size(),1);QCOMPARE(shelf.items(),library);QVERIFY(shelf.playlistStatus().contains("invalid"));
     catalog.invalidate("Profile closed");QVERIFY(catalog.items().isEmpty());
+    KodiMedia episodes("playlist-profile",nullptr,dir.path());episodes.openView("shows","playlist","Episodes.xsp");
+    QTRY_VERIFY(episodes.connected());QTRY_VERIFY(!episodes.busy());
+    QCOMPARE(episodes.items()[0].toMap()["mediaType"].toString(),QString("episode"));
+    server.setProperty("playState","playing");episodes.activate(0);
+    QTRY_VERIFY(episodes.playbackActive());QTRY_VERIFY(!episodes.busy());
+    QCOMPARE(server.property("lastPlayParams").toMap()["episodeid"].toInt(),41);
+    QCOMPARE(episodes.viewKind(),QString("playlist"));
+    server.setProperty("playState","ended");episodes.playbackControl("stop");QTRY_VERIFY(!episodes.playbackActive());
+    QCOMPARE(episodes.selectedIndex(),0);QCOMPARE(episodes.viewValue(),QString("Episodes.xsp"));
 }
 void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
 {
@@ -1080,5 +1094,38 @@ void KodiMediaTests::timesOut()
     QTRY_VERIFY_WITH_TIMEOUT(!media.busy(), 5000);
     QVERIFY(media.status().contains("did not respond"));
 }
+void KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded()
+{
+    QTemporaryDir temporary;QVERIFY(temporary.isValid());
+    const auto oldHome=qgetenv("HOME"),oldConfig=qgetenv("XDG_CONFIG_HOME"),oldData=qgetenv("XDG_DATA_HOME");
+    const auto restore=qScopeGuard([&]{qputenv("HOME",oldHome);qputenv("XDG_CONFIG_HOME",oldConfig);qputenv("XDG_DATA_HOME",oldData);});
+    qputenv("HOME",temporary.filePath("desktop").toUtf8());qputenv("XDG_CONFIG_HOME",temporary.filePath("config").toUtf8());qputenv("XDG_DATA_HOME",temporary.filePath("data").toUtf8());
+    auto write=[](const QString &path,const QByteArray &bytes){QDir().mkpath(QFileInfo(path).absolutePath());QFile file(path);return file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size();};
+    auto read=[](const QString &path){QFile file(path);return file.open(QIODevice::ReadOnly)?file.readAll():QByteArray();};
+    const auto source=temporary.filePath("desktop/.kodi/userdata/guisettings.xml");
+    const auto target=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/default/kodi/home/.kodi/userdata/guisettings.xml";
+    const QByteArray desktop="<settings><setting id=\"lookandfeel.skin\">skin.fixture</setting></settings>";
+    QVERIFY(write(source,desktop));QVERIFY(write(target,"previous profile"));
+    QVERIFY(write(temporary.filePath("desktop/.kodi/userdata/keymaps/nested/remote.xml"),"nested keymap"));
+    KodiImporter importer("default");int prepared=0,released=0;
+    importer.setBackendGuard([&]{++prepared;return true;},[&]{++released;QVERIFY(write(QFileInfo(target).dir().filePath("backend-state"),QByteArray::number(released)));});
+    importer.scanExistingKodi();QTRY_VERIFY_WITH_TIMEOUT(!importer.importInProgress(),10000);
+    QVERIFY2(importer.canImport(),qPrintable(importer.importStatus()));QVERIFY(importer.previewText().contains("skin.fixture"));
+    QSignalSpy backup(&importer,&KodiImporter::backupCreated),installed(&importer,&KodiImporter::importCompleted),rolledBack(&importer,&KodiImporter::rollbackCompleted);
+    importer.createBackup();QTRY_COMPARE_WITH_TIMEOUT(backup.count(),1,10000);
+    QVERIFY(importer.backupAvailable());QVERIFY(!importer.canRollback());
+    importer.previewImport();QTRY_VERIFY_WITH_TIMEOUT(!importer.importInProgress(),10000);
+    importer.import();QTRY_COMPARE_WITH_TIMEOUT(installed.count(),1,10000);
+    QVERIFY2(installed.first().first().toBool(),qPrintable(importer.importStatus()));QCOMPARE(read(target),desktop);QCOMPARE(read(source),desktop);
+    const auto nested=QFileInfo(target).dir().filePath("keymaps/nested/remote.xml");QCOMPARE(read(nested),QByteArray("nested keymap"));
+    KodiImporter cold("default");QVERIFY(cold.canRollback());QCOMPARE(cold.backupPath(),importer.backupPath());
+    importer.rollback();QTRY_COMPARE_WITH_TIMEOUT(rolledBack.count(),1,10000);
+    QVERIFY2(rolledBack.first().first().toBool(),qPrintable(importer.importStatus()));QCOMPARE(read(target),QByteArray("previous profile"));QCOMPARE(read(source),desktop);
+    QCOMPARE(prepared,released);const auto complete=prepared;
+    importer.setBackendGuard([&]{++prepared;return false;},[&]{++released;});importer.createBackup();
+    QVERIFY(!importer.importInProgress());QVERIFY(importer.importStatus().contains("Stop playback"));QCOMPARE(released,complete);
+    KodiImporter invalid("../other");invalid.scanExistingKodi();QVERIFY(!invalid.canImport());QCOMPARE(read(source),desktop);
+}
+
 QTEST_GUILESS_MAIN(KodiMediaTests)
 #include "tst_kodi_media.moc"

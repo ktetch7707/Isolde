@@ -8,7 +8,8 @@ Item {
     property string pendingAction: ""
 
     function back() {
-        if (pendingAction.length) { pendingAction = ""; return true }
+        if (kodiImporter.importInProgress) { kodiImporter.cancel(); return true }
+        if (pendingAction.length) { pendingAction = ""; kodiImporter.releasePreview(); return true }
         return false
     }
     function handleCommand(command) {
@@ -19,8 +20,14 @@ Item {
             if (selectedIndex === 0) kodiImporter.scanExistingKodi()
             else if (selectedIndex === 1) kodiImporter.createBackup()
             else if (selectedIndex === 2) kodiImporter.previewImport()
-            else if (selectedIndex === 3) { if (pendingAction === "import") kodiImporter.import(); else pendingAction = "import" }
-            else if (selectedIndex === 4) { if (pendingAction === "rollback") kodiImporter.rollback(); else pendingAction = "rollback" }
+            else if (selectedIndex === 3) {
+                if (pendingAction === "import") { pendingAction = ""; kodiImporter["import"](); }
+                else pendingAction = "import"
+            }
+            else if (selectedIndex === 4) {
+                if (pendingAction === "rollback") { pendingAction = ""; kodiImporter.rollback(); }
+                else pendingAction = "rollback"
+            }
             else if (selectedIndex === 5) kodiImporter.clearConflicts()
             else if (selectedIndex === 6) kodiMedia.refresh()
             else if (selectedIndex === 7) sessionManager.goHome()
@@ -31,7 +38,7 @@ Item {
         const row = actions.itemAt(selectedIndex)
         if (row) scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, row.y - 20))
     }
-    onVisibleChanged: if (!visible) { pendingAction = ""; selectedIndex = 0 }
+    onVisibleChanged: if (!visible) { pendingAction = ""; selectedIndex = 0; kodiImporter.releasePreview() }
 
     Rectangle { anchors.fill: parent; color: shell.surface }
     Flickable {
@@ -44,8 +51,8 @@ Item {
             id: contents
             width: parent.width; spacing: 20 * shell.gapScale
             Text { font.family: shell.fontFamily; text: "KODI DESKTOP IMPORT"; color: shell.text; font.pixelSize: 30 * shell.textScale }
-            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Import your existing desktop Kodi setup (skin, sources, add-ons, watch/resume state). Isolde preserves Kodi's configuration by reference and never edits Kodi databases or media files."; color: shell.muted; font.pixelSize: 18 * shell.textScale }
-            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: kodiImporter.importStatus; color: shell.focus; font.pixelSize: 20 * shell.textScale }
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Import your existing desktop Kodi setup (skin, sources, add-ons, watch/resume state). A verified copy is installed into this Isolde profile. The original desktop configuration and media stay unchanged. Rollback restores this profile's previous configuration. Stop playback before continuing."; color: shell.muted; font.pixelSize: 18 * shell.textScale }
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: kodiImporter.importStatus; color: shell.focus; font.pixelSize: 20 * shell.textScale }
 
             Repeater {
                 id: actions
@@ -73,8 +80,8 @@ Item {
                 }
             }
 
-            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: kodiImporter.previewText; color: shell.text; font.pixelSize: 17 * shell.textScale; visible: kodiImporter.previewText.length > 0 }
-            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Conflicts: " + kodiImporter.conflicts.join("  "); color: shell.error; font.pixelSize: 16 * shell.textScale; visible: kodiImporter.conflicts.length > 0 }
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: kodiImporter.previewText; color: shell.text; font.pixelSize: 17 * shell.textScale; visible: kodiImporter.previewText.length > 0 }
+            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: "Conflicts: " + kodiImporter.conflicts.join("  "); color: shell.error; font.pixelSize: 16 * shell.textScale; visible: kodiImporter.conflicts.length > 0 }
 
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Backup: " + (kodiImporter.backupAvailable ? kodiImporter.backupPath : "none"); color: shell.muted; font.pixelSize: 15 * shell.textScale; visible: kodiImporter.backupAvailable }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Rollback available: " + (kodiImporter.canRollback ? "Yes" : "No"); color: shell.muted; font.pixelSize: 15 * shell.textScale }

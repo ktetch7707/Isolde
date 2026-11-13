@@ -163,7 +163,7 @@ SUITES = {"all": None, "remote_bindings":("isolde_remote_binding_tests","isolde_
           "profile_browser_isolation": "isolde_profile_browser_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
           "studio_navigation": "isolde_home_navigation_tests",
-          "kodi_media_client": "isolde_kodi_media_tests",
+          "kodi_media_client": ("isolde_kodi_media_tests","isolde"),
           "desktop_mode": "isolde_desktop_mode_tests",
           "vpn": "isolde_vpn_tests",
           "studio_quick": "isolde_studio_quick_tests",
@@ -236,6 +236,8 @@ def suite_selection(suite):
         pattern = "^(guide_contracts|guide_remote_ui|kodi_local_bridge|kodi_playback|kodi_media_client)$"
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
+    if suite == "kodi_media_client":
+        pattern = "^(kodi_media_client|kodi_import_contracts)$"
     return targets, pattern
 CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-only", "--inspect"]), "themecontrols": ("home-components-acceptance.py", ["--studio", "--themes-controls-only", "--inspect"]), "themecustom": ("home-components-acceptance.py", ["--studio", "--themes-custom-only", "--inspect"]), "themefaults": ("home-components-acceptance.py", ["--studio", "--themes-faults-only", "--inspect"]), "themes": ("home-components-acceptance.py", ["--studio", "--themes-only", "--inspect"]),
          "catalog": ("home-components-acceptance.py", ["--studio", "--catalog", "--inspect"]),
@@ -606,11 +608,11 @@ def verified_gallery_evidence(run, result):
     return path,record['sha256']
 
 
-def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None, local_search=False):
-    if int(pages)+int(playlists)+int(game_case is not None)+int(local_search)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
+def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None, local_search=False, movie_art=False):
+    if int(pages)+int(playlists)+int(game_case is not None)+int(local_search)+int(movie_art)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
     frozen='games-acceptance.py' if game_case else 'tv-library-acceptance.py'
-    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--local-search' if local_search else '--pages' if pages else '--playlists' if playlists else '--history','--inspect']
+    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--local-search' if local_search else '--pages' if pages else '--playlists' if playlists else '--movie-art' if movie_art else '--history','--inspect']
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/frozen),str(executable)]+flags
 
 
@@ -1298,6 +1300,8 @@ class Oracle:
                 expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning", "steam_games"}
             if suite == "guide":
                 expected = {"guide_contracts", "guide_remote_ui", "kodi_local_bridge", "kodi_playback", "kodi_media_client"}
+            if suite == "kodi_media_client":
+                expected = {"kodi_media_client","kodi_import_contracts"}
             if {c.get("name") for c in cases} != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
@@ -1724,7 +1728,7 @@ class Oracle:
         if store_helper_digest and case not in ('store','store-web','store-offline','store-updates','store-discovery'):raise RuntimeError('Store helper is Store-only')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
-        if history_helper_digest and case not in ('local-search','history','pages','playlists','games','emulators'):raise RuntimeError('Unsupported library helper case')
+        if history_helper_digest and case not in ('local-search','history','pages','playlists','movieart','games','emulators'):raise RuntimeError('Unsupported library helper case')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
         if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
@@ -1751,9 +1755,9 @@ class Oracle:
             command=reference_helper_command(source,helper,executable,flags,collections_helper)
             if reference_collections_digest:self.update(referenceCollectionsHelperSha256=reference_collections_digest)
             self.update(acceptanceHelperSha256=reference_helper_digest)
-        if case in ('local-search','history','pages','playlists','games','emulators') and history_helper_digest:
+        if case in ('local-search','history','pages','playlists','movieart','games','emulators') and history_helper_digest:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
-            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',game_case=case if case in ('games','emulators') else None)
+            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',movie_art=case=='movieart',game_case=case if case in ('games','emulators') else None)
             self.update(acceptanceHelperSha256=history_helper_digest)
         if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
