@@ -770,6 +770,7 @@ def main():
                         key("Escape"); key("Return")  # Close/reopen the actual editor.
                         page_menu(4)  # Named Layers.
                         key("Up", 30); key("Down"); key("Return")  # Explicit Clock, not runtime focus's source.
+                        key("Return")  # Page item -> Find on page, returning to the canvas.
 
                     key("Return"); key("Return"); key("Right"); key("Return")
                     remote = apply_at(2)
