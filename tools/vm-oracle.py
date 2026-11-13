@@ -12,6 +12,7 @@ import selectors
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import tempfile
 import sys
@@ -46,6 +47,23 @@ def guest_disk_usage_diagnostic(locations):
         return {"usage": result.stdout[:65536], "errors": result.stderr[:2048], "exit": result.returncode}
     except subprocess.TimeoutExpired:
         return {"usage": "", "errors": "Optional disk inventory timed out after 30 seconds", "timedOut": True}
+
+
+def remove_guest_index_cache(cache, home, mounts):
+    """Only the guest's reproducible desktop index; never profile/application data."""
+    cache,home=Path(cache),Path(home)
+    if home.resolve()!=home.absolute() or cache!=home/'.cache/tracker3' or cache.resolve()!=cache.absolute() or cache.is_symlink():raise RuntimeError('Unsafe guest index cache path')
+    if not cache.exists():return 0
+    if not cache.is_dir() or cache.stat().st_uid!=os.getuid():raise RuntimeError('Unsafe guest index cache owner')
+    if any(Path(m)!=Path('/') and (Path(m)==cache or Path(m).is_relative_to(cache) or cache.is_relative_to(Path(m))) for m in mounts):raise RuntimeError('Mounted guest index cache')
+    total=0
+    for directory,names,files in os.walk(cache,followlinks=False):
+        for name in names+files:
+            entry=Path(directory)/name;info=entry.lstat()
+            if entry.is_symlink() or info.st_uid!=os.getuid() or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):raise RuntimeError('Unsafe guest index cache entry')
+            if stat.S_ISREG(info.st_mode):total+=info.st_size
+    shutil.rmtree(cache)
+    return total
 
 
 def repository_dns_probe(host):
@@ -429,8 +447,9 @@ def visual_result_passed(case, result):
                     "emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",
                     "emulatorsdetails","emulatorspermission","emulatorsmenu","emulatorsplay","emulatorsaction","emulatorsreturn","emulatorsrestored"])
     if case == "movieart":
-        return (all(result.get(key) is True for key in ("passed","freshProfile","scrapedByKodi","media_unchanged"))
+        return (all(result.get(key) is True for key in ("passed","freshProfile","scrapedByKodi","media_unchanged","freshSourceSetupThroughIsolde","sourcePreviewCancelNoWrite","remotePosterPreviewNoWrite","remotePosterCancelNoWrite","remotePosterApplied"))
                 and all(result.get(key) is False for key in ("normalProfileUsed","metadataSupplied","playbackVerified"))
+                and result.get("kodiMenusRequired") is False
                 and result.get("artworkBytes",0)>4096)
     if case == "games":
         return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRegistration","nativeGameStarted","returned"))
@@ -470,7 +489,7 @@ def visual_result_passed(case, result):
         return (all(result.get(k) is True for k in ("passed", "compatibilityProbeOnly", "userdataBindingVerified", "packageInstalled", "launchRequested", "ownedSessionStopped"))
                 and all(result.get(k) is False for k in ("isoldeIntegrationVerified", "playbackVerified", "remoteVerified")))
     if case == "playlists":
-        return (all(result.get(key) is True for key in ("passed","real_kodi_saved_playlist","playlist_creation_ui_verified","playlist_cancel_no_write","play_pause_stop","media_unchanged"))
+        return (all(result.get(key) is True for key in ("passed","real_kodi_saved_playlist","playlist_creation_ui_verified","playlist_cancel_no_write","play_pause_stop","media_unchanged","rename_collision_preserved","remote_rule_preview_confirm","smart_sort_saved","member_reorder_remote_cancel_commit","delete_cancel_confirm","nativeMenuOwnedIsoldeControls","remotePictureSize","remoteSubtitleOff","realNextPrevious","controlsCloseRestoresVideoFocus"))
                 and result.get("normal_profile_used") is False and result.get("picker_ui_verified") is False and result.get("episodes")==3)
     if case == "shell":
         return (result.get("passed") is True and result.get("reviewSequenceCaptured")==["shellnavigation","shellgallery","shellstore","shellreturn","shellambient","shellwake"]
@@ -1551,7 +1570,62 @@ class Oracle:
         atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None, store_helper_digest=None):
-        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data"}: raise ValueError("Unsupported guest configuration target")
+        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data","kodi-managed"}: raise ValueError("Unsupported guest configuration target")
+        if target=='kodi-managed':
+            if self.command('hostname')!='isolde-test':raise RuntimeError('Managed Kodi builds are guest-only')
+            source,entries=extract_snapshot(self.run)
+            self.stage('oracle-self-test',['python3',str(source/'tests/test_vm_oracle.py')],90)
+            index_lease=self.root/'kodi-indexer-lease.json'
+            if shutil.disk_usage(self.root).free<3*1024**3 and (Path.home()/'.cache/tracker3').is_dir():
+                listing=self.command('systemctl','--user','list-units','--all','--plain','--no-legend')
+                units=[]
+                for line in listing.splitlines():
+                    fields=line.split()
+                    if len(fields)>=4 and fields[2]=='active' and re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',fields[0]):units.append(fields[0])
+                if units:
+                    atomic_json(index_lease,{'units':units,'guest':'isolde-test','reason':'managed Kodi dependency build'})
+                    self.stage('pause-guest-indexer',['systemctl','--user','stop',*units],30)
+                mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+                reclaimed=remove_guest_index_cache(Path.home()/'.cache/tracker3',Path.home(),mounts)
+                atomic_json(self.run/'guest-index-cache-cleanup.json',{'guest':'isolde-test','cache':str(Path.home()/'.cache/tracker3'),'reclaimedBytes':reclaimed,'normalProfilesPreserved':True,'unitsPaused':units})
+            self.automatic_test_cleanup()
+            self.check()
+            # The frozen release is retained separately. A dependency rebuild
+            # may discard even the newest unused legacy CMake cache, preserving
+            # its authored source and LastTest evidence. This is guest-only.
+            legacy=Path.home()/'isolde-runs';removed=[]
+            if shutil.disk_usage(self.root).free<4*1024**3 and legacy.is_dir() and not legacy.is_symlink() and legacy.resolve()==legacy:
+                mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+                active=[]
+                for process in Path('/proc').iterdir():
+                    if process.name.isdigit():
+                        for name in ('cwd','exe'):
+                            try:active.append((process/name).resolve(strict=True))
+                            except (OSError,RuntimeError):pass
+                for candidate in sorted(legacy.iterdir()):
+                    if shutil.disk_usage(self.root).free>=4*1024**3:break
+                    if candidate.is_symlink() or not re.fullmatch(r'studio-implementation-[0-9]+',candidate.name):continue
+                    target=candidate/'build';cache=target/'CMakeCache.txt'
+                    if not cache.is_file() or cache.is_symlink() or any(path==target or path.is_relative_to(target) for path in active):continue
+                    roots=re.findall(r'^CMAKE_HOME_DIRECTORY:INTERNAL=(.+)$',cache.read_text(),re.M)
+                    if len(roots)!=1:continue
+                    authored=Path(roots[0])
+                    if authored.resolve()!=authored or authored==target or authored.is_relative_to(target) or not (authored/'CMakeLists.txt').is_file():continue
+                    saved=self.run/'legacy-build-evidence'/candidate.name;saved.mkdir(parents=True,exist_ok=True)
+                    for relative in ('CMakeCache.txt','Testing/Temporary/LastTest.log','Testing/Temporary/LastTestsFailed.log','ctest.xml'):
+                        item=target/relative
+                        if item.is_file() and not item.is_symlink() and item.stat().st_size<=16*1024**2:shutil.copy2(item,saved/relative.replace('/','-'))
+                    removed.append({'build':str(target),'authoredSourcePreserved':str(authored),'evidence':str(saved)})
+                    atomic_json(self.run/'kodi-legacy-build-cleanup.json',{'guest':'isolde-test','targets':removed,'installedReleasePreserved':True})
+                    remove_guest_build(target,legacy,mounts)
+            self.stage('kodi-managed-build',['python3',str(source/'tools/build-managed-kodi.py'),'--source',str(source),'--work',str(self.root/'support/managed-kodi'),'--receipt',str(self.run/'kodi-managed-result.json')],7200)
+            if index_lease.exists():
+                lease=json.loads(index_lease.read_text());units=lease.get('units',[])
+                if index_lease.is_symlink() or lease.get('guest')!='isolde-test' or not isinstance(units,list) or any(not isinstance(unit,str) or not re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',unit) for unit in units):raise RuntimeError('Invalid guest indexer restoration lease')
+                if units:self.stage('restore-guest-indexer',['systemctl','--user','start',*units],30)
+                index_lease.unlink()
+            self.update(service=self.service(),releases=self.links())
+            return
         if target=='store-test-data':
             payload=self.tested_payload();release=self.deployed_release(payload,target)
             if self.command('hostname')!='isolde-test':raise RuntimeError('Guest-only fixture cleanup')
@@ -2551,7 +2625,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data","kodi-managed"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")

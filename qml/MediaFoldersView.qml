@@ -7,6 +7,7 @@ Item {
     property bool browsing: false
     property int selectedIndex: 0
     property string pendingRemoval: ""
+    property bool ownsFolderLease:false
     readonly property var rows: browsing
         ? ["Up / storage locations", "Allow this folder read-only"].concat(kodiService.folderChoices)
         : ["Add media folder…"].concat(kodiService.libraryFolders)
@@ -17,6 +18,7 @@ Item {
         return false
     }
     function handleCommand(command) {
+        if(command===inputManager.menu){ownsFolderLease=kodiService.beginFolderEditing();return}
         if (command === inputManager.navigateUp) { pendingRemoval = ""; selectedIndex = Math.max(0, selectedIndex - 1) }
         else if (command === inputManager.navigateDown) { pendingRemoval = ""; selectedIndex = Math.min(rows.length - 1, selectedIndex + 1) }
         else if (command === inputManager.confirm) {
@@ -37,7 +39,10 @@ Item {
         const row = items.itemAt(selectedIndex)
         if (row) scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, row.y - 20))
     }
-    onVisibleChanged: if (!visible) { browsing = false; resetSelection() }
+    onVisibleChanged: {
+        if(visible)ownsFolderLease=kodiService.beginFolderEditing()
+        else {if(ownsFolderLease)kodiService.endFolderEditing();ownsFolderLease=false;browsing=false;resetSelection()}
+    }
     Rectangle { anchors.fill: parent; color: shell.surface }
     Flickable {
         id: scroll; anchors.fill: parent; contentHeight: contents.implicitHeight; clip: true
@@ -47,7 +52,7 @@ Item {
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.muted
                 text: browsing ? (kodiService.browsePath || "Choose a storage location") : "Allow Kodi to read an existing media folder and all its subfolders. Both frontends use the same paths. This grants access; it does not reorganize files or change Kodi sources." }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.focus
-                text: kodiService.canEditFolders ? "Read-only access. Select an allowed folder twice to remove permission." : "To change access, stop playback and turn Automatic startup off in Media Library. Close any Kodi app first. Turn startup back on afterward." }
+                text: kodiService.canEditFolders ? "Read-only access. Select an allowed folder twice to remove permission. Kodi reconnects when you leave." : "Preparing safe folder editing. Stop playback and wait for scans; Menu retries. Your frontend and automatic-start preferences stay unchanged." }
             Repeater {
                 id: items; model: root.rows
                 delegate: Rectangle {
@@ -66,7 +71,7 @@ Item {
             }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.focus; text: kodiService.folderStatus }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 17 * shell.textScale; color: shell.muted
-                text: "First setup: Open Kodi → Videos → Files → Add videos. Select the allowed folder at its original path; choose Movies and enable recursive scanning. Use your preferred scraper or Local information only. Existing Kodi sources keep their settings. Then return to Isolde mode and Scan for New Movies. Missing drives do not erase library records." }
+                text: "After allowing a folder, return to Source setup in Media Library. Choose its content and installed metadata provider, preview and save, then Scan. Missing drives do not erase library records." }
         }
     }
 }

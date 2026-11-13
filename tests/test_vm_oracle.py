@@ -1378,6 +1378,18 @@ class OracleTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'unsafe mount'):runner.automatic_test_cleanup()
         self.assertFalse(json.loads((runner.run/'guest-test-cleanup.json').read_text())['minimumMet'])
 
+    def test_guest_index_cache_refuses_redirects_mounts_and_unrelated_data(self):
+        home=self.root/'guest';cache=home/'.cache/tracker3';cache.mkdir(parents=True)
+        (cache/'meta.db').write_bytes(b'cached-index')
+        unrelated=home/'profiles';unrelated.mkdir();(unrelated/'saved.json').write_text('keep')
+        with self.assertRaises(RuntimeError):oracle.remove_guest_index_cache(unrelated,home,[])
+        with self.assertRaises(RuntimeError):oracle.remove_guest_index_cache(cache,home,[home/'.cache'])
+        (cache/'redirect').symlink_to(unrelated,target_is_directory=True)
+        with self.assertRaises(RuntimeError):oracle.remove_guest_index_cache(cache,home,[])
+        (cache/'redirect').unlink()
+        self.assertEqual(oracle.remove_guest_index_cache(cache,home,[]),len(b'cached-index'))
+        self.assertFalse(cache.exists());self.assertEqual((unrelated/'saved.json').read_text(),'keep')
+
     def test_optional_disk_inventory_timeout_is_recorded(self):
         with patch.object(oracle.subprocess,'run',side_effect=subprocess.TimeoutExpired('du',30)):
             result=oracle.guest_disk_usage_diagnostic([self.root])

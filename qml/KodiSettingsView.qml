@@ -8,8 +8,13 @@ Item {
     property bool editingFolders: false
     property bool showingImport: false
     property bool showingPlayback: false
+    property bool showingSources:false
+    property bool showingCapabilities:false
+    property int capabilityIndex:0
     readonly property string webStatus:typeof discoveryProvider!=="undefined"?discoveryProvider.status:"No web provider configured; local results only"
     function back() {
+        if(showingCapabilities){showingCapabilities=false;return true}
+        if(showingSources){if(!sourcesPage.back())showingSources=false;return true}
         if (showingPlayback) { showingPlayback=false; return true }
         if (showingImport) { if (!importPage.back()) showingImport = false; return true }
         if (!editingFolders) return false
@@ -21,6 +26,23 @@ Item {
         if (row) scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, row.y - 20))
     }
     function handleCommand(command) {
+        if(showingCapabilities){
+            const inventory=kodiService.capabilityInventory
+            if(command===inputManager.navigateUp)capabilityIndex=Math.max(0,capabilityIndex-1)
+            else if(command===inputManager.navigateDown)capabilityIndex=Math.min(inventory.length-1,capabilityIndex+1)
+            else if(command===inputManager.confirm && inventory[capabilityIndex]){
+                const route=inventory[capabilityIndex].route
+                if(route==="sources"){showingCapabilities=false;showingSources=true}
+                else if(route==="folders"){showingCapabilities=false;editingFolders=true}
+                else if(route==="playback"){showingCapabilities=false;showingPlayback=true}
+                else if(route==="import"){showingCapabilities=false;showingImport=true}
+                else if(route==="videoscan")kodiMedia.scanMovies()
+                else if(route==="musicscan")kodiMedia.scanMusic()
+                else if(route==="restart")kodiService.retry()
+            }
+            return
+        }
+        if(showingSources){sourcesPage.handleCommand(command);return}
         if (showingPlayback) {
             if(command===inputManager.confirm)kodiService.setAlwaysPlayLocally(!kodiService.alwaysPlayLocally)
             return
@@ -31,6 +53,9 @@ Item {
         else if (command === inputManager.navigateDown) selectedIndex = Math.min(actions.count-1, selectedIndex + 1)
         else if (command === inputManager.confirm) {
             if (kodiService.switching) return
+            if(selectedIndex===12){showingCapabilities=true;return}
+            if(selectedIndex===11){kodiMedia.scanMusic();return}
+            if(selectedIndex===10){showingSources=true;return}
             if (selectedIndex === 9) { showingPlayback=true; return }
             if (selectedIndex === 8) { showingImport = true; return }
             if (selectedIndex === 6) editingFolders = true
@@ -51,7 +76,7 @@ Item {
     Rectangle { anchors.fill: parent; color: shell.surface }
     Flickable {
     id: scroll
-    visible: !root.editingFolders && !root.showingImport && !root.showingPlayback
+    visible: !root.editingFolders && !root.showingImport && !root.showingPlayback && !root.showingSources && !root.showingCapabilities
     anchors.fill: parent
     contentHeight: contents.implicitHeight
     clip: true
@@ -64,23 +89,23 @@ Item {
         Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: kodiService.status; color: shell.focus; font.pixelSize: 22 * shell.textScale }
         Repeater {
             id: actions
-            model: ["Automatic startup: " + (kodiService.enabled ? "On" : "Off"), "Restart Kodi background service", "Scan for New Movies", "Refresh library connection", "Frontend: " + (kodiService.frontend === "isolde" ? "Isolde (preview) — select for Kodi" : "Kodi application — select for Isolde"), "Open Kodi with your existing setup", "Media folder access · " + kodiService.libraryFolders.length + " allowed", "Web search: " + (searchPreferences.webEnabled ? "ON — " + root.webStatus : "OFF — Kodi library only"), "Import existing desktop Kodi · backup/preview/import/rollback", "Playback Preferences"]
+            model: ["Automatic startup: " + (kodiService.enabled ? "On" : "Off"), "Restart Kodi background service", "Scan for New Movies", "Refresh library connection", "Frontend: " + (kodiService.frontend === "isolde" ? "Isolde — select for Kodi" : "Kodi application — select for Isolde"), "Open Kodi with your existing setup", "Media folder access · " + kodiService.libraryFolders.length + " allowed", "Web search: " + (searchPreferences.webEnabled ? "ON — " + root.webStatus : "OFF — Kodi library only"), "Import existing desktop Kodi · backup/preview/import/rollback", "Playback Preferences", "Source setup · folders, content and metadata providers", "Scan music folders", "Media capabilities and settings"]
             delegate: Rectangle {
                 required property int index
                 required property string modelData
                 objectName: "mediaLibraryActionRow"
-                width: parent.width; height: 80; radius: shell.radius
+                width: parent.width; height: Math.max(80*shell.textScale,actionLabel.implicitHeight+36); radius: shell.radius
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 2 : 0
                 border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
                 opacity: kodiService.switching || (index === 5 && kodiService.frontend !== "kodi") || (index === 2 && (!kodiMedia.connected || kodiMedia.busy)) || (index === 3 && kodiMedia.busy) ? 0.45 : 1
-                Text { font.family: shell.fontFamily; anchors.fill: parent; anchors.margins: 18; text: modelData; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * shell.textScale; wrapMode: Text.WordWrap }
+                Text { id:actionLabel;font.family: shell.fontFamily; anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top; anchors.margins: 18; text: modelData; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * shell.textScale; wrapMode: Text.WordWrap }
                 MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
             }
         }
         Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: root.selectedIndex >= 4 ? kodiService.status : (kodiMedia.scanStatus || kodiMedia.status); color: shell.focus; font.pixelSize: 18 * shell.textScale }
         Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Both frontends use this Isolde profile's same Kodi home. Switching does not replace your skin, add-ons, sources or library. Exit Kodi normally before switching back."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
-        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Put new movies in your existing movie folder, then scan here. Kodi uses this profile's configured video sources and content settings (including subfolders when enabled). This does not move, rename, import or clean up files. Use Media folder access below to allow a collection, then configure its movie content once in Kodi. Startup alone does not grant file access."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Put new movies in your existing movie folder, then scan here. Kodi uses this profile's configured video sources and content settings (including subfolders when enabled). This does not move, rename, import or clean up files. Use Media folder access below to allow a collection, then use Source setup to choose its content and metadata provider. Startup alone does not grant file access."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
     }
     }
     Rectangle {
@@ -100,4 +125,18 @@ Item {
     }
     KodiImportView { id: importPage; objectName: "kodiImportPage"; anchors.fill: parent; visible: root.showingImport; appearance: root.appearance }
     MediaFoldersView { id: folderPage; objectName: "mediaFolderAccessPage"; anchors.fill: parent; visible: root.editingFolders; appearance: root.appearance }
+    KodiSourcesView {id:sourcesPage;objectName:"kodiSourceSetupPage";anchors.fill:parent;visible:root.showingSources;appearance:root.appearance}
+    ListView {
+        id:capabilities;anchors.fill:parent;visible:root.showingCapabilities;clip:true;model:kodiService.capabilityInventory;spacing:12*shell.gapScale
+        currentIndex:root.capabilityIndex
+        onCurrentIndexChanged:positionViewAtIndex(currentIndex,ListView.Contain)
+        header:Text {width:capabilities.width;text:qsTr("MEDIA CAPABILITIES AND SETTINGS\nUp/Down chooses · OK opens available controls · Back returns");wrapMode:Text.WordWrap;color:shell.text;font.family:shell.fontFamily;font.pixelSize:25*shell.textScale;bottomPadding:20}
+        footer:Text {width:capabilities.width;text:kodiMedia.scanStatus || kodiService.status;wrapMode:Text.WordWrap;color:shell.focus;font.family:shell.fontFamily;font.pixelSize:18*shell.textScale}
+        delegate:Rectangle {
+            required property int index;required property var modelData
+            width:capabilities.width;height:capabilityText.implicitHeight+32;radius:shell.radius;color:index===root.capabilityIndex?shell.selected:shell.surface;border.width:index===root.capabilityIndex?2:0;border.color:shell.selectedFocus
+            Text {id:capabilityText;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:16;textFormat:Text.PlainText;text:modelData.name+"\n"+modelData.description;wrapMode:Text.WordWrap;color:index===root.capabilityIndex?shell.selectedText:shell.text;font.family:shell.fontFamily;font.pixelSize:21*shell.textScale}
+            MouseArea {anchors.fill:parent;onClicked:{root.capabilityIndex=index;root.handleCommand(inputManager.confirm)}}
+        }
+    }
 }

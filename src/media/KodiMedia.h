@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QVariantList>
 #include <QJsonObject>
+#include <functional>
 
 class KodiMedia final : public QObject {
     Q_OBJECT
@@ -22,8 +23,18 @@ class KodiMedia final : public QObject {
     Q_PROPERTY(bool hasNextPage READ hasNextPage NOTIFY changed)
     Q_PROPERTY(bool playbackActive READ playbackActive NOTIFY changed)
     Q_PROPERTY(QString playbackStatus READ playbackStatus NOTIFY changed)
+    Q_PROPERTY(QString playbackMediaType READ playbackMediaType NOTIFY changed)
+    Q_PROPERTY(bool playbackCanPrevious READ playbackCanPrevious NOTIFY changed)
+    Q_PROPERTY(bool playbackCanNext READ playbackCanNext NOTIFY changed)
     Q_PROPERTY(QString subtitleStatus READ subtitleStatus NOTIFY changed)
     Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY changed)
+    Q_PROPERTY(QVariantMap playbackOptions READ playbackOptions NOTIFY changed)
+    Q_PROPERTY(QString playbackOptionsStatus READ playbackOptionsStatus NOTIFY changed)
+    Q_PROPERTY(QVariantList librarySources READ librarySources NOTIFY changed)
+    Q_PROPERTY(QVariantList sourceScrapers READ sourceScrapers NOTIFY changed)
+    Q_PROPERTY(QStringList sourceRoots READ sourceRoots NOTIFY changed)
+    Q_PROPERTY(QString sourceStatus READ sourceStatus NOTIFY changed)
+    Q_PROPERTY(bool sourcePreviewReady READ sourcePreviewReady NOTIFY changed)
     Q_PROPERTY(bool playbackCanPause READ playbackCanPause NOTIFY changed)
     Q_PROPERTY(bool playbackCanSeek READ playbackCanSeek NOTIFY changed)
     Q_PROPERTY(QString viewKind READ viewKind NOTIFY changed)
@@ -88,8 +99,27 @@ public:
     Q_INVOKABLE void previousPage();
     bool playbackActive() const { return m_playbackActive; }
     QString playbackStatus() const { return m_playbackStatus; }
+    QString playbackMediaType() const { return m_playingKind; }
+    bool playbackCanPrevious() const;
+    bool playbackCanNext() const;
+    Q_INVOKABLE bool playAdjacent(int direction);
     QString subtitleStatus() const { return m_subtitleStatus; }
     QVariantList subtitleTracks() const { return m_subtitleTracks; }
+    QVariantMap playbackOptions() const { return m_playbackOptions; }
+    QString playbackOptionsStatus() const { return m_playbackOptionsStatus; }
+    Q_INVOKABLE void refreshPlaybackOptions();
+    Q_INVOKABLE void setPlaybackOption(const QString &kind,const QVariant &value);
+    Q_INVOKABLE void requestVideoPresentation() { if(m_playbackActive && m_playbackVisible)emit playbackPresentationRequested(); }
+    QVariantList librarySources() const { return m_librarySources; }
+    QVariantList sourceScrapers() const { return m_sourceScrapers; }
+    QStringList sourceRoots() const { return m_sourceRoots; }
+    QString sourceStatus() const { return m_sourceStatus; }
+    bool sourcePreviewReady() const { return m_sourcePreviewReady; }
+    void setSourceEditGuard(std::function<bool()> guard) { m_sourceGuard=std::move(guard); }
+    Q_INVOKABLE void refreshSources();
+    Q_INVOKABLE void previewSource(const QVariantMap &source);
+    Q_INVOKABLE void applySource(const QVariantMap &source);
+    Q_INVOKABLE void cancelSourcePreview();
     bool playbackCanPause() const { return m_playbackActive && m_playbackCanPause; }
     bool playbackCanSeek() const { return m_playbackActive && m_playbackCanSeek; }
     bool lastPlaybackNaturalEnd() const { return m_lastPlaybackNaturalEnd; }
@@ -118,8 +148,12 @@ public:
     Q_INVOKABLE void invalidate(const QString &reason);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE void scanMovies();
+    Q_INVOKABLE void scanMusic();
     void quitIfIdle();
 signals:
+    void sourceApplied();
+    void playbackOptionsRequested();
+    void playbackPresentationRequested();
     void changed();
     void collectionsChanged();
     void quitReply(bool accepted);
@@ -130,6 +164,9 @@ signals:
     void playbackFailed(const QString &reason);
     void playlistSaved(const QString &filename);
 private:
+    bool adjacentScope() const;
+    void finishAdjacent();
+    void startScan(const QString &kind);
     void request(const QString &method, const QJsonObject &params = {});
     void consume();
     void fail(const QString &message);
@@ -170,6 +207,7 @@ private:
     QString m_scanStatus;
     bool m_observedScan = false;
     int m_scanPolls = 0;
+    QString m_scanKind="Video";
     int m_pageStart = 0, m_requestedStart = 0, m_totalMovies = 0, m_pageCount = 0;
     bool m_playbackActive = false, m_playbackVisible = false;
     bool m_playbackCanPause = false, m_playbackCanSeek = false;
@@ -178,8 +216,20 @@ private:
     QString m_scheduledKind;
     int m_scheduledId = 0;
     QString m_playbackStatus;
+    QString m_playingKind;
+    int m_playingId=0,m_adjacentGlobal=-1,m_adjacentAfterRead=-1;
+    bool m_adjacentTransition=false,m_returnHomeRequested=false;
     QString m_subtitleStatus = QStringLiteral("Subtitle track discovery is not active.");
     QVariantList m_subtitleTracks;
+    QVariantMap m_playbackOptions;
+    QString m_playbackOptionsStatus;
+    int m_optionsRequest=0;
+    QVariantList m_librarySources,m_sourceScrapers;
+    QStringList m_sourceRoots;
+    QString m_sourceStatus,m_sourceRevision;
+    QVariantMap m_sourceDraft;
+    bool m_sourcePreviewReady=false;
+    std::function<bool()> m_sourceGuard;
     QString m_pendingControl;
     QString m_presentationError;
     QTimer m_playbackPoll;

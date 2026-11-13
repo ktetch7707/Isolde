@@ -147,7 +147,7 @@ def guide_candidates(params, execute):
     return {"items":items,"limits":limits,"skipped":skipped}
 
 
-def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
+def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=None):
     try:
         request = json.loads(raw)
     except (ValueError, UnicodeDecodeError):
@@ -159,12 +159,18 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
         return error(-32600, "Invalid request")
     if len(raw) > 32768 and request.get("method") != "Isolde.SetPoster":
         return error(-32600, "Request exceeds the method limit")
-    playback_methods = {"Isolde.PlayGuideStream", "Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl", "Isolde.LoadSubtitle", "Isolde.GetSubtitleTracks", "Isolde.SetSubtitleTrack"}
-    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GuideCandidates", "Isolde.SetPoster", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "Isolde.DeletePlaylist", "Isolde.RenamePlaylist", "Isolde.ReorderPlaylist", "Isolde.SortPlaylist", "Isolde.EditPlaylist", "Isolde.PreviewPlaylistRule", "Isolde.GetPlaylistOrder", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
+    playback_methods = {"Isolde.PlayGuideStream", "Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl", "Isolde.LoadSubtitle", "Isolde.GetSubtitleTracks", "Isolde.SetSubtitleTrack", "Isolde.GetPlaybackOptions", "Isolde.SetPlaybackOption"}
+    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GetSources", "Isolde.PreviewSource", "Isolde.ApplySource", "Isolde.GuideCandidates", "Isolde.SetPoster", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "Isolde.DeletePlaylist", "Isolde.RenamePlaylist", "Isolde.ReorderPlaylist", "Isolde.SortPlaylist", "Isolde.EditPlaylist", "Isolde.PreviewPlaylistRule", "Isolde.GetPlaylistOrder", "VideoLibrary.Scan", "AudioLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
     if not isinstance(params, dict):
         return error(-32602, "Parameters must be an object")
+    if request["method"] in {"Isolde.GetSources","Isolde.PreviewSource","Isolde.ApplySource"}:
+        try:
+            if sources is None:raise ValueError("Managed source support unavailable")
+            return {"jsonrpc":"2.0","id":request_id,"result":sources.handle(request["method"],params)}
+        except Exception:
+            return error(-32000,"Source operation unavailable. Stop playback/scanning, check the managed Kodi installation, refresh and retry. An unfinished source transaction must recover before another edit.")
     if request["method"]=="Isolde.GuideCandidates":
         try:
             return {"jsonrpc":"2.0","id":request_id,"result":guide_candidates(params,execute)}
@@ -296,12 +302,12 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
         if not isinstance(order, dict) or set(order) - {"method", "order", "ignorearticle"} or order.get("method", "title") not in {"title", "track"} or order.get("order", "ascending") != "ascending" or ("ignorearticle" in order and type(order["ignorearticle"]) is not bool):
             return error(-32602, "Unsupported music order")
         params = dict(params, limits=limits)
-    elif request["method"] == "VideoLibrary.Scan":
+    elif request["method"] in ("VideoLibrary.Scan","AudioLibrary.Scan"):
         if params:
             return error(-32602, "Scan uses only this profile's configured sources")
         params = {"showdialogs": False}
     elif request["method"] == "XBMC.GetInfoBooleans":
-        if params != {"booleans": ["Library.IsScanningVideo"]}:
+        if params not in ({"booleans": ["Library.IsScanningVideo"]},{"booleans": ["Library.IsScanningMusic"]}):
             return error(-32602, "Only video scan status is available")
     elif request["method"].startswith("VideoLibrary.") and request["method"] not in (
         "VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails"):
@@ -342,12 +348,13 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
 
 
 class LocalBridge:
-    def __init__(self, directory, execute, playback=None, artwork=None, playlists=None):
+    def __init__(self, directory, execute, playback=None, artwork=None, playlists=None, sources=None):
         self.directory = Path(directory)
         self.execute = execute
         self.playback = playback
         self.artwork = artwork
         self.playlists = playlists
+        self.sources = sources
         self.listener = None
         self.socket_path = self.directory / "rpc.sock"
         self.identity = None
@@ -398,7 +405,7 @@ class LocalBridge:
                     raw += part
                 if len(raw) > MAX_REQUEST or not raw.endswith(b"\n"):
                     return
-                response = json.dumps(dispatch(raw, self.execute, self.playback, self.artwork, self.playlists)).encode() + b"\n"
+                response = json.dumps(dispatch(raw, self.execute, self.playback, self.artwork, self.playlists, self.sources)).encode() + b"\n"
                 if len(response) <= MAX_RESPONSE:
                     client.sendall(response)
             except (OSError, ValueError):

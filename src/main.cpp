@@ -112,7 +112,8 @@ struct ProfileRuntime {
           input(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("remote-bindings.json")) {
     actions.setAudioSettings(&audioSettings);
     kodiArtwork.setManagedArtworkResolver([this,&profiles](const QString &id){return profiles.editingAllowed()?homeLayout.resolveArtwork(id):QString{};});
-    powerSettings.setGuard([this,&profiles]{return profiles.editingAllowed() && !sessions.hasActiveSession() && !kodi.playbackActive() && !kodiImporter.importInProgress();});
+    kodi.setSourceEditGuard([this,&profiles]{return profiles.editingAllowed() && (!sessions.hasActiveSession() || sessions.currentAppType()=="settings") && !desktopMode.active() && !kodiService.switching() && !kodiImporter.importInProgress();});
+    powerSettings.setGuard([this,&profiles]{return profiles.editingAllowed() && (!sessions.hasActiveSession() || sessions.currentAppType()=="settings") && !desktopMode.active() && !kodi.playbackActive() && !kodiService.switching() && !kodiImporter.importInProgress();});
     const auto kodiAddons=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+profiles.activeId()+"/kodi/home/.kodi/addons";
     interfaceSounds=std::make_unique<InterfaceSounds>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("interface-sounds.json"),
         QStringList{kodiAddons,"/usr/share/kodi/addons","/usr/local/share/kodi/addons"});
@@ -123,8 +124,9 @@ struct ProfileRuntime {
     catalog.setStoreProvider(&storeProvider);
     kodiImporter.setBackendGuard([this]{
         if(kodi.playbackActive() || sessions.currentAppId()=="kodi" || desktopMode.active())return false;
-        kodiService.suspend(true);return kodiService.canOpenApplication();
-    },[this]{if(setup.complete())kodiService.suspend(false);});
+        kodiService.beginFolderEditing();return kodiService.canEditFolders();
+    },[this]{kodiService.endFolderEditing();},[this]{return kodiService.switching();});
+    QObject::connect(&kodiService,&KodiService::changed,&kodiImporter,[this]{kodiImporter.continueWhenBackendReady();},Qt::QueuedConnection);
     if(kodiImporter.recoveryPending())QTimer::singleShot(0,&kodiImporter,&KodiImporter::scanExistingKodi);
     if (initialLaunch && QCoreApplication::arguments().contains("--setup")) setup.restart();
     engine.rootContext()->setContextProperty(QStringLiteral("setupState"), &setup);
@@ -299,6 +301,7 @@ struct ProfileRuntime {
         QTimer::singleShot(6000, query, [query] { if (query->state() != QProcess::NotRunning) query->kill(); });
     };
     QObject::connect(&kodi, &KodiMedia::playbackStarted, &engine, [presentKodi] { presentKodi(true); });
+    QObject::connect(&kodi, &KodiMedia::playbackPresentationRequested, &engine, [presentKodi] { presentKodi(true); });
     QObject::connect(&kodi, &KodiMedia::playbackReturned, &engine, [this, presentKodi](bool) {
         if (kodi.playbackStatus() != "replaced") presentKodi(false);
         if (auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0))) {

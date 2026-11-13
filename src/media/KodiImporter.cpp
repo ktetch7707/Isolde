@@ -44,7 +44,7 @@ KodiImporter::~KodiImporter()
 
 void KodiImporter::shutdown()
 {
-    m_deadline.stop();m_releaseBackend={};m_prepareBackend={};
+    m_deadline.stop();m_deferredAction.clear();m_releaseBackend={};m_prepareBackend={};m_backendPreparing={};
     disconnect(&m_process,nullptr,this,nullptr);
     if(m_process.state()!=QProcess::NotRunning){m_process.terminate();if(!m_process.waitForFinished(7000)){m_process.kill();m_process.waitForFinished(3000);}}
     m_lock.reset();m_importInProgress=false;
@@ -83,7 +83,13 @@ void KodiImporter::runAction(const QString &action)
     const auto python=QStandardPaths::findExecutable("python3");
     if(helper.isEmpty() || python.isEmpty()){m_importStatus=tr("Kodi import support is missing. Repair the Isolde installation.");emit changed();return;}
     if(!m_lock){
-        if(m_prepareBackend && !m_prepareBackend()){m_importStatus=tr("Stop playback and close the Kodi application before importing or restoring its configuration.");emit changed();return;}
+        if(m_prepareBackend && !m_prepareBackend()){
+            if(m_backendPreparing && m_backendPreparing()){
+                m_deferredAction=action;m_backendPrepared=true;m_importInProgress=true;
+                m_importStatus=tr("Waiting for Kodi to finish saving and close safely. Back cancels; playback or scanning prevents import.");
+            }else m_importStatus=tr("Stop playback, wait for scans and close the Kodi application before importing or restoring its configuration.");
+            emit changed();return;
+        }
         m_backendPrepared=true;
     }
     const auto home=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+m_profile+"/kodi/home";
@@ -131,6 +137,13 @@ void KodiImporter::finish(bool success)
 }
 
 void KodiImporter::scanExistingKodi(){runAction("scan");}
+void KodiImporter::continueWhenBackendReady()
+{
+    if(m_deferredAction.isEmpty() || (m_backendPreparing && m_backendPreparing()))return;
+    const auto action=m_deferredAction;m_deferredAction.clear();m_importInProgress=false;
+    runAction(action);
+    if(!m_importInProgress && !m_lock)releaseBackend();
+}
 void KodiImporter::createBackup(){runAction("backup");}
 void KodiImporter::previewImport(){runAction("preview");}
 void KodiImporter::import(){runAction("import");}
@@ -149,6 +162,10 @@ void KodiImporter::releasePreview()
 void KodiImporter::cancel()
 {
     if(!m_importInProgress)return;
+    if(!m_deferredAction.isEmpty()){
+        m_deferredAction.clear();m_importInProgress=false;m_cancelled=true;
+        m_importStatus=tr("Import preparation cancelled. No configuration changed.");releaseBackend();emit changed();return;
+    }
     m_cancelled=true;m_importStatus=tr("Cancelling and restoring the private Kodi configuration…");emit changed();
     m_process.terminate();const auto generation=m_generation;
     QTimer::singleShot(7000,this,[this,generation]{if(m_importInProgress && m_cancelled && m_generation==generation)m_process.kill();});

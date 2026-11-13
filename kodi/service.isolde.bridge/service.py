@@ -8,6 +8,7 @@ from bridge import LocalBridge
 from playback import Playback
 from artwork import Artwork
 from playlists import Playlists
+from sources import Sources
 
 commands = queue.Queue(maxsize=128)
 class Monitor(xbmc.Monitor):
@@ -19,7 +20,7 @@ class Monitor(xbmc.Monitor):
             except (ValueError,TypeError,queue.Full): pass
         if sender.casefold() == "isolde" and method.casefold().startswith("other."):
             action = method[6:].casefold()
-            if action in ("pause", "stop", "home", "forward", "backward", "channel-next", "channel-previous"):
+            if action in ("pause", "stop", "home", "forward", "backward", "channel-next", "channel-previous", "options"):
                 try: commands.put_nowait(action)
                 except queue.Full: pass
 
@@ -28,7 +29,9 @@ playback = Playback(xbmc.executeJSONRPC, xbmc.executebuiltin, os.environ.get("IS
                     subtitle_loader=lambda path: xbmc.Player().setSubtitles(path))
 bridge = LocalBridge(xbmcvfs.translatePath("special://profile/isolde"), xbmc.executeJSONRPC, playback,
                      Artwork(xbmc.executeJSONRPC, xbmcvfs.translatePath("special://profile/Thumbnails")),
-                     Playlists(xbmcvfs.translatePath("special://profile/"),playback.managed))
+                     Playlists(xbmcvfs.translatePath("special://profile/"),playback.managed),
+                     Sources(xbmcvfs.translatePath("special://profile/"),xbmc.executeJSONRPC,xbmc.executebuiltin,playback.managed,
+                             json.loads(os.environ.get("ISOLDE_LIBRARY_ROOTS","[]"))))
 try:
     bridge.start()
     if os.environ.get("ISOLDE_MANAGED_KODI") == "1":

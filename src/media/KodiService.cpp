@@ -7,6 +7,50 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QSet>
+#include <QCryptographicHash>
+
+namespace {
+QString managedKodiExecutable()
+{
+#ifdef Q_OS_LINUX
+    const QString root="/opt/isolde-managed-kodi";
+    QFile manifest(root+"/manifest.json");QFile binary(root+"/kodi.bin");
+    for(const auto &path:QStringList{root,manifest.fileName(),binary.fileName(),root+"/bin/kodi"}){
+        const QFileInfo info(path);
+        if(info.isSymLink() || info.ownerId()!=0 || (info.permissions()&(QFileDevice::WriteGroup|QFileDevice::WriteOther)))return {};
+    }
+    if(!manifest.open(QIODevice::ReadOnly) || manifest.size()>8192 || !binary.open(QIODevice::ReadOnly))return {};
+    const auto metadata=QJsonDocument::fromJson(manifest.readAll()).object();
+    if(metadata["feature"]!="isolde-sources-v1" || metadata["sourceApiBaseline"]!="21.2-Omega")return {};
+    QCryptographicHash hash(QCryptographicHash::Sha256);if(!hash.addData(&binary) || metadata["binarySha256"]!=QString::fromLatin1(hash.result().toHex()))return {};
+    return QFileInfo(root+"/bin/kodi").isExecutable()?root+"/bin/kodi":QString{};
+#else
+    return {};
+#endif
+}
+}
+
+QVariantList KodiService::capabilityInventory() const
+{
+    static const bool resourcesReady=[] { Q_INIT_RESOURCE(kodi_capabilities);return true; }();
+    Q_UNUSED(resourcesReady);
+    QFile file(":/config/kodi-capabilities.json");
+    if(!file.open(QIODevice::ReadOnly) || file.size()>65536)return {};
+    const auto document=QJsonDocument::fromJson(file.readAll()).object();
+    if(document["schemaVersion"].toInt()!=1 || !document["items"].isArray())return {};
+    const auto items=document["items"].toArray();if(items.size()>64)return {};
+    QSet<QString> ids;
+    for(const auto &item:items){const auto row=item.toObject();const auto id=row["id"].toString();
+        if(row.size()!=4 || id.isEmpty() || id.size()>64 || ids.contains(id) || row["name"].toString().isEmpty() || row["name"].toString().size()>160 || row["description"].toString().isEmpty() || row["description"].toString().size()>2048
+           || !QStringList{"sources","folders","videoscan","musicscan","playback","import","restart","none"}.contains(row["route"].toString()))return {};
+        ids.insert(id);
+    }
+    return items.toVariantList();
+}
 
 KodiService::KodiService(const QString &profile, QObject *parent) : QObject(parent), m_profile(profile), m_modeClient(profile)
 {
@@ -15,12 +59,14 @@ KodiService::KodiService(const QString &profile, QObject *parent) : QObject(pare
     m_modeDeadline.setSingleShot(true);
     m_modeDeadline.setInterval(20000);
     connect(&m_modeDeadline, &QTimer::timeout, this, [this] {
+        if(m_pendingFrontend=="folders")m_folderStatus="Kodi has not finished saving. Folder permissions are unchanged; stop playback/scanning and press Menu to retry.";
         m_pendingFrontend.clear();
         m_status = "Kodi has not exited cleanly. Mode unchanged; no forced shutdown was used. Exit Kodi normally, then retry.";
         emit changed();
     });
     connect(&m_modeClient, &KodiMedia::quitReply, this, [this](bool accepted) {
         if (!switching() || accepted) return;
+        if(m_pendingFrontend=="folders")m_folderStatus="Stop playback and wait for scans to finish, then press Menu to retry. Folder permissions are unchanged.";
         m_modeDeadline.stop(); m_pendingFrontend.clear();
         m_status = "Could not switch safely. Stop playback, wait for scans, and retry. Mode unchanged.";
         emit changed();
@@ -46,6 +92,14 @@ KodiService::KodiService(const QString &profile, QObject *parent) : QObject(pare
             m_pendingFrontend.clear(); m_modeDeadline.stop();
             m_lock.reset(); m_overlay.reset();
             emit unavailable("Kodi closed for frontend switching.");
+            if(requested=="folders"){
+                if(code==0 && exitStatus==QProcess::NormalExit){
+                    m_folderEditing=!m_cancelFolderPreparing;
+                    m_folderStatus=m_folderEditing?"Ready · Kodi saved and paused safely. Folder access changes stay read-only.":"Folder editing cancelled. No permissions changed.";
+                    if(m_cancelFolderPreparing && m_resumeAfterFolders && m_enabled)start();
+                }else m_folderStatus="Kodi did not exit cleanly. Folder permissions are unchanged; retry when ready.";
+                emit changed();return;
+            }
             if (code == 0 && exitStatus == QProcess::NormalExit) commitFrontend(requested);
             else { m_status = "Kodi did not exit normally. Mode unchanged."; emit changed(); }
             return;
@@ -60,6 +114,23 @@ KodiService::KodiService(const QString &profile, QObject *parent) : QObject(pare
 }
 KodiService::~KodiService() { stop(); }
 QStringList KodiService::libraryFolders() const { return MediaGrants::folders(m_profile); }
+bool KodiService::beginFolderEditing()
+{
+    if(m_folderEditing)return true;
+    if(m_pendingFrontend=="folders")return true;
+    if(m_suspended || switching()){m_folderStatus="Close the active Kodi app or wait for the current operation, then press Menu to retry.";emit changed();return false;}
+    m_resumeAfterFolders=m_enabled && m_frontend=="isolde";m_cancelFolderPreparing=false;
+    if(m_process.state()==QProcess::NotRunning){m_folderEditing=true;m_folderStatus="Ready · folder access changes are read-only.";emit changed();return true;}
+    if(!m_ready){m_folderStatus="Wait for the library to become ready, then press Menu to retry.";emit changed();return false;}
+    m_pendingFrontend="folders";m_folderStatus="Waiting for Kodi to save and pause safely. Playback and scans prevent folder changes.";m_modeDeadline.start();emit changed();m_modeClient.quitIfIdle();return true;
+}
+void KodiService::endFolderEditing()
+{
+    if(m_pendingFrontend=="folders"){m_cancelFolderPreparing=true;return;}
+    if(!m_folderEditing)return;
+    m_folderEditing=false;const bool resume=m_resumeAfterFolders;m_resumeAfterFolders=false;
+    if(resume && m_enabled && !m_suspended)start();emit changed();
+}
 void KodiService::browseLibraryFolder(const QString &path)
 {
     const QStringList roots{QDir::homePath(), "/media", "/mnt"};
@@ -89,7 +160,7 @@ void KodiService::browseLibraryParent()
 void KodiService::allowBrowsedFolder() { addLibraryFolder(QUrl::fromLocalFile(m_browsePath)); }
 void KodiService::addLibraryFolder(const QUrl &folder)
 {
-    if (!canEditFolders()) { m_folderStatus = "Stop playback and turn Automatic startup off before changing folder access. Close any Kodi app first."; emit changed(); return; }
+    if (!canEditFolders()) { m_folderStatus = "Wait for safe folder editing. Stop playback/scanning, close any Kodi app and press Menu to retry."; emit changed(); return; }
     const auto path = QDir::cleanPath(folder.toLocalFile());
     const auto error = folder.isLocalFile() ? MediaGrants::validate(path) : QString("Choose a local folder.");
     if (!error.isEmpty()) { m_folderStatus = error; emit changed(); return; }
@@ -97,12 +168,12 @@ void KodiService::addLibraryFolder(const QUrl &folder)
     if (folders.contains(path)) { m_folderStatus = "This folder is already allowed."; emit changed(); return; }
     folders.append(path);
     const auto saved = MediaGrants::save(m_profile, folders);
-    m_folderStatus = saved.isEmpty() ? "Read-only access saved. Turn Automatic startup on to reconnect the library. Existing configured sources keep their content settings; folder access alone does not configure a new source." : saved;
+    m_folderStatus = saved.isEmpty() ? "Read-only access saved. Kodi reconnects when you leave. Choose Source setup to configure this folder’s content and metadata provider." : saved;
     emit changed();
 }
 void KodiService::removeLibraryFolder(const QString &folder)
 {
-    if (!canEditFolders()) { m_folderStatus = "Stop playback and turn Automatic startup off before changing folder access. Close any Kodi app first."; emit changed(); return; }
+    if (!canEditFolders()) { m_folderStatus = "Wait for safe folder editing. Stop playback/scanning, close any Kodi app and press Menu to retry."; emit changed(); return; }
     auto folders = libraryFolders();
     if (!folders.removeAll(folder)) return;
     const auto saved = MediaGrants::save(m_profile, folders);
@@ -209,8 +280,8 @@ void KodiService::markReady()
 void KodiService::start()
 {
     if (m_frontend == "kodi") { m_status = "Kodi application mode. Background startup is paused; your setup is unchanged."; emit changed(); return; }
-    if (!m_enabled || m_suspended || switching() || m_process.state() != QProcess::NotRunning) return;
-    const auto executable = QStandardPaths::findExecutable("kodi");
+    if (!m_enabled || m_suspended || m_folderEditing || switching() || m_process.state() != QProcess::NotRunning) return;
+    auto executable=managedKodiExecutable();if(executable.isEmpty())executable=QStandardPaths::findExecutable("kodi");
     if (executable.isEmpty()) { m_status = "Install Kodi from the App Store to use the media library."; emit changed(); return; }
     auto environment = QProcessEnvironment::systemEnvironment();
     const QDir runtime(environment.value("XDG_RUNTIME_DIR"));
@@ -246,7 +317,7 @@ void KodiService::start()
     }
     const auto destination = addonsOverlay + '/' + runtimeId;
     if (!QDir().mkpath(destination)) { fail("Cannot create Kodi startup files."); return; }
-    for (const auto &name : QStringList{"addon.xml", "service.py", "bridge.py", "playback.py", "artwork.py", "playlists.py"}) {
+    for (const auto &name : QStringList{"addon.xml", "service.py", "bridge.py", "playback.py", "artwork.py", "playlists.py", "sources.py"}) {
         QFile source(addon + '/' + name), target(destination + '/' + name);
         if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly)) { fail("The Isolde Kodi bridge is missing. Reinstall Isolde."); return; }
         auto data = source.readAll();
@@ -274,9 +345,15 @@ void KodiService::start()
         "<return>NotifyAll(Isolde,pause)</return><space>NotifyAll(Isolde,pause)</space>"
         "<left>NotifyAll(Isolde,backward)</left><right>NotifyAll(Isolde,forward)</right>"
         "<up>NotifyAll(Isolde,channel-previous)</up><down>NotifyAll(Isolde,channel-next)</down>"
+        "<menu>NotifyAll(Isolde,options)</menu><m>NotifyAll(Isolde,options)</m>"
         "</keyboard></FullscreenVideo>"
         "<VideoOSD><keyboard><escape>NotifyAll(Isolde,stop)</escape><backspace>NotifyAll(Isolde,stop)</backspace>"
-        "</keyboard></VideoOSD></keymap>";
+        "</keyboard></VideoOSD>"
+        "<Visualisation><keyboard><escape>NotifyAll(Isolde,stop)</escape><backspace>NotifyAll(Isolde,stop)</backspace>"
+        "<return>NotifyAll(Isolde,pause)</return><space>NotifyAll(Isolde,pause)</space>"
+        "<left>NotifyAll(Isolde,backward)</left><right>NotifyAll(Isolde,forward)</right>"
+        "<menu>NotifyAll(Isolde,options)</menu><m>NotifyAll(Isolde,options)</m>"
+        "</keyboard></Visualisation></keymap>";
     if (!keys.open(QIODevice::WriteOnly) || keys.write(keyData) != keyData.size()) { fail("Cannot prepare managed playback keys."); return; }
     keys.close();
     const QStringList extra{"--ro-bind", "/usr/share/kodi/addons", "/run/isolde-original-addons",
@@ -284,7 +361,8 @@ void KodiService::start()
         "--ro-bind", overlayManifest.fileName(), "/usr/share/kodi/system/addon-manifest.xml",
         "--ro-bind", originalKeys, "/run/isolde-original-keymaps",
         "--ro-bind", runtimeKeys, QDir::homePath() + "/.kodi/userdata/keymaps",
-        "--setenv", "ISOLDE_MANAGED_KODI", "1"};
+        "--setenv", "ISOLDE_MANAGED_KODI", "1",
+        "--setenv", "ISOLDE_LIBRARY_ROOTS",QString::fromUtf8(QJsonDocument::fromVariant(libraryFolders()).toJson(QJsonDocument::Compact))};
     for (int i = 0; i < extra.size(); ++i) plan.arguments.insert(separator + i, extra[i]);
     m_process.setProcessEnvironment(plan.environment);
     m_process.start(plan.program, plan.arguments);

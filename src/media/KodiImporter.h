@@ -34,7 +34,8 @@ public:
     bool canImport() const { return m_canImport; }
     bool canRollback() const { return m_canRollback; }
     bool recoveryPending() const;
-    void setBackendGuard(std::function<bool()> prepare,std::function<void()> release){m_prepareBackend=std::move(prepare);m_releaseBackend=std::move(release);}
+    void setBackendGuard(std::function<bool()> prepare,std::function<void()> release,std::function<bool()> preparing={}){m_prepareBackend=std::move(prepare);m_releaseBackend=std::move(release);m_backendPreparing=std::move(preparing);}
+    void continueWhenBackendReady();
     void shutdown();
 
     Q_INVOKABLE void scanExistingKodi();
@@ -63,6 +64,7 @@ private:
     QTimer m_deadline;
     QByteArray m_output;
     QString m_action;
+    QString m_deferredAction;
     bool m_cancelled=false;
     bool m_backendPrepared=false;
     bool m_releaseRequested=false;
@@ -70,6 +72,7 @@ private:
     std::unique_ptr<QLockFile> m_lock;
     std::function<bool()> m_prepareBackend;
     std::function<void()> m_releaseBackend;
+    std::function<bool()> m_backendPreparing;
 
     QString m_profile;
     bool m_backupAvailable = false;

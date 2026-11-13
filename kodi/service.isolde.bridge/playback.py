@@ -30,6 +30,7 @@ class Playback:
         self.stream_url = None
         self.channel_delta = 0
         self.channel_request = 0
+        self.options_request = 0
 
     def owned_item(self, item):
         if self.stream_url is not None:
@@ -79,6 +80,10 @@ class Playback:
             return False
 
     def handle(self, method, params):
+        if method == "Isolde.GetPlaybackOptions" and not params:
+            return self.playback_options()
+        if method == "Isolde.SetPlaybackOption" and set(params) == {"kind", "value"}:
+            return self.set_playback_option(params["kind"], params["value"])
         if not self.managed:
             raise ValueError("Playback requires Isolde frontend mode")
         if method == "Isolde.LoadSubtitle":
@@ -130,6 +135,7 @@ class Playback:
             self.channel_delta = 0
             self.state, self.seen, self.home = "starting", False, False
             self.generation += 1
+            self.options_request = 0
             self.pending_stop = self.scheduled_offset = self.missing_since = None
             self.failure_reason = self.control_error = ""
             self.can_pause = self.can_seek = self.natural_end = self.stop_requested = False
@@ -187,6 +193,7 @@ class Playback:
             self.stream_url = None
             self.channel_delta = 0
             self.generation += 1
+            self.options_request = 0
             self.media_type = media_type
             self.pending_stop = None
             self.scheduled_offset = offset
@@ -203,6 +210,51 @@ class Playback:
         if method == "Isolde.PlaybackControl" and set(params) == {"action"}:
             return self.control(params["action"])
         raise ValueError("Unsupported playback request")
+
+    def owned_player(self):
+        if not self.managed or self.movie is None:
+            raise ValueError("An Isolde-managed player is required")
+        for player in self.rpc("Player.GetActivePlayers"):
+            ident=player.get("playerid")
+            if player.get("type")==("audio" if self.media_type=="song" else "video") and type(ident) is int and self.owned_item(self.player_item(ident)):
+                return ident
+        raise ValueError("The managed player is no longer active")
+
+    def owned_video_player(self):
+        if self.media_type=="song":raise ValueError("An Isolde-managed video is required")
+        return self.owned_player()
+
+    def playback_options(self):
+        player=self.owned_player()
+        if self.media_type=="song":
+            return {"audio":[],"subtitles":[],"views":[],"view":"normal","subtitleEnabled":False}
+        props=self.rpc("Player.GetProperties",{"playerid":player,"properties":["audiostreams","currentaudiostream","subtitles","currentsubtitle","subtitleenabled"]})
+        result={"audio":[],"subtitles":[],"views":["normal","zoom","stretch4:3","widezoom","stretch16:9","original"],"subtitleEnabled":props.get("subtitleenabled") is True}
+        for key,current in (("audiostreams","currentaudiostream"),("subtitles","currentsubtitle")):
+            rows=props.get(key)
+            if not isinstance(rows,list) or len(rows)>64:raise ValueError("Invalid track inventory")
+            selected=props.get(current,{})
+            if not isinstance(selected,dict):raise ValueError("Invalid current track")
+            seen=set()
+            for row in rows:
+                if not isinstance(row,dict) or type(row.get("index")) is not int or row["index"]<0 or row["index"] in seen:raise ValueError("Invalid track identity")
+                seen.add(row["index"])
+                result["audio" if key=="audiostreams" else "subtitles"].append({"id":row["index"],"name":str(row.get("name", ""))[:160],"language":str(row.get("language",""))[:32],"selected":row["index"]==selected.get("index") and (key=="audiostreams" or result["subtitleEnabled"])})
+        view=self.rpc("Player.GetViewMode")
+        result["view"]=view.get("viewmode", "normal")
+        return result
+
+    def set_playback_option(self,kind,value):
+        before=self.playback_options();player=self.owned_video_player()
+        if kind=="audio" and type(value) is int and any(row["id"]==value for row in before["audio"]):
+            method="Player.SetAudioStream";params={"playerid":player,"stream":value}
+        elif kind=="subtitle" and (value=="off" or type(value) is int and any(row["id"]==value for row in before["subtitles"])):
+            method="Player.SetSubtitle";params={"playerid":player,"subtitle":value,"enable":value!="off"}
+        elif kind=="view" and type(value) is str and value in before["views"]:
+            method="Player.SetViewMode";params={"viewmode":value}
+        else:raise ValueError("Choose an available playback option")
+        if self.rpc(method,params)!="OK":raise ValueError("Kodi did not acknowledge the option")
+        return self.playback_options()
 
     def subtitle_tracks(self):
         if (self.movie is None or self.stream_url is not None or
@@ -339,6 +391,7 @@ class Playback:
                 self.movie, self.state = None, "ended" if self.seen else "failed"
                 self.builtin("Minimize")
         result = {"state": self.state, "home": self.home}
+        if self.options_request:result["optionsRequest"]=self.options_request
         if self.channel_delta:
             result.update(channelDelta=self.channel_delta, channelRequest=self.channel_request)
         result["canPause"] = self.movie is not None and self.can_pause
@@ -349,6 +402,10 @@ class Playback:
         return result
 
     def control(self, action):
+        if action=="options":
+            self.owned_player()
+            self.options_request=self.options_request%2147483647+1
+            return self.status()
         if action in ("channel-next", "channel-previous"):
             self.status()
             if self.movie is not None and self.seen:

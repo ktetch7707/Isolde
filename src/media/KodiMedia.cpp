@@ -69,6 +69,10 @@ void KodiMedia::releaseSocket()
 }
 void KodiMedia::fail(const QString &message)
 {
+    if(m_busy && m_stage>=22 && m_stage<=24){m_busy=false;releaseSocket();m_sourcePreviewReady=false;m_sourceStatus="Source operation could not be confirmed. Refresh to recover before another edit. "+message;emit changed();return;}
+    if(m_busy && (m_stage==20 || m_stage==21)){
+        m_busy=false;releaseSocket();m_playbackOptionsStatus="Playback options unavailable. "+message;emit changed();return;
+    }
     if (m_busy && (m_stage == 14 || m_stage == 15)) {
         m_busy = false;
         m_subtitleStatus = QStringLiteral("Kodi subtitle operation failed: %1").arg(message);
@@ -79,7 +83,9 @@ void KodiMedia::fail(const QString &message)
     if(((m_stage>=9 && m_stage<=12) || (m_stage>=16 && m_stage<=19)) && m_busy)m_playlistStatus="Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. "+message;
     m_pendingMovie = m_pendingShow = 0;
     m_pendingDirectKind.clear(); m_pendingDirectId = 0;
-    const bool wasPlaying = m_playbackActive;
+    const bool wasPlaying = m_playbackActive || m_adjacentTransition;
+    const bool returnHome=m_returnHomeRequested;
+    m_adjacentTransition=false;m_adjacentGlobal=m_adjacentAfterRead=-1;m_returnHomeRequested=false;
     m_lastPlaybackNaturalEnd=false;
     m_pendingControl.clear();
     m_playbackPoll.stop();
@@ -102,7 +108,7 @@ void KodiMedia::fail(const QString &message)
     }
     m_status = message;
     emit changed();
-    if (wasPlaying) emit playbackReturned(false);
+    if (wasPlaying) emit playbackReturned(returnHome);
     if (quitting) emit quitReply(false);
 }
 void KodiMedia::quitIfIdle()
@@ -115,11 +121,13 @@ void KodiMedia::quitIfIdle()
 }
 void KodiMedia::invalidate(const QString &reason)
 {
+    m_busy=false;m_optionsRequest=0;m_playbackOptions.clear();m_sourcePreviewReady=false;
     fail(reason);
 }
 void KodiMedia::retire(const QString &reason)
 {
     m_retired = true;
+    m_busy=false;m_optionsRequest=0;m_sourcePreviewReady=false;
     m_appOpenings.clear();
     m_historySelection.clear();
     fail(reason);
@@ -731,16 +739,21 @@ void KodiMedia::openCollection(const QString &id)
     }
 }
 void KodiMedia::scanMovies()
+{startScan("Video");}
+void KodiMedia::scanMusic()
+{startScan("Music");}
+void KodiMedia::startScan(const QString &kind)
 {
     if (m_busy || m_playbackActive || !m_connected) return;
     ++m_generation;
     m_busy = true;
     m_stage = 2;
+    m_scanKind=kind;
     m_observedScan = false;
     m_scanPolls = 0;
-    m_scanStatus = "Requesting a scan of this profile's configured video folders…";
+    m_scanStatus = kind=="Music"?"Requesting a scan of this profile’s music folders and embedded tags…":"Requesting a scan of this profile's configured video folders…";
     emit changed();
-    request("VideoLibrary.Scan");
+    request(kind=="Music"?"AudioLibrary.Scan":"VideoLibrary.Scan");
 }
 void KodiMedia::playMovie(int movieId, bool resume)
 {
@@ -754,8 +767,9 @@ void KodiMedia::playLibraryItem(const QString &kind, int id, bool resume, bool r
     for (const auto &item : m_movies) listed |= item.toMap().value(kind + "id").toInt() == id;
     if ((requireListed && !listed) || id < 1) return;
     ++m_generation;
+    m_playingKind=kind;m_playingId=id;m_returnHomeRequested=false;m_playbackOptions.clear();
     m_scheduledPlayback=false;
-    m_playbackActive = true; m_playbackVisible = false; m_busy = true; m_stage = 5;
+    m_optionsRequest=0;m_playbackActive = true; m_playbackVisible = false; m_busy = true; m_stage = 5;
     m_presentationError.clear();
     m_playbackStatus = "Starting " + kind + "…";
     emit changed();
@@ -766,9 +780,10 @@ bool KodiMedia::playScheduled(const QString &kind, int id, int offsetSeconds)
     if (m_busy || m_playbackActive || id<1 || offsetSeconds<0 || offsetSeconds>=86400
         || !QStringList{"movie","episode","musicvideo","song"}.contains(kind)) return false;
     ++m_generation;
+    m_playingKind=kind;m_playingId=id;m_returnHomeRequested=false;m_playbackOptions.clear();
     m_scheduledPlayback=true;
     m_scheduledKind=kind;m_scheduledId=id;
-    m_playbackActive=true; m_playbackVisible=false; m_busy=true; m_stage=5;
+    m_optionsRequest=0;m_playbackActive=true; m_playbackVisible=false; m_busy=true; m_stage=5;
     m_presentationError.clear(); m_playbackStatus="Tuning to the channel's broadcast position…";
     emit changed();
     request("Isolde.PlayScheduled",{{"mediaType",kind},{"mediaId",id},{"offsetSeconds",offsetSeconds}});
@@ -777,14 +792,14 @@ bool KodiMedia::playScheduled(const QString &kind, int id, int offsetSeconds)
 bool KodiMedia::playGuideStream(const QString &url)
 {
     if(m_busy || m_playbackActive || !GuideFeeds::streamUrl(url))return false;
-    ++m_generation;m_scheduledPlayback=false;m_playbackActive=true;m_playbackVisible=false;m_busy=true;m_stage=5;
+    ++m_generation;m_playingKind="stream";m_playingId=0;m_returnHomeRequested=false;m_playbackOptions.clear();m_scheduledPlayback=false;m_optionsRequest=0;m_playbackActive=true;m_playbackVisible=false;m_busy=true;m_stage=5;
     m_presentationError.clear();m_playbackStatus="Connecting to the reviewed live stream…";emit changed();
     request("Isolde.PlayGuideStream",{{"url",url}});return m_playbackActive;
 }
 bool KodiMedia::playPvr(int id,int clientId,int uniqueId)
 {
     if(m_busy || m_playbackActive || id<1)return false;
-    ++m_generation;m_scheduledPlayback=false;m_playbackActive=true;m_playbackVisible=false;m_busy=true;m_stage=5;
+    ++m_generation;m_playingKind="channel";m_playingId=id;m_returnHomeRequested=false;m_playbackOptions.clear();m_scheduledPlayback=false;m_optionsRequest=0;m_playbackActive=true;m_playbackVisible=false;m_busy=true;m_stage=5;
     m_presentationError.clear();m_playbackStatus="Tuning to the configured Kodi PVR channel…";emit changed();
     request("Isolde.PlayChannel",{{"channelid",id},{"resume",false},{"clientid",clientId},{"uniqueid",uniqueId}});
     return m_playbackActive;
@@ -799,10 +814,46 @@ void KodiMedia::presentationFailed()
 }
 void KodiMedia::playbackControl(const QString &action)
 {
+    if(action=="home" || action=="stop"){
+        if(action=="home")m_returnHomeRequested=true;
+        if(m_adjacentTransition){
+            m_adjacentGlobal=m_adjacentAfterRead=-1;m_adjacentTransition=false;
+            if(!m_playbackActive){++m_generation;m_busy=false;releaseSocket();emit changed();emit playbackReturned(action=="home");m_returnHomeRequested=false;return;}
+        }
+    }
     if (!m_playbackActive || !QStringList{"pause", "stop", "home", "forward", "backward"}.contains(action)) return;
     if (m_busy) { if (action == "stop" || action == "home") m_pendingControl = action; return; }
     m_busy = true; m_stage = 7;
     request("Isolde.PlaybackControl", {{"action", action}});
+}
+bool KodiMedia::adjacentScope() const
+{
+    if(!m_playbackActive || m_scheduledPlayback || !m_connected || QStringList{"manual","history"}.contains(m_viewKind)
+       || !QStringList{"movie","episode","song"}.contains(m_playingKind) || m_selectedIndex<0 || m_selectedIndex>=m_movies.size())return false;
+    const auto item=m_movies[m_selectedIndex].toMap();return item.value("mediaType").toString()==m_playingKind && item.value("mediaId").toInt()==m_playingId;
+}
+bool KodiMedia::playbackCanPrevious() const{return adjacentScope() && m_pageStart+m_selectedIndex>0;}
+bool KodiMedia::playbackCanNext() const{return adjacentScope() && m_pageStart+m_selectedIndex+1<m_totalMovies;}
+bool KodiMedia::playAdjacent(int direction)
+{
+    if(m_busy || (direction!=-1 && direction!=1) || !(direction<0?playbackCanPrevious():playbackCanNext()))return false;
+    const int target=m_pageStart+m_selectedIndex+direction;
+    // Stop first so Kodi saves progress; retain the originating filtered list.
+    playbackControl("stop");m_adjacentGlobal=target;m_adjacentTransition=true;
+    m_playbackStatus=direction<0?"Opening the previous title…":"Opening the next title…";emit changed();return true;
+}
+void KodiMedia::finishAdjacent()
+{
+    if(m_adjacentAfterRead<0)return;
+    const int index=m_adjacentAfterRead-m_pageStart;m_adjacentAfterRead=-1;
+    if(index<0 || index>=m_movies.size()){
+        m_adjacentTransition=false;m_playbackStatus="The adjacent item is no longer available. Choose a title from the refreshed list.";emit changed();emit playbackReturned(false);return;
+    }
+    const auto item=m_movies[index].toMap();const auto kind=item.value("mediaType").toString();const int id=item.value("mediaId").toInt();
+    m_selectedIndex=index;
+    if(!QStringList{"movie","episode","song"}.contains(kind) || id<1){m_adjacentTransition=false;m_playbackStatus="Choose a specific playable title from this library view.";emit changed();emit playbackReturned(false);return;}
+    const auto generation=m_generation;
+    QTimer::singleShot(0,this,[this,generation,kind,id]{if(generation==m_generation && m_adjacentTransition && !m_busy && !m_playbackActive)playLibraryItem(kind,id,true);});
 }
 void KodiMedia::loadSubtitle(const QString &path)
 {
@@ -837,6 +888,35 @@ void KodiMedia::refreshSubtitleTracks()
     m_subtitleStatus = QStringLiteral("Reading subtitle tracks from the managed Kodi player…");
     request(QStringLiteral("Isolde.GetSubtitleTracks"));
 }
+void KodiMedia::refreshPlaybackOptions()
+{
+    if(!m_playbackActive || m_busy)return;
+    m_busy=true;m_stage=20;m_playbackOptionsStatus="Reading this video’s audio, subtitle and viewing options…";
+    emit changed();request("Isolde.GetPlaybackOptions");
+}
+void KodiMedia::refreshSources()
+{
+    if(m_busy || m_playbackActive)return;
+    m_sourcePreviewReady=false;m_busy=true;m_stage=22;m_sourceStatus="Reading this profile’s Kodi sources and installed scrapers…";emit changed();request("Isolde.GetSources");
+}
+void KodiMedia::previewSource(const QVariantMap &source)
+{
+    if(m_busy || m_playbackActive || !m_sourceGuard || !m_sourceGuard())return;
+    m_sourceDraft=source;m_sourcePreviewReady=false;m_sourceRevision.clear();m_busy=true;m_stage=23;m_sourceStatus="Validating source draft · nothing saved…";emit changed();request("Isolde.PreviewSource",{{"source",QJsonObject::fromVariantMap(source)}});
+}
+void KodiMedia::applySource(const QVariantMap &source)
+{
+    if(m_busy || m_playbackActive || !m_sourceGuard || !m_sourceGuard())return;
+    if(!m_sourcePreviewReady || source!=m_sourceDraft || m_sourceRevision.size()!=64){m_sourceStatus="Preview this exact source draft before saving.";emit changed();return;}
+    m_sourcePreviewReady=false;m_busy=true;m_stage=24;m_sourceStatus="Applying the confirmed source settings through Kodi…";emit changed();request("Isolde.ApplySource",{{"source",QJsonObject::fromVariantMap(source)},{"revision",m_sourceRevision}});
+}
+void KodiMedia::cancelSourcePreview(){m_sourcePreviewReady=false;m_sourceDraft.clear();m_sourceRevision.clear();emit changed();}
+void KodiMedia::setPlaybackOption(const QString &kind,const QVariant &value)
+{
+    if(!m_playbackActive || m_busy || !QStringList{"audio","subtitle","view"}.contains(kind))return;
+    m_busy=true;m_stage=21;m_playbackOptionsStatus="Applying the selected option in Kodi…";
+    emit changed();request("Isolde.SetPlaybackOption",{{"kind",kind},{"value",QJsonValue::fromVariant(value)}});
+}
 void KodiMedia::setSubtitleTrack(int trackId)
 {
     if (!m_playbackActive || m_busy || trackId < -1) {
@@ -854,6 +934,7 @@ void KodiMedia::request(const QString &method, const QJsonObject &params)
 {
     if (m_retired) { fail("This profile is no longer active."); return; }
     releaseSocket();
+    m_timeout.setInterval(m_stage>=22 && m_stage<=24?25000:3000);
     m_received.clear();
     m_request = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", ++m_id}, {"method", method}, {"params", params}}).toJson(QJsonDocument::Compact) + '\n';
 #ifdef Q_OS_LINUX
@@ -886,6 +967,12 @@ void KodiMedia::consume()
             m_playbackStatus = QStringLiteral("Kodi could not load this local subtitle. Keep your video playing and retry.");
             emit changed(); return;
         }
+        if (m_stage>=22 && m_stage<=24) {
+            m_busy=false;m_timeout.stop();releaseSocket();m_sourcePreviewReady=false;m_sourceStatus="Source operation unavailable. Stop playback/scanning, check the managed Kodi installation, refresh and retry. Previous unfinished edits must recover first.";emit changed();return;
+        }
+        if (m_stage == 20 || m_stage == 21) {
+            m_busy=false;m_timeout.stop();releaseSocket();m_playbackOptionsStatus="Kodi could not read or change this video’s options. Refresh and retry.";emit changed();return;
+        }
         if (m_stage == 14 || m_stage == 15) {
             m_busy = false; m_timeout.stop(); releaseSocket();
             m_subtitleStatus = QStringLiteral("Kodi could not read or change the managed video's subtitle tracks.");
@@ -911,6 +998,41 @@ void KodiMedia::consume()
     const auto result = response.value("result").toObject();
     // Finish this reply before initiating a new connection (no reentrant socket reads).
     m_timeout.stop();
+    if(m_stage>=22 && m_stage<=24){
+        const auto stage=m_stage;m_busy=false;releaseSocket();
+        const auto revision=result["revision"].toString();
+        bool valid=QRegularExpression("^[0-9a-f]{64}$").match(revision).hasMatch();
+        if(stage==23){
+            valid=valid && result["preview"].toBool() && result["source"].toObject().toVariantMap()==m_sourceDraft;
+            if(valid){m_sourceRevision=revision;m_sourcePreviewReady=true;m_sourceStatus="Preview ready · source/content/scanner settings apply only after confirmation. Removing a source preserves media and library titles.";}
+        }else{
+            valid=valid && result["sources"].isArray() && result["sources"].toArray().size()<=128 && result["scrapers"].isArray() && result["scrapers"].toArray().size()<=384 && result["roots"].isArray() && result["roots"].toArray().size()<=128;
+            for(const auto &value:result["sources"].toArray()){const auto row=value.toObject();valid=valid && row["name"].isString() && row["name"].toString().size()<=160 && row["path"].isString() && row["path"].toString().size()<=4096 && row["editable"].isBool();}
+            for(const auto &value:result["scrapers"].toArray()){const auto row=value.toObject();valid=valid && row["id"].isString() && row["id"].toString().size()<=160 && row["name"].isString() && row["name"].toString().size()<=160 && QStringList{"movies","tvshows","musicvideos"}.contains(row["content"].toString());}
+            for(const auto &value:result["roots"].toArray())valid=valid && value.isString() && value.toString().startsWith('/') && value.toString().size()<=4096;
+            if(stage==24)valid=valid && result["applied"].toBool();
+            if(valid){m_librarySources=result["sources"].toArray().toVariantList();m_sourceScrapers=result["scrapers"].toArray().toVariantList();m_sourceRoots.clear();for(const auto &value:result["roots"].toArray())m_sourceRoots.append(value.toString());m_sourceStatus=stage==24?"Kodi source settings saved. Scan the library when ready; files and watched/resume state were not changed.":"Choose a source or add an allowed local media folder. Existing remote/multipath sources are preserved.";}
+        }
+        if(!valid){m_sourcePreviewReady=false;m_sourceStatus="Invalid source response. Refresh before retrying.";}
+        if(valid && stage==24)emit sourceApplied();
+        emit changed();return;
+    }
+    if(m_stage==20 || m_stage==21){
+        bool valid=result["audio"].isArray() && result["subtitles"].isArray() && result["views"].isArray() && result["subtitleEnabled"].isBool() && result["view"].isString();
+        for(const auto &key:QStringList{"audio","subtitles"}){
+            const auto rows=result[key].toArray();QSet<int> seen;valid=valid && rows.size()<=64;
+            for(const auto &value:rows){const auto row=value.toObject();const auto id=row["id"].toInt(-1);
+                valid=valid && row["id"].isDouble() && row["id"].toDouble()==id && id>=0 && !seen.contains(id) && row["name"].isString() && row["name"].toString().size()<=160 && row["language"].isString() && row["language"].toString().size()<=32 && row["selected"].isBool();seen.insert(id);
+            }
+        }
+        const QStringList allowed{"normal","zoom","stretch4:3","widezoom","stretch16:9","original"};
+        valid=valid && result["views"].toArray().size()<=allowed.size();
+        for(const auto &view:result["views"].toArray())valid=valid && view.isString() && allowed.contains(view.toString());
+        m_busy=false;releaseSocket();
+        if(valid){m_playbackOptions=result.toVariantMap();m_playbackOptionsStatus="Choose an option. Confirm applies it to the managed Kodi player.";}
+        else {m_playbackOptions.clear();m_playbackOptionsStatus="Kodi returned invalid playback options. Refresh to retry.";}
+        emit changed();return;
+    }
     if(m_stage>=16 && m_stage<=19){
         const int stage=m_stage;m_busy=false;releaseSocket();
         if(stage==16 || stage==19){
@@ -1008,7 +1130,9 @@ void KodiMedia::consume()
         if (state=="failed" && result.value("reason").isString()) m_playbackStatus=result.value("reason").toString().left(512);
         if (state == "starting" || state == "playing" || state == "paused") {
             m_playbackPoll.start();
-            if (state != "starting" && !m_playbackVisible) { m_playbackVisible = true; emit playbackStarted(); }
+            const auto optionRequest=result["optionsRequest"].toInt();
+            if(optionRequest>0 && optionRequest!=m_optionsRequest){m_optionsRequest=optionRequest;const auto generation=m_generation;QTimer::singleShot(0,this,[this,generation]{if(generation==m_generation && m_playbackActive)emit playbackOptionsRequested();});}
+            if (state != "starting" && !m_playbackVisible) { m_adjacentTransition=false;m_playbackVisible = true; emit playbackStarted(); }
         } else {
             m_playbackPoll.stop(); m_playbackActive = m_playbackVisible = false;
             m_subtitleTracks.clear();
@@ -1019,7 +1143,16 @@ void KodiMedia::consume()
             if(m_stage==5 && m_scheduledPlayback && state=="failed" && !result.value("home").toBool() && result.value("availability")=="unavailable")
                 emit scheduledMediaUnavailable(m_scheduledKind,m_scheduledId);
             if(state=="failed")emit playbackFailed(m_playbackStatus);
-            emit playbackReturned(result.value("home").toBool());
+            if(state=="ended" && m_adjacentGlobal>=0 && !m_returnHomeRequested && !result.value("home").toBool()){
+                m_adjacentAfterRead=m_adjacentGlobal;m_adjacentGlobal=-1;
+                m_playbackStatus="Loading the adjacent title from the same library view…";
+                const auto generation=m_generation;const int target=m_adjacentAfterRead;
+                QTimer::singleShot(0,this,[this,generation,target]{if(generation==m_generation && m_adjacentTransition && !m_busy && !m_playbackActive){m_selectedIndex=target%50;loadPage((target/50)*50);}});
+                emit changed();return;
+            }
+            m_adjacentGlobal=m_adjacentAfterRead=-1;m_adjacentTransition=false;
+            const bool home=result.value("home").toBool() || m_returnHomeRequested;m_returnHomeRequested=false;
+            emit playbackReturned(home);
             if (state == "ended" && !m_scheduledPlayback) {
                 // Kodi persists progress on stop; update the current shelf after
                 // that write without replacing the user's filter or selection.
@@ -1079,27 +1212,27 @@ void KodiMedia::consume()
             m_stage = 3;
             m_scanStatus = "Scan requested. Waiting for Kodi's scan status…";
         } else {
-            const auto scanning = result.value("Library.IsScanningVideo");
+            const auto scanning = result.value("Library.IsScanning"+m_scanKind);
             if (!scanning.isBool()) { fail("Kodi returned an invalid scan status."); return; }
             ++m_scanPolls;
             m_observedScan = m_observedScan || scanning.toBool();
             if ((!scanning.toBool() && (m_observedScan || m_scanPolls >= 5)) || m_scanPolls >= 1800) {
                 m_scanStatus = scanning.toBool() ? "Kodi is still scanning. Monitoring stopped after 30 minutes."
                     : m_observedScan ? "Kodi finished scanning. Your files were not moved or renamed."
-                    : "Kodi accepted the scan and is idle. A short scan may have finished between checks; no new movies are guaranteed.";
+                    : "Kodi accepted the scan and is idle. A short scan may have finished between checks; new library items are not guaranteed.";
                 m_busy = false;
                 releaseSocket();
                 refresh();
                 return;
             }
-            if (scanning.toBool()) m_scanStatus = "Kodi is scanning configured video folders. You can keep using Isolde.";
+            if (scanning.toBool()) m_scanStatus = m_scanKind=="Music"?"Kodi is scanning configured music folders and tags. You can keep using Isolde.":"Kodi is scanning configured video folders. You can keep using Isolde.";
         }
         releaseSocket();
         emit changed();
         const auto generation = m_generation;
         QTimer::singleShot(1000, this, [this, generation] {
             if (m_busy && generation == m_generation)
-                request("XBMC.GetInfoBooleans", {{"booleans", QJsonArray{"Library.IsScanningVideo"}}});
+                request("XBMC.GetInfoBooleans", {{"booleans", QJsonArray{"Library.IsScanning"+m_scanKind}}});
         });
         return;
     }
@@ -1186,6 +1319,7 @@ void KodiMedia::consume()
     m_busy = false;
     m_connected = true;
     releaseSocket();
+    finishAdjacent();
     emit changed();
     if (m_pendingMovie > 0) {
         const int movie = m_pendingMovie;

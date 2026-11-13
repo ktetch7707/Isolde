@@ -16,6 +16,67 @@ spec.loader.exec_module(bridge)
 
 
 class BridgeTests(unittest.TestCase):
+    @unittest.skipUnless(os.name=="posix","Source transactions use the guest's descriptor-relative filesystem")
+    def test_source_preview_stale_failure_recovery_and_profile_boundary(self):
+        spec=importlib.util.spec_from_file_location("isolde_sources",Path(__file__).resolve().parents[1]/"kodi/service.isolde.bridge/sources.py")
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            profile=Path(temporary)/'profile';profile.mkdir();media=Path(temporary)/'media';media.mkdir()
+            other=Path(temporary)/'other';other.mkdir()
+            control=profile/'isolde';state=[];backup=[];fail_set=False;fail_restore=False;playing=False
+            def execute(raw):
+                request=json.loads(raw)
+                if request['method']=='Player.GetActivePlayers':result=[{'playerid':1}] if playing else []
+                else:result={'addons':[{'addonid':'metadata.local','name':'Local metadata'}]}
+                return json.dumps({'result':result})
+            def builtin(command):
+                nonlocal state,backup
+                request=json.loads((control/'source-request.json').read_text());operation=request['operation']
+                self.assertEqual(command,'IsoldeSources('+request['token']+')')
+                ok=True
+                if operation=='set':
+                    self.assertEqual(request['expected'],state)
+                    backup=json.loads(json.dumps(state));(control/'source-config-backup.xml').write_text('<sources/>')
+                    (control/'source-native-backup.json').write_text('{}')
+                    source=dict(request['source']);state=[row for row in state if (row['category'],row['path'])!=(source['category'],source['path'])]
+                    if not source.pop('remove'):state.append(dict(source,singlePath=True))
+                    ok=not fail_set
+                elif operation=='restore':
+                    ok=not fail_restore
+                    if ok:state=json.loads(json.dumps(backup))
+                (control/'source-reply.json').write_text(json.dumps(dict(version=1,token=request['token'],ok=ok,sources=state,sourceFileExists=True)))
+            store=module.Sources(profile,execute,builtin,True,[str(media)])
+            draft=dict(name='Movies',path=str(media)+'/',category='video',content='movies',scraper='metadata.local',recursive=True,folderNames=False,noUpdate=False,exclude=False,remove=False)
+            preview=store.handle('Isolde.PreviewSource',{'source':draft});self.assertEqual(state,[])
+            self.assertFalse((control/'source-journal.json').exists())
+            result=store.handle('Isolde.ApplySource',dict(source=draft,revision=preview['revision']))
+            self.assertTrue(result['applied']);saved=json.loads(json.dumps(state));self.assertEqual(result['sources'][0]['name'],'Movies')
+            self.assertFalse((control/'source-journal.json').exists())
+            changed=dict(draft,name='Renamed');preview=store.handle('Isolde.PreviewSource',{'source':changed})
+            state[0]['name']='External change'
+            with self.assertRaisesRegex(ValueError,'changed after preview'):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
+            state=saved;preview=store.handle('Isolde.PreviewSource',{'source':changed});fail_set=True
+            with self.assertRaises(ValueError):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
+            self.assertEqual(state,saved);self.assertFalse((control/'source-journal.json').exists())
+            fail_restore=True
+            with self.assertRaises(ValueError):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
+            self.assertTrue((control/'source-journal.json').exists())
+            fail_restore=False;fail_set=False
+            store=module.Sources(profile,execute,builtin,True,[str(media)])
+            self.assertEqual(state,saved);self.assertFalse((control/'source-journal.json').exists())
+            for unsafe in (dict(draft,path=str(other)+'/'),dict(draft,recursive=1),dict(draft,path=str(media)+'/../other/'),dict(draft,scraper='missing')):
+                with self.assertRaises(ValueError):store.handle('Isolde.PreviewSource',{'source':unsafe})
+            playing=True
+            with self.assertRaisesRegex(ValueError,'Stop playback'):store.handle('Isolde.ApplySource',dict(source=changed,revision=preview['revision']))
+            self.assertEqual(state,saved);playing=False
+            music=dict(draft,category='music',content='music',scraper='',name='Music')
+            self.assertTrue(store.handle('Isolde.PreviewSource',{'source':music})['preview'])
+            remove=dict(draft,remove=True);preview=store.handle('Isolde.PreviewSource',{'source':remove})
+            store.handle('Isolde.ApplySource',dict(source=remove,revision=preview['revision']))
+            self.assertEqual(state,[]);self.assertTrue(media.is_dir());self.assertFalse((other/'isolde').exists())
+            unmanaged=module.Sources(other,execute,builtin,False,[str(media)])
+            with self.assertRaises(ValueError):unmanaged.handle('Isolde.GetSources',{})
+
     def test_guide_acceptance_observations_respect_bridge_boundary(self):
         root=Path(__file__).resolve().parents[1]
         for name in ('guide_lifecycle.py','guide_features.py','guide-soak-acceptance.py'):

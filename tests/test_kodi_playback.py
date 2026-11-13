@@ -39,6 +39,7 @@ class PlaybackTests(unittest.TestCase):
         modules = {"xbmc": fake, "xbmcvfs": types.SimpleNamespace(translatePath=lambda p: p),
                    "bridge": types.SimpleNamespace(LocalBridge=Bridge), "playback": types.SimpleNamespace(Playback=Player),
                    "artwork": types.SimpleNamespace(Artwork=lambda *args: None),
+                   "sources": types.SimpleNamespace(Sources=lambda *args: None),
                    "playlists": types.SimpleNamespace(Playlists=lambda *args: None)}
         with patch.dict(sys.modules, modules):
             runpy.run_path(str(Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/service.py"))
@@ -68,6 +69,8 @@ class PlaybackTests(unittest.TestCase):
         ]
         self.subtitle_id = 0
         self.subtitle_enabled = True
+        self.audio_id = 0
+        self.view = "normal"
         self.now = 0
         self.calls, self.builtins = [], []
         self.player = module.Playback(self.execute, self.builtins.append, True, lambda: self.now)
@@ -94,7 +97,7 @@ class PlaybackTests(unittest.TestCase):
             values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
                     "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
             values.update({"subtitles":self.subtitle_tracks, "currentsubtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
-                           "subtitleenabled":self.subtitle_enabled})
+                           "subtitleenabled":self.subtitle_enabled,"audiostreams":[{"index":0,"name":"Stereo","language":"en"},{"index":1,"name":"Commentary","language":"en"}],"currentaudiostream":{"index":self.audio_id}})
             if set(params["properties"])-set(values):return json.dumps({"error":{"code":-32602,"message":"Invalid Player property"}})
             result={key:values[key] for key in params["properties"]}
         elif method == "XBMC.GetInfoBooleans":
@@ -102,6 +105,12 @@ class PlaybackTests(unittest.TestCase):
             if self.pause_info_error:return json.dumps({"error":{"code":-32602,"message":"Capability unavailable"}})
             result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
+        elif method == "Player.GetViewMode":
+            self.assertEqual(params,{});result={"viewmode":self.view}
+        elif method == "Player.SetViewMode":
+            self.assertEqual(set(params),{"viewmode"});self.view=params["viewmode"]
+        elif method == "Player.SetAudioStream":
+            self.assertEqual(set(params),{"playerid","stream"});self.audio_id=params["stream"]
         elif method == "Player.SetSubtitle":
             self.assertEqual(set(params),{"playerid","subtitle","enable"})
             self.assertIs(type(params["enable"]),bool)
@@ -379,6 +388,37 @@ class PlaybackTests(unittest.TestCase):
             self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": 99})
         with self.assertRaises(ValueError):
             self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": True})
+
+    def test_native_menu_and_options_remain_owned_and_do_not_stop_playback(self):
+        self.start()
+        first=self.player.control("options")["optionsRequest"]
+        self.assertEqual(self.player.status()["optionsRequest"],first)
+        self.assertEqual(self.player.control("options")["optionsRequest"],first+1)
+        options=self.player.handle("Isolde.GetPlaybackOptions",{})
+        self.assertEqual([row["id"] for row in options["audio"]],[0,1])
+        self.player.handle("Isolde.SetPlaybackOption",{"kind":"audio","value":1})
+        self.assertEqual(self.audio_id,1)
+        self.subtitle_enabled=False
+        options=self.player.handle("Isolde.SetPlaybackOption",{"kind":"subtitle","value":2})
+        self.assertTrue(options["subtitles"][1]["selected"])
+        options=self.player.handle("Isolde.SetPlaybackOption",{"kind":"view","value":"zoom"})
+        self.assertEqual(options["view"],"zoom")
+        for kind,value in (("audio",True),("subtitle",99),("view","execute"),("volume",100)):
+            with self.assertRaises(ValueError):self.player.handle("Isolde.SetPlaybackOption",dict(kind=kind,value=value))
+        self.assertTrue(self.active)
+        writes=sum(method.startswith("Player.Set") for method,_ in self.calls)
+        self.item=8
+        with self.assertRaises(ValueError):self.player.handle("Isolde.SetPlaybackOption",dict(kind="view",value="normal"))
+        self.assertEqual(sum(method.startswith("Player.Set") for method,_ in self.calls),writes)
+        with self.assertRaises(ValueError):self.player.control("options")
+
+    def test_song_menu_exposes_common_controls_without_video_settings(self):
+        self.kind="song"
+        self.player.handle("Isolde.PlaySong",{"songid":7,"resume":False});self.active=True
+        self.assertEqual(self.player.control("options")["state"],"playing")
+        self.assertEqual(self.player.handle("Isolde.GetPlaybackOptions",{})["views"],[])
+        with self.assertRaises(ValueError):self.player.handle("Isolde.SetPlaybackOption",dict(kind="view",value="zoom"))
+        self.assertEqual(self.player.control("pause")["state"],"paused")
 
     def test_episode_resume_restart_and_type_scoped_ownership(self):
         self.kind = "episode"

@@ -211,7 +211,7 @@ Window {
         if (kodiMedia.playbackActive) {
             if (command === inputManager.home) kodiMedia.playbackControl("home")
             else if (command === inputManager.back) kodiMedia.playbackControl("stop")
-            else if (command === inputManager.menu) subtitleTrackPicker.open = true
+            else if (command === inputManager.menu) playbackOptions.showControls()
             else if (command === inputManager.playPause || command === inputManager.confirm) kodiMedia.playbackControl("pause")
             else if (command === inputManager.navigateLeft) kodiMedia.playbackControl("backward")
             else if (command === inputManager.navigateRight) kodiMedia.playbackControl("forward")
@@ -722,6 +722,7 @@ Window {
         appearance: window.shellAppearance("kodi", "")
         onCloseRequested: open = false
     }
+    PlaybackOptionsWindow { id:playbackOptions;kodiClient:kodiMedia;appearance:window.shellAppearance("kodi", "") }
     CaptureSessionView {
         id: captureSession
         anchors.fill: parent

@@ -20,7 +20,9 @@ class KodiService final : public QObject {
     Q_PROPERTY(QString browsePath READ browsePath NOTIFY changed)
     Q_PROPERTY(QStringList folderChoices READ folderChoices NOTIFY changed)
     Q_PROPERTY(bool alwaysPlayLocally READ alwaysPlayLocally WRITE setAlwaysPlayLocally NOTIFY alwaysPlayLocallyChanged)
+    Q_PROPERTY(QVariantList capabilityInventory READ capabilityInventory CONSTANT)
 public:
+    QVariantList capabilityInventory() const;
     bool alwaysPlayLocally() const { return m_alAlwaysPlayLocally; }
     Q_INVOKABLE void setAlwaysPlayLocally(bool value);
     Q_INVOKABLE void resetAlwaysPlayLocally();
@@ -31,8 +33,10 @@ public:
     QString status() const { return m_status; }
     QString frontend() const { return m_frontend; }
     bool switching() const { return !m_pendingFrontend.isEmpty(); }
-    bool canOpenApplication() const { return !switching() && m_process.state() == QProcess::NotRunning; }
-    bool canEditFolders() const { return !m_suspended && canOpenApplication(); }
+    bool canOpenApplication() const { return !switching() && !m_folderEditing && m_process.state() == QProcess::NotRunning; }
+    bool canEditFolders() const { return !m_suspended && !switching() && m_process.state() == QProcess::NotRunning; }
+    Q_INVOKABLE bool beginFolderEditing();
+    Q_INVOKABLE void endFolderEditing();
     QStringList libraryFolders() const;
     QString folderStatus() const { return m_folderStatus; }
     QString browsePath() const { return m_browsePath; }
@@ -61,6 +65,7 @@ private:
     QString m_profile, m_status = "Not started";
     bool m_enabled = true, m_stopping = false, m_suspended = false, m_ready = false;
     bool m_alAlwaysPlayLocally = true;
+    bool m_folderEditing=false,m_resumeAfterFolders=false,m_cancelFolderPreparing=false;
     QProcess m_process;
     QTimer m_probe;
     int m_checks = 0;

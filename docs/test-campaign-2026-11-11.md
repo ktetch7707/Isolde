@@ -1643,3 +1643,48 @@ Static review: git diff --check and node --check src/input/web-remote.js pass. P
 BUG-147, subsequent playback API review: subtitle discovery used unsupported Player.GetProperties property `subtitle` instead of Kodi's declared `currentsubtitle`; its mock duplicated the invalid contract and concealed the production failure. Corrected both, explicitly pass SetSubtitle enable=true for a chosen track (false for Off), and extend the existing track test to start disabled before selecting. The picker now measures wrapped heading/status/rows, reveals the selected track and uses shared selected-text contrast/radii. Primary schema: https://github.com/xbmc/xbmc/blob/Omega/xbmc/interfaces/json-rpc/schema/types.json . No VM run; include in the same combined candidate.
 
 Additional T04.6 integration gap retained: the existing Isolde subtitle picker does not itself prove the physical Menu handoff from the foreground native Kodi playback window, nor complete audio/viewing controls. Review native keymap/notification/focus handoff with the capability UI work; an API-only pass cannot close this advertised workflow. This is known software work, not a hardware handoff exception.
+
+## T04 source/setup and playback completion batch — November13
+
+BUG-145 source repair now includes a Kodi-native managed source builtin, typed
+private broker, draft/preview/confirmed apply/remove UI, exact source/provider
+backup and rollback, stale-preview refusal, video/music scanner controls and
+safe idle-backend folder-access lease. Declared matrix and package provenance:
+[kodi-managed-source-interface.md](kodi-managed-source-interface.md). Existing
+network/multipath definitions remain preserved/read-only; this is explicit scope,
+not a claim that arbitrary Kodi settings or add-on configuration are implemented.
+
+Native Menu now opens an owned Isolde controls window, with common transport,
+reported audio/subtitle tracks, picture size and current-list previous/next across
+pages. Music visualization has managed transport/Menu keys. The capability guide
+is validated packaged data, with setup and recovery routes. Existing bridge,
+playback and Qt media registrations now contain the direct boundary assertions;
+existing movieart/playlists installed journeys exercise fresh Isolde-only source
+setup, poster edits and actual Menu/next/previous/picture/subtitle/focus return.
+They have not run yet; no new registration or acceptance credit is claimed.
+
+BUG-148 (source review): both new source-save and Power guards treated Isolde's
+own Settings session as an external app, blocking their normal UI. Allow Settings
+explicitly while preserving profile, external app, desktop, import and playback
+restrictions. Repaired in source; installed verification remains pending.
+
+Dependency setup attempts a–g are retained under build/vm-oracle. g compiled the
+native source builtin and reached1166/1697 before the distribution-patched
+SystemInfo.cpp failed on missing DEB_VERSION. debian/rules supplies that macro;
+plain dpkg-buildflags does not. h supplies the exact installed version to its
+consuming translation unit and reuses cached objects. Earlier DFSG dependency,
+render-system and CMake target errors were diagnosed before retry. These are
+native dependency setup failures, not application test passes. Guest build deps,
+verified generated legacy cache cleanup and reproducible desktop index-cache
+cleanup are recorded; an indexer restoration lease remains until setup succeeds.
+No host cleanup or host toolchain installation occurred. Full application and
+installed batch still pending; acceptance remains88%, T04=49%.
+
+BUG-149 (source review): desktop-import preparation called KodiService.suspend,
+whose legacy stop path kills the backend after four seconds if stdin quit does
+not finish. That bypassed idle scan/save ownership. Import now uses the same
+asynchronous clean-exit lease as folder editing, waits within the existing20s
+backend deadline, and cancels preparation without copying/writing configuration.
+Existing Qt desktop import case covers deferred wait, cancel, resumed operation
+and source preservation. Import rows now size to wrapped shared-scale text.
+Pending combined verification; no extra full test or acceptance credit.

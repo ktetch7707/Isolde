@@ -145,6 +145,7 @@ target_include_directories(isolde_core PUBLIC src)
 target_compile_definitions(isolde_core PRIVATE ISOLDE_GAME_RUNTIME_SOURCE="${CMAKE_CURRENT_SOURCE_DIR}/config/game-runtimes.json")
 target_link_libraries(isolde_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network Qt6::DBus Qt6::Multimedia Qt6::SerialPort Qt6::Sql)
 qt_add_resources(isolde_core "remote_buttons" PREFIX "/" FILES config/remote-buttons.json)
+qt_add_resources(isolde_core "kodi_capabilities" PREFIX "/" FILES config/kodi-capabilities.json)
 
 qt_add_executable(isolde src/main.cpp)
 qt_add_executable(isolde-recovery src/recovery/main.cpp)
@@ -176,6 +177,8 @@ qt_add_qml_module(isolde
         qml/GuideWidget.qml
         qml/LibraryBrowseControls.qml
         qml/KodiSettingsView.qml
+        qml/PlaybackOptionsWindow.qml
+        qml/KodiSourcesView.qml
         qml/KodiImportView.qml
         qml/MediaFoldersView.qml
         qml/SetupWizard.qml
@@ -441,7 +444,7 @@ install(FILES config/studio-defaults.json DESTINATION bin/config)
 install(DIRECTORY config/packages DESTINATION bin/config)
 install(DIRECTORY config/skins DESTINATION bin/config)
 install(DIRECTORY kodi/service.isolde.bridge DESTINATION share/isolde/kodi PATTERN "__pycache__" EXCLUDE)
-foreach(bridge_file addon.xml bridge.py service.py playback.py artwork.py playlists.py)
+foreach(bridge_file addon.xml bridge.py service.py playback.py artwork.py playlists.py sources.py)
     configure_file(kodi/service.isolde.bridge/${bridge_file} ${CMAKE_CURRENT_BINARY_DIR}/share/isolde/kodi/service.isolde.bridge/${bridge_file} COPYONLY)
 endforeach()
 

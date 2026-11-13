@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QtTest>
 #include <QScopeGuard>
+#include <QSet>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -35,6 +36,7 @@ private slots:
     void tvGuideReadsChannelsAndKeepsUnavailableStateHonest();
     void pagesLibraryAndResets();
     void playbackLifecycle();
+    void sourcePreviewAndPlaybackOptionsBoundaries();
     void scheduledPlaybackUsesExplicitBroadcastOffset();
     void scheduledUnavailableAcknowledgementUsesOnlyOwnedStartIdentity();
     void localViewsAndCollections();
@@ -80,6 +82,11 @@ void KodiMediaTests::mediaFolderPermissions()
     {
         KodiService service("folder-test");
         service.setEnabled(false);
+        QVERIFY(service.beginFolderEditing());QVERIFY(service.canEditFolders());
+        service.endFolderEditing();QVERIFY(!service.enabled());
+        const auto capabilities=service.capabilityInventory();QVERIFY(capabilities.size()>=10);
+        QSet<QString> capabilityIds;for(const auto &value:capabilities)capabilityIds.insert(value.toMap()["id"].toString());
+        QVERIFY(capabilityIds.contains("sources"));QVERIFY(capabilityIds.contains("tracks"));QVERIFY(capabilityIds.contains("import"));
         QCOMPARE(service.frontend(),QString("isolde"));
         QVERIFY(service.canEditFolders());
         service.addLibraryFolder(QUrl::fromLocalFile(media.path()));
@@ -182,6 +189,18 @@ static void serve(QLocalServer &server, int version)
                     result = QJsonObject{{"state", server.property("playState").toString()}, {"home", server.property("playHome").toBool()}};
                     const auto overrideKey=request.value("method")=="Isolde.PlaybackStatus"?"pollResult":"playResult";
                     if(server.property(overrideKey).isValid())result=QJsonObject::fromVariantMap(server.property(overrideKey).toMap());
+                    if(server.property("autoStop").toBool() && request["method"]=="Isolde.PlaybackControl" && QStringList{"stop","home"}.contains(request["params"].toObject()["action"].toString()))
+                        result=QJsonObject{{"state","ended"},{"home",request["params"].toObject()["action"]=="home"}};
+                }
+                else if(QStringList{"Isolde.GetPlaybackOptions","Isolde.SetPlaybackOption"}.contains(request["method"].toString())){
+                    server.setProperty("optionParams",request["params"].toObject().toVariantMap());
+                    result=QJsonObject{{"audio",QJsonArray{QJsonObject{{"id",0},{"name","Stereo"},{"language","en"},{"selected",true}}}},{"subtitles",QJsonArray{}},{"views",QJsonArray{"normal","zoom"}},{"view","normal"},{"subtitleEnabled",false}};
+                    if(server.property("badOptions").toBool())result=QJsonObject{{"audio",QJsonArray{}}};
+                }
+                else if(QStringList{"Isolde.GetSources","Isolde.PreviewSource","Isolde.ApplySource"}.contains(request["method"].toString())){
+                    const auto params=request["params"].toObject();server.setProperty("sourceParams",params.toVariantMap());
+                    result=QJsonObject{{"revision",QString(64,'c')},{"sources",QJsonArray{}},{"scrapers",QJsonArray{}},{"roots",QJsonArray{"/media/fixture"}},{"applied",true}};
+                    if(request["method"]=="Isolde.PreviewSource")result=QJsonObject{{"revision",QString(64,'c')},{"source",params["source"]},{"preview",true}};
                 }
                 else if (request.value("method") == "Isolde.GetPlaylists") {
                     result=QJsonObject{{"playlists",QJsonArray{QJsonObject{{"playlistid",1},{"title","Family films"},{"playlistName","Family films.xsp"}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
@@ -206,13 +225,15 @@ static void serve(QLocalServer &server, int version)
                 else if(request["method"]=="Isolde.GetPlaylistOrder"){
                     result=QJsonObject{{"members",QJsonArray{QJsonObject{{"title","Alpha"},{"index",0}},QJsonObject{{"title","Beta"},{"index",1}}}},{"revision",QString(64,'b')}};
                 }
-                else if (request.value("method") == "VideoLibrary.Scan") {
+                else if (request.value("method") == "VideoLibrary.Scan" || request.value("method") == "AudioLibrary.Scan") {
                     result = server.property("rejectScan").toBool() ? "rejected" : "OK";
                     server.setProperty("scanRequests", server.property("scanRequests").toInt() + 1);
+                    server.setProperty("scanMethod",request["method"].toString());
                 } else if (request.value("method") == "XBMC.GetInfoBooleans") {
                     const bool scanning = server.property("scanning").toBool();
                     server.setProperty("scanning", false);
-                    result = QJsonObject{{"Library.IsScanningVideo", scanning}};
+                    const auto boolean=request["params"].toObject()["booleans"].toArray().first().toString();
+                    result = QJsonObject{{boolean, scanning}};
                 }
                 else if (request.value("method") == "VideoLibrary.GetMovieDetails") {
                     const int movieId = request.value("params").toObject().value("movieid").toInt();
@@ -927,6 +948,35 @@ void KodiMediaTests::playbackLifecycle()
     QVERIFY(!media.connected());
     QCOMPARE(started.size(), 1);
 }
+void KodiMediaTests::sourcePreviewAndPlaybackOptionsBoundaries()
+{
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));serve(server,13);
+    server.setProperty("total",103);server.setProperty("playState","playing");server.setProperty("autoStop",true);
+    KodiMedia media("source-options",nullptr,dir.path());media.refresh();QTRY_VERIFY(media.connected());
+    bool allowed=true;media.setSourceEditGuard([&]{return allowed;});
+    media.refreshSources();QTRY_VERIFY(!media.busy());QCOMPARE(media.sourceRoots(),QStringList{"/media/fixture"});
+    const QVariantMap source{{"name","Movies"},{"path","/media/fixture/"},{"category","video"},{"content","movies"},{"scraper","metadata.local"},{"recursive",true},{"folderNames",false},{"noUpdate",false},{"exclude",false},{"remove",false}};
+    media.previewSource(source);QTRY_VERIFY(!media.busy());QVERIFY(media.sourcePreviewReady());
+    auto changed=source;changed["name"]="Changed";media.applySource(changed);QVERIFY(!media.busy());
+    QSignalSpy applied(&media,&KodiMedia::sourceApplied);
+    allowed=false;media.applySource(source);QVERIFY(!media.busy());QVERIFY(applied.isEmpty());
+    allowed=true;media.applySource(source);QTRY_COMPARE(applied.size(),1);QVERIFY(!media.sourcePreviewReady());
+    QCOMPARE(server.property("sourceParams").toMap()["revision"].toString(),QString(64,'c'));
+    media.previewSource(source);QTRY_VERIFY(!media.busy());media.cancelSourcePreview();media.applySource(source);QVERIFY(!media.busy());QCOMPARE(applied.size(),1);
+    media.selectIndex(49);media.playSelected();QTRY_VERIFY(media.playbackActive() && !media.busy());
+    QVERIFY(media.playbackCanPrevious());QVERIFY(media.playbackCanNext());
+    media.refreshPlaybackOptions();QTRY_VERIFY(!media.busy());QCOMPARE(media.playbackOptions()["audio"].toList().size(),1);
+    media.setPlaybackOption("view","zoom");QTRY_VERIFY(!media.busy());QCOMPARE(server.property("optionParams").toMap()["value"].toString(),QString("zoom"));
+    server.setProperty("badOptions",true);media.refreshPlaybackOptions();QTRY_VERIFY(!media.busy());QVERIFY(media.playbackOptions().isEmpty());QVERIFY(media.playbackActive());QVERIFY(media.connected());
+    QVERIFY(!media.playAdjacent(2));QVERIFY(media.playAdjacent(1));
+    QTRY_COMPARE(server.property("lastPlayParams").toMap()["movieid"].toInt(),51);
+    QTRY_VERIFY(media.playbackActive() && !media.busy());QCOMPARE(media.pageStart(),50);QCOMPARE(media.selectedIndex(),0);
+    QVERIFY(media.playAdjacent(-1));QTRY_COMPARE(server.property("lastPlayParams").toMap()["movieid"].toInt(),50);
+    QTRY_VERIFY(media.playbackActive() && !media.busy());QCOMPARE(media.pageStart(),0);QCOMPARE(media.selectedIndex(),49);
+    QSignalSpy returned(&media,&KodiMedia::playbackReturned);media.playbackControl("home");QTRY_VERIFY(!media.playbackActive());QCOMPARE(returned.size(),1);QVERIFY(returned[0][0].toBool());
+    media.scanMusic();QTRY_COMPARE(server.property("scanMethod").toString(),QString("AudioLibrary.Scan"));media.invalidate("Stopped monitoring");media.refresh();QTRY_VERIFY(media.connected() && !media.busy());
+    media.previewSource(source);media.retire("Profile closed");QTest::qWait(50);QVERIFY(!media.sourcePreviewReady());QVERIFY(!media.connected());QVERIFY(!media.busy());
+}
 void KodiMediaTests::scheduledPlaybackUsesExplicitBroadcastOffset()
 {
     QTemporaryDir dir; QLocalServer server;
@@ -1163,6 +1213,15 @@ void KodiMediaTests::desktopImportIsRecursivePrivateReversibleAndGuarded()
     QCOMPARE(prepared,released);const auto complete=prepared;
     importer.setBackendGuard([&]{++prepared;return false;},[&]{++released;});importer.createBackup();
     QVERIFY(!importer.importInProgress());QVERIFY(importer.importStatus().contains("Stop playback"));QCOMPARE(released,complete);
+    bool preparing=true;bool ready=false;int deferredReleases=0;
+    importer.setBackendGuard([&]{return ready;},[&]{++deferredReleases;},[&]{return preparing;});
+    importer.scanExistingKodi();QVERIFY(importer.importInProgress());
+    importer.continueWhenBackendReady();QVERIFY(importer.importInProgress());QCOMPARE(read(target),QByteArray("previous profile"));
+    importer.cancel();QVERIFY(!importer.importInProgress());QCOMPARE(deferredReleases,1);
+    preparing=false;ready=true;importer.continueWhenBackendReady();QVERIFY(!importer.importInProgress());
+    preparing=true;ready=false;importer.scanExistingKodi();QVERIFY(importer.importInProgress());
+    preparing=false;ready=true;importer.continueWhenBackendReady();QTRY_VERIFY_WITH_TIMEOUT(!importer.importInProgress(),10000);
+    QVERIFY(importer.canImport());QCOMPARE(deferredReleases,2);QCOMPARE(read(source),desktop);
     KodiImporter invalid("../other");invalid.scanExistingKodi();QVERIFY(!invalid.canImport());QCOMPARE(read(source),desktop);
 }
 

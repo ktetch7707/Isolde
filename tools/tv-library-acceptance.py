@@ -174,17 +174,11 @@ if ''' + repr(str(imported)) + ''' in selected:
                 "params":{"tvshowid":show["tvshowid"], "art":{"poster":''' + repr(str(poster)) + '''}}}))
 ''')
     if args.movie_art:
-        # Import ONLY source configuration through Kodi's supported export/import
-        # format. All movie identity and artwork must come from the online scraper.
+        # Fresh source setup is performed by Isolde below, never a Kodi import dialog.
         movies = media / "movies"
         folder = movies / "Big Buck Bunny (2008)"; folder.mkdir(parents=True)
         movie_file = folder / "Big Buck Bunny (2008).ogv"
         os.link(clip, movie_file)
-        (imported / "videodb.xml").write_text('<videodb><version>1</version><paths><path><url>'
-            + escape(str(movies)) + '/</url><scanrecursive>1</scanrecursive><usefoldernames>true</usefoldernames>'
-            '<content>movies</content><scraperpath>metadata.themoviedb.org.python</scraperpath></path></paths></videodb>')
-        importer = (userdata / "tv-fixture-import.py").read_text()
-        importer = importer[:importer.index('    response = json.loads')]
         # Kodi can update its bundled provider after first launch. Initialize
         # the updated provider BEFORE importing source settings, otherwise the
         # source keeps the old provider's incomplete artwork configuration.
@@ -203,9 +197,12 @@ for setting in ("fetch_posters","fanart","landscape","keyart"):
 provider.setSettingString("language","en-US")
 provider.setSettingString("searchlanguage","en-US")
 '''
-        importer = provider_setup + importer
-        importer += '\nxbmc.executeJSONRPC(' + repr(json.dumps({"jsonrpc":"2.0","id":1,"method":"VideoLibrary.Scan","params":{"directory":str(movies)+"/"}})) + ')\n'
-        (userdata / "tv-fixture-import.py").write_text(importer)
+        # Only provider default initialization remains a synthetic fixture setup.
+        # It does not add sources, import a database, scan or open Kodi settings.
+        (userdata / "tv-fixture-import.py").write_text(provider_setup)
+        manifest=Path('/opt/isolde-managed-kodi/manifest.json')
+        if not manifest.is_file() or json.loads(manifest.read_text()).get('feature')!='isolde-sources-v1':
+            raise RuntimeError('Configure kodi-managed before fresh source acceptance')
     if args.guide:
         if not Path("/usr/share/kodi/addons/pvr.iptvsimple/addon.xml").is_file():
             raise RuntimeError("Run the bounded Configure guide action before this PVR acceptance case")
@@ -230,6 +227,7 @@ provider.setSettingString("searchlanguage","en-US")
         managed_art=config/'profiles'/profile/'artwork';managed_art.mkdir(parents=True)
         managed_poster=managed_art/(hashlib.sha256(poster.read_bytes()).hexdigest()+'.png')
         managed_poster.write_bytes(poster.read_bytes())
+        (config/'profiles'/profile/'home-layout.json').write_text(json.dumps(dict(schemaVersion=2,rootPage=dict(name='Home',visible=True,position=0),categories=[],components=[],composition=dict(schemaVersion=1,enabled=True,grid=dict(columns=8,rows=6,mode='screen'),headerControls=['settings'],showClock=False,navigation=[dict(id='home',name='Home')],initialTab='home'))))
     if args.history:
         import copy
         defaults=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
@@ -257,7 +255,7 @@ provider.setSettingString("searchlanguage","en-US")
             grid=dict(defaults['defaultGrid']);grid.update(columns=8,rows=6,mode='screen')
             guide_home['composition']={'schemaVersion':1,'enabled':True,'showClock':False,'grid':grid}
         (guide_profile/'home-layout.json').write_text(json.dumps(guide_home))
-    (config / "MediaAccess.conf").write_text(f"[profiles]\n{profile}\\kodi\\folders={media}\n")
+    (config / "MediaAccess.conf").write_text(f"[profiles]\n{profile}\\kodi\\folders={movies if args.movie_art else media}\n")
     unknown = evidence / "config/Unknown Organization"; unknown.mkdir()
     (unknown / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
     env = dict(os.environ)
@@ -339,13 +337,49 @@ provider.setSettingString("searchlanguage","en-US")
             wait(lambda: rpc(directory, "JSONRPC.Version"), "Private bridge ready")
             time.sleep(6)  # Finish startup-window replacement and managed minimization.
             kodi = next(r[0] for r in windows() if "Kodi" in r[-1])
-            run("wmctrl", "-i", "-a", kodi, env=env)
-            x11.XSetInputFocus(display, int(kodi, 16), 2, 0); x11.XSync(display, 0)
+            if not args.movie_art:
+                run("wmctrl", "-i", "-a", kodi, env=env)
+                x11.XSetInputFocus(display, int(kodi, 16), 2, 0); x11.XSync(display, 0)
             time.sleep(1)
             if args.guide:guide_capture('guidestartup')
-            else:
+            elif not args.movie_art:
                 key("kodi", "Escape"); key("kodi", "Escape")  # Dismiss first-run dialogs in this new test home.
                 key("kodi", "F9")
+            else:
+                key("kodi","F9")  # Fixture provider defaults only; never a library/source operation.
+                run("wmctrl","-i","-a",shell,env=env)
+                initial=rpc(directory,'Isolde.GetSources')
+                assert initial['sources']==[],initial
+                assert not (userdata/'sources.xml').exists(),'Fresh fixture already has source configuration'
+                def source_press(name,count=1):
+                    for _ in range(count):key(shell,name,.08)
+                    time.sleep(.3)
+                source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
+                source_press('Up',20);source_press('Down',7);source_press('Return')
+                source_press('Down',10);source_press('Return');time.sleep(1)
+                guide_capture('sourceempty')
+                choices=[row for row in initial['scrapers'] if row['content']=='movies']
+                provider_index=next(i for i,row in enumerate(choices) if row['id']=='metadata.themoviedb.org.python')
+                default_index=next((i for i,row in enumerate(choices) if row['id']=='metadata.local'),0)
+                def source_draft():
+                    source_press('Up',30);source_press('Down',2);source_press('Return');source_press('Return')
+                    source_press('Down',2)
+                    source_press('Return',(provider_index-default_index)%len(choices))
+                    source_press('Down',5);source_press('Return');time.sleep(.7)
+                source_draft();guide_capture('sourcepreview')
+                assert rpc(directory,'Isolde.GetSources')['sources']==[],'Preview saved a source'
+                source_press('Escape');source_press('Escape')
+                assert rpc(directory,'Isolde.GetSources')['sources']==[],'Cancelled draft saved a source'
+                source_draft();source_press('Down');source_press('Return');source_press('Return')
+                def saved_source():
+                    rows=rpc(directory,'Isolde.GetSources')['sources']
+                    return rows if len(rows)==1 else None
+                saved=wait(saved_source,'Source saved through Isolde preview and confirmation')
+                assert saved[0]['path']==str(movies)+'/' and saved[0]['content']=='movies' and saved[0]['scraper']=='metadata.themoviedb.org.python',saved
+                assert saved[0]['recursive'] is True
+                guide_capture('sourcesaved')
+                source_press('Escape');source_press('Up',8);source_press('Return')
+                (evidence/'source-setup.json').write_text(json.dumps(dict(fresh=True,previewNoWrite=True,cancelNoWrite=True,remoteConfirmedSave=True,nativeSources=saved,kodiMenusRequired=False),indent=2))
             if args.guide:
                 source_channels=wait(lambda:rpc(directory,'PVR.GetChannels',{'channelgroupid':'alltv','properties':['channelnumber','locked','hidden','clientid','uniqueid'],'limits':{'start':0,'end':50}}).get('channels'),'Real IPTV Simple channel ready',seconds=60)
                 assert len(source_channels)==1 and source_channels[0]['label']=='Isolde PVR Test',source_channels
@@ -534,7 +568,8 @@ provider.setSettingString("searchlanguage","en-US")
                     "movie":movie,"artworkBytes":len(raw),"artworkSha256":hashlib.sha256(raw).hexdigest(),
                     "artworkMime":art["mime"],"media_unchanged":True,"remotePosterPreviewNoWrite":True,
                     "remotePosterCancelNoWrite":True,"remotePosterApplied":True,"unrelatedTitleArtPreserved":True,
-                    "captures":["movieart","movieposterpreview","movieposterapplied"]},indent=2))
+                    "freshSourceSetupThroughIsolde":True,"sourcePreviewCancelNoWrite":True,"kodiMenusRequired":False,
+                    "captures":["sourceempty","sourcepreview","sourcesaved","movieart","movieposterpreview","movieposterapplied"]},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
@@ -698,6 +733,38 @@ provider.setSettingString("searchlanguage","en-US")
                 key("kodi","Return")  # Focused on-screen Pause control.
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Real playlist episode paused")
                 playlist_capture("playlistpaused")
+                before_item=rpc(directory,'Player.GetItem',{'playerid':1,'properties':[]})['item']
+                key('kodi','Menu')
+                def controls_window():
+                    return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None)
+                controls=wait(controls_window,'Native Menu opened the owned Isolde playback controls')
+                playlist_capture('playlistcontrols')
+                # First playlist episode has Next, but no Previous. Exercise
+                # real player presentation and subtitles through the Qt window.
+                for _ in range(6):key(controls,'Down',.08)
+                key(controls,'Return');key(controls,'Down');key(controls,'Return')
+                wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions').get('view')=='zoom','Remote picture-size choice applied by Kodi')
+                playlist_capture('playlistpicture')
+                key(controls,'Escape')
+                for _ in range(5):key(controls,'Down',.08)
+                key(controls,'Return');key(controls,'Return')
+                assert rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'] is False
+                key(controls,'Escape')
+                for _ in range(3):key(controls,'Down',.08)
+                key(controls,'Return')
+                def current_episode():
+                    if rpc(directory,'Isolde.PlaybackStatus').get('state')!='playing':return None
+                    return rpc(directory,'Player.GetItem',{'playerid':1,'properties':[]}).get('item')
+                next_item=wait(lambda:(item if (item:=current_episode()) and item.get('id')!=before_item['id'] else None),'Remote Next opened another actual playlist episode')
+                playlist_capture('playlistnext')
+                key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on next episode')
+                for _ in range(3):key(controls,'Down',.08)
+                key(controls,'Return')
+                wait(lambda:(item if (item:=current_episode()) and item.get('id')==before_item['id'] else None),'Remote Previous restored the original actual episode')
+                key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on original episode')
+                key(controls,'Escape');time.sleep(.5)
+                active_window=run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).strip().split()[-1]
+                assert int(active_window,16)==int(next(row[0] for row in windows() if 'Kodi' in row[-1]),16),'Closing controls did not restore native playback focus'
                 # Kodi logs rejected input during the OSD closing animation.
                 # Let that animation settle before the managed Back -> Stop key.
                 time.sleep(3)
@@ -706,7 +773,7 @@ provider.setSettingString("searchlanguage","en-US")
                 run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
                 playlist_capture("playlistreturned")
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
-                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"rename_collision_preserved":True,"remote_rule_preview_confirm":True,"smart_sort_saved":True,"member_reorder_remote_cancel_commit":True,"delete_cancel_confirm":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False},indent=2))
+                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"rename_collision_preserved":True,"remote_rule_preview_confirm":True,"smart_sort_saved":True,"member_reorder_remote_cancel_commit":True,"delete_cancel_confirm":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False,"nativeMenuOwnedIsoldeControls":True,"remotePictureSize":True,"remoteSubtitleOff":True,"realNextPrevious":True,"controlsCloseRestoresVideoFocus":True},indent=2))
                 print("Evidence: "+str(evidence),flush=True);return
             art = wait(lambda: (a if (a := rpc(directory, "Isolde.GetArtwork", {"kind": "tvshow", "id": show_id})).get("data") else None), "Kodi local artwork ready")
             artwork = base64.b64decode(art["data"])
