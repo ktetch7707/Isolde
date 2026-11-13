@@ -5,8 +5,11 @@ Window {
     id:root
     required property var kodiClient
     property var appearance:({})
+    property real uiScale:1
+    property real safeInset:0
     property string mode:"controls"
     property int selectedIndex:0
+    property int controlOriginIndex:0
     property bool restoreVideo:true
     property bool waitingAdjacent:false
     transientParent:null
@@ -32,15 +35,16 @@ Window {
     }
     function showControls(){waitingAdjacent=false;restoreVideo=true;mode="controls";selectedIndex=0;show();raise();requestActivate();body.forceActiveFocus();refreshTimer.start()}
     function closeControls(restore){restoreVideo=restore;hide()}
-    function back(){if(waitingAdjacent){waitingAdjacent=false;kodiClient.playbackControl("stop");closeControls(false)}else if(mode!=="controls"){mode="controls";selectedIndex=0}else hide()}
+    function back(){if(waitingAdjacent){waitingAdjacent=false;kodiClient.playbackControl("stop");closeControls(false)}else if(mode!=="controls"){mode="controls";selectedIndex=Math.min(controlOriginIndex,rows.length-1)}else hide()}
     function handleCommand(command){
         if(command===inputManager.home){closeControls(false);kodiClient.playbackControl("home");return}
-        if(command===inputManager.back || command===inputManager.menu){back();return}
+        if(command===inputManager.menu){if(waitingAdjacent)back();else hide();return}
+        if(command===inputManager.back){back();return}
         if(command===inputManager.navigateUp)selectedIndex=Math.max(0,selectedIndex-1)
         else if(command===inputManager.navigateDown)selectedIndex=Math.min(rows.length-1,selectedIndex+1)
         else if(command===inputManager.confirm && !kodiClient.busy){
             const row=rows[selectedIndex];if(!row)return
-            if(row.page){mode=row.page;selectedIndex=0;refreshTimer.start()}
+            if(row.page){controlOriginIndex=selectedIndex;mode=row.page;selectedIndex=0;refreshTimer.start()}
             else if(row.adjacent){waitingAdjacent=true;if(kodiClient.playAdjacent(row.adjacent)){selectedIndex=0;refreshTimer.stop()}else waitingAdjacent=false}
             else if(row.refresh)refreshTimer.start()
             else if(row.close)hide()
@@ -58,10 +62,12 @@ Window {
         function onChanged(){if(!root.waitingAdjacent && !root.kodiClient.playbackActive)root.closeControls(false);root.selectedIndex=Math.min(root.selectedIndex,Math.max(0,root.rows.length-1))}
     }
     Timer {id:refreshTimer;interval:100;onTriggered:{if(root.visible && root.kodiClient.playbackActive){if(root.kodiClient.busy)restart();else root.kodiClient.refreshPlaybackOptions()}}}
+    Rectangle {anchors.fill:parent;color:shell.scrim}
     Item {
-        id:body;anchors.fill:parent;focus:true
+        id:body;x:root.safeInset;y:root.safeInset
+        width:Math.max(1,(root.width-2*root.safeInset)/root.uiScale);height:Math.max(1,(root.height-2*root.safeInset)/root.uiScale)
+        scale:root.uiScale;transformOrigin:Item.TopLeft;focus:true
         Keys.onPressed:event=>{const command=inputManager.commandForKey(event.key);if(command!==inputManager.none){root.handleCommand(command);event.accepted=true}}
-        Rectangle {anchors.fill:parent;color:shell.scrim}
         Rectangle {
             anchors.centerIn:parent;width:Math.min(parent.width-64,800*shell.textScale);height:parent.height-64;color:shell.surface;radius:shell.radius
             Column {

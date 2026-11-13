@@ -18,6 +18,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QUrl>
+#include <algorithm>
 
 class KodiMediaTests : public QObject {
     Q_OBJECT
@@ -87,6 +88,8 @@ void KodiMediaTests::mediaFolderPermissions()
         const auto capabilities=service.capabilityInventory();QVERIFY(capabilities.size()>=10);
         QSet<QString> capabilityIds;for(const auto &value:capabilities)capabilityIds.insert(value.toMap()["id"].toString());
         QVERIFY(capabilityIds.contains("sources"));QVERIFY(capabilityIds.contains("tracks"));QVERIFY(capabilityIds.contains("import"));
+        const auto libraryViews=service.libraryViews();QCOMPARE(libraryViews.size(),3);
+        QVERIFY(std::any_of(libraryViews.begin(),libraryViews.end(),[](const QVariant &row){return row.toMap()["kind"]=="albums";}));
         QCOMPARE(service.frontend(),QString("isolde"));
         QVERIFY(service.canEditFolders());
         service.addLibraryFolder(QUrl::fromLocalFile(media.path()));
@@ -975,7 +978,7 @@ void KodiMediaTests::sourcePreviewAndPlaybackOptionsBoundaries()
     QTRY_VERIFY(media.playbackActive() && !media.busy());QCOMPARE(media.pageStart(),0);QCOMPARE(media.selectedIndex(),49);
     QSignalSpy returned(&media,&KodiMedia::playbackReturned);media.playbackControl("home");QTRY_VERIFY(!media.playbackActive());QCOMPARE(returned.size(),1);QVERIFY(returned[0][0].toBool());
     media.scanMusic();QTRY_COMPARE(server.property("scanMethod").toString(),QString("AudioLibrary.Scan"));media.invalidate("Stopped monitoring");media.refresh();QTRY_VERIFY(media.connected() && !media.busy());
-    media.previewSource(source);media.retire("Profile closed");QTest::qWait(50);QVERIFY(!media.sourcePreviewReady());QVERIFY(!media.connected());QVERIFY(!media.busy());
+    media.previewSource(source);media.retire("Profile closed");QTest::qWait(50);QVERIFY(!media.sourcePreviewReady());QVERIFY(!media.connected());QVERIFY(!media.busy());QVERIFY(media.sourceRoots().isEmpty());QVERIFY(media.librarySources().isEmpty());QVERIFY(media.playbackOptions().isEmpty());
 }
 void KodiMediaTests::scheduledPlaybackUsesExplicitBroadcastOffset()
 {

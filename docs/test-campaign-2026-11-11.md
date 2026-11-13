@@ -1688,3 +1688,66 @@ backend deadline, and cancels preparation without copying/writing configuration.
 Existing Qt desktop import case covers deferred wait, cancel, resumed operation
 and source preservation. Import rows now size to wrapped shared-scale text.
 Pending combined verification; no extra full test or acceptance credit.
+
+BUG-150 native dependency packaging is now repaired by l: generated package
+modes are explicit, fixed root-owned directories are corrected at dpkg configure,
+and installed binary/manifest ownership and hashes remain required. Read-only k
+storage evidence showed directories0775 while binaries were0755 and manifest0644;
+reinstall alone retained existing directory modes. l passes installation and
+restores the guest indexer; no application acceptance is inferred.
+
+The repeated remaining disk blocker was desktop indexing of generated build
+artifacts. Test now uses the same exact-path cache cleaner already covered by
+oracle safety checks, pauses only initially active guest indexer units during
+low-space builds, and restores them in finally under the existing runner lock.
+A crash leaves a validated per-run Recover lease. Ninja-declared Kodi link
+archives/staging duplicates can be discarded only after the installed dependency
+passes ownership/permission/hash checks; native objects/source/package/evidence
+remain. d stopped before application compilation after ordinary caches exhausted;
+e is the combined application candidate's first actual build/full attempt.
+
+Milestone reconciliation splits T04.5/.6/.7 under unchanged original group
+weights, preserving every previously earned weight. No new evidence credit:
+192/235 milestones, task49%, project2202/25=88%. Existing installed helpers now
+also exercise real native source publication denial/recovery and the capability
+guide's named setup route. These assertions remain pending execution/review.
+
+BUG-152, e full-run failure: invalidate/retire cleared m_busy before generic
+failure handling. This avoided per-operation nonfatal error branches, but also
+lost the active scan/quit context; the existing cancelsScanMonitoring assertion
+failed. Keep the context and explicitly request a forced disconnect instead,
+while ordinary source/options/subtitle RPC errors remain nonfatal. Retirement
+also clears newly added source/options data. Existing media tests retain scan
+cancellation and assert source/options teardown; no new registration.
+
+BUG-151 repairs restore the opening playback row after nested Back, make Menu
+close controls consistently, restore Remove's own row after preview Back, and
+hide Remove on a never-saved source. Existing Home navigation theme case now
+exercises these actual QML methods. GUI helper navigation resets to known list
+bounds rather than assuming the previous focus bug. The e run compiled the full
+app and passed59/60 attempted registrations; Native profile/browser isolation
+and Home layout were unattempted after its required stop at#60. Indexer finally
+restoration passes. No passing full receipt or deployment is claimed.
+
+f repeats full integration because e has a demonstrated full-suite failure and
+the fix touches shared media disconnection/lifecycle plus remote focus. This is
+the combined correction batch, not a rerun for a screenshot, commit or percent.
+Keep all failures; same candidate then goes through installed/offline/standing
+visual journeys. Current app changes remain unaccepted until that evidence.
+
+November13 media batch: t04-combined-20261113-f passes63/63 existing
+registrations, including the prior scan-cancellation failure, and stages its
+exact candidate. Native poster publication/failed-ack rollback, managed-art
+bounds and client cancellation now credit T04.5.c. Ledger193/235, T04=51%,
+project2204/25=88.16% (rounded88%). Installed source/controls acceptance stays
+open. BUG-153: stale source errors obscured successful retry, and the fixed
+Music embedded-tag provider emitted an erroneous missing-provider message.
+BUG-154: ordinary default library navigation lacked Music despite existing
+album/song APIs. Both repaired in the bounded media follow-up; existing Home
+navigation/media cases extended, no additional CTest registration. g attempted
+zero application tests due to a runner indentation error; corrected h is the
+active focused run reusing the exact original f full evidence. No failed run
+is relabelled passed. Installed movieart now also covers a real tagged WAV
+music source, Kodi scan, remote album/song browse and native Music controls.
+
+BUG-155: new libraryViews getter deduced QJsonValueRef from a temporary JSON object; h aborts with heap corruption. Own a QJsonValue through value() instead. i cancelled after this concrete diagnosis, with guest indexer/service restoration. j verifies the fix; no acceptance credit for h/i.

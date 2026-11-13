@@ -26,6 +26,28 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    @unittest.skipUnless(os.name=='posix','Guest cache ownership uses POSIX uid/mode')
+    def test_managed_kodi_cleanup_keeps_objects_and_requires_installed_hash(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);work=root/'support/managed-kodi';build=work/'build';build.mkdir(parents=True)
+            source=work/'distribution-source/kodi';source.mkdir(parents=True)
+            (build/'CMakeCache.txt').write_text('CMAKE_HOME_DIRECTORY:INTERNAL='+str(source)+'\n')
+            (build/'build.ninja').write_text('build library.a: CXX_STATIC_LIBRARY_LINKER__library_Release object.o\n')
+            archive=build/'library.a';archive.write_bytes(b'!<arch>\nrelinkable')
+            obj=build/'object.o';obj.write_bytes(b'compiled')
+            install=root/'installed';install.mkdir();install.chmod(0o755);binary=install/'kodi.bin';binary.write_bytes(b'\x7fELFfixture');binary.chmod(0o644)
+            oracle.atomic_json(install/'manifest.json',dict(feature='isolde-sources-v1',binarySha256='0'*64))
+            (install/'manifest.json').chmod(0o644)
+            with self.assertRaisesRegex(RuntimeError,'checksum'):oracle.remove_managed_kodi_archives(root,target_free=10**18,installation=install,owner_uid=os.getuid())
+            oracle.atomic_json(install/'manifest.json',dict(feature='isolde-sources-v1',binarySha256=oracle.digest(binary)))
+            (install/'manifest.json').chmod(0o644)
+            with self.assertRaisesRegex(RuntimeError,'Mounted'):oracle.remove_managed_kodi_archives(root,mounts=[build],target_free=10**18,installation=install,owner_uid=os.getuid())
+            self.assertTrue(archive.exists())
+            self.assertEqual(oracle.remove_managed_kodi_archives(root,active=[obj],target_free=10**18,installation=install,owner_uid=os.getuid()),[])
+            removed=oracle.remove_managed_kodi_archives(root,target_free=10**18,installation=install,owner_uid=os.getuid())
+            self.assertEqual([item['path'] for item in removed],[str(archive)])
+            self.assertTrue(binary.exists());self.assertTrue(obj.exists());self.assertTrue(source.exists())
+
     def test_search_origin_main_reuse_accepts_only_the_exact_visibility_fix(self):
         after='''        property string themeOrigin: ""
         property bool playbackOriginLibraryOpen: false
@@ -1041,6 +1063,27 @@ class OracleTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','shell_appearance')
             write(current,changed);(base/'payload/bin/isolde').write_bytes(b'tampered')
             with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','shell_appearance')
+
+    def test_media_followup_reuse_refuses_lifecycle_changes(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder).resolve();base=root/'runs/base';current=root/'runs/focused'
+            base.mkdir(parents=True);current.mkdir()
+            values={'qml/KodiLibraryView.qml':b'old','src/media/KodiMedia.cpp':b'lifecycle','qml/Main.qml':b'owner'}
+            def write(run,data):
+                (run/'files.sha256').write_text(''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n' for name,value in sorted(data.items())))
+            write(base,values);changed=dict(values,**{'qml/KodiLibraryView.qml':b'music route'})
+            write(current,changed);(base/'payload/bin').mkdir(parents=True);(base/'payload/bin/isolde').write_bytes(b'full candidate')
+            oracle.atomic_json(base/'test-result.json',{'passed':True,'fullSuite':True,'sourceDigest':oracle.digest(base/'files.sha256'),'payload':oracle.payload_hashes(base/'payload')})
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','media_controls')['changedMediaFiles'],['qml/KodiLibraryView.qml'])
+            for name in ('src/media/KodiMedia.cpp','qml/Main.qml','qml/Unexpected.qml'):
+                write(current,dict(changed,**{name:b'uncovered'}))
+                with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','media_controls')
+            write(current,changed);(base/'payload/bin/isolde').write_bytes(b'tampered')
+            with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','media_controls')
+        _,pattern=oracle.suite_selection('media_controls')
+        for name in ('home_component_navigation','studio_navigation','kodi_media_client','kodi_local_bridge','kodi_playback','kodi_import_contracts','native_profile_isolation'):
+            self.assertIsNotNone(re.fullmatch(pattern,name))
+        self.assertIsNone(re.fullmatch(pattern,'studio_performance'))
 
     def test_shell_appearance_batch_selects_all_three_boundaries(self):
         targets,pattern=oracle.suite_selection('shell_appearance')

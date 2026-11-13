@@ -52,6 +52,21 @@ QVariantList KodiService::capabilityInventory() const
     return items.toVariantList();
 }
 
+QVariantList KodiService::libraryViews() const
+{
+    if(capabilityInventory().isEmpty())return {};
+    QFile file(":/config/kodi-capabilities.json");if(!file.open(QIODevice::ReadOnly) || file.size()>65536)return {};
+    const auto value=QJsonDocument::fromJson(file.readAll()).object().value("libraryViews");
+    if(!value.isArray() || value.toArray().isEmpty() || value.toArray().size()>16)return {};
+    QSet<QString> kinds;
+    for(const auto &item:value.toArray()){
+        const auto row=item.toObject();const auto kind=row["kind"].toString();
+        if(row.size()!=3 || !QStringList{"movies","shows","albums"}.contains(kind) || kinds.contains(kind) || row["name"].toString().isEmpty() || row["name"].toString().size()>160 || !QStringList{"primary","trailing"}.contains(row["position"].toString()))return {};
+        kinds.insert(kind);
+    }
+    return value.toArray().toVariantList();
+}
+
 KodiService::KodiService(const QString &profile, QObject *parent) : QObject(parent), m_profile(profile), m_modeClient(profile)
 {
     m_frontend = QSettings(QSettings::defaultFormat(), QSettings::UserScope, "Isolde", "Kodi").value("profiles/" + profile + "/kodi/frontend", "isolde").toString();

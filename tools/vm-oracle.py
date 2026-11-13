@@ -177,6 +177,7 @@ SUITES = {"all": None, "remote_bindings":("isolde_remote_binding_tests","isolde_
           "games": ("isolde_component_tests", "isolde_games_ui_tests", "isolde_tests"),
           "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests", "isolde_native_smoke"),
           "store_remote_ui": "isolde_studio_quick_tests",
+          "media_controls": ("isolde_home_navigation_tests","isolde_kodi_media_tests","isolde_native_sandbox_tests","isolde"),
           "audio_backend": "isolde_audio_tests",
           "profile_browser_isolation": "isolde_profile_browser_tests",
           "home_component_navigation": "isolde_home_navigation_tests",
@@ -242,6 +243,8 @@ def suite_selection(suite):
         pattern = "^(vpn_setup|vpn_launch)$"
     if suite == "store":
         pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote|fdroid_store|store_lifecycle)$"
+    if suite == "media_controls":
+        pattern = "^(home_component_navigation|studio_navigation|kodi_media_client|kodi_local_bridge|kodi_playback|kodi_import_contracts|native_profile_isolation)$"
     if suite == "campaign_repairs":
         pattern = "^(" + "|".join(sorted(REPAIR_TESTS)) + ")$"
     if suite == "runtime_contracts":
@@ -447,8 +450,9 @@ def visual_result_passed(case, result):
                     "emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",
                     "emulatorsdetails","emulatorspermission","emulatorsmenu","emulatorsplay","emulatorsaction","emulatorsreturn","emulatorsrestored"])
     if case == "movieart":
-        return (all(result.get(key) is True for key in ("passed","freshProfile","scrapedByKodi","media_unchanged","freshSourceSetupThroughIsolde","sourcePreviewCancelNoWrite","remotePosterPreviewNoWrite","remotePosterCancelNoWrite","remotePosterApplied"))
-                and all(result.get(key) is False for key in ("normalProfileUsed","metadataSupplied","playbackVerified"))
+        return (all(result.get(key) is True for key in ("passed","freshProfile","scrapedByKodi","media_unchanged","freshSourceSetupThroughIsolde","sourcePreviewCancelNoWrite","nativeSourceWriteFailureRecovery","remotePosterPreviewNoWrite","remotePosterCancelNoWrite","remotePosterApplied"))
+                and all(result.get(key) is False for key in ("normalProfileUsed","metadataSupplied"))
+                and all(result.get(key) is True for key in ("playbackVerified","freshPlaybackReturnThroughIsolde","actualKodiResumeSavedAndRestored","preferenceOffLibraryDirect","remoteHomeMoviesRoute","realAudioTrackSelection","sourceEditPreservesProgress","remoteMusicSourceBrowsePlayback"))
                 and result.get("kodiMenusRequired") is False
                 and result.get("artworkBytes",0)>4096)
     if case == "games":
@@ -938,6 +942,12 @@ def search_origin_main_delta(before,after):
 
 
 def focused_qml_coverage(root, run, base_id, suite):
+    if suite=='media_controls':
+        proof=qml_coverage(root,run,base_id,suite,'media_controls',
+            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml'},
+            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media')
+        proof['changedMediaFiles']=proof.pop('changedMediaQml')
+        return proof
     if suite=='store':
         proof=qml_coverage(root,run,base_id,suite,'store',{'tools/android-store-transaction.py','tools/fdroid-store.py','tools/android-setup.py','tools/provision-android.py','qml/AppStoreView.qml','src/input/web-remote.js','src/sessions/NativeAppHost.cpp','src/sessions/ChromiumRemotePipe.h'},
             {'tools/backlog-progress.ps1','tests/tst_isolde.cpp','tests/web_remote.cpp','tools/native-session-smoke.cpp','tools/web-remote-acceptance.py','tests/test_fdroid_store.py','tests/test_android_provisioning.py','tests/test_store_lifecycle.py','tests/studio/tst_selection.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/store-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Store',{'tools/web-remote-acceptance.py','docs/store-android-authorization-fixture.md'})
@@ -1315,6 +1325,8 @@ class Oracle:
                 expected = {"studio_quick", "isolde_tests", "component_contracts", "sources_remote_ui", "home_component_navigation"}
             if suite == "store":
                 expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote", "fdroid_store", "store_lifecycle"}
+            if suite == "media_controls":
+                expected = {"home_component_navigation","studio_navigation","kodi_media_client","kodi_local_bridge","kodi_playback","kodi_import_contracts","native_profile_isolation"}
             if suite == "games":
                 expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning", "steam_games"}
             if suite == "guide":
@@ -1428,11 +1440,39 @@ class Oracle:
         verify_tree(self.run / "source", manifest(self.run / "files.sha256"))
         return self.run / "payload"
 
+    def pause_test_indexer(self):
+        if self.command('hostname')!='isolde-test' or self.root!=Path.home()/'isolde-oracle' or self.root.resolve()!=self.root:raise RuntimeError('Indexer cache maintenance is guest-only')
+        lease=self.root/'test-indexer-lease.json'
+        if lease.exists() or lease.is_symlink():raise RuntimeError('Recover the previous test indexer lease before another test')
+        units=[]
+        for line in self.command('systemctl','--user','list-units','--all','--plain','--no-legend').splitlines():
+            fields=line.split()
+            if len(fields)>=4 and fields[2]=='active' and re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',fields[0]):units.append(fields[0])
+        if units:
+            atomic_json(lease,dict(guest='isolde-test',runId=self.state['runId'],units=units))
+            self.stage('pause-test-indexer',['systemctl','--user','stop',*units],30)
+        cache=Path.home()/'.cache/tracker3';reclaimed=0
+        if cache.exists() or cache.is_symlink():
+            mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+            reclaimed=remove_guest_index_cache(cache,Path.home(),mounts)
+        atomic_json(self.run/'test-indexer-cache-cleanup.json',dict(guest='isolde-test',units=units,reclaimedBytes=reclaimed,applicationDataPreserved=True))
+
+    def restore_test_indexer(self):
+        lease=self.root/'test-indexer-lease.json'
+        if not lease.exists() and not lease.is_symlink():return
+        if lease.resolve()!=lease or lease.stat().st_uid!=os.getuid() or lease.stat().st_size>8192:raise RuntimeError('Unsafe test indexer restoration lease')
+        record=json.loads(lease.read_text());units=record.get('units',[])
+        if record.get('guest')!='isolde-test' or record.get('runId')!=self.state['runId'] or not isinstance(units,list) or len(units)>32 or any(not isinstance(unit,str) or not re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',unit) for unit in units):raise RuntimeError('Invalid test indexer restoration lease')
+        prior_stage=self.state.get('stage')
+        if units:self.stage('restore-test-indexer',['systemctl','--user','start',*units],30)
+        lease.unlink();atomic_json(self.run/'test-indexer-restored.json',dict(guest='isolde-test',units=units,restored=True));self.update(stage=prior_stage)
+
     def automatic_test_cleanup(self):
         before = shutil.disk_usage(self.root).free
         if before >= 3 * 1024**3:
             return
         print("PREFLIGHT reclaiming verified guest artifacts (target 3 GiB, minimum 2 GiB)", flush=True)
+        if self.state.get('action')=='test':self.pause_test_indexer()
         try:
             self.maintain_artifacts(minimum_gib=2)
         finally:
@@ -1531,6 +1571,9 @@ class Oracle:
             removed=remove_unselected_test_objects(self.root,mounts,active,getattr(self,'maintenance_build_targets',()),target_free=minimum_gib*1024**3,include_production=True)
             atomic_json(self.run/'guest-production-object-cleanup.json',{'guest':'isolde-test','targets':removed,'objectsRegeneratedByNinja':True,'sourceAndAcceptanceEvidencePreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            removed=remove_managed_kodi_archives(self.root,mounts,active)
+            atomic_json(self.run/'guest-managed-kodi-cache-cleanup.json',{'guest':'isolde-test','targets':removed,'compiledObjectsAndInstalledDependencyPreserved':True})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
     def prepare_visual_desktop(self):
@@ -1575,6 +1618,13 @@ class Oracle:
             if self.command('hostname')!='isolde-test':raise RuntimeError('Managed Kodi builds are guest-only')
             source,entries=extract_snapshot(self.run)
             self.stage('oracle-self-test',['python3',str(source/'tests/test_vm_oracle.py')],90)
+            installed=Path('/opt/isolde-managed-kodi')
+            if installed.exists():
+                paths=[installed,installed/'bin',installed/'kodi.bin',installed/'bin/kodi',installed/'manifest.json']
+                for path in paths:
+                    if path.resolve()!=path or path.stat().st_uid!=0:raise RuntimeError('Unsafe managed Kodi package path/owner')
+                if any(path.stat().st_mode&0o022 for path in paths):
+                    self.stage('kodi-package-mode-repair',['python3',str(source/'tools/build-managed-kodi.py'),'--source',str(source),'--work',str(self.root/'support/managed-kodi'),'--receipt',str(self.run/'kodi-mode-repair.json'),'--repair-package-modes'],480)
             index_lease=self.root/'kodi-indexer-lease.json'
             if shutil.disk_usage(self.root).free<3*1024**3 and (Path.home()/'.cache/tracker3').is_dir():
                 listing=self.command('systemctl','--user','list-units','--all','--plain','--no-legend')
@@ -2289,6 +2339,44 @@ def cancel_owned(root, run_id):
     raise RuntimeError("Owned runner has not finished cleanup; preserve evidence and inspect Status")
 
 
+def remove_managed_kodi_archives(root,mounts=(),active=(),target_free=3*1024**3,installation=Path('/opt/isolde-managed-kodi'),owner_uid=0):
+    """Discard only relinkable Ninja archives after the installed Kodi hash passes."""
+    work=root/'support/managed-kodi';build=work/'build';ninja=build/'build.ninja'
+    if not ninja.exists():return []
+    if root.resolve()!=root or work.resolve()!=work or build.resolve()!=build or ninja.resolve()!=ninja:raise RuntimeError('Redirected managed Kodi cache')
+    if any(path==build or path.is_relative_to(build) for path in active):return []
+    manifest_path=installation/'manifest.json';binary=installation/'kodi.bin'
+    for path in (installation,manifest_path,binary):
+        info=path.stat()
+        if path.resolve()!=path or info.st_uid!=owner_uid or info.st_mode&0o022:raise RuntimeError('Unsafe installed managed Kodi dependency')
+    if manifest_path.stat().st_size>8192:raise RuntimeError('Unbounded managed Kodi manifest')
+    metadata=json.loads(manifest_path.read_text())
+    if metadata.get('feature')!='isolde-sources-v1' or metadata.get('binarySha256')!=digest(binary):raise RuntimeError('Installed managed Kodi checksum mismatch')
+    cache=build/'CMakeCache.txt'
+    if cache.resolve()!=cache or not cache.is_file() or cache.stat().st_size>1024**2 or ninja.stat().st_size>16*1024**2:raise RuntimeError('Unsafe managed Kodi build graph')
+    sources=re.findall(r'^CMAKE_HOME_DIRECTORY:INTERNAL=(.+)$',cache.read_text(),re.M)
+    if len(sources)!=1 or not Path(sources[0]).is_relative_to(work/'distribution-source') or Path(sources[0]).resolve()!=Path(sources[0]):raise RuntimeError('Unknown managed Kodi source cache')
+    candidates=[]
+    for relative in re.findall(r'^build ([A-Za-z0-9_./+-]+\.a): CXX_STATIC_LIBRARY_LINKER[^\n]*$',ninja.read_text(),re.M):
+        path=build/relative
+        if not path.exists() and not path.is_symlink():continue
+        if not path.is_relative_to(build) or '..' in path.parts or path.resolve()!=path or not path.is_file() or path.stat().st_uid!=os.getuid():raise RuntimeError('Unsafe managed Kodi archive')
+        with path.open('rb') as stream:
+            if stream.read(8)!=b'!<arch>\n':raise RuntimeError('Unknown managed Kodi archive')
+        candidates.append(path)
+    staged=work/'package/opt/isolde-managed-kodi/kodi.bin'
+    if staged.exists() or staged.is_symlink():
+        if staged.resolve()!=staged or not staged.is_file() or staged.stat().st_uid!=os.getuid() or digest(staged)!=metadata['binarySha256']:raise RuntimeError('Changed managed Kodi package staging binary')
+        candidates.append(staged)
+    for path in candidates:
+        if any(m!=Path('/') and (m==path or m.is_relative_to(path) or path.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted managed Kodi archive')
+    removed=[]
+    for path in sorted(set(candidates),key=lambda item:item.stat().st_size,reverse=True):
+        if shutil.disk_usage(root).free>=target_free:break
+        size=path.stat().st_size;path.unlink();removed.append({'path':str(path),'bytes':size})
+    return removed
+
+
 def remove_linked_test_executables(root,mounts=(),active=(),keep=(),target_free=3*1024**3):
     """Ninja can relink generated binaries; retain objects, staged and installed files."""
     build=root/'work/build';targets=build/'CMakeFiles/TargetDirectories.txt'
@@ -2579,6 +2667,11 @@ def deduplicate_fixture_media(root, mounts=(), active=(), target_free=3*1024**3,
 
 def oracle_storage_inventory(root):
     payloads=[];recovery=[];source_copies=[]
+    dependency=[]
+    prefix=Path('/opt/isolde-managed-kodi')
+    for path in (prefix,prefix/'bin',prefix/'kodi.bin',prefix/'bin/kodi',prefix/'manifest.json'):
+        if path.exists():
+            info=path.stat();dependency.append(dict(path=str(path),resolved=str(path.resolve()),uid=info.st_uid,gid=info.st_gid,mode=oct(info.st_mode&0o7777),bytes=info.st_size))
     for run in sorted((root/"runs").iterdir(),key=lambda p:p.stat().st_mtime,reverse=True)[:1024]:
         if not run.is_dir() or run.is_symlink():continue
         if (run/'source').is_dir() and len(source_copies)<64:
@@ -2608,7 +2701,7 @@ def oracle_storage_inventory(root):
     for line in usage.stdout.splitlines():
         size,sep,path=line.partition("\t")
         if sep and size.isdigit():directories.append({"path":path,"bytes":int(size)*1024})
-    return {"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceCopies":source_copies,"emulatorCacheEntries":[{"name":p.name,"children":[c.name for c in list(p.iterdir())[:20]] if p.is_dir() and not p.is_symlink() else []} for p in list((Path.home()/".cache/isolde-emulators").iterdir())[:32]] if (Path.home()/".cache/isolde-emulators").is_dir() else [],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
+    return {"managedKodiPaths":dependency,"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceCopies":source_copies,"emulatorCacheEntries":[{"name":p.name,"children":[c.name for c in list(p.iterdir())[:20]] if p.is_dir() and not p.is_symlink() else []} for p in list((Path.home()/".cache/isolde-emulators").iterdir())[:32]] if (Path.home()/".cache/isolde-emulators").is_dir() else [],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
 
 
 def main():
@@ -2761,7 +2854,8 @@ def main():
             if args.action == "check":
                 oracle.check()
             elif args.action == "test":
-                oracle.test(args.suite,args.reuse_full_run,args.resume_run_id)
+                try:oracle.test(args.suite,args.reuse_full_run,args.resume_run_id)
+                finally:oracle.restore_test_indexer()
             elif args.action == "visual":
                 oracle.visual(args.case, args.installed,args.reopen_helper_digest,args.feature_helper_digest,args.studio_helper_digest,args.history_helper_digest,args.reference_helper_digest,args.reference_collections_digest,args.diagnostic,args.store_helper_digest)
             elif args.action == "deploy":
@@ -2773,6 +2867,7 @@ def main():
             elif args.action == "configure":
                 oracle.configure_native(args.configure_target,args.maintenance_tests_digest,args.demo_art_helper_digest,args.store_helper_digest)
             elif args.action == "recover":
+                oracle.restore_test_indexer()
                 if args.orphan_visual_pid:
                     layouts = oracle.layout_hashes();service = oracle.service();links = oracle.links()
                     receipt = recover_visual_orphan(oracle.run, args.orphan_visual_pid)

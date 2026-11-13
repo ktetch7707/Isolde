@@ -6,6 +6,7 @@ Item {
     property var kodiClient:kodiMedia
     property string mode:"list"
     property int selectedIndex:0
+    property int previewOriginIndex:0
     property var draft:({})
     property string pending:""
     property string message:""
@@ -25,17 +26,16 @@ Item {
         if(mode==="edit")return [
             {label:qsTr("Name · ")+(draft.name || ""),key:"name"},
             {label:qsTr("Content · ")+contentLabels[Math.max(0,contentTypes.indexOf(draft.content))],key:"content"},
-            {label:qsTr("Metadata provider · ")+(draft.category==="music"?qsTr("Embedded file tags"):scraperLabel),key:"scraper"}].concat(draft.category==="music"?[]:[
+            {label:qsTr("Metadata provider · ")+(draft.category==="music"?qsTr("Embedded file tags"):scraperLabel),key:draft.category==="music"?"":"scraper"}].concat(draft.category==="music"?[]:[
             {label:qsTr("Scan subfolders · ")+(draft.recursive?qsTr("On"):qsTr("Off")),key:"recursive"},
             {label:qsTr("Use folder names · ")+(draft.folderNames?qsTr("On"):qsTr("Off")),key:"folderNames"},
             {label:qsTr("Exclude from library updates · ")+(draft.noUpdate?qsTr("On"):qsTr("Off")),key:"noUpdate"},
             {label:qsTr("Exclude from scanning · ")+(draft.exclude?qsTr("On"):qsTr("Off")),key:"exclude"}]).concat([
-            {label:qsTr("Preview source settings"),preview:true},
-            {label:qsTr("Remove this source · preview consequences"),remove:true},
+            {label:qsTr("Preview source settings"),preview:true}]).concat(newSource?[]:[{label:qsTr("Remove this source · preview consequences"),remove:true}]).concat([
             {label:qsTr("Cancel · keep saved source"),back:true}])
         return [{label:qsTr("Refresh sources and providers"),refresh:true},{label:qsTr("Allow a media folder · read-only access"),folders:true},{label:qsTr("Add a Kodi source"),add:true}].concat((kodiClient.librarySources || []).map(source=>({label:source.name+(source.path?" · "+source.path:"")+(source.editable?"":" · "+qsTr("preserved, read-only")),source:source})))
     }
-    function refresh(){refreshAttempts=0;refreshTimer.restart()}
+    function refresh(){message="";refreshAttempts=0;refreshTimer.restart()}
     function changedDraft(value){draft=Object.assign({},draft,value);confirmSave=false;kodiClient.cancelSourcePreview();message=qsTr("Draft only · preview before applying")}
     function chooseDefaultScraper(){const choices=(kodiClient.sourceScrapers || []).filter(row=>row.content===draft.content);changedDraft({scraper:(choices.find(row=>row.id==="metadata.local") || choices[0] || {}).id || ""})}
     function edit(source,isNew){
@@ -46,8 +46,8 @@ Item {
     function back(){
         if(mode==="keyboard"){keyboard.handleCommand(inputManager.back);return true}
         if(mode==="folders"){if(!folderPage.back()){mode="list";selectedIndex=1;refresh()}return true}
-        if(mode==="preview"){if(confirmSave)confirmSave=false;else {mode="edit";selectedIndex=rows.findIndex(row=>row.preview)}return true}
-        if(mode!=="list"){mode="list";selectedIndex=0;pending="";kodiClient.cancelSourcePreview();return true}
+        if(mode==="preview"){if(confirmSave)confirmSave=false;else {mode="edit";selectedIndex=Math.min(previewOriginIndex,rows.length-1)}return true}
+        if(mode!=="list"){mode="list";selectedIndex=0;pending="";message="";kodiClient.cancelSourcePreview();return true}
         return false
     }
     function handleCommand(command){
@@ -66,7 +66,7 @@ Item {
             if(row.path){const path=row.path.replace(/\/+$/,"")+"/";edit({name:path.split('/').filter(part=>part.length).pop(),path:path,content:"movies",recursive:true},true);chooseDefaultScraper();return}
             if(row.source){if(row.source.editable)edit(row.source);else message=qsTr("This source is preserved. Editing supports allowed local single-folder sources; existing remote and multipath definitions stay intact.");return}
             if(row.apply){if(!confirmSave){confirmSave=true;return}confirmSave=false;pending="apply";kodiClient.applySource(draft);return}
-            if(row.preview || row.remove){if(row.remove)changedDraft({remove:true});else if(draft.remove)changedDraft({remove:false});pending="preview";kodiClient.previewSource(draft);return}
+            if(row.preview || row.remove){previewOriginIndex=selectedIndex;if(row.remove)changedDraft({remove:true});else if(draft.remove)changedDraft({remove:false});pending="preview";kodiClient.previewSource(draft);return}
             if(row.key==="name"){keyboard.value=draft.name;keyboard.selectedIndex=0;keyboard.mode="letters";keyboard.shift=false;mode="keyboard";return}
             if(row.key==="content"){const content=availableContentTypes[(Math.max(0,availableContentTypes.indexOf(draft.content))+1)%availableContentTypes.length];changedDraft({content:content,category:content==="music"?"music":"video",recursive:content==="music"?true:draft.recursive,folderNames:content==="music"?false:draft.folderNames,noUpdate:content==="music"?false:draft.noUpdate,exclude:content==="music"?false:draft.exclude});chooseDefaultScraper();return}
             if(row.key==="scraper"){if(!scrapers.length){message=qsTr("No installed provider for this content. Unspecified content has no provider.");return}const index=scrapers.findIndex(value=>value.id===draft.scraper);changedDraft({scraper:scrapers[(index+1)%scrapers.length].id});return}
@@ -76,7 +76,7 @@ Item {
     function reveal(){const row=sourceRows.itemAt(selectedIndex);if(!row)return;const top=rowColumn.y+row.y;if(top<scroll.contentY)scroll.contentY=top;else if(top+row.height>scroll.contentY+scroll.height)scroll.contentY=top+row.height-scroll.height}
     onSelectedIndexChanged:revealTimer.restart()
     onModeChanged:revealTimer.restart()
-    onVisibleChanged:{pending="";confirmSave=false;mode="list";selectedIndex=0;if(visible)refresh();else{refreshTimer.stop();kodiClient.cancelSourcePreview()}}
+    onVisibleChanged:{pending="";message="";confirmSave=false;mode="list";selectedIndex=0;if(visible)refresh();else{refreshTimer.stop();kodiClient.cancelSourcePreview()}}
     Connections {
         target:root.kodiClient
         function onSourceApplied(){if(root.pending==="apply"){root.pending="";root.mode="list";root.selectedIndex=0;root.message=""}}

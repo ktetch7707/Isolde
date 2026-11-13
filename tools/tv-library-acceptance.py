@@ -84,8 +84,16 @@ def main():
         (playlists/"Fixture episodes.xsp").write_text('<smartplaylist type="episodes"><name>Fixture episodes</name><match>all</match><rule field="tvshow" operator="is"><value>Isolde Television Fixture</value></rule><order direction="ascending">episode</order></smartplaylist>')
     show = media / "Isolde Television Fixture"; show.mkdir()
     clip = show / "Fixture S01E01.ogv"
-    run("gst-launch-1.0", "-q", "videotestsrc", f"num-buffers={600 if args.pages else 1800}", "!", "video/x-raw,width=320,height=180,framerate=15/1",
-        "!", "theoraenc", "!", "oggmux", "!", "filesink", "location=" + str(clip))
+    if args.movie_art:
+        # Two real silent audio tracks exercise selection without making a
+        # physical-output claim; twenty minutes permits default Kodi resume.
+        command=['gst-launch-1.0','-q','oggmux','name=mux','!','filesink','location='+str(clip),
+            'videotestsrc','num-buffers=18000','!','video/x-raw,width=320,height=180,framerate=15/1','!','theoraenc','!','queue','!','mux.']
+        for _ in range(2):command+=['audiotestsrc','wave=silence','num-buffers=56250','samplesperbuffer=1024','!','audio/x-raw,rate=48000,channels=1','!','vorbisenc','!','queue','!','mux.']
+        run(*command)
+    else:
+        run("gst-launch-1.0", "-q", "videotestsrc", f"num-buffers={600 if args.pages else 1800}", "!", "video/x-raw,width=320,height=180,framerate=15/1",
+            "!", "theoraenc", "!", "oggmux", "!", "filesink", "location=" + str(clip))
     def chunk(name, content):
         return struct.pack(">I", len(content)) + name + content + struct.pack(">I", zlib.crc32(name + content))
     poster = show / "poster.png"
@@ -176,6 +184,17 @@ if ''' + repr(str(imported)) + ''' in selected:
     if args.movie_art:
         # Fresh source setup is performed by Isolde below, never a Kodi import dialog.
         movies = media / "movies"
+        music = media / "music";music.mkdir()
+        import wave,struct
+        for number in (1,2):
+            song=music/f'Fixture song {number}.wav'
+            with wave.open(str(song),'wb') as output:
+                output.setnchannels(1);output.setsampwidth(2);output.setframerate(8000);output.writeframes(b'\0\0'*8000*60)
+            tags=b'INFO'
+            for tag,value in ((b'INAM',f'Fixture song {number}'),(b'IART','Isolde Fixture Artist'),(b'IPRD','Isolde Fixture Album')):
+                raw=value.encode()+b'\0';tags+=tag+struct.pack('<I',len(raw))+raw+b'\0'*(len(raw)%2)
+            data=song.read_bytes()+b'LIST'+struct.pack('<I',len(tags))+tags
+            song.write_bytes(data[:4]+struct.pack('<I',len(data)-8)+data[8:])
         folder = movies / "Big Buck Bunny (2008)"; folder.mkdir(parents=True)
         movie_file = folder / "Big Buck Bunny (2008).ogv"
         os.link(clip, movie_file)
@@ -227,7 +246,7 @@ provider.setSettingString("searchlanguage","en-US")
         managed_art=config/'profiles'/profile/'artwork';managed_art.mkdir(parents=True)
         managed_poster=managed_art/(hashlib.sha256(poster.read_bytes()).hexdigest()+'.png')
         managed_poster.write_bytes(poster.read_bytes())
-        (config/'profiles'/profile/'home-layout.json').write_text(json.dumps(dict(schemaVersion=2,rootPage=dict(name='Home',visible=True,position=0),categories=[],components=[],composition=dict(schemaVersion=1,enabled=True,grid=dict(columns=8,rows=6,mode='screen'),headerControls=['settings'],showClock=False,navigation=[dict(id='home',name='Home')],initialTab='home'))))
+        (config/'profiles'/profile/'home-layout.json').write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),categories=[dict(id='apps',name='Apps')],items=[dict(kind='app',id='movies',appId='movies',size='standard',categoryId='apps')],composition=dict(schemaVersion=1,enabled=False,headerControls=['settings']))))
     if args.history:
         import copy
         defaults=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
@@ -255,7 +274,7 @@ provider.setSettingString("searchlanguage","en-US")
             grid=dict(defaults['defaultGrid']);grid.update(columns=8,rows=6,mode='screen')
             guide_home['composition']={'schemaVersion':1,'enabled':True,'showClock':False,'grid':grid}
         (guide_profile/'home-layout.json').write_text(json.dumps(guide_home))
-    (config / "MediaAccess.conf").write_text(f"[profiles]\n{profile}\\kodi\\folders={movies if args.movie_art else media}\n")
+    (config / "MediaAccess.conf").write_text(f"[profiles]\n{profile}\\kodi\\folders={str(movies)+', '+str(music) if args.movie_art else media}\n")
     unknown = evidence / "config/Unknown Organization"; unknown.mkdir()
     (unknown / "Isolde.conf").write_text("[sources]\nautomaticSourcesEnabled=false\n")
     env = dict(os.environ)
@@ -349,14 +368,16 @@ provider.setSettingString("searchlanguage","en-US")
                 key("kodi","F9")  # Fixture provider defaults only; never a library/source operation.
                 run("wmctrl","-i","-a",shell,env=env)
                 initial=rpc(directory,'Isolde.GetSources')
-                assert initial['sources']==[],initial
-                assert not (userdata/'sources.xml').exists(),'Fresh fixture already has source configuration'
+                initial_sources=initial['sources']
+                assert not any(row['editable'] for row in initial_sources),'Fresh fixture already has a configured granted-folder source'
+                initial_source_bytes=(userdata/'sources.xml').read_bytes() if (userdata/'sources.xml').exists() else None
                 def source_press(name,count=1):
                     for _ in range(count):key(shell,name,.08)
                     time.sleep(.3)
                 source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
                 source_press('Up',20);source_press('Down',7);source_press('Return')
-                source_press('Down',10);source_press('Return');time.sleep(1)
+                source_press('Down',12);source_press('Return');guide_capture('mediacapabilities')
+                source_press('Return');time.sleep(1)  # Capability guide's named Source setup action.
                 guide_capture('sourceempty')
                 choices=[row for row in initial['scrapers'] if row['content']=='movies']
                 provider_index=next(i for i,row in enumerate(choices) if row['id']=='metadata.themoviedb.org.python')
@@ -367,19 +388,52 @@ provider.setSettingString("searchlanguage","en-US")
                     source_press('Return',(provider_index-default_index)%len(choices))
                     source_press('Down',5);source_press('Return');time.sleep(.7)
                 source_draft();guide_capture('sourcepreview')
-                assert rpc(directory,'Isolde.GetSources')['sources']==[],'Preview saved a source'
+                assert rpc(directory,'Isolde.GetSources')['sources']==initial_sources,'Preview saved a source'
                 source_press('Escape');source_press('Escape')
-                assert rpc(directory,'Isolde.GetSources')['sources']==[],'Cancelled draft saved a source'
+                assert rpc(directory,'Isolde.GetSources')['sources']==initial_sources,'Cancelled draft saved a source'
+                assert ((userdata/'sources.xml').read_bytes() if (userdata/'sources.xml').exists() else None)==initial_source_bytes,'Preview/cancel rewrote Kodi source configuration'
                 source_draft();source_press('Down');source_press('Return');source_press('Return')
                 def saved_source():
                     rows=rpc(directory,'Isolde.GetSources')['sources']
-                    return rows if len(rows)==1 else None
+                    return rows if len(rows)==len(initial_sources)+1 else None
                 saved=wait(saved_source,'Source saved through Isolde preview and confirmation')
-                assert saved[0]['path']==str(movies)+'/' and saved[0]['content']=='movies' and saved[0]['scraper']=='metadata.themoviedb.org.python',saved
-                assert saved[0]['recursive'] is True
+                target_source=next(row for row in saved if row['path']==str(movies)+'/')
+                assert target_source['content']=='movies' and target_source['scraper']=='metadata.themoviedb.org.python',saved
+                assert target_source['recursive'] is True
                 guide_capture('sourcesaved')
+                source_press('Down',2);source_press('Return');source_press('Down');source_press('Return')
+                source_press('Down');source_press('Return',3);source_press('Down',2);source_press('Return')
+                source_press('Down');source_press('Return');source_press('Return')
+                def saved_music():
+                    rows=rpc(directory,'Isolde.GetSources')['sources']
+                    return rows if any(row['path']==str(music)+'/' and row['category']=='music' for row in rows) else None
+                saved=wait(saved_music,'Music source saved through the same remote setup workflow')
+                guide_capture('musicsource')
+                # Exercise real Kodi transaction/recovery against a denied
+                # sources.xml publication, solely in this disposable profile.
+                source_bytes=(userdata/'sources.xml').read_bytes()
+                source_index=saved.index(target_source)
+                source_press('Up',20);source_press('Down',3+source_index);source_press('Return')
+                source_press('Down',5);source_press('Return');source_press('Down',2);source_press('Return')
+                source_press('Down');source_press('Return')
+                original_mode=userdata.stat().st_mode&0o777
+                try:
+                    userdata.chmod(0o500);source_press('Return')
+                    def recovery_retained():
+                        request=json.loads((directory/'source-request.json').read_text())
+                        reply=json.loads((directory/'source-reply.json').read_text())
+                        return (directory/'source-journal.json').exists() and request.get('operation')=='restore' and reply.get('token')==request.get('token') and reply.get('ok') is False
+                    wait(recovery_retained,'Native source write failure retained its recovery journal')
+                    time.sleep(.6);guide_capture('sourcefailed')
+                    assert (userdata/'sources.xml').read_bytes()==source_bytes,'Failed source save changed source XML'
+                finally:userdata.chmod(original_mode)
+                source_press('Escape');source_press('Escape');source_press('Up',20);source_press('Return')
+                wait(lambda:not (directory/'source-journal.json').exists(),'Isolde Refresh recovered the interrupted native source transaction')
+                assert (userdata/'sources.xml').read_bytes()==source_bytes,'Recovery did not restore exact source XML'
+                assert rpc(directory,'Isolde.GetSources')['sources']==saved,'Recovery changed scanner/provider settings'
+                guide_capture('sourcerecovered')
                 source_press('Escape');source_press('Up',8);source_press('Return')
-                (evidence/'source-setup.json').write_text(json.dumps(dict(fresh=True,previewNoWrite=True,cancelNoWrite=True,remoteConfirmedSave=True,nativeSources=saved,kodiMenusRequired=False),indent=2))
+                (evidence/'source-setup.json').write_text(json.dumps(dict(fresh=True,previewNoWrite=True,cancelNoWrite=True,remoteConfirmedSave=True,nativeWriteFailureRecovery=True,nativeSources=saved,kodiMenusRequired=False),indent=2))
             if args.guide:
                 source_channels=wait(lambda:rpc(directory,'PVR.GetChannels',{'channelgroupid':'alltv','properties':['channelnumber','locked','hidden','clientid','uniqueid'],'limits':{'start':0,'end':50}}).get('channels'),'Real IPTV Simple channel ready',seconds=60)
                 assert len(source_channels)==1 and source_channels[0]['label']=='Isolde PVR Test',source_channels
@@ -519,10 +573,10 @@ provider.setSettingString("searchlanguage","en-US")
                 return
             if args.movie_art:
                 query = {"properties":["title","year","file","art","uniqueid"],"limits":{"start":0,"end":50}}
-                movies = wait(lambda: rpc(directory,"VideoLibrary.GetMovies",query).get("movies"),
+                movie_rows = wait(lambda: rpc(directory,"VideoLibrary.GetMovies",query).get("movies"),
                               "Kodi TMDB matched named synthetic movie", seconds=150)
-                assert len(movies)==1 and movies[0]["title"]=="Big Buck Bunny" and movies[0]["year"]==2008
-                movie=movies[0]
+                assert len(movie_rows)==1 and movie_rows[0]["title"]=="Big Buck Bunny" and movie_rows[0]["year"]==2008
+                movie=movie_rows[0]
                 assert movie["file"]==str(movie_file) and str(movie.get("uniqueid",{}).get("tmdb"))=="10378"
                 assert any("image.tmdb.org" in value for value in movie["art"].values()), movie
                 def artwork():
@@ -535,10 +589,12 @@ provider.setSettingString("searchlanguage","en-US")
                 import io
                 image=Image.open(io.BytesIO(raw)); image.verify()
                 (evidence/"movie-artwork.jpg").write_bytes(raw)
-                # Return to the shell's real Movies view, without playing the clip.
+                # Open Movies using only the remote-operated Home card.
                 run("wmctrl","-i","-a",shell,env=env)
-                key(shell,"Home"); key(shell,"m",modifiers=4); time.sleep(1)
-                key(shell,"Down"); time.sleep(2)
+                def open_movie_card():
+                    source_press('Home');source_press('Up',20);source_press('Down');source_press('Return');time.sleep(1)
+                    source_press('Up',20);source_press('Down')
+                open_movie_card();time.sleep(2)
                 print("MOVIEART_READY "+str(evidence),flush=True)
                 wait(lambda:(evidence/"movieart-captured").exists(),"Movie artwork frame captured",seconds=110)
                 def poster_capture(phase):
@@ -562,14 +618,79 @@ provider.setSettingString("searchlanguage","en-US")
                 assert applied.size==(240,360) and applied.convert('RGB').getpixel((0,0))==(85,67,153)
                 assert all(changed.get(name)==value for name,value in original_art.items() if name!='poster'),'Poster edit changed unrelated title art'
                 time.sleep(.5);key(shell,'Escape');key(shell,'Escape');poster_capture('movieposterapplied')
+                key(shell,'Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Fresh Isolde source played its real local movie without Kodi menus')
+                poster_capture('moviefreshplaying')
+                key('kodi','Menu')
+                controls=wait(lambda:next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None),'Fresh native Menu opened Isolde playback controls')
+                poster_capture('moviefreshcontrols')
+                for _ in range(3):key(controls,'Down',.1)
+                key(controls,'Return');key(controls,'Down');key(controls,'Return')
+                wait(lambda:any(row['id']==1 and row['selected'] for row in rpc(directory,'Isolde.GetPlaybackOptions')['audio']),'Remote audio selection changed the real Kodi audio stream')
+                poster_capture('moviefreshaudio');key(controls,'Escape')
+                for _ in range(20):key(controls,'Up',.04)
+                key(controls,'Down');key(controls,'Down')
+                for _ in range(30):key(controls,'Return',.35)
+                def player_seconds():
+                    value=rpc(directory,'Player.GetProperties',{'playerid':1,'properties':['time']})['time']
+                    return value.get('hours',0)*3600+value.get('minutes',0)*60+value.get('seconds',0)
+                position=wait(lambda:(seconds if (seconds:=player_seconds())>180 else None),'Remote seek passed Kodi default resume threshold')
+                key(controls,'Escape');key('kodi','Escape')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Fresh movie stopped through managed Back')
+                def stored_resume():
+                    value=rpc(directory,'VideoLibrary.GetMovieDetails',{'movieid':movie['movieid'],'properties':['resume']})['moviedetails']['resume']
+                    return value if value.get('position',0)>180 else None
+                resume=wait(stored_resume,'Kodi persisted actual movie resume progress')
+                run('wmctrl','-i','-a',shell,env=env);poster_capture('moviefreshreturned')
+                # The preference changes in Settings; a library launch must
+                # remain direct even while discovery would show viewing choices.
+                source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
+                source_press('Up',20);source_press('Down',7);source_press('Return')
+                source_press('Up',20);source_press('Down',10);source_press('Return');time.sleep(1)
+                source_press('Down',3+source_index);source_press('Return')
+                source_press('Down',5);source_press('Return');source_press('Down',2);source_press('Return')
+                source_press('Down');source_press('Return');source_press('Return')
+                wait(lambda:any(row['path']==str(movies)+'/' and row['noUpdate'] for row in rpc(directory,'Isolde.GetSources')['sources']),'Remote scanner edit applied to the populated library')
+                assert stored_resume()==resume,'Editing source settings changed existing Kodi progress'
+                poster_capture('sourceprogresspreserved')
+                source_press('Escape');source_press('Up');source_press('Return')
+                poster_capture('localplaybackon');source_press('Return');poster_capture('localplaybackoff')
+                preference=(config/'Kodi.conf').read_text()
+                assert 'alwaysPlayLocally=false' in preference,'Remote preference toggle was not persisted'
+                open_movie_card();key(shell,'Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Preference OFF kept library playback direct')
+                wait(lambda:player_seconds()>=resume['position']-3,'Kodi resumed from its stored position')
+                poster_capture('movieresumed')
+                key('kodi','Home')
+                wait(lambda:(value if (value:=rpc(directory,'Isolde.PlaybackStatus')).get('state')=='ended' and value.get('home') is True else None),'Native Home stopped playback and returned to Isolde')
+                run('wmctrl','-i','-a',shell,env=env);poster_capture('moviefreshhome')
+                open_movie_card();source_press('Up',20);source_press('Right',20);source_press('Return')
+                # Music toolbar opens albums; scan stays a separate deliberate
+                # action in Media Settings, using Kodi's own tag reader.
+                source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
+                source_press('Up',20);source_press('Down',7);source_press('Return')
+                source_press('Down',11);source_press('Return')
+                songs=wait(lambda:rpc(directory,'AudioLibrary.GetSongs',{'properties':['title','album','artist']}).get('songs'),'Kodi indexed real tagged music',seconds=60)
+                assert len(songs)==2 and all(row.get('album')=='Isolde Fixture Album' for row in songs),songs
+                open_movie_card();source_press('Up',20);source_press('Right',20);source_press('Return');time.sleep(1)
+                poster_capture('musicalbums');source_press('Up',20);source_press('Down');source_press('Return');time.sleep(1)
+                poster_capture('musicsongs');source_press('Up',20);source_press('Down');source_press('Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Remote song playback')
+                key('kodi','Menu');controls=wait(lambda:next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None),'Music controls owned by Isolde')
+                poster_capture('musiccontrols');key(controls,'Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='paused','Music transport pause')
+                key(controls,'Escape');key('kodi','Escape')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Music stopped and returned')
+                run('wmctrl','-i','-a',shell,env=env);poster_capture('musicreturned')
                 for path,digest in hashes.items(): assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
                 (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"freshProfile":True,
-                    "normalProfileUsed":False,"scrapedByKodi":True,"metadataSupplied":False,"playbackVerified":False,
+                    "normalProfileUsed":False,"scrapedByKodi":True,"metadataSupplied":False,"playbackVerified":True,
                     "movie":movie,"artworkBytes":len(raw),"artworkSha256":hashlib.sha256(raw).hexdigest(),
                     "artworkMime":art["mime"],"media_unchanged":True,"remotePosterPreviewNoWrite":True,
                     "remotePosterCancelNoWrite":True,"remotePosterApplied":True,"unrelatedTitleArtPreserved":True,
-                    "freshSourceSetupThroughIsolde":True,"sourcePreviewCancelNoWrite":True,"kodiMenusRequired":False,
-                    "captures":["sourceempty","sourcepreview","sourcesaved","movieart","movieposterpreview","movieposterapplied"]},indent=2))
+                    "freshSourceSetupThroughIsolde":True,"sourcePreviewCancelNoWrite":True,"nativeSourceWriteFailureRecovery":True,"capabilityGuideRemoteRoute":True,"kodiMenusRequired":False,
+                    "freshPlaybackReturnThroughIsolde":True,"actualKodiResumeSavedAndRestored":True,"preferenceOffLibraryDirect":True,"remoteHomeMoviesRoute":True,"realAudioTrackSelection":True,"sourceEditPreservesProgress":True,"remoteMusicSourceBrowsePlayback":True,"seekPosition":position,"storedResume":resume,
+                    "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned"]},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
@@ -746,10 +867,12 @@ provider.setSettingString("searchlanguage","en-US")
                 wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions').get('view')=='zoom','Remote picture-size choice applied by Kodi')
                 playlist_capture('playlistpicture')
                 key(controls,'Escape')
+                for _ in range(20):key(controls,'Up',.04)
                 for _ in range(5):key(controls,'Down',.08)
                 key(controls,'Return');key(controls,'Return')
                 assert rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'] is False
                 key(controls,'Escape')
+                for _ in range(20):key(controls,'Up',.04)
                 for _ in range(3):key(controls,'Down',.08)
                 key(controls,'Return')
                 def current_episode():

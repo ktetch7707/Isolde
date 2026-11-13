@@ -31,6 +31,35 @@ def atomic(path,value):
     with temporary.open('w') as stream:json.dump(value,stream,indent=2);stream.flush();os.fsync(stream.fileno())
     os.replace(temporary,path)
 
+def normalize_package(package):
+    # dpkg preserves modes on pre-existing directories. Repair only this
+    # package's fixed, root-owned, non-linked directories during configuration.
+    (package/'DEBIAN/postinst').write_text('#!/bin/sh\nset -eu\nfor directory in /opt/isolde-managed-kodi /opt/isolde-managed-kodi/bin /opt/isolde-managed-kodi/licenses; do\n  [ ! -L "$directory" ] && [ -d "$directory" ] && [ "$(/usr/bin/stat -c %u -- "$directory")" = 0 ] || exit 1\n  /bin/chmod 0755 -- "$directory"\ndone\n')
+    for path in [package,*package.rglob('*')]:
+        if path.resolve()!=path or path.is_symlink() or path.stat().st_uid!=os.getuid():raise RuntimeError('Unsafe managed Kodi package staging path')
+        if path.is_dir():path.chmod(0o755)
+        elif path.is_file():path.chmod(0o755 if path.name=='kodi.bin' or path in (package/'opt/isolde-managed-kodi/bin/kodi',package/'DEBIAN/postinst') else 0o644)
+        else:raise RuntimeError('Unexpected managed Kodi package entry')
+
+def repair_package_modes(work,source,receipt):
+    package=work/'package';prefix=package/'opt/isolde-managed-kodi'
+    metadata=json.loads((prefix/'manifest.json').read_text())
+    expected=hashlib.sha256((source/'native/kodi/IsoldeSources.cpp').read_bytes()+(source/'native/kodi/IsoldeSources.h').read_bytes()).hexdigest()
+    binary=prefix/'kodi.bin';installed=Path('/opt/isolde-managed-kodi/kodi.bin')
+    if metadata.get('feature')!='isolde-sources-v1' or metadata.get('extensionSha256')!=expected or metadata.get('binarySha256')!=sha(binary) or sha(installed)!=sha(binary):raise RuntimeError('Package-mode repair requires the exact built and installed native candidate')
+    normalize_package(package)
+    control=(package/'DEBIAN/control').read_text()
+    version=re.search(r'^Version: ([0-9A-Za-z.+~:-]+)$',control,re.M)
+    architecture=re.search(r'^Architecture: ([a-z0-9]+)$',control,re.M)
+    if not version or not architecture:raise RuntimeError('Invalid managed Kodi package identity')
+    deb=work/('isolde-managed-kodi_'+version[1]+'_'+architecture[1]+'.deb')
+    run(['dpkg-deb','--root-owner-group','--build',str(package),str(deb)],timeout=120)
+    run(['sudo','-n','apt-get','install','--reinstall','-y',str(deb)],timeout=300)
+    for path in (installed.parent,installed.parent/'bin',installed,installed.parent/'bin/kodi',installed.parent/'manifest.json'):
+        info=path.stat()
+        if path.resolve()!=path or info.st_uid!=0 or info.st_mode&0o022:raise RuntimeError('Managed Kodi package permissions still unsafe: '+str(path)+' uid='+str(info.st_uid)+' mode='+oct(info.st_mode&0o7777)+' resolved='+str(path.resolve()))
+    atomic(receipt,dict(passed=True,kind='dependency-package-permission-repair',binarySha256=sha(installed),package=str(deb),packageSha256=sha(deb)))
+
 def overlay(source,repository,version):
     native=repository/'native/kodi';target=source/'xbmc/interfaces/builtins'
     for name in ('IsoldeSources.cpp','IsoldeSources.h'):shutil.copyfile(native/name,target/name)
@@ -53,13 +82,15 @@ def overlay(source,repository,version):
         info.write_text(text.replace(anchor,replacement))
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--source',type=Path,required=True);parser.add_argument('--work',type=Path,required=True);parser.add_argument('--receipt',type=Path,required=True)
+    parser=argparse.ArgumentParser();parser.add_argument('--source',type=Path,required=True);parser.add_argument('--work',type=Path,required=True);parser.add_argument('--receipt',type=Path,required=True);parser.add_argument('--repair-package-modes',action='store_true')
     args=parser.parse_args()
     if socket.gethostname()!='isolde-test' or os.geteuid()==0:raise RuntimeError('Build only as the normal Isolde-Test guest user')
     expected=Path.home()/'isolde-oracle/support/managed-kodi'
     if args.work.absolute()!=expected or args.work.resolve()!=expected:raise RuntimeError('Unsafe Kodi build workspace')
     if args.source.resolve()!=args.source.absolute() or not (args.source/'native/kodi/upstream.json').is_file():raise RuntimeError('Verified Isolde source required')
     work=args.work;work.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if args.repair_package_modes:
+        repair_package_modes(work,args.source,args.receipt);return
     if shutil.disk_usage(work).free<2*1024**3:raise RuntimeError('Managed Kodi build needs at least 2 GiB free before setup')
     pin=json.loads((args.source/'native/kodi/upstream.json').read_text())
     version=subprocess.check_output(['dpkg-query','-W','-f=${Version}','kodi-bin'],text=True).strip()
@@ -110,9 +141,9 @@ def main():
         return ' '.join(value for value in values if not value.startswith('-flto') and value!='-ffat-lto-objects')
     cpp=flags('CPPFLAGS')+' -D_XBMC'
     run(['cmake','-S',str(source),'-B',str(build),'-G','Ninja',*distribution_flags,*dvd_flags,'-DCMAKE_BUILD_TYPE=Release','-DCMAKE_C_FLAGS='+cpp+' '+flags('CFLAGS'),'-DCMAKE_CXX_FLAGS='+cpp+' '+flags('CXXFLAGS'),'-DCMAKE_EXE_LINKER_FLAGS='+flags('LDFLAGS'),'-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG -g0','-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG -g0','-DCMAKE_INSTALL_PREFIX=/usr','-DCORE_PLATFORM_NAME=x11','-DAPP_RENDER_SYSTEM=gl','-DUSE_LTO=OFF','-DENABLE_TESTING=OFF'],timeout=300)
-    # Kodi's CMake target is kodi; its Linux output suffix produces kodi.bin.
+    # Kodi's CMake target is kodi; this distribution names X11 output kodi-x11.
     run(['cmake','--build',str(build),'--target','kodi','--parallel','2'],timeout=5400)
-    binary=build/'kodi.bin'
+    binary=build/'kodi-x11'
     if not binary.is_file():raise RuntimeError('Kodi build did not produce its Linux executable')
     with binary.open('rb') as stream:
         if stream.read(4)!=b'\x7fELF':raise RuntimeError('Kodi output is not a Linux executable')
@@ -131,6 +162,7 @@ def main():
     for name in ('LICENSE.md','LICENSES/README.md'):
         if (source/name).is_file():shutil.copyfile(source/name,licenses/Path(name).name)
     deb=work/('isolde-managed-kodi_'+package_version+'_'+architecture+'.deb')
+    normalize_package(package)
     run(['dpkg-deb','--root-owner-group','--build',str(package),str(deb)],timeout=120)
     run(['sudo','-n','apt-get','install','-y',str(deb)],timeout=300)
     installed=Path('/opt/isolde-managed-kodi/kodi.bin')

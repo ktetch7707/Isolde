@@ -67,13 +67,16 @@ void KodiMedia::releaseSocket()
 #endif
     m_descriptor = -1;
 }
-void KodiMedia::fail(const QString &message)
+void KodiMedia::fail(const QString &message, bool forceDisconnect)
 {
-    if(m_busy && m_stage>=22 && m_stage<=24){m_busy=false;releaseSocket();m_sourcePreviewReady=false;m_sourceStatus="Source operation could not be confirmed. Refresh to recover before another edit. "+message;emit changed();return;}
-    if(m_busy && (m_stage==20 || m_stage==21)){
+    if(m_busy && m_stage>=22 && m_stage<=24){
+        m_sourcePreviewReady=false;m_sourceStatus="Source operation could not be confirmed. Refresh to recover before another edit. "+message;
+        if(!forceDisconnect){m_busy=false;releaseSocket();emit changed();return;}
+    }
+    if(!forceDisconnect && m_busy && (m_stage==20 || m_stage==21)){
         m_busy=false;releaseSocket();m_playbackOptionsStatus="Playback options unavailable. "+message;emit changed();return;
     }
-    if (m_busy && (m_stage == 14 || m_stage == 15)) {
+    if (!forceDisconnect && m_busy && (m_stage == 14 || m_stage == 15)) {
         m_busy = false;
         m_subtitleStatus = QStringLiteral("Kodi subtitle operation failed: %1").arg(message);
         releaseSocket();
@@ -121,16 +124,17 @@ void KodiMedia::quitIfIdle()
 }
 void KodiMedia::invalidate(const QString &reason)
 {
-    m_busy=false;m_optionsRequest=0;m_playbackOptions.clear();m_sourcePreviewReady=false;
-    fail(reason);
+    m_optionsRequest=0;m_playbackOptions.clear();m_sourcePreviewReady=false;
+    fail(reason,true);
 }
 void KodiMedia::retire(const QString &reason)
 {
     m_retired = true;
-    m_busy=false;m_optionsRequest=0;m_sourcePreviewReady=false;
+    m_optionsRequest=0;m_sourcePreviewReady=false;
+    m_playbackOptions.clear();m_subtitleTracks.clear();m_librarySources.clear();m_sourceScrapers.clear();m_sourceRoots.clear();m_sourceDraft.clear();m_sourceRevision.clear();
     m_appOpenings.clear();
     m_historySelection.clear();
-    fail(reason);
+    fail(reason,true);
 }
 void KodiMedia::refresh()
 {

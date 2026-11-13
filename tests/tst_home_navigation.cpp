@@ -923,7 +923,7 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme()
     SearchSettings searchPreferences; KodiImporter importer("theme-test");
     engine.rootContext()->setContextProperty("searchPreferences", &searchPreferences);
     engine.rootContext()->setContextProperty("kodiImporter", &importer);
-    engine.rootContext()->setContextProperty("profileManager", QVariantMap{{"activeName", "Theme test"}});
+    engine.rootContext()->setContextProperty("profileManager", QVariantMap{{"activeName", "Theme test"},{"editingAllowed",true}});
     const QVariantMap appearance{{"focusColor", "#E65D8F"}, {"surfaceColor", "#334455"},
         {"selectedColor", "#123456"}, {"textColor", "#E0E0E0"}, {"mutedColor", "#AAAAAA"},
         {"backgroundEnd", "#010203"}, {"tileRoundness", 0.8}};
@@ -981,7 +981,33 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme()
     QCOMPARE(media.status(), status);
     const auto artifacts = qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");
     if (!artifacts.isEmpty()) QVERIFY(window.grabWindow().save(artifacts + "/studio-test-shell-media-settings-custom.png"));
-
+    root->setProperty("editingFolders",false);root->setProperty("showingSources",true);
+    auto *sources=findItem(qobject_cast<QQuickItem *>(root.get()),"kodiSourceSetupPage");QVERIFY(sources);
+    sources->setProperty("draft",QVariantMap{{"name","Movies"},{"path","/media/movies/"},{"category","video"},{"content","movies"}});
+    sources->setProperty("previewOriginIndex",8);sources->setProperty("mode","preview");
+    QVERIFY(QMetaObject::invokeMethod(sources,"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Back)))));
+    QCOMPARE(sources->property("mode").toString(),QString("edit"));QCOMPARE(sources->property("selectedIndex").toInt(),8);
+    sources->setProperty("newSource",true);
+    for(const auto &row:sources->property("rows").value<QJSValue>().toVariant().toList())QVERIFY(!row.toMap()["remove"].toBool());
+    sources->setProperty("message","Previous source failure");QVERIFY(QMetaObject::invokeMethod(sources,"refresh"));QCOMPARE(sources->property("message").toString(),QString());
+    sources->setProperty("draft",QVariantMap{{"name","Music"},{"path","/media/music/"},{"category","music"},{"content","music"}});
+    sources->setProperty("selectedIndex",2);QVERIFY(QMetaObject::invokeMethod(sources,"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Confirm)))));
+    QVERIFY(!sources->property("message").toString().contains("No installed provider"));
+    root->setProperty("showingSources",false);
+    QQmlComponent popupComponent(&engine,QUrl::fromLocalFile(QFileInfo(QStringLiteral(KODI_SETTINGS_QML)).dir().filePath("PlaybackOptionsWindow.qml")));
+    QVERIFY2(popupComponent.isReady(),qPrintable(popupComponent.errorString()));
+    std::unique_ptr<QObject> popup(popupComponent.createWithInitialProperties({{"kodiClient",QVariant::fromValue(&media)},{"appearance",custom}}));
+    QVERIFY2(popup,qPrintable(popupComponent.errorString()));
+    const auto controls=popup->property("rows").value<QJSValue>().toVariant().toList();int audioIndex=-1;
+    for(int i=0;i<controls.size();++i)if(controls[i].toMap()["page"]=="audio")audioIndex=i;
+    QVERIFY(audioIndex>=0);popup->setProperty("selectedIndex",audioIndex);popup->setProperty("visible",true);
+    QVERIFY(QMetaObject::invokeMethod(popup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Confirm)))));
+    QCOMPARE(popup->property("mode").toString(),QString("audio"));
+    QVERIFY(QMetaObject::invokeMethod(popup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Back)))));
+    QCOMPARE(popup->property("mode").toString(),QString("controls"));QCOMPARE(popup->property("selectedIndex").toInt(),audioIndex);
+    QVERIFY(QMetaObject::invokeMethod(popup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Confirm)))));
+    QVERIFY(QMetaObject::invokeMethod(popup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Menu)))));
+    QVERIFY(!popup->property("visible").toBool());
 }
 void HomeNavigationTests::appearancePreviewCancelAndApply()
 {
@@ -1157,6 +1183,8 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
                     const auto params=request["params"].toObject();server.setProperty("savedPlaylist",params.toVariantMap());
                     result={{"saved",true},{"name",params["name"]},{"kind",params["kind"]},{"playlistName","Isolde-ui-fixture.xsp"}};
                 }
+                else if (method == "AudioLibrary.GetAlbums") result = {{"albums",QJsonArray{QJsonObject{{"albumid",31},{"title","Fixture album"},{"artist",QJsonArray{"Fixture artist"}}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+                else if (method == "AudioLibrary.GetSongs") result = {{"songs",QJsonArray{QJsonObject{{"songid",32},{"title","Fixture song"},{"album","Fixture album"},{"artist",QJsonArray{"Fixture artist"}}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
                 else if (method == "Isolde.GetArtwork") result = {{"mime", ""}, {"data", ""}};
                 else if (method.startsWith("Isolde.Play")) {
                     const auto state = method == "Isolde.PlaybackControl" ? "ended" : "playing";
@@ -1178,11 +1206,13 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     AppRegistry registry; QVERIFY(registry.loadFromData(R"([{"id":"settings","name":"Settings","type":"settings","section":"System","accent":"#556677"}])"));
     SessionManager sessions(&registry);
     KodiMedia media("library-ui-test", nullptr, dir.path());
+    KodiService service("library-ui-test");service.setEnabled(false);
     KodiArtwork art("library-ui-test", nullptr, dir.path());
     InputManager input;
     QQmlEngine engine;
     engine.rootContext()->setContextProperty("inputManager", &input);
     engine.rootContext()->setContextProperty("kodiMedia", &media);
+    engine.rootContext()->setContextProperty("kodiService", &service);
     engine.rootContext()->setContextProperty("kodiArtwork", &art);
     engine.rootContext()->setContextProperty("sessionManager", &sessions);
     engine.rootContext()->setContextProperty("profileManager", QVariantMap{{"activeName", "Test profile"}});
@@ -1269,6 +1299,17 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QVERIFY(command(InputManager::Back)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("shows"));
     QVERIFY(command(InputManager::Back)); QVERIFY(!root->property("open").toBool());
     QSignalSpy searchReturn(root.get(),SIGNAL(searchReturnRequested()));
+    root->setProperty("open",true);media.openLibrary("movies");QTRY_VERIFY(!media.busy());
+    media.selectIndex(-1);
+    for(int i=0;i<20;++i)QVERIFY(command(InputManager::NavigateRight));
+    QVERIFY(command(InputManager::Confirm));QTRY_VERIFY(!media.busy());QCOMPARE(media.mediaKind(),QString("albums"));
+    QVERIFY(!root->property("toolbar").value<QJSValue>().toVariant().toList().isEmpty());
+    QVERIFY(command(InputManager::NavigateDown));QVERIFY(command(InputManager::Confirm));
+    QTRY_VERIFY(!media.busy());QCOMPARE(media.mediaKind(),QString("songs"));
+    QVariant songSubtitle;QVERIFY(QMetaObject::invokeMethod(root.get(),"subtitle",Q_RETURN_ARG(QVariant,songSubtitle),Q_ARG(QVariant,media.items().first())));
+    QVERIFY(songSubtitle.toString().contains("Fixture artist"));QVERIFY(!songSubtitle.toString().contains("Unwatched"));
+    QVERIFY(command(InputManager::Back));QTRY_VERIFY(!media.busy());QCOMPARE(media.mediaKind(),QString("albums"));
+    QVERIFY(command(InputManager::Back));
     root->setProperty("open",true);root->setProperty("returnToSearchAfterPlayback",true);
     QVERIFY(QMetaObject::invokeMethod(&media,"playbackReturned",Q_ARG(bool,false)));
     QCOMPARE(searchReturn.count(),1);QVERIFY(!root->property("open").toBool());

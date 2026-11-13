@@ -466,3 +466,157 @@ CURRENT IMPLEMENTATION (November12 continuation): BUG-145 source authoring now h
 Dependency setup is an authenticated distribution Kodi21 Omega build with one managed-only source builtin (no Isolde SQLite writes, no new side service). Configure kodi-managed attempts a–f preserved: version/source-keyring/DFSG-render setup diagnosed, f reached Ninja but target kodi.bin was wrong (CMake target kodi, binary kodi.bin). Corrected g is compiling incrementally under the existing runner. Poll its live session; do not interrupt a healthy build or launch another. Guest-only build dependencies installed; obsolete generated legacy cache removed with sibling source/evidence preserved. Reproducible guest desktop tracker cache reclaimed and indexer restoration lease recorded; successful setup restores it. No app Test/Visual/Deploy has run in this continuation. Project remains88%,T04=49%.
 
 November13 resume: g stopped at1166/1697 because the distribution-patched SystemInfo.cpp requires DEB_VERSION, supplied by debian/rules rather than plain dpkg-buildflags. Apply that exact installed version to its consuming translation unit; retain compiled objects. Source native builtin itself compiled. Pending extension batch also normalizes music scanner flags and refuses both music/video active scans. BUG-148: integration guards incorrectly treated Isolde's own Settings session as an external app and denied source saves/Power from their only UI; explicitly allow Settings while retaining profile/import/playback/desktop/external-session guards. This is a source-review fix, not yet a pass. No acceptance change.
+
+November13 dependency closure: h completed native compilation/linking; packaging
+expected kodi.bin while the observed distribution output is kodi-x11. Corrected
+the package input, retaining its installed /opt/isolde-managed-kodi/kodi.bin name.
+i stopped at the unchanged2 GiB preflight gate. j supplied existing exact host
+source/report backup receipts to normal verified cleanup and passed native build,
+package installation/hash verification and guest-indexer restoration. Normal
+service remains active/running, zero restarts, current release unchanged.
+Evidence: build/vm-oracle/t04-kodi-native-20261113-j/report/.
+
+Launch ONE combined full application Test next: source/content private protocol,
+new native dependency selection, asynchronous ownership/import, global playback
+Menu/focus, packaged QML/resources and the earlier Power/Capture/browser batch
+cross several boundaries, so prior full/scoped reuse cannot cover this candidate.
+This is the planned integration run, not a percentage or documentation rerun.
+Source commit1b60bd7 plus packaging/backup-receipt runner corrections. Keep the
+first failing registration and diagnose before retrying. Existing installed
+movieart/playlists helpers are prepared; use the same passing candidate afterward.
+
+Combined a stopped in disk preflight before application compilation or any CTest:
+newly installed native dependency plus its link archives left<2 GiB. All ordinary
+verified cleanup was exhausted. Extend that same automatic cleanup to discard
+only Ninja-declared managed-Kodi static link archives and its identical package
+staging executable, after verifying the root-owned installed executable against
+its manifest. Retain every native object, source checkout/archive, Debian package,
+installed file and acceptance record. Existing oracle registration adds checksum,
+mount, active-process and object/source preservation assertions. b is the same
+application batch's first actual build/full attempt after this diagnosed preflight
+repair; the2 GiB minimum remains unchanged.
+
+b stopped in the oracle safety self-test, before application build: the new fake
+installed-dependency fixture inherited writable group permissions, so the safety
+check correctly refused it before reaching the intended checksum assertion.
+Fixture now explicitly uses directory0755/files0644. No production safety check
+was relaxed. c retries the planned application batch after that diagnosed harness
+setup correction; still zero application registrations attempted in a/b.
+
+c passed all125 runner safety tests, then correctly refused the actual installed
+managed Kodi dependency's group-writable package directory. BUG-150: package
+staging inherited the guest umask, and the first package receipt checked binary
+ownership/hash but not every installed directory mode. Normalize all generated
+package directories0755, data0644 and executables0755; reinstall the exact same
+hashed candidate through apt and verify every installed path. This repair runs
+before cache cleanup because the cleanup correctly requires a safe installed
+copy before deleting any link archive. Source/binary checks and the2 GiB
+application minimum remain enforced. No application CTest has run in a–c.
+
+Read-only k Status/Storage identifies the exact retained mode: both root-owned
+/opt/isolde-managed-kodi and bin remain0775, while all three executable/manifest
+files already have the correct0755/0644 modes. dpkg preserved pre-existing
+directory permissions on reinstall. Package configuration now sets only its
+three fixed root-owned, non-symlink directories to0755; every path/owner check
+remains enforced. k's failed repair and read-only mode inventory are preserved.
+
+l passes package directory repair, native cached relink, installation/hash checks
+and guest-indexer restoration. Evidence: t04-kodi-native-20261113-l/report/;
+normal service active/running/zero restarts and installed app release unchanged.
+The planned full application run d now follows corrected dependency setup and
+safe automatic link-cache pruning. a–c never reached application compilation or
+CTest, and are retained as failed preflights. Playback popup also inherits the
+existing display scale/safe area and originating library palette before the
+first actual application build. T04.5/.6/.7 outcomes split under their original
+weights: prior earned credit unchanged;192/235 milestones, sum2202, Overall88%.
+
+d passed125 runner checks and root-owned dependency validation, then still had
+<2 GiB after discarding140 MB of native link archives. The desktop indexer was
+recreating its disposable cache immediately after Configure restored it. Normal
+Test now pauses only the originally active guest indexer units during low-space
+builds, uses the already-tested exact tracker-cache cleanup, and restores those
+same units in a finally block under the existing runner lock, with an explicit
+Recover lease for crashes. No indexer setting, app profile, host or file grant is
+changed. This closes the repeated cache-growth cause instead of waiving space
+or rerunning separate Configure cleanup before each test. e remains the planned
+first actual application build/full run; a–d attempted zero app registrations.
+
+The e application build succeeds (all new C++/QML compiles), and the single full
+CTest run is healthy/in progress; do not interrupt or restart it. Existing
+movieart helper now uses a one-Movies-card declarative fixture and only
+D-pad/Confirm/Back/Menu/Home for product flows (Ctrl+M removed). A longer lawful
+synthetic clip permits real seek beyond Kodi's default resume threshold, actual
+stored progress/resume, default-ON and remote OFF preference screenshots, and
+proof that OFF leaves library playback direct. Source preview/cancel compares
+any packaged empty/default source inventory/XML exactly rather than requiring
+that Kodi never creates an empty config file. All are test-helper refinements,
+not application changes or acceptance passes.
+
+Source review follow-up BUG-151: nested playback audio/subtitle/view Back currently
+returns to the first transport row rather than its exact opening row; source
+Remove preview Back likewise selects ordinary Preview instead of Remove. Retain
+these concrete focus fixes for the next diagnosed repair batch, with direct
+assertions in the existing Home navigation registration. Do not interrupt the
+healthy e full run. Neither new feature is accepted yet.
+
+BUG-152, e full-run failure: invalidate/retire cleared m_busy before generic
+failure handling. This avoided per-operation nonfatal error branches, but also
+lost the active scan/quit context; the existing cancelsScanMonitoring assertion
+failed. Keep the context and explicitly request a forced disconnect instead,
+while ordinary source/options/subtitle RPC errors remain nonfatal. Retirement
+also clears newly added source/options data. Existing media tests retain scan
+cancellation and assert source/options teardown; no new registration.
+
+BUG-151 repairs restore the opening playback row after nested Back, make Menu
+close controls consistently, restore Remove's own row after preview Back, and
+hide Remove on a never-saved source. Existing Home navigation theme case now
+exercises these actual QML methods. GUI helper navigation resets to known list
+bounds rather than assuming the previous focus bug. The e run compiled the full
+app and passed59/60 attempted registrations; Native profile/browser isolation
+and Home layout were unattempted after its required stop at#60. Indexer finally
+restoration passes. No passing full receipt or deployment is claimed.
+
+f repeats full integration because e has a demonstrated full-suite failure and
+the fix touches shared media disconnection/lifecycle plus remote focus. This is
+the combined correction batch, not a rerun for a screenshot, commit or percent.
+Keep all failures; same candidate then goes through installed/offline/standing
+visual journeys. Current app changes remain unaccepted until that evidence.
+
+November13 f completes all63/63 existing CTests and stages a passing payload;
+indexer/service restoration passes. BUG-153 source errors survived Refresh and
+fixed Music provider selection falsely reported a missing scraper: clear stale
+messages and make that fixed row read-only. BUG-154 ordinary Music browsing had
+no default entry: validated packaged library-view data now exposes Music, with
+album/song labels and contextual help. Existing Home/media tests cover these.
+The next media_controls run reuses f's exact full payload and source identity,
+whitelisting only the read-only KodiService libraryViews getter, its packaged
+inventory and two browse/source QML files, plus named tests/harness. It refuses
+Main/KodiMedia lifecycle or any other production delta and runs seven existing
+registrations. No new full run for this bounded UI follow-up; installed movieart,
+playlists, offline search and reference review follow the same staged candidate.
+Acceptance remains88% pending proof; BUG-153/154 are implemented, not accepted.
+
+g stopped before application testing: a harness edit duplicated the suite-selection clause into receipt validation with wrong indentation. Removed that duplicate; g attempted no application registrations. h retries the corrected harness, preserving g's failure.
+
+h builds successfully and passes126 runner checks, but the first selected
+registration aborts with corrupted double-linked list inside televisionLibraryRemoteFlow
+(474 ms), then Qt's stack-trace helper hits the registration's60s timeout.
+No deployment. Added bounded phase diagnostics to that existing case so the
+next focused attempt locates the corruption rather than treating a timeout as
+flaky or rerunning full integration. Source/app delta remains the same narrow
+Music/source UI boundary. h's abort and full console are retained.
+
+BUG-155 root cause identified during i preflight: auto deduced QJsonValueRef
+from operator[] on a temporary QJsonObject in the new libraryViews getter.
+The proxy outlived the temporary and caused h's heap corruption. Use value()
+to retain an owning QJsonValue instead. Cancel i's redundant diagnostic run
+before further application tests; this is a diagnosed memory defect correction,
+not optional polish or interruption to restart a healthy full build. j will
+verify the corrected getter and all seven existing affected registrations.
+
+j passes all7/7 existing media_controls registrations in111s after owning the
+JSON value;126 runner checks pass. SourceDigest a777f87dffbc89f5fa6747f0676b192d2cbce4f1bc5b4c6f6d0b6b7b34447581.
+Strict reuse verifies f's63/63 full payload and the bounded changed-file set.
+Deployed releaseed516a6288baeffa1ffb5b12; normal service active/running/zero
+restarts. Installed movieart/playlists campaign now running on that exact
+candidate; review and acceptance pending. T04=51%,193/235, project88%.

@@ -1,11 +1,16 @@
 {
   "schemaVersion": 1,
+  "libraryViews": [
+    {"kind":"movies","name":"Movies","position":"primary"},
+    {"kind":"shows","name":"Shows","position":"primary"},
+    {"kind":"albums","name":"Music","position":"trailing"}
+  ],
   "items": [
     {"id":"sources","name":"Library sources and metadata","description":"Allow local folders, choose Movies, TV shows, Music videos or Music, select an installed metadata provider and preview scanner changes. Existing remote and multipath sources are preserved as read-only.","route":"sources"},
     {"id":"folders","name":"Media folder access","description":"Grant or remove read-only access for this profile. Kodi pauses safely while access changes and resumes afterward. Files are never moved or deleted.","route":"folders"},
     {"id":"videoscan","name":"Scan video library","description":"Ask Kodi to scan configured video sources. Scanner status and errors appear here; this never cleans or removes library titles.","route":"videoscan"},
     {"id":"musicscan","name":"Scan music library","description":"Ask Kodi to scan allowed music sources and embedded file tags. Browse Music, then an album, to play its tracks.","route":"musicscan"},
-    {"id":"browse","name":"Browse, search and progress","description":"Open Movies, TV Shows, Music or TV Guide from Home or configured page components. Library controls provide search, genres, watched/continue/recent views and bounded paging. Kodi owns watched state and resume positions.","route":"none"},
+    {"id":"browse","name":"Browse, search and progress","description":"Open Movies or TV Shows, then choose Music in the library toolbar to browse albums and tracks. Music page components offer the same library. TV Guide is available from Home or configured page components. Video controls provide search, genres, watched/continue/recent views and paging. Kodi owns watched state and resume positions.","route":"none"},
     {"id":"playlists","name":"Saved playlists","description":"In Movies or TV Shows, open library controls, then Save playlist or Saved playlists. Preview rules, rename, change sorting, reorder file members or delete a playlist. Media and watched state are preserved.","route":"none"},
     {"id":"posters","name":"Title posters","description":"Open a movie or TV-show details card, then choose its poster. Select managed artwork, preview, cancel or confirm apply. Other title artwork is preserved.","route":"none"},
     {"id":"transport","name":"Playback and next / previous","description":"Confirm plays, pauses or resumes. Left / Right seeks when supported; Back stops and restores the origin. Menu opens Isolde playback controls. Previous / Next follows the current movie, episode or song list across pages; scheduled channels and legacy collections retain their own navigation.","route":"none"},

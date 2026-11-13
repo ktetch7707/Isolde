@@ -169,7 +169,7 @@ private:
     void startScan(const QString &kind);
     void request(const QString &method, const QJsonObject &params = {});
     void consume();
-    void fail(const QString &message);
+    void fail(const QString &message, bool forceDisconnect=false);
     void releaseSocket();
     void loadPage(int start);
     void loadManualPage(int start);

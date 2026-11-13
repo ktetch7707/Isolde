@@ -28,18 +28,20 @@ Rectangle {
     signal searchReturnRequested()
     readonly property var selectedItem: kodiMedia.selectedIndex >= 0 && kodiMedia.selectedIndex < kodiMedia.items.length ? kodiMedia.items[kodiMedia.selectedIndex] : null
     readonly property var toolbar: {
-        let rows = [{ label: "Movies", action: "movies" }, { label: "Shows", action: "shows" }]
-        if (kodiMedia.mediaKind !== "seasons") rows = rows.concat([{ label: "Recently Added", action: "recent" }, { label: "Continue Watching", action: "continue" }, { label: "Search", action: "search" }])
+        const views=kodiService.libraryViews || []
+        let rows=views.filter(row=>row.position==="primary").map(row=>({label:row.name,action:"library",kind:row.kind}))
+        const music=kodiMedia.mediaKind==="albums" || kodiMedia.mediaKind==="songs"
+        if (kodiMedia.mediaKind !== "seasons" && !music) rows = rows.concat([{ label: "Recently Added", action: "recent" }, { label: "Continue Watching", action: "continue" }, { label: "Search", action: "search" }])
         if (kodiMedia.mediaKind === "movies" || kodiMedia.mediaKind === "shows") rows = rows.concat([{ label: "Collections", action: "collections" }, { label: "Save playlist", action: "save" }])
         if(kodiMedia.mediaKind==="movies" || kodiMedia.mediaKind==="shows")rows.push({label:"Playlists",action:"playlists"})
-        return rows.concat([{ label: "Refresh", action: "refresh" }])
+        return rows.concat([{ label: "Refresh", action: "refresh" }]).concat(views.filter(row=>row.position==="trailing").map(row=>({label:row.name,action:"library",kind:row.kind})))
     }
     onToolbarChanged: toolbarIndex = Math.min(toolbarIndex, toolbar.length - 1)
     function toolbarAction(index) {
         const row = toolbar[index]
         if (!row || kodiMedia.busy) return
         details = null
-        if (row.action === "movies" || row.action === "shows") kodiMedia.openLibrary(row.action)
+        if (row.action === "library") kodiMedia.openView(row.kind,"all")
         else if (row.action === "recent" || row.action === "continue") kodiMedia.setView(row.action)
         else if (row.action === "search") searchRequested()
         else if (row.action === "collections" || row.action === "save" || row.action === "playlists") browseControls.begin(row.action==="save"?"savePlaylist":row.action)
@@ -47,6 +49,7 @@ Rectangle {
     }
     function subtitle(item) {
         if (!item) return ""
+        if(item.mediaType==="album" || item.mediaType==="song")return [(item.artist || []).join(", "),item.mediaType==="song"?item.album:"",item.duration>0?Math.ceil(item.duration/60)+" min":""].filter(value=>value).join(" · ")
         if (item.mediaType === "tvshow" || item.mediaType === "season") return (item.episode || 0) + " episodes · " + (item.watchedepisodes || 0) + " watched"
         const progress = item.resume && item.resume.position > 0 ? "Resume at " + Math.floor(item.resume.position / 60) + " min" : item.playcount > 0 ? "Watched" : "Unwatched"
         const knownEpisode = Number.isInteger(item.season) && item.season >= 0 && Number.isInteger(item.episode) && item.episode > 0
@@ -175,7 +178,8 @@ Rectangle {
             Text { font.family: shell.fontFamily; width: parent.width; objectName: "libraryDetailsSubtitle"; text: root.subtitle(root.details); color: shell.elevatedFocus; font.pixelSize: 21 * root.textScale; wrapMode: Text.WordWrap }
             Text { font.family: shell.fontFamily; width: parent.width; text: root.details ? root.details.plot || "No description supplied by Kodi." : ""; color: shell.elevatedText; font.pixelSize: 22 * root.textScale; wrapMode: Text.WordWrap; maximumLineCount: Math.max(2, Math.floor((root.height - 340) / 28)); elide: Text.ElideRight }
                     Text { font.family: shell.fontFamily; width: parent.width; text: root.details && root.details.mediaType === "tvshow" ? "OK browse · Menu curate · Back close"
-                        : root.details && root.details.mediaType === "season" ? "OK browse · Back close"
+                        : root.details && (root.details.mediaType === "season" || root.details.mediaType === "album") ? "OK browse · Back close"
+                        : root.details && root.details.mediaType === "song" ? "OK play · Back close\nDuring playback: Menu controls · Back stop · Home return"
                     : "OK play / resume · Right restart · Menu curate · Back close\nDuring playback: OK pause · Left/Right seek · Back stop · Home return"; color: shell.elevatedMuted; font.pixelSize: 20 * root.textScale; wrapMode: Text.WordWrap }
             Text { font.family: shell.fontFamily; objectName: "libraryDetailsPlayback"; text: kodiMedia.playbackStatus; color: shell.elevatedFocus; font.pixelSize: 18 * root.textScale }
             Text { width:parent.width;visible:root.details && (root.details.mediaType==="movie" || root.details.mediaType==="tvshow") && profileManager.editingAllowed;text:"Left · Change this title’s Kodi poster";color:shell.elevatedFocus;font.family:shell.fontFamily;font.pixelSize:20*root.textScale;wrapMode:Text.WordWrap }

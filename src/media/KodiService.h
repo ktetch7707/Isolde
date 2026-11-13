@@ -21,8 +21,10 @@ class KodiService final : public QObject {
     Q_PROPERTY(QStringList folderChoices READ folderChoices NOTIFY changed)
     Q_PROPERTY(bool alwaysPlayLocally READ alwaysPlayLocally WRITE setAlwaysPlayLocally NOTIFY alwaysPlayLocallyChanged)
     Q_PROPERTY(QVariantList capabilityInventory READ capabilityInventory CONSTANT)
+    Q_PROPERTY(QVariantList libraryViews READ libraryViews CONSTANT)
 public:
     QVariantList capabilityInventory() const;
+    QVariantList libraryViews() const;
     bool alwaysPlayLocally() const { return m_alAlwaysPlayLocally; }
     Q_INVOKABLE void setAlwaysPlayLocally(bool value);
     Q_INVOKABLE void resetAlwaysPlayLocally();

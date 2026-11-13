@@ -78,6 +78,11 @@ From the repository root:
 ./tools/vm-test.ps1 Test -Suite home_component_navigation -ReuseFullRun <full-run-id> -RunId <new-id>
 # Other choices: home_component_navigation, kodi_media_client. Default: all.
 
+# Bounded Music toolbar/source-message follow-up after a full media pass.
+# Only packaged library-view data, its read-only getter and the two named
+# library/source QML files may differ; lifecycle changes are refused.
+./tools/vm-test.ps1 Test -Suite media_controls -ReuseFullRun <full-run-id> -RunId <new-id>
+
 # Use the exact RUN_ID printed by the passing full Test.
 ./tools/vm-test.ps1 Visual -RunId <id>
 # Default: Studio, lounge and pastel sequentially, using the staged tested build.

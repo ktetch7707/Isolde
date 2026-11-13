@@ -722,7 +722,7 @@ Window {
         appearance: window.shellAppearance("kodi", "")
         onCloseRequested: open = false
     }
-    PlaybackOptionsWindow { id:playbackOptions;kodiClient:kodiMedia;appearance:window.shellAppearance("kodi", "") }
+    PlaybackOptionsWindow { id:playbackOptions;kodiClient:kodiMedia;appearance:window.shellAppearance("kodi",kodiLibrary.themeOrigin);uiScale:window.uiScaleFactor;safeInset:window.safeAreaPixels }
     CaptureSessionView {
         id: captureSession
         anchors.fill: parent

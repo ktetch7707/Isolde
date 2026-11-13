@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Check','Test','Visual','Deploy','Provision','Configure','Diagnose','Status','Recover','Cancel')][string]$Action = 'Test',
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$RunId,
-    [ValidateSet('all','remote_bindings','runtime_contracts','campaign_repairs','sources','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','audio_backend','vpn','studio','studio_quick','studio_safety','studio_selection','studio_artwork','studio_visuals','app_icons','shell_appearance','studio_colors','studio_workflows','studio_cutover','studio_designs','studio_design_contracts','studio_reuse','studio_performance','studio_remaining','studio_closure_regressions','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
+    [ValidateSet('all','remote_bindings','runtime_contracts','campaign_repairs','sources','guide','guide_contracts','guide_remote_ui','games','store','store_remote_ui','media_controls','audio_backend','vpn','studio','studio_quick','studio_safety','studio_selection','studio_artwork','studio_visuals','app_icons','shell_appearance','studio_colors','studio_workflows','studio_cutover','studio_designs','studio_design_contracts','studio_reuse','studio_performance','studio_remaining','studio_closure_regressions','studio_gestures','studio_grid','studio_destinations','studio_ordered','studio_policies','studio_overlays','studio_unit','studio_behavior','component_contracts','home_component_navigation','studio_navigation','kodi_media_client','desktop_mode','profile_browser_isolation')][string]$Suite = 'all',
     [string[]]$Cases = @('studio','lounge','pastel'),
     [switch]$Installed,
     [switch]$FrozenReferenceHelpers,
@@ -29,7 +29,7 @@ $Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim(
 $invalidCases = @($Cases | Where-Object { $_ -notin $validCases })
 if ($FrozenReferenceHelpers -and ($Action -ne 'Visual' -or @($Cases | Where-Object { $_ -notin @('lounge','pastel') }).Count)) { throw 'FrozenReferenceHelpers requires Visual with Lounge/Pastel only.' }
 if (!$Cases.Count -or $invalidCases.Count) { throw "Cases must be comma-separated values from: $($validCases -join ', ')" }
-if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation','studio_selection','studio_artwork','studio_visuals','shell_appearance','sources','store'))) { throw 'ReuseFullRun requires Test with a supported bounded suite.' }
+if ($ReuseFullRun -and ($Action -ne 'Test' -or $Suite -notin @('guide_remote_ui','home_component_navigation','studio_selection','studio_artwork','studio_visuals','shell_appearance','sources','store','media_controls'))) { throw 'ReuseFullRun requires Test with a supported bounded suite.' }
 if ($Storage -and $Action -ne 'Status') { throw 'Storage inventory is restricted to Status.' }
 if ($RestoreSourceRunIds.Count -gt 32 -or ($RestoreSourceRunIds.Count -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'artifacts'))) { throw 'Archive restoration requires artifact maintenance and at most 32 source runs.' }
 if ($BackedUpSourceRunIds.Count -gt 128 -or ($BackedUpSourceRunIds.Count -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'artifacts'))) { throw 'Archive pruning requires artifact maintenance and at most 128 backed-up source runs.' }
@@ -74,7 +74,8 @@ try {
     }
     $guestFree = $homeResult.Lines | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1
     if (!$guestFree) { throw 'Could not determine guest free space.' }
-    if ($BackedUpSourceRunIds.Count -or ($Action -eq 'Test' -and [long]$guestFree -lt $(if ($ResumeRunId) { 2GB } else { 3GB }))) {
+    $usesGuestBuildCache = $Action -eq 'Test' -or ($Action -eq 'Configure' -and $ConfigureTarget -eq 'kodi-managed')
+    if ($BackedUpSourceRunIds.Count -or ($usesGuestBuildCache -and [long]$guestFree -lt $(if ($ResumeRunId) { 2GB } else { 3GB }))) {
         $backups = @(Get-OracleSourceBackups -Root (Join-Path $repo 'build/vm-oracle') -RunIds $BackedUpSourceRunIds)
         $receipt = Join-Path $local 'host-source-backups.json'
         ConvertTo-Json -InputObject @($backups) | Set-Content -LiteralPath $receipt -Encoding utf8NoBOM
