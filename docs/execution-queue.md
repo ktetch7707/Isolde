@@ -1,5 +1,18 @@
 # Executable backlog queue
 
+## Current checkpoint — November 13 storage repair
+
+Acceptance remains88% (2204/25),193/235 milestones; T04 remains51%.
+Permanent guest retention is verified: c removes148 obsolete releases and six
+payloads, recovering13.1 GiB; e passes129 runner safety checks and repeats with
+zero removals/12.8 GiB free. Normal service, release links and layouts remain
+unchanged. Tracker exclusions configured and paused indexer restored. See
+[storage policy](vm-storage-policy.md). Earlier m/n/o dedup proposals below
+are superseded by bounded retention, not implemented as extra workarounds.
+Resume managed Kodi native correction p, then the combined media_controls
+candidate and installed movieart/playlists journeys. No acceptance credit
+for maintenance or failed preflights.
+
 ## Round-two verification campaign — 2026-11-11
 
 The user now authorizes testing everything not yet VM verified in the backlog;
@@ -620,3 +633,83 @@ Strict reuse verifies f's63/63 full payload and the bounded changed-file set.
 Deployed releaseed516a6288baeffa1ffb5b12; normal service active/running/zero
 restarts. Installed movieart/playlists campaign now running on that exact
 candidate; review and acceptance pending. T04=51%,193/235, project88%.
+
+j installed Visual attempt084828 stops in guest desktop preparation, before
+launching a disposable app: the all-app accessibility walk exceeds its8s/2048
+node bound. BUG-156 runner scope: prune every application tree except verified
+/proc process owners gnome-shell and the guest housekeeping notification process.
+Keep identical time/node/action constraints and exact Ignore-only behavior;
+add process-identity refusal cases in the existing oracle safety test. No
+application changes or rebuild; verify harness through desktop-prompts Configure,
+then repeat installed Visual on the same passing j candidate.
+
+Desktop repair k passes126 safety tests and actual preparation. The repeated
+j Visual attempt085106 stops during fixture generation, before app launch:
+new function-local import struct shadowed the module import used earlier for
+poster PNG creation. Removed the redundant local import; retain global struct
+and local wave. Helper-only correction, same installed j, no application rebuild.
+
+Installed attempt085306 saves real Movie and Music sources through Isolde,
+passes preview/cancel no-write and native denied-write/journal recovery, and
+restores exact source XML. Its final inventory list equality fails. Native
+Load can reorder virtual add-on defaults relative to serialized local sources;
+compare complete source records as a multiset (retain every field/duplicate),
+print both raw inventories, and refresh the saved list index after reload. Any
+actual scanner/provider difference still fails with both inventories retained.
+BUG-157 visual review: source preview can scroll away its title/status before
+all review fields are read; first-row Up cannot reveal that context. Record
+for the next combined UI correction after the installed semantic campaign;
+no acceptance claim for that source-preview usability outcome yet. Initial
+capability/source/error frames reviewed, no desktop notification obscures them.
+
+Attempt085821 proves BUG-158: recovery actually drops both pathless Kodi
+virtual add-on sources; every local Movie/Music scanner/provider field survives.
+The full-record multiset assertion correctly remains failed. Native recovery
+now retains full pathless source objects and original positions across XML
+Load, for all five Kodi source categories, including retries after a denied
+publication; failed Load restores the previous vectors. No source is filtered
+from acceptance. BUG-157 preview becomes remote-focusable read-only review
+rows, with a separate final apply action and bounded paging inside over-height
+rows; first review row restores title/status. Existing Home case covers the
+review inventory and top scroll reset; helper now navigates to the actual final
+apply row. These are one correction batch. Rebuild only the managed Kodi native
+extension/package, then media_controls on f with the explicit native source
+recovery file included in its reviewed boundary; no Main/KodiMedia lifecycle
+changes allowed. Full native extension evidence is the repeated installed
+failure/recovery invariant, not a fictitious full-suite pass. Final T04 closure
+integration remains separate; current app full f63 and focused j7 remain honest.
+
+m stops before native compilation: verified guest artifacts recover only1.69
+GiB. Storage evidence identifies773 MB of owned synthetic fixture media, with
+new failed fixtures still protected by the old last-three dedup retention.
+Use the existing checksum/format/mount/active-path checked hardlink deduplicator
+also for recent *inactive* fixtures only below2 GiB, preserving every path and
+byte. Existing safety test now proves active-fixture exclusion with that mode.
+Do not remove source data, cached evidence, host files or passing candidates;
+keep the2 GiB minimum. n retries only after this specific safe-space correction.
+
+n preserves all synthetic media bytes and reclaims the recent duplicates but
+still stops below2 GiB; no native compilation attempted. Existing staged-payload
+dedup leaves every historical installed release as a separate copy. Extend that
+same verified dedup to old inactive installed releases, keeping current, previous
+and any live exe/cwd release untouched. Verify each entire release against its
+passing test manifest before sharing matching mode/owner/device/hash files and
+again afterward; mounts, redirects, unknown bytes and pending transactions still
+refuse. Paths/bytes are retained. Existing safety test proves current/previous
+inode preservation and inactive-release byte identity. This is guest artifact
+maintenance, not host cleanup, deletion of releases, or a lower disk threshold.
+
+User November13 redirects work to a permanent VM space fix. o also stops below
+2 GiB before compiling. Read-only topology proves a50 GiB disk with a fully
+allocated ext4 root (no unused partition capacity); host has~1.1 TiB free, but
+no VM disk/host files were changed. Expanded usage reveals10.8 GiB of historical
+installed releases and3.3 GiB of oracle runs. Installer never expires releases;
+all historical focused receipts also pin base payloads forever. Replace those
+unbounded lifetimes with3 newest releases/staged candidates plus current,
+previous, recovery-unit, active-process, stopped-profile and reachable current
+candidate dependency pins. Audit content-addressed release trees (allow only
+bounded generated Python caches), exact staged hashes, ownership, links and
+mounts; preserve every manifest/log/screenshot/profile/build cache. Refuse
+changed identities before applying. First run storage-capacity audit only,
+review the concrete plan, then apply through the same guarded runner. No more
+native rebuild retries until sustained free-space and retention checks pass.

@@ -9,6 +9,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ResumeRunId,
     [string]$GuideReplayPlan,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ReuseFullRun,
+    [switch]$ApplyStorageRetention,
     [switch]$Capture,
     [switch]$Storage,
     [ValidateRange(0,2147483647)][int]$OrphanVisualPid=0,
@@ -17,11 +18,12 @@ param(
     [switch]$GuideDiagnostics,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','browser-test-tools','audio-test-recover','artifacts','desktop-prompts','kodi-demo-art','store-test-data','kodi-managed')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','browser-test-tools','audio-test-recover','artifacts','desktop-prompts','storage-capacity','kodi-demo-art','store-test-data','kodi-managed')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
 if ($Diagnostic -and ($Action -ne 'Visual' -or $Installed)) { throw 'Diagnostic visuals are staged-only; installation/deployment is prohibited.' }
+if ($ApplyStorageRetention -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'storage-capacity')) { throw 'ApplyStorageRetention requires Configure storage-capacity.' }
 if ($ResumeRunId -and ($Action -ne 'Test' -or $Suite -ne 'all' -or $ReuseFullRun)) { throw 'Campaign resumption requires Test -Suite all, without coverage reuse.' }
 if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
 $validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','local-search','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-updates','store-discovery','games','emulators')
@@ -148,6 +150,7 @@ try {
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
         if ($Storage) { $command += ' --storage' }
         if ($OrphanVisualPid) { $command += " --orphan-visual-pid $OrphanVisualPid" }
+        if ($ApplyStorageRetention) { $command += " --apply-storage-retention" }
         if ($GuideDiagnostics) { $command += ' --guide-diagnostics' }
         if ($Action -eq 'Test') { $command += " --suite $Suite" }
         if ($ResumeRunId) { $command += " --resume-run-id $ResumeRunId" }
@@ -166,7 +169,7 @@ try {
             $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($demoHelper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/kodi-demo-art-$demoHash.py")) -TimeoutSeconds 30 -Log $transport
             $command += " --demo-art-helper-digest $demoHash"
         }
-        if ($Action -eq 'Configure' -and $ConfigureTarget -in @('artifacts','desktop-prompts')) {
+        if ($Action -eq 'Configure' -and $ConfigureTarget -in @('artifacts','desktop-prompts','storage-capacity')) {
             $maintenanceFiles = @('tools/install-appliance.py','tools/vm-oracle.py','tests/test_vm_oracle.py','tools/store-acceptance.py','tools/home-reference-acceptance.py','tools/home-components-acceptance.py','tools/reference_collections.py','tests/tst_home_navigation.cpp','tools/guide_features.py','tools/guide_lifecycle.py','tools/guide-soak-acceptance.py','qml/OnScreenKeyboard.qml','CMakeLists.txt','config/studio-defaults.json','tests/fixtures/shell-theme-routes.json')
             $maintenanceLines = foreach ($relative in $maintenanceFiles) {
                 $hash = (Get-FileHash -LiteralPath (Join-Path $repo $relative) -Algorithm SHA256).Hash.ToLowerInvariant()

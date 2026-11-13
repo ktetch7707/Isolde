@@ -304,6 +304,12 @@ def secret_prompt_paths(tree):
     return paths
 
 
+def guest_notification_owner(pid, proc=Path('/proc')):
+    if not isinstance(pid,int) or isinstance(pid,bool) or pid<=0:return False
+    try:return (proc/str(pid)/'comm').read_text().strip() in {'gnome-shell','gsd-housekeepin'}
+    except OSError:return False
+
+
 def dismiss_guest_disk_banner():
     import gi
     gi.require_version('Atspi','2.0')
@@ -315,6 +321,9 @@ def dismiss_guest_disk_banner():
         node,ancestors=pending.pop()
         if node is None:continue
         try:
+            # Enumerate notifications, not every Isolde/Kodi/browser child.
+            # Process identity is verified independently of accessible names.
+            if len(ancestors)==1 and not guest_notification_owner(node.get_process_id()):continue
             name=(node.get_name() or '')[:256]
             index=len(nodes);nodes.append((node,name,ancestors))
             if len(ancestors)<12:
@@ -944,7 +953,7 @@ def search_origin_main_delta(before,after):
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='media_controls':
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
-            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml'},
+            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','native/kodi/IsoldeSources.cpp'},
             {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media')
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
@@ -992,6 +1001,128 @@ def ctest_command(build, report):
             "--timeout", "120", "--output-junit", str(report)]
 
 
+def retained_storage_runs(root, current, extra=()):
+    runs=root/'runs'
+    candidates=sorted((p for p in runs.iterdir() if p.is_dir() and not p.is_symlink()),key=lambda p:p.stat().st_mtime,reverse=True)
+    staged=sorted((p for p in candidates if (p/'payload').is_dir()),key=lambda p:(p/'payload').stat().st_mtime,reverse=True)
+    retained={current,*candidates[:3],*staged[:3],*extra}
+    retained.update(p for p in candidates if (p/'guide-soak-receipt.json').exists() or (p/'guide-soak-receipt.json').is_symlink())
+    pending=list(retained)
+    while pending:
+        candidate=pending.pop();record=candidate/'test-result.json'
+        if candidate.parent!=runs or candidate.resolve()!=candidate:raise RuntimeError('Unsafe retained candidate')
+        if not record.exists():continue
+        if record.resolve()!=record or record.stat().st_size>4*1024**2:raise RuntimeError('Unsafe retained receipt')
+        proof=json.loads(record.read_text()).get('coverageReuse')
+        if not proof:continue
+        base=proof.get('baseRunId') if isinstance(proof,dict) else None
+        if not isinstance(base,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',base):raise RuntimeError('Unsafe retained coverage base')
+        path=runs/base
+        if path not in retained:retained.add(path);pending.append(path)
+    return retained
+
+
+def release_storage_identity(release, mounts=()):
+    if release.resolve()!=release or not release.is_dir() or not re.fullmatch(r'[a-f0-9]{24}',release.name):raise RuntimeError('Unsafe retired release path')
+    if any(m!=Path('/') and (m==release or m.is_relative_to(release) or release.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted retired release refused')
+    authored=hashlib.sha256();observed=hashlib.sha256();size=0;files=0;generated=[]
+    for path in sorted(release.rglob('*')):
+        if path.resolve()!=path or path.is_symlink():raise RuntimeError('Redirected retired release member')
+        info=path.stat()
+        if info.st_uid!=os.getuid():raise RuntimeError('Foreign-owned retired release member')
+        if path.is_dir():continue
+        if not path.is_file() or info.st_size>1024**3 or files>=65536:raise RuntimeError('Unbounded retired release member')
+        name=path.relative_to(release).as_posix();files+=1;size+=info.st_size
+        cache=re.fullmatch(r'([A-Za-z0-9_-]+)\.cpython-[0-9]+(?:\.opt-[12])?\.pyc',path.name)
+        is_cache=path.parent.name=='__pycache__' and cache and info.st_size<=4*1024**2 and (path.parent.parent/(cache[1]+'.py')).is_file()
+        observed.update(name.encode()+b'\0');observed.update(str(info.st_mode).encode()+b'\0')
+        if not is_cache:authored.update(name.encode()+b'\0')
+        else:generated.append(name)
+        with path.open('rb') as stream:
+            for chunk in iter(lambda:stream.read(1024**2),b''):
+                observed.update(chunk)
+                if not is_cache:authored.update(chunk)
+    if not (release/'bin/isolde').is_file():raise RuntimeError('Incomplete retired release')
+    return dict(contentId=authored.hexdigest()[:24],treeSha256=observed.hexdigest(),bytes=size,files=files,generatedPythonCache=generated)
+
+
+def storage_retention_plan(root, current, mounts=(), extra=(), active=()):
+    if root.resolve()!=root or (root/'runs').resolve()!=root/'runs':raise RuntimeError('Unsafe storage retention root')
+    prefix=root.parent/'.local/share/isolde-appliance';releases=prefix/'releases';retained=retained_storage_runs(root,current,extra)
+    protected=set();references=[]
+    if releases.exists() and (releases.resolve()!=releases or not releases.is_dir()):raise RuntimeError('Redirected release directory')
+    def pin(path,reason):
+        if path.parent!=releases or not re.fullmatch(r'[a-f0-9]{24}',path.name) or path.resolve()!=path:raise RuntimeError('Unsafe release retention reference')
+        protected.add(path);references.append(dict(release=str(path),reason=reason))
+    for name in ('current','previous'):
+        link=prefix/name
+        if link.exists() or link.is_symlink():
+            if not link.is_symlink():raise RuntimeError('Release link is not a symlink')
+            pin(link.resolve(strict=True),name)
+    installed=sorted((p for p in releases.iterdir() if p.is_dir()),key=lambda p:p.stat().st_mtime,reverse=True) if releases.exists() else []
+    for path in installed[:3]:pin(path,'newest three releases')
+    for candidate in retained:
+        receipt=candidate/'deploy-result.json'
+        if receipt.exists():
+            if receipt.resolve()!=receipt or receipt.stat().st_size>262144:raise RuntimeError('Unsafe retained deployment receipt')
+            path=json.loads(receipt.read_text()).get('release')
+            if path:pin(Path(path),'retained candidate '+candidate.name)
+    units=root.parent/'.config/systemd/user'
+    for unit in list(units.glob('isolde*.service'))[:32]:
+        if unit.resolve()!=unit or unit.stat().st_size>65536:raise RuntimeError('Unsafe Isolde service reference')
+        for identity in re.findall(re.escape(str(releases))+r'/([a-f0-9]{24})(?:/|["\s])',unit.read_text()):pin(releases/identity,'service '+unit.name)
+    for path in active:
+        for release in installed:
+            if path==release or path.is_relative_to(release):pin(release,'live process')
+    plan=dict(policyVersion=1,keepNewestReleases=3,keepNewestPayloads=3,retainedRuns=sorted(p.name for p in retained),protectedReleases=references,releases=[],payloads=[],unverifiedRetained=[],refused=[])
+    for release in installed:
+        if release in protected:continue
+        try:identity=release_storage_identity(release,mounts)
+        except RuntimeError as error:
+            plan['refused'].append(dict(path=str(release),reason=str(error)));continue
+        if identity['contentId']!=release.name:
+            plan['refused'].append(dict(path=str(release),reason='release content-address mismatch',observed=identity));continue
+        plan['releases'].append(dict(path=str(release),identity=identity))
+    for candidate in (root/'runs').iterdir():
+        payload=candidate/'payload';receipt=candidate/'test-result.json'
+        if candidate in retained or not payload.exists():continue
+        if candidate.resolve()!=candidate or payload.resolve()!=payload or receipt.resolve()!=receipt:
+            plan['refused'].append(dict(path=str(payload),reason='redirected obsolete staged payload'));continue
+        if not receipt.is_file():
+            plan['unverifiedRetained'].append(dict(path=str(payload),reason='no passing test receipt'));continue
+        if any(path==payload or path.is_relative_to(payload) for path in active):continue
+        if any(m!=Path('/') and (m==payload or m.is_relative_to(payload) or payload.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted obsolete staged payload')
+        result=json.loads(receipt.read_text())
+        if result.get('passed') is not True:
+            plan['unverifiedRetained'].append(dict(path=str(payload),reason='no passing test receipt'));continue
+        if payload_hashes(payload)!=result.get('payload'):
+            plan['refused'].append(dict(path=str(payload),reason='obsolete staged payload identity mismatch'));continue
+        plan['payloads'].append(dict(path=str(payload),hashes=result['payload']))
+    return plan
+
+
+def apply_storage_retention(root, plan, mounts=(), active=()):
+    if plan.get('policyVersion')!=1 or plan.get('refused'):raise RuntimeError('Storage audit contains refused identities; no artifacts removed')
+    releases=root.parent/'.local/share/isolde-appliance/releases';removed=[]
+    for item in plan['releases']:
+        path=Path(item['path'])
+        if path.parent!=releases or release_storage_identity(path,mounts)!=item['identity']:raise RuntimeError('Retired release changed after storage audit')
+        if any(p==path or p.is_relative_to(path) for p in active):raise RuntimeError('Retired release became active')
+        for name in ('current','previous'):
+            link=releases.parent/name
+            if link.is_symlink() and link.resolve(strict=True)==path:raise RuntimeError('Retired release became current or previous')
+    for item in plan['payloads']:
+        path=Path(item['path'])
+        if path.name!='payload' or path.parent.parent!=root/'runs' or path.resolve()!=path or payload_hashes(path)!=item['hashes']:raise RuntimeError('Staged payload changed after storage audit')
+        if any(m!=Path('/') and (m==path or m.is_relative_to(path) or path.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted staged payload before removal')
+        if any(p==path or p.is_relative_to(path) for p in active):raise RuntimeError('Staged payload became active')
+    for item in [*plan['releases'],*plan['payloads']]:
+        path=Path(item['path'])
+        if path.resolve()!=path:raise RuntimeError('Storage target redirected before removal')
+        shutil.rmtree(path);removed.append(str(path))
+    return removed
+
+
 def campaign_pending(registered, results):
     if not registered or len(set(registered)) != len(registered):
         raise RuntimeError('Invalid campaign registrations')
@@ -1031,6 +1162,38 @@ class Oracle:
         self.state.update(values, updated=time.time())
         atomic_json(self.run / "status.json", self.state)
         atomic_json(self.root / "latest.json", self.state)
+
+    def storage_retention(self, apply=False):
+        if self.command('hostname')!='isolde-test' or self.root!=Path.home()/'isolde-oracle' or self.root.resolve()!=self.root:raise RuntimeError('Storage retention is restricted to Isolde-Test')
+        mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+        def live_paths():
+            found=[];releases=Path.home()/'.local/share/isolde-appliance/releases'
+            for process in Path('/proc').iterdir():
+                if not process.name.isdigit():continue
+                for name in ('exe','cwd'):
+                    try:found.append((process/name).resolve(strict=True))
+                    except (OSError,RuntimeError):pass
+                try:
+                    command=(process/'cmdline').read_bytes()[:262144]
+                    for identity in re.findall(re.escape(os.fsencode(releases))+rb'/([a-f0-9]{24})(?:/|\x00)',command):found.append(releases/identity.decode())
+                except OSError:pass
+            return found
+        prefix=Path.home()/'.local/share/isolde-appliance';prefix.mkdir(parents=True,exist_ok=True)
+        with exclusive_lock(prefix/'.install.lock'):
+            service_before=self.service();links_before=self.links();layouts_before=self.layout_hashes()
+            before=shutil.disk_usage(self.root).free
+            plan=storage_retention_plan(self.root,self.run,mounts,getattr(self,'maintenance_pins',()),live_paths())
+            atomic_json(self.run/'storage-retention-plan.json',plan)
+            removed=apply_storage_retention(self.root,plan,mounts,live_paths()) if apply else []
+            after=shutil.disk_usage(self.root).free
+            result=dict(applied=apply,removed=removed,freeBefore=before,freeAfter=after,reclaimedBytes=after-before,retainedRuns=plan['retainedRuns'],refused=plan['refused'],normalProfilesPreserved=True,incrementalBuildCachePreserved=True)
+            result.update(serviceBefore=service_before,serviceAfter=self.service(),linksBefore=links_before,linksAfter=self.links(),normalLayoutsUnchanged=layouts_before==self.layout_hashes())
+            atomic_json(self.run/'storage-retention-result.json',result)
+            if apply:
+                if result['serviceBefore']!=result['serviceAfter'] or result['linksBefore']!=result['linksAfter'] or not result['normalLayoutsUnchanged']:raise RuntimeError('Normal service, releases or layouts changed during storage retention')
+                atomic_json(self.root/'storage-policy.json',dict(version=1,keepNewestReleases=3,keepNewestPayloads=3,protectCurrentPreviousRecoveryLiveAndReachableBases=True,activatedBy=self.state['runId']))
+            print('STORAGE_RETENTION '+json.dumps(dict(applied=apply,releases=len(plan['releases']),payloads=len(plan['payloads']),refused=len(plan['refused']),freeGiB=round(after/1024**3,2))),flush=True)
+            return result
 
     def stage(self, name, argv, timeout=120, env=None, on_line=None):
         self.update(stage=name)
@@ -1259,6 +1422,7 @@ class Oracle:
         self.maintenance_pins = {self.root / 'runs' / reuse_full_run} if reuse_full_run else set()
         source, entries = extract_snapshot(self.run)
         self.stage("oracle-self-test", ["python3", str(source / "tests/test_vm_oracle.py")], 90)
+        if (self.root/'storage-policy.json').is_file():self.storage_retention(apply=True)
         if resume_run_id:
             self.resume_tests(entries, resume_run_id)
             return
@@ -1467,6 +1631,34 @@ class Oracle:
         if units:self.stage('restore-test-indexer',['systemctl','--user','start',*units],30)
         lease.unlink();atomic_json(self.run/'test-indexer-restored.json',dict(guest='isolde-test',units=units,restored=True));self.update(stage=prior_stage)
 
+    def restore_kodi_indexer(self):
+        lease=self.root/'kodi-indexer-lease.json'
+        if not lease.exists() and not lease.is_symlink():return
+        if lease.resolve()!=lease or lease.stat().st_size>16384:raise RuntimeError('Unsafe native indexer restoration lease')
+        record=json.loads(lease.read_text());units=record.get('units',[])
+        if record.get('guest')!='isolde-test' or not isinstance(units,list) or len(units)>32 or any(not isinstance(unit,str) or not re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',unit) for unit in units):raise RuntimeError('Invalid native indexer restoration lease')
+        if units:self.stage('restore-guest-indexer',['systemctl','--user','start',*units],30)
+        atomic_json(self.run/'kodi-indexer-restored.json',dict(guest='isolde-test',units=units,restored=True));lease.unlink()
+
+    def exclude_test_trees_from_indexer(self):
+        schemas=set(self.command('gsettings','list-schemas').splitlines())
+        schema=next((name for name in ('org.freedesktop.Tracker3.Miner.Files','org.freedesktop.LocalSearch3.Miner.Files') if name in schemas),None)
+        policy=self.command('gsettings','get',schema,'ignored-directories-with-content') if schema else ''
+        result=dict(schema=schema,configured=False,markers=[],globalSettingsChanged=False)
+        if schema and re.search(r"['\"]\.trackerignore['\"]",policy):
+            mounts=[Path(line.split()[4].replace('\\040',' ')) for line in Path('/proc/self/mountinfo').read_text().splitlines()]
+            for directory in (self.root,Path.home()/'Videos/Isolde-Acceptance'):
+                if directory.resolve()!=directory or not directory.is_dir() or directory.stat().st_uid!=os.getuid():raise RuntimeError('Unsafe test-tree exclusion root')
+                if any(m!=Path('/') and (m==directory or m.is_relative_to(directory) or directory.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted test-tree exclusion root')
+                marker=directory/'.trackerignore'
+                if marker.exists() or marker.is_symlink():
+                    if marker.resolve()!=marker or not marker.is_file() or marker.stat().st_uid!=os.getuid():raise RuntimeError('Unsafe test-tree exclusion marker')
+                else:atomic_json(marker,dict(owner='Isolde VM runner',purpose='Disposable test data, excluded from desktop indexing'))
+                result['markers'].append(str(marker))
+            result['configured']=True
+        atomic_json(self.run/'test-tree-indexer-exclusions.json',result)
+        return result
+
     def automatic_test_cleanup(self):
         before = shutil.disk_usage(self.root).free
         if before >= 3 * 1024**3:
@@ -1612,8 +1804,8 @@ class Oracle:
             raise RuntimeError('Guest keyring prompts remain; refuse obscured visual evidence')
         atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
-    def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None, store_helper_digest=None):
-        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data","kodi-managed"}: raise ValueError("Unsupported guest configuration target")
+    def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None, store_helper_digest=None, apply_storage_retention=False):
+        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed"}: raise ValueError("Unsupported guest configuration target")
         if target=='kodi-managed':
             if self.command('hostname')!='isolde-test':raise RuntimeError('Managed Kodi builds are guest-only')
             source,entries=extract_snapshot(self.run)
@@ -1669,11 +1861,7 @@ class Oracle:
                     atomic_json(self.run/'kodi-legacy-build-cleanup.json',{'guest':'isolde-test','targets':removed,'installedReleasePreserved':True})
                     remove_guest_build(target,legacy,mounts)
             self.stage('kodi-managed-build',['python3',str(source/'tools/build-managed-kodi.py'),'--source',str(source),'--work',str(self.root/'support/managed-kodi'),'--receipt',str(self.run/'kodi-managed-result.json')],7200)
-            if index_lease.exists():
-                lease=json.loads(index_lease.read_text());units=lease.get('units',[])
-                if index_lease.is_symlink() or lease.get('guest')!='isolde-test' or not isinstance(units,list) or any(not isinstance(unit,str) or not re.fullmatch(r'(?:tracker-[A-Za-z0-9_.@-]+|localsearch-3|tinysparql-[A-Za-z0-9_.@-]+)\.service',unit) for unit in units):raise RuntimeError('Invalid guest indexer restoration lease')
-                if units:self.stage('restore-guest-indexer',['systemctl','--user','start',*units],30)
-                index_lease.unlink()
+            self.restore_kodi_indexer()
             self.update(service=self.service(),releases=self.links())
             return
         if target=='store-test-data':
@@ -1692,7 +1880,7 @@ class Oracle:
                 self.stage('kodi-demo-art',[sys.executable,str(helper),'--source',str(self.run/'source'),'--receipt',str(self.run/'kodi-demo-art-result.json')],900)
             self.update(service=self.service(),releases=self.links())
             return
-        if target in ("artifacts","desktop-prompts"):
+        if target in ("artifacts","desktop-prompts","storage-capacity"):
             if self.command("hostname")!="isolde-test" or self.root!=Path.home()/"isolde-oracle" or self.root.resolve()!=self.root:
                 raise RuntimeError("Artifact maintenance is restricted to the native Isolde-Test oracle")
             if not isinstance(maintenance_tests_digest,str) or not re.fullmatch(r"[0-9a-f]{64}",maintenance_tests_digest):
@@ -1710,6 +1898,12 @@ class Oracle:
                 raise RuntimeError("Redirected maintenance self-test dependency")
             verify_tree(bundle,entries)
             self.stage("guest-maintenance-self-tests",[sys.executable,str(tests)],90)
+            if target=='storage-capacity':
+                self.storage_retention(apply=apply_storage_retention)
+                if apply_storage_retention:
+                    self.exclude_test_trees_from_indexer()
+                    self.restore_kodi_indexer()
+                return
             if target=='desktop-prompts':
                 self.prepare_visual_desktop()
                 return
@@ -1951,6 +2145,7 @@ class Oracle:
 
     def deploy(self):
         payload = self.tested_payload()
+        if (self.root/'storage-policy.json').is_file():self.storage_retention(apply=True)
         source = self.run / "source"
         spec = importlib.util.spec_from_file_location("oracle_installer", source / "tools/install-appliance.py")
         installer = importlib.util.module_from_spec(spec)
@@ -2171,6 +2366,7 @@ def collect_evidence(run, case, directories):
             if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
                 paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json","guide-soak-ready.json")]
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
+            if case=="movieart":paths += [directory/name for name in ('source-setup.json','source-recovery-inventory.json')]
             if case=="guide-features":paths += [directory/name for name in ('guide-features.json','guide-soak-ready.json')]
             if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json','cached-artwork-observation.json','original-home-layout.json')]
             if case in {"studio-designs", "studio-search"}:
@@ -2696,16 +2892,23 @@ def oracle_storage_inventory(root):
         records.append({"runId":payload.parent.name,"payloadBytes":sizes.get(str(payload),0),"modified":payload.stat().st_mtime,"state":state.get("state","unknown")})
     cache_roots=list((Path.home()/'.local/share/Isolde/native-profiles').glob('*/kodi/home/.cache'))[:128]
     extra=[p for p in [Path.home()/'.cache/isolde-emulators',Path.home()/'.cache/isolde/game-runtime-bundles',Path.home()/'Videos/Isolde-Acceptance',*cache_roots] if p.is_dir() and not p.is_symlink() and p.resolve()==p]
-    usage=subprocess.run(["du","-xk","--max-depth=2","--",str(root),"/tmp",*[str(p) for p in extra]],capture_output=True,text=True,timeout=30)
+    topology={}
+    for label,argv in {'blockDevices':['lsblk','--json','--bytes','--output','NAME,PATH,TYPE,SIZE,FSTYPE,MOUNTPOINTS,PKNAME'],'rootMount':['findmnt','--json','--target','/']}.items():
+        observed=subprocess.run(argv,capture_output=True,text=True,timeout=10)
+        try:topology[label]=json.loads(observed.stdout) if observed.returncode==0 and len(observed.stdout)<=262144 else {'unavailable':True}
+        except ValueError:topology[label]={'unavailable':True}
+    capacity=shutil.disk_usage(root);topology['filesystemBytes']={'total':capacity.total,'used':capacity.used,'free':capacity.free}
+    usage=subprocess.run(["du","-xk","--max-depth=2","--",str(root),"/tmp",str(Path.home()/'.cache'),str(Path.home()/'.local/share/isolde-appliance'),*[str(p) for p in extra]],capture_output=True,text=True,timeout=30)
     directories=[]
     for line in usage.stdout.splitlines():
         size,sep,path=line.partition("\t")
         if sep and size.isdigit():directories.append({"path":path,"bytes":int(size)*1024})
-    return {"managedKodiPaths":dependency,"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceCopies":source_copies,"emulatorCacheEntries":[{"name":p.name,"children":[c.name for c in list(p.iterdir())[:20]] if p.is_dir() and not p.is_symlink() else []} for p in list((Path.home()/".cache/isolde-emulators").iterdir())[:32]] if (Path.home()/".cache/isolde-emulators").is_dir() else [],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
+    return {"topology":topology,"managedKodiPaths":dependency,"freeGiB":round(shutil.disk_usage(root).free/1024**3,2),"stagedPayloads":sorted(records,key=lambda r:r["modified"],reverse=True)[:64],"sourceCopies":source_copies,"emulatorCacheEntries":[{"name":p.name,"children":[c.name for c in list(p.iterdir())[:20]] if p.is_dir() and not p.is_symlink() else []} for p in list((Path.home()/".cache/isolde-emulators").iterdir())[:32]] if (Path.home()/".cache/isolde-emulators").is_dir() else [],"sourceRecoveryCandidates":recovery,"largestTestDirectories":sorted(directories,key=lambda r:r["bytes"],reverse=True)[:32]}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--apply-storage-retention",action="store_true")
     parser.add_argument("action", choices=["check", "test", "visual", "deploy", "provision", "configure", "diagnose", "status", "recover", "cancel"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--suite", choices=SUITES, default="all")
@@ -2718,7 +2921,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","kodi-demo-art","store-test-data","kodi-managed"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")
@@ -2865,9 +3068,12 @@ def main():
             elif args.action == "diagnose":
                 oracle.diagnose(args.native_app)
             elif args.action == "configure":
-                oracle.configure_native(args.configure_target,args.maintenance_tests_digest,args.demo_art_helper_digest,args.store_helper_digest)
+                try:oracle.configure_native(args.configure_target,args.maintenance_tests_digest,args.demo_art_helper_digest,args.store_helper_digest,args.apply_storage_retention)
+                finally:
+                    if args.configure_target=='kodi-managed':oracle.restore_kodi_indexer()
             elif args.action == "recover":
                 oracle.restore_test_indexer()
+                oracle.restore_kodi_indexer()
                 if args.orphan_visual_pid:
                     layouts = oracle.layout_hashes();service = oracle.service();links = oracle.links()
                     receipt = recover_visual_orphan(oracle.run, args.orphan_visual_pid)
@@ -2883,6 +3089,7 @@ def main():
                     with exclusive_lock(Path("/tmp/isolde-home-components-acceptance.lock")):
                         oracle.update(service=oracle.restore(record["service"]))
                         lease.unlink()
+
             oracle.update(state="passed", stage="finished")
     except Exception as error:
         if acquired or args.wait_seconds:

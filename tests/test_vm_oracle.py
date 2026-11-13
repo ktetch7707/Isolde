@@ -89,6 +89,11 @@ class OracleTests(unittest.TestCase):
         self.assertEqual(oracle.secret_prompt_paths('/org/freedesktop/secrets\n/org/freedesktop/secrets/collection/login\n/org/freedesktop/secrets/prompt/p1\n'),['/org/freedesktop/secrets/prompt/p1'])
         for tree in ('x'*65537,'/org/freedesktop/secrets/prompt/../../collection/login','\n'.join('/org/freedesktop/secrets/prompt/p'+str(i) for i in range(17))):
             with self.assertRaises(RuntimeError):oracle.secret_prompt_paths(tree)
+        with tempfile.TemporaryDirectory() as temporary:
+            proc=Path(temporary);(proc/'42').mkdir();comm=proc/'42/comm'
+            for name,expected in [('gnome-shell',True),('gsd-housekeepin',True),('isolde',False),('kodi.bin',False),('chromium',False)]:
+                comm.write_text(name+'\n');self.assertEqual(oracle.guest_notification_owner(42,proc),expected)
+            for pid in (0,-1,True,'42',43):self.assertFalse(oracle.guest_notification_owner(pid,proc))
 
     def test_reference_default_theme_ignores_object_order_but_rejects_value_changes(self):
         path=Path(__file__).resolve().parents[1]/'tools/home-reference-acceptance.py'
@@ -523,6 +528,64 @@ class OracleTests(unittest.TestCase):
             self.assertEqual(result["stagedPayloads"][0]["runId"],"old")
             self.assertGreater(result["stagedPayloads"][0]["payloadBytes"],0)
             self.assertEqual((payload/"binary").read_bytes(),b"evidence payload")
+
+    def test_storage_retention_preserves_rollback_service_live_and_changed_releases(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home=Path(temporary);root=home/'isolde-oracle';current=root/'runs/maintenance';current.mkdir(parents=True)
+            prefix=home/'.local/share/isolde-appliance';releases=prefix/'releases';releases.mkdir(parents=True)
+            versions=[]
+            for index in range(8):
+                body=('isolde version '+str(index)).encode();identity=hashlib.sha256(b'bin/isolde\0'+body).hexdigest()[:24]
+                release=releases/identity;(release/'bin').mkdir(parents=True);(release/'bin/isolde').write_bytes(body);os.utime(release,(index,index));versions.append(release)
+            (prefix/'current').symlink_to(versions[0],target_is_directory=True);(prefix/'previous').symlink_to(versions[1],target_is_directory=True)
+            units=home/'.config/systemd/user';units.mkdir(parents=True);(units/'isolde-recovery.service').write_text('ExecStart='+str(versions[2]/'bin/isolde'))
+            profile=home/'.config/Isolde/profiles/keep';profile.mkdir(parents=True);(profile/'data').write_text('untouched')
+            active=[versions[3]/'bin/isolde'];plan=oracle.storage_retention_plan(root,current,active=active)
+            self.assertEqual([item['path'] for item in plan['releases']],[str(versions[4])]);self.assertEqual(plan['refused'],[])
+            (versions[4]/'bin/isolde').write_bytes(b'changed')
+            with self.assertRaises(RuntimeError):oracle.apply_storage_retention(root,plan,active=active)
+            self.assertTrue(versions[4].is_dir());(versions[4]/'bin/isolde').write_bytes(b'isolde version 4')
+            with self.assertRaisesRegex(RuntimeError,'Mounted'):oracle.release_storage_identity(versions[4],[versions[4]])
+            (prefix/'current').unlink();(prefix/'current').symlink_to(versions[4],target_is_directory=True)
+            with self.assertRaisesRegex(RuntimeError,'current or previous'):oracle.apply_storage_retention(root,plan,active=active)
+            (prefix/'current').unlink();(prefix/'current').symlink_to(versions[0],target_is_directory=True)
+            self.assertEqual(oracle.apply_storage_retention(root,plan,active=active),[str(versions[4])])
+            for index,release in enumerate(versions):self.assertEqual(release.exists(),index!=4)
+            self.assertEqual((profile/'data').read_text(),'untouched')
+            for index in range(8,18):
+                body=('isolde version '+str(index)).encode();identity=hashlib.sha256(b'bin/isolde\0'+body).hexdigest()[:24]
+                release=releases/identity;(release/'bin').mkdir(parents=True);(release/'bin/isolde').write_bytes(body);os.utime(release,(index,index))
+                previous=(prefix/'current').resolve();(prefix/'previous').unlink();(prefix/'previous').symlink_to(previous,target_is_directory=True)
+                (prefix/'current').unlink();(prefix/'current').symlink_to(release,target_is_directory=True)
+                oracle.apply_storage_retention(root,oracle.storage_retention_plan(root,current,active=active),active=active)
+            self.assertLessEqual(len(list(releases.iterdir())),5)
+            self.assertTrue(versions[2].is_dir());self.assertTrue(versions[3].is_dir())
+
+    def test_native_indexer_restore_validates_lease_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runner=oracle.Oracle(Path(temporary)/'isolde-oracle','restore');lease=runner.root/'kodi-indexer-lease.json'
+            oracle.atomic_json(lease,dict(guest='isolde-test',units=['unexpected.service']))
+            with self.assertRaises(RuntimeError):runner.restore_kodi_indexer()
+            self.assertTrue(lease.is_file())
+            oracle.atomic_json(lease,dict(guest='isolde-test',units=['localsearch-3.service']))
+            with patch.object(runner,'stage') as stage:
+                runner.restore_kodi_indexer();runner.restore_kodi_indexer();self.assertEqual(stage.call_count,1)
+            self.assertFalse(lease.exists())
+
+    def test_storage_retention_only_pins_dependencies_of_current_candidates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)/'isolde-oracle';runs=root/'runs';current=runs/'current';current.mkdir(parents=True)
+            for index,name in enumerate(('old-base','old-focused','live-base','new-a','new-b','new-c')):
+                run=runs/name;payload=run/'payload/bin/isolde';payload.parent.mkdir(parents=True);payload.write_text(name)
+                receipt=dict(passed=True,fullSuite=True,payload=oracle.payload_hashes(run/'payload'))
+                if name in ('old-focused','new-c'):receipt['coverageReuse']={'baseRunId':'old-base' if name=='old-focused' else 'live-base'}
+                oracle.atomic_json(run/'test-result.json',receipt);os.utime(run/'payload',(index,index));os.utime(run,(index,index))
+            plan=oracle.storage_retention_plan(root,current)
+            self.assertIn('live-base',plan['retainedRuns']);self.assertNotIn('old-base',plan['retainedRuns'])
+            self.assertEqual({Path(item['path']).parent.name for item in plan['payloads']},{'old-base','old-focused'})
+            oracle.apply_storage_retention(root,plan)
+            self.assertTrue((runs/'old-base/test-result.json').is_file());self.assertFalse((runs/'old-base/payload').exists())
+            self.assertTrue((runs/'live-base/payload/bin/isolde').is_file())
 
     def test_synthetic_media_dedup_preserves_paths_bytes_and_recent_fixtures(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -1068,13 +1131,15 @@ class OracleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder).resolve();base=root/'runs/base';current=root/'runs/focused'
             base.mkdir(parents=True);current.mkdir()
-            values={'qml/KodiLibraryView.qml':b'old','src/media/KodiMedia.cpp':b'lifecycle','qml/Main.qml':b'owner'}
+            values={'qml/KodiLibraryView.qml':b'old','src/media/KodiMedia.cpp':b'lifecycle','qml/Main.qml':b'owner','native/kodi/IsoldeSources.cpp':b'original source boundary'}
             def write(run,data):
                 (run/'files.sha256').write_text(''.join(hashlib.sha256(value).hexdigest()+'  '+name+'\n' for name,value in sorted(data.items())))
             write(base,values);changed=dict(values,**{'qml/KodiLibraryView.qml':b'music route'})
             write(current,changed);(base/'payload/bin').mkdir(parents=True);(base/'payload/bin/isolde').write_bytes(b'full candidate')
             oracle.atomic_json(base/'test-result.json',{'passed':True,'fullSuite':True,'sourceDigest':oracle.digest(base/'files.sha256'),'payload':oracle.payload_hashes(base/'payload')})
             self.assertEqual(oracle.focused_qml_coverage(root,current,'base','media_controls')['changedMediaFiles'],['qml/KodiLibraryView.qml'])
+            changed['native/kodi/IsoldeSources.cpp']=b'preserve virtual entries during source recovery';write(current,changed)
+            self.assertEqual(oracle.focused_qml_coverage(root,current,'base','media_controls')['changedMediaFiles'],['native/kodi/IsoldeSources.cpp','qml/KodiLibraryView.qml'])
             for name in ('src/media/KodiMedia.cpp','qml/Main.qml','qml/Unexpected.qml'):
                 write(current,dict(changed,**{name:b'uncovered'}))
                 with self.assertRaises(RuntimeError):oracle.focused_qml_coverage(root,current,'base','media_controls')
