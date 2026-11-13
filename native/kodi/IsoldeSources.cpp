@@ -20,6 +20,7 @@
 #include <fcntl.h>
 #include <filesystem>
 #include <memory>
+#include <map>
 #include <stdexcept>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -230,7 +231,27 @@ int IsoldeSources(const std::vector<std::string>& parameters)
           if(fstatat(directory.value,"source-config-backup.xml",&existing,AT_SYMLINK_NOFOLLOW)==0)
           {
             Read(directory.value,"source-config-backup.xml");
-            if(!CMediaSourceSettings::GetInstance().Load(CSpecialProtocol::TranslatePath("special://profile/isolde/source-config-backup.xml")))throw std::runtime_error("Source backup cannot be loaded");
+            auto& manager=CMediaSourceSettings::GetInstance();
+            std::map<std::string,std::vector<CMediaSource>> previous;
+            for(const auto& category:std::vector<std::string>{"video","music","pictures","programs","files"})
+              if(const auto* sources=manager.GetSources(category))previous.emplace(category,*sources);
+            if(!manager.Load(CSpecialProtocol::TranslatePath("special://profile/isolde/source-config-backup.xml")))
+            {
+              for(const auto& entry:previous)if(auto* sources=manager.GetSources(entry.first))*sources=entry.second;
+              throw std::runtime_error("Source backup cannot be loaded");
+            }
+            // Kodi's virtual add-on entries are not serialized by Save().
+            // Retain their complete objects and positions on every recovery
+            // attempt, including attempts that later fail XML publication.
+            for(const auto& entry:previous)
+              if(auto* sources=manager.GetSources(entry.first))
+                for(size_t index=0;index<entry.second.size();++index)
+                {
+                  const auto& source=entry.second[index];
+                  if(!source.strPath.empty() && source.strPath.front()=='/')continue;
+                  const auto found=std::find_if(sources->begin(),sources->end(),[&](const CMediaSource& candidate){return candidate.strName==source.strName && candidate.strPath==source.strPath && candidate.vecPaths==source.vecPaths;});
+                  if(found==sources->end())sources->insert(sources->begin()+std::min(index,sources->size()),source);
+                }
           }
           unlinkat(config.value,".isolde-sources.xml",0);
         }

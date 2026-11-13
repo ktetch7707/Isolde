@@ -1751,3 +1751,45 @@ is relabelled passed. Installed movieart now also covers a real tagged WAV
 music source, Kodi scan, remote album/song browse and native Music controls.
 
 BUG-155: new libraryViews getter deduced QJsonValueRef from a temporary JSON object; h aborts with heap corruption. Own a QJsonValue through value() instead. i cancelled after this concrete diagnosis, with guest indexer/service restoration. j verifies the fix; no acceptance credit for h/i.
+
+BUG-156 runner notification inventory exceeded its fixed bound by traversing
+application trees; k passes all126 runner checks and actual guest preparation
+after restricting traversal to independently verified notification process IDs.
+BUG-157 installed preview scrolling hides review context; read-only focusable
+review fields and long-row remote paging implemented, awaiting verification.
+BUG-158 installed native recovery loses pathless Video/Music add-on sources on
+XML Load. Both strict order and full-record multiset checks fail, preserving
+the finding. Native restore now retains those complete objects in all source
+categories, including failed-publication retries; local source flags were
+unchanged. No credit for the failed installed runs.
+
+November13 storage repair: historical installed releases and focused receipt
+pins grew without bounds. Verified retention c removes148 retired releases and
+six staged payloads, restoring13.1 GiB. Repeat e passes129 runner checks,
+removes nothing and retains12.8 GiB free. Current/previous/recovery/live and
+reachable candidate dependencies are protected; all test receipts, profiles
+and incremental cache remain. Ten simulated deployment cycles stay bounded.
+Tracker exclusions use existing guest policy; native failure restoration now
+closes the indexer lease. Repair pushed as f7e7ce5. Acceptance remains88%.
+
+Managed Kodi p builds/installs corrected extension5349a0b41c76, binary
+e6d262fbc356807927da370e98cac9e9e331949cfd168163c112f2768856fc96;
+normal service remains active/zero restarts. Dependency evidence alone is not
+installed recovery acceptance. q attempts zero application tests: exact reuse
+guard rejects the new storage-policy document. Add only that named document
+to the media harness addition allowlist; r resumes the same correction batch.
+
+r passes7/7 and deploys cfc446352b79587dfc5c060a. Six installed captures
+reviewed: preview is readable and remotely selected. Recovery still fails;
+bridge masks nonlocal URLs as empty paths, so preserve nonlocal native objects
+instead of only empty paths. s compiles that correction but apt rejects its
+hash-derived package version as a downgrade. BUG-159: content hashes have no
+chronological Debian ordering; allow replacement of the exact locally built
+package. BUG-160: error status scrolls offscreen at Apply; visibility fix open.
+
+t installs corrected7d9bac4fd7d9. Installed r attempt123227-354 proves exact
+source inventory preservation and XML restore, closing the reproduced native
+BUG-158. BUG-161 helper Up8 targets Frontend after returning from capability
+source setup, shutting Kodi down rather than scanning. Movie lookup timeout
+is retained. Correct helper to Up30/Down2/Confirm; no application/full-suite
+rerun for this input-only correction. Artwork/playlists acceptance stays open.

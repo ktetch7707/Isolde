@@ -22,7 +22,7 @@ Item {
     readonly property var rows:{
         if(mode==="folders")return []
         if(mode==="roots")return (kodiClient.sourceRoots || []).map(path=>({label:path,path:path})).concat([{label:qsTr("Back"),back:true}])
-        if(mode==="preview")return [{label:qsTr("Back to draft"),back:true},{label:confirmSave?qsTr("CONFIRM · Apply this source change"):qsTr("Apply reviewed source change"),apply:true}]
+        if(mode==="preview")return reviewRows().concat([{label:qsTr("Back to draft"),back:true},{label:confirmSave?qsTr("CONFIRM · Apply this source change"):qsTr("Apply reviewed source change"),apply:true}])
         if(mode==="edit")return [
             {label:qsTr("Name · ")+(draft.name || ""),key:"name"},
             {label:qsTr("Content · ")+contentLabels[Math.max(0,contentTypes.indexOf(draft.content))],key:"content"},
@@ -36,6 +36,17 @@ Item {
         return [{label:qsTr("Refresh sources and providers"),refresh:true},{label:qsTr("Allow a media folder · read-only access"),folders:true},{label:qsTr("Add a Kodi source"),add:true}].concat((kodiClient.librarySources || []).map(source=>({label:source.name+(source.path?" · "+source.path:"")+(source.editable?"":" · "+qsTr("preserved, read-only")),source:source})))
     }
     function refresh(){message="";refreshAttempts=0;refreshTimer.restart()}
+    function reviewRows(){
+        let values=[qsTr("Name · ")+(draft.name || ""),qsTr("Folder · ")+(draft.path || "")]
+        if(draft.remove)values.push(qsTr("Remove this source definition and exclude its path from scanning. Media files, Kodi titles, watched state and resume positions are retained."))
+        else {
+            values.push(qsTr("Content · ")+contentLabels[Math.max(0,contentTypes.indexOf(draft.content))])
+            values.push(qsTr("Metadata provider · ")+(draft.category==="music"?qsTr("Embedded file tags"):scraperLabel))
+            if(draft.category==="music")values.push(qsTr("Scanner · all subfolders, embedded file tags"))
+            else values=values.concat([qsTr("Subfolders · ")+(draft.recursive?qsTr("On"):qsTr("Off")),qsTr("Folder names · ")+(draft.folderNames?qsTr("On"):qsTr("Off")),qsTr("Exclude from updates · ")+(draft.noUpdate?qsTr("On"):qsTr("Off")),qsTr("Exclude from scanning · ")+(draft.exclude?qsTr("On"):qsTr("Off"))])
+        }
+        return values.map(value=>({label:value,review:true}))
+    }
     function changedDraft(value){draft=Object.assign({},draft,value);confirmSave=false;kodiClient.cancelSourcePreview();message=qsTr("Draft only · preview before applying")}
     function chooseDefaultScraper(){const choices=(kodiClient.sourceScrapers || []).filter(row=>row.content===draft.content);changedDraft({scraper:(choices.find(row=>row.id==="metadata.local") || choices[0] || {}).id || ""})}
     function edit(source,isNew){
@@ -54,10 +65,11 @@ Item {
         if(mode==="keyboard"){keyboard.handleCommand(command);return}
         if(mode==="folders"){folderPage.handleCommand(command);return}
         if(command===inputManager.back){back();return}
-        if(command===inputManager.navigateUp){confirmSave=false;selectedIndex=Math.max(0,selectedIndex-1)}
-        else if(command===inputManager.navigateDown){confirmSave=false;selectedIndex=Math.min(rows.length-1,selectedIndex+1)}
+        if(command===inputManager.navigateUp){confirmSave=false;if(!scrollLongRow(-1))selectedIndex=Math.max(0,selectedIndex-1)}
+        else if(command===inputManager.navigateDown){confirmSave=false;if(!scrollLongRow(1))selectedIndex=Math.min(rows.length-1,selectedIndex+1)}
         else if(command===inputManager.confirm && !kodiClient.busy){
             const row=rows[selectedIndex];if(!row)return
+            if(row.review)return
             if(row.back){back();return}
             if(row.refresh){refresh();return}
             if(row.folders){mode="folders";return}
@@ -73,7 +85,8 @@ Item {
             if(row.key) {const value={};value[row.key]=!draft[row.key];changedDraft(value)}
         }
     }
-    function reveal(){const row=sourceRows.itemAt(selectedIndex);if(!row)return;const top=rowColumn.y+row.y;if(top<scroll.contentY)scroll.contentY=top;else if(top+row.height>scroll.contentY+scroll.height)scroll.contentY=top+row.height-scroll.height}
+    function scrollLongRow(direction){const row=sourceRows.itemAt(selectedIndex);if(!row || row.height<=scroll.height)return false;const top=rowColumn.y+row.y,bottom=top+row.height;if(direction>0 && scroll.contentY+scroll.height<bottom){scroll.contentY=Math.min(bottom-scroll.height,scroll.contentY+scroll.height*.6);return true}if(direction<0 && scroll.contentY>top){scroll.contentY=Math.max(top,scroll.contentY-scroll.height*.6);return true}return false}
+    function reveal(){const row=sourceRows.itemAt(selectedIndex);if(!row)return;const top=rowColumn.y+row.y;if(selectedIndex===0)scroll.contentY=0;else if(row.height>scroll.height || top<scroll.contentY)scroll.contentY=top;else if(top+row.height>scroll.contentY+scroll.height)scroll.contentY=top+row.height-scroll.height}
     onSelectedIndexChanged:revealTimer.restart()
     onModeChanged:revealTimer.restart()
     onVisibleChanged:{pending="";message="";confirmSave=false;mode="list";selectedIndex=0;if(visible)refresh();else{refreshTimer.stop();kodiClient.cancelSourcePreview()}}
@@ -92,13 +105,12 @@ Item {
     Timer {id:revealTimer;interval:0;onTriggered:if(root.visible)root.reveal()}
     Rectangle {anchors.fill:parent;color:shell.surface}
     Flickable {
-        id:scroll;anchors.fill:parent;clip:true;contentHeight:contents.implicitHeight;boundsBehavior:Flickable.StopAtBounds;visible:root.mode!=="folders" && root.mode!=="keyboard"
+        id:scroll;objectName:"kodiSourceScroll";anchors.fill:parent;clip:true;contentHeight:contents.implicitHeight;boundsBehavior:Flickable.StopAtBounds;visible:root.mode!=="folders" && root.mode!=="keyboard"
         Column {
             id:contents;width:parent.width;spacing:16*shell.gapScale
             Text {width:parent.width;wrapMode:Text.WordWrap;text:qsTr("KODI SOURCE SETUP");font.family:shell.fontFamily;font.pixelSize:30*shell.textScale;color:shell.text}
             Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.message || root.kodiClient.sourceStatus || qsTr("Reading sources…");font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;color:shell.focus}
-            Text {width:parent.width;visible:root.mode==="edit" || root.mode==="preview";wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;text:root.draft.path || "";font.family:shell.fontFamily;font.pixelSize:17*shell.textScale;color:shell.muted}
-            Text {width:parent.width;visible:root.mode==="preview";wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.draft.remove?qsTr("Remove this source definition and exclude its path from scanning. Media files and existing Kodi titles, watched state and resume positions are retained."):[root.draft.name,root.contentLabels[Math.max(0,root.contentTypes.indexOf(root.draft.content))],root.scraperLabel,qsTr("Subfolders: ")+(root.draft.recursive?qsTr("On"):qsTr("Off")),qsTr("Folder names: ")+(root.draft.folderNames?qsTr("On"):qsTr("Off")),qsTr("Exclude from updates: ")+(root.draft.noUpdate?qsTr("On"):qsTr("Off")),qsTr("Exclude from scanning: ")+(root.draft.exclude?qsTr("On"):qsTr("Off"))].join("\n");font.family:shell.fontFamily;font.pixelSize:20*shell.textScale;color:shell.text}
+            Text {width:parent.width;visible:root.mode==="edit";wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;text:root.draft.path || "";font.family:shell.fontFamily;font.pixelSize:17*shell.textScale;color:shell.muted}
             Column {
                 id:rowColumn;width:parent.width;spacing:8*shell.gapScale
                 Repeater {
@@ -111,7 +123,7 @@ Item {
                     }
                 }
             }
-            Text {width:parent.width;wrapMode:Text.WordWrap;text:qsTr("Up/Down chooses · OK edits/previews · Back cancels · Saving never moves media or cleans the library. Use Scan in Media Library after applying settings.");font.family:shell.fontFamily;font.pixelSize:17*shell.textScale;color:shell.muted}
+            Text {width:parent.width;wrapMode:Text.WordWrap;text:root.mode==="preview"?qsTr("Up/Down reviews each field · OK on Apply requests final confirmation · Back returns to the draft without saving."):qsTr("Up/Down chooses · OK edits/previews · Back cancels · Saving never moves media or cleans the library. Use Scan in Media Library after applying settings.");font.family:shell.fontFamily;font.pixelSize:17*shell.textScale;color:shell.muted}
         }
     }
     MediaFoldersView {id:folderPage;anchors.fill:parent;appearance:root.appearance;visible:root.mode==="folders" && root.visible}

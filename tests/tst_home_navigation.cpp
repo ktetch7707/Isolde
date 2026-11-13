@@ -985,6 +985,21 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme()
     auto *sources=findItem(qobject_cast<QQuickItem *>(root.get()),"kodiSourceSetupPage");QVERIFY(sources);
     sources->setProperty("draft",QVariantMap{{"name","Movies"},{"path","/media/movies/"},{"category","video"},{"content","movies"}});
     sources->setProperty("previewOriginIndex",8);sources->setProperty("mode","preview");
+    sources->setProperty("selectedIndex",0);
+    auto *sourceScroll=findItem(qobject_cast<QQuickItem *>(sources),"kodiSourceScroll");QVERIFY(sourceScroll);
+    QTRY_COMPARE(sourceScroll->property("contentY").toReal(),0.0);
+    const auto reviewRows=sources->property("rows").value<QJSValue>().toVariant().toList();
+    QCOMPARE(reviewRows.size(),10);QVERIFY(reviewRows.first().toMap()["review"].toBool());QVERIFY(reviewRows.last().toMap()["apply"].toBool());
+    auto longSource=sources->property("draft").toMap();longSource["path"]="/media/"+QString(4000,'W');sources->setProperty("draft",longSource);
+    QVERIFY(QMetaObject::invokeMethod(sources,"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::NavigateDown)))));
+    QTest::qWait(20);QCOMPARE(sources->property("selectedIndex").toInt(),1);
+    int reviewSteps=0;
+    while(sources->property("selectedIndex").toInt()==1 && reviewSteps<40){
+        QVERIFY(QMetaObject::invokeMethod(sources,"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::NavigateDown)))));QTest::qWait(2);++reviewSteps;
+    }
+    QVERIFY(reviewSteps>1);QVERIFY(reviewSteps<40);QCOMPARE(sources->property("selectedIndex").toInt(),2);
+    for(int i=0;i<4;++i){QVERIFY(QMetaObject::invokeMethod(sources,"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::NavigateUp)))));QTest::qWait(2);}
+    QCOMPARE(sources->property("selectedIndex").toInt(),0);QTRY_COMPARE(sourceScroll->property("contentY").toReal(),0.0);
     QVERIFY(QMetaObject::invokeMethod(sources,"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Back)))));
     QCOMPARE(sources->property("mode").toString(),QString("edit"));QCOMPARE(sources->property("selectedIndex").toInt(),8);
     sources->setProperty("newSource",true);

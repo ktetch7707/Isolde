@@ -164,7 +164,9 @@ def main():
     deb=work/('isolde-managed-kodi_'+package_version+'_'+architecture+'.deb')
     normalize_package(package)
     run(['dpkg-deb','--root-owner-group','--build',str(package),str(deb)],timeout=120)
-    run(['sudo','-n','apt-get','install','-y',str(deb)],timeout=300)
+    # Content hashes identify exact candidates; their lexical Debian version
+    # ordering does not indicate whether a candidate is newer.
+    run(['sudo','-n','apt-get','install','-y','--allow-downgrades',str(deb)],timeout=300)
     installed=Path('/opt/isolde-managed-kodi/kodi.bin')
     if installed.is_symlink() or installed.stat().st_uid!=0 or sha(installed)!=binary_hash:raise RuntimeError('Installed managed Kodi binary differs from the built artifact')
     atomic(args.receipt,dict(passed=True,kind='dependency-build-not-application-acceptance',metadata=metadata,package=str(deb),packageSha256=sha(deb),normalProfilesUsed=False,serviceRestarted=False,createdAt=time.time()))

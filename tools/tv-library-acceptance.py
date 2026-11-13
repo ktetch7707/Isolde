@@ -185,7 +185,7 @@ if ''' + repr(str(imported)) + ''' in selected:
         # Fresh source setup is performed by Isolde below, never a Kodi import dialog.
         movies = media / "movies"
         music = media / "music";music.mkdir()
-        import wave,struct
+        import wave
         for number in (1,2):
             song=music/f'Fixture song {number}.wav'
             with wave.open(str(song),'wb') as output:
@@ -392,7 +392,7 @@ provider.setSettingString("searchlanguage","en-US")
                 source_press('Escape');source_press('Escape')
                 assert rpc(directory,'Isolde.GetSources')['sources']==initial_sources,'Cancelled draft saved a source'
                 assert ((userdata/'sources.xml').read_bytes() if (userdata/'sources.xml').exists() else None)==initial_source_bytes,'Preview/cancel rewrote Kodi source configuration'
-                source_draft();source_press('Down');source_press('Return');source_press('Return')
+                source_draft();source_press('Down',30);source_press('Return');source_press('Return')
                 def saved_source():
                     rows=rpc(directory,'Isolde.GetSources')['sources']
                     return rows if len(rows)==len(initial_sources)+1 else None
@@ -403,7 +403,7 @@ provider.setSettingString("searchlanguage","en-US")
                 guide_capture('sourcesaved')
                 source_press('Down',2);source_press('Return');source_press('Down');source_press('Return')
                 source_press('Down');source_press('Return',3);source_press('Down',2);source_press('Return')
-                source_press('Down');source_press('Return');source_press('Return')
+                source_press('Down',30);source_press('Return');source_press('Return')
                 def saved_music():
                     rows=rpc(directory,'Isolde.GetSources')['sources']
                     return rows if any(row['path']==str(music)+'/' and row['category']=='music' for row in rows) else None
@@ -415,7 +415,7 @@ provider.setSettingString("searchlanguage","en-US")
                 source_index=saved.index(target_source)
                 source_press('Up',20);source_press('Down',3+source_index);source_press('Return')
                 source_press('Down',5);source_press('Return');source_press('Down',2);source_press('Return')
-                source_press('Down');source_press('Return')
+                source_press('Down',30);source_press('Return')
                 original_mode=userdata.stat().st_mode&0o777
                 try:
                     userdata.chmod(0o500);source_press('Return')
@@ -430,9 +430,14 @@ provider.setSettingString("searchlanguage","en-US")
                 source_press('Escape');source_press('Escape');source_press('Up',20);source_press('Return')
                 wait(lambda:not (directory/'source-journal.json').exists(),'Isolde Refresh recovered the interrupted native source transaction')
                 assert (userdata/'sources.xml').read_bytes()==source_bytes,'Recovery did not restore exact source XML'
-                assert rpc(directory,'Isolde.GetSources')['sources']==saved,'Recovery changed scanner/provider settings'
+                recovered=rpc(directory,'Isolde.GetSources')['sources']
+                (evidence/'source-recovery-inventory.json').write_text(json.dumps(dict(before=saved,after=recovered),indent=2))
+                canonical=lambda rows:sorted(json.dumps(row,sort_keys=True) for row in rows)
+                print('SOURCE_RECOVERY_INVENTORY '+json.dumps(dict(before=saved,after=recovered),sort_keys=True),flush=True)
+                assert canonical(recovered)==canonical(saved),('Recovery changed scanner/provider settings',saved,recovered)
+                saved=recovered;source_index=saved.index(target_source)
                 guide_capture('sourcerecovered')
-                source_press('Escape');source_press('Up',8);source_press('Return')
+                source_press('Escape');source_press('Up',30);source_press('Down',2);source_press('Return')
                 (evidence/'source-setup.json').write_text(json.dumps(dict(fresh=True,previewNoWrite=True,cancelNoWrite=True,remoteConfirmedSave=True,nativeWriteFailureRecovery=True,nativeSources=saved,kodiMenusRequired=False),indent=2))
             if args.guide:
                 source_channels=wait(lambda:rpc(directory,'PVR.GetChannels',{'channelgroupid':'alltv','properties':['channelnumber','locked','hidden','clientid','uniqueid'],'limits':{'start':0,'end':50}}).get('channels'),'Real IPTV Simple channel ready',seconds=60)
@@ -649,7 +654,7 @@ provider.setSettingString("searchlanguage","en-US")
                 source_press('Up',20);source_press('Down',10);source_press('Return');time.sleep(1)
                 source_press('Down',3+source_index);source_press('Return')
                 source_press('Down',5);source_press('Return');source_press('Down',2);source_press('Return')
-                source_press('Down');source_press('Return');source_press('Return')
+                source_press('Down',30);source_press('Return');source_press('Return')
                 wait(lambda:any(row['path']==str(movies)+'/' and row['noUpdate'] for row in rpc(directory,'Isolde.GetSources')['sources']),'Remote scanner edit applied to the populated library')
                 assert stored_resume()==resume,'Editing source settings changed existing Kodi progress'
                 poster_capture('sourceprogresspreserved')

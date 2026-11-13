@@ -13,6 +13,23 @@ Resume managed Kodi native correction p, then the combined media_controls
 candidate and installed movieart/playlists journeys. No acceptance credit
 for maintenance or failed preflights.
 
+p dependency passes; r passes7/7 existing media registrations and deploys
+cfc446352b79587dfc5c060a. Installed preview is reviewed and fixed. Native
+recovery still loses virtual sources: bridge inventory deliberately masks
+nonlocal URLs as empty strings, so native empty-path-only preservation misses
+the actual URL objects. Preserve nonlocal source objects instead. s rebuilds
+only that dependency; reuse unchanged r application tests, then repeat installed
+movieart/playlists. r failure is retained, with no recovery acceptance credit.
+
+t native package7d9bac4fd7d9 installs successfully after correcting hash-version
+ordering. r installed attempt123227-354 proves exact recovery inventory and
+byte-identical XML, including both virtual add-on entries. It then times out
+on movie lookup: old Up8 sequence selected Frontend and shut Kodi down instead
+of Scan. Helper now uses Up30/Down2/Confirm to select explicit Scan. No further
+application rebuild required for this helper correction. Resume installed r
+movieart/playlists, review all new captures; BUG-160 error-status visibility
+remains open. Acceptance stays88%; source/control task closure remains open.
+
 ## Round-two verification campaign — 2026-11-11
 
 The user now authorizes testing everything not yet VM verified in the backlog;

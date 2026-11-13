@@ -954,7 +954,7 @@ def focused_qml_coverage(root, run, base_id, suite):
     if suite=='media_controls':
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
             {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','native/kodi/IsoldeSources.cpp'},
-            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media')
+            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
     if suite=='store':
