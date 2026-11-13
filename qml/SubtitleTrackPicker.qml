@@ -7,6 +7,7 @@ Item {
     property var appearance: ({})
     property bool open: false
     property int selectedIndex: 0
+    onSelectedIndexChanged: tracks.positionViewAtIndex(selectedIndex, ListView.Contain)
     signal closeRequested()
     SurfacePalette { id: shell; appearance: root.appearance }
 
@@ -46,21 +47,26 @@ Item {
         anchors.centerIn: parent
         width: Math.min(parent.width - 80, 680)
         height: Math.min(parent.height - 80, 560)
-        radius: 16
+        radius: shell.radius
         color: shell.surface
         border.width: 2
         border.color: shell.focus
         Column {
+            id:trackContents
             anchors.fill: parent
             anchors.margins: 24
             spacing: 12
             Text {
+                id:trackHeading
+                width:parent.width
+                wrapMode:Text.WordWrap
                 text: "Subtitle tracks · Kodi"
                 color: shell.text
                 font.pixelSize: 28 * shell.textScale
                 font.weight: Font.DemiBold
             }
             Text {
+                id:trackStatus
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: kodiClient ? kodiClient.subtitleStatus : "Kodi playback is unavailable."
@@ -70,7 +76,7 @@ Item {
             ListView {
                 id: tracks
                 width: parent.width
-                height: parent.height - 72
+                height: Math.max(0,parent.height-trackHeading.height-trackStatus.height-2*parent.spacing)
                 clip: true
                 model: ["Off"].concat(kodiClient ? kodiClient.subtitleTracks.map(track =>
                     (track.language ? track.language.toUpperCase() + " · " : "") +
@@ -81,22 +87,27 @@ Item {
                     required property int index
                     required property string modelData
                     width: tracks.width
-                    height: 58
-                    radius: 8
+                    height: Math.max(58*shell.textScale,trackLabel.implicitHeight+24)
+                    radius: shell.radius
                     color: index === root.selectedIndex ? shell.selected : shell.elevated
                     border.width: index === root.selectedIndex ? 2 : 0
                     border.color: shell.focus
                     Text {
+                        id:trackLabel
                         anchors.fill: parent
                         anchors.margins: 12
                         verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
+                        wrapMode: Text.WordWrap
+                        textFormat:Text.PlainText
                         text: modelData
-                        color: shell.text
+                        color: index===root.selectedIndex?shell.selectedText:shell.text
                         font.pixelSize: 17 * shell.textScale
                     }
                 }
-                onCountChanged: positionViewAtIndex(root.selectedIndex, ListView.Contain)
+                onCountChanged: {
+                    root.selectedIndex=Math.max(0,Math.min(root.selectedIndex,count-1))
+                    positionViewAtIndex(root.selectedIndex, ListView.Contain)
+                }
             }
         }
     }

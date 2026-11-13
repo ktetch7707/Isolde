@@ -216,12 +216,12 @@ class Playback:
                 continue
             props = self.rpc("Player.GetProperties", {
                 "playerid": player_id,
-                "properties": ["subtitles", "subtitle", "subtitleenabled"],
+                "properties": ["subtitles", "currentsubtitle", "subtitleenabled"],
             })
             available = props.get("subtitles")
             if not isinstance(available, list) or len(available) > 64:
                 raise ValueError("Kodi returned an invalid subtitle track list")
-            selected = props.get("subtitle", {})
+            selected = props.get("currentsubtitle", {})
             selected_id = selected.get("index") if isinstance(selected, dict) else None
             tracks = []
             seen = set()
@@ -258,6 +258,7 @@ class Playback:
                 if self.rpc("Player.SetSubtitle", {
                     "playerid": player_id,
                     "subtitle": subtitle_id,
+                    "enable": subtitle_id != "off",
                 }) != "OK":
                     raise ValueError("Kodi did not confirm the subtitle track change")
                 return self.subtitle_tracks()

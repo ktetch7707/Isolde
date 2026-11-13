@@ -93,7 +93,7 @@ class PlaybackTests(unittest.TestCase):
         elif method == "Player.GetProperties":
             values={"speed":self.speed,"canseek":self.seekable,"canchangespeed":True,"live":self.kind=="channel",
                     "time":{"hours":self.position//3600,"minutes":self.position//60%60,"seconds":self.position%60}}
-            values.update({"subtitles":self.subtitle_tracks, "subtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
+            values.update({"subtitles":self.subtitle_tracks, "currentsubtitle":next((track for track in self.subtitle_tracks if track["index"]==self.subtitle_id), {}),
                            "subtitleenabled":self.subtitle_enabled})
             if set(params["properties"])-set(values):return json.dumps({"error":{"code":-32602,"message":"Invalid Player property"}})
             result={key:values[key] for key in params["properties"]}
@@ -103,8 +103,10 @@ class PlaybackTests(unittest.TestCase):
             result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
         elif method == "Player.SetSubtitle":
-            self.subtitle_enabled = params["subtitle"] != "off"
-            if self.subtitle_enabled: self.subtitle_id = params["subtitle"]
+            self.assertEqual(set(params),{"playerid","subtitle","enable"})
+            self.assertIs(type(params["enable"]),bool)
+            self.subtitle_enabled = params["subtitle"] != "off" and params["enable"]
+            if type(params["subtitle"]) is int: self.subtitle_id = params["subtitle"]
         elif method == "Player.Stop": self.active = False
         return json.dumps({"result": result})
 
@@ -363,9 +365,11 @@ class PlaybackTests(unittest.TestCase):
         self.assertEqual([track["id"] for track in tracks["tracks"]], [0, 2])
         self.assertTrue(tracks["tracks"][0]["selected"])
         self.assertTrue(tracks["tracks"][1]["external"])
+        self.subtitle_enabled=False
         selected = self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": 2})
+        self.assertTrue(selected["enabled"])
         self.assertEqual(selected["selectedId"], 2)
-        self.assertIn(("Player.SetSubtitle", {"playerid": 1, "subtitle": 2}), self.calls)
+        self.assertIn(("Player.SetSubtitle", {"playerid": 1, "subtitle": 2, "enable": True}), self.calls)
         disabled = self.player.handle("Isolde.SetSubtitleTrack", {"subtitleId": "off"})
         self.assertFalse(disabled["enabled"])
         self.item = 8
