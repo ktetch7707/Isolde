@@ -89,7 +89,7 @@ void KodiService::browseLibraryParent()
 void KodiService::allowBrowsedFolder() { addLibraryFolder(QUrl::fromLocalFile(m_browsePath)); }
 void KodiService::addLibraryFolder(const QUrl &folder)
 {
-    if (!canEditFolders()) { m_folderStatus = "Switch to Kodi application mode and exit Kodi normally before changing folder access."; emit changed(); return; }
+    if (!canEditFolders()) { m_folderStatus = "Stop playback and turn Automatic startup off before changing folder access. Close any Kodi app first."; emit changed(); return; }
     const auto path = QDir::cleanPath(folder.toLocalFile());
     const auto error = folder.isLocalFile() ? MediaGrants::validate(path) : QString("Choose a local folder.");
     if (!error.isEmpty()) { m_folderStatus = error; emit changed(); return; }
@@ -97,12 +97,12 @@ void KodiService::addLibraryFolder(const QUrl &folder)
     if (folders.contains(path)) { m_folderStatus = "This folder is already allowed."; emit changed(); return; }
     folders.append(path);
     const auto saved = MediaGrants::save(m_profile, folders);
-    m_folderStatus = saved.isEmpty() ? "Read-only access saved. Open Kodi, add this same folder as a video source, and set its content to Movies with subfolder scanning. Existing sources need no remapping." : saved;
+    m_folderStatus = saved.isEmpty() ? "Read-only access saved. Turn Automatic startup on to reconnect the library. Existing configured sources keep their content settings; folder access alone does not configure a new source." : saved;
     emit changed();
 }
 void KodiService::removeLibraryFolder(const QString &folder)
 {
-    if (!canEditFolders()) { m_folderStatus = "Exit Kodi and switch to Kodi application mode before changing access."; emit changed(); return; }
+    if (!canEditFolders()) { m_folderStatus = "Stop playback and turn Automatic startup off before changing folder access. Close any Kodi app first."; emit changed(); return; }
     auto folders = libraryFolders();
     if (!folders.removeAll(folder)) return;
     const auto saved = MediaGrants::save(m_profile, folders);
@@ -176,7 +176,10 @@ void KodiService::setAlwaysPlayLocally(bool value)
     settings.setValue(QStringLiteral("alwaysPlayLocally"), value);
     settings.endGroup();
     settings.sync();
-    if (settings.status() != QSettings::NoError) { m_status = "Could not save Always Play Locally preference."; emit changed(); return; }
+    if (settings.status() != QSettings::NoError) {
+        settings.setValue("profiles/"+m_profile+"/kodi/alwaysPlayLocally",m_alAlwaysPlayLocally);settings.sync();
+        m_status = "Could not save Always Play Locally preference. Previous selection retained."; emit changed(); return;
+    }
     m_alAlwaysPlayLocally = value;
     emit alwaysPlayLocallyChanged();
 }
@@ -188,7 +191,10 @@ void KodiService::resetAlwaysPlayLocally()
     settings.remove(QStringLiteral("alwaysPlayLocally"));
     settings.endGroup();
     settings.sync();
-    if (settings.status() != QSettings::NoError) { m_status = "Could not reset Always Play Locally preference."; emit changed(); return; }
+    if (settings.status() != QSettings::NoError) {
+        settings.setValue("profiles/"+m_profile+"/kodi/alwaysPlayLocally",m_alAlwaysPlayLocally);settings.sync();
+        m_status = "Could not reset Always Play Locally preference. Previous selection retained."; emit changed(); return;
+    }
     m_alAlwaysPlayLocally = true;
     emit alwaysPlayLocallyChanged();
 }

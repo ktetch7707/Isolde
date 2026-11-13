@@ -8,6 +8,7 @@ Item {
     property bool editingFolders: false
     property bool showingImport: false
     property bool showingPlayback: false
+    readonly property string webStatus:typeof discoveryProvider!=="undefined"?discoveryProvider.status:"No web provider configured; local results only"
     function back() {
         if (showingPlayback) { showingPlayback=false; return true }
         if (showingImport) { if (!importPage.back()) showingImport = false; return true }
@@ -63,7 +64,7 @@ Item {
         Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: kodiService.status; color: shell.focus; font.pixelSize: 22 * shell.textScale }
         Repeater {
             id: actions
-            model: ["Automatic startup: " + (kodiService.enabled ? "On" : "Off"), "Restart Kodi background service", "Scan for New Movies", "Refresh library connection", "Frontend: " + (kodiService.frontend === "isolde" ? "Isolde (preview) — select for Kodi" : "Kodi application — select for Isolde"), "Open Kodi with your existing setup", "Media folder access · " + kodiService.libraryFolders.length + " allowed", "Web search: " + (searchPreferences.webEnabled ? "ON — no provider configured, Kodi results only" : "OFF — Kodi library only"), "Import existing desktop Kodi · backup/preview/import/rollback", "Playback Preferences"]
+            model: ["Automatic startup: " + (kodiService.enabled ? "On" : "Off"), "Restart Kodi background service", "Scan for New Movies", "Refresh library connection", "Frontend: " + (kodiService.frontend === "isolde" ? "Isolde (preview) — select for Kodi" : "Kodi application — select for Isolde"), "Open Kodi with your existing setup", "Media folder access · " + kodiService.libraryFolders.length + " allowed", "Web search: " + (searchPreferences.webEnabled ? "ON — " + root.webStatus : "OFF — Kodi library only"), "Import existing desktop Kodi · backup/preview/import/rollback", "Playback Preferences"]
             delegate: Rectangle {
                 required property int index
                 required property string modelData

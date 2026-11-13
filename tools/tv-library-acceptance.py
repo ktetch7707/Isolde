@@ -101,6 +101,14 @@ def main():
             f"<filenameandpath>{escape(str(file))}</filenameandpath><path>{escape(str(show))}/</path><file>{file.name}</file>"
             f"<art><thumb>{escape(str(poster))}</thumb></art>"
             + ("<resume><position>20</position><total>120</total></resume>" if season == 1 and number == 2 else "") + "</episodedetails>")
+    if args.playlists:
+        member_file=playlists/'Member order.m3u8'
+        member_paths=[show/f'Fixture S{season:02}E{number:02}.ogv' for season,number in fixture_episodes]
+        member_records=[f'#EXTINF:120,Fixture member {i+1}\n{path}\n' for i,path in enumerate(member_paths)]
+        member_file.write_text('#EXTM3U\n'+''.join(member_records))
+        collision_file=playlists/'collision.xsp'
+        collision_file.write_text('<smartplaylist type="tvshows"><name>Collision fixture</name><match>all</match><order direction="ascending">title</order></smartplaylist>')
+        collision_bytes=collision_file.read_bytes()
     imported = media / "import"; imported.mkdir()
     (imported / "videodb.xml").write_text("<videodb><version>1</version><tvshow><title>Isolde Television Fixture</title>"
         f"<plot>Local synthetic television acceptance.</plot><path>{escape(str(show))}/</path><basepath>{escape(str(show))}/</basepath>"
@@ -218,6 +226,10 @@ provider.setSettingString("searchlanguage","en-US")
     config = evidence / "config/Isolde"; config.mkdir(parents=True)
     (config / "profiles.json").write_text(json.dumps({"active": profile, "profiles": [{"id": profile, "name": "TV acceptance"}]}))
     (config / "device-setup.json").write_text('{"version":1,"step":6,"complete":true}')
+    if args.movie_art:
+        managed_art=config/'profiles'/profile/'artwork';managed_art.mkdir(parents=True)
+        managed_poster=managed_art/(hashlib.sha256(poster.read_bytes()).hexdigest()+'.png')
+        managed_poster.write_bytes(poster.read_bytes())
     if args.history:
         import copy
         defaults=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
@@ -495,11 +507,34 @@ provider.setSettingString("searchlanguage","en-US")
                 key(shell,"Down"); time.sleep(2)
                 print("MOVIEART_READY "+str(evidence),flush=True)
                 wait(lambda:(evidence/"movieart-captured").exists(),"Movie artwork frame captured",seconds=110)
+                def poster_capture(phase):
+                    print(phase.upper()+"_READY "+str(evidence),flush=True)
+                    wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" captured",seconds=110)
+                def title_art():
+                    return rpc(directory,"VideoLibrary.GetMovieDetails",{"movieid":movie['movieid'],"properties":["art"]})['moviedetails']['art']
+                original_art=title_art()
+                key(shell,'Menu');key(shell,'Left');time.sleep(.5);poster_capture('movieposterpreview')
+                assert title_art()==original_art,'Poster preview wrote Kodi metadata'
+                key(shell,'Return');key(shell,'Escape');key(shell,'Escape')
+                assert title_art()==original_art,'Cancelled poster confirmation wrote Kodi metadata'
+                key(shell,'Left');key(shell,'Return');key(shell,'Return')
+                changed=wait(lambda: (value if (value:=title_art()).get('poster','').split('/')[-1].startswith('isolde-') else None),'Remote poster apply acknowledged by Kodi')
+                reported_path=Path(changed['poster'])
+                assert reported_path.parent in {userdata/'Thumbnails',Path.home()/'.kodi/userdata/Thumbnails'},reported_path
+                assert re.fullmatch(r'isolde-[0-9a-f]{64}\.png',reported_path.name),reported_path
+                applied_path=userdata/'Thumbnails'/reported_path.name
+                assert not applied_path.is_symlink() and applied_path.is_file(),applied_path
+                applied=Image.open(applied_path)
+                assert applied.size==(240,360) and applied.convert('RGB').getpixel((0,0))==(85,67,153)
+                assert all(changed.get(name)==value for name,value in original_art.items() if name!='poster'),'Poster edit changed unrelated title art'
+                time.sleep(.5);key(shell,'Escape');key(shell,'Escape');poster_capture('movieposterapplied')
                 for path,digest in hashes.items(): assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
                 (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"freshProfile":True,
                     "normalProfileUsed":False,"scrapedByKodi":True,"metadataSupplied":False,"playbackVerified":False,
                     "movie":movie,"artworkBytes":len(raw),"artworkSha256":hashlib.sha256(raw).hexdigest(),
-                    "artworkMime":art["mime"],"media_unchanged":True},indent=2))
+                    "artworkMime":art["mime"],"media_unchanged":True,"remotePosterPreviewNoWrite":True,
+                    "remotePosterCancelNoWrite":True,"remotePosterApplied":True,"unrelatedTitleArtPreserved":True,
+                    "captures":["movieart","movieposterpreview","movieposterapplied"]},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
@@ -612,10 +647,50 @@ provider.setSettingString("searchlanguage","en-US")
                 items=result["tvshows"]
                 assert len(items)==3 and {i["episodeid"] for i in items}=={i["episodeid"] for i in eps}
                 assert all(i["playlistMediaType"]=="episode" and "file" not in i for i in items)
+                def manage_playlist(name):
+                    current=rpc(directory,'Isolde.GetPlaylists')['playlists']
+                    index=next(i for i,row in enumerate(current) if row['playlistName']==name)
+                    press('Up',30);press('Down',index+2);press('Return');time.sleep(.5)
+                original_playlist=created[0].read_bytes()
+                press('Down');press('Return');press('Return');press('Escape')
+                assert created[0].read_bytes()==original_playlist,'Rename cancellation changed the definition'
+                press('Down');press('Return');press('Return');remote_text(press,'renamed.xsp')
+                renamed=playlists/'renamed.xsp'
+                wait(lambda:renamed.exists() and not created[0].exists(),'Remote rename committed without losing the original')
+                assert ET.fromstring(renamed.read_bytes()).findtext('name')=='renamed'
+                manage_playlist(renamed.name);press('Down');press('Return');press('Return');remote_text(press,collision_file.name)
+                time.sleep(2);playlist_capture('playlistcollision')
+                assert renamed.exists() and collision_file.read_bytes()==collision_bytes,'Collision destroyed a playlist'
+                manage_playlist(renamed.name);press('Down',4);press('Return');press('Return');press('Escape')
+                rename_bytes=renamed.read_bytes()
+                assert b'<rule' not in rename_bytes,'Cancelled rule draft changed the saved definition'
+                # Replace rules only after a real read-only Kodi preview and explicit review.
+                press('Down',4);press('Return');press('Return');press('Down');press('Return');remote_text(press,'fixture')
+                press('Return');time.sleep(2);playlist_capture('playlistrules')
+                assert renamed.read_bytes()==rename_bytes,'Preview wrote the playlist'
+                press('Escape');press('Return');press('Return')
+                wait(lambda:ET.fromstring(renamed.read_bytes()).findtext('rule/value')=='fixture','Reviewed rule replacement committed')
+                manage_playlist(renamed.name);press('Down',2);press('Return');press('Down',2);press('Return');press('Down',3);press('Return');press('Down')
+                sort_bytes=renamed.read_bytes();playlist_capture('playlistorder')
+                assert renamed.read_bytes()==sort_bytes,'Order preview wrote the playlist'
+                press('Return')
+                wait(lambda:(order:=ET.fromstring(renamed.read_bytes()).find('order')) is not None and order.text=='dateadded' and order.get('direction')=='descending','Smart playlist order saved remotely')
+                manage_playlist(member_file.name);press('Down',2);press('Return');time.sleep(1)
+                member_before=member_file.read_bytes()
+                press('Down',2);press('Return');press('Down',2);playlist_capture('playlistmembers')
+                assert member_file.read_bytes()==member_before,'Moving a member wrote before Save'
+                press('Escape');press('Escape')
+                assert member_file.read_bytes()==member_before,'Member move cancellation changed the saved order'
+                press('Down',2);press('Return');time.sleep(1);press('Down',2);press('Return');press('Down',2);press('Return');press('Return')
+                expected_members=('#EXTM3U\n'+member_records[1]+member_records[2]+member_records[0]).encode()
+                wait(lambda:member_file.read_bytes()==expected_members,'Complete D-pad member order saved with matching metadata')
+                manage_playlist(renamed.name);press('Down',3);press('Return');press('Escape')
+                assert renamed.exists(),'Delete cancellation removed the definition'
+                manage_playlist(renamed.name);press('Down',3);press('Return');playlist_capture('playlistdelete');press('Return')
+                wait(lambda:not renamed.exists(),'Confirmed playlist deletion removed only its definition')
+                assert collision_file.read_bytes()==collision_bytes and member_file.read_bytes()==expected_members
                 # Open the real episode playlist through the existing management UI.
-                press("Escape");press("Up",20)
-                fixture_index=next(i for i,p in enumerate(catalog) if p["playlistName"]=="Fixture episodes.xsp")
-                press("Down",fixture_index+2);press("Return");press("Return");time.sleep(2)
+                manage_playlist('Fixture episodes.xsp');press("Return");time.sleep(2)
                 playlist_capture("playlistlibrary")
                 press("Down");press("Return")
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Real playlist episode playing")
@@ -631,7 +706,7 @@ provider.setSettingString("searchlanguage","en-US")
                 run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
                 playlist_capture("playlistreturned")
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
-                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False},indent=2))
+                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"rename_collision_preserved":True,"remote_rule_preview_confirm":True,"smart_sort_saved":True,"member_reorder_remote_cancel_commit":True,"delete_cancel_confirm":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False},indent=2))
                 print("Evidence: "+str(evidence),flush=True);return
             art = wait(lambda: (a if (a := rpc(directory, "Isolde.GetArtwork", {"kind": "tvshow", "id": show_id})).get("data") else None), "Kodi local artwork ready")
             artwork = base64.b64decode(art["data"])

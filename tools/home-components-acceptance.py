@@ -798,7 +798,7 @@ def main():
                     # Author the ordinary packaged 4x2 input group, then move
                     # one of its children through the actual nested canvas.
                     key("Escape"); page_menu(2)
-                    key("Down", 2); key("Right"); key("Return"); key("Down", 3); key("Return")
+                    studio_catalog_family(key, "widgets"); key("Down", 3); key("Return")
                     key("Left", 20); key("Down"); key("Return")
                     key("Escape"); page_menu(7); key("Return")
                     expect(lambda: len(json.loads(layout.read_text())["components"]) == 11,

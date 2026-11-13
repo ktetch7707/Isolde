@@ -47,7 +47,7 @@ class KodiImportTests(unittest.TestCase):
 
     def test_inventory_uses_real_skin_source_addons_and_versioned_database(self):
         text=self.operation.scan()
-        for expected in ('skin.fixture','Media sources: 1','User add-ons: 1','Watch/resume databases: 1'):self.assertIn(expected,text)
+        for expected in ('skin.fixture','Media sources: 1','User add-ons: 1','Playlists: 1','Watch/resume databases: 1'):self.assertIn(expected,text)
         self.assert_preserved();self.assertFalse(self.operation.receipt.exists())
 
     def test_recursive_backup_import_cold_reopen_and_rollback(self):

@@ -11,10 +11,10 @@ and verified Android/Web removal are evidenced. All14+16 current captures review
 Live SmartTube decoding remains unverified (loading spinner); controlled runtime
 session/error/data fixtures and explicit U01 handoff apply. No playback claim.
 Temporary permission removed before normal service restore; layout hashes unchanged.
-T29=100%; project2198/25=87.92% rounded88%,191/228 milestones.
+T29=100%; project2202/25=88.08% rounded88%,192/228 milestones.
 See docs/store-final-acceptance-2026-11-12.md. T03 now accepted100%: installed x releasef21c113eb646a6997202177b, real56-episode search/paging/playback/exact Search and library origin return; nine frames reviewed, p62 full plus x5 focused with exact scoped Main reuse. BUG-127/128 fixed; recurring Studio frame-stall diagnostic BUG-125 retained, not a claimed fix. Resume T04.
-Acceptance is **88% (2198/25)**, with191/228 independently evidenced milestones.
-T04 current45%: installed f release58a7c894d6ffc1b1e158d68e passes63/63 tests, seven reviewed playlist frames including actual episode playback/return, and real Movies poster display. Native import/rollback is implemented and verified; its installed workflow and remaining management requirements stay open. See [T04 verification](t04-kodi-verification-2026-11-12.md).
+Acceptance is **88% (2202/25)**, with192/228 independently evidenced milestones.
+T04 current49%: installed f release58a7c894d6ffc1b1e158d68e passes63/63 tests, seven reviewed playlist frames including actual episode playback/return, and real Movies poster display. Native import/rollback is implemented and verified; its installed workflow and remaining management requirements stay open. See [T04 verification](t04-kodi-verification-2026-11-12.md).
 
 T25, T26 and T28 are accepted100%. Feedback-r passes full61/61, deploys release
 9e33a01181c41ea8d571f932 and passes installed Sources actions,24 reviewed gallery
@@ -159,7 +159,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search and installed acceptance | 100% | 100% | p62 full/x5 focused; installed56-episode paging/playback/exact Search and library return accepted |
-| T04 | 19 | Complete Kodi interface, preservation and import | 45% | 100% | all scope items implemented: backup/preview/import/rollback, first-library setup, Desktop/Return, nested-folder scan, playlist create/reorder/delete, library sources/settings/artwork, Kodi capability inventory |
+| T04 | 19 | Complete Kodi interface, preservation and import | 49% | 100% | all scope items implemented: backup/preview/import/rollback, first-library setup, Desktop/Return, nested-folder scan, playlist create/reorder/delete, library sources/settings/artwork, Kodi capability inventory |
 | T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 54% | 100% | coding claim predates campaign: BUG-078 missing Power software and installed input/contrast defects remain; interface audio output verified narrowly; broad acceptance open |
 | T09 | 21 | Playback preference and viewing controls | 38% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
 | T10 | 22 | Capture/HDMI/audio software and editors | 67% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
@@ -168,7 +168,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **88%** | **100%** | **2198 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **88%** | **100%** | **2202 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
@@ -689,3 +689,7 @@ Excluded; obligations retained by T22–T24. Preserve existing skins/pages.
 ## Completion rule
 
 Overall = half-up round(sum of ACTIVE weighted milestone percentages / **27**); reproduce with `tools/backlog-progress.ps1`. Final acceptance is distinct from earned credit. Active: **T01,T03–T05,T09–T31**. Every box and required linked subrequirement needs passing evidence. 100% means **S1 first-product software complete with reasonable VM-proven confidence, ready for the user's hardware testing**. H01–H05 are separate user hardware checks; service/account/usability checks are also handoff-only. Publication is a separate user decision. Synchronize table/scopes/math/dependencies/AGENTS.md for any task change. Historical arithmetic elsewhere is not current authority.
+
+## Current source-gap correction — 2026-11-12
+
+Testing/source review disproves the historical blanket100% Coding assertion for T04: source/content/scanner authoring and the complete capability/setup interface are still incomplete (BUG-145). The current repair batch adds real title-poster editing and playlist management, Power, Capture layout and external browser bindings, but is held for combined verification under the user's latest instruction. No new acceptance credit is claimed from those source edits. See the combined repair source checkpoint in docs/test-campaign-2026-11-11.md. Do not start another verification campaign merely because the older Coding table says100%; complete the known source gaps first.

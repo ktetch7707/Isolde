@@ -31,6 +31,9 @@ class KodiMedia final : public QObject {
     Q_PROPERTY(QVariantList collections READ collections NOTIFY changed)
     Q_PROPERTY(QString collectionStatus READ collectionStatus NOTIFY changed)
     Q_PROPERTY(QString playlistStatus READ playlistStatus NOTIFY changed)
+    Q_PROPERTY(QVariantList playlistPreview READ playlistPreview NOTIFY changed)
+    Q_PROPERTY(bool playlistPreviewReady READ playlistPreviewReady NOTIFY changed)
+    Q_PROPERTY(QVariantList playlistMembers READ playlistMembers NOTIFY changed)
 public:
     explicit KodiMedia(const QString &profile, QObject *parent = nullptr, const QString &testDirectory = {});
     ~KodiMedia() override;
@@ -47,6 +50,13 @@ public:
     Q_INVOKABLE void renamePlaylist(const QString &name, const QString &newName);
     Q_INVOKABLE void deletePlaylist(const QString &name);
     Q_INVOKABLE void reorderPlaylist(const QString &name, const QVariantList &order);
+    Q_INVOKABLE void sortPlaylist(const QString &name, const QString &sort, const QString &direction);
+    Q_INVOKABLE void editPlaylist(const QString &name, const QString &view, const QString &value);
+    Q_INVOKABLE void previewPlaylist(const QString &name, const QString &view, const QString &value);
+    Q_INVOKABLE void loadPlaylistMembers(const QString &name);
+    QVariantList playlistPreview() const { return m_playlistPreview; }
+    bool playlistPreviewReady() const { return m_playlistPreviewReady; }
+    QVariantList playlistMembers() const { return m_playlistMembers; }
     QString playlistStatus() const { return m_playlistStatus; }
     void openPlaylists();
     static bool validPlaylistName(const QString &name);
@@ -136,6 +146,10 @@ private:
     bool storeCollections(const QVariantList &entries);
     QString m_profile, m_viewKind = "all", m_viewValue, m_collectionStatus;
     QString m_playlistStatus;
+    QVariantList m_playlistPreview, m_playlistMembers;
+    QString m_playlistOrderName, m_playlistRevision;
+    QString m_playlistRuleName, m_playlistRuleView, m_playlistRuleValue, m_playlistRuleRevision;
+    bool m_playlistPreviewReady=false;
     int m_lastGuideSurfRequest=0;
     QString m_directory, m_status = "Open Kodi with the Isolde bridge enabled to browse this profile's library.";
     QLocalSocket m_socket;

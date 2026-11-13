@@ -76,7 +76,7 @@ void KodiMedia::fail(const QString &message)
         emit changed();
         return;
     }
-    if((m_stage==9 || m_stage==10 || m_stage==11 || m_stage==12) && m_busy)m_playlistStatus="Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. "+message;
+    if(((m_stage>=9 && m_stage<=12) || (m_stage>=16 && m_stage<=19)) && m_busy)m_playlistStatus="Playlist operation could not be confirmed. Refresh the saved-playlist list before retrying. "+message;
     m_pendingMovie = m_pendingShow = 0;
     m_pendingDirectKind.clear(); m_pendingDirectId = 0;
     const bool wasPlaying = m_playbackActive;
@@ -223,7 +223,8 @@ void KodiMedia::deletePlaylist(const QString &name) {
     request("Isolde.DeletePlaylist",{{"name",name.trimmed()}});
 }
 void KodiMedia::reorderPlaylist(const QString &name, const QVariantList &order) {
-    if(m_busy || m_playbackActive || !validPlaylistName(name) || order.isEmpty()){
+    if(m_busy || m_playbackActive || !validPlaylistName(name) || order.isEmpty() || order.size()>256
+       || name!=m_playlistOrderName || m_playlistRevision.size()!=64){
         m_playlistStatus="Cannot reorder this playlist. Choose a valid playlist and order, then retry.";emit changed();return;
     }
     QJsonArray ints;
@@ -238,7 +239,33 @@ void KodiMedia::reorderPlaylist(const QString &name, const QVariantList &order) 
         seen.insert(i);
     }
     ++m_generation;m_busy=true;m_stage=12;m_playlistStatus="Reordering Kodi playlist…";emit changed();
-    request("Isolde.ReorderPlaylist",{{"name",name.trimmed()},{"order",ints}});
+    request("Isolde.ReorderPlaylist",{{"name",name.trimmed()},{"order",ints},{"revision",m_playlistRevision}});
+}
+void KodiMedia::sortPlaylist(const QString &name,const QString &sort,const QString &direction)
+{
+    if(m_busy || m_playbackActive || !validPlaylistName(name))return;
+    ++m_generation;m_busy=true;m_stage=19;m_playlistStatus="Saving smart-playlist order…";emit changed();
+    request("Isolde.SortPlaylist",{{"name",name},{"sort",sort},{"direction",direction}});
+}
+void KodiMedia::editPlaylist(const QString &name,const QString &view,const QString &value)
+{
+    if(m_busy || m_playbackActive || !validPlaylistName(name))return;
+    if(!m_playlistPreviewReady || name!=m_playlistRuleName || view!=m_playlistRuleView || value!=m_playlistRuleValue || m_playlistRuleRevision.size()!=64){m_playlistStatus="Preview this rule before saving.";emit changed();return;}
+    ++m_generation;m_busy=true;m_stage=16;m_playlistStatus="Saving playlist rule…";emit changed();
+    request("Isolde.EditPlaylist",{{"name",name},{"view",view},{"value",value},{"revision",m_playlistRuleRevision}});
+}
+void KodiMedia::previewPlaylist(const QString &name,const QString &view,const QString &value)
+{
+    if(m_busy || m_playbackActive || !validPlaylistName(name))return;
+    m_playlistRuleName=name;m_playlistRuleView=view;m_playlistRuleValue=value;m_playlistRuleRevision.clear();
+    ++m_generation;m_busy=true;m_stage=17;m_playlistPreview.clear();m_playlistPreviewReady=false;m_playlistStatus="Previewing the first 50 matching Kodi items…";emit changed();
+    request("Isolde.PreviewPlaylistRule",{{"name",name},{"view",view},{"value",value}});
+}
+void KodiMedia::loadPlaylistMembers(const QString &name)
+{
+    if(m_busy || m_playbackActive || !validPlaylistName(name))return;
+    ++m_generation;m_busy=true;m_stage=18;m_playlistOrderName=name;m_playlistRevision.clear();m_playlistMembers.clear();
+    m_playlistStatus="Loading playlist members…";emit changed();request("Isolde.GetPlaylistOrder",{{"name",name}});
 }
 void KodiMedia::openHistory(int count) {
     if(count < 1 || count > 50 || !canNavigate()) return;
@@ -849,6 +876,11 @@ void KodiMedia::consume()
         fail(m_mediaKind=="channels"?"TV guide unavailable. Configure a PVR TV source in Kodi, then refresh.":"Kodi returned an incompatible response."); return;
     }
     if (response.contains("error")) {
+        if((m_stage>=9 && m_stage<=12) || (m_stage>=16 && m_stage<=19)){
+            m_busy=false;m_timeout.stop();releaseSocket();
+            m_playlistStatus="Playlist operation failed. Reload and check the name, supported rules/order and storage before retrying. No change was confirmed.";
+            emit changed();return;
+        }
         if (m_stage == 13) {
             m_busy = false; m_timeout.stop(); releaseSocket();
             m_playbackStatus = QStringLiteral("Kodi could not load this local subtitle. Keep your video playing and retry.");
@@ -879,6 +911,30 @@ void KodiMedia::consume()
     const auto result = response.value("result").toObject();
     // Finish this reply before initiating a new connection (no reentrant socket reads).
     m_timeout.stop();
+    if(m_stage>=16 && m_stage<=19){
+        const int stage=m_stage;m_busy=false;releaseSocket();
+        if(stage==16 || stage==19){
+            const bool ok=result[stage==16?"edited":"reordered"].toBool();
+            m_playlistStatus=ok?"Playlist saved in Kodi.":"Kodi did not confirm the change. Reload before retrying.";
+        }else{
+            const auto rows=result[stage==17?"items":"members"];
+            bool valid=rows.isArray() && rows.toArray().size()<=(stage==17?50:256);
+            const auto array=rows.toArray();
+            for(int i=0;i<array.size();++i){const auto row=array[i].toObject();
+                const auto title=row["title"].toString();
+                valid=valid && !title.isEmpty() && title.size()<=160 && (stage==17
+                    ? QStringList{"movie","tvshow","episode"}.contains(row["mediaType"].toString()) && row["mediaId"].toInt()>0
+                    : row["index"].isDouble() && row["index"].toDouble()==i);
+            }
+            if(stage==18)valid=valid && !array.isEmpty() && QRegularExpression("^[0-9a-f]{64}$").match(result["revision"].toString()).hasMatch();
+            if(stage==17)valid=valid && result["total"].isDouble() && result["total"].toDouble()>=array.size() && result["total"].toDouble()<=10000000 && QRegularExpression("^[0-9a-f]{64}$").match(result["revision"].toString()).hasMatch();
+            if(valid){
+                if(stage==17){m_playlistRuleRevision=result["revision"].toString();m_playlistPreviewReady=true;m_playlistPreview=array.toVariantList();m_playlistStatus=QString("Preview · %1 of %2 items · not saved").arg(array.size()).arg(result["total"].toInt());}
+                else{m_playlistMembers=array.toVariantList();m_playlistRevision=result["revision"].toString();m_playlistStatus="Choose an item, move it with Up/Down, then Confirm. Save order applies the complete draft.";}
+            }else m_playlistStatus="Kodi returned invalid playlist data. Reload before retrying.";
+        }
+        emit changed();return;
+    }
     if(m_stage==9){
         m_busy=false;releaseSocket();const auto filename=result["playlistName"].toString();
         if(!result["saved"].toBool() || !validPlaylistName(filename) || !filename.startsWith("Isolde-")){

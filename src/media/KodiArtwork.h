@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QLocalSocket>
 #include <QTimer>
+#include <functional>
 
 class KodiArtwork final : public QObject {
     Q_OBJECT
@@ -14,6 +15,8 @@ public:
     QString status() const { return m_status; }
     Q_INVOKABLE void load(const QString &kind, int id);
     Q_INVOKABLE void clear();
+    void setManagedArtworkResolver(std::function<QString(const QString &)> resolver) { m_resolver=std::move(resolver); }
+    Q_INVOKABLE bool setPoster(const QString &kind, int id, const QString &managedId);
 signals:
     void changed();
 private:
@@ -25,5 +28,8 @@ private:
     QString m_directory, m_kind, m_source, m_status;
     int m_item = -1, m_requestId = 0, m_descriptor = -1;
     bool m_active = false;
+    bool m_setting = false;
+    std::function<QString(const QString &)> m_resolver;
+    QByteArray m_poster;
     QByteArray m_received, m_request;
 };

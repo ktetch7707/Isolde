@@ -167,19 +167,19 @@ def main():
             # Chrome maps its window. Up establishes the same visible origin
             # whether focus is unset or already on that first control.
             key('Up');expect(lambda:state.get('selected')=='start','semantic first control')
-            key('Down');expect(lambda:state.get('selected')=='entry','semantic text field')
-            key('Return');expect(lambda:state.get('keyboard') is True and state.get('keyboardFits') is True,'remote keyboard opens without inherited page overflow');capture('keyboard')
+            key('F6');expect(lambda:state.get('selected')=='entry','custom remote semantic text field')
+            key('F7');expect(lambda:state.get('keyboard') is True and state.get('keyboardFits') is True,'custom remote keyboard opens without inherited page overflow');capture('keyboard')
             key('Return','Escape');expect(lambda:state.get('keyboard') is False and state.get('value')=='','Back cancels text without writing')
             key('Return','Return','Down','Down','Down','Down','Right','Right','Right','Right','Return')
             expect(lambda:state.get('keyboard') is False and state.get('value')=='1','remote Done applies text');capture('text')
-            key('F2');expect(lambda:state.get('menu') is True and state.get('menuFits') is True,'page actions open without inherited page overflow');capture('menu')
+            key('F9');expect(lambda:state.get('menu') is True and state.get('menuFits') is True,'custom page actions open without inherited page overflow');capture('menu')
             key('Down','Down','Return');expect(lambda:state.get('menu') is False and state.get('scroll',0)>200,'explicit page scroll');capture('scroll')
             key('F2','Escape');expect(lambda:state.get('menu') is False,'Back closes page actions')
             key('Down');expect(lambda:state.get('selected')=='next','semantic navigation control')
             key('Return');expect(lambda:state.get('path','').endswith('/second'),'Confirm navigates to second page')
             key('Escape');expect(lambda:state.get('path','').endswith('/first'),'Back restores browser history');capture('back')
             child.stdin.write(b'expect-return\n');child.stdin.flush()
-            key('Escape');child.wait(timeout=8)
+            key('F8');child.wait(timeout=8)
             if child.returncode:raise RuntimeError('Owned sandbox did not exit cleanly')
             receipt={'passed':True,'boundary':'controlled-loopback-page','browser':'actual-external-chrome','productionSandbox':True,'privateDisplay':True,'physicalXKeys':actions,'observations':observations,'frames':frames,'ownedExitVerified':True,'rootBackExitVerified':True,'normalProfileUsed':False,'visualReview':'pending'}
             (output/'external-web-remote-result.json').write_text(json.dumps(receipt,indent=2))

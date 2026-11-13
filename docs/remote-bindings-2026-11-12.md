@@ -152,3 +152,12 @@ rollback/retry. Its real QQuickWindow test drives the page with actual key
 events, including capture, review cancellation, save, Menu restore and scroll
 to the all-defaults confirmation. UI captures are renderer evidence, not an
 installed-window or physical-remote claim.
+
+## Pending combined repair
+
+Supported function-key and ASCII bindings for navigation, Confirm, Back, Home,
+Menu and Search now also enter the external Chrome bridge through its existing
+private options payload. The existing Chrome boundary journey uses custom
+Down/Confirm/Menu/Back and retains standard history/keyboard paths. This source
+change has not yet run in the VM. Native application/raw-device mapping and the
+remaining installed matrix remain open; do not infer general external support.

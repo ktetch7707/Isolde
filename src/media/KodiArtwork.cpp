@@ -4,6 +4,9 @@
 #include <QJsonObject>
 #include <QBuffer>
 #include <QImageReader>
+#include <QFile>
+#include <QUrl>
+#include <QImage>
 #ifdef Q_OS_LINUX
 #include <fcntl.h>
 #include <unistd.h>
@@ -31,7 +34,12 @@ KodiArtwork::KodiArtwork(const QString &profile, QObject *parent, const QString 
         const auto result = reply.value("result").toObject();
         const auto mime = result.value("mime").toString(), encoded = result.value("data").toString();
         if (reply.value("jsonrpc") != "2.0" || reply.value("id").toInt() != m_requestId || reply.contains("error")) {
-            finish("Artwork unavailable"); return;
+            finish(m_setting?"Kodi could not confirm the poster change. Refresh before retrying.":"Artwork unavailable"); return;
+        }
+        if(m_setting){
+            if(!result.value("updated").toBool()){finish("Kodi could not confirm the poster change.");return;}
+            const auto source="data:image/png;base64,"+QString::fromLatin1(m_poster.toBase64());
+            cancel();m_setting=false;m_poster.clear();m_source=source;m_status="Poster updated in Kodi";emit changed();return;
         }
         if (mime.isEmpty() && encoded.isEmpty()) { finish("No local artwork cached in Kodi"); return; }
         const auto raw = QByteArray::fromBase64(encoded.toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
@@ -57,11 +65,25 @@ void KodiArtwork::cancel()
 }
 void KodiArtwork::clear()
 {
-    cancel(); m_item = -1; m_kind.clear(); m_source.clear(); m_status.clear(); emit changed();
+    cancel(); m_setting=false;m_poster.clear();m_item = -1; m_kind.clear(); m_source.clear(); m_status.clear(); emit changed();
+}
+bool KodiArtwork::setPoster(const QString &kind,int id,const QString &managedId)
+{
+    if(m_active && m_setting)return false;
+    if(!m_resolver || !QStringList{"movie","tvshow"}.contains(kind) || id<1)return false;
+    const auto source=m_resolver(managedId);const auto url=QUrl(source);
+    if(source.isEmpty() || !url.isLocalFile())return false;
+    QFile file(url.toLocalFile());
+    if(!file.open(QIODevice::ReadOnly) || file.size()>8*1024*1024)return false;
+    QImageReader reader(&file);const auto size=reader.size();
+    if(!reader.canRead() || !size.isValid() || size.width()>4096 || size.height()>4096 || qint64(size.width())*size.height()>4*1024*1024)return false;
+    const auto image=reader.read();QByteArray png;QBuffer output(&png);output.open(QIODevice::WriteOnly);
+    if(image.isNull() || !image.save(&output,"PNG") || png.size()>1024*1024)return false;
+    cancel();m_setting=true;m_kind=kind;m_item=id;m_poster=png;m_status="Saving the confirmed poster in Kodi…";emit changed();begin();return true;
 }
 void KodiArtwork::load(const QString &kind, int id)
 {
-    cancel(); m_kind = kind; m_item = id; m_source.clear();
+    cancel(); m_setting=false;m_poster.clear();m_kind = kind; m_item = id; m_source.clear();
     if (id < 1 || !QStringList{"movie", "tvshow", "season", "episode", "album", "song", "channel"}.contains(kind)) { m_status = "No artwork selected"; emit changed(); return; }
     m_status = "Loading Kodi artwork…"; m_debounce.start(); emit changed();
 }
@@ -72,8 +94,10 @@ void KodiArtwork::begin()
     m_descriptor = ::open(m_directory.toLocal8Bit().constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (m_descriptor < 0) { finish("Artwork unavailable"); return; }
     m_active = true;
-    m_request = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", ++m_requestId}, {"method", "Isolde.GetArtwork"},
-        {"params", QJsonObject{{"kind", m_kind}, {"id", m_item}}}}).toJson(QJsonDocument::Compact) + '\n';
+    QJsonObject params{{"kind",m_kind},{"id",m_item}};
+    if(m_setting)params.insert("data",QString::fromLatin1(m_poster.toBase64()));
+    m_request = QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", ++m_requestId}, {"method", m_setting?"Isolde.SetPoster":"Isolde.GetArtwork"},
+        {"params",params}}).toJson(QJsonDocument::Compact) + '\n';
     m_timeout.start();
     m_socket.connectToServer(QString("/proc/self/fd/%1/rpc.sock").arg(m_descriptor));
 #else

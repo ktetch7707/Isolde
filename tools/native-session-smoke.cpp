@@ -25,7 +25,8 @@ int main(int argc, char **argv)
         if(!plan.error.isEmpty()){qCritical().noquote()<<plan.error;return 2;}
         auto launch=plan.arguments;const auto index=launch.lastIndexOf("--");
         if(index<0)return 2;
-        const QVariantMap appearance{{"focusColor","#a9326e"},{"surfaceColor","#f7edf4"},{"textColor","#332c44"},{"cornerRadius",12},{"typographyScale",1}};
+        const QVariantMap appearance{{"focusColor","#a9326e"},{"surfaceColor","#f7edf4"},{"textColor","#332c44"},{"cornerRadius",12},{"typographyScale",1},
+            {"keyBindings",QVariantMap{{"f6","down"},{"f7","confirm"},{"f8","back"},{"f9","menu"},{"f10","home"}}}};
         launch.insert(index,"--web-remote");launch.insert(index+1,QString::fromLatin1(QJsonDocument::fromVariant(appearance).toJson(QJsonDocument::Compact).toBase64()));
         launch<<"--ozone-platform=x11"<<"--no-first-run"<<"--no-default-browser-check"<<"--disable-background-networking"<<"--disable-component-update"<<"--window-size=1000,720"<<"--app="+url.toString();
         QProcess child;child.setProcessChannelMode(QProcess::ForwardedChannels);child.setProcessEnvironment(plan.environment);

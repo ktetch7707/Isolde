@@ -65,7 +65,7 @@ def read_playlist(method, params, execute):
         entries.append(entry)
     return {params["kind"] if params["kind"]=="movies" else "tvshows":entries,"limits":limits}
 
-MAX_REQUEST = 32768
+MAX_REQUEST = 1500000
 MAX_RESPONSE = 4 * 1024 * 1024
 READ_METHODS = {
     "JSONRPC.Ping", "JSONRPC.Version", "Application.GetProperties",
@@ -157,8 +157,10 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
         return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0" or type(request_id) is not int:
         return error(-32600, "Invalid request")
+    if len(raw) > 32768 and request.get("method") != "Isolde.SetPoster":
+        return error(-32600, "Request exceeds the method limit")
     playback_methods = {"Isolde.PlayGuideStream", "Isolde.PlayScheduled", "Isolde.PlayMovie", "Isolde.PlayEpisode", "Isolde.PlaySong", "Isolde.PlayChannel", "Isolde.PlaybackStatus", "Isolde.PlaybackControl", "Isolde.LoadSubtitle", "Isolde.GetSubtitleTracks", "Isolde.SetSubtitleTrack"}
-    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GuideCandidates", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "Isolde.DeletePlaylist", "Isolde.RenamePlaylist", "Isolde.ReorderPlaylist", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
+    if not isinstance(request.get("method"), str) or request.get("method") not in READ_METHODS | playback_methods | {"Isolde.GuideCandidates", "Isolde.SetPoster", "Isolde.GetArtwork", "Isolde.GetPlaylists", "Isolde.GetPlaylistItems", "Isolde.CreatePlaylist", "Isolde.DeletePlaylist", "Isolde.RenamePlaylist", "Isolde.ReorderPlaylist", "Isolde.SortPlaylist", "Isolde.EditPlaylist", "Isolde.PreviewPlaylistRule", "Isolde.GetPlaylistOrder", "VideoLibrary.Scan", "XBMC.GetInfoBooleans", "Isolde.QuitIfIdle"}:
         return error(-32601, "Method is not enabled by the Isolde bridge")
     params = request.get("params", {})
     if not isinstance(params, dict):
@@ -174,6 +176,15 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
             return {"jsonrpc":"2.0","id":request_id,"result":playlists.create(params)}
         except Exception:
             return error(-32000,"Could not save this Kodi playlist. Check the name, view and profile storage; previous playlists are unchanged.")
+    if request["method"] in ("Isolde.SortPlaylist","Isolde.EditPlaylist","Isolde.PreviewPlaylistRule","Isolde.GetPlaylistOrder"):
+        try:
+            if playlists is None:raise ValueError("Managed playlists unavailable")
+            method=request["method"]
+            result=(playlists.sort(params) if method=="Isolde.SortPlaylist" else playlists.edit(params) if method=="Isolde.EditPlaylist"
+                    else playlists.preview(params,execute) if method=="Isolde.PreviewPlaylistRule" else playlists.members(params))
+            return {"jsonrpc":"2.0","id":request_id,"result":result}
+        except Exception:
+            return error(-32000,"Playlist operation failed. Reload the playlist, check the supported rule/order and storage, then retry. No change was confirmed.")
     if request["method"]=="Isolde.DeletePlaylist":
         try:
             if playlists is None:raise ValueError("Managed playlists unavailable")
@@ -197,11 +208,11 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None):
             return {"jsonrpc":"2.0","id":request_id,"result":read_playlist(request["method"],params,execute)}
         except Exception:
             return error(-32000,"Kodi playlist unavailable. Choose a video library playlist of the selected kind, with at most 128 saved playlists; refresh to retry.")
-    if request["method"] == "Isolde.GetArtwork":
+    if request["method"] in ("Isolde.GetArtwork", "Isolde.SetPoster"):
         try:
             if artwork is None:
                 raise ValueError("Artwork unavailable")
-            return {"jsonrpc": "2.0", "id": request_id, "result": artwork.get(params)}
+            return {"jsonrpc": "2.0", "id": request_id, "result": artwork.set_poster(params) if request["method"] == "Isolde.SetPoster" else artwork.get(params)}
         except Exception:
             return error(-32000, "Local Kodi artwork unavailable")
     if request["method"] in ("VideoLibrary.GetMovieDetails", "VideoLibrary.GetTVShowDetails"):

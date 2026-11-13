@@ -48,10 +48,12 @@ void RemoteBindingTests::captureSaveReloadAndProfileIsolation() {
     QVERIFY(!QFile::exists(path));
     QVERIFY(manager.saveBinding());
     QCOMPARE(manager.commandForKey(Qt::Key_F6), InputManager::NavigateUp);
+    QCOMPARE(manager.webRemoteOptions({}).value("keyBindings").toMap().value("f6").toString(),QString("up"));
     QCOMPARE(manager.commandForKey(Qt::Key_Up), InputManager::NavigateUp);
     InputManager reopened(path), other(dir.filePath("two.json"));
     QCOMPARE(reopened.commandForKey(Qt::Key_F6), InputManager::NavigateUp);
     QCOMPARE(other.commandForKey(Qt::Key_F6), InputManager::None);
+    QVERIFY(!other.webRemoteOptions({}).value("keyBindings").toMap().contains("f6"));
     const auto old = read(path);
     QVERIFY(manager.beginBinding(InputManager::NavigateDown)); press(Qt::Key_F7);
     QVERIFY(manager.saveBinding());
@@ -61,6 +63,7 @@ void RemoteBindingTests::captureSaveReloadAndProfileIsolation() {
     QCOMPARE(manager.commandForKey(Qt::Key_F7), InputManager::NavigateDown);
     QVERIFY(manager.resetBindings());
     QCOMPARE(manager.commandForKey(Qt::Key_F7), InputManager::None);
+    QVERIFY(manager.webRemoteOptions({}).value("keyBindings").toMap().isEmpty());
 }
 
 void RemoteBindingTests::cancelConflictRepeatAndInvalidInput() {

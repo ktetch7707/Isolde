@@ -109,6 +109,8 @@ add_library(isolde_core STATIC
     src/settings/AppVpn.h
     src/settings/DisplaySettings.cpp
     src/settings/DisplaySettings.h
+    src/settings/PowerSettings.cpp
+    src/settings/PowerSettings.h
     src/settings/AudioSettings.cpp
     src/settings/AudioSettings.h
     src/settings/InterfaceSounds.cpp
@@ -236,6 +238,7 @@ qt_add_qml_module(isolde
         qml/IsoldeWebProfile.qml
         qml/SourceSettingsView.qml
         qml/SystemSettingsView.qml
+        qml/PowerSettingsView.qml
         qml/WebKioskView.qml
 )
 

@@ -8,6 +8,7 @@
 #include "home/PageData.h"
 #include "games/GameLibrary.h"
 #include "settings/DisplaySettings.h"
+#include "settings/PowerSettings.h"
 #include "settings/AudioSettings.h"
 #include "settings/InterfaceSounds.h"
 #include "settings/RemoteSettings.h"
@@ -66,6 +67,7 @@ struct ProfileRuntime {
     AppCatalog catalog{&registry};
     HomeLayout homeLayout{&registry};
     DisplaySettings displaySettings;
+    PowerSettings powerSettings;
     AudioSettings &audioSettings;
     std::unique_ptr<InterfaceSounds> interfaceSounds;
     CaptureController &captureController;
@@ -109,6 +111,8 @@ struct ProfileRuntime {
         : audioSettings(audio), captureController(capture), appVpn(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("app-vpn.json"), profiles.activeId()),
           input(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("remote-bindings.json")) {
     actions.setAudioSettings(&audioSettings);
+    kodiArtwork.setManagedArtworkResolver([this,&profiles](const QString &id){return profiles.editingAllowed()?homeLayout.resolveArtwork(id):QString{};});
+    powerSettings.setGuard([this,&profiles]{return profiles.editingAllowed() && !sessions.hasActiveSession() && !kodi.playbackActive() && !kodiImporter.importInProgress();});
     const auto kodiAddons=QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/native-profiles/"+profiles.activeId()+"/kodi/home/.kodi/addons";
     interfaceSounds=std::make_unique<InterfaceSounds>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("interface-sounds.json"),
         QStringList{kodiAddons,"/usr/share/kodi/addons","/usr/local/share/kodi/addons"});
@@ -175,7 +179,7 @@ struct ProfileRuntime {
         if (kodi.connected()) kodiService.markReady();
     });
     QObject::connect(&sessions, &SessionManager::launching, &kodiService, [this](const QString &id) {
-        qApp->setProperty("isoldeRemoteAppearance",homeLayout.homeAppearance());
+        qApp->setProperty("isoldeRemoteAppearance",input.webRemoteOptions(homeLayout.homeAppearance()));
         if (id == "kodi") kodiService.suspend(true);
     });
     QObject::connect(&sessions, &SessionManager::returnedHome, &kodiService, [this](const QString &id) {
@@ -251,6 +255,7 @@ struct ProfileRuntime {
     engine.rootContext()->setContextProperty(QStringLiteral("appCatalog"), &catalog);
     engine.rootContext()->setContextProperty(QStringLiteral("homeLayout"), &homeLayout);
     engine.rootContext()->setContextProperty(QStringLiteral("displaySettings"), &displaySettings);
+    engine.rootContext()->setContextProperty(QStringLiteral("powerSettings"), &powerSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("audioSettings"), &audioSettings);
     engine.rootContext()->setContextProperty(QStringLiteral("interfaceSounds"), interfaceSounds.get());
     engine.rootContext()->setContextProperty(QStringLiteral("remoteSettings"), &remoteSettings);

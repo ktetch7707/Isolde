@@ -47,7 +47,7 @@ Item {
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.muted
                 text: browsing ? (kodiService.browsePath || "Choose a storage location") : "Allow Kodi to read an existing media folder and all its subfolders. Both frontends use the same paths. This grants access; it does not reorganize files or change Kodi sources." }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; font.pixelSize: 18 * shell.textScale; color: shell.focus
-                text: kodiService.canEditFolders ? "Read-only access. Select an allowed folder twice to remove permission." : "To change access: switch to Kodi application mode, then exit Kodi normally." }
+                text: kodiService.canEditFolders ? "Read-only access. Select an allowed folder twice to remove permission." : "To change access, stop playback and turn Automatic startup off in Media Library. Close any Kodi app first. Turn startup back on afterward." }
             Repeater {
                 id: items; model: root.rows
                 delegate: Rectangle {

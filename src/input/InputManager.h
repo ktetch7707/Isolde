@@ -59,6 +59,7 @@ public:
     Q_INVOKABLE Command commandForKey(int key) const;
     Q_INVOKABLE QString labelForCommand(Command command) const;
     Q_INVOKABLE QString webRemoteScript(const QVariantMap &appearance) const;
+    QVariantMap webRemoteOptions(const QVariantMap &appearance) const;
     QVariantList bindingRows() const;
     bool bindingActive() const { return m_target != None; }
     bool listening() const { return bindingActive() && !m_candidate; }

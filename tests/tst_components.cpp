@@ -13,6 +13,9 @@
 #include "games/GameEmulators.h"
 #include <QStandardPaths>
 #include "settings/ProfileManager.h"
+#include "settings/PowerSettings.h"
+#include <QDBusContext>
+#include <QProcess>
 #include <QScopeGuard>
 #include "app/AppCatalog.h"
 #include <QSqlQuery>
@@ -48,9 +51,25 @@ static const QByteArray legacy = R"({"schemaVersion":1,"theme":{"backgroundStart
 static void writeFile(const QString &path, const QByteArray &data) { QFile file(path); if (file.open(QIODevice::WriteOnly)) file.write(data); }
 static QByteArray readFile(const QString &path) { QFile file(path); if (!file.open(QIODevice::ReadOnly)) return {}; return file.readAll(); }
 
+class PowerBoundaryFixture final : public QObject, protected QDBusContext {
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Manager")
+public:
+    int accepted=0;
+    bool interactive=false,deny=false;
+public slots:
+    QString CanSuspend() const { return "no"; }
+    QString CanReboot() const { return "challenge"; }
+    QString CanPowerOff() const { return "yes"; }
+    void PowerOff(bool value) { interactive=value;++accepted; }
+    void Reboot(bool) { if(deny)sendErrorReply("org.freedesktop.DBus.Error.AccessDenied","Fixture denial");else ++accepted; }
+    void Suspend(bool) { ++accepted; }
+};
+
 class ComponentTests : public QObject {
     Q_OBJECT
 private slots:
+    void powerCapabilitiesGuardAndActions();
     void sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts();
     void sourceFamiliesUseGenericBoundedComposition();
     void steamGamesUseProviderIdentityAndReviewedImport();
@@ -904,6 +923,36 @@ void ComponentTests::sourcePoliciesRejectUnsafeDataWithoutRewritingLayouts()
     QVERIFY(!reload.setAppearance({{"sourcePolicy",QVariantMap{{"mode","shell"}}}})); QCOMPARE(readFile(saved),original);
 }
 
+void ComponentTests::powerCapabilitiesGuardAndActions()
+{
+#ifdef Q_OS_LINUX
+    QProcess daemon;
+    daemon.start("dbus-daemon",{"--session","--nofork","--nopidfile","--print-address=1"});
+    QVERIFY(daemon.waitForStarted());QVERIFY(daemon.waitForReadyRead());
+    const auto address=QString::fromUtf8(daemon.readLine()).trimmed();QVERIFY(!address.isEmpty());
+    const auto connection=QString("isolde-power-fixture-%1").arg(QCoreApplication::applicationPid());
+    auto bus=QDBusConnection::connectToBus(address,connection);QVERIFY(bus.isConnected());
+    auto cleanup=qScopeGuard([&]{bus.unregisterService("org.isolde.PowerFixture");QDBusConnection::disconnectFromBus(connection);daemon.terminate();if(!daemon.waitForFinished(2000)){daemon.kill();daemon.waitForFinished();}});
+    PowerBoundaryFixture fixture;
+    QVERIFY(bus.registerService("org.isolde.PowerFixture"));
+    QVERIFY(bus.registerObject("/org/freedesktop/login1",&fixture,QDBusConnection::ExportAllSlots));
+    PowerSettings power(nullptr,bus,"org.isolde.PowerFixture");bool allowed=false;power.setGuard([&]{return allowed;});
+    QVERIFY(!power.request("poweroff"));QCOMPARE(fixture.accepted,0);
+    power.refresh();QTRY_VERIFY(!power.busy());
+    QCOMPARE(power.capabilities().value("poweroff").toString(),QString("yes"));
+    QCOMPARE(power.capabilities().value("reboot").toString(),QString("challenge"));
+    QVERIFY(!power.request("poweroff"));QVERIFY(!power.request("shell"));QCOMPARE(fixture.accepted,0);
+    allowed=true;QVERIFY(!power.request("suspend"));QVERIFY(power.request("poweroff"));QVERIFY(!power.request("poweroff"));
+    QTRY_VERIFY(!power.busy());QCOMPARE(fixture.accepted,1);QVERIFY(fixture.interactive);
+    fixture.deny=true;QVERIFY(power.request("reboot"));QTRY_VERIFY(!power.busy());
+    QCOMPARE(fixture.accepted,1);QVERIFY(power.status().contains("denied"));
+    bus.unregisterService("org.isolde.PowerFixture");power.refresh();QTRY_VERIFY(!power.busy());
+    QCOMPARE(power.capabilities().value("poweroff").toString(),QString("unavailable"));
+    QVERIFY(!power.request("poweroff"));
+#else
+    QSKIP("login1 power support targets Linux");
+#endif
+}
 void ComponentTests::settingsNavigationIsBoundedAndProfileLocal()
 {
     const auto options = QJsonDocument::fromJson(readFile(QFINDTESTDATA("../config/studio-defaults.json"))).object();

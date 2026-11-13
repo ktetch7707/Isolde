@@ -12,10 +12,15 @@ Item {
         { page: 5, name: "Setup guide", detail: "Repeat network, display, sound, remote and profile setup", status: "Open guide" },
         { page: 7, name: "Diagnostics", detail: "Installed media components and capture readiness", status: "Inspect" },
         { page: 4, name: "About Isolde", detail: "Version and acknowledgements", status: "Isolde " + isoldeVersion },
-        { page: 3, name: "Power", detail: "OS power and restart controls are not available in this build", status: "Unavailable" }
+        { page: 3, name: "Power", detail: "Suspend, restart or shut down with confirmation", status: "Review actions" }
     ]
 
     function handleCommand(command) {
+        if(activePage===3){
+            if(command===inputManager.back){if(!powerPage.back())activePage=-1}
+            else powerPage.handleCommand(command)
+            return
+        }
         if (activePage === 7) {
             if (command === inputManager.back) activePage = -1
             else componentPage.handleCommand(command)
@@ -23,7 +28,7 @@ Item {
         }
         if (activePage === 8) {
             if (command === inputManager.back) {
-                if (capturePage.draftDirty || capturePage.keyboardMode || capturePage.artworkEditing) capturePage.handleCommand(command)
+                if (capturePage.draftDirty || capturePage.keyboardMode || capturePage.artworkEditing || capturePage.detailsFocused) capturePage.handleCommand(command)
                 else { capturePage.handleCommand(command); activePage = captureReturnPage }
             }
             else capturePage.handleCommand(command)
@@ -75,7 +80,7 @@ Item {
         else if (command === inputManager.confirm && rows[selectedIndex]) {
             const page = rows[selectedIndex].page
             if (page === 5) { if (setupState.restart()) sessionManager.goHome() }
-            else if (page !== 3) activePage = page
+            else activePage = page
         }
     }
 
@@ -105,6 +110,7 @@ Item {
         onCaptureSetupRequested: { root.captureReturnPage=7; root.activePage = 8 }
     }
     CaptureSettingsView { appearance: root.appearance; id: capturePage; anchors.fill: parent; visible: root.activePage === 8 }
+    PowerSettingsView { appearance:root.appearance;id:powerPage;anchors.fill:parent;visible:root.activePage===3 }
     TMDBAttributionView {
         id: tmdbAttribution
         anchors.fill: parent
@@ -216,7 +222,7 @@ Item {
                 id:footerText
                 width:parent.width-36
                 x:18;y:18
-                text: "The setup guide keeps your existing settings and profiles. Power and restart controls are unavailable in this build."
+                text: "The setup guide keeps your existing settings and profiles. Power actions show this system’s capabilities and require confirmation."
                 color: shell.elevatedText
                 font.pixelSize: 16 * shell.textScale
                 wrapMode: Text.WordWrap

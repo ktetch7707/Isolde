@@ -142,12 +142,12 @@ function isoldeRemote(options) {
     addEventListener("keydown",event=>{
         if(event.ctrlKey || event.altKey || event.metaKey || event.key==="Home")return;
         const commands={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",Enter:"confirm",Escape:"back",BrowserBack:"back",ContextMenu:"menu",F2:"menu",BrowserSearch:"search"};
-        const command=commands[event.key];
+        const command=(options.keyBindings || {})[String(event.key).toLowerCase()] || commands[event.key];
         if(command){
-            let handled=api.handle(command);
+            let handled=command==="home"?false:api.handle(command);
             // External Chrome supplies only this fixed isolated-world binding.
             // Embedded views keep their existing owning-view Back fallback.
-            if(!handled && command==="back" && typeof globalThis.__isoldeReturnToOwner==="function"){
+            if(!handled && (command==="back" || command==="home") && typeof globalThis.__isoldeReturnToOwner==="function"){
                 globalThis.__isoldeReturnToOwner("return");handled=true;
             }
             if(handled){event.preventDefault();event.stopImmediatePropagation();}

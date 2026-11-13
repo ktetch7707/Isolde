@@ -28,7 +28,20 @@ InputManager::InputManager(const QString &storagePath, QObject *parent)
     loadBindings();
 }
 InputManager::~InputManager() { if (qApp) qApp->removeEventFilter(this); }
-QString InputManager::webRemoteScript(const QVariantMap &appearance) const { return ::webRemoteScript(appearance); }
+QVariantMap InputManager::webRemoteOptions(const QVariantMap &appearance) const
+{
+    auto options=appearance;QVariantMap bindings;
+    const QMap<int,QString> commands{{NavigateUp,"up"},{NavigateDown,"down"},{NavigateLeft,"left"},{NavigateRight,"right"},{Confirm,"confirm"},{Back,"back"},{Home,"home"},{Menu,"menu"},{Search,"search"}};
+    for(auto it=m_bindings.cbegin();it!=m_bindings.cend();++it){
+        if(!commands.contains(it.key()))continue;
+        QString key;
+        if(it.value()>=Qt::Key_F1 && it.value()<=Qt::Key_F35)key="f"+QString::number(it.value()-Qt::Key_F1+1);
+        else if(it.value()>=0x20 && it.value()<=0x7e)key=QString(QChar(it.value())).toLower();
+        if(!key.isEmpty())bindings[key]=commands[it.key()];
+    }
+    options["keyBindings"]=bindings;return options;
+}
+QString InputManager::webRemoteScript(const QVariantMap &appearance) const { return ::webRemoteScript(webRemoteOptions(appearance)); }
 
 InputManager::Command InputManager::commandForKey(int key) const
 {

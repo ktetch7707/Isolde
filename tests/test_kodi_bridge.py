@@ -180,6 +180,61 @@ class BridgeTests(unittest.TestCase):
             reply=bridge.dispatch(self.request("Isolde.CreatePlaylist",params),lambda _:self.fail("No generic RPC for playlist write"),playlists=store)
             self.assertTrue(reply["result"]["saved"])
             self.assertIn("error",bridge.dispatch(self.request("Isolde.CreatePlaylist",params),lambda _:None))
+            # Exercise the existing management operations against real owned files.
+            renamed='Renamed.xsp'
+            store.rename({'name':saved.name,'newName':renamed})
+            self.assertFalse(saved.exists());self.assertEqual(ET.fromstring((folder/renamed).read_bytes()).findtext('name'),'Renamed')
+            collision=folder/'Collision.xsp';collision.write_bytes(b'existing playlist')
+            before={p.name:p.read_bytes() for p in folder.iterdir()}
+            with self.assertRaises(ValueError):store.rename({'name':renamed,'newName':collision.name})
+            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
+            # Actual process death after destination publication must restore on cold open.
+            child=os.fork()
+            if child==0:
+                real_write=store._write
+                def crash_after_write(descriptor,name,data):
+                    real_write(descriptor,name,data)
+                    if name=='Crash.xsp':os._exit(73)
+                store._write=crash_after_write
+                store.rename({'name':renamed,'newName':'Crash.xsp'});os._exit(1)
+            _,status=os.waitpid(child,0);self.assertEqual(os.waitstatus_to_exitcode(status),73)
+            store=module.Playlists(profile,True)
+            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
+            real_write=store._write;failed=False
+            def fail_replacement(descriptor,name,data):
+                nonlocal failed
+                real_write(descriptor,name,data)
+                if name==renamed and not failed:failed=True;raise OSError('Injected replacement failure')
+            with patch.object(store,'_write',side_effect=fail_replacement):
+                with self.assertRaises(OSError):store.sort({'name':renamed,'sort':'year','direction':'descending'})
+            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
+            preview_params={'name':renamed,'view':'search','value':'Fixture'}
+            def execute_preview(raw):
+                request=json.loads(raw);self.assertEqual(request['method'],'VideoLibrary.GetMovies')
+                self.assertEqual(request['params']['limits'],{'start':0,'end':50})
+                self.assertEqual(request['params']['filter'],{'field':'title','operator':'contains','value':'Fixture'})
+                return json.dumps({'result':{'movies':[{'movieid':1,'title':'Fixture'}],'limits':{'start':0,'end':1,'total':1}}})
+            preview=store.preview(preview_params,execute_preview)
+            self.assertEqual({p.name:p.read_bytes() for p in folder.iterdir()},before)
+            store.edit(dict(preview_params,revision=preview['revision']))
+            edited=(folder/renamed).read_bytes();self.assertEqual(ET.fromstring(edited).findtext('rule/value'),'Fixture')
+            with self.assertRaises(ValueError):store.edit(dict(preview_params,revision=preview['revision']))
+            self.assertEqual((folder/renamed).read_bytes(),edited)
+            store.sort({'name':renamed,'sort':'title','direction':'descending'})
+            self.assertEqual(ET.fromstring((folder/renamed).read_bytes()).find('order').get('direction'),'descending')
+            member=folder/'Members.m3u8';member.write_text('#EXTM3U\n#EXTINF:1,Alpha\n/a.ogv\n#EXTINF:2,Beta\n/b.ogv\n#EXTINF:3,Gamma\n/c.ogv\n')
+            order=store.members({'name':member.name});original=member.read_bytes()
+            self.assertEqual([r['title'] for r in order['members']],['Alpha','Beta','Gamma'])
+            for invalid in ([0],[True,1,2],[0,0,2],[0,1,3]):
+                with self.assertRaises(ValueError):store.reorderPlaylist({'name':member.name,'order':invalid,'revision':order['revision']})
+                self.assertEqual(member.read_bytes(),original)
+            store.reorderPlaylist({'name':member.name,'order':[2,0,1],'revision':order['revision']})
+            self.assertEqual(member.read_text(),'#EXTM3U\n#EXTINF:3,Gamma\n/c.ogv\n#EXTINF:1,Alpha\n/a.ogv\n#EXTINF:2,Beta\n/b.ogv\n')
+            with self.assertRaises(ValueError):store.reorderPlaylist({'name':member.name,'order':[0,1,2],'revision':order['revision']})
+            foreign=Path(directory)/'untouched.xsp';foreign.write_text('untouched');link=folder/'Link.xsp';link.symlink_to(foreign)
+            with self.assertRaises(OSError):store.delete({'name':link.name})
+            self.assertEqual(foreign.read_text(),'untouched');link.unlink()
+            store.delete({'name':renamed});self.assertFalse((folder/renamed).exists())
 
     def test_saved_playlist_catalog_and_members_are_read_only_and_bounded(self):
         calls=[]
@@ -371,6 +426,40 @@ class BridgeTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 bridge.LocalBridge(directory, lambda raw: raw).start()
             self.assertEqual(path.read_text(), "user data")
+
+    def test_managed_poster_updates_kodi_and_rolls_back_failed_ack(self):
+        import base64
+        art_spec = importlib.util.spec_from_file_location("artwork", Path(__file__).resolve().parents[1] / "kodi/service.isolde.bridge/artwork.py")
+        module = importlib.util.module_from_spec(art_spec); art_spec.loader.exec_module(module)
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a2ioAAAAASUVORK5CYII=")
+        calls=[]; fail=False
+        def execute(raw):
+            request=json.loads(raw);calls.append(request)
+            if request["method"]=="VideoLibrary.GetMovieDetails":
+                return json.dumps({"result":{"moviedetails":{"art":{"poster":"old-poster","fanart":"keep-fanart"}}}})
+            self.assertEqual(request["method"],"VideoLibrary.SetMovieDetails")
+            if fail and request["params"]["art"]["poster"]!="old-poster":return json.dumps({"error":{"code":-1}})
+            return json.dumps({"result":"OK"})
+        with tempfile.TemporaryDirectory() as directory:
+            art=module.Artwork(execute,directory)
+            params={"kind":"movie","id":7,"data":base64.b64encode(png).decode()}
+            reply=bridge.dispatch(self.request("Isolde.SetPoster",params),execute,artwork=art)
+            self.assertEqual(reply["result"],{"updated":True})
+            saved=Path(calls[-1]["params"]["art"]["poster"])
+            self.assertEqual(saved.parent,Path(directory));self.assertEqual(saved.read_bytes(),png)
+            self.assertEqual(set(calls[-1]["params"]),{"movieid","art"})
+            self.assertNotIn("fanart",calls[-1]["params"]["art"])
+            art.set_poster(params);self.assertEqual(len(list(Path(directory).iterdir())),1)
+            fail=True
+            with self.assertRaises(ValueError):art.set_poster(params)
+            self.assertEqual(calls[-1]["params"]["art"],{"poster":"old-poster"})
+            for invalid in (dict(params,id=True),dict(params,kind="episode"),dict(params,data="invalid"),dict(params,path="/outside")):
+                count=len(calls)
+                with self.assertRaises(ValueError):art.set_poster(invalid)
+                self.assertEqual(len(calls),count)
+            saved.unlink();saved.symlink_to(Path(directory)/"missing")
+            with self.assertRaises(OSError):art.set_poster(params)
+            self.assertTrue(saved.is_symlink())
 
     def test_stale_socket_recovered(self):
         with tempfile.TemporaryDirectory() as directory:

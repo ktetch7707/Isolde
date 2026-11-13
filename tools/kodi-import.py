@@ -205,8 +205,9 @@ class Import:
         source_file=root/'userdata/sources.xml'
         if source_file.is_file():sources=len(xml(source_file).findall('.//source'))
         addons=sum(entry['type']=='directory' and name.startswith('addons/') and name.count('/')==1 for name,entry in entries.items())
-        databases=[name for name in entries if re.fullmatch(r'userdata/Database/MyVideos\d*\.db',name)]
-        summary=f'Skin: {skin}\nMedia sources: {sources}\nUser add-ons: {addons}\nWatch/resume databases: {len(databases)}\nPreserved files: {sum(e["type"]=="file" for e in entries.values())}\nOriginal desktop configuration remains unchanged. Temporary logs, cache and generated Isolde connection data are excluded.'
+        databases=[name for name in entries if re.fullmatch(r'userdata/Database/(MyVideos|MyMusic)\d*\.db',name)]
+        playlists=sum(entry['type']=='file' and name.startswith('userdata/playlists/') and name.lower().endswith(('.xsp','.m3u','.m3u8')) for name,entry in entries.items())
+        summary=f'Skin: {skin}\nMedia sources: {sources}\nUser add-ons: {addons}\nPlaylists: {playlists}\nWatch/resume databases: {len(databases)}\nPreserved files: {sum(e["type"]=="file" for e in entries.values())}\nOriginal desktop configuration remains unchanged. Temporary logs, cache and generated Isolde connection data are excluded.'
         return summary
 
     def backup(self):

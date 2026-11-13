@@ -414,7 +414,7 @@ Item {
                     id:webSwitch;objectName:"searchWebToggle";anchors.right:parent.right;anchors.verticalCenter:parent.verticalCenter
                     visible:!!root.searchSettings;checked:root.webSearchEnabled
                     text:"Web search · "+(checked?"On":"Off")
-                    Accessible.name:"Web search";Accessible.description:checked?"On. No web provider configured; local results only.":"Off. Local results only."
+                    Accessible.name:"Web search";Accessible.description:checked?(root.onlineDiscovery?root.onlineDiscovery.status:"On. No web provider configured; local results only."):"Off. Local results only."
                     onClicked:{root.focusArea="web";root.lastHeader="web";root.searchSettings.toggleWebEnabled();checked=Qt.binding(()=>root.webSearchEnabled)}
                     contentItem:Text {font.family:shell.fontFamily;text:webSwitch.text;color:root.ink;font.pixelSize:18*(root.appearance.typographyScale || 1);verticalAlignment:Text.AlignVCenter;rightPadding:webSwitch.indicator.width+12}
                     indicator:Rectangle {x:webSwitch.width-width;y:(webSwitch.height-height)/2;width:54;height:30;radius:height/2;color:webSwitch.checked?root.searchFocusInk:root.muted

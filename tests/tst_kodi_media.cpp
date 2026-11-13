@@ -16,6 +16,7 @@
 #include <QtTest>
 #include <QScopeGuard>
 #include <QStandardPaths>
+#include <QUrl>
 
 class KodiMediaTests : public QObject {
     Q_OBJECT
@@ -79,9 +80,8 @@ void KodiMediaTests::mediaFolderPermissions()
     {
         KodiService service("folder-test");
         service.setEnabled(false);
-        service.addLibraryFolder(QUrl::fromLocalFile(media.path()));
-        QVERIFY(service.libraryFolders().isEmpty());
-        service.setFrontend("kodi");
+        QCOMPARE(service.frontend(),QString("isolde"));
+        QVERIFY(service.canEditFolders());
         service.addLibraryFolder(QUrl::fromLocalFile(media.path()));
         QCOMPARE(service.libraryFolders(), QStringList{media.path()});
         service.addLibraryFolder(QUrl::fromLocalFile(media.path()));
@@ -169,6 +169,9 @@ static void serve(QLocalServer &server, int version)
                 socket->setProperty("input", bytes);
                 if (!bytes.endsWith('\n')) return;
                 const auto request = QJsonDocument::fromJson(bytes).object();
+                if(server.property("rejectPlaylistMutation").toBool() && request["method"]=="Isolde.SortPlaylist"){
+                    socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Refused"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;
+                }
                 QJsonValue result;
                 if (request.value("method") == "JSONRPC.Version")
                     result = QJsonObject{{"version", QJsonObject{{"major", version}}}};
@@ -192,6 +195,16 @@ static void serve(QLocalServer &server, int version)
                     const auto params=request.value("params").toObject();const int start=params["start"].toInt();
                     result=QJsonObject{{"movies",QJsonArray{QJsonObject{{"movieid",start+41},{"title","Local film"},{"playlistMediaType","movie"}}}},{"limits",QJsonObject{{"start",start},{"end",start+1},{"total",51}}}};
                     if(params["kind"]=="shows")result=QJsonObject{{"tvshows",QJsonArray{QJsonObject{{"episodeid",41},{"title","Playlist episode"},{"playlistMediaType","episode"}}}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+                }
+                else if(request["method"]=="Isolde.PreviewPlaylistRule"){
+                    server.setProperty("ruleParams",request["params"].toObject().toVariantMap());
+                    result=QJsonObject{{"items",QJsonArray{QJsonObject{{"title","Fixture"},{"mediaType","movie"},{"mediaId",41}}}},{"total",1},{"revision",QString(64,'a')}};
+                }
+                else if(request["method"]=="Isolde.EditPlaylist" || request["method"]=="Isolde.SortPlaylist" || request["method"]=="Isolde.ReorderPlaylist"){
+                    server.setProperty("playlistMutation",request["params"].toObject().toVariantMap());result=QJsonObject{{"edited",true},{"reordered",true}};
+                }
+                else if(request["method"]=="Isolde.GetPlaylistOrder"){
+                    result=QJsonObject{{"members",QJsonArray{QJsonObject{{"title","Alpha"},{"index",0}},QJsonObject{{"title","Beta"},{"index",1}}}},{"revision",QString(64,'b')}};
                 }
                 else if (request.value("method") == "VideoLibrary.Scan") {
                     result = server.property("rejectScan").toBool() ? "rejected" : "OK";
@@ -275,6 +288,19 @@ void KodiMediaTests::savedKodiPlaylistCatalogAndShelf()
     QCOMPARE(episodes.viewKind(),QString("playlist"));
     server.setProperty("playState","ended");episodes.playbackControl("stop");QTRY_VERIFY(!episodes.playbackActive());
     QCOMPARE(episodes.selectedIndex(),0);QCOMPARE(episodes.viewValue(),QString("Episodes.xsp"));
+    KodiMedia editor("playlist-profile",nullptr,dir.path());editor.openView("movies","all");QTRY_VERIFY(editor.connected());QTRY_VERIFY(!editor.busy());
+    const auto retained=editor.items();editor.editPlaylist("Family films.xsp","search","Fixture");
+    QVERIFY(!editor.busy());QVERIFY(editor.playlistStatus().contains("Preview"));
+    editor.previewPlaylist("Family films.xsp","search","Fixture");QTRY_VERIFY(!editor.busy());QVERIFY(editor.playlistPreviewReady());
+    QCOMPARE(editor.playlistPreview().size(),1);QCOMPARE(editor.items(),retained);
+    editor.editPlaylist("Family films.xsp","search","Changed after preview");QVERIFY(!editor.busy());
+    editor.editPlaylist("Family films.xsp","search","Fixture");QTRY_VERIFY(!editor.busy());
+    QCOMPARE(server.property("playlistMutation").toMap()["revision"].toString(),QString(64,'a'));
+    editor.loadPlaylistMembers("Members.m3u8");QTRY_VERIFY(!editor.busy());QCOMPARE(editor.playlistMembers().size(),2);
+    editor.reorderPlaylist("Members.m3u8",{1,0});QTRY_VERIFY(!editor.busy());
+    QCOMPARE(server.property("playlistMutation").toMap()["revision"].toString(),QString(64,'b'));
+    server.setProperty("rejectPlaylistMutation",true);editor.sortPlaylist("Family films.xsp","title","ascending");QTRY_VERIFY(!editor.busy());
+    QVERIFY(editor.connected());QCOMPARE(editor.items(),retained);QVERIFY(editor.playlistStatus().contains("failed"));
 }
 void KodiMediaTests::recentlyViewedMergesKodiHistoryAndStaysBounded()
 {
@@ -417,7 +443,10 @@ void KodiMediaTests::artworkSelectionCancellation()
                 if (!bytes.endsWith('\n')) return;
                 const auto request = QJsonDocument::fromJson(bytes).object(); ++requests;
                 lastId = request["params"].toObject()["id"].toInt();
+                server.setProperty("lastArtworkMethod",request["method"].toString());
+                server.setProperty("lastArtworkParams",request["params"].toObject().toVariantMap());
                 const auto result = server.property("bad").toBool() ? QJsonObject{{"mime", "image/png"}, {"data", "not an image"}}
+                    : request["method"]=="Isolde.SetPoster"?QJsonObject{{"updated",true}}
                     : QJsonObject{{"mime", "image/png"}, {"data", QString::fromLatin1(png.toBase64())}};
                 socket->write(QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"id", request["id"]}, {"result", result}}).toJson(QJsonDocument::Compact) + '\n');
                 socket->disconnectFromServer();
@@ -433,6 +462,16 @@ void KodiMediaTests::artworkSelectionCancellation()
     server.setProperty("bad", true); art.load("tvshow", 4);
     QTRY_VERIFY(art.status().contains("format unavailable")); QVERIFY(art.source().isEmpty());
     art.load("unknown", 1); QTest::qWait(180); QCOMPARE(requests, 2);
+    const auto poster=dir.filePath("poster.png");QVERIFY(image.save(poster));
+    art.setManagedArtworkResolver([&](const QString &id){return id=="artwork/managed.png"?QUrl::fromLocalFile(poster).toString():QString{};});
+    QVERIFY(!art.setPoster("movie",1,"../outside"));QVERIFY(!art.setPoster("episode",1,"artwork/managed.png"));
+    server.setProperty("bad",false);QVERIFY(art.setPoster("movie",7,"artwork/managed.png"));
+    QVERIFY(!art.setPoster("movie",7,"artwork/managed.png"));
+    QTRY_COMPARE(art.status(),QString("Poster updated in Kodi"));
+    QCOMPARE(server.property("lastArtworkMethod").toString(),QString("Isolde.SetPoster"));
+    const auto params=server.property("lastArtworkParams").toMap();QCOMPARE(params["id"].toInt(),7);
+    QVERIFY(!params.contains("path"));QVERIFY(!params["data"].toString().isEmpty());
+    QVERIFY(art.source().startsWith("data:image/png;base64,"));
 }
 void KodiMediaTests::televisionHierarchyAndEpisodePlayback()
 {

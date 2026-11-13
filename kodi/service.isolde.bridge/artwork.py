@@ -1,8 +1,12 @@
-"""Read only Kodi-reported local/cached art. Never fetch URLs or populate caches."""
+"""Read Kodi-owned art; apply explicitly confirmed managed posters through Kodi's API."""
 import base64
 import json
 import os
 import stat
+import hashlib
+import struct
+import secrets
+import re
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -17,6 +21,67 @@ class Artwork:
         if "error" in reply:
             raise ValueError("Kodi art query failed")
         return reply["result"]
+
+    def set_poster(self, params):
+        """Publish one bounded managed PNG, then ask Kodi to change its own metadata."""
+        kind, ident = params.get("kind"), params.get("id")
+        if set(params) != {"kind", "id", "data"} or kind not in {"movie", "tvshow"} or type(ident) is not int or ident < 1:
+            raise ValueError("A movie or show identity is required")
+        encoded = params["data"]
+        if not isinstance(encoded, str) or len(encoded) > 1398104:
+            raise ValueError("Poster exceeds the managed limit")
+        raw = base64.b64decode(encoded, validate=True)
+        if not 33 <= len(raw) <= 1024 * 1024 or raw[:8] != b"\x89PNG\r\n\x1a\n" or raw[12:16] != b"IHDR":
+            raise ValueError("A managed PNG is required")
+        width, height = struct.unpack(">II", raw[16:24])
+        if not 0 < width <= 4096 or not 0 < height <= 4096 or width * height > 4 * 1024 * 1024:
+            raise ValueError("Poster dimensions exceed the limit")
+        suffix = "Movie" if kind == "movie" else "TVShow"
+        identity = {kind + "id": ident}
+        details = self.query("VideoLibrary.Get" + suffix + "Details", dict(identity, properties=["art"]))
+        old = details.get(kind + "details", {}).get("art")
+        if not isinstance(old, dict):
+            raise ValueError("Kodi title no longer exists")
+        name = "isolde-" + hashlib.sha256(raw).hexdigest() + ".png"
+        directory = os.open(self.thumbnails, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            try:
+                descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+            except FileNotFoundError:
+                count = 0
+                with os.scandir(directory) as entries:
+                    for index, entry in enumerate(entries):
+                        if index >= 4096:
+                            raise ValueError("Kodi artwork directory exceeds the managed inspection limit")
+                        if re.fullmatch(r"isolde-[0-9a-f]{64}\.png", entry.name): count += 1
+                        if count >= 256:
+                            raise ValueError("Managed poster limit reached; existing artwork is preserved")
+                temporary = ".isolde-poster-" + secrets.token_hex(16)
+                descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
+                try:
+                    with os.fdopen(descriptor, "wb") as target:
+                        target.write(raw); target.flush(); os.fsync(target.fileno())
+                    os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
+                finally:
+                    try: os.unlink(temporary, dir_fd=directory)
+                    except FileNotFoundError: pass
+            else:
+                with os.fdopen(descriptor, "rb") as existing:
+                    info = os.fstat(existing.fileno())
+                    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_size != len(raw) or existing.read(len(raw) + 1) != raw:
+                        raise ValueError("Managed poster collision")
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        path = str(self.thumbnails / name)
+        try:
+            if self.query("VideoLibrary.Set" + suffix + "Details", dict(identity, art={"poster": path})) != "OK":
+                raise ValueError("Kodi did not acknowledge the poster")
+        except Exception:
+            # A response can fail after Kodi applied it. Restore through Kodi's API.
+            self.query("VideoLibrary.Set" + suffix + "Details", dict(identity, art={"poster": old.get("poster", "")}))
+            raise ValueError("Poster update failed; refresh before retrying")
+        return {"updated": True}
 
     def get(self, params):
         kinds = {"movie": "Movie", "tvshow": "TVShow", "season": "Season", "episode": "Episode", "album": "Album", "song": "Song", "channel":"Channel"}

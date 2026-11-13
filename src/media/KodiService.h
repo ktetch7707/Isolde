@@ -32,7 +32,7 @@ public:
     QString frontend() const { return m_frontend; }
     bool switching() const { return !m_pendingFrontend.isEmpty(); }
     bool canOpenApplication() const { return !switching() && m_process.state() == QProcess::NotRunning; }
-    bool canEditFolders() const { return m_frontend == "kodi" && !m_suspended && canOpenApplication(); }
+    bool canEditFolders() const { return !m_suspended && canOpenApplication(); }
     QStringList libraryFolders() const;
     QString folderStatus() const { return m_folderStatus; }
     QString browsePath() const { return m_browsePath; }

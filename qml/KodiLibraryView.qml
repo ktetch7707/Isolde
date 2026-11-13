@@ -14,6 +14,16 @@ Rectangle {
     property var details: null
     property int toolbarIndex: 0
     property string artworkKey: ""
+    property bool choosingPoster: false
+    property int posterIndex: 0
+    property bool confirmPoster: false
+    property string posterStatus: ""
+    property var posterChoices: []
+    function closePoster(){choosingPoster=false;confirmPoster=false;posterStatus=""}
+    function openPoster(){
+        if(!details || !profileManager.editingAllowed || (details.mediaType!=="movie" && details.mediaType!=="tvshow"))return
+        posterChoices=homeLayout.captureArtworkChoices();posterIndex=0;confirmPoster=false;posterStatus="";choosingPoster=true
+    }
     signal searchRequested()
     signal searchReturnRequested()
     readonly property var selectedItem: kodiMedia.selectedIndex >= 0 && kodiMedia.selectedIndex < kodiMedia.items.length ? kodiMedia.items[kodiMedia.selectedIndex] : null
@@ -54,7 +64,7 @@ Rectangle {
     }
     visible: open
     onSelectedItemChanged: updateArtwork()
-    onOpenChanged: { if (!open) { details = null; browseControls.mode = "" }; updateArtwork() }
+    onOpenChanged: { if (!open) { closePoster();details = null; browseControls.mode = "" }; updateArtwork() }
     Connections {
         target: kodiMedia
         function onChanged() { if (!kodiMedia.connected) root.details = null; root.updateArtwork() }
@@ -72,12 +82,22 @@ Rectangle {
     }
     function handleCommand(command) {
         if (command === inputManager.home) { browseControls.mode = ""; open = false; sessionManager.goHome(); return }
+        if(choosingPoster){
+            if(command===inputManager.back){if(confirmPoster)confirmPoster=false;else closePoster()}
+            else if(command===inputManager.navigateUp || command===inputManager.navigateDown){confirmPoster=false;posterIndex=Math.max(0,Math.min(posterChoices.length-1,posterIndex+(command===inputManager.navigateDown?1:-1)))}
+            else if(command===inputManager.confirm && posterChoices.length && details){
+                if(!confirmPoster)confirmPoster=true
+                else {confirmPoster=false;posterStatus=kodiArtwork.setPoster(details.mediaType,details.mediaId,posterChoices[posterIndex].id)?"Saving confirmed poster…":"The managed image could not be applied. Choose a PNG/JPEG within the supported size and retry."}
+            }
+            return
+        }
         if (browseControls.active) { browseControls.handleCommand(command); return }
         if (command === inputManager.back) { if (details) details = null; else if (!kodiMedia.goBack()) open = false; return }
         if (kodiMedia.busy) return
         if (command === inputManager.search && kodiMedia.mediaKind !== "seasons") { searchRequested(); return }
         if (details) {
             if (command === inputManager.confirm) { details = null; kodiMedia.activate(kodiMedia.selectedIndex) }
+            else if(command===inputManager.navigateLeft)openPoster()
             else if (command === inputManager.navigateRight) kodiMedia.playSelected(false)
             else if (command === inputManager.menu && (details.mediaType === "movie" || details.mediaType === "tvshow")) {
                 browseControls.begin("addSelected", details)
@@ -143,7 +163,7 @@ Rectangle {
                 Text { font.family: shell.fontFamily; text: root.selectedItem ? root.selectedItem.plot || root.subtitle(root.selectedItem) : ""; color: shell.backgroundMuted; font.pixelSize: 16 * root.textScale; width: parent.width; maximumLineCount: 3; wrapMode: Text.WordWrap; elide: Text.ElideRight }
             }
         }
-        Text { font.family: shell.fontFamily; objectName: "libraryStatusLine"; text: kodiMedia.status + (kodiMedia.playbackStatus ? " · " + kodiMedia.playbackStatus : ""); width: parent.width; elide: Text.ElideRight; color: !kodiMedia.busy && !kodiMedia.connected ? shell.backgroundError : shell.backgroundMuted; font.pixelSize: 15 * root.textScale }
+        Text { font.family: shell.fontFamily; objectName: "libraryStatusLine"; text: kodiMedia.status + (kodiMedia.playbackStatus ? " · " + kodiMedia.playbackStatus : "") + (kodiArtwork.status ? " · "+kodiArtwork.status:""); width: parent.width; elide: Text.ElideRight; color: !kodiMedia.busy && !kodiMedia.connected ? shell.backgroundError : shell.backgroundMuted; font.pixelSize: 15 * root.textScale }
         Text { font.family: shell.fontFamily; text: "OK open / play / resume    Menu details    ↑ Toolbar    ← → Pages    Back " + (kodiMedia.canGoBack ? "parent" : "Home"); color: shell.backgroundFocus; font.pixelSize: 16 * root.textScale; width: parent.width; elide: Text.ElideRight }
     }
     Rectangle {
@@ -158,9 +178,35 @@ Rectangle {
                         : root.details && root.details.mediaType === "season" ? "OK browse · Back close"
                     : "OK play / resume · Right restart · Menu curate · Back close\nDuring playback: OK pause · Left/Right seek · Back stop · Home return"; color: shell.elevatedMuted; font.pixelSize: 20 * root.textScale; wrapMode: Text.WordWrap }
             Text { font.family: shell.fontFamily; objectName: "libraryDetailsPlayback"; text: kodiMedia.playbackStatus; color: shell.elevatedFocus; font.pixelSize: 18 * root.textScale }
+            Text { width:parent.width;visible:root.details && (root.details.mediaType==="movie" || root.details.mediaType==="tvshow") && profileManager.editingAllowed;text:"Left · Change this title’s Kodi poster";color:shell.elevatedFocus;font.family:shell.fontFamily;font.pixelSize:20*root.textScale;wrapMode:Text.WordWrap }
         }
         MouseArea { anchors.right: parent.right; anchors.top: parent.top; width: 90; height: 45; onClicked: root.details = null
             Text { font.family: shell.fontFamily; anchors.centerIn: parent; text: "Back"; color: shell.elevatedText; font.pixelSize: 20 * root.textScale } }
     }
     LibraryBrowseControls { id: browseControls; provider:root.provider;appearance:root.appearance;anchors.fill: parent; anchors.margins: 35; z: 10 }
+    Rectangle {
+        anchors.fill:parent;anchors.margins:35;z:11;visible:root.choosingPoster;color:shell.elevated;radius:shell.radius
+        Column {
+            id:posterContents
+            anchors.fill:parent;anchors.margins:24;spacing:16*shell.gapScale
+            Text { id:posterHeading;width:parent.width;wrapMode:Text.WordWrap;text:"CHANGE TITLE POSTER";font.family:shell.fontFamily;font.pixelSize:28*root.textScale;color:shell.elevatedText }
+            Text { id:posterHelp;width:parent.width;wrapMode:Text.WordWrap;text:root.confirmPoster?"CONFIRM · Save this poster to the selected Kodi title? Back cancels.":"Up/Down previews managed artwork. OK reviews the change; OK again saves to Kodi. Back leaves the title unchanged.";font.family:shell.fontFamily;font.pixelSize:18*root.textScale;color:shell.elevatedFocus }
+            Row {
+                width:parent.width;height:Math.max(0,parent.height-posterHeading.height-posterHelp.height-posterStatusLabel.height-3*parent.spacing);spacing:16*shell.gapScale
+                ListView {
+                    width:Math.max(0,parent.width*0.55-parent.spacing);height:parent.height;clip:true;model:root.posterChoices;currentIndex:root.posterIndex
+                    delegate:Rectangle {
+                        required property int index;required property var modelData
+                        width:ListView.view.width;height:posterLabel.implicitHeight+28;radius:shell.radius;color:root.posterIndex===index?shell.selected:shell.elevated
+                        border.width:root.posterIndex===index?2:0;border.color:shell.selectedFocus
+                        Text { id:posterLabel;anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top;anchors.margins:14;wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;text:modelData.name;font.family:shell.fontFamily;font.pixelSize:20*root.textScale;color:root.posterIndex===index?shell.selectedText:shell.elevatedText }
+                        MouseArea { anchors.fill:parent;onClicked:{if(root.posterIndex!==index){root.posterIndex=index;root.confirmPoster=false}else root.handleCommand(inputManager.confirm)} }
+                    }
+                    Text { width:parent.width;visible:!root.posterChoices.length;text:"No managed artwork yet. Import an image through Studio’s artwork controls, then reopen this picker.";wrapMode:Text.WordWrap;color:shell.elevatedText;font.family:shell.fontFamily;font.pixelSize:20*root.textScale }
+                }
+                Image { width:parent.width*0.45;height:parent.height;sourceSize.width:512;sourceSize.height:768;fillMode:Image.PreserveAspectFit;source:root.choosingPoster && root.posterChoices.length?homeLayout.resolveArtwork(root.posterChoices[root.posterIndex].id):"" }
+            }
+            Text { id:posterStatusLabel;width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.posterStatus?(kodiArtwork.status || root.posterStatus):"Preview · no changes saved";color:shell.elevatedFocus;font.family:shell.fontFamily;font.pixelSize:18*root.textScale }
+        }
+    }
 }
