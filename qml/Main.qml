@@ -650,6 +650,7 @@ Window {
         playbackPreferences: kodiService
         appearance:window.shellAppearance("search", themeOrigin)
         property string themeOrigin: ""
+        property bool playbackOriginLibraryOpen: false
         movieSearchClient: searchMovies
         showSearchClient: searchShows
         episodeSearchClient: searchEpisodes
@@ -687,10 +688,10 @@ Window {
             if (sessionManager.launch("settings")) settings.openSection(section)
         }
         onMediaRequested: (mediaType, mediaId, query, collectionId, pageStart) => {
-            const libraryWasOpen = kodiLibrary.open
+            commandCenter.playbackOriginLibraryOpen = kodiLibrary.open
             kodiLibrary.open = true
             kodiLibrary.returnToHomeAfterPlayback = false
-            kodiLibrary.returnToSearchAfterPlayback = !libraryWasOpen && (mediaType === "movie" || mediaType === "episode")
+            kodiLibrary.returnToSearchAfterPlayback = mediaType === "movie" || mediaType === "episode"
             if (mediaType === "collection") kodiMedia.openCollection(collectionId)
             else if (mediaType === "show") kodiMedia.openShowResult(query, mediaId, pageStart)
             else kodiMedia.playMedia(mediaType, mediaId, true)
@@ -863,6 +864,7 @@ Window {
     }
     Connections {
         target: kodiLibrary
+        function onSearchReturnRequested() { kodiLibrary.open = commandCenter.playbackOriginLibraryOpen; commandCenter.open = true }
         function onSearchRequested() { commandCenter.themeOrigin = kodiLibrary.themeOrigin; commandCenter.pageId = ""; commandCenter.pageSources = []; commandCenter.open = true }
     }
 }

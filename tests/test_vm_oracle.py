@@ -26,6 +26,31 @@ spec.loader.exec_module(oracle)
 
 
 class OracleTests(unittest.TestCase):
+    def test_search_origin_main_reuse_accepts_only_the_exact_visibility_fix(self):
+        after='''        property string themeOrigin: ""
+        property bool playbackOriginLibraryOpen: false
+        movieSearchClient: searchMovies
+        onMediaRequested: (mediaType, mediaId, query, collectionId, pageStart) => {
+            commandCenter.playbackOriginLibraryOpen = kodiLibrary.open
+            kodiLibrary.open = true
+        }
+        function onSearchReturnRequested() { kodiLibrary.open = commandCenter.playbackOriginLibraryOpen; commandCenter.open = true }
+'''
+        before=after.replace('        property bool playbackOriginLibraryOpen: false\n','').replace('            commandCenter.playbackOriginLibraryOpen = kodiLibrary.open\n','').replace('function onSearchReturnRequested() { kodiLibrary.open = commandCenter.playbackOriginLibraryOpen; commandCenter.open = true }','function onSearchReturnRequested() { commandCenter.open = true }')
+        oracle.search_origin_main_delta(before,after)
+        for changed in (after+'\n// unrelated edit',after.replace('commandCenter.open = true }','commandCenter.open = false }'),before):
+            with self.assertRaises(RuntimeError):oracle.search_origin_main_delta(before,changed)
+        with self.assertRaises(RuntimeError):oracle.search_origin_main_delta('unrecognized original',after)
+
+    def test_local_search_requires_real_kodi_network_denial_and_all_captures(self):
+        result=dict(passed=True,freshProfile=True,realKodi=True,mediaUnchanged=True,normalProfileUsed=False,journey='local-search',episodes=list(range(56)),shows=[1],network=dict(socketErrnos=[101,101],unixSocketAvailable=True),captures=['localsearchorigin','localsearchentry','localsearchresults','localsearchmore','localsearchnext','localsearchprevious','localsearchplaying','localsearchplayreturn','localsearchreturned'],actualInputActions=30)
+        self.assertTrue(oracle.visual_result_passed('local-search',result))
+        for changed in ({'realKodi':False},{'normalProfileUsed':True},{'captures':[]},{'network':{}}):
+            self.assertFalse(oracle.visual_result_passed('local-search',dict(result,**changed)))
+        command=oracle.history_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),local_search=True)
+        self.assertEqual(command[-2:],['--local-search','--inspect'])
+        with self.assertRaises(ValueError):oracle.history_helper_command(Path('/frozen'),Path('/helper'),Path('/app'),local_search=True,pages=True)
+
     def test_store_offline_receipt_requires_three_real_cold_socket_probes(self):
         result={key:True for key in ('passed','freshProfile','profileIsolation','coldReopen','cancelNoWrite','writeFailureRollback','retryVerified','webLifecycle','repositoryFailureRecovered','manifestsRemoved')}
         result.update(normalProfileUsed=False,androidLifecycle=False,actualInputActions=30,

@@ -250,8 +250,8 @@ Validation: `tools/test-backlog-progress.ps1` checks fixed original group weight
 | Milestone | State | Independently finishable outcome / pass condition | Evidence or remaining requirement |
 | --- | --- | --- | --- |
 | T03.4.a | done | Production search/page-source/remote-focus and preference isolation/write-failure contracts pass native/offscreen tests. | docs/backlog-evidence-reconciliation-2026-11-02.md; final T21 LastTest.log names all five search/bridge contracts. |
-| T03.4.b | open | Actual real-Kodi search, network denial and exact originating-page recovery are reconciled to the installed acceptance candidate. | docs/backlog-evidence-reconciliation-2026-11-02.md; F/G staged denial proof exists, but source applicability and installed observation remain. |
-| T03.4.c | open | Complete permitted-key installed real-Kodi paging/cancel/return journey and all inherited T03.4 requirements pass. | docs/backlog-evidence-reconciliation-2026-11-02.md; installed journey outstanding, VM owned by active T22 run during this review. |
+| T03.4.b | done | Actual real-Kodi search, network denial and exact originating-page recovery are reconciled to the installed acceptance candidate. | docs/test-campaign-2026-11-11.md; installed j local-search attempt153522/result.json, four reviewed captures, actual real Kodi show/three episodes, kernel IPv4+IPv6 denial and exact Home focus restoration; normal layouts unchanged. |
+| T03.4.c | done | Complete permitted-key installed real-Kodi paging/cancel/return journey and all inherited T03.4 requirements pass. | docs/t03-search-acceptance-2026-11-12.md; p full62/62, x five focused tests with exact source-bound reuse; installed x attempt163901 nine reviewed frames, real56-episode paging/play/Stop/exact query/page/selection and originating-library return under kernel Internet-socket denial. |
 
 ## T15.4 — installed design walkthrough (one quarter of T15)
 

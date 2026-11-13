@@ -389,3 +389,39 @@ pass. Explicit decoded live-content U01 handoff, no playback claim. BUG-126
 physical X press/release sequencing fixed; BUG-125 non-reproduced timing retained.
 Overall2172/25=86.88% rounded87%,186/222. Commit/push Store batch, then T03
 installed real-Kodi scoped search/paging/cancel/return. No full rerun for docs.
+
+T03 selected next: installed real-Kodi search under kernel IPv4/IPv6 denial,
+remote keyboard/query/results/cancel and exact Home origin. Add bounded
+local-search journey to existing private TV/Kodi fixture and SHA library helper
+route; reuse full-tested installed j. No product change or full CTest needed.
+First .4.b evidence; complete paging/page-source .4.c remains separate.
+Local-search harness runner self-tests pass (new typed case/negative-result tests).
+Configure artifacts did not reach optional3GiB target; safe cleanup complete,
+above2GiB minimum. This is maintenance-target failure, not a product pass/fail.
+Proceed with installed local-search; no app rebuild. Review all4 captures before
+credit; full paging/page-source .4.c not represented by the first journey.
+T03.4.b accepted92%, project87.24%,187/222. Expanded attempt153805 reveals
+BUG-127 despite automated pass: playback stop loses Search return. QML Main and
+KodiLibrary correction plus native stop/Home distinction ready; Test t03-search-
+20261112-p full once for changed global return route, then deploy and repeat
+installed local-search. Preserve six unrelated Studio files. No .4.c credit yet.
+Healthy full p running session28894. Additional reviewed BUG-128 long-list focus
+and BUG-127 preserved query/page selection fixed in CommandCenter + native
+regressions after p froze. Let p finish, then Test -Suite studio_visuals
+-ReuseFullRun t03-search-20261112-p on a new ID. Existing reuse boundary covers
+CommandCenter + tests/tst_home_navigation; Main/KodiLibrary unchanged from p.
+Deploy final focused passing candidate, installed local-search; review all9
+frames for actual selected More visibility and post-play Search page/selection.
+t5/5 with strict p62 reuse passes; installed attempt161123 fixes visible More and
+exact Search page/selection after stop. Remaining same BUG-127: underlyingLibrary
+visibility must restore on final Search Back. Main captures that boolean now.
+Full t03-search-20261112-u required because current bounded reuse excludes Main;
+then Deploy+local-search repeat all9 frames. T03 remains92%, no .4.c credit.
+
+T03 CLOSED100%. Current installedx/f21c113eb646a6997202177b, p62 full plusx5
+strict scoped reuse,123 runner tests; attempt163901 all9 reviewed frames.
+Real56-episode offline paging/play/Stop/exact Search and library origin return
+passes. BUG-127/128 fixed. Overall87.56% rounded88%,188/222. Retain BUG-125
+intermittent Studio frame timing diagnostic for final risk review; no fake fix.
+Commit/push this T03 logical batch preserving six Studio files, then T04 current
+Scope/Entry docs only. No live tests or authorization rule remain active.

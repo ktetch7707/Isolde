@@ -392,7 +392,7 @@ void HomeNavigationTests::pageComposerAndIndependentKodiWidgets()
     const auto disabledHistory=appHistory->items();QVERIFY(std::none_of(disabledHistory.cbegin(),disabledHistory.cend(),[](const QVariant &item){return item.toMap()["mediaType"]=="app";}));
     QVERIFY(historySessions.launch(historyApp.id));QTRY_VERIFY(!appHistory->busy());historySessions.goHome();QTRY_VERIFY(!appHistory->busy());
     QCOMPARE(appHistory->items()[0].toMap()["appId"].toString(),historyApp.id);
-    QCOMPARE(historyClient->items().size(),2);QCOMPARE(otherHistory->items().size(),16);
+    QTRY_COMPARE(historyClient->items().size(),2);QTRY_COMPARE(otherHistory->items().size(),16);
     startingData.activate(appHistory,0,true,"history-origin");QCOMPARE(historySessions.currentAppId(),historyApp.id);historySessions.goHome();QTRY_VERIFY(!appHistory->busy());
     QCOMPARE(historyFocus.last()[0].toString(),QString("history-origin"));
     startingData.activate(appHistory,0,true,"../unsafe-origin");QVERIFY(!historySessions.hasActiveSession());
@@ -704,6 +704,33 @@ void HomeNavigationTests::universalLocalSearchRemoteFlow()
     QCOMPARE(mediaRequested[0][0].toString(), QString("show"));
     QCOMPARE(mediaRequested[0][1].toInt(), 2);
     QCOMPARE(mediaRequested[0][2].toString(), QString("Pilot"));
+    int episodeResult=-1;
+    const auto currentResults=root->property("results").toList();
+    for(int index=0;index<currentResults.size();++index)
+        if(currentResults[index].toMap().value("mediaType")=="episode")episodeResult=index;
+    QVERIFY(episodeResult>=0);root->setProperty("selectedIndex",episodeResult);root->setProperty("focusArea","results");
+    QVERIFY(QMetaObject::invokeMethod(root.get(),"activateSelected"));
+    root->setProperty("open",false);root->setProperty("open",true);
+    QCOMPARE(root->property("selectedIndex").toInt(),episodeResult);
+    QCOMPARE(root->property("focusArea").toString(),QString("results"));
+    QCOMPARE(root->property("query").toString(),QString("Pilot"));
+    QQuickWindow searchWindow;searchWindow.resize(1280,720);
+    qobject_cast<QQuickItem *>(root.get())->setParentItem(searchWindow.contentItem());searchWindow.show();
+    QVariantList manyApps;
+    for(int index=0;index<60;++index)manyApps.append(QVariantMap{{"id",QString("app-%1").arg(index)},{"name",QString("App %1").arg(index)},{"type","desktop"}});
+    root->setProperty("apps",manyApps);root->setProperty("query",QString());root->setProperty("selectedIndex",59);
+    QTRY_VERIFY(root->property("results").toList().size()>=60);
+    auto *scroller=root->findChild<QQuickItem *>("searchResultScroller");QVERIFY(scroller);
+    std::function<QQuickItem *(QQuickItem *,const QString &)> findResultItem=[&](QQuickItem *parent,const QString &name)->QQuickItem *{
+        if(parent->objectName()==name)return parent;
+        for(auto *child:parent->childItems())if(auto *found=findResultItem(child,name))return found;
+        return nullptr;
+    };
+    QQuickItem *selectedRow=nullptr;
+    QTRY_VERIFY((selectedRow=findResultItem(qobject_cast<QQuickItem *>(root.get()),"searchResultRow-59")));
+    QTRY_VERIFY(selectedRow->y()>4000);
+    QTRY_VERIFY(selectedRow->mapToItem(scroller,QPointF()).y()>=-1);
+    QTRY_VERIFY(selectedRow->mapToItem(scroller,QPointF(0,selectedRow->height())).y()<=scroller->height()+1);
 }
 void HomeNavigationTests::appSuppliedIconsUseManagedArtwork()
 {
@@ -1176,7 +1203,7 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QVERIFY(command(InputManager::Menu)); QVERIFY(!root->property("details").isNull());
     // Appearance changes must repaint existing production browse/detail children
     // without rebuilding the client, navigating, or refreshing the Kodi query.
-    QTest::qWait(200); // Let the episode artwork request settle before counting repaint traffic.
+    QTRY_COMPARE(art.status(),QString("No local artwork cached in Kodi"));
     const auto detailsBefore = root->property("details");
     const auto itemsBefore = media.items();
     const auto requestCount = requests;
@@ -1241,6 +1268,14 @@ void HomeNavigationTests::televisionLibraryRemoteFlow()
     QCOMPARE(media.viewKind(), QString("recent")); QCOMPARE(media.mediaKind(), QString("episodes"));
     QVERIFY(command(InputManager::Back)); QTRY_VERIFY(!media.busy()); QCOMPARE(media.mediaKind(), QString("shows"));
     QVERIFY(command(InputManager::Back)); QVERIFY(!root->property("open").toBool());
+    QSignalSpy searchReturn(root.get(),SIGNAL(searchReturnRequested()));
+    root->setProperty("open",true);root->setProperty("returnToSearchAfterPlayback",true);
+    QVERIFY(QMetaObject::invokeMethod(&media,"playbackReturned",Q_ARG(bool,false)));
+    QCOMPARE(searchReturn.count(),1);QVERIFY(!root->property("open").toBool());
+    QVERIFY(!root->property("returnToSearchAfterPlayback").toBool());
+    root->setProperty("open",true);root->setProperty("returnToSearchAfterPlayback",true);
+    QVERIFY(QMetaObject::invokeMethod(&media,"playbackReturned",Q_ARG(bool,true)));
+    QCOMPARE(searchReturn.count(),1);QVERIFY(!root->property("open").toBool());
 }
 void HomeNavigationTests::gridEditorMoveResizeDuplicateRemove()
 {

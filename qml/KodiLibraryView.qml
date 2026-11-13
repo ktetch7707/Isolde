@@ -15,6 +15,7 @@ Rectangle {
     property int toolbarIndex: 0
     property string artworkKey: ""
     signal searchRequested()
+    signal searchReturnRequested()
     readonly property var selectedItem: kodiMedia.selectedIndex >= 0 && kodiMedia.selectedIndex < kodiMedia.items.length ? kodiMedia.items[kodiMedia.selectedIndex] : null
     readonly property var toolbar: {
         let rows = [{ label: "Movies", action: "movies" }, { label: "Shows", action: "shows" }]
@@ -62,6 +63,7 @@ Rectangle {
                 root.returnToSearchAfterPlayback = false
                 root.open = false
                 if (home) sessionManager.goHome()
+                else root.searchReturnRequested()
                 return
             }
             if (home || (root.returnToHomeAfterPlayback && kodiMedia.playbackStatus === "ended")) { root.open = false; sessionManager.goHome() }

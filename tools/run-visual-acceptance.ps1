@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','history','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-updates','store-discovery','games','emulators')][string]$Case = 'pages',
+    [ValidateSet('movieart','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','pastel','lounge','studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','local-search','history','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-updates','store-discovery','games','emulators')][string]$Case = 'pages',
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$SourceRoot,
     [string]$Executable = '/home/isolde-dev/.local/share/isolde-appliance/current/bin/isolde',
@@ -56,7 +56,7 @@ if ($GuestRunner) {
         $command += " --studio-helper-digest $StudioHelperDigest"
     }
     if ($HistoryHelperDigest) {
-        if ($Case -notin @('history','pages','playlists','games','emulators') -or $HistoryHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid library helper identity.' }
+        if ($Case -notin @('local-search','history','pages','playlists','games','emulators') -or $HistoryHelperDigest -notmatch '^[0-9a-f]{64}$') { throw 'Invalid library helper identity.' }
         $command += " --history-helper-digest $HistoryHelperDigest"
     }
     if ($StoreHelperDigest) {

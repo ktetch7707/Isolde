@@ -60,6 +60,7 @@ Item {
     property bool regionKeyboardOpen: false
     property string query: ""
     property int selectedIndex: 0
+    property var mediaReturnState: null
     property string focusArea:"query"
     property string lastHeader:"query"
     readonly property var discoveryRegions:["US","CA","GB","AU","NZ","IN","JP","KR","FR","DE","ES","BR"]
@@ -255,19 +256,21 @@ Item {
 
     onOpenChanged: {
         if (open) {
-            selectedIndex = 0
-            focusArea="query";lastHeader="query"
+            const returning=mediaReturnState
+            mediaReturnState=null
+            selectedIndex = returning ? returning.index : 0
+            focusArea=returning ? returning.area : "query";lastHeader=returning ? returning.header : "query"
             keyboardOpen = false
             searchKeyboard.value = query
             searchKeyboard.selectedIndex = 0
-            mediaSearchTimer.restart()
+            if (!returning) mediaSearchTimer.restart()
         } else {
             keyboardOpen = false
             regionKeyboardOpen = false
             pendingDiscoverySelection=null
             selectedDiscoveryTitle=null
             mediaSearchTimer.stop()
-            invalidateMediaSearch()
+            if (!mediaReturnState) invalidateMediaSearch()
             if (onlineDiscovery) onlineDiscovery.clearResults()
         }
     }
@@ -346,6 +349,7 @@ Item {
             closeRequested()
             shellActionRequested(item.targetAction)
         } else if (item.kind === "media") {
+            if(item.mediaType==="movie" || item.mediaType==="episode")mediaReturnState={index:selectedIndex,area:focusArea,header:lastHeader}
             closeRequested()
             mediaRequested(item.mediaType, item.mediaId, query.trim(), "", item.pageStart)
         } else if (item.kind === "mediaCollection") {
@@ -461,22 +465,28 @@ Item {
 
             Flickable {
                 id: resultScroller
+                objectName: "searchResultScroller"
                 width: parent.width
                 height:Math.max(60,parent.height-searchHeader.height-queryControl.height-resultCount.height-searchStatus.height-searchFooter.height-5*parent.spacing)
                 contentHeight: resultColumn.height
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
-                contentY: Math.max(0, Math.min(Math.max(0, contentHeight - height), root.selectedIndex * 82 - 110))
+                contentY: {
+                    const item=resultRepeater.itemAt(root.selectedIndex)
+                    return item ? Math.max(0,Math.min(Math.max(0,contentHeight-height),item.y+item.height/2-height/2)) : 0
+                }
 
                 Column {
                     id: resultColumn
                     width: parent.width
                     spacing: 10
                     Repeater {
+                        id: resultRepeater
                         model: root.results
                         delegate: Rectangle {
                             required property int index
                             required property var modelData
+                            objectName: "searchResultRow-"+index
                             width: resultColumn.width
                             height: 76
                             radius: 12

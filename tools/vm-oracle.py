@@ -250,6 +250,7 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "repairs": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--inspect"]),
          "apps": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--inspect"]),
          "clients": ("home-reference-acceptance.py", ["--existing-profile", "8bdf6077-4613-4b52-9b20-d1ec7931dfcf", "--verify-default-apps", "--skip-steam", "--inspect"]),
+         "local-search": ("tv-library-acceptance.py", ["--local-search", "--inspect"]),
          "pages": ("tv-library-acceptance.py", ["--pages", "--inspect"]),
          "guide": ("tv-library-acceptance.py", ["--guide", "--inspect"]),
          "guide-surfaces": ("tv-library-acceptance.py", ["--guide", "--guide-surfaces", "--inspect"]),
@@ -326,6 +327,14 @@ def dismiss_guest_disk_banner():
 
 
 def visual_result_passed(case, result):
+    if case=='local-search':
+        return (all(result.get(k) is True for k in ('passed','freshProfile','realKodi','mediaUnchanged'))
+                and result.get('normalProfileUsed') is False and result.get('journey')=='local-search'
+                and len(result.get('episodes',[]))==56 and len(result.get('shows',[]))>=1
+                and result.get('network',{}).get('socketErrnos')==[101,101]
+                and result.get('network',{}).get('unixSocketAvailable') is True
+                and result.get('captures')==['localsearchorigin','localsearchentry','localsearchresults','localsearchmore','localsearchnext','localsearchprevious','localsearchplaying','localsearchplayreturn','localsearchreturned']
+                and result.get('actualInputActions',0)>0)
     if case=='studio':
         colors=result.get('colorPicker',{})
         workflows=result.get('workflows',{})
@@ -597,11 +606,11 @@ def verified_gallery_evidence(run, result):
     return path,record['sha256']
 
 
-def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None):
-    if int(pages)+int(playlists)+int(game_case is not None)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
+def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None, local_search=False):
+    if int(pages)+int(playlists)+int(game_case is not None)+int(local_search)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
     frozen='games-acceptance.py' if game_case else 'tv-library-acceptance.py'
-    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--pages' if pages else '--playlists' if playlists else '--history','--inspect']
+    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--local-search' if local_search else '--pages' if pages else '--playlists' if playlists else '--history','--inspect']
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/frozen),str(executable)]+flags
 
 
@@ -878,8 +887,9 @@ def qml_coverage(root, run, base_id, suite, expected_suite, qml, harness, label,
         raise RuntimeError('Full-suite base payload changed')
     before=manifest(base/'files.sha256');after=manifest(run/'files.sha256')
     changed=sorted(name for name in before.keys()|after.keys() if before.get(name)!=after.get(name))
-    if not qml.intersection(changed) or any(name not in qml|harness and not name.startswith('docs/') for name in changed):
-        raise RuntimeError('Source changes exceed the focused '+label+' QML coverage boundary')
+    outside=[name for name in changed if name not in qml|harness and not name.startswith('docs/')]
+    if not qml.intersection(changed) or outside:
+        raise RuntimeError('Source changes exceed the focused '+label+' QML coverage boundary: '+(', '.join(outside[:16]) if outside else 'no covered application change'))
     if any(name not in after or (name not in before and name not in added_harness) for name in changed):
         raise RuntimeError('Focused reuse cannot add or remove source files outside its named harness boundary')
     return {'baseRunId':base_id,'baseSourceDigest':result['sourceDigest'],
@@ -891,6 +901,19 @@ def guide_qml_coverage(root, run, base_id, suite):
         {'tests/guide_ui.cpp','tests/test_vm_oracle.py','tests/test_kodi_bridge.py',
          'tools/vm-test.ps1','tools/vm-oracle.py','tools/guide-soak-acceptance.py','tools/guide-reopen-inputs.json','tools/tv-library-acceptance.py',
          'tools/guide-input-plan.ps1','tools/test-guide-input-plan.ps1'},'Guide')
+
+
+def search_origin_main_delta(before,after):
+    edits=[('        property string themeOrigin: ""\n        movieSearchClient:',
+            '        property string themeOrigin: ""\n        property bool playbackOriginLibraryOpen: false\n        movieSearchClient:'),
+           ('        onMediaRequested: (mediaType, mediaId, query, collectionId, pageStart) => {\n            kodiLibrary.open = true',
+            '        onMediaRequested: (mediaType, mediaId, query, collectionId, pageStart) => {\n            commandCenter.playbackOriginLibraryOpen = kodiLibrary.open\n            kodiLibrary.open = true'),
+           ('function onSearchReturnRequested() { commandCenter.open = true }',
+            'function onSearchReturnRequested() { kodiLibrary.open = commandCenter.playbackOriginLibraryOpen; commandCenter.open = true }')]
+    for old,new in edits:
+        if before.count(old)!=1:raise RuntimeError('Unrecognized original Search origin routing')
+        before=before.replace(old,new)
+    if before!=after:raise RuntimeError('Main changes exceed the exact Search origin visibility correction')
 
 
 def focused_qml_coverage(root, run, base_id, suite):
@@ -908,10 +931,16 @@ def focused_qml_coverage(root, run, base_id, suite):
              'tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/home-components-acceptance.py','tools/reference_collections.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1'},
             'ShellKeyboard',{'tests/fixtures/shell-theme-routes.json'})
     if suite=='studio_visuals':
+        before=manifest(root/'runs'/base_id/'files.sha256');after=manifest(run/'files.sha256')
+        if before.get('qml/Main.qml')!=after.get('qml/Main.qml'):
+            old=root/'runs'/base_id/'source/qml/Main.qml';new=run/'source/qml/Main.qml'
+            if not old.is_file() or not new.is_file() or digest(old)!=before.get('qml/Main.qml') or digest(new)!=after.get('qml/Main.qml'):
+                raise RuntimeError('Exact frozen Main sources required for Search origin reuse')
+            search_origin_main_delta(old.read_text(),new.read_text())
         icons={'config/app-icons/'+name+'.svg' for name in ('steam','spotify','kodi','freetube','netflix','cbc-gem','crunchyroll','paramount-plus','youtube-tv','prime-video','disney-plus','peacock')}
         return qml_coverage(root,run,base_id,suite,'studio_visuals',
-            {'qml/PageStudioView.qml','qml/CommandCenter.qml','qml/HomeCard.qml'}|icons,
-            {'config/app-icons/provenance.json','tests/tst_home_navigation.cpp','tests/studio/tst_editor.qml','tests/studio/tst_artwork.qml','tests/studio/tst_shell.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1','tools/home-components-acceptance.py','tools/home-reference-acceptance.py'},'StudioVisuals')
+            {'qml/Main.qml','qml/PageStudioView.qml','qml/CommandCenter.qml','qml/HomeCard.qml'}|icons,
+            {'config/app-icons/provenance.json','tests/tst_home_navigation.cpp','tests/studio/tst_editor.qml','tests/studio/tst_artwork.qml','tests/studio/tst_shell.qml','tests/test_vm_oracle.py','tools/vm-test.ps1','tools/vm-oracle.py','tools/run-visual-acceptance.ps1','tools/test-all.ps1','tools/home-components-acceptance.py','tools/home-reference-acceptance.py','tools/tv-library-acceptance.py'},'StudioVisuals')
     if suite=='studio_artwork':
         return qml_coverage(root,run,base_id,suite,'studio_artwork',
             {'qml/StudioImageFraming.qml','qml/StudioArtworkPicker.qml','qml/StudioInspector.qml','qml/PageStudioView.qml'},
@@ -1695,7 +1724,7 @@ class Oracle:
         if store_helper_digest and case not in ('store','store-web','store-offline','store-updates','store-discovery'):raise RuntimeError('Store helper is Store-only')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
-        if history_helper_digest and case not in ('history','pages','playlists','games','emulators'):raise RuntimeError('Unsupported library helper case')
+        if history_helper_digest and case not in ('local-search','history','pages','playlists','games','emulators'):raise RuntimeError('Unsupported library helper case')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
         if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
@@ -1722,9 +1751,9 @@ class Oracle:
             command=reference_helper_command(source,helper,executable,flags,collections_helper)
             if reference_collections_digest:self.update(referenceCollectionsHelperSha256=reference_collections_digest)
             self.update(acceptanceHelperSha256=reference_helper_digest)
-        if case in ('history','pages','playlists','games','emulators') and history_helper_digest:
+        if case in ('local-search','history','pages','playlists','games','emulators') and history_helper_digest:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
-            command=history_helper_command(source,helper,executable,pages=case=='pages',playlists=case=='playlists',game_case=case if case in ('games','emulators') else None)
+            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',game_case=case if case in ('games','emulators') else None)
             self.update(acceptanceHelperSha256=history_helper_digest)
         if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
@@ -2076,7 +2105,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-updates|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|local-search|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-updates|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

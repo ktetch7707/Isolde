@@ -18,6 +18,8 @@ import socket
 import sqlite3
 from datetime import datetime, timedelta, timezone
 import signal
+import importlib.util
+import sys
 import struct
 import subprocess
 from guide_features import remote_text
@@ -55,6 +57,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
     parser.add_argument("--inspect", action="store_true")
+    parser.add_argument("--local-search", action="store_true", help="Real Kodi local search under kernel Internet-socket denial")
     parser.add_argument("--pages", action="store_true", help="Create and customize a page through Settings, then exercise its widget against real Kodi")
     parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
     parser.add_argument("--history", action="store_true", help="Verify actual Kodi playback updates independent production Recently viewed carousels")
@@ -89,9 +92,10 @@ def main():
     poster.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 240, 360, 8, 2, 0, 0, 0))
         + chunk(b"IDAT", zlib.compress((b"\x00" + b"\x55\x43\x99" * 240) * 360)) + chunk(b"IEND", b""))
     episodes = []
-    for season, number in ((0, 1), (1, 1), (1, 2)):
+    fixture_episodes=[(0,1)]+[(1,n) for n in range(1,56)] if args.local_search else [(0,1),(1,1),(1,2)]
+    for season, number in fixture_episodes:
         file = show / f"Fixture S{season:02}E{number:02}.ogv"
-        if file != clip: file.write_bytes(clip.read_bytes())
+        if file != clip: os.link(clip,file) if args.local_search else file.write_bytes(clip.read_bytes())
         episodes.append(f"<episodedetails><title>Fixture {season}x{number}</title><showtitle>Isolde Television Fixture</showtitle>"
             f"<season>{season}</season><episode>{number}</episode><runtime>2</runtime><plot>Synthetic TV acceptance, no audio.</plot>"
             f"<filenameandpath>{escape(str(file))}</filenameandpath><path>{escape(str(show))}/</path><file>{file.name}</file>"
@@ -111,11 +115,11 @@ def main():
         document=(imported/'videodb.xml').read_text().replace('<tvshow><title>','<tvshow><studio>Cartoon Network</studio><title>',1)
         document=document.replace('<paths/>',f'<movie><title>Fixture Movie</title><year>2026</year><studio>Cartoon Network</studio><runtime>2</runtime><filenameandpath>{escape(str(movie))}</filenameandpath><path>{escape(str(media))}/</path><file>{movie.name}</file><basepath>{escape(str(media))}/</basepath><art><poster>{escape(str(poster))}</poster></art></movie><paths/>')
         (imported/'videodb.xml').write_text(document)
-    if args.guide or args.history:
+    if args.guide or args.history or args.local_search:
         # Kodi's native import resolves exported episode entries to these
         # export-relative filenames. Supply actual fixture media there rather
         # than relying on an ignored filenameandpath override in the XML.
-        for season, number in ((0,1),(1,1),(1,2)):
+        for season, number in fixture_episodes:
             os.link(clip,exported_art/f"s{season:02}e{number:02}.avi")
         if args.history:
             assert all((exported_art/f"s{season:02}e{number:02}.avi").is_file() for season,number in ((0,1),(1,1),(1,2)))
@@ -306,7 +310,14 @@ provider.setSettingString("searchlanguage","en-US")
     try:
         if active: run("systemctl", "--user", "stop", "isolde.service")
         with (evidence / "shell.log").open("w") as log:
-            process = subprocess.Popen([str(args.executable.resolve())] + ([] if args.pages else ["--windowed"]) + ["--launch-app=shows"], env=env, stdout=log, stderr=log)
+            command=[str(args.executable.resolve())] + ([] if args.pages else ["--windowed"]) + ["--launch-app=shows"]
+            offline=None
+            if args.local_search:
+                spec=importlib.util.spec_from_file_location('local_search_offline',Path(__file__).with_name('guide-soak-acceptance.py'))
+                offline=importlib.util.module_from_spec(spec);spec.loader.exec_module(offline)
+                probe=offline.SOCKET_PROBE.replace("'--windowed'","'--windowed','--launch-app=shows'")
+                command=[sys.executable,'-c',probe,str(evidence),str(args.executable.resolve())]
+            process = subprocess.Popen(command, env=env, stdout=log, stderr=log,preexec_fn=offline.install_socket_filter if offline else None)
             shell = wait(lambda: next((r[0] for r in windows() if r[2] == str(process.pid)), None), "Shell ready")
             kodi = wait(lambda: next((r[0] for r in windows() if "Kodi" in r[-1]), None), "Kodi ready")
             directory = userdata / "isolde"
@@ -492,7 +503,39 @@ provider.setSettingString("searchlanguage","en-US")
             seasons = rpc(directory, "VideoLibrary.GetSeasons", {"tvshowid": show_id, "properties": ["season"]})["seasons"]
             assert {s["season"] for s in seasons} == {0, 1}
             eps = rpc(directory, "VideoLibrary.GetEpisodes", {"tvshowid": show_id, "properties": ["season", "episode", "resume"]})["episodes"]
-            assert len(eps) == 3
+            if args.local_search:
+                def complete_search_import():
+                    imported=[]
+                    for start in (0,50):
+                        imported+=rpc(directory,'VideoLibrary.GetEpisodes',{'tvshowid':show_id,'properties':['season','episode','resume'],'limits':{'start':start,'end':start+50}}).get('episodes',[])
+                    return imported if len(imported)==56 else None
+                eps=wait(complete_search_import,'Kodi imported all56 search fixture episodes',seconds=60)
+            assert len(eps) == (56 if args.local_search else 3)
+            if args.local_search:
+                network=json.loads((evidence/'network-denial.json').read_text())
+                assert network['socketErrnos']==[101,101] and network['unixSocketAvailable'] is True
+                assert network['pid']==process.pid
+                phases=[];inputs=[]
+                def press(name):inputs.append(name);key(shell,name,.08)
+                def capture(phase):phases.append(phase);guide_capture(phase)
+                run('wmctrl','-i','-a',shell,env=env)
+                press('Home');time.sleep(2);capture('localsearchorigin')
+                press('s');capture('localsearchentry');press('Return')
+                remote_text(press,'fixture');time.sleep(3);capture('localsearchresults')
+                for _ in range(60):press('Down')
+                capture('localsearchmore');press('Return');time.sleep(2);capture('localsearchnext')
+                # The busy result clamps selection to the Previous Episodes row.
+                press('Return');time.sleep(2);capture('localsearchprevious')
+                for _ in range(60):press('Down')
+                press('Return');time.sleep(2);press('Down');press('Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Search result starts real Kodi playback')
+                capture('localsearchplaying');key('kodi','Escape')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Search playback ends')
+                time.sleep(2);run('wmctrl','-i','-a',shell,env=env);capture('localsearchplayreturn')
+                press('Escape');capture('localsearchreturned')
+                for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                (evidence/'result.json').write_text(json.dumps(dict(passed=True,journey='local-search',freshProfile=True,normalProfileUsed=False,realKodi=True,shows=shows,episodes=eps,network=network,captures=phases,actualInputActions=len(inputs),inputTrace=inputs,mediaUnchanged=True,visualReview='pending'),indent=2))
+                print('Evidence: '+str(evidence),flush=True);return
             if args.history:
                 phases=[]
                 def history_capture(phase):
