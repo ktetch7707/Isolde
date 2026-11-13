@@ -80,6 +80,8 @@ def main():
     userdata = data / "Isolde/native-profiles" / profile / "kodi/home/.kodi/userdata"
     if media.exists() or userdata.exists(): raise RuntimeError("Fixture must be new")
     media.mkdir(parents=True); userdata.mkdir(parents=True, mode=0o700)
+    if args.movie_art:
+        (userdata/'advancedsettings.xml').write_text('<advancedsettings><loglevel hide="true">1</loglevel></advancedsettings>')
     if args.playlists:
         playlists=userdata/"playlists/video";playlists.mkdir(parents=True)
         (playlists/"Fixture episodes.xsp").write_text('<smartplaylist type="episodes"><name>Fixture episodes</name><match>all</match><rule field="tvshow" operator="is"><value>Isolde Television Fixture</value></rule><order direction="ascending">episode</order></smartplaylist>')
@@ -89,8 +91,8 @@ def main():
         # Two real silent audio tracks exercise selection without making a
         # physical-output claim; twenty minutes permits default Kodi resume.
         command=['gst-launch-1.0','-q','oggmux','name=mux','!','filesink','location='+str(clip),
-            'videotestsrc','num-buffers=18000','!','video/x-raw,width=320,height=180,framerate=15/1','!','theoraenc','!','queue','!','mux.']
-        for _ in range(2):command+=['audiotestsrc','wave=silence','num-buffers=56250','samplesperbuffer=1024','!','audio/x-raw,rate=48000,channels=1','!','vorbisenc','!','queue','!','mux.']
+            'videotestsrc','num-buffers=6000','!','video/x-raw,width=320,height=180,framerate=5/1','!','theoraenc','!','queue','!','mux.']
+        for _ in range(2):command+=['audiotestsrc','wave=silence','num-buffers=9375','samplesperbuffer=1024','!','audio/x-raw,rate=8000,channels=1','!','vorbisenc','!','queue','!','mux.']
         run(*command)
     else:
         run("gst-launch-1.0", "-q", "videotestsrc", f"num-buffers={600 if args.pages else 1800}", "!", "video/x-raw,width=320,height=180,framerate=15/1",
@@ -634,7 +636,16 @@ provider.setSettingString("searchlanguage","en-US")
                 assert all(changed.get(name)==value for name,value in original_art.items() if name!='poster'),'Poster edit changed unrelated title art'
                 time.sleep(.5);key(shell,'Escape');key(shell,'Escape');poster_capture('movieposterapplied')
                 key(shell,'Return')
-                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Fresh Isolde source played its real local movie without Kodi menus')
+                playback_trace=[]
+                def fresh_movie_playing():
+                    status=rpc(directory,'Isolde.PlaybackStatus')
+                    if not playback_trace or status!=playback_trace[-1]:
+                        playback_trace.append(status)
+                        players=rpc(directory,'Player.GetActivePlayers')
+                        actual=[rpc(directory,'Player.GetItem',{'playerid':row['playerid'],'properties':[]}) for row in players]
+                        print('FRESH_PLAYBACK_STATE '+json.dumps(dict(status=status,players=players,items=actual)),flush=True)
+                    return status.get('state')=='playing'
+                wait(fresh_movie_playing,'Fresh Isolde source played its real local movie without Kodi menus')
                 poster_capture('moviefreshplaying')
                 key('kodi','Menu')
                 controls=wait(lambda:next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None),'Fresh native Menu opened Isolde playback controls')
@@ -1032,7 +1043,11 @@ provider.setSettingString("searchlanguage","en-US")
                     {"properties":["title","year","file","art","uniqueid"],"limits":{"start":0,"end":50}}),indent=2))
             except (OSError,RuntimeError): pass
         kodi_log = userdata.parent / "temp/kodi.log"
-        if kodi_log.exists(): print(kodi_log.read_text(errors="replace")[-6000:], flush=True)
+        if kodi_log.exists():
+            log_text=kodi_log.read_text(errors="replace")
+            print(log_text[-6000:], flush=True)
+            if args.movie_art:
+                print('KODI_PLAYBACK_DIAGNOSTICS\n'+'\n'.join(line for line in log_text.splitlines()[-4000:] if any(token in line for token in ('OnPlayBack','OnAV','OnMessage','CurrentFile','TMSG_','CApplication::Play','VideoLibrary.GetMovie','Player.GetItem'))) [-24000:],flush=True)
         if args.inspect: print("Inspect: " + str(evidence), flush=True); time.sleep(20)
         raise
     finally:

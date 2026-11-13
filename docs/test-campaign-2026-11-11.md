@@ -1819,3 +1819,30 @@ BUG-167 playlists fixture bootstrap uses a browser ID before Kodi creates it;
 w132032-786 fails before playlist UI, not a product playlist failure. Replace
 fixed sleeps with bounded named Import-control and dialog readiness. Subsequent
 installed attempts retain all failed logs and reuse the unchanged tested app.
+
+Installed w132240-490/132755-054 verify actual poster preview/cancel/confirmed
+Apply, managed PNG identity/pixels and unrelated-art preservation. All ten
+132240 frames reviewed (review-sheet.jpg plus full-size key captures). Credit
+T04.5.d and complete T04.5; T04=66%,2219/25=88.76% rounded89%,197/235.
+BUG-168 fresh local movie decodes but Kodi GetItem returns empty unknown type;
+bridge eventually declares replacement and refuses controls. Diagnostic state
+trace records starting→replaced with active video/unknown item. x8/8 verifies
+exact validated-file fallback through JSON-RPC, but installed x133511-505 still
+fails. Add Kodi's native getPlayingFile identity callback for the same exact
+file only; conflicting known IDs/foreign paths remain rejected. y verifies
+this correction; installed controls not accepted yet. No relaxed timeout or
+ownership bypass. Faster synthetic media keeps20min/two audio streams while
+reducing generation from~90sec to~30sec; actual decode remains required.
+
+y8/8 also passes native file-identity contracts but installed134215-024 still
+returns unknown/replaced. Both unsuccessful fallbacks are removed, restoring
+strict original ownership. Debug w134713-180 records native OnPlayBackStarted
+and OnAVStarted but no published current item. Native Kodi21.3 publishes its
+item via GUI messages; Isolde previously showed the minimized window only
+after playing, creating a startup dependency cycle. Request existing native
+presentation once on the accepted initial starting reply, with actual-start
+signal and ownership checks unchanged. Existing lifecycle case proves one
+presentation and no premature started signal. Because shared playback-start
+ordering changed, z performs one new full integration:63/63 pass, source
+01f9b17e2638d86ded6701d3beb802e1657bc56838c8e786cf9698395da6e9f5,
+installed ac197e707d3dbf122f5c77c0. Installed playback closure remains pending.

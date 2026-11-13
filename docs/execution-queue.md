@@ -2,6 +2,25 @@
 
 ## Current checkpoint — November 13 installed media batch
 
+Current acceptance89% (2219/25),197/235 milestones; T04=66%, T04.5 fully
+accepted. z full integration passes63/63 and deploys
+ac197e707d3dbf122f5c77c0, source01f9b17e2638d86ded6701d3beb802e1657bc56838c8e786cf9698395da6e9f5.
+Installed movieart/playlists is active on z. x/y path-identity fallback attempts
+failed installed verification and were removed; strict original ownership is
+retained. z presents the native window once on accepted starting reply, before
+waiting for GUI-owned item publication. No installed playback pass claimed yet.
+
+Startup correction: w debug134713-180 confirms Kodi OnPlayBackStarted/OnAVStarted
+while item stays unknown. Isolde presents the minimized native window only
+after playing, creating a GUI-start notification dependency cycle. Remove
+unsuccessful x/y Python identity fallbacks; restore tested w. Emit the existing
+presentation request once on the accepted initial starting acknowledgement;
+retain strict ownership and actual-start signals. Existing lifecycle case
+asserts one presentation, zero started until actual playing, and invalidation.
+This changes the shared KodiMedia playback-start boundary, so run one full
+integration batch z before installed verification; prior focused reuse rejects
+that cross-cutting file. This is the recorded reason for the new full run.
+
 Acceptance89% (2217/25),196/235 milestones; T04=64%. Current installed
 dd5acf8172cb47bffa46f466 from t04-media-20261113-w passes8/8 affected tests
 with original f63/63 reuse. Native dependency7d9bac4fd7d9 retains complete

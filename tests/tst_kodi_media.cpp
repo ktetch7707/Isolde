@@ -925,6 +925,7 @@ void KodiMediaTests::playbackLifecycle()
     serve(server, 13);
     KodiMedia media("default", nullptr, dir.path());
     QSignalSpy started(&media, &KodiMedia::playbackStarted), returned(&media, &KodiMedia::playbackReturned);
+    QSignalSpy presented(&media, &KodiMedia::playbackPresentationRequested);
     media.refresh(); QTRY_VERIFY(media.connected());
     media.playMovie(999, true);
     QVERIFY(!media.playbackActive());
@@ -934,6 +935,8 @@ void KodiMediaTests::playbackLifecycle()
     QCOMPARE(server.property("playRequests").toInt(), 1);
     QVERIFY(media.playbackActive());
     QCOMPARE(started.size(), 0);
+    QCOMPARE(presented.size(),1);
+    QTest::qWait(600);QCOMPARE(presented.size(),1);QCOMPARE(started.size(),0);
     server.setProperty("playState", "playing");
     QTRY_COMPARE(started.size(), 1);
     server.setProperty("playState", "paused");

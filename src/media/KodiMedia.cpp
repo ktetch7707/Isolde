@@ -1134,6 +1134,9 @@ void KodiMedia::consume()
         if (state=="failed" && result.value("reason").isString()) m_playbackStatus=result.value("reason").toString().left(512);
         if (state == "starting" || state == "playing" || state == "paused") {
             m_playbackPoll.start();
+            // A minimized Kodi window must process its GUI start notification
+            // before its current library item becomes available to the bridge.
+            if(m_stage==5 && state=="starting")emit playbackPresentationRequested();
             const auto optionRequest=result["optionsRequest"].toInt();
             if(optionRequest>0 && optionRequest!=m_optionsRequest){m_optionsRequest=optionRequest;const auto generation=m_generation;QTimer::singleShot(0,this,[this,generation]{if(generation==m_generation && m_playbackActive)emit playbackOptionsRequested();});}
             if (state != "starting" && !m_playbackVisible) { m_adjacentTransition=false;m_playbackVisible = true; emit playbackStarted(); }
