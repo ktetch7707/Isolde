@@ -237,7 +237,7 @@ def suite_selection(suite):
     if suite == "home_component_navigation":
         pattern = "^(home_component_navigation|studio_navigation)$"
     if suite == "kodi_media_client":
-        pattern = "^(kodi_media_client|kodi_import_contracts)$"
+        pattern = "^(kodi_media_client|kodi_import_contracts|kodi_local_bridge)$"
     return targets, pattern
 CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-only", "--inspect"]), "themecontrols": ("home-components-acceptance.py", ["--studio", "--themes-controls-only", "--inspect"]), "themecustom": ("home-components-acceptance.py", ["--studio", "--themes-custom-only", "--inspect"]), "themefaults": ("home-components-acceptance.py", ["--studio", "--themes-faults-only", "--inspect"]), "themes": ("home-components-acceptance.py", ["--studio", "--themes-only", "--inspect"]),
          "catalog": ("home-components-acceptance.py", ["--studio", "--catalog", "--inspect"]),
@@ -1246,7 +1246,7 @@ class Oracle:
         self.update(changedFiles=changed, suite=suite, sourceDigest=digest(self.run / "files.sha256"))
         build = work / "build"
         self.stage("configure", ["cmake", "-S", str(work / "source"), "-B", str(build), "-G", "Ninja",
-                                 "-DBUILD_TESTING=ON", "-DCMAKE_BUILD_TYPE=Debug"], 120)
+                                 "-DBUILD_TESTING=ON", "-DCMAKE_BUILD_TYPE=Debug", "-DCMAKE_CXX_FLAGS_DEBUG=-g1"], 120)
         command = ["cmake", "--build", str(build), "--parallel", "2"]
         targets, pattern = suite_selection(suite)
         if reuse:targets=targets+['isolde','isolde-recovery','isolde-native-host']
@@ -1301,7 +1301,7 @@ class Oracle:
             if suite == "guide":
                 expected = {"guide_contracts", "guide_remote_ui", "kodi_local_bridge", "kodi_playback", "kodi_media_client"}
             if suite == "kodi_media_client":
-                expected = {"kodi_media_client","kodi_import_contracts"}
+                expected = {"kodi_media_client","kodi_import_contracts","kodi_local_bridge"}
             if {c.get("name") for c in cases} != expected:
                 raise RuntimeError("CTest did not execute exactly the selected suites")
         if not cases or any(c.find("failure") is not None or c.find("error") is not None for c in cases):
@@ -1505,6 +1505,12 @@ class Oracle:
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             removed=remove_packaged_psp_build(Path.home()/'.cache/isolde-emulators/ppsspp-1.20.4',mounts,active,prune_source=True)
             atomic_json(self.run/'guest-packaged-runtime-build-cleanup.json',{'guest':'isolde-test','targets':removed,'verifiedOfflinePackageAndReceiptPreserved':True,'upstreamCheckoutRemoved':any(Path(p).name=='source' for p in removed)})
+        if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
+            # Last resort: regenerate a bounded amount of declared production
+            # object cache. Retain source, selected test objects,
+            # tests, staged/installed candidates and every evidence path.
+            removed=remove_unselected_test_objects(self.root,mounts,active,getattr(self,'maintenance_build_targets',()),target_free=minimum_gib*1024**3,include_production=True)
+            atomic_json(self.run/'guest-production-object-cleanup.json',{'guest':'isolde-test','targets':removed,'objectsRegeneratedByNinja':True,'sourceAndAcceptanceEvidencePreserved':True})
         if shutil.disk_usage(self.root).free<minimum_gib*1024**3:
             raise RuntimeError(f"Verified obsolete artifacts could not recover {minimum_gib} GiB; inspect storage evidence")
 
@@ -2274,15 +2280,16 @@ def deduplicate_source_snapshots(root,current,mounts=(),active=(),target_free=3*
     return records
 
 
-def remove_unselected_test_objects(root,mounts=(),active=(),keep=(),target_free=3*1024**3):
-    """Last resort: regenerate only unrelated test objects, retaining production cache."""
+def remove_unselected_test_objects(root,mounts=(),active=(),keep=(),target_free=3*1024**3,include_production=False):
+    """Regenerate unselected test objects; opt in to declared production objects only as a last resort."""
     build=root/'work/build';meta=build/'CMakeFiles';listing=meta/'TargetDirectories.txt'
     if not listing.exists():return []
+    if type(include_production) is not bool:raise RuntimeError('Invalid production cache retention policy')
     if root.resolve()!=root or meta.resolve()!=meta or listing.resolve()!=listing or listing.stat().st_size>1024**2:raise RuntimeError('Unsafe test object cache')
     candidates=[]
     for name in listing.read_text().splitlines():
         directory=Path(name)
-        if directory.parent!=meta or not re.fullmatch(r'isolde(?:_[A-Za-z0-9]+)*_tests\.dir',directory.name) or directory.name[:-4] in keep:continue
+        if directory.parent!=meta or not (re.fullmatch(r'isolde(?:_[A-Za-z0-9]+)*_tests\.dir',directory.name) or include_production and directory.name in {'isolde_core.dir','isolde.dir'}) or directory.name[:-4] in keep and not (include_production and directory.name in {'isolde_core.dir','isolde.dir'}):continue
         if not directory.is_dir():continue
         if directory.resolve()!=directory:raise RuntimeError('Redirected test object directory')
         if any(m!=Path('/') and (m==directory or m.is_relative_to(directory) or directory.is_relative_to(m)) for m in mounts):raise RuntimeError('Mounted test object directory')

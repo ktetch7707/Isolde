@@ -183,6 +183,11 @@ class OracleTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'Unknown'):oracle.remove_unselected_test_objects(root,active=[active],keep=[names[1]],target_free=10**18)
             self.assertTrue(objects[0].exists())
 
+            objects[0].write_bytes(b'\x7fELFobject')
+            removed=oracle.remove_unselected_test_objects(root,active=[active],keep=[names[1]],target_free=10**18,include_production=True)
+            self.assertEqual(set(removed),{str(objects[0]),str(objects[2]),str(objects[3])})
+            self.assertTrue(all(p.exists() for p in [objects[1],objects[4],active,generated,listing]))
+            with self.assertRaisesRegex(RuntimeError,'Invalid'):oracle.remove_unselected_test_objects(root,include_production='yes')
     def test_runner_test_cache_preserves_recent_and_rejects_unknown_bytes(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);bins=root/'bin';bins.mkdir();driver=bins/'driver.py';driver.write_text('current')
