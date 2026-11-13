@@ -1793,3 +1793,29 @@ BUG-158. BUG-161 helper Up8 targets Frontend after returning from capability
 source setup, shutting Kodi down rather than scanning. Movie lookup timeout
 is retained. Correct helper to Up30/Down2/Confirm; no application/full-suite
 rerun for this input-only correction. Artwork/playlists acceptance stays open.
+
+November13 continuation: BUG-162 hidden desktop accessibility branches exceed
+the preflight bound; restrict traversal to visible branches, u129 self-tests
+and installed w preparation pass. BUG-160 status now stays above scrolling
+source controls; w sourcefailed capture reviewed with error and Apply visible.
+BUG-163 fresh online Kodi artwork was never cached without Kodi navigation;
+use Kodi image:// VFS cache population, bounded1 MiB and one attempt/request,
+without a parallel downloader/cache. Official Omega ImageFile.cpp confirms
+Kodi owns on-demand caching. w8/8 existing registrations pass (including
+cached-artwork); installed w131524-047 retrieves and visibly shows the genuine
+Big Buck Bunny poster. BUG-164 playback service fixture lacked xbmcvfs.File;
+v fails that fixture, corrected w passes. BUG-165 poster helper compares a raw
+path against Kodi's image:// URL; Kodi's FileItemHandler.cpp confirms wrapping.
+Decode only the standard wrapper for identity checks. BUG-166 later music scan
+helper assumes Settings index reset; explicitly return to top before selecting.
+These helper corrections reuse w without an application rebuild.
+
+Credit T04.5.b/.6.b/.7.a from actual installed save/cancel/recovery, guided
+source/content/provider workflow and scan to real metadata/visible poster.
+T04=64%, project2217/25=88.68% rounded89%,196/235 milestones. Poster edit,
+controls/music/playlists/import/offline/reference closure remain open.
+
+BUG-167 playlists fixture bootstrap uses a browser ID before Kodi creates it;
+w132032-786 fails before playlist UI, not a product playlist failure. Replace
+fixed sleeps with bounded named Import-control and dialog readiness. Subsequent
+installed attempts retain all failed logs and reuse the unchanged tested app.

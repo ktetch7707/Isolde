@@ -244,7 +244,7 @@ def suite_selection(suite):
     if suite == "store":
         pattern = "^(isolde_tests|studio_selection|android_provisioning|web_remote|fdroid_store|store_lifecycle)$"
     if suite == "media_controls":
-        pattern = "^(home_component_navigation|studio_navigation|kodi_media_client|kodi_local_bridge|kodi_playback|kodi_import_contracts|native_profile_isolation)$"
+        pattern = "^(home_component_navigation|studio_navigation|kodi_media_client|kodi_local_bridge|kodi_cached_artwork|kodi_playback|kodi_import_contracts|native_profile_isolation)$"
     if suite == "campaign_repairs":
         pattern = "^(" + "|".join(sorted(REPAIR_TESTS)) + ")$"
     if suite == "runtime_contracts":
@@ -324,6 +324,9 @@ def dismiss_guest_disk_banner():
             # Enumerate notifications, not every Isolde/Kodi/browser child.
             # Process identity is verified independently of accessible names.
             if len(ancestors)==1 and not guest_notification_owner(node.get_process_id()):continue
+            # Hidden shell menus/history cannot obscure an installed window.
+            # Avoid walking those potentially large, remote accessibility trees.
+            if len(ancestors)>=2 and not node.get_state_set().contains(Atspi.StateType.SHOWING):continue
             name=(node.get_name() or '')[:256]
             index=len(nodes);nodes.append((node,name,ancestors))
             if len(ancestors)<12:
@@ -953,8 +956,8 @@ def search_origin_main_delta(before,after):
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='media_controls':
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
-            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','native/kodi/IsoldeSources.cpp'},
-            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
+            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
+            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
     if suite=='store':
@@ -1490,7 +1493,7 @@ class Oracle:
             if suite == "store":
                 expected = {"isolde_tests", "studio_selection", "android_provisioning", "web_remote", "fdroid_store", "store_lifecycle"}
             if suite == "media_controls":
-                expected = {"home_component_navigation","studio_navigation","kodi_media_client","kodi_local_bridge","kodi_playback","kodi_import_contracts","native_profile_isolation"}
+                expected = {"home_component_navigation","studio_navigation","kodi_media_client","kodi_local_bridge","kodi_cached_artwork","kodi_playback","kodi_import_contracts","native_profile_isolation"}
             if suite == "games":
                 expected = {"component_contracts", "games_remote_ui", "isolde_tests", "games_provisioning", "steam_games"}
             if suite == "guide":

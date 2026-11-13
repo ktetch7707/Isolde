@@ -28,7 +28,7 @@ monitor = Monitor()
 playback = Playback(xbmc.executeJSONRPC, xbmc.executebuiltin, os.environ.get("ISOLDE_MANAGED_KODI") == "1",
                     subtitle_loader=lambda path: xbmc.Player().setSubtitles(path))
 bridge = LocalBridge(xbmcvfs.translatePath("special://profile/isolde"), xbmc.executeJSONRPC, playback,
-                     Artwork(xbmc.executeJSONRPC, xbmcvfs.translatePath("special://profile/Thumbnails")),
+                     Artwork(xbmc.executeJSONRPC, xbmcvfs.translatePath("special://profile/Thumbnails"), xbmcvfs.File),
                      Playlists(xbmcvfs.translatePath("special://profile/"),playback.managed),
                      Sources(xbmcvfs.translatePath("special://profile/"),xbmc.executeJSONRPC,xbmc.executebuiltin,playback.managed,
                              json.loads(os.environ.get("ISOLDE_LIBRARY_ROOTS","[]"))))

@@ -62,5 +62,26 @@ class ArtworkTests(unittest.TestCase):
                        {"kind": "unknown", "id": 1}, {"kind": "movie", "id": 1, "url": "https://example.invalid"}):
             with self.assertRaises(ValueError): art.get(params)
 
+    def test_fresh_art_uses_bounded_kodi_image_vfs_and_closes_it(self):
+        class Image:
+            def __init__(self, size):self.length=size;self.closed=False;self.reads=[]
+            def size(self):return self.length
+            def readBytes(self,limit):self.reads.append(limit);return b'\x89PNG\r\n\x1a\nfixture'
+            def close(self):self.closed=True
+        with tempfile.TemporaryDirectory() as directory:
+            url='https://example.invalid/fresh.png';opened=[]
+            def execute(raw):
+                method=json.loads(raw)['method']
+                return json.dumps({'result':{'textures':[]} if method=='Textures.GetTextures' else {'moviedetails':{'art':{'poster':url,'fanart':url}}}})
+            for size in (32,1024*1024+1,0):
+                image=Image(size)
+                def open_image(path):opened.append(path);return image
+                result=module.Artwork(execute,directory,open_image).get({'kind':'movie','id':1})
+                self.assertTrue(image.closed)
+                self.assertEqual(bool(result['data']),size==32)
+                self.assertEqual(image.reads,[1024*1024+1] if size==32 else [])
+            self.assertEqual(opened,['image://https%3A%2F%2Fexample.invalid%2Ffresh.png/']*3)
+            self.assertEqual(list(Path(directory).iterdir()),[])
+
 
 if __name__ == "__main__": unittest.main()

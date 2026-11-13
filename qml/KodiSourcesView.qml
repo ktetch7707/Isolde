@@ -104,12 +104,16 @@ Item {
     Timer {id:refreshTimer;interval:100;onTriggered:{if(root.visible && root.mode==="list"){if(root.kodiClient.busy || !root.kodiClient.connected){if(++root.refreshAttempts<300)restart();else root.message=qsTr("Library unavailable. Check Media Library status and choose Refresh to retry.")}else root.kodiClient.refreshSources()}}}
     Timer {id:revealTimer;interval:0;onTriggered:if(root.visible)root.reveal()}
     Rectangle {anchors.fill:parent;color:shell.surface}
+    Column {
+        id:sourceHeader;width:parent.width;spacing:16*shell.gapScale
+        visible:root.mode!=="folders" && root.mode!=="keyboard"
+        Text {width:parent.width;wrapMode:Text.WordWrap;text:qsTr("KODI SOURCE SETUP");font.family:shell.fontFamily;font.pixelSize:30*shell.textScale;color:shell.text}
+        Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.message || root.kodiClient.sourceStatus || qsTr("Reading sources…");font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;color:shell.focus}
+    }
     Flickable {
-        id:scroll;objectName:"kodiSourceScroll";anchors.fill:parent;clip:true;contentHeight:contents.implicitHeight;boundsBehavior:Flickable.StopAtBounds;visible:root.mode!=="folders" && root.mode!=="keyboard"
+        id:scroll;objectName:"kodiSourceScroll";anchors.fill:parent;anchors.topMargin:sourceHeader.height+16*shell.gapScale;clip:true;contentHeight:contents.implicitHeight;boundsBehavior:Flickable.StopAtBounds;visible:root.mode!=="folders" && root.mode!=="keyboard"
         Column {
             id:contents;width:parent.width;spacing:16*shell.gapScale
-            Text {width:parent.width;wrapMode:Text.WordWrap;text:qsTr("KODI SOURCE SETUP");font.family:shell.fontFamily;font.pixelSize:30*shell.textScale;color:shell.text}
-            Text {width:parent.width;wrapMode:Text.WordWrap;textFormat:Text.PlainText;text:root.message || root.kodiClient.sourceStatus || qsTr("Reading sources…");font.family:shell.fontFamily;font.pixelSize:18*shell.textScale;color:shell.focus}
             Text {width:parent.width;visible:root.mode==="edit";wrapMode:Text.WrapAnywhere;textFormat:Text.PlainText;text:root.draft.path || "";font.family:shell.fontFamily;font.pixelSize:17*shell.textScale;color:shell.muted}
             Column {
                 id:rowColumn;width:parent.width;spacing:8*shell.gapScale

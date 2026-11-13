@@ -36,7 +36,7 @@ class PlaybackTests(unittest.TestCase):
             def close(self): events.append("closed")
         fake = types.SimpleNamespace(Monitor=Monitor, executeJSONRPC=lambda _: None,
             executebuiltin=lambda _: None, log=lambda *args: None, LOGINFO=1, LOGWARNING=2, LOGERROR=3)
-        modules = {"xbmc": fake, "xbmcvfs": types.SimpleNamespace(translatePath=lambda p: p),
+        modules = {"xbmc": fake, "xbmcvfs": types.SimpleNamespace(translatePath=lambda p: p, File=lambda _: self.fail("Callback test must not request an image")),
                    "bridge": types.SimpleNamespace(LocalBridge=Bridge), "playback": types.SimpleNamespace(Playback=Player),
                    "artwork": types.SimpleNamespace(Artwork=lambda *args: None),
                    "sources": types.SimpleNamespace(Sources=lambda *args: None),

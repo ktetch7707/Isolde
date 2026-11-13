@@ -19,6 +19,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 import signal
 import importlib.util
+from urllib.parse import unquote
 import sys
 import struct
 import subprocess
@@ -145,7 +146,7 @@ def main():
     (userdata / "keymaps").mkdir()
     (userdata / "keymaps/tv-fixture.xml").write_text("<keymap><global><keyboard><f9>RunScript(special://profile/tv-fixture-import.py)</f9></keyboard></global></keymap>")
     (userdata / "mediasources.xml").write_text('<mediasources><network><location id="0">' + escape(str(imported)) + '/</location></network></mediasources>')
-    (userdata / "tv-fixture-import.py").write_text('''import json, xbmc, xbmcgui
+    (userdata / "tv-fixture-import.py").write_text('''import json, time, xbmc, xbmcgui
 xbmc.executebuiltin("ActivateWindow(mediasettings)")
 xbmc.sleep(700)
 for _ in range(4):
@@ -156,15 +157,23 @@ for _ in range(4):
 xbmc.executebuiltin("ActivateWindow(home)")
 xbmc.sleep(300)
 xbmc.executebuiltin("ActivateWindow(mediasettings,videolibrary.import)")
-xbmc.sleep(500)
-for control in range(30, 3000):
-    if xbmc.getInfoLabel("Control.GetLabel(%s)" % control).strip().lower() == "import library":
-        xbmc.executebuiltin("SetFocus(%s)" % control)
-        xbmc.sleep(250)
-        break
+deadline=time.monotonic()+12
+control=None
+while time.monotonic()<deadline:
+    control=next((index for index in range(30,3000) if xbmc.getInfoLabel("Control.GetLabel(%s)" % index).strip().lower()=="import library"),None)
+    if control is not None:break
+    xbmc.sleep(200)
+if control is None:raise RuntimeError("Fixture bootstrap Import library control did not become ready")
+xbmc.executebuiltin("SetFocus(%s)" % control)
+xbmc.sleep(300)
 xbmc.executebuiltin("Action(select)")
-xbmc.sleep(700)
-dialog = xbmcgui.getCurrentWindowDialogId()
+deadline=time.monotonic()+12
+dialog=0
+while time.monotonic()<deadline:
+    dialog=xbmcgui.getCurrentWindowDialogId()
+    if dialog>0:break
+    xbmc.sleep(200)
+if dialog<=0:raise RuntimeError("Fixture bootstrap import browser did not open")
 browser = xbmcgui.Window(dialog)
 xbmc.executebuiltin("SetFocus(450)")
 xbmc.executebuiltin("Action(down)")
@@ -606,7 +615,8 @@ provider.setSettingString("searchlanguage","en-US")
                     print(phase.upper()+"_READY "+str(evidence),flush=True)
                     wait(lambda:(evidence/(phase+"-captured")).exists(),phase+" captured",seconds=110)
                 def title_art():
-                    return rpc(directory,"VideoLibrary.GetMovieDetails",{"movieid":movie['movieid'],"properties":["art"]})['moviedetails']['art']
+                    values=rpc(directory,"VideoLibrary.GetMovieDetails",{"movieid":movie['movieid'],"properties":["art"]})['moviedetails']['art']
+                    return {name:unquote(value[8:-1]) if value.startswith('image://') and value.endswith('/') else value for name,value in values.items()}
                 original_art=title_art()
                 key(shell,'Menu');key(shell,'Left');time.sleep(.5);poster_capture('movieposterpreview')
                 assert title_art()==original_art,'Poster preview wrote Kodi metadata'
@@ -674,7 +684,7 @@ provider.setSettingString("searchlanguage","en-US")
                 # action in Media Settings, using Kodi's own tag reader.
                 source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
                 source_press('Up',20);source_press('Down',7);source_press('Return')
-                source_press('Down',11);source_press('Return')
+                source_press('Up',30);source_press('Down',11);source_press('Return')
                 songs=wait(lambda:rpc(directory,'AudioLibrary.GetSongs',{'properties':['title','album','artist']}).get('songs'),'Kodi indexed real tagged music',seconds=60)
                 assert len(songs)==2 and all(row.get('album')=='Isolde Fixture Album' for row in songs),songs
                 open_movie_card();source_press('Up',20);source_press('Right',20);source_press('Return');time.sleep(1)

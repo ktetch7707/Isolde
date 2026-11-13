@@ -8,13 +8,14 @@ import struct
 import secrets
 import re
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import unquote, quote, urlsplit
 
 
 class Artwork:
-    def __init__(self, execute, thumbnails):
+    def __init__(self, execute, thumbnails, open_image=None):
         self.execute = execute
         self.thumbnails = Path(thumbnails).resolve()
+        self.open_image = open_image
 
     def query(self, method, params):
         reply = json.loads(self.execute(json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})))
@@ -122,4 +123,20 @@ class Artwork:
                         return {"mime": mime, "data": base64.b64encode(raw).decode("ascii")}
                 except OSError:
                     continue
+            # Kodi's image:// VFS populates its own texture cache. Never fetch
+            # an arbitrary caller URL or maintain a parallel Isolde art cache.
+            parsed=urlsplit(original)
+            if self.open_image and parsed.scheme in ('https','http') and parsed.hostname and not parsed.username and not parsed.password:
+                stream=None
+                try:
+                    stream=self.open_image('image://'+quote(original,safe='')+'/')
+                    raw=bytes(stream.readBytes(1024*1024+1)) if 0<stream.size()<=1024*1024 else b''
+                    mime='image/png' if raw.startswith(b'\x89PNG\r\n\x1a\n') else 'image/jpeg' if raw.startswith(b'\xff\xd8\xff') else ''
+                    if mime and len(raw)<=1024*1024:return {'mime':mime,'data':base64.b64encode(raw).decode('ascii')}
+                except (OSError,RuntimeError):
+                    pass
+                finally:
+                    if stream is not None:stream.close()
+                # At most one Kodi cache-population attempt per request.
+                break
         return {"mime": "", "data": ""}

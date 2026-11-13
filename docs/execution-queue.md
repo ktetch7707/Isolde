@@ -1,5 +1,23 @@
 # Executable backlog queue
 
+## Current checkpoint — November 13 installed media batch
+
+Acceptance89% (2217/25),196/235 milestones; T04=64%. Current installed
+dd5acf8172cb47bffa46f466 from t04-media-20261113-w passes8/8 affected tests
+with original f63/63 reuse. Native dependency7d9bac4fd7d9 retains complete
+virtual source records through real failed-write recovery. Fixed status header
+keeps error and Apply visible. Fresh online art uses Kodi image:// VFS to
+populate Kodi's own cache; actual installed TMDB poster is delivered/displayed.
+Credits T04.5.b/.6.b/.7.a only. No complete poster/control/playlist/import claim.
+
+First w movieart stops because helper treats Kodi's wrapped image URL as a raw
+path; decode that standard wrapper for comparison. Later Music Scan also resets
+selection before choosing its row. Playlist fixture import attempts a browser
+before it exists: bounded control/dialog readiness replaces fixed sleeps.
+Resume current installed movieart/playlists batch, then review all captures,
+offline/local-search and both reference pairs. No app rebuild for helper-only
+corrections. Import/rollback and Desktop installed workflow still remain.
+
 ## Current checkpoint — November 13 storage repair
 
 Acceptance remains88% (2204/25),193/235 milestones; T04 remains51%.

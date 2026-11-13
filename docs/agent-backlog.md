@@ -3,6 +3,13 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-12
 
+November13 current: **89% (2217/25 =88.68%)**,196/235 milestones.
+T04 advances51→64%: installed fresh source/content/provider setup, actual scan
+to metadata and visible poster, typed native source save/rollback and remote
+capability/recovery routing verified. w passes8/8 affected registrations with
+strict f63/63 reuse; installed release dd5acf8172cb47bffa46f466. Complete poster
+editing/playback/playlist/import closure remains open. See execution queue.
+
 Store T29 is accepted100%. Installed release3540c89c155eb0c38e750d40,
 store-final-20261112-j full62/62; store-boundary-o six focused tests pass.
 Signed APK update/crash recovery, offline/profile isolation, actual fixed setup
@@ -159,7 +166,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search and installed acceptance | 100% | 100% | p62 full/x5 focused; installed56-episode paging/playback/exact Search and library return accepted |
-| T04 | 19 | Complete Kodi interface, preservation and import | 51% | 100% | all scope items implemented: backup/preview/import/rollback, first-library setup, Desktop/Return, nested-folder scan, playlist create/reorder/delete, library sources/settings/artwork, Kodi capability inventory |
+| T04 | 19 | Complete Kodi interface, preservation and import | 64% | 100% | installed fresh source/provider setup, native recovery, scan/real poster and capability routes accepted; full editing/playback/playlist/import closure open |
 | T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 54% | 100% | coding claim predates campaign: BUG-078 missing Power software and installed input/contrast defects remain; interface audio output verified narrowly; broad acceptance open |
 | T09 | 21 | Playback preference and viewing controls | 38% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
 | T10 | 22 | Capture/HDMI/audio software and editors | 67% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
@@ -168,7 +175,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **88%** | **100%** | **2204 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **89%** | **100%** | **2217 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 
