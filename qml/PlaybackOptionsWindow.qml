@@ -12,6 +12,7 @@ Window {
     property int controlOriginIndex:0
     property bool restoreVideo:true
     property bool waitingAdjacent:false
+    property bool pendingConfirm:false
     transientParent:null
     flags:Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     color:"transparent"
@@ -37,12 +38,15 @@ Window {
     function closeControls(restore){restoreVideo=restore;hide()}
     function back(){if(waitingAdjacent){waitingAdjacent=false;kodiClient.playbackControl("stop");closeControls(false)}else if(mode!=="controls"){mode="controls";selectedIndex=Math.min(controlOriginIndex,rows.length-1)}else hide()}
     function handleCommand(command){
+        if(command!==inputManager.confirm)pendingConfirm=false
         if(command===inputManager.home){closeControls(false);kodiClient.playbackControl("home");return}
         if(command===inputManager.menu){if(waitingAdjacent)back();else hide();return}
         if(command===inputManager.back){back();return}
         if(command===inputManager.navigateUp)selectedIndex=Math.max(0,selectedIndex-1)
         else if(command===inputManager.navigateDown)selectedIndex=Math.min(rows.length-1,selectedIndex+1)
-        else if(command===inputManager.confirm && !kodiClient.busy){
+        else if(command===inputManager.confirm){
+            if(kodiClient.busy){pendingConfirm=true;return}
+            pendingConfirm=false
             const row=rows[selectedIndex];if(!row)return
             if(row.page){controlOriginIndex=selectedIndex;mode=row.page;selectedIndex=0;refreshTimer.start()}
             else if(row.adjacent){waitingAdjacent=true;if(kodiClient.playAdjacent(row.adjacent)){selectedIndex=0;refreshTimer.stop()}else waitingAdjacent=false}
@@ -53,13 +57,13 @@ Window {
         }
     }
     onSelectedIndexChanged:list.positionViewAtIndex(selectedIndex,ListView.Contain)
-    onVisibleChanged:if(!visible){refreshTimer.stop();if(restoreVideo && kodiClient.playbackActive)kodiClient.requestVideoPresentation()}
+    onVisibleChanged:if(!visible){pendingConfirm=false;refreshTimer.stop();if(restoreVideo && kodiClient.playbackActive)kodiClient.requestVideoPresentation()}
     Connections {
         target:root.kodiClient
         function onPlaybackOptionsRequested(){root.showControls()}
         function onPlaybackStarted(){if(root.waitingAdjacent){root.waitingAdjacent=false;root.closeControls(false)}}
         function onPlaybackReturned(){root.waitingAdjacent=false;root.closeControls(false)}
-        function onChanged(){if(!root.waitingAdjacent && !root.kodiClient.playbackActive)root.closeControls(false);root.selectedIndex=Math.min(root.selectedIndex,Math.max(0,root.rows.length-1))}
+        function onChanged(){if(!root.waitingAdjacent && !root.kodiClient.playbackActive)root.closeControls(false);root.selectedIndex=Math.min(root.selectedIndex,Math.max(0,root.rows.length-1));if(root.visible && root.pendingConfirm && !root.kodiClient.busy)Qt.callLater(function(){if(root.visible && root.pendingConfirm && !root.kodiClient.busy){root.pendingConfirm=false;root.handleCommand(inputManager.confirm)}})}
     }
     Timer {id:refreshTimer;interval:100;onTriggered:{if(root.visible && root.kodiClient.playbackActive){if(root.kodiClient.busy)restart();else root.kodiClient.refreshPlaybackOptions()}}}
     Rectangle {anchors.fill:parent;color:shell.scrim}

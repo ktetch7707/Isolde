@@ -1846,3 +1846,43 @@ presentation and no premature started signal. Because shared playback-start
 ordering changed, z performs one new full integration:63/63 pass, source
 01f9b17e2638d86ded6701d3beb802e1657bc56838c8e786cf9698395da6e9f5,
 installed ac197e707d3dbf122f5c77c0. Installed playback closure remains pending.
+
+z installed playback still fails. Native diagnostics ah identify the actual
+BUG-168 path: correct local movie id1 reaches OnPlayBackStarted, but GUI message
+dispatch has zero targets. All five targets were cleared two seconds after
+initial skin load, without subsequent registration. Authenticated-source audits
+ai/aj identify the X11 forced-refresh path: UnloadSkin disconnects the targets,
+but EGL context reuse can leave m_newGlContext false, skipping the caller's
+existing ReloadSkin. Managed-only correction ak marks forced refresh as needing
+reload. This fixes the lifecycle instead of weakening item identity. Installed
+movieart/playlists must still prove the correction; no new credit yet.
+
+ak installs, but installed144842-833 still fails with zero message targets;
+the proposed X11 flag correction is not proven sufficient. al adds a bounded
+managed-only UnloadSkin stack trace; installed145537-539 collects the exact
+second unload caller. Initial LoadSkin/Initialize unload is normal. No further
+full CTest run, timeout relaxation or acceptance credit.
+
+am native build passes. Installed z171623-129 now publishes the actual movie1
+identity and enables pause/seek; Menu opens Isolde's own controls. BUG-168's
+missing-handler failure is corrected, but complete playback acceptance remains
+open: the playing capture still shows Isolde, then audio selection times out.
+Full-size playing/controls/failure images reviewed. Native trace confirms a
+forced resize inside startup's nested YesNo loop; pending reload after startup
+restores application/playlist handlers without bypassing ownership.
+
+Related batch: BUG-170 playback controls discard Confirm while the shared
+client is busy polling. Retain one pending Confirm, cancel on navigation/Back/
+hide, apply after readiness. BUG-171 fullscreen changes can replace the Kodi XID;
+activate before fullscreen and reacquire the unique current window afterward.
+Managed skin reload also restores fullscreen video if playback is already active
+after the earlier forced unload. BUG-172 import preview lies below the actions
+without a D-pad target; expose each preview line as a read-only navigable row.
+an builds the native correction, followed by one media_controls batch reusing
+z63/63 and the installed movieart/playlists batch. No new CTest registrations.
+
+BUG-169 diagnostic dependency rebuild reused a Debian package version despite a
+different built binary. The installed SHA check rejected it before acceptance.
+Exact local dependency installation now uses --reinstall as well as
+--allow-downgrades, retaining post-install binary hash/owner checks. ag/ah verify
+the actual diagnostic binary. No host changes or new CTest registrations.

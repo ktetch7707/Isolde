@@ -5,7 +5,28 @@
 Current acceptance89% (2219/25),197/235 milestones; T04=66%, T04.5 fully
 accepted. z full integration passes63/63 and deploys
 ac197e707d3dbf122f5c77c0, source01f9b17e2638d86ded6701d3beb802e1657bc56838c8e786cf9698395da6e9f5.
-Installed movieart/playlists is active on z. x/y path-identity fallback attempts
+Installed z movieart remains blocked by BUG-168; playlists has not rerun.
+Native trace ah proves the real movie reaches the playback callback with id1,
+but all five GUI message targets were cleared two seconds after skin startup.
+Read-only authenticated-source audits ai/aj identify forced X11 context refresh:
+it unloads the skin, while EGL reuse can leave m_newGlContext false and skip
+the existing caller's skin reload. Managed native correction ak restores that
+flag after forced refresh, but installed144842-833 still has zero targets.
+Do not treat that hypothesis as resolved. al adds bounded managed-only native
+UnloadSkin caller stacks. Installed145537-539 identifies FinishWindowResize →
+forced RefreshGLContext while a startup YesNo dialog runs a nested render loop.
+ReloadSkin refuses while m_bInitializing, so the forced-refresh flag alone
+cannot recover. am adds one pending managed reload, posted by ProcessSkin once
+initialization ends. am installed171623-129 proves actual movie1 ownership and
+Menu-to-Isolde controls; screenshot still shows the library, and audio Confirm
+is dropped during busy polling. Related BUG-170/171/172 batch fixes queued
+Confirm/cancellation, fullscreen XID replacement/reload restoration and D-pad
+import preview. an native dependency passes. ao media_controls is running with
+z63/63 reuse, then deploy ao and run installed movieart/playlists. No full
+application rerun for this dependency/helper
+diagnosis; z63/63 remains applicable. No new acceptance credit yet.
+
+x/y path-identity fallback attempts
 failed installed verification and were removed; strict original ownership is
 retained. z presents the native window once on accepted starting reply, before
 waiting for GUI-owned item publication. No installed playback pass claimed yet.

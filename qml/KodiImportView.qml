@@ -6,6 +6,9 @@ Item {
     property var appearance: ({})
     property int selectedIndex: 0
     property string pendingAction: ""
+    readonly property var previewRows: kodiImporter.previewText.length ? kodiImporter.previewText.split("\n").filter(function(line) { return line.length > 0 }) : []
+    readonly property int actionCount: 8
+    onPreviewRowsChanged: selectedIndex = Math.min(selectedIndex, actionCount + previewRows.length - 1)
 
     function back() {
         if (kodiImporter.importInProgress) { kodiImporter.cancel(); return true }
@@ -14,7 +17,7 @@ Item {
     }
     function handleCommand(command) {
         if (command === inputManager.navigateUp) { pendingAction = ""; selectedIndex = Math.max(0, selectedIndex - 1) }
-        else if (command === inputManager.navigateDown) { pendingAction = ""; selectedIndex = Math.min(7, selectedIndex + 1) }
+        else if (command === inputManager.navigateDown) { pendingAction = ""; selectedIndex = Math.min(actionCount + previewRows.length - 1, selectedIndex + 1) }
         else if (command === inputManager.confirm) {
             if (kodiImporter.importInProgress) return
             if (selectedIndex === 0) kodiImporter.scanExistingKodi()
@@ -65,7 +68,7 @@ Item {
                     "6 · Clear conflict notices",
                     "7 · Refresh library connection",
                     "8 · Return to Isolde Home"
-                ]
+                ].concat(root.previewRows.map(function(line) { return "Preview · " + line }))
                 delegate: Rectangle {
                     required property int index
                     required property string modelData
@@ -80,7 +83,6 @@ Item {
                 }
             }
 
-            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: kodiImporter.previewText; color: shell.text; font.pixelSize: 17 * shell.textScale; visible: kodiImporter.previewText.length > 0 }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: "Conflicts: " + kodiImporter.conflicts.join("  "); color: shell.error; font.pixelSize: 16 * shell.textScale; visible: kodiImporter.conflicts.length > 0 }
 
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Backup: " + (kodiImporter.backupAvailable ? kodiImporter.backupPath : "none"); color: shell.muted; font.pixelSize: 15 * shell.textScale; visible: kodiImporter.backupAvailable }

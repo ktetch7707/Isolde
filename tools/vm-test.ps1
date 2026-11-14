@@ -18,7 +18,7 @@ param(
     [switch]$GuideDiagnostics,
     [ValidateRange(0,900)][int]$WaitSeconds=0,
     [ValidateSet('freetube','cbc-gem','steam')][string]$NativeApp = 'freetube',
-    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','browser-test-tools','audio-test-recover','artifacts','desktop-prompts','storage-capacity','kodi-demo-art','store-test-data','kodi-managed')][string]$ConfigureTarget = 'native',
+    [ValidateSet('native','surfshark','android','android-repair','android-store-support','games','guide','audio-test-tools','browser-test-tools','audio-test-recover','artifacts','desktop-prompts','storage-capacity','kodi-demo-art','store-test-data','kodi-managed','kodi-managed-audit')][string]$ConfigureTarget = 'native',
     [string]$IdentityFile = 'C:/Users/kketc/VirtualBox VMs/Isolde-Test/automation/id_ed25519_automation'
 )
 $ErrorActionPreference = 'Stop'
@@ -76,7 +76,7 @@ try {
     }
     $guestFree = $homeResult.Lines | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1
     if (!$guestFree) { throw 'Could not determine guest free space.' }
-    $usesGuestBuildCache = $Action -eq 'Test' -or ($Action -eq 'Configure' -and $ConfigureTarget -eq 'kodi-managed')
+    $usesGuestBuildCache = $Action -eq 'Test' -or ($Action -eq 'Configure' -and $ConfigureTarget -in @('kodi-managed','kodi-managed-audit'))
     if ($BackedUpSourceRunIds.Count -or ($usesGuestBuildCache -and [long]$guestFree -lt $(if ($ResumeRunId) { 2GB } else { 3GB }))) {
         $backups = @(Get-OracleSourceBackups -Root (Join-Path $repo 'build/vm-oracle') -RunIds $BackedUpSourceRunIds)
         $receipt = Join-Path $local 'host-source-backups.json'
@@ -87,7 +87,7 @@ try {
         ConvertTo-Json -InputObject @($reports) | Set-Content -LiteralPath $reportReceipt -Encoding utf8NoBOM
         $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($reportReceipt,"isolde-dev@127.0.0.1:$guestRun/host-report-backups.json")) -TimeoutSeconds 30 -Log $transport
     }
-    if ($Action -eq 'Test' -or ($Action -eq 'Configure' -and $ConfigureTarget -eq 'kodi-managed')) {
+    if ($Action -eq 'Test' -or ($Action -eq 'Configure' -and $ConfigureTarget -in @('kodi-managed','kodi-managed-audit'))) {
         $unknown = & git -C $repo ls-files --others --exclude-standard -- src qml config tests CMakeLists.txt
         if ($unknown) { throw "Track required new application/test files before testing: $($unknown -join ', '). Untracked artifacts are never uploaded automatically." }
         Push-Location $repo
@@ -187,7 +187,7 @@ try {
             $command += " --maintenance-tests-digest $maintenanceHash"
         }
         if ($WaitSeconds) { $command += " --wait-seconds $WaitSeconds" }
-        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'kodi-managed') { 7500 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'games') { 2500 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
+        $seconds = if ($Action -eq 'Provision') { 2400 } elseif ($Action -eq 'Test') { 1800 } elseif ($Action -eq 'Deploy') { 180 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'android') { 3900 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -in @('kodi-managed','kodi-managed-audit')) { 7500 } elseif ($Action -eq 'Configure' -and $ConfigureTarget -eq 'games') { 2500 } elseif ($Action -eq 'Configure') { 1100 } elseif ($Action -eq 'Diagnose') { 90 } else { 45 }
         $launched = $Action -in @('Test','Deploy')
         $seconds += $WaitSeconds
         $desktopPreparation = {

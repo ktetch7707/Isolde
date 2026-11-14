@@ -1023,6 +1023,38 @@ void HomeNavigationTests::kodiSettingsFollowUserTheme()
     QVERIFY(QMetaObject::invokeMethod(popup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Confirm)))));
     QVERIFY(QMetaObject::invokeMethod(popup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Menu)))));
     QVERIFY(!popup->property("visible").toBool());
+    QQmlComponent busyClientComponent(&engine);
+    busyClientComponent.setData(R"(import QtQuick
+        QtObject {
+            property bool busy: true
+            property bool playbackActive: true
+            property bool playbackCanPrevious: false
+            property bool playbackCanNext: false
+            property string playbackMediaType: "movie"
+            property string playbackStatus: "playing"
+            property string playbackOptionsStatus: ""
+            property var playbackOptions: ({})
+            signal changed()
+            function refreshPlaybackOptions() {}
+            function requestVideoPresentation() {}
+        })",QUrl());
+    std::unique_ptr<QObject> busyClient(busyClientComponent.create());
+    QVERIFY2(busyClient,qPrintable(busyClientComponent.errorString()));
+    std::unique_ptr<QObject> busyPopup(popupComponent.createWithInitialProperties({{"kodiClient",QVariant::fromValue(busyClient.get())},{"appearance",custom}}));
+    QVERIFY(busyPopup);busyPopup->setProperty("visible",true);busyPopup->setProperty("selectedIndex",3);
+    QVERIFY(QMetaObject::invokeMethod(busyPopup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Confirm)))));
+    QVERIFY(busyPopup->property("pendingConfirm").toBool());QCOMPARE(busyPopup->property("mode").toString(),QString("controls"));
+    busyClient->setProperty("busy",false);QVERIFY(QMetaObject::invokeMethod(busyClient.get(),"changed"));
+    QTRY_COMPARE(busyPopup->property("mode").toString(),QString("audio"));
+    QVERIFY(!busyPopup->property("pendingConfirm").toBool());
+    QVERIFY(QMetaObject::invokeMethod(busyPopup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Back)))));
+    busyClient->setProperty("busy",true);
+    QVERIFY(QMetaObject::invokeMethod(busyPopup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::Confirm)))));
+    QVERIFY(busyPopup->property("pendingConfirm").toBool());
+    QVERIFY(QMetaObject::invokeMethod(busyPopup.get(),"handleCommand",Q_ARG(QVariant,QVariant(int(InputManager::NavigateDown)))));
+    busyClient->setProperty("busy",false);QVERIFY(QMetaObject::invokeMethod(busyClient.get(),"changed"));QCoreApplication::processEvents();
+    QCOMPARE(busyPopup->property("mode").toString(),QString("controls"));QVERIFY(!busyPopup->property("pendingConfirm").toBool());
+    busyPopup->setProperty("visible",false);
 }
 void HomeNavigationTests::appearancePreviewCancelAndApply()
 {

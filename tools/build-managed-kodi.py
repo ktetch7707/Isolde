@@ -71,6 +71,68 @@ def overlay(source,repository,version):
         if after in text:continue
         if text.count(before)!=1:raise RuntimeError('Kodi source builtin layout changed; inspect before building')
         path.write_text(text.replace(before,after))
+    # Bounded managed-backend diagnostics for native playback publication.
+    # They observe Kodi's real message path without changing its ownership.
+    traces=[('xbmc/guilib/GUIWindowManager.cpp','  bool handled = false;',
+             '  bool handled = false;\n  if (std::getenv("ISOLDE_MANAGED_KODI") && message.GetMessage()==GUI_MSG_PLAYBACK_STARTED) CLog::Log(LOGINFO,"ISOLDE native playback dispatch targets={}",m_vecMsgTargets.size());'),
+            ('xbmc/guilib/GUIWindowManager.cpp','  m_vecMsgTargets.emplace_back(pMsgTarget);',
+             '  m_vecMsgTargets.emplace_back(pMsgTarget);\n  if (std::getenv("ISOLDE_MANAGED_KODI")) CLog::Log(LOGINFO,"ISOLDE native target added count={} manager={}",m_vecMsgTargets.size(),static_cast<void*>(this));'),
+            ('xbmc/guilib/GUIWindowManager.cpp','  m_vecMsgTargets.erase( m_vecMsgTargets.begin(), m_vecMsgTargets.end() );',
+             '  if (std::getenv("ISOLDE_MANAGED_KODI")) CLog::Log(LOGINFO,"ISOLDE native targets cleared count={} manager={}",m_vecMsgTargets.size(),static_cast<void*>(this));\n  m_vecMsgTargets.erase( m_vecMsgTargets.begin(), m_vecMsgTargets.end() );'),
+            ('xbmc/application/Application.cpp','  case GUI_MSG_PLAYBACK_STARTED:\n    {',
+             '  case GUI_MSG_PLAYBACK_STARTED:\n    {\n      if (std::getenv("ISOLDE_MANAGED_KODI")) CLog::Log(LOGINFO,"ISOLDE application received playback start");'),
+            ('xbmc/application/Application.cpp','          std::make_shared<CFileItem>(*std::static_pointer_cast<CFileItem>(message.GetItem()));\n      m_playerEvent.Reset();',
+             '          std::make_shared<CFileItem>(*std::static_pointer_cast<CFileItem>(message.GetItem()));\n      if (std::getenv("ISOLDE_MANAGED_KODI")) CLog::Log(LOGINFO,"ISOLDE application current pathBytes={} tagged={} id={}",m_itemCurrentFile->GetPath().size(),m_itemCurrentFile->HasVideoInfoTag(),m_itemCurrentFile->HasVideoInfoTag()?m_itemCurrentFile->GetVideoInfoTag()->m_iDbId:-1);\n      m_playerEvent.Reset();'),
+            ('xbmc/application/ApplicationPlayerCallback.cpp','  std::shared_ptr<CFileItem> itemCurrentFile;',
+             '  std::shared_ptr<CFileItem> itemCurrentFile;\n  if (std::getenv("ISOLDE_MANAGED_KODI")) CLog::Log(LOGINFO,"ISOLDE native callback pathBytes={} tagged={} id={}",file.GetPath().size(),file.HasVideoInfoTag(),file.HasVideoInfoTag()?file.GetVideoInfoTag()->m_iDbId:-1);'),
+            ('xbmc/application/ApplicationSkinHandling.cpp','  CServiceBroker::GetGUI()->GetWindowManager().AddMsgTarget(m_msgCb);',
+             '  if (std::getenv("ISOLDE_MANAGED_KODI")) CLog::Log(LOGINFO,"ISOLDE native skin application target={}",m_msgCb!=nullptr);\n  CServiceBroker::GetGUI()->GetWindowManager().AddMsgTarget(m_msgCb);')]
+    for name,before,after in traces:
+        path=source/name;text=path.read_text()
+        if after not in text:
+            if text.count(before)!=1:raise RuntimeError('Native playback diagnostic source layout changed: '+name)
+            text=text.replace(before,after)
+        if '#include <cstdlib>' not in text:text='#include <cstdlib>\n'+text
+        if '#include "GUIUserMessages.h"' not in text:text='#include "GUIUserMessages.h"\n'+text
+        if text!=path.read_text():path.write_text(text)
+    path=source/'xbmc/application/ApplicationSkinHandling.cpp';text=path.read_text()
+    before='void CApplicationSkinHandling::UnloadSkin()\n{'
+    after=before+'\n  if (std::getenv("ISOLDE_MANAGED_KODI"))\n  {\n    void* frames[12];\n    const int count=backtrace(frames,12);\n    char** symbols=backtrace_symbols(frames,count);\n    if (symbols) { for (int i=0;i<count;++i) CLog::Log(LOGINFO,"ISOLDE native unload caller {}",symbols[i]); std::free(symbols); }\n  }'
+    if after not in text:
+        if text.count(before)!=1:raise RuntimeError('Native skin unload source layout changed')
+        text=text.replace(before,after)
+    if '#include <execinfo.h>' not in text:text='#include <execinfo.h>\n'+text
+    if text!=path.read_text():path.write_text(text)
+    # X11's forced context refresh unloads the skin even when EGL reuses its
+    # context. Tell the existing resize/fullscreen caller to reload that skin;
+    # otherwise its application/playlist message targets stay disconnected.
+    path=source/'xbmc/windowing/X11/WinSystemX11GLContext.cpp'
+    text=path.read_text()
+    before='    if (force)\n      CRenderSystemGL::InitRenderSystem();'
+    after='    if (force)\n    {\n      CRenderSystemGL::InitRenderSystem();\n      if (std::getenv("ISOLDE_MANAGED_KODI")) m_newGlContext = true;\n    }'
+    if after not in text:
+        if text.count(before)!=1:raise RuntimeError('X11 context refresh source layout changed')
+        text=text.replace(before,after)
+    if '#include <cstdlib>' not in text:text='#include <cstdlib>\n'+text
+    if text!=path.read_text():path.write_text(text)
+    header=source/'xbmc/application/ApplicationSkinHandling.h';text=header.read_text()
+    member='  mutable bool m_isoldePendingSkinReload{false};\n'
+    if member not in text:
+        text,count=re.subn(r'(?m)^(\s*bool\s*&\s*m_bInitializing;)',lambda match:member+match[1],text)
+        if count!=1:raise RuntimeError('Native skin initialization member layout changed')
+        header.write_text(text)
+    path=source/'xbmc/application/ApplicationSkinHandling.cpp';text=path.read_text()
+    edits=[('void CApplicationSkinHandling::ReloadSkin(bool confirm)\n{',
+            'void CApplicationSkinHandling::ReloadSkin(bool confirm)\n{\n  if (m_bInitializing && std::getenv("ISOLDE_MANAGED_KODI") && g_SkinInfo && !CServiceBroker::GetGUI()->GetWindowManager().Initialized())\n    m_isoldePendingSkinReload = true;'),
+           ('void CApplicationSkinHandling::ProcessSkin() const\n{',
+            'void CApplicationSkinHandling::ProcessSkin() const\n{\n  if (m_isoldePendingSkinReload && !m_bInitializing)\n  {\n    m_isoldePendingSkinReload = false;\n    CServiceBroker::GetAppMessenger()->PostMsg(TMSG_EXECUTE_BUILT_IN, -1, -1, nullptr, "ReloadSkin");\n  }')]
+    edits.append(('      default:\n        break;',
+                  '      default:\n        if (std::getenv("ISOLDE_MANAGED_KODI"))\n          CServiceBroker::GetGUI()->GetWindowManager().ActivateWindow(WINDOW_FULLSCREEN_VIDEO);\n        break;'))
+    for before,after in edits:
+        if after not in text:
+            if text.count(before)!=1:raise RuntimeError('Native deferred skin reload source layout changed')
+            text=text.replace(before,after)
+    if text!=path.read_text():path.write_text(text)
     # The distribution patch reads DEB_VERSION only in this translation unit.
     # Retain that version stamp without invalidating every cached Kodi object.
     stamp=source/'xbmc/utils/IsoldeDistributionVersion.h'
@@ -166,7 +228,7 @@ def main():
     run(['dpkg-deb','--root-owner-group','--build',str(package),str(deb)],timeout=120)
     # Content hashes identify exact candidates; their lexical Debian version
     # ordering does not indicate whether a candidate is newer.
-    run(['sudo','-n','apt-get','install','-y','--allow-downgrades',str(deb)],timeout=300)
+    run(['sudo','-n','apt-get','install','-y','--allow-downgrades','--reinstall',str(deb)],timeout=300)
     installed=Path('/opt/isolde-managed-kodi/kodi.bin')
     if installed.is_symlink() or installed.stat().st_uid!=0 or sha(installed)!=binary_hash:raise RuntimeError('Installed managed Kodi binary differs from the built artifact')
     atomic(args.receipt,dict(passed=True,kind='dependency-build-not-application-acceptance',metadata=metadata,package=str(deb),packageSha256=sha(deb),normalProfilesUsed=False,serviceRestarted=False,createdAt=time.time()))

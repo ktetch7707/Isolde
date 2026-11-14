@@ -365,6 +365,10 @@ provider.setSettingString("searchlanguage","en-US")
             kodi = wait(lambda: next((r[0] for r in windows() if "Kodi" in r[-1]), None), "Kodi ready")
             directory = userdata / "isolde"
             wait(lambda: rpc(directory, "JSONRPC.Version"), "Private bridge ready")
+            if args.movie_art:
+                startup_log=userdata.parent/'temp/kodi.log'
+                if startup_log.is_file():
+                    print('NATIVE_STARTUP_TRACE\n'+'\n'.join(line for line in startup_log.read_text(errors='replace').splitlines() if 'ISOLDE native' in line)[-16000:],flush=True)
             time.sleep(6)  # Finish startup-window replacement and managed minimization.
             kodi = next(r[0] for r in windows() if "Kodi" in r[-1])
             if not args.movie_art:
@@ -644,6 +648,8 @@ provider.setSettingString("searchlanguage","en-US")
                         players=rpc(directory,'Player.GetActivePlayers')
                         actual=[rpc(directory,'Player.GetItem',{'playerid':row['playerid'],'properties':[]}) for row in players]
                         print('FRESH_PLAYBACK_STATE '+json.dumps(dict(status=status,players=players,items=actual)),flush=True)
+                        print('FRESH_PLAYBACK_WINDOWS '+json.dumps(windows()),flush=True)
+                        print(run('xprop','-root','_NET_ACTIVE_WINDOW',env=env),flush=True)
                     return status.get('state')=='playing'
                 wait(fresh_movie_playing,'Fresh Isolde source played its real local movie without Kodi menus')
                 poster_capture('moviefreshplaying')
@@ -1032,7 +1038,7 @@ provider.setSettingString("searchlanguage","en-US")
             (evidence / "result.json").write_text(json.dumps({"passed": True, "profile": profile, "shows": len(shows), "seasons": len(seasons), "episodes": len(eps), "media_unchanged": True}, indent=2))
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
-        if args.pages and args.inspect and process and process.poll() is None:
+        if (args.pages or args.movie_art or args.playlists) and args.inspect and process and process.poll() is None:
             print("FAILED_READY "+str(evidence),flush=True)
             deadline=time.monotonic()+30
             while not (evidence/"failed-captured").exists() and time.monotonic()<deadline:
@@ -1047,7 +1053,7 @@ provider.setSettingString("searchlanguage","en-US")
             log_text=kodi_log.read_text(errors="replace")
             print(log_text[-6000:], flush=True)
             if args.movie_art:
-                print('KODI_PLAYBACK_DIAGNOSTICS\n'+'\n'.join(line for line in log_text.splitlines()[-4000:] if any(token in line for token in ('OnPlayBack','OnAV','OnMessage','CurrentFile','TMSG_','CApplication::Play','VideoLibrary.GetMovie','Player.GetItem'))) [-24000:],flush=True)
+                print('KODI_PLAYBACK_DIAGNOSTICS\n'+'\n'.join(line for line in log_text.splitlines() if any(token in line for token in ('ISOLDE native','ISOLDE application','OnPlayBack','OnAV','OnMessage','CurrentFile','TMSG_','CApplication::Play','VideoLibrary.GetMovie','Player.GetItem'))) [-24000:],flush=True)
         if args.inspect: print("Inspect: " + str(evidence), flush=True); time.sleep(20)
         raise
     finally:

@@ -956,7 +956,7 @@ def search_origin_main_delta(before,after):
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='media_controls':
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
-            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
+            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
             {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
@@ -1808,11 +1808,43 @@ class Oracle:
         atomic_json(self.run/'guest-visual-desktop.json',{'guest':'isolde-test','dismissedPromptPaths':paths,'keyringServiceRestarted':restart,'diskBanner':disk_banner,'desktopBannersBefore':before,'desktopBannersAfter':False,'credentialsRead':False,'credentialsUnlocked':False})
 
     def configure_native(self, target="native", maintenance_tests_digest=None, demo_art_helper_digest=None, store_helper_digest=None, apply_storage_retention=False):
-        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed"}: raise ValueError("Unsupported guest configuration target")
-        if target=='kodi-managed':
+        if target not in {"native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed","kodi-managed-audit"}: raise ValueError("Unsupported guest configuration target")
+        if target in ('kodi-managed','kodi-managed-audit'):
             if self.command('hostname')!='isolde-test':raise RuntimeError('Managed Kodi builds are guest-only')
             source,entries=extract_snapshot(self.run)
             self.stage('oracle-self-test',['python3',str(source/'tests/test_vm_oracle.py')],90)
+            if target=='kodi-managed-audit':
+                cache=self.root/'support/managed-kodi/distribution-source'
+                trees=list(cache.glob('kodi-21.*'))
+                if len(trees)!=1 or trees[0].resolve()!=trees[0]:raise RuntimeError('One ordinary authenticated Kodi source tree required')
+                audit={}
+                names={'xbmc/application/Application.cpp','xbmc/application/ApplicationPlayerCallback.cpp','xbmc/guilib/GUIWindowManager.cpp','xbmc/guilib/GUIComponent.cpp','xbmc/ServiceManager.cpp'}
+                candidates=list((trees[0]/'xbmc/application').glob('*.cpp'))
+                if len(candidates)>64:raise RuntimeError('Unbounded native application source inventory')
+                for candidate in candidates:
+                    if candidate.resolve()!=candidate or candidate.stat().st_size>1024*1024:raise RuntimeError('Unsafe native application source')
+                    if any(token in candidate.read_text() for token in ('MsgTarget','UnloadSkin','DeInitialize')):names.add(str(candidate.relative_to(trees[0])))
+                for candidate in (trees[0]/'xbmc/interfaces/builtins').glob('*.cpp'):
+                    if candidate.resolve()!=candidate or candidate.stat().st_size>1024*1024:raise RuntimeError('Unsafe native builtin source')
+                    if 'Minimize' in candidate.read_text():names.add(str(candidate.relative_to(trees[0])))
+                native_files=list((trees[0]/'xbmc').rglob('*.cpp'))
+                if len(native_files)>12000:raise RuntimeError('Unbounded native source inventory')
+                for candidate in native_files:
+                    if candidate.resolve()!=candidate or candidate.stat().st_size>2*1024*1024:raise RuntimeError('Unsafe native source audit')
+                    contents=candidate.read_text()
+                    if any(token in contents for token in ('GetWindowManager().DeInitialize','GetWindowManager().DestroyWindows','->UnloadSkin()','case TMSG_MINIMIZE')):names.add(str(candidate.relative_to(trees[0])))
+                for name in sorted(names):
+                    path=trees[0]/name
+                    if path.is_symlink() or path.resolve()!=path:raise RuntimeError('Redirected Kodi audit source: '+name)
+                    if not path.exists():audit[name]={'missing':True};continue
+                    if not path.is_file() or path.stat().st_size>1024*1024:raise RuntimeError('Unsafe Kodi audit source: '+name)
+                    lines=path.read_text().splitlines();selected=set()
+                    for index,line in enumerate(lines):
+                        if any(token in line for token in ('GUI_MSG_PLAYBACK_STARTED','AddMsgTarget','AddMessageTarget','m_vecMsgTargets','DispatchThreadMessages','OnPlayBackStarted','ResetCurrentItem','DeInitialize','UnloadSkin','Minimize','TMSG_MINIMIZE','DestroyWindows')):
+                            selected.update(range(max(0,index-8),min(len(lines),index+24)))
+                    audit[name]=dict(sha256=digest(path),lines=[str(index+1)+': '+lines[index] for index in sorted(selected)])
+                atomic_json(self.run/'kodi-native-source-audit.json',audit)
+                return
             installed=Path('/opt/isolde-managed-kodi')
             if installed.exists():
                 paths=[installed,installed/'bin',installed/'kodi.bin',installed/'bin/kodi',installed/'manifest.json']
@@ -2924,7 +2956,7 @@ def main():
     parser.add_argument("--installed", action="store_true")
     parser.add_argument('--diagnostic',action='store_true')
     parser.add_argument("--native-app", choices=["freetube", "cbc-gem", "steam"], default="freetube")
-    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed"],default="native")
+    parser.add_argument("--configure-target",choices=["native","surfshark","android","android-repair","android-store-support","games","guide","audio-test-tools","browser-test-tools","audio-test-recover","artifacts","desktop-prompts","storage-capacity","kodi-demo-art","store-test-data","kodi-managed","kodi-managed-audit"],default="native")
     parser.add_argument('--demo-art-helper-digest')
     parser.add_argument("--maintenance-tests-digest")
     parser.add_argument("--reopen-helper-digest")

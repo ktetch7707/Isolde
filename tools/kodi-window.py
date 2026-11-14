@@ -2,21 +2,31 @@
 import ctypes
 import subprocess
 import sys
+import time
 
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ("show", "hide"):
         return 2
-    result = subprocess.run(["wmctrl", "-lx"], capture_output=True, text=True, timeout=2, check=True)
-    ids = []
-    for line in result.stdout.splitlines():
-        fields = line.split()
-        if len(fields) >= 3 and fields[2].lower() == "kodi.kodi":
-            ids.append(int(fields[0], 16))
+    def inventory():
+        result = subprocess.run(["wmctrl", "-lx"], capture_output=True, text=True, timeout=2, check=True)
+        return [int(fields[0],16) for line in result.stdout.splitlines()
+                if len(fields:=line.split())>=3 and fields[2].lower()=="kodi.kodi"]
+    ids=inventory()
+    deadline=time.monotonic()+3
+    while not ids and sys.argv[1]=="show" and time.monotonic()<deadline:
+        time.sleep(.1);ids=inventory()
     if len(ids) != 1:
         return 3
     if sys.argv[1] == "show":
-        for args in (["-i", "-r", hex(ids[0]), "-b", "add,fullscreen"], ["-i", "-a", hex(ids[0])]):
+        for args in (["-i", "-a", hex(ids[0])], ["-i", "-r", hex(ids[0]), "-b", "add,fullscreen"]):
             subprocess.run(["wmctrl", *args], timeout=2, check=True)
+        # Fullscreen can recreate the native GL window. Activate its current
+        # unambiguous identity, rather than the now-obsolete pre-resize XID.
+        time.sleep(.2);ids=inventory()
+        while not ids and time.monotonic()<deadline:
+            time.sleep(.1);ids=inventory()
+        if len(ids)!=1:return 3
+        subprocess.run(["wmctrl","-i","-a",hex(ids[0])],timeout=2,check=True)
     else:
         x11 = ctypes.CDLL("libX11.so.6")
         x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
