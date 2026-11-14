@@ -1987,3 +1987,33 @@ different built binary. The installed SHA check rejected it before acceptance.
 Exact local dependency installation now uses --reinstall as well as
 --allow-downgrades, retaining post-install binary hash/owner checks. ag/ah verify
 the actual diagnostic binary. No host changes or new CTest registrations.
+
+az final combined integration passes63/63 in687sec, source
+007084cb774fcd4ae59d80af0d4e7ce08ad5455b09d2a4417c53736bfebf6b82,
+HEAD cbeedcd. Deployed release33a3d7b05cc725087e69d3e9 is healthy with
+zero restarts and9.4GiB free. Installed movieart/playlists batch follows.
+The user muted VM output; audible silence alone never fails playback. Actual
+player state, time, selected tracks and visible frames remain the evidence.
+
+Standing-reference reuse audit against feedback-r:61 Home/Page/schema/fixture
+files, studio-defaults.json and both reference helpers are byte-identical by
+the frozen manifests. Extracted original Main.qml differs only in Settings
+remote-edit dispatch, playback Menu control opening, Search playback-origin
+restoration and the initially hidden playback-control window. These do not
+change default/Home recreation/reset rendering. Reuse the already reviewed
+feedback-r Lounge/Pastel pairs for those unchanged surfaces; changed playback
+and Search boundaries require their own current installed evidence. No claim
+that old reference fixtures prove actual native playback.
+
+BUG-178 (acceptance helper): az installed attempt183906-770 times out waiting
+for songs because Settings preserves the Playback Preferences subpage from
+the preceding preference-OFF test. The final captured page is that subpage,
+and the helper's Return toggled the preference instead of starting music scan.
+Return with Back to the Media menu before selecting Scan music folders.
+This is unrelated to mute and does not demonstrate a music decoder failure.
+Reuse az63/63 and installed release33a3d7b05cc725087e69d3e9; helper-only retry,
+no full application rerun. This attempt independently proves30 actual remote
+seeks reaching780sec, retained connection, saved13min resume, scanner edit
+preserving progress, direct library resume with preference OFF and native Home.
+Movie playing/control/returned frames reviewed; complete music/playlist outcome
+and final combined capture review remain open.

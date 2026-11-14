@@ -703,6 +703,10 @@ provider.setSettingString("searchlanguage","en-US")
                 # action in Media Settings, using Kodi's own tag reader.
                 source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
                 source_press('Up',20);source_press('Down',7);source_press('Return')
+                # Settings preserves the Playback Preferences subpage visited
+                # above. Back returns to its exact Media menu origin before
+                # selecting the scan action; Up/Down do not leave that subpage.
+                source_press('Escape')
                 source_press('Up',30);source_press('Down',11);source_press('Return')
                 songs=wait(lambda:rpc(directory,'AudioLibrary.GetSongs',{'properties':['title','album','artist']}).get('songs'),'Kodi indexed real tagged music',seconds=60)
                 assert len(songs)==2 and all(row.get('album')=='Isolde Fixture Album' for row in songs),songs

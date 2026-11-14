@@ -2,6 +2,19 @@
 
 ## Current checkpoint — November 13 installed media batch
 
+az full integration passes63/63 (687sec), source
+007084cb774fcd4ae59d80af0d4e7ce08ad5455b09d2a4417c53736bfebf6b82;
+deployed release33a3d7b05cc725087e69d3e9, active/running/zero restarts.
+Installed attempt183906-770 proves actual seek to780sec, persisted resume,
+direct preference-OFF resume and native Home return. It stops at music scan:
+the helper reentered retained Playback Preferences and never issued scan.
+BUG-178 helper Back correction is running against the same installed app in
+tool session22085 (movieart/playlists); do not launch another VM job.
+User muted VM output; audible silence is not a failure.
+Use actual player state/time/track evidence. Acceptance remains89% pending
+the installed outcomes and capture review; no further full rerun is required
+for helper/documentation-only corrections.
+
 Acceptance **89% (2219/25)**,197/235 milestones; T04=66%. Coding100%.
 Current installed app: aq release08eb8fc40223d61239eae564, source
 d2ff1a78e217e9431709a34c8cf6de4cec371e9f0a6b7e95a73b8af095debaa7.
