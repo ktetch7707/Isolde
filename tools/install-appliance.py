@@ -27,8 +27,8 @@ DEPENDENCIES = [
 ]
 
 
-def run(*args, **kwargs):
-    subprocess.run(args, check=True, **kwargs)
+def run(*args, check=True, **kwargs):
+    subprocess.run(args, check=check, **kwargs)
 
 
 def ubuntu_supported():
@@ -69,24 +69,50 @@ def checked_release(prefix, name):
     return resolved
 
 
-def install_payload(payload, prefix):
-    for relative in ("bin/isolde", "bin/isolde-native-host", "bin/config/native-session-bus.conf"):
+def payload_digest(payload):
+    digest = hashlib.sha256()
+    for path in sorted(payload.rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(payload)).encode() + b"\0")
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def verify_payload_signature(payload, signature_path, public_key):
+    signature_path = Path(signature_path).absolute()
+    if signature_path.is_symlink() or not signature_path.is_file() or signature_path.stat().st_size != 64:
+        raise RuntimeError("Payload lacks a trusted signature")
+    public_key = Path(public_key).absolute()
+    if public_key.is_symlink() or not public_key.is_file():
+        raise RuntimeError("Trusted signing key is missing")
+    digest_file = payload.parent / (".isolde-digest-" + payload.name)
+    try:
+        digest_file.write_text(payload_digest(payload))
+        result = run("openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key),
+            "-rawin", "-in", str(digest_file), "-sigfile", str(signature_path),
+            capture_output=True, text=True, timeout=30, check=False)
+        if result.returncode:
+            raise RuntimeError("Payload signature does not match trusted signing key")
+    finally:
+        digest_file.unlink(missing_ok=True)
+
+
+def install_payload(payload, prefix, signature=None, public_key=None):
+    for relative in ("bin/isolde", "bin/isolde-native-host", "bin/isolde-recovery", "bin/config/native-session-bus.conf"):
         if not (payload / relative).is_file():
             raise RuntimeError(f"Incomplete build: missing {relative}")
     files = sorted(payload.rglob("*"))
     if any(path.is_symlink() for path in files):
         raise RuntimeError("Release payload must not contain symlinks")
-    digest = hashlib.sha256()
-    for path in files:
-        if path.is_file():
-            digest.update(str(path.relative_to(payload)).encode() + b"\0")
-            digest.update(path.read_bytes())
+    if signature is not None:
+        verify_payload_signature(payload, signature, public_key or Path(__file__).with_name("isolde-signing-key.pub"))
     prefix.mkdir(parents=True, exist_ok=True)
     current = checked_release(prefix, "current")
     checked_release(prefix, "previous")
     releases = prefix / "releases"
     releases.mkdir(exist_ok=True)
-    release = releases / digest.hexdigest()[:24]
+    digest = payload_digest(payload)
+    release = releases / digest[:24]
     if not release.exists():
         with tempfile.TemporaryDirectory(dir=releases, prefix=".staging-") as scratch:
             staged = Path(scratch) / "payload"
@@ -202,6 +228,8 @@ def main():
     parser.add_argument("--without-default-apps", action="store_true", help="Explicitly omit native default-app downloads and first-install activation")
     parser.add_argument("--android", action="store_true", help="Provision the Android runtime and verified SmartTube package during dependencies setup")
     parser.add_argument("--android-software-rendering", action="store_true", help="Use the Android software renderer for a VM; requires --android")
+    parser.add_argument("--signature", type=Path, help="Trusted payload signature file (64-byte raw signature)")
+    parser.add_argument("--public-key", type=Path, help="Trusted signing public key (defaults to packaged isolde-signing-key.pub)")
     args = parser.parse_args()
     if args.android_software_rendering and not args.android:
         parser.error("--android-software-rendering requires --android")
@@ -254,7 +282,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="isolde-install-") as directory:
         payload = Path(directory)
         run("cmake", "--install", str(build), "--prefix", str(payload))
-        release = install_payload(payload, prefix)
+        release = install_payload(payload, prefix, signature=args.signature, public_key=args.public_key)
     if args.startup:
         config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
         install_startup(prefix, config)

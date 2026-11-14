@@ -117,6 +117,58 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(result['PATH'], '/usr/bin')
         self.assertNotIn('LD_PRELOAD', result)
 
+    def test_install_with_invalid_signature_is_rejected(self):
+        signature = self.root / "payload.sig"
+        signature.write_bytes(b"\x00" * 64)
+        public_key = self.root / "signing-key.pub"
+        public_key.write_text("not-a-real-key")
+        with patch.object(installer, "run") as run:
+            run.return_value.returncode = 1
+            with self.assertRaises(RuntimeError) as context:
+                installer.install_payload(self.payload, self.prefix, signature=signature, public_key=public_key)
+        self.assertIn("signature", str(context.exception).lower())
+        self.assertFalse((self.prefix / "current").exists())
+
+    def test_install_with_missing_signature_file_is_rejected(self):
+        signature = self.root / "missing.sig"
+        with self.assertRaises(RuntimeError) as context:
+            installer.install_payload(self.payload, self.prefix, signature=signature)
+        self.assertIn("lacks a trusted signature", str(context.exception))
+
+    def test_install_with_valid_signature_passes(self):
+        signature = self.root / "payload.sig"
+        signature.write_bytes(b"\x00" * 64)
+        public_key = self.root / "signing-key.pub"
+        public_key.write_text("not-a-real-key")
+        with patch.object(installer, "run") as run:
+            run.return_value.returncode = 0
+            release = installer.install_payload(self.payload, self.prefix, signature=signature, public_key=public_key)
+        self.assertIsNotNone(release)
+        run.assert_called_once()
+        args = run.call_args[0]
+        self.assertIn("openssl", args)
+        self.assertIn("-verify", args)
+        self.assertIn("-sigfile", args)
+
+    def test_install_with_bad_signature_and_mocked_failure_is_rejected(self):
+        signature = self.root / "payload.sig"
+        signature.write_bytes(b"\x00" * 64)
+        public_key = self.root / "signing-key.pub"
+        public_key.write_text("not-a-real-key")
+        with patch.object(installer, "run") as run:
+            run.return_value.returncode = 1
+            with self.assertRaises(RuntimeError) as context:
+                installer.install_payload(self.payload, self.prefix, signature=signature, public_key=public_key)
+            self.assertIn("signature", str(context.exception).lower())
+
+
+    def test_install_requires_recovery_binary(self):
+        (self.payload / "bin/isolde-recovery").unlink()
+        with self.assertRaises(RuntimeError) as context:
+            installer.install_payload(self.payload, self.prefix)
+        self.assertIn("isolde-recovery", str(context.exception))
+        self.assertEqual((self.prefix / "current").resolve().name, "first")
+
 
 if __name__ == "__main__":
     unittest.main()

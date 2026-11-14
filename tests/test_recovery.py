@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("recovery", Path(__file__).resolve().parents[1] / "tools/recovery-controller.py")
 recovery = importlib.util.module_from_spec(spec)
@@ -56,6 +57,30 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaises(BlockingIOError):
                 recovery.recover(self.prefix, 11, self.control)
         self.assertEqual((self.prefix / "current").resolve().name, "b")
+
+    def test_rollback_with_invalid_signature_is_rejected(self):
+        signature = self.prefix / "releases" / "a" / "release.sig"
+        signature.write_bytes(b"\x00" * 64)
+        public_key = self.prefix / "signing-key.pub"
+        public_key.write_text("not-a-real-key")
+        with patch.object(recovery, "run") as run:
+            run.return_value.returncode = 1
+            with self.assertRaises(RuntimeError) as context:
+                recovery.recover(self.prefix, 11, self.control,
+                                 signature=signature, public_key=public_key)
+        self.assertIn("signature", str(context.exception).lower())
+        self.assertEqual((self.prefix / "current").resolve().name, "b")
+
+    def test_rollback_with_valid_signature_passes(self):
+        signature = self.prefix / "releases" / "a" / "release.sig"
+        signature.write_bytes(b"\x00" * 64)
+        public_key = self.prefix / "signing-key.pub"
+        public_key.write_text("not-a-real-key")
+        with patch.object(recovery, "run") as run:
+            run.return_value.returncode = 0
+            recovery.recover(self.prefix, 11, self.control,
+                             signature=signature, public_key=public_key)
+        self.assertEqual((self.prefix / "current").resolve().name, "a")
 
 
 if __name__ == "__main__":
