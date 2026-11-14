@@ -1270,9 +1270,14 @@ void KodiMedia::consume()
         return;
     }
     const QString listKey = m_mediaKind == "history" ? (m_recentEpisodes ? "episodes" : "movies") : m_mediaKind == "shows" ? "tvshows" : m_mediaKind;
-    if (!result.value(listKey).isArray()) { fail("Kodi returned an invalid library list."); return; }
-    const auto entries = result.value(listKey).toArray();
+    // Kodi omits an empty collection member while retaining zero limits.
+    // Explicit null/wrong types and missing nonempty pages remain errors.
     const auto limits = result.value("limits").toObject();
+    if (!result.value(listKey).isArray()
+        && !(result.value(listKey).isUndefined() && limits.value("total").isDouble() && limits.value("total").toInt(-1) == 0)) {
+        fail("Kodi returned an invalid library list."); return;
+    }
+    const auto entries = result.value(listKey).toArray();
     const int total = limits.value("total").toInt(-1);
     if (entries.isEmpty() && total >= 0 && total < m_requestedStart) {
         const auto generation = m_generation;

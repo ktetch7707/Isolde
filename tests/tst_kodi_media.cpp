@@ -405,7 +405,7 @@ void KodiMediaTests::selectedAppHistoryMergeAndOffline()
 }
 void KodiMediaTests::musicAlbumsTracksAndKodiPlayback()
 {
-    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));QList<QJsonObject> calls;
+    QTemporaryDir dir;QLocalServer server;QVERIFY(server.listen(dir.filePath("rpc.sock")));QList<QJsonObject> calls;bool emptyMusic=true;
     connect(&server,&QLocalServer::newConnection,&server,[&]{while(server.hasPendingConnections()){
         auto *socket=server.nextPendingConnection();connect(socket,&QLocalSocket::disconnected,socket,&QObject::deleteLater);
         connect(socket,&QLocalSocket::readyRead,socket,[&,socket]{
@@ -417,11 +417,14 @@ void KodiMediaTests::musicAlbumsTracksAndKodiPlayback()
                 if(!albums)QCOMPARE(params["filter"].toObject()["albumid"].toInt(),41);
                 const QJsonObject item{{albums?"albumid":"songid",albums?41:23},{"title",albums?"An actual Kodi album":"First track"},{"artist",QJsonArray{"Composer"}},{"duration",120}};
                 result={{albums?"albums":"songs",QJsonArray{item}},{"limits",QJsonObject{{"start",0},{"end",1},{"total",1}}}};
+                if(emptyMusic)result={{"limits",QJsonObject{{"start",0},{"end",0},{"total",0}}}};
             } else if(method=="Isolde.PlaySong") {QCOMPARE(request["params"].toObject()["songid"].toInt(),23);QVERIFY(!request["params"].toObject()["resume"].toBool());result={{"state","playing"},{"home",false}};}
             else result={{"state",method=="Isolde.PlaybackControl"?"ended":"playing"},{"home",false}};
             socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"result",result}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();
         });}});
     KodiMedia media("music-profile",nullptr,dir.path());media.openView("albums","all");QTRY_VERIFY(media.connected());
+    QVERIFY(!media.busy());QVERIFY(media.items().isEmpty());
+    emptyMusic=false;media.refresh();QTRY_VERIFY(media.connected() && !media.busy());
     QCOMPARE(media.items().first().toMap()["mediaType"].toString(),QString("album"));QCOMPARE(media.browseTitle(),QString("Music · Albums"));
     const auto before=calls.size();media.openView("albums","continue");QTest::qWait(20);QCOMPARE(calls.size(),before);
     media.activate(0);QTRY_VERIFY(!media.busy());QVERIFY(media.connected());QCOMPARE(media.mediaKind(),QString("songs"));QCOMPARE(media.browseTitle(),QString("An actual Kodi album"));
