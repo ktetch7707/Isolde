@@ -104,7 +104,9 @@ class PlaybackTests(unittest.TestCase):
             self.assertEqual(params,{"booleans":["Player.PauseEnabled"]})
             if self.pause_info_error:return json.dumps({"error":{"code":-32602,"message":"Capability unavailable"}})
             result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
-        elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
+        elif method == "Player.PlayPause":
+            self.assertIs(type(params["play"]), bool)
+            self.speed = int(params["play"])
         elif method == "Player.Seek":
             # Kodi 21 rejects the legacy string value. Enforce the real schema
             # at this boundary so a permissive fake cannot hide broken seeks.
@@ -332,6 +334,7 @@ class PlaybackTests(unittest.TestCase):
         self.assertIn("ActivateWindow(visualisation)", self.builtins)
         self.assertNotIn("ActivateWindow(fullscreenvideo)", self.builtins)
         self.assertEqual(self.player.control("pause")["state"], "paused")
+        self.assertEqual(self.player.control("pause")["state"], "playing")
         self.item = 99
         self.assertEqual(self.player.status()["state"], "replaced")
         self.assertFalse(any(method == "Player.Stop" for method, _ in self.calls))

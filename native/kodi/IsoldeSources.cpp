@@ -87,6 +87,15 @@ void BackupContent(int directory,CVideoDatabase& database,const std::string& pat
   std::string bytes;if(!CJSONVariantWriter::Write(backup,bytes,true) || bytes.size()>65536)throw std::runtime_error("Source recovery metadata exceeds limit");
   Atomic(directory,"source-native-backup.json",bytes);
 }
+bool ConfigureScraper(const ADDON::ScraperPtr& scraper, const std::string& content,
+                      const std::string& settings)
+{
+  if(scraper->SetPathSettings(ADDON::TranslateContent(content),settings))
+    return true;
+  // Kodi sets the path content before loading settings. Its bundled local
+  // information provider has no settings file and can scan without one.
+  return scraper->ID()=="metadata.local" && settings.empty();
+}
 void RestoreContent(int directory,CVideoDatabase& database)
 {
   CVariant backup;if(!CJSONVariantParser::Parse(Read(directory,"source-native-backup.json"),backup) || backup["version"].asInteger()!=1)throw std::runtime_error("Invalid source recovery metadata");
@@ -98,7 +107,7 @@ void RestoreContent(int directory,CVideoDatabase& database)
   if(!content.empty())
   {
     ADDON::AddonPtr addon;
-    if(!CServiceBroker::GetAddonMgr().GetAddon(id,addon,ADDON::OnlyEnabled::CHOICE_YES) || !(scraper=std::dynamic_pointer_cast<ADDON::CScraper>(addon)) || !scraper->SetPathSettings(ADDON::TranslateContent(content),backup["settings"].asString()))throw std::runtime_error("Original scraper unavailable for recovery");
+    if(!CServiceBroker::GetAddonMgr().GetAddon(id,addon,ADDON::OnlyEnabled::CHOICE_YES) || !(scraper=std::dynamic_pointer_cast<ADDON::CScraper>(addon)) || !ConfigureScraper(scraper,content,backup["settings"].asString()))throw std::runtime_error("Original scraper unavailable for recovery");
   }
   VIDEO::SScanSettings settings;settings.recurse=static_cast<int>(backup["recurse"].asInteger());settings.parent_name=backup["parentName"].asBoolean();settings.parent_name_root=backup["parentRoot"].asBoolean();settings.noupdate=backup["noUpdate"].asBoolean();settings.exclude=backup["exclude"].asBoolean();settings.m_allExtAudio=backup["allAudio"].asBoolean();
   database.BeginTransaction();
@@ -167,7 +176,7 @@ void Change(CVideoDatabase& database,const CVariant& source)
     ADDON::AddonPtr addon;
     if(!CServiceBroker::GetAddonMgr().GetAddon(scraperId,addon,ADDON::OnlyEnabled::CHOICE_YES)
        || !(scraper=std::dynamic_pointer_cast<ADDON::CScraper>(addon))
-       || !scraper->SetPathSettings(ADDON::TranslateContent(content),previousScraper && direct && previousScraper->ID()==scraperId && ADDON::TranslateContent(previousScraper->Content())==content?previousScraper->GetPathSettings():""))
+       || !ConfigureScraper(scraper,content,previousScraper && direct && previousScraper->ID()==scraperId && ADDON::TranslateContent(previousScraper->Content())==content?previousScraper->GetPathSettings():""))
       throw std::runtime_error("The selected Kodi scraper is unavailable");
   }
   VIDEO::SScanSettings settings=direct?previousSettings:VIDEO::SScanSettings{};

@@ -441,7 +441,8 @@ class Playback:
                 if not self.pause_available():
                     self.control_error = "This source does not support pausing. Playback continues."
                     return self.status()
-                self.rpc("Player.PlayPause", {"playerid": pid, "play": "toggle"})
+                props = self.rpc("Player.GetProperties", {"playerid": pid, "properties": ["speed"]})
+                self.rpc("Player.PlayPause", {"playerid": pid, "play": props["speed"] == 0})
             else:
                 props = self.rpc("Player.GetProperties", {"playerid": pid, "properties": ["canseek"]})
                 if props.get("canseek") is not True:
