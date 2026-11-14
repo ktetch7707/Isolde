@@ -105,6 +105,13 @@ class PlaybackTests(unittest.TestCase):
             if self.pause_info_error:return json.dumps({"error":{"code":-32602,"message":"Capability unavailable"}})
             result={"Player.PauseEnabled":self.pausable} if self.pause_info is None else self.pause_info
         elif method == "Player.PlayPause": self.speed = 0 if self.speed else 1
+        elif method == "Player.Seek":
+            # Kodi 21 rejects the legacy string value. Enforce the real schema
+            # at this boundary so a permissive fake cannot hide broken seeks.
+            self.assertEqual(set(params),{"playerid","value"})
+            self.assertIsInstance(params["value"],dict)
+            self.assertEqual(set(params["value"]),{"step"})
+            self.assertIn(params["value"]["step"],("smallforward","smallbackward"))
         elif method == "Player.GetViewMode":
             self.assertEqual(params,{});result={"viewmode":self.view}
         elif method == "Player.SetViewMode":
@@ -339,7 +346,9 @@ class PlaybackTests(unittest.TestCase):
         self.assertIn(("Player.Open", {"item": {"movieid": 7}, "options": {"resume": True}}), self.calls)
         self.assertEqual(self.player.control("pause")["state"], "paused")
         self.player.control("forward")
-        self.assertIn(("Player.Seek", {"playerid": 1, "value": "smallforward"}), self.calls)
+        self.assertIn(("Player.Seek", {"playerid": 1, "value": {"step": "smallforward"}}), self.calls)
+        self.player.control("backward")
+        self.assertIn(("Player.Seek", {"playerid": 1, "value": {"step": "smallbackward"}}), self.calls)
         result = self.player.control("home")
         self.assertEqual(result, {"state": "ended", "home": True, "canPause": False, "canSeek": False, "naturalEnd": False})
         self.assertEqual(self.builtins, ["ActivateWindow(fullscreenvideo)", "Minimize"])

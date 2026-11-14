@@ -1942,6 +1942,46 @@ playlists now verifies the transport correction before another frozen full run.
 All14 aq174119-693 images reviewed via review-sheet plus full playing/control/
 second-track/failure frames; native input defect and seek failure remain explicit.
 
+au diagnostic180909-215 still fails seeking:30 presses advance only normal
+elapsed time16→24sec. The failure frame retains the generic incompatible message,
+but protocol-id diagnostics never fire. Inspection identifies BUG-175's actual
+cause: Playback.control sends legacy Player.Seek value="smallforward", rejected
+by Kodi21's object-only schema. Correct to value={step:"smallforward"} (and
+backward). The permissive fake previously accepted the invalid string; enforce
+the real request shape and both directions in the existing playback test.
+The speculative request-socket rewrite is reverted, not presented as a fix.
+Keep existing40-control/cancel checks. On a stage7 error preserve connection,
+library rows and active playback, show retry status and continue ownership polls;
+the existing lifecycle now verifies this with an actual rejected control reply.
+aw is the focused eight-registration check before the final combined candidate.
+
+BUG-177 av capture review finds some keyboard screenshots precede paint despite
+DOM assertions passing. Use two animation-frame boundaries for external DOM
+observations and two actual frameSwapped boundaries before embedded screenshots.
+Reverify the existing web_remote registration and review the resulting images.
+
+aw passes8/8 affected registrations,121sec CTest, source
+a77b46aa16cd64c91f4c2464a7d20dcf140a2d6f6d084d1c3d50a367f0f3c5fd.
+This includes strict Kodi21 forward/backward schema, rejected control retaining
+library/connection/playback,40 controls and cancellation. No deployable full
+payload is inferred. ax verifies the existing browser registration with real
+paint barriers before the single final combined integration candidate.
+
+ax external Chrome passes with two-animation-frame observations, but its newly
+added embedded frameSwapped assertion fails: offscreen Qt does not provide an
+on-screen swap signal. This is a harness error, not an application/mute defect.
+Use synchronous offscreen grab, drain the Chromium texture update and save the
+next grab; ay rechecks the original registration. Do not add a platform-only
+swap prerequisite or count ax as acceptance.
+
+ay existing web_remote passes in20sec, source
+d27cb930f8775019a6342ab3822d0eb5fb045edd95970ffb5388258215c1fc3b.
+Full-size external and embedded keyboard captures now visibly show the expected
+keyboard, selected key and unobscured field. This corrects BUG-177 evidence.
+With aw8/8 media plus ay browser green, freeze az combined full integration.
+Reason: as's demonstrated full failure plus combined web focus/real Seek protocol/
+nonfatal control errors. No further production edit before installed batch.
+
 BUG-169 diagnostic dependency rebuild reused a Debian package version despite a
 different built binary. The installed SHA check rejected it before acceptance.
 Exact local dependency installation now uses --reinstall as well as

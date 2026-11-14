@@ -24,17 +24,25 @@ Complete mappings added and verified with z63/63 reuse:
 aq passes8/8 and deploys08eb8fc40223d61239eae564. Installed174119-693 proves
 visible playback, native Menu-to-Isolde controls and actual second audio stream.
 Repeated seeks expose BUG-175 incompatible shared-client response, losing the
-library connection. Replace the reused QLocalSocket with one owned socket per
-request and guard callbacks by socket plus request identity; disconnect retired
-signals before abort. Existing lifecycle exercises40 alternating controls and
-cancel/retry retains late old-peer close. This changes all Kodi client transport,
-so as requires one full63-test integration batch (recorded reason). as stops at
+library connection. The speculative request-socket rewrite is reverted after
+diagnostic180909-215 identifies the actual rejected legacy Seek value string.
+Use Kodi21 value={step:...}; strict existing fixture rejects the old shape.
+Stage7 rejection now preserves connection/library/playback and shows retry;
+existing lifecycle verifies rejection plus40 controls and late cancelled-peer
+close. as attempted the full integration for the transport change and stops at
 Chrome first-focus BUG-176 after23 passes. au continues original unattempted
 registrations: combined62/63 pass, only Chrome failed; no acceptance payload.
 Web bridge now initializes semantic focus on attachment/DOMContentLoaded; av
 focused existing web_remote passes actual Chrome and embedded flows. au staged
-diagnostic movieart/playlists is active to validate seeking before freezing one
-new full candidate. Do not deploy or credit diagnostic payload as acceptance.
+diagnostic movieart fails seeking honestly, with no acceptance. aw media_controls
+passes8/8 for the actual Seek/error-preservation correction. ay web_remote passes
+after replacing the unsupported offscreen swap gate with synchronous captures;
+full-size external/embedded keyboard frames now visibly show keyboard/focus.
+Freeze az full integration now: as's demonstrated full failure and the combined
+web focus/seek/control-error changes justify this one closure run. Then deploy
+az and run installed movieart/playlists; no additional production edits planned
+before that batch. No complete media acceptance or percent credit yet.
+Do not deploy or credit diagnostic payload as acceptance.
 Then import/rollback/Desktop, Studio playlist shelf, offline/local-search and both
 standing references. No full rerun for helper/native-only changes; no new CTest
 registrations or credit from diagnostics. T04 source/title-art milestones already

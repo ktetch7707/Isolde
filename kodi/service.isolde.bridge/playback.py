@@ -447,5 +447,5 @@ class Playback:
                 if props.get("canseek") is not True:
                     self.control_error = "This source does not support seeking. Playback continues."
                     return self.status()
-                self.rpc("Player.Seek", {"playerid": pid, "value": "smallforward" if action == "forward" else "smallbackward"})
+                self.rpc("Player.Seek", {"playerid": pid, "value": {"step": "smallforward" if action == "forward" else "smallbackward"}})
         return self.status()

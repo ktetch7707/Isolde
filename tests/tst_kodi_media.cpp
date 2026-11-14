@@ -179,6 +179,9 @@ static void serve(QLocalServer &server, int version)
                 socket->setProperty("input", bytes);
                 if (!bytes.endsWith('\n')) return;
                 const auto request = QJsonDocument::fromJson(bytes).object();
+                if(server.property("rejectControl").toBool() && request["method"]=="Isolde.PlaybackControl"){
+                    socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Rejected control"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;
+                }
                 if(server.property("rejectPlaylistMutation").toBool() && request["method"]=="Isolde.SortPlaylist"){
                     socket->write(QJsonDocument(QJsonObject{{"jsonrpc","2.0"},{"id",request["id"]},{"error",QJsonObject{{"code",-32000},{"message","Refused"}}}}).toJson(QJsonDocument::Compact)+'\n');socket->disconnectFromServer();return;
                 }
@@ -942,6 +945,11 @@ void KodiMediaTests::playbackLifecycle()
     server.setProperty("playState", "paused");
     media.playbackControl("pause");
     QTRY_COMPARE(media.playbackStatus(), QString("paused"));
+    server.setProperty("rejectControl",true);
+    QTRY_VERIFY(!media.busy());media.playbackControl("forward");QTRY_VERIFY(!media.busy());
+    QVERIFY(media.connected());QVERIFY(media.playbackActive());QVERIFY(!media.movies().isEmpty());
+    QVERIFY(media.playbackStatus().contains("retained"));
+    server.setProperty("rejectControl",false);
     server.setProperty("playState", "playing");
     for (int index=0;index<40;++index) {
         QTRY_VERIFY(!media.busy());

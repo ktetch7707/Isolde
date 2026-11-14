@@ -32,13 +32,13 @@ button,input{font:26px sans-serif;width:220px;height:60px;display:block;margin:2
 <button id="bottom" onclick="this.textContent='Activated'">Bottom control</button>
 <script>let lastKey='';addEventListener('keydown',event=>{lastKey=event.key},true);
 function fits(selector){const panel=document.querySelector(selector);if(!panel)return false;const r=panel.getBoundingClientRect();return [...panel.querySelectorAll('button')].every(b=>{const k=b.getBoundingClientRect();return k.left>=r.left&&k.right<=r.right&&k.top>=r.top&&k.bottom<=r.bottom})}
-setInterval(()=>fetch('observe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+setInterval(()=>requestAnimationFrame(()=>requestAnimationFrame(()=>fetch('observe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
  path:location.pathname,selected:document.activeElement.id,value:document.getElementById('entry').value,
  keyboard:!!document.querySelector('[data-isolde-remote-keyboard]'),menu:!!document.querySelector('[data-isolde-remote-menu]'),
  remoteHint:document.documentElement.innerText.includes('D-pad Move highlight'),focused:document.hasFocus(),lastKey,
  keyboardFits:fits('[data-isolde-remote-keyboard]'),menuFits:fits('[data-isolde-remote-menu]'),
  canGoBack:globalThis.navigation?navigation.canGoBack:null,historyLength:history.length,
- scroll:scrollY,bottom:document.getElementById('bottom').textContent})}).catch(()=>{}),80);
+ scroll:scrollY,bottom:document.getElementById('bottom').textContent})}).catch(()=>{}))),80);
 </script>'''
 
 

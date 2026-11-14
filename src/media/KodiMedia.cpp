@@ -47,20 +47,22 @@ KodiMedia::KodiMedia(const QString &profile, QObject *parent, const QString &tes
     connect(&m_playbackPoll, &QTimer::timeout, this, [this] {
         if (!m_busy && m_playbackActive) { m_busy = true; m_stage = 6; request("Isolde.PlaybackStatus"); }
     });
+    m_socket.setReadBufferSize(4 * 1024 * 1024 + 1);
     m_timeout.setSingleShot(true);
     m_timeout.setInterval(3000);
     connect(&m_timeout, &QTimer::timeout, this, [this] { fail("Kodi did not respond. You can retry without leaving Isolde."); });
+    connect(&m_socket, &QLocalSocket::connected, this, [this] { m_socket.write(m_request); });
+    connect(&m_socket, &QLocalSocket::readyRead, this, &KodiMedia::consume);
+    connect(&m_socket, &QLocalSocket::errorOccurred, this, [this](QLocalSocket::LocalSocketError error) {
+        if (error == QLocalSocket::PeerClosedError && m_received.endsWith('\n')) return;
+        if (m_busy) fail("Kodi's local bridge is unavailable for this profile. Start Kodi and enable the bridge, then retry.");
+    });
 }
 KodiMedia::~KodiMedia() { m_busy = false; releaseSocket(); }
 void KodiMedia::releaseSocket()
 {
     m_timeout.stop();
-    if (auto *socket = m_socket) {
-        m_socket = nullptr;
-        socket->disconnect(this);
-        socket->abort();
-        socket->deleteLater();
-    }
+    m_socket.abort();
 #ifdef Q_OS_LINUX
     if (m_descriptor >= 0) ::close(m_descriptor);
 #endif
@@ -944,30 +946,15 @@ void KodiMedia::request(const QString &method, const QJsonObject &params)
     m_descriptor = ::open(m_directory.toLocal8Bit().constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
     if (m_descriptor < 0) { fail("Kodi's local bridge is not set up for this profile yet."); return; }
     m_timeout.start();
-    auto *socket = new QLocalSocket(this);
-    m_socket = socket;
-    socket->setReadBufferSize(4 * 1024 * 1024 + 1);
-    const auto requestId = m_id;
-    connect(socket, &QLocalSocket::connected, this, [this, socket, requestId] {
-        if (m_socket == socket && m_id == requestId) socket->write(m_request);
-    });
-    connect(socket, &QLocalSocket::readyRead, this, [this, socket, requestId] {
-        if (m_socket == socket && m_id == requestId) consume();
-    });
-    connect(socket, &QLocalSocket::errorOccurred, this, [this, socket, requestId](QLocalSocket::LocalSocketError error) {
-        if (m_socket != socket || m_id != requestId) return;
-        if (error == QLocalSocket::PeerClosedError && m_received.endsWith('\n')) return;
-        if (m_busy) fail("Kodi's local bridge is unavailable for this profile. Start Kodi and enable the bridge, then retry.");
-    });
-    socket->connectToServer(QString("/proc/self/fd/%1/rpc.sock").arg(m_descriptor));
+    m_socket.connectToServer(QString("/proc/self/fd/%1/rpc.sock").arg(m_descriptor));
 #else
     fail("The local Kodi bridge currently requires Linux.");
 #endif
 }
 void KodiMedia::consume()
 {
-    if (!m_busy || !m_socket) return;
-    m_received += m_socket->readAll();
+    if (!m_busy) return;
+    m_received += m_socket.readAll();
     if (m_received.size() > 4 * 1024 * 1024) { fail("Kodi returned too much data."); return; }
     if (!m_received.endsWith('\n')) return;
     const auto response = QJsonDocument::fromJson(m_received).object();
@@ -977,6 +964,11 @@ void KodiMedia::consume()
         fail(m_mediaKind=="channels"?"TV guide unavailable. Configure a PVR TV source in Kodi, then refresh.":"Kodi returned an incompatible response."); return;
     }
     if (response.contains("error")) {
+        if (m_stage == 7) {
+            m_busy=false;m_timeout.stop();releaseSocket();
+            m_playbackStatus="Kodi could not apply that playback control. Playback and the library connection are retained; retry or stop when ready.";
+            emit changed();return;
+        }
         if((m_stage>=9 && m_stage<=12) || (m_stage>=16 && m_stage<=19)){
             m_busy=false;m_timeout.stop();releaseSocket();
             m_playlistStatus="Playlist operation failed. Reload and check the name, supported rules/order and storage before retrying. No change was confirmed.";

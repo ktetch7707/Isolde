@@ -189,7 +189,7 @@ private:
     bool m_playlistPreviewReady=false;
     int m_lastGuideSurfRequest=0;
     QString m_directory, m_status = "Open Kodi with the Isolde bridge enabled to browse this profile's library.";
-    QLocalSocket *m_socket = nullptr;
+    QLocalSocket m_socket;
     QTimer m_timeout;
     QByteArray m_received, m_request;
     QVariantList m_movies;

@@ -49,7 +49,13 @@ private slots:
             if(result.isEmpty() && !result.wait(5000))return QVariant();return result.first().first();
         };
         auto key=[&](Qt::Key code){QTest::keyClick(window,code);QTest::qWait(80);};
-        auto capture=[&](const QString &name){const auto dir=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");if(!dir.isEmpty())window->grabWindow().save(dir+"/studio-test-web-remote-"+name+".png");};
+        auto capture=[&](const QString &name){const auto dir=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");if(!dir.isEmpty()){
+            // Offscreen windows render synchronously during grabWindow and do
+            // not emit an on-screen swap. Drain the Chromium texture update
+            // between renders before saving the reviewed frame.
+            window->grabWindow();QTest::qWait(120);
+            window->grabWindow().save(dir+"/studio-test-web-remote-"+name+".png");
+        }};
         QTRY_COMPARE(value("document.activeElement.id").toString(),QString("one"));
         key(Qt::Key_Right);QCOMPARE(value("document.activeElement.id").toString(),QString("two"));key(Qt::Key_Return);
         QCOMPARE(value("document.getElementById('two').dataset.clicked").toString(),QString("yes"));capture("focus");
