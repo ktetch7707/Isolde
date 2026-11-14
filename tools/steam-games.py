@@ -417,7 +417,7 @@ def matching_processes(variable, value, proc=Path("/proc"), token=None, exclude_
                     if executable in ("steam", "steam.sh", "steamwebhelper", "steamservice", "steam-runtime-launcher-service"):
                         continue
                 if (variable+"="+value).encode() in fields:
-                    if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] != "Z": result.append(int(entry.name))
+                    if (entry/"stat").read_text().rsplit(") ",1)[1].split()[0] not in ("Z","X","x"): result.append(int(entry.name))
             except (FileNotFoundError, ProcessLookupError):
                 # Processes can exit between /proc enumeration and inspection.
                 continue

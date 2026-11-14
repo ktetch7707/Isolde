@@ -184,13 +184,24 @@ void SessionManager::handleSteamProviderState(const QVariantMap &state)
 {
     m_steamProviderState=state;
     const auto identity=state.value("appId").toString();
-    if(QStringList{"incomplete","recovery_required"}.contains(state.value("session_end").toString())
-       && QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch()){
+    const auto sessionEnd=state.value("session_end").toString();
+    const bool isRecovery=QStringList{"incomplete","recovery_required"}.contains(sessionEnd)
+        && QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch();
+    if(isRecovery){
         auto record=state;record.insert("recoveryPending",true);
         auto updated=m_steamRecoveryStatuses;updated.insert(identity,record);
         if(writeSteamRecoveryStatuses(m_profileId,updated)){
             m_steamRecoveryStatuses=updated;
             emit steamRecoveryStatusesChanged();
+        }
+    } else if (!identity.isEmpty() && QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch()) {
+        // A current provider state supersedes any stale recovery record for this app.
+        auto updated=m_steamRecoveryStatuses;
+        if(updated.remove(identity)>0){
+            if(writeSteamRecoveryStatuses(m_profileId,updated)){
+                m_steamRecoveryStatuses=updated;
+                emit steamRecoveryStatusesChanged();
+            }
         }
     }
     emit steamProviderStateChanged();
