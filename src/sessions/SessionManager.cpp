@@ -194,16 +194,9 @@ void SessionManager::handleSteamProviderState(const QVariantMap &state)
             m_steamRecoveryStatuses=updated;
             emit steamRecoveryStatusesChanged();
         }
-    } else if (!identity.isEmpty() && QRegularExpression("^[1-9][0-9]{0,9}$").match(identity).hasMatch()) {
-        // A current provider state supersedes any stale recovery record for this app.
-        auto updated=m_steamRecoveryStatuses;
-        if(updated.remove(identity)>0){
-            if(writeSteamRecoveryStatuses(m_profileId,updated)){
-                m_steamRecoveryStatuses=updated;
-                emit steamRecoveryStatusesChanged();
-            }
-        }
     }
+    // A new launch cannot prove earlier saves were recovered. Keep durable
+    // warnings until acknowledgeSteamRecovery records the user's review.
     emit steamProviderStateChanged();
 }
 

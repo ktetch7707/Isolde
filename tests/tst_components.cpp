@@ -240,6 +240,16 @@ void ComponentTests::steamRecoveryWritesRemainBoundToManagerProfileAfterSwitch()
                                .value("games").toObject().value("42").toObject();
         QVERIFY(!journal.contains("pid"));
         QVERIFY(!journal.contains("pids"));
+        const auto pendingBytes=readFile(ownerHome+"/steam-recovery.json");
+        auto current=state;
+        current.insert("phase","starting");current.insert("session_end","unknown");
+        sessions.handleSteamProviderState(current);
+        QVERIFY(sessions.steamRecoveryStatuses().contains("42"));
+        QCOMPARE(readFile(ownerHome+"/steam-recovery.json"),pendingBytes);
+        current.insert("phase","ended");current.insert("session_end","normal");
+        sessions.handleSteamProviderState(current);
+        QVERIFY(sessions.steamRecoveryStatuses().contains("42"));
+        QCOMPARE(readFile(ownerHome+"/steam-recovery.json"),pendingBytes);
         QVERIFY(sessions.acknowledgeSteamRecovery("42"));
         QVERIFY(!sessions.steamRecoveryStatuses().contains("42"));
         QVERIFY(QFileInfo::exists(ownerHome+"/steam-recovery.json"));
