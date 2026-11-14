@@ -2,65 +2,30 @@
 
 ## Current checkpoint — November 13 installed media batch
 
-Current acceptance89% (2219/25),197/235 milestones; T04=66%, T04.5 fully
-accepted. z full integration passes63/63 and deploys
-ac197e707d3dbf122f5c77c0, source01f9b17e2638d86ded6701d3beb802e1657bc56838c8e786cf9698395da6e9f5.
-Installed z movieart remains blocked by BUG-168; playlists has not rerun.
-Native trace ah proves the real movie reaches the playback callback with id1,
-but all five GUI message targets were cleared two seconds after skin startup.
-Read-only authenticated-source audits ai/aj identify forced X11 context refresh:
-it unloads the skin, while EGL reuse can leave m_newGlContext false and skip
-the existing caller's skin reload. Managed native correction ak restores that
-flag after forced refresh, but installed144842-833 still has zero targets.
-Do not treat that hypothesis as resolved. al adds bounded managed-only native
-UnloadSkin caller stacks. Installed145537-539 identifies FinishWindowResize →
-forced RefreshGLContext while a startup YesNo dialog runs a nested render loop.
-ReloadSkin refuses while m_bInitializing, so the forced-refresh flag alone
-cannot recover. am adds one pending managed reload, posted by ProcessSkin once
-initialization ends. am installed171623-129 proves actual movie1 ownership and
-Menu-to-Isolde controls; screenshot still shows the library, and audio Confirm
-is dropped during busy polling. Related BUG-170/171/172 batch fixes queued
-Confirm/cancellation, fullscreen XID replacement/reload restoration and D-pad
-import preview. an native dependency passes. ao passes8/8 with z63/63 reuse,
-deployed9273aa71afba8b85dbbaaf8e. Installed172748-678 shows black Kodi and
-repeated forced context/skin reloads; Menu controls cannot open. BUG-173 native
-FinishWindowResize changes output without updating m_currentOutput, so later
-resize events recreate the window repeatedly. ap corrects managed output state
-after successful SetWindow. Reuse ao application, then movieart/playlists. No full
-application rerun for this dependency/helper
-diagnosis; z63/63 remains applicable. No new acceptance credit yet.
+Acceptance **89% (2219/25)**,197/235 milestones; T04=66%. Coding100%.
+Current app: ao release9273aa71afba8b85dbbaaf8e, source
+02451e400fff2467d0cdd41050a12a0bccfdf56ca99dd4ecf2ef9a5b99227c68.
+ao passes8/8 affected registrations with strict z63/63 full reuse. Native ap
+passes, normal service healthy, about9.8GiB free; storage repair remains effective.
 
-x/y path-identity fallback attempts
-failed installed verification and were removed; strict original ownership is
-retained. z presents the native window once on accepted starting reply, before
-waiting for GUI-owned item publication. No installed playback pass claimed yet.
+BUG-168 is traced to forced X11 refresh unloading the skin inside startup's
+nested dialog. The immediate reload is refused while initializing. Managed
+forced-refresh flag plus one deferred reload restore actual playback identity.
+BUG-173 missing current-output update caused repeated window recreation; ap
+fixes it. Installed ao173403-240 now proves actual fullscreen color-bar movie,
+correct movie1 identity and healthy native event dispatch. Playing frame reviewed.
+No complete controls/playlist acceptance yet. Failed attempts remain in campaign.
 
-Startup correction: w debug134713-180 confirms Kodi OnPlayBackStarted/OnAVStarted
-while item stays unknown. Isolde presents the minimized native window only
-after playing, creating a GUI-start notification dependency cycle. Remove
-unsuccessful x/y Python identity fallbacks; restore tested w. Emit the existing
-presentation request once on the accepted initial starting acknowledgement;
-retain strict ownership and actual-start signals. Existing lifecycle case
-asserts one presentation, zero started until actual playing, and invalidation.
-This changes the shared KodiMedia playback-start boundary, so run one full
-integration batch z before installed verification; prior focused reuse rejects
-that cross-cutting file. This is the recorded reason for the new full run.
-
-Acceptance89% (2217/25),196/235 milestones; T04=64%. Current installed
-dd5acf8172cb47bffa46f466 from t04-media-20261113-w passes8/8 affected tests
-with original f63/63 reuse. Native dependency7d9bac4fd7d9 retains complete
-virtual source records through real failed-write recovery. Fixed status header
-keeps error and Apply visible. Fresh online art uses Kodi image:// VFS to
-populate Kodi's own cache; actual installed TMDB poster is delivered/displayed.
-Credits T04.5.b/.6.b/.7.a only. No complete poster/control/playlist/import claim.
-
-First w movieart stops because helper treats Kodi's wrapped image URL as a raw
-path; decode that standard wrapper for comparison. Later Music Scan also resets
-selection before choosing its row. Playlist fixture import attempts a browser
-before it exists: bounded control/dialog readiness replaces fixed sleeps.
-Resume current installed movieart/playlists batch, then review all captures,
-offline/local-search and both reference pairs. No app rebuild for helper-only
-corrections. Import/rollback and Desktop installed workflow still remain.
+Related batch f426353 fixes busy Confirm/cancellation, reacquires Kodi's current
+XID after fullscreen, restores video after skin reload and makes import preview
+D-pad navigable. Native output correction c39abc8 is pushed. BUG-174 remains:
+VideoOSD context only mapped Stop/Back, losing Menu/transport while OSD is active.
+Complete mappings added; aq media_controls is running with z63/63 reuse. Next:
+deploy aq, run installed movieart/playlists, review all captures, fix named failures.
+Then import/rollback/Desktop, Studio playlist shelf, offline/local-search and both
+standing references. No full rerun for helper/native-only changes; no new CTest
+registrations or credit from diagnostics. T04 source/title-art milestones already
+accepted stay credited. Resume T12 only after T04 closure.
 
 ## Current checkpoint — November 13 storage repair
 

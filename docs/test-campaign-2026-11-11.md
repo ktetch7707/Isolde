@@ -1891,6 +1891,14 @@ the trace records repeated native stacks throughout the failure. ap updates
 that state only after successful managed SetWindow. Native-only correction
 reuses ao8/8 and z63/63; installed movieart/playlists remains the next gate.
 
+ap installs successfully. ao installed173403-240 proves visible fullscreen
+synthetic20min movie, movie1 identity, pause/seek capability and native four-target
+dispatch. Full-size playing frame reviewed; no black window or resize loop.
+BUG-174 Menu times out because the native VideoOSD is active and its managed
+keymap defines only Stop/Back. Extend that context with the same pause/seek/
+adjacent/Menu mappings as FullscreenVideo. aq verifies the existing affected
+registrations; full z remains reused. No complete control acceptance yet.
+
 BUG-169 diagnostic dependency rebuild reused a Debian package version despite a
 different built binary. The installed SHA check rejected it before acceptance.
 Exact local dependency installation now uses --reinstall as well as
