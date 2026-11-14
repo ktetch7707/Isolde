@@ -662,10 +662,12 @@ provider.setSettingString("searchlanguage","en-US")
                 poster_capture('moviefreshaudio');key(controls,'Escape')
                 for _ in range(20):key(controls,'Up',.04)
                 key(controls,'Down');key(controls,'Down')
-                for _ in range(30):key(controls,'Return',.35)
                 def player_seconds():
                     value=rpc(directory,'Player.GetProperties',{'playerid':1,'properties':['time']})['time']
                     return value.get('hours',0)*3600+value.get('minutes',0)*60+value.get('seconds',0)
+                for step in range(30):
+                    key(controls,'Return',.35)
+                    if step%5==4:print('REMOTE_SEEK_PROGRESS '+json.dumps({'presses':step+1,'seconds':player_seconds(),'state':rpc(directory,'Isolde.PlaybackStatus')}),flush=True)
                 position=wait(lambda:(seconds if (seconds:=player_seconds())>180 else None),'Remote seek passed Kodi default resume threshold')
                 key(controls,'Escape');key('kodi','Escape')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Fresh movie stopped through managed Back')
@@ -1038,6 +1040,8 @@ provider.setSettingString("searchlanguage","en-US")
             (evidence / "result.json").write_text(json.dumps({"passed": True, "profile": profile, "shows": len(shows), "seasons": len(seasons), "episodes": len(eps), "media_unchanged": True}, indent=2))
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
+        shell_log=evidence/'shell.log'
+        if shell_log.is_file():print('SHELL_FAILURE_DIAGNOSTICS\n'+shell_log.read_text(errors='replace')[-4000:],flush=True)
         if (args.pages or args.movie_art or args.playlists) and args.inspect and process and process.poll() is None:
             print("FAILED_READY "+str(evidence),flush=True)
             deadline=time.monotonic()+30

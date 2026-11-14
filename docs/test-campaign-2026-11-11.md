@@ -1899,6 +1899,49 @@ keymap defines only Stop/Back. Extend that context with the same pause/seek/
 adjacent/Menu mappings as FullscreenVideo. aq verifies the existing affected
 registrations; full z remains reused. No complete control acceptance yet.
 
+aq8/8 passes and deploys08eb8fc40223d61239eae564, source
+d2ff1a78e217e9431709a34c8cf6de4cec371e9f0a6b7e95a73b8af095debaa7.
+Installed174119-693 passes visible fullscreen movie, Menu-to-Isolde popup and
+actual second audio stream selection. Repeated remote seek then exposes
+BUG-175 incompatible shared Kodi reply, disconnecting the library client.
+Read-only ar collects the failed fixture's application log; no socket-specific
+Qt warning was present. Use separate request-owned sockets, disconnect/retire
+old callbacks and guard socket plus request identity. Existing playbackLifecycle
+adds40 alternating controls; cancelledRequestCanRetry includes late old-peer
+close. Protocol rejection logs only stage/id/byte metadata, no paths or payloads.
+Transport affects every Kodi request, so as is one justified full integration
+run. No installed seek/resume/music/playlist pass yet; no acceptance credit.
+
+User muted VM audio during testing. Audible loudness is not an acceptance gate;
+these media checks use real player state, selected tracks, timing and screenshots.
+The request/response failure is independent of mute; do not count mute as a bug.
+
+as full integration stops honestly after23 passes at web_remote. BUG-176 actual
+external Chrome page/bridge reports loaded and focused, but the first semantic
+control remains unset; no mute-related failure. au continues only unattempted
+registrations on the original verified source/build and retains the Chrome
+failure, never producing a passing acceptance payload. at first refused a
+diagnostic tv-library helper-only change; permit that non-CTest helper as harness
+input while still verifying the original cached application/test bytes exactly.
+
+Web remote initialization previously selected a control only after a mutation
+or key. Initialize the existing focused semantic candidate or first candidate
+on attachment and DOMContentLoaded. Update the existing embedded test to assert
+initial focus, then actual Right navigation; external test requires initial focus
+before Up/F6/text/menu/history/return. Add a runner selector for the already
+registered web_remote test, so diagnose it alone before another full candidate.
+No new CTest registration or accepted percentage from continuation/diagnostics.
+
+au finishes all unattempted registrations: combined62 passed/one failed Chrome,
+pending empty. KodiMediaTests::playbackLifecycle and all36 Kodi client cases pass,
+as do Guide, audio, games, sandbox/browser/profile and other original registrations.
+The diagnostic payload remains passed:false/acceptance:false and is never deployed.
+av focused existing web_remote passes in30sec, including actual external Chrome
+and embedded key/keyboard/menu/history/return. au staged diagnostic movieart/
+playlists now verifies the transport correction before another frozen full run.
+All14 aq174119-693 images reviewed via review-sheet plus full playing/control/
+second-track/failure frames; native input defect and seek failure remain explicit.
+
 BUG-169 diagnostic dependency rebuild reused a Debian package version despite a
 different built binary. The installed SHA check rejected it before acceptance.
 Exact local dependency installation now uses --reinstall as well as

@@ -176,6 +176,7 @@ SUITES = {"all": None, "remote_bindings":("isolde_remote_binding_tests","isolde_
           "guide": ("isolde_guide_tests", "isolde_guide_ui_tests", "isolde_kodi_media_tests"),
           "games": ("isolde_component_tests", "isolde_games_ui_tests", "isolde_tests"),
           "store": ("isolde_tests", "isolde_studio_quick_tests", "isolde_web_remote_tests", "isolde_native_smoke"),
+          "web_remote": ("isolde_web_remote_tests", "isolde_native_smoke"),
           "store_remote_ui": "isolde_studio_quick_tests",
           "media_controls": ("isolde_home_navigation_tests","isolde_kodi_media_tests","isolde_native_sandbox_tests","isolde"),
           "audio_backend": "isolde_audio_tests",
@@ -1534,7 +1535,7 @@ class Oracle:
             raise RuntimeError('Invalid campaign base')
         previous=self.root/'runs'/previous_id
         prior=manifest(previous/'files.sha256')
-        harness={'tools/vm-oracle.py','tools/vm-test.ps1','tools/test-all.ps1','tools/run-visual-acceptance.ps1','tests/test_vm_oracle.py'}
+        harness={'tools/vm-oracle.py','tools/vm-test.ps1','tools/test-all.ps1','tools/run-visual-acceptance.ps1','tools/tv-library-acceptance.py','tests/test_vm_oracle.py'}
         changed={name for name in set(entries)|set(prior) if entries.get(name)!=prior.get(name)}
         if any(name not in harness and not name.startswith('docs/') for name in changed):
             raise RuntimeError('Campaign application/test bytes changed; a new build is required')
@@ -1844,6 +1845,13 @@ class Oracle:
                             selected.update(range(max(0,index-8),min(len(lines),index+24)))
                     audit[name]=dict(sha256=digest(path),lines=[str(index+1)+': '+lines[index] for index in sorted(selected)])
                 atomic_json(self.run/'kodi-native-source-audit.json',audit)
+                fixtures=[path for path in Path('/tmp').glob('isolde-tv-acceptance-*') if path.is_dir() and not path.is_symlink() and path.stat().st_uid==os.getuid()]
+                if len(fixtures)>512:raise RuntimeError('Unbounded acceptance fixture inventory')
+                if fixtures:
+                    latest=max(fixtures,key=lambda path:path.stat().st_mtime)
+                    shell_log=latest/'shell.log'
+                    if shell_log.is_file() and not shell_log.is_symlink() and shell_log.stat().st_size<=4*1024*1024:
+                        atomic_json(self.run/'kodi-last-fixture-shell.json',{'fixture':str(latest),'lines':shell_log.read_text(errors='replace').splitlines()[-100:]})
                 return
             installed=Path('/opt/isolde-managed-kodi')
             if installed.exists():

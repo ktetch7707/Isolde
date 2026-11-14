@@ -163,6 +163,7 @@ def main():
             x.XSetInputFocus(display,window,1,0);x.XSync(display,0)
             expect(lambda:state.get('focused') is True,'owned browser document has input focus')
             expect(lambda:state.get('focused') is True,'owned Chrome page has keyboard focus')
+            expect(lambda:state.get('selected')=='start','production bridge establishes initial semantic focus')
             # The mutation observer may already select the first control while
             # Chrome maps its window. Up establishes the same visible origin
             # whether focus is unset or already on that first control.

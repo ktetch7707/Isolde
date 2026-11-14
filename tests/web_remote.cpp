@@ -50,7 +50,7 @@ private slots:
         };
         auto key=[&](Qt::Key code){QTest::keyClick(window,code);QTest::qWait(80);};
         auto capture=[&](const QString &name){const auto dir=qEnvironmentVariable("ISOLDE_TEST_ARTIFACTS");if(!dir.isEmpty())window->grabWindow().save(dir+"/studio-test-web-remote-"+name+".png");};
-        key(Qt::Key_Right);QCOMPARE(value("document.activeElement.id").toString(),QString("one"));
+        QTRY_COMPARE(value("document.activeElement.id").toString(),QString("one"));
         key(Qt::Key_Right);QCOMPARE(value("document.activeElement.id").toString(),QString("two"));key(Qt::Key_Return);
         QCOMPARE(value("document.getElementById('two').dataset.clicked").toString(),QString("yes"));capture("focus");
         key(Qt::Key_Down);QCOMPARE(value("document.activeElement.id").toString(),QString("entry"));key(Qt::Key_Return);

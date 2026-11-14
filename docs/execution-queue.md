@@ -3,9 +3,9 @@
 ## Current checkpoint — November 13 installed media batch
 
 Acceptance **89% (2219/25)**,197/235 milestones; T04=66%. Coding100%.
-Current app: ao release9273aa71afba8b85dbbaaf8e, source
-02451e400fff2467d0cdd41050a12a0bccfdf56ca99dd4ecf2ef9a5b99227c68.
-ao passes8/8 affected registrations with strict z63/63 full reuse. Native ap
+Current installed app: aq release08eb8fc40223d61239eae564, source
+d2ff1a78e217e9431709a34c8cf6de4cec371e9f0a6b7e95a73b8af095debaa7.
+aq passes8/8 affected registrations with strict z63/63 full reuse. Native ap
 passes, normal service healthy, about9.8GiB free; storage repair remains effective.
 
 BUG-168 is traced to forced X11 refresh unloading the skin inside startup's
@@ -20,8 +20,21 @@ Related batch f426353 fixes busy Confirm/cancellation, reacquires Kodi's current
 XID after fullscreen, restores video after skin reload and makes import preview
 D-pad navigable. Native output correction c39abc8 is pushed. BUG-174 remains:
 VideoOSD context only mapped Stop/Back, losing Menu/transport while OSD is active.
-Complete mappings added; aq media_controls is running with z63/63 reuse. Next:
-deploy aq, run installed movieart/playlists, review all captures, fix named failures.
+Complete mappings added and verified with z63/63 reuse:
+aq passes8/8 and deploys08eb8fc40223d61239eae564. Installed174119-693 proves
+visible playback, native Menu-to-Isolde controls and actual second audio stream.
+Repeated seeks expose BUG-175 incompatible shared-client response, losing the
+library connection. Replace the reused QLocalSocket with one owned socket per
+request and guard callbacks by socket plus request identity; disconnect retired
+signals before abort. Existing lifecycle exercises40 alternating controls and
+cancel/retry retains late old-peer close. This changes all Kodi client transport,
+so as requires one full63-test integration batch (recorded reason). as stops at
+Chrome first-focus BUG-176 after23 passes. au continues original unattempted
+registrations: combined62/63 pass, only Chrome failed; no acceptance payload.
+Web bridge now initializes semantic focus on attachment/DOMContentLoaded; av
+focused existing web_remote passes actual Chrome and embedded flows. au staged
+diagnostic movieart/playlists is active to validate seeking before freezing one
+new full candidate. Do not deploy or credit diagnostic payload as acceptance.
 Then import/rollback/Desktop, Studio playlist shelf, offline/local-search and both
 standing references. No full rerun for helper/native-only changes; no new CTest
 registrations or credit from diagnostics. T04 source/title-art milestones already

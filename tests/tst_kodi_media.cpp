@@ -942,6 +942,14 @@ void KodiMediaTests::playbackLifecycle()
     server.setProperty("playState", "paused");
     media.playbackControl("pause");
     QTRY_COMPARE(media.playbackStatus(), QString("paused"));
+    server.setProperty("playState", "playing");
+    for (int index=0;index<40;++index) {
+        QTRY_VERIFY(!media.busy());
+        media.playbackControl(index%2?"backward":"forward");
+        QTRY_VERIFY(!media.busy());
+        QVERIFY(media.connected());QVERIFY(media.playbackActive());
+        QCOMPARE(media.playbackStatus(),QString("playing"));
+    }
     server.setProperty("playState", "ended"); server.setProperty("playHome", true);
     QTRY_VERIFY(!media.playbackActive());
     QCOMPARE(returned.size(), 1);
@@ -1162,10 +1170,11 @@ void KodiMediaTests::cancelledRequestCanRetry()
                                      Q_ARG(QString, QStringLiteral("Stopped for profile switch"))));
     QVERIFY(!media.busy());
     QVERIFY(!media.connected());
-    delete oldSocket;
     serve(server, 13);
     media.refresh();
     QTRY_VERIFY(media.connected());
+    // A cancelled peer can finish closing after the next request succeeds.
+    oldSocket->abort();delete oldSocket;
     QTest::qWait(3200);
     QVERIFY(media.connected()); // Cancelled deadline cannot erase the new result.
     QCOMPARE(media.movies().size(), 1);

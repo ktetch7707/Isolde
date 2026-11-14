@@ -154,5 +154,11 @@ function isoldeRemote(options) {
         }
     },true);
     addEventListener("scroll",paint,true);addEventListener("resize",paint);addEventListener("focusin",event=>{if(!keyboard && !pageMenu && candidates().includes(event.target)){current=event.target;paint();}},true);
+    // Attachment can happen after the page has finished loading, with no later
+    // mutation to establish the first remote target. Preserve existing control
+    // focus when present; otherwise start at the first semantic candidate.
+    function establishFocus(){const all=candidates();select(all.includes(document.activeElement)?document.activeElement:all[0]);}
+    establishFocus();
+    if(document.readyState==="loading")addEventListener("DOMContentLoaded",establishFocus,{once:true});
     return api;
 }
