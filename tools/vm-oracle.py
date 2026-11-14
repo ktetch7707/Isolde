@@ -467,6 +467,7 @@ def visual_result_passed(case, result):
                 and all(result.get(key) is False for key in ("normalProfileUsed","metadataSupplied"))
                 and all(result.get(key) is True for key in ("playbackVerified","freshPlaybackReturnThroughIsolde","actualKodiResumeSavedAndRestored","preferenceOffLibraryDirect","remoteHomeMoviesRoute","realAudioTrackSelection","sourceEditPreservesProgress","remoteMusicSourceBrowsePlayback"))
                 and result.get("kodiMenusRequired") is False
+                and all(result.get(key) is True for key in ("installedImportRollback","importSourceUnchanged","preferenceWriteFailureRetained","desktopExactReturn"))
                 and result.get("artworkBytes",0)>4096)
     if case == "games":
         return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRegistration","nativeGameStarted","returned"))
@@ -507,7 +508,8 @@ def visual_result_passed(case, result):
                 and all(result.get(k) is False for k in ("isoldeIntegrationVerified", "playbackVerified", "remoteVerified")))
     if case == "playlists":
         return (all(result.get(key) is True for key in ("passed","real_kodi_saved_playlist","playlist_creation_ui_verified","playlist_cancel_no_write","play_pause_stop","media_unchanged","rename_collision_preserved","remote_rule_preview_confirm","smart_sort_saved","member_reorder_remote_cancel_commit","delete_cancel_confirm","nativeMenuOwnedIsoldeControls","remotePictureSize","remoteSubtitleOff","realNextPrevious","controlsCloseRestoresVideoFocus"))
-                and result.get("normal_profile_used") is False and result.get("picker_ui_verified") is False and result.get("episodes")==3)
+                and result.get("normal_profile_used") is False and result.get("picker_ui_verified") is True
+                and result.get("remoteSubtitleEnabled") is True and result.get("episodes")==3)
     if case == "shell":
         return (result.get("passed") is True and result.get("reviewSequenceCaptured")==["shellnavigation","shellgallery","shellstore","shellreturn","shellambient","shellwake"]
                 and result.get("hostUiAutomationUsed") is False and result.get("layoutWrites") is False and result.get("semanticAcceptance")=="not_verified")
@@ -956,8 +958,7 @@ def search_origin_main_delta(before,after):
 
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='media_controls':
-        # Permit only this scan refusal diagnostic; lifecycle changes still
-        # invalidate full coverage and must not hide behind this selector.
+        # Check the exact scan and transport corrections before reusing coverage.
         before=manifest(root/'runs'/base_id/'files.sha256');after=manifest(run/'files.sha256')
         for name,old,new in (
             ('src/media/KodiMedia.cpp',
@@ -969,7 +970,11 @@ def focused_qml_coverage(root, run, base_id, suite):
              '        emit changed();\n        return;\n    }\n'),
             ('kodi/service.isolde.bridge/bridge.py',
              '    elif request["method"].startswith("AudioLibrary."):',
-             '    elif request["method"] in ("AudioLibrary.GetAlbums", "AudioLibrary.GetSongs"):')):
+             '    elif request["method"] in ("AudioLibrary.GetAlbums", "AudioLibrary.GetSongs"):'),
+            ('kodi/service.isolde.bridge/playback.py',
+             '                self.rpc("Player.PlayPause", {"playerid": pid, "play": "toggle"})\n',
+             '                props = self.rpc("Player.GetProperties", {"playerid": pid, "properties": ["speed"]})\n'
+             '                self.rpc("Player.PlayPause", {"playerid": pid, "play": props["speed"] == 0})\n')):
             if before.get(name)==after.get(name):continue
             original=root/'runs'/base_id/'source'/name;current=run/'source'/name
             if not original.is_file() or not current.is_file() or digest(original)!=before.get(name) or digest(current)!=after.get(name):raise RuntimeError('Exact scan correction sources required')
@@ -987,8 +992,8 @@ def focused_qml_coverage(root, run, base_id, suite):
                     if normalized==old_text or (normalized.count(new)==1 and normalized.replace(new,old,1)==old_text):continue
             if new_text.count(new)!=1 or new_text.replace(new,old,1)!=old_text:raise RuntimeError('Media correction exceeds the scan-only boundary')
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
-            {'src/media/KodiService.h','src/media/KodiService.cpp','src/media/KodiMedia.cpp','config/kodi-capabilities.json','qml/KodiSettingsView.qml','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/bridge.py','kodi/service.isolde.bridge/sources.py','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
-            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_kodi_bridge.py','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
+            {'src/media/KodiService.h','src/media/KodiService.cpp','src/media/KodiMedia.cpp','config/kodi-capabilities.json','qml/KodiSettingsView.qml','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/bridge.py','kodi/service.isolde.bridge/sources.py','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py','kodi/service.isolde.bridge/playback.py'},
+            {'AGENTS.md','tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_kodi_bridge.py','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
     if suite=='store':
@@ -1031,7 +1036,7 @@ def focused_qml_coverage(root, run, base_id, suite):
 
 
 def ctest_command(build, report):
-    return ["ctest", "--test-dir", str(build), "--output-on-failure", "--stop-on-failure",
+    return ["ctest", "--test-dir", str(build), "--output-on-failure",
             "--timeout", "120", "--output-junit", str(report)]
 
 
@@ -1180,6 +1185,10 @@ def diagnostic_campaign_receipt(result, progress):
     if result.get('sourceDigest')!=progress.get('sourceDigest') or result.get('runs')!=progress.get('runs') or not result.get('payload'):
         raise RuntimeError('Diagnostic candidate identity mismatch')
     return True
+
+
+class RestoredVisualFailure(RuntimeError):
+    """A journey failed, but the runner verified restoration and preserved evidence."""
 
 
 class Oracle:
@@ -1850,7 +1859,7 @@ class Oracle:
                 if len(trees)!=1 or trees[0].resolve()!=trees[0]:raise RuntimeError('One ordinary authenticated Kodi source tree required')
                 audit={}
                 names={'xbmc/application/Application.cpp','xbmc/application/ApplicationPlayerCallback.cpp','xbmc/guilib/GUIWindowManager.cpp','xbmc/guilib/GUIComponent.cpp','xbmc/ServiceManager.cpp'}
-                names.update({'xbmc/interfaces/json-rpc/AudioLibrary.cpp','xbmc/music/MusicLibraryQueue.cpp','xbmc/music/MusicDatabase.cpp','xbmc/music/infoscanner/MusicInfoScanner.cpp','xbmc/interfaces/builtins/LibraryBuiltins.cpp'})
+                names.update({'xbmc/addons/Scraper.cpp','xbmc/interfaces/json-rpc/AudioLibrary.cpp','xbmc/interfaces/json-rpc/PlayerOperations.cpp','xbmc/cores/paplayer/PAPlayer.cpp','xbmc/music/MusicLibraryQueue.cpp','xbmc/music/MusicDatabase.cpp','xbmc/music/jobs/MusicLibraryScanningJob.cpp','xbmc/music/infoscanner/MusicInfoScanner.cpp','xbmc/interfaces/builtins/LibraryBuiltins.cpp'})
                 candidates=list((trees[0]/'xbmc/application').glob('*.cpp'))
                 if len(candidates)>64:raise RuntimeError('Unbounded native application source inventory')
                 for candidate in candidates:
@@ -1872,8 +1881,11 @@ class Oracle:
                     if not path.is_file() or path.stat().st_size>1024*1024:raise RuntimeError('Unsafe Kodi audit source: '+name)
                     lines=path.read_text().splitlines();selected=set()
                     for index,line in enumerate(lines):
-                        if any(token in line for token in ('GUI_MSG_PLAYBACK_STARTED','AddMsgTarget','AddMessageTarget','m_vecMsgTargets','DispatchThreadMessages','OnPlayBackStarted','ResetCurrentItem','DeInitialize','UnloadSkin','Minimize','TMSG_MINIMIZE','DestroyWindows','ScanLibrary','StartMusicScan','AudioLibrary::Scan','UpdateLibrary','MusicInfoScanner::Start','CMusicDatabase::GetPaths','m_pathsToScan')):
+                        if any(token in line for token in ('GUI_MSG_PLAYBACK_STARTED','AddMsgTarget','AddMessageTarget','m_vecMsgTargets','DispatchThreadMessages','OnPlayBackStarted','ResetCurrentItem','DeInitialize','UnloadSkin','Minimize','TMSG_MINIMIZE','DestroyWindows','ScanLibrary','StartMusicScan','AudioLibrary::Scan','UpdateLibrary','MusicInfoScanner::Start','CMusicDatabase::GetPaths','m_pathsToScan','CMusicLibraryQueue::AddJob','CMusicLibraryScanningJob::','CMusicInfoScanner::Process','::PlayPause','::Pause()','::GetSpeed','"speed"','IsPausedPlayback')):
                             selected.update(range(max(0,index-8),min(len(lines),index+24)))
+                    if name=='xbmc/addons/Scraper.cpp':
+                        for index,line in enumerate(lines):
+                            if 'CScraper::SetPathSettings' in line:selected.update(range(max(0,index-4),min(len(lines),index+48)))
                     audit[name]=dict(sha256=digest(path),lines=[str(index+1)+': '+lines[index] for index in sorted(selected)])
                 atomic_json(self.run/'kodi-native-source-audit.json',audit)
                 fixtures=[path for path in Path('/tmp').glob('isolde-tv-acceptance-*') if path.is_dir() and not path.is_symlink() and path.stat().st_uid==os.getuid()]
@@ -1896,7 +1908,16 @@ class Oracle:
                     native_log=max(logs,key=lambda path:path.stat().st_mtime)
                     if native_log.resolve()!=native_log or native_log.stat().st_uid!=os.getuid() or native_log.stat().st_size>16*1024*1024:raise RuntimeError('Unsafe native scan log')
                     lines=native_log.read_text(errors='replace').splitlines()
-                    atomic_json(self.run/'kodi-last-scan-diagnostics.json',{'log':str(native_log),'lines':[line for line in lines if any(token in line.lower() for token in ('musicinfoscanner','audiolibrary.scan','tagloader','music scan','scanmusic','error <general>'))][-100:]})
+                    atomic_json(self.run/'kodi-last-scan-diagnostics.json',{'log':str(native_log),'lines':[line for line in lines if any(token in line.lower() for token in ('scan','tag','flac','error <general>'))][-150:]})
+                    control=native_log.parent.parent/'userdata/isolde'
+                    transactions={}
+                    for name in ('source-request.json','source-reply.json'):
+                        path=control/name
+                        if not path.exists():continue
+                        if path.resolve()!=path or path.stat().st_uid!=os.getuid() or path.stat().st_size>1024*1024:raise RuntimeError('Unsafe fixture source receipt')
+                        value=json.loads(path.read_text())
+                        transactions[name]={key:value[key] for key in ('operation','paths','ok','error') if key in value}
+                    atomic_json(self.run/'kodi-last-source-operation.json',transactions)
                 return
             installed=Path('/opt/isolde-managed-kodi')
             if installed.exists():
@@ -2200,6 +2221,7 @@ class Oracle:
             match = re.search(r"/tmp/isolde-(?:components-acceptance|reference-config|tv-acceptance)-[A-Za-z0-9_-]+", line)
             if match:
                 evidence.add(Path(match.group()))
+        journey_failure = None
         try:
             # The existing harness lock is still authoritative for the graphical session.
             self.stage("visual-" + case, command, 1740 if case in {"themes","guide-lifecycle","guide-features"} else 900 if case in ("studio-designs","pages","history","guide","guide-surfaces","movieart","playlists","android","androidapps","store","store-updates","emulators") else 480, on_line=line_output)
@@ -2210,6 +2232,8 @@ class Oracle:
                 write_soak_receipt(self.run,evidence,executable)
             self.update(visualCase=case, visualPassed=True, visualReview="pending",
                         visualAcceptance="diagnostic_only" if diagnostic else "pending", semanticAcceptance="not_verified", executable=str(executable))
+        except (RuntimeError, TimeoutError) as error:
+            journey_failure = error
         finally:
             # This guard also runs on timeouts/SIGHUP when a harness cannot reach its own finally.
             if case in ('store','store-updates') and store_helper_digest:
@@ -2225,6 +2249,8 @@ class Oracle:
             collect_evidence(self.run, case, evidence)
             if self.layout_hashes() != layouts:
                 raise RuntimeError("Normal profile layout changed during an isolated visual test")
+        if journey_failure is not None:
+            raise RestoredVisualFailure(str(journey_failure)) from journey_failure
 
     def layout_hashes(self):
         config = Path.home() / ".config/Isolde"
@@ -3183,6 +3209,9 @@ def main():
         if acquired or args.wait_seconds:
             oracle.update(state="failed", error=str(error))
         print("FAIL " + str(error), flush=True)
+        if isinstance(error, RestoredVisualFailure):
+            print("VM_VISUAL_CASE_FAILED " + args.case, flush=True)
+            sys.exit(3)
         sys.exit(1)
     finally:
         if acquired or args.wait_seconds:

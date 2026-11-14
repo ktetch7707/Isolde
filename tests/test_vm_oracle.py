@@ -1442,15 +1442,18 @@ class OracleTests(unittest.TestCase):
         self.assertTrue(receipt['minimumMet']);self.assertFalse(receipt['targetReached'])
         self.assertGreater(receipt['reclaimedBytes'],0)
 
-    def test_ctest_stops_before_unrelated_work_after_first_failure(self):
-        build=self.root/'ctest-fixture';build.mkdir();marker=build/'must-not-run'
+    def test_ctest_collects_failures_and_runs_independent_siblings(self):
+        build=self.root/'ctest-fixture';build.mkdir();marker=build/'independent-ran'
         script=build/'later.py';script.write_text('from pathlib import Path\nimport sys\nPath(sys.argv[1]).write_text("ran")\n')
         (build/'CTestTestfile.cmake').write_text(
             f'add_test(first "{Path(sys.executable).as_posix()}" "-c" "raise SystemExit(1)")\n'
             f'add_test(later "{Path(sys.executable).as_posix()}" "{script.as_posix()}" "{marker.as_posix()}")\n')
         result=subprocess.run(oracle.ctest_command(build,build/'results.xml'),capture_output=True,text=True,timeout=15)
-        self.assertNotEqual(result.returncode,0);self.assertFalse(marker.exists())
+        self.assertNotEqual(result.returncode,0);self.assertTrue(marker.exists())
         self.assertIn('first',result.stdout)
+        cases={case.get('name'):case for case in oracle.ET.parse(build/'results.xml').iter('testcase')}
+        self.assertIsNotNone(cases['first'].find('failure'))
+        self.assertIsNone(cases['later'].find('failure'))
 
     def test_campaign_continuation_retains_failures_and_refuses_unknown_or_repeated_results(self):
         results=[{'name':'first','state':'failed'}]
@@ -1943,10 +1946,23 @@ class OracleTests(unittest.TestCase):
                 patch.object(runner, "links", return_value={"current": "same"}), \
                 patch.object(runner, "stage", side_effect=TimeoutError("timed out")), \
                 patch.object(runner, "restore", return_value=before) as restore:
-            with self.assertRaises(TimeoutError):
+            with self.assertRaisesRegex(oracle.RestoredVisualFailure, 'timed out'):
                 runner.visual("studio")
             restore.assert_called_once_with(before)
         self.assertFalse((self.root / "service-lease.json").exists())
+
+    def test_failed_restoration_does_not_allow_another_visual_case(self):
+        runner=oracle.Oracle(self.root,'visual-restore-failed')
+        with patch.object(runner,'prepare_visual_desktop'), \
+                patch.object(runner,'tested_payload',return_value=self.root), \
+                patch.object(runner,'service',return_value={'ActiveState':'active'}), \
+                patch.object(runner,'links',return_value={'current':'same'}), \
+                patch.object(runner,'stage',side_effect=RuntimeError('journey failed')), \
+                patch.object(runner,'restore',side_effect=RuntimeError('restoration failed')):
+            with self.assertRaisesRegex(RuntimeError,'restoration failed') as error:
+                runner.visual('studio')
+        self.assertNotIsInstance(error.exception,oracle.RestoredVisualFailure)
+        self.assertTrue((self.root/'service-lease.json').is_file())
 
     def test_visual_desktop_refuses_host_and_only_cancels_prompt(self):
         runner=oracle.Oracle(self.root/'isolde-oracle','desktop')

@@ -93,7 +93,7 @@ During ordinary build/test execution poll the existing session with small output
 
 ## Failure protocol
 
-1. Stop at the first named failure. Preserve logs/captures; inspect its stage and a bounded relevant log section. Classify it as product, harness, environment/transport, account/provider, or review scheduling. Record the classification and evidence; do not call a harness failure a product failure.
+1. Collect independent failures in one bounded batch. Stop dependent stages when their prerequisite fails, and stop visual cases if safe restoration cannot be verified. Preserve logs/captures; inspect each failed stage and a bounded relevant log section. Classify it as product, harness, environment/transport, account/provider, or review scheduling. Record the classification and evidence; do not call a harness failure a product failure.
 2. Identify a testable cause. Patch that cause and related known issues; run the smallest check capable of falsifying the diagnosis. No unchanged retry, arbitrary timeout increase, relaxed assertion, force-pass, lock deletion or clean rebuild.
 3. If the same failure persists after two cause-directed repair attempts, switch to a minimal reproducer/contract diagnosis instead of another long acceptance run. This is a change in debugging method, not permission to abandon the task. A further expensive attempt needs new evidence explaining why it should differ.
 4. BUSY means resume/observe its verified owner. Storage means the existing checked guest maintenance process. Host/VM security, transport and approval boundaries remain in `vm-oracle.md`; never use a second access path to bypass a rejection.

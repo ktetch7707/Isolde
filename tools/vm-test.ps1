@@ -6,6 +6,7 @@ param(
     [switch]$Installed,
     [switch]$FrozenReferenceHelpers,
     [switch]$Diagnostic,
+    [switch]$StopOnVisualFailure,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ResumeRunId,
     [string]$GuideReplayPlan,
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$')][string]$ReuseFullRun,
@@ -97,6 +98,7 @@ try {
         $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + $files + "isolde-dev@127.0.0.1:$guestRun/") -TimeoutSeconds 90 -Log $transport
     }
     if ($Action -eq 'Visual') {
+        $caseFailures = [System.Collections.Generic.List[string]]::new()
         foreach ($case in $Cases) {
             $reopenDigest = ''
             $featureDigest = ''
@@ -141,10 +143,20 @@ try {
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-reopen-$reopenDigest.py")) -TimeoutSeconds 30 -Log $transport
             }
             $attempt = 'attempt-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
-            & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
+            $attemptPath = Join-Path $local "visual/$case/$attempt"
+            try {
+              & "$PSScriptRoot/run-visual-acceptance.ps1" -Case $case -SourceRoot "$guestRun/source" `
                 -GuestRunner $guestDriver -RunId $RunId -Installed:$Installed -Diagnostic:$Diagnostic -IdentityFile $IdentityFile `
-                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory (Join-Path $local "visual/$case/$attempt") -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -StoreHelperDigest $storeDigest -ReferenceHelperDigest $referenceDigest -ReferenceCollectionsDigest $referenceCollectionsDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
+                -Executable "$guestRun/payload/bin/isolde" -OutputDirectory $attemptPath -WaitSeconds $WaitSeconds -GuideReplayPlan $GuideReplayPlan -ReopenHelperDigest $reopenDigest -FeatureHelperDigest $featureDigest -StudioHelperDigest $studioDigest -HistoryHelperDigest $historyDigest -StoreHelperDigest $storeDigest -ReferenceHelperDigest $referenceDigest -ReferenceCollectionsDigest $referenceCollectionsDigest -TimeoutSeconds $(if($case -in @('guide-lifecycle','guide-features')){1800}else{1000})
+            } catch {
+                $caseLog = Join-Path $attemptPath "$case-output.log"
+                $restoredFailure = $_.Exception.Message -like 'ssh.exe exited 3.*' -and (Test-Path -LiteralPath $caseLog) -and ((Get-Content -LiteralPath $caseLog -Tail 6) -ccontains "VM_VISUAL_CASE_FAILED $case")
+                if ($StopOnVisualFailure -or !$restoredFailure) { throw }
+                $caseFailures.Add($case)
+                Write-Host "Visual case failed after verified restoration: $case. Continuing independent cases."
+            }
         }
+        if ($caseFailures.Count) { throw "Visual cases failed: $($caseFailures -join ', '). See individual attempt logs." }
     } else {
         $remoteAction = $Action.ToLowerInvariant()
         $command = "python3 $guestDriver $remoteAction --run-id $RunId"
