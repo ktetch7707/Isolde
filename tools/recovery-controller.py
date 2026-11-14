@@ -7,6 +7,8 @@ import importlib.util
 from pathlib import Path
 import subprocess
 import sys
+import os
+import tempfile
 
 spec = importlib.util.spec_from_file_location("installer", Path(__file__).with_name("install-appliance.py"))
 installer = importlib.util.module_from_spec(spec)
@@ -34,7 +36,9 @@ def verify_release_signature(release_dir, signature_path, public_key):
     public_key = Path(public_key).absolute()
     if public_key.is_symlink() or not public_key.is_file():
         raise RuntimeError("Trusted signing key is missing")
-    digest_file = release_dir.parent / (".isolde-recovery-digest-" + release_dir.name)
+    descriptor, name = tempfile.mkstemp(prefix=".isolde-recovery-digest-", dir=release_dir.parent)
+    os.close(descriptor)
+    digest_file = Path(name)
     try:
         digest_file.write_text(release_digest(release_dir))
         result = run("openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key),
@@ -47,7 +51,7 @@ def verify_release_signature(release_dir, signature_path, public_key):
 
 
 def run(*args, check=True, **kwargs):
-    subprocess.run(args, check=check, **kwargs)
+    return subprocess.run(args, check=check, **kwargs)
 
 
 def previous_available(prefix):

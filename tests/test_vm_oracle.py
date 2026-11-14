@@ -1516,7 +1516,7 @@ class OracleTests(unittest.TestCase):
             binary=prefix/'releases'/name/'bin/isolde';binary.parent.mkdir(parents=True);binary.write_bytes(name.encode())
             installer.set_link(prefix/('current' if name=='old' else 'previous'),binary.parent.parent)
         payload=self.root/'payload'
-        for name in ('bin/isolde','bin/isolde-native-host','bin/config/native-session-bus.conf'):
+        for name in ('bin/isolde','bin/isolde-native-host','bin/isolde-recovery','bin/config/native-session-bus.conf'):
             file=payload/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(b'candidate')
         runner=oracle.Oracle(self.root/'oracle','failed-deploy');events=[]
         def stage(name,args,timeout):

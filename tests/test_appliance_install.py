@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch, call
 import subprocess
 import socket
+import shutil
 
 spec = importlib.util.spec_from_file_location("installer", Path(__file__).resolve().parents[1] / "tools/install-appliance.py")
 installer = importlib.util.module_from_spec(spec)
@@ -167,7 +168,38 @@ class InstallationTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as context:
             installer.install_payload(self.payload, self.prefix)
         self.assertIn("isolde-recovery", str(context.exception))
-        self.assertEqual((self.prefix / "current").resolve().name, "first")
+        self.assertFalse((self.prefix / "current").exists())
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required for real signature verification")
+    def test_real_signature_accepts_original_and_rejects_tampering(self):
+        private = self.root / "private.pem"
+        public = self.root / "public.pem"
+        message = self.root / "digest"
+        signature = self.root / "payload.sig"
+        subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private)], check=True, capture_output=True)
+        subprocess.run(["openssl", "pkey", "-in", str(private), "-pubout", "-out", str(public)], check=True, capture_output=True)
+        message.write_text(installer.payload_digest(self.payload))
+        subprocess.run(["openssl", "pkeyutl", "-sign", "-inkey", str(private), "-rawin", "-in", str(message), "-out", str(signature)], check=True, capture_output=True)
+        release = installer.install_payload(self.payload, self.prefix, signature, public)
+        (self.payload / "bin/isolde").write_text("tampered")
+        with self.assertRaisesRegex(RuntimeError, "signature does not match"):
+            installer.install_payload(self.payload, self.prefix, signature, public)
+        self.assertEqual((self.prefix / "current").resolve(), release)
+
+    def test_signature_digest_does_not_follow_predictable_scratch_link(self):
+        sentinel = self.root / "sentinel"
+        sentinel.write_text("preserve")
+        scratch = self.root / ".isolde-digest-payload"
+        scratch.symlink_to(sentinel)
+        signature = self.root / "payload.sig"
+        signature.write_bytes(b"\0" * 64)
+        public = self.root / "public.pem"
+        public.write_text("fixture")
+        with patch.object(installer, "run") as run:
+            run.return_value.returncode = 0
+            installer.verify_payload_signature(self.payload, signature, public)
+        self.assertEqual(sentinel.read_text(), "preserve")
+        self.assertTrue(scratch.is_symlink())
 
 
 if __name__ == "__main__":

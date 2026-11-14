@@ -3,6 +3,8 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+import shutil
+import subprocess
 
 spec = importlib.util.spec_from_file_location("recovery", Path(__file__).resolve().parents[1] / "tools/recovery-controller.py")
 recovery = importlib.util.module_from_spec(spec)
@@ -81,6 +83,38 @@ class RecoveryTests(unittest.TestCase):
             recovery.recover(self.prefix, 11, self.control,
                              signature=signature, public_key=public_key)
         self.assertEqual((self.prefix / "current").resolve().name, "a")
+
+    @unittest.skipUnless(shutil.which("openssl"), "OpenSSL required for real signature verification")
+    def test_real_rollback_signature_rejects_tampering_before_switch(self):
+        private = self.prefix / "private.pem"
+        public = self.prefix / "public.pem"
+        message = self.prefix / "digest"
+        signature = self.prefix / "release.sig"
+        previous = self.prefix / "releases/a"
+        subprocess.run(["openssl", "genpkey", "-algorithm", "ED25519", "-out", str(private)], check=True, capture_output=True)
+        subprocess.run(["openssl", "pkey", "-in", str(private), "-pubout", "-out", str(public)], check=True, capture_output=True)
+        message.write_text(recovery.release_digest(previous))
+        subprocess.run(["openssl", "pkeyutl", "-sign", "-inkey", str(private), "-rawin", "-in", str(message), "-out", str(signature)], check=True, capture_output=True)
+        recovery.verify_release_signature(previous, signature, public)
+        (previous / "bin/isolde").write_text("tampered")
+        with self.assertRaisesRegex(RuntimeError, "signature does not match"):
+            recovery.recover(self.prefix, 11, self.control, signature, public)
+        self.assertEqual((self.prefix / "current").resolve().name, "b")
+
+    def test_signature_digest_does_not_follow_predictable_scratch_link(self):
+        sentinel = self.prefix / "sentinel"
+        sentinel.write_text("preserve")
+        scratch = self.prefix / "releases/.isolde-recovery-digest-a"
+        scratch.symlink_to(sentinel)
+        signature = self.prefix / "release.sig"
+        signature.write_bytes(b"\0" * 64)
+        public = self.prefix / "public.pem"
+        public.write_text("fixture")
+        with patch.object(recovery, "run") as run:
+            run.return_value.returncode = 0
+            recovery.verify_release_signature(self.prefix / "releases/a", signature, public)
+        self.assertEqual(sentinel.read_text(), "preserve")
+        self.assertTrue(scratch.is_symlink())
 
 
 if __name__ == "__main__":

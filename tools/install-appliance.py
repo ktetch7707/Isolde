@@ -28,7 +28,7 @@ DEPENDENCIES = [
 
 
 def run(*args, check=True, **kwargs):
-    subprocess.run(args, check=check, **kwargs)
+    return subprocess.run(args, check=check, **kwargs)
 
 
 def ubuntu_supported():
@@ -85,7 +85,9 @@ def verify_payload_signature(payload, signature_path, public_key):
     public_key = Path(public_key).absolute()
     if public_key.is_symlink() or not public_key.is_file():
         raise RuntimeError("Trusted signing key is missing")
-    digest_file = payload.parent / (".isolde-digest-" + payload.name)
+    descriptor, name = tempfile.mkstemp(prefix=".isolde-digest-", dir=payload.parent)
+    os.close(descriptor)
+    digest_file = Path(name)
     try:
         digest_file.write_text(payload_digest(payload))
         result = run("openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(public_key),
