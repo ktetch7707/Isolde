@@ -71,6 +71,24 @@ void KodiMediaTests::localPlaybackPreferenceIsPersistedAndProfileScoped()
         KodiService other("local-playback-other");QVERIFY(other.alwaysPlayLocally());
         restored.resetAlwaysPlayLocally();
         KodiService reset("local-playback-first");QVERIFY(reset.alwaysPlayLocally());
+        QSettings stored(QSettings::IniFormat,QSettings::UserScope,"Isolde","Kodi");
+        const auto file=stored.fileName();const auto directory=QFileInfo(file).absolutePath();
+        const auto fileMode=QFile::permissions(file),directoryMode=QFile::permissions(directory);
+        {
+            auto restore=qScopeGuard([&]{QFile::setPermissions(directory,directoryMode);QFile::setPermissions(file,fileMode);});
+            QVERIFY(QFile::setPermissions(file,QFile::ReadOwner));
+            QVERIFY(QFile::setPermissions(directory,QFile::ReadOwner|QFile::ExeOwner));
+            reset.setAlwaysPlayLocally(false);
+            QVERIFY(reset.alwaysPlayLocally());
+            QVERIFY(reset.status().contains("Could not save"));
+        }
+        QSignalSpy changed(&reset,&KodiService::changed);
+        reset.setAlwaysPlayLocally(false);
+        QVERIFY(!reset.alwaysPlayLocally());
+        QCOMPARE(reset.status(),QString("Playback preference saved."));
+        QCOMPARE(changed.count(),1);
+        reset.resetAlwaysPlayLocally();
+        QCOMPARE(reset.status(),QString("Playback preference reset to default."));
     }
     QSettings::setDefaultFormat(original);
 }

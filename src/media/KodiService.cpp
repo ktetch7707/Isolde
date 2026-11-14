@@ -267,7 +267,9 @@ void KodiService::setAlwaysPlayLocally(bool value)
         m_status = "Could not save Always Play Locally preference. Previous selection retained."; emit changed(); return;
     }
     m_alAlwaysPlayLocally = value;
+    m_status = "Playback preference saved.";
     emit alwaysPlayLocallyChanged();
+    emit changed();
 }
 
 void KodiService::resetAlwaysPlayLocally()
@@ -282,7 +284,9 @@ void KodiService::resetAlwaysPlayLocally()
         m_status = "Could not reset Always Play Locally preference. Previous selection retained."; emit changed(); return;
     }
     m_alAlwaysPlayLocally = true;
+    m_status = "Playback preference reset to default.";
     emit alwaysPlayLocallyChanged();
+    emit changed();
 }
 
 void KodiService::markReady()

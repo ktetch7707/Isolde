@@ -689,7 +689,13 @@ provider.setSettingString("searchlanguage","en-US")
                 poster_capture('sourceprogresspreserved')
                 source_press('Escape');source_press('Up');source_press('Return')
                 poster_capture('localplaybackon')
-                preference_file=config/'Kodi.conf';preference_before=preference_file.read_bytes()
+                # A fresh profile reads the packaged On default without writing
+                # Kodi.conf. Persist Off/On through the product before injecting
+                # a failure into an existing settings file.
+                source_press('Return');source_press('Return')
+                preference_file=config/'Kodi.conf'
+                wait(lambda:preference_file.is_file(),'Playback preference persisted through Isolde')
+                preference_before=preference_file.read_bytes()
                 directory_mode=config.stat().st_mode & 0o777;preference_mode=preference_file.stat().st_mode & 0o777
                 try:
                     preference_file.chmod(0o400);config.chmod(0o500)
@@ -716,7 +722,10 @@ provider.setSettingString("searchlanguage","en-US")
                 # above. Back returns to its exact Media menu origin before
                 # selecting the scan action; Up/Down do not leave that subpage.
                 source_press('Escape')
-                source_press('Up',30);source_press('Down',11);source_press('Return')
+                source_press('Up',30);source_press('Down',11)
+                poster_capture('musicscanselected')
+                source_press('Return');time.sleep(1)
+                poster_capture('musicscanrequested')
                 songs=wait(lambda:rpc(directory,'AudioLibrary.GetSongs',{'properties':['title','album','artist']}).get('songs'),'Kodi indexed real tagged music',seconds=60)
                 assert len(songs)==2 and all(row.get('album')=='Isolde Fixture Album' for row in songs),songs
                 open_movie_card();source_press('Up',20);source_press('Right',20);source_press('Return');time.sleep(1)
