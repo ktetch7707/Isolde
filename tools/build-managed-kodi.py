@@ -115,6 +115,14 @@ def overlay(source,repository,version):
         text=text.replace(before,after)
     if '#include <cstdlib>' not in text:text='#include <cstdlib>\n'+text
     if text!=path.read_text():path.write_text(text)
+    path=source/'xbmc/windowing/X11/WinSystemX11.cpp';text=path.read_text()
+    before='  if (m_userOutput.compare(m_currentOutput) != 0)\n  {\n    SetWindow(newWidth, newHeight, false, m_userOutput);\n  }'
+    after='  if (m_userOutput.compare(m_currentOutput) != 0)\n  {\n    if (std::getenv("ISOLDE_MANAGED_KODI"))\n    {\n      if (!SetWindow(newWidth, newHeight, false, m_userOutput)) return;\n      m_currentOutput = m_userOutput;\n    }\n    else SetWindow(newWidth, newHeight, false, m_userOutput);\n  }'
+    if after not in text:
+        if text.count(before)!=1:raise RuntimeError('X11 resize output source layout changed')
+        text=text.replace(before,after)
+    if '#include <cstdlib>' not in text:text='#include <cstdlib>\n'+text
+    if text!=path.read_text():path.write_text(text)
     header=source/'xbmc/application/ApplicationSkinHandling.h';text=header.read_text()
     member='  mutable bool m_isoldePendingSkinReload{false};\n'
     if member not in text:

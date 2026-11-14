@@ -1881,6 +1881,16 @@ without a D-pad target; expose each preview line as a read-only navigable row.
 an builds the native correction, followed by one media_controls batch reusing
 z63/63 and the installed movieart/playlists batch. No new CTest registrations.
 
+ao passes8/8 affected registrations in91sec and deploys9273aa71afba8b85dbbaaf8e,
+source02451e400fff2467d0cdd41050a12a0bccfdf56ca99dd4ecf2ef9a5b99227c68.
+Busy Confirm and navigation-cancel regression pass. Installed172748-678 reaches
+a black Kodi window, then fails Menu controls; no acceptance. BUG-173 native
+FinishWindowResize calls SetWindow for a new output but omits m_currentOutput
+assignment. Later resize events repeat forced context destruction/skin reload;
+the trace records repeated native stacks throughout the failure. ap updates
+that state only after successful managed SetWindow. Native-only correction
+reuses ao8/8 and z63/63; installed movieart/playlists remains the next gate.
+
 BUG-169 diagnostic dependency rebuild reused a Debian package version despite a
 different built binary. The installed SHA check rejected it before acceptance.
 Exact local dependency installation now uses --reinstall as well as

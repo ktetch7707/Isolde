@@ -21,8 +21,12 @@ initialization ends. am installed171623-129 proves actual movie1 ownership and
 Menu-to-Isolde controls; screenshot still shows the library, and audio Confirm
 is dropped during busy polling. Related BUG-170/171/172 batch fixes queued
 Confirm/cancellation, fullscreen XID replacement/reload restoration and D-pad
-import preview. an native dependency passes. ao media_controls is running with
-z63/63 reuse, then deploy ao and run installed movieart/playlists. No full
+import preview. an native dependency passes. ao passes8/8 with z63/63 reuse,
+deployed9273aa71afba8b85dbbaaf8e. Installed172748-678 shows black Kodi and
+repeated forced context/skin reloads; Menu controls cannot open. BUG-173 native
+FinishWindowResize changes output without updating m_currentOutput, so later
+resize events recreate the window repeatedly. ap corrects managed output state
+after successful SetWindow. Reuse ao application, then movieart/playlists. No full
 application rerun for this dependency/helper
 diagnosis; z63/63 remains applicable. No new acceptance credit yet.
 
