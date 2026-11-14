@@ -4,6 +4,12 @@ Latest acceptance scope: [vm-software-completion.md](vm-software-completion.md).
 
 Testing frequency, readiness, evidence reuse and failure diagnosis follow [the execution contract](backlog-execution.md); current work resumes from [the queue](execution-queue.md). Focused tests follow complete batches, full Test is an integration gate, and harness-only corrections reuse a matching passing staged application through the supported runner. The `test-all.ps1` report does not remove existing timed review/input checkpoints: classify a case as attended until the helper actually supports unattended execution. All screenshot/semantic review and installed/offline gates below remain required.
 
+For a failed graphical checkpoint, use the shortest supported case against the
+verified payload. Confirm the intended window and product state before sending
+input. Save the failed phase and the relevant log excerpt. When multiple cases
+need verification on the same release, pass them in one `-Cases` invocation.
+The execution contract defines when a complete journey needs to be replayed.
+
 ## Standing machine-boundary permission (user, 2026-10-21)
 
 Isolde-Test is a disposable Isolde test machine. Agents may perform necessary **guest-only** cleanup and testing/setup autonomously; do not repeatedly ask permission for obsolete guest build artifacts or ordinary test setup. User revision, November7: normal `Test` now automatically cleans verified obsolete guest artifacts below 3 GiB, after runner self-tests and under the existing guest lock. It uses the same checked maintenance implementation as explicit Configure. Prefer this single invocation over separate Status/Configure calls. A cleanup receipt records reclaimed bytes and whether the 3 GiB target and 2 GiB test minimum were met. Unsafe paths/checksums still fail; a missed 3 GiB target alone does not block testing above 2 GiB.
