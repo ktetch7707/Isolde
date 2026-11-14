@@ -1,4 +1,5 @@
 {
+  "playlistShelfChoices":[{"name":"Movies · Kodi playlist","kind":"movies"},{"name":"Shows · Kodi playlist","kind":"shows"}],
   "settingsNavigation":{"schemaVersion":1,"categories":[
     {"id":"network","name":"Network & Internet","description":"Wi-Fi, connections and VPN","rows":[{"name":"Network connection","description":"Connection status, Wi-Fi and saved networks","route":"network"},{"name":"VPN","description":"Provider setup, locations and connection controls","route":"vpn"}]},
     {"id":"picture","name":"Picture & Sound","description":"Display, accessibility and audio","rows":[{"name":"Display & accessibility","description":"Safe area, interface scale, contrast and motion","route":"display"},{"name":"Sound","description":"Audio output, volume and startup preferences","route":"audio"},{"name":"Interface sounds","description":"Kodi sound themes, navigation feedback and sound level","route":"interface-sounds"}]},

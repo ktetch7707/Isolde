@@ -312,7 +312,27 @@ Item {
         QtObject {id:fakePlaylistCatalog;property var items:[{title:"Family films",playlistName:"Family films.xsp"}];property string status:"Kodi video playlists · 1 of 1"}
         QtObject {id:playlistProvider;property int refreshes:0;function playlistCatalog(){return fakePlaylistCatalog}function refresh(client){refreshes++}}
         Component {id:playlistInspector;App.StudioInspector {width:1280;height:720}}
+        Component {id:playlistAddCatalog;App.StudioCatalog {width:1280;height:720}}
         SignalSpy {id:ambientSpy;signalName:"dismissRequested"}
+        function test_add_playlist_shelf_keeps_draft_until_placement() {
+            const catalog=createTemporaryObject(playlistAddCatalog,tests.parent,{session:editor.session,options:homeLayout.studioOptions,appearance:editor.page.appearance,provider:playlistProvider})
+            verify(catalog!==null)
+            const before=JSON.stringify(editor.session.document)
+            const choice=catalog.primaryFamilies.findIndex(f=>f.id==="library")
+            verify(choice>=0);catalog.chooseFamily(choice);compare(catalog.view,"media")
+            const source=catalog.labels().indexOf("Movies · Kodi playlist")
+            verify(source>=0);catalog.selected=source;catalog.handleCommand(inputManager.confirm)
+            compare(catalog.view,"playlists");compare(catalog.labels()[1],"Family films")
+            catalog.handleCommand(inputManager.back);compare(catalog.view,"media");compare(catalog.selected,source)
+            catalog.handleCommand(inputManager.confirm)
+            let picked=null
+            catalog.picked.connect((type,configuration)=>{picked={type:type,configuration:configuration}})
+            catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm)
+            verify(picked!==null);compare(picked.type,"library")
+            compare(picked.configuration.presentation.libraryValue,"Family films.xsp")
+            compare(picked.configuration.presentation.libraryKind,"movies")
+            compare(JSON.stringify(editor.session.document),before);compare(studioFixture.disk(),diskBaseline)
+        }
         function test_kodi_playlist_picker_is_remote_and_draft_only() {
             verify(editor.session.execute("newPage",{name:"Playlist room",preset:"blank"}),editor.session.errorString)
             const pageId=editor.session.document.pages[editor.session.document.pages.length-1].id
