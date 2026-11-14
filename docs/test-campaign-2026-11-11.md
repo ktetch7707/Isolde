@@ -2223,3 +2223,41 @@ stopped it. The simulated physical-key route used in movieart had failed
 despite X11 reporting the intended focus. Movieart now uses the same
 window-targeted remote commands as the passing video and music workflows
 and checks the exact reopened song ID. The probe is diagnostic only.
+
+Closure p passed8/8 affected CTest registrations with verified k63/63 reuse
+and installed cefd7d8cdba975190fc4df3b. BUG-192 was a product defect: the rename
+handler reset the keyboard's properties instead of the playlist view. Routing
+completion through the existing view reset restores the catalog. Installed
+playlists151903-525 confirms collision refusal, draft cancellation, preview
+and smart-rule save, smart ordering, member reordering, and delete confirmation.
+The later picture-size test used a fixed row even when Previous and Next were
+both available (BUG-193). The focused playback case now navigates relative to
+the fixed tail of the controls list. The isolated import test reached the
+correct page, but Kodi took the foreground during preview and no backup
+receipt appeared (BUG-194). The next attempt observes the backend restart
+and activates the import window before continuing.
+
+Installed p kodi-import152721-904 passed. The verified snapshot matched the
+desktop inventory, only the disposable Isolde profile changed, rollback
+restored its original sources, and the owned Desktop control returned to the
+exact tile twice. The rollback frame caught a briefly visible Kodi startup
+window. No Kodi menu interaction was required. The earlier failed attempts
+did not wait for a settled backend and focused Backup row.
+
+Installed p playlist-playback152447-040 verified zoom, subtitle on/off, adjacent
+playback in both directions, native focus restoration and managed stop. Studio
+shelf creation was separate and failed because the default profile had no page
+grid configured (BUG-195, fixture prerequisite). The isolated shelf case seeds
+a declarative grid and exercises selection, placement and saving in the real editor.
+The failed import frame also exposed stale empty-library instructions directing
+the user to Kodi menus (BUG-196). Those messages now point to the existing
+Isolde source and Guide setup routes.
+
+Closure q passed8/8 affected registrations with verified k63/63 reuse.
+Release 5e40ea5dc89487bec5e562b0 installed and passed playlist-shelf153429-420.
+Reviewed all four captures: the empty library provides the Isolde route,
+the Kodi playlist picker shows actual entries, Studio places the draft, and
+the saved shelf renders the three real episodes. Normal layout hashes match
+and the service is active with zero restarts. The k Lounge and Pastel pairs
+remain applicable because the shared rendering and reference presets did not
+change. T04 closes at100% (7/7 groups); project2253/25 rounds to90%.

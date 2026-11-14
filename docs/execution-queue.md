@@ -2,7 +2,7 @@
 
 ## Current checkpoint — November 14 review and media continuation
 
-Selected T04; acceptance89% (2224/25),199/238 milestones, T04=71%.
+T04 complete; acceptance90% (2253/25),208/239 milestones, T04=100% (7/7 groups).
 T04.6.aa now credits independently reviewed native movie Menu/seek/resume/stop/
 origin/Home evidence; original0.45 playback weight is preserved across aa/ab/ac.
 Review fixes180–186 pass combined review-media-20261114-a63/63, zero skips,
@@ -44,7 +44,20 @@ real playback and exact result return. Local TV source apply and scanning now
 work. Movieart music pause and stop still time out (BUG-189). Playlist creation
 and rename worked, but the fixture missed its collision entry and rule preview
 input route (BUG-192). Continue on the same candidate with the short
-music-transport diagnostic and corrected playlist route. T04 is71%.
+music-transport diagnostic and corrected playlist route.
+
+Movieart081542-029 proved pause, resume, stop and the exact song return.
+Import then failed to produce its backup receipt. The preview frame showed
+Kodi over Isolde after the prior song stopped, so import UI evidence is
+invalid. The standalone p import152721-904 verified backup, import, rollback
+and exact Desktop return after synchronizing remote input with backend
+readiness. p playlists151903-525 verified management and rule edits.
+p playlist-playback152447-040 verified the remaining transport matrix, and
+p playlist-shelf153122-995 verified selection, placement and rendered cards.
+Lounge and Pastel standing evidence is retained from k; the rendering and
+fixture preset inputs are unchanged. The q focused batch passed8/8 with strict k63/63 reuse. Installed release
+5e40ea5dc89487bec5e562b0 passed playlist-shelf153429-420; all four frames
+reviewed. No T04 runner remains active. Resume by backlog priority.
 
 ## Previous checkpoint — November 13 installed media batch
 

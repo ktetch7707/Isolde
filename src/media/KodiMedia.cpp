@@ -1339,7 +1339,7 @@ void KodiMedia::consume()
     m_movies = normalized;
     restoreHistorySelection();
     m_selectedIndex = qBound(-1, m_selectedIndex, qMax(-1, int(m_movies.size()) - 1));
-    m_status = m_movies.isEmpty() ? (m_mediaKind == "channels" ? "No TV channels in this profile. Configure a PVR TV source in Kodi, then refresh." : m_mediaKind == "albums" ? "No albums in this profile's Kodi music library. Add music sources in Kodi, then refresh." : m_mediaKind == "history" ? "Nothing viewed in this profile yet. Kodi viewing history appears here." : m_viewKind == "all" ? "No items in this Kodi library view. Configure sources in Kodi or refresh to retry."
+    m_status = m_movies.isEmpty() ? (m_mediaKind == "channels" ? "No TV channels in this profile. Open TV Guide to set up a source, then refresh." : m_mediaKind == "albums" ? "No albums in this profile. Open Settings, then Media & Playback to add a music source and scan." : m_mediaKind == "history" ? "Nothing viewed in this profile yet. Kodi viewing history appears here." : m_viewKind == "all" ? "No items in this library view. Open Settings, then Media & Playback to add or scan sources."
         : m_viewKind == "continue" ? "No items with saved progress in this profile." : "Not found in your Kodi library.")
         : QString("%1 · %2–%3 of %4").arg(browseTitle()).arg(m_pageStart + 1).arg(m_pageStart + m_movies.size()).arg(m_totalMovies);
     m_busy = false;

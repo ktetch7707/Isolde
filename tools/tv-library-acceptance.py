@@ -91,21 +91,25 @@ def main():
     parser.add_argument("--local-search", action="store_true", help="Real Kodi local search under kernel Internet-socket denial")
     parser.add_argument("--pages", action="store_true", help="Create and customize a page through Settings, then exercise its widget against real Kodi")
     parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
+    parser.add_argument("--playlist-playback", action="store_true", help="Verify playback controls and shelf placement with a preexisting Kodi playlist")
+    parser.add_argument("--playlist-shelf", action="store_true", help="Place an existing Kodi playlist on Home")
     parser.add_argument("--history", action="store_true", help="Verify actual Kodi playback updates independent production Recently viewed carousels")
     parser.add_argument("--movie-art", action="store_true", help="Scrape a named synthetic movie using Kodi's TMDB provider; no supplied metadata/art")
+    parser.add_argument("--kodi-import", action="store_true", help="Verify installed import, rollback, and Desktop return")
     parser.add_argument("--music-transport", action="store_true", help="Diagnose the owned controls and Kodi transport with one private FLAC fixture")
     parser.add_argument("--guide", action="store_true", help="Configure an isolated real IPTV Simple channel, then import and tune it through the Guide")
     parser.add_argument("--guide-surfaces", action="store_true", help="Also create two local channels through the UI and review compact/overlay/full return")
     parser.add_argument("--guide-lifecycle", action="store_true", help="Extend the real Guide journey with natural transitions, D-pad surfing and actual deleted-file repair")
     parser.add_argument("--guide-features", action="store_true", help="Extend the real Guide journey with native feeds, artwork, portability, templates and calendar controls")
     args = parser.parse_args()
+    if args.playlist_playback or args.playlist_shelf:args.playlists=True
     if args.guide_lifecycle:args.guide=args.guide_surfaces=True
     if args.guide_features:args.guide=args.guide_surfaces=True
     if args.guide_surfaces and not args.guide:parser.error("--guide-surfaces requires --guide")
     lock = open("/tmp/isolde-home-components-acceptance.lock", "a"); fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     profile = str(uuid.uuid4())
     evidence = Path(tempfile.mkdtemp(prefix="isolde-tv-acceptance-"))
-    print("Fixture evidence: " + str(evidence) + " Â· profile " + profile, flush=True)
+    print("Fixture evidence: " + str(evidence) + " - profile " + profile, flush=True)
     media = Path.home() / "Videos/Isolde-Acceptance" / ("Isolde-tv-test-" + profile)
     data = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share")))
     userdata = data / "Isolde/native-profiles" / profile / "kodi/home/.kodi/userdata"
@@ -289,7 +293,13 @@ provider.setSettingString("searchlanguage","en-US")
     config = evidence / "config/Isolde"; config.mkdir(parents=True)
     (config / "profiles.json").write_text(json.dumps({"active": profile, "profiles": [{"id": profile, "name": "TV acceptance"}]}))
     (config / "device-setup.json").write_text('{"version":1,"step":6,"complete":true}')
-    if args.movie_art:
+    if args.playlists:
+        layout=config/'profiles'/profile/'home-layout.json'
+        layout.parent.mkdir(parents=True)
+        layout.write_text(json.dumps(dict(schemaVersion=2,rootPage=dict(name='Home',visible=True,position=0),
+            categories=[],components=[],composition=dict(schemaVersion=1,enabled=True,showClock=False,
+                grid=dict(columns=8,rows=6,mode='screen'),headerControls=['settings','edit']))))
+    if args.movie_art or args.kodi_import:
         managed_art=config/'profiles'/profile/'artwork';managed_art.mkdir(parents=True)
         managed_poster=managed_art/(hashlib.sha256(poster.read_bytes()).hexdigest()+'.png')
         managed_poster.write_bytes(poster.read_bytes())
@@ -425,10 +435,93 @@ provider.setSettingString("searchlanguage","en-US")
                     print('NATIVE_STARTUP_TRACE\n'+'\n'.join(line for line in startup_log.read_text(errors='replace').splitlines() if 'ISOLDE native' in line)[-16000:],flush=True)
             time.sleep(6)  # Finish startup-window replacement and managed minimization.
             kodi = next(r[0] for r in windows() if "Kodi" in r[-1])
-            if not (args.movie_art or args.playlists or args.local_search or args.music_transport):
+            if not (args.movie_art or args.playlists or args.local_search or args.music_transport or args.kodi_import):
                 run("wmctrl", "-i", "-a", kodi, env=env)
                 x11.XSetInputFocus(display, int(kodi, 16), 2, 0); x11.XSync(display, 0)
             time.sleep(1)
+            if args.kodi_import:
+                run('wmctrl','-i','-a',shell,env=env)
+                def import_capture(phase):
+                    run('wmctrl','-i','-a',shell,env=env)
+                    wait(lambda:int(run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).split()[-1],16)==int(shell,16),
+                         'Isolde import window has focus',seconds=5)
+                    guide_capture(phase)
+                def source_press(name,count=1):
+                    for _ in range(count):
+                        key(shell,name,.08)
+                    time.sleep(.3)
+                # Exercise the installed importer against the guest's existing
+                # desktop Kodi, read-only at the source. All writes remain in
+                # this disposable Isolde profile and its verified snapshots.
+                import_spec=importlib.util.spec_from_file_location('installed_import_inventory',Path(__file__).with_name('kodi-import.py'))
+                import_support=importlib.util.module_from_spec(import_spec);import_spec.loader.exec_module(import_support)
+                desktop=Path.home()/'.kodi'
+                desktop_before=import_support.inventory(desktop)
+                source=dict(name='Prior source',path=str(media)+'/',category='video',content='',
+                    scraper='',recursive=True,folderNames=False,noUpdate=False,exclude=False,remove=False)
+                draft=rpc(directory,'Isolde.PreviewSource',{'source':source})
+                assert rpc(directory,'Isolde.ApplySource',{'source':source,'revision':draft['revision']})['applied']
+                prior_sources=(userdata/'sources.xml').read_bytes()
+                receipt=config/'kodi-import-backups'/profile/'receipt.json'
+                source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
+                source_press('Up',20);source_press('Down',7);source_press('Return')
+                source_press('Up',30);source_press('Down',8);source_press('Return')
+                import_capture('importentry')
+                source_press('Down',2);source_press('Return');time.sleep(2)
+                wait(lambda:rpc(directory,'JSONRPC.Version'),'Kodi returned after read-only preview',seconds=20)
+                source_press('Down',8);import_capture('importpreview')
+                assert not receipt.exists(),'Preview created an import snapshot or changed profile state'
+                source_press('Up',30);source_press('Return')
+                wait(lambda:rpc(directory,'JSONRPC.Version'),'Kodi returned after read-only scan',seconds=20)
+                time.sleep(2)
+                run('wmctrl','-i','-a',shell,env=env)
+                source_press('Up',16);source_press('Down')
+                import_capture('importbackupselected')
+                source_press('Return')
+                try:
+                    wait(lambda:receipt.is_file(),'Installed importer created a verified snapshot',seconds=15)
+                except RuntimeError:
+                    import_capture('importbackupfailed')
+                    raise
+                snapshot=json.loads(receipt.read_text())
+                assert snapshot['profile']==profile and snapshot['sourceEntries']==desktop_before and not snapshot['imported']
+                source_press('Down',2);source_press('Return');import_capture('importready')
+                assert json.loads(receipt.read_text())['imported'] is False,'First Confirm imported before explicit consent'
+                source_press('Return')
+                wait(lambda:json.loads(receipt.read_text()).get('imported') is True,'Installed import confirmed',seconds=90)
+                assert import_support.inventory(desktop)==desktop_before,'Import changed desktop Kodi'
+                wait(lambda:rpc(directory,'JSONRPC.Version'),'Imported Kodi restarted',seconds=20)
+                import_capture('importapplied')
+                source_press('Down');source_press('Return')
+                assert json.loads(receipt.read_text())['imported'] is True,'Rollback applied before confirmation'
+                source_press('Return')
+                wait(lambda:json.loads(receipt.read_text()).get('imported') is False,'Installed rollback confirmed',seconds=90)
+                wait(lambda:(userdata/'sources.xml').read_bytes()==prior_sources,'Rollback restored the original private sources')
+                assert import_support.inventory(desktop)==desktop_before,'Rollback changed desktop Kodi'
+                wait(lambda:rpc(directory,'JSONRPC.Version'),'Restored Kodi restarted',seconds=20)
+                import_capture('importrollback')
+                source_press('Up');source_press('Return');source_press('Escape')
+                assert json.loads(receipt.read_text())['imported'] is False,'Cancelled import confirmation changed profile state'
+                (evidence/'import-workflow.json').write_text(json.dumps(dict(profile=profile,sourceUnchanged=True,previewNoWrite=True,confirmationRequired=True,importAndRollback=True,cancelNoWrite=True,sourceEntries=len(desktop_before)),indent=2))
+                desktop_label=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['desktop']['returnLabel']
+                def return_window():
+                    return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]==desktop_label),None)
+                source_press('Home');source_press('Up',20);source_press('Down');source_press('Right');source_press('Return')
+                desktop_return=wait(return_window,'Desktop mode shows its owned return control',seconds=45)
+                guide_capture('kodidesktop')
+                key(desktop_return,'Home')
+                wait(lambda:not return_window(),'Desktop Home returns to Isolde')
+                guide_capture('kodidesktopreturned')
+                key(shell,'Return')
+                desktop_return=wait(return_window,'Confirm reopens the exact Desktop origin')
+                key(desktop_return,'Home')
+                wait(lambda:not return_window(),'Repeat Desktop return completed')
+                for path,digest in hashes.items():
+                    assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
+                (evidence/'result.json').write_text(json.dumps(dict(passed=True,freshProfile=True,
+                    normalProfileUsed=False,importRollback=True,desktopExactReturn=True,mediaUnchanged=True)))
+                return
+
             if args.music_transport:
                 source=dict(name='Transport fixture',path=str(music)+'/',category='music',content='music',
                     scraper='',recursive=True,folderNames=False,noUpdate=False,exclude=False,remove=False)
@@ -473,6 +566,9 @@ provider.setSettingString("searchlanguage","en-US")
                 return
             if args.guide:guide_capture('guidestartup')
             elif args.playlists or args.local_search:
+                if args.playlist_shelf:
+                    run('wmctrl','-i','-a',shell,env=env)
+                    guide_capture('kodiemptylibrary')
                 wait(lambda:any(row['id']=='metadata.local' and row['content']=='tvshows'
                     for row in rpc(directory,'Isolde.GetSources')['scrapers']),'Kodi local TV metadata provider ready')
                 source=dict(name='Television fixture',path=str(media)+'/',category='video',content='tvshows',
@@ -859,58 +955,10 @@ provider.setSettingString("searchlanguage","en-US")
                 assert item['id']==original_song
                 key('kodi','Escape')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Reopened song stopped')
-                # Exercise the installed importer against the guest's existing
-                # desktop Kodi, read-only at the source. All writes remain in
-                # this disposable Isolde profile and its verified snapshots.
-                import_spec=importlib.util.spec_from_file_location('installed_import_inventory',Path(__file__).with_name('kodi-import.py'))
-                import_support=importlib.util.module_from_spec(import_spec);import_spec.loader.exec_module(import_support)
-                desktop=Path.home()/'.kodi'
-                desktop_before=import_support.inventory(desktop)
-                prior_sources=(userdata/'sources.xml').read_bytes()
-                receipt=config/'kodi-import-backups'/profile/'receipt.json'
-                source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
-                source_press('Up',20);source_press('Down',7);source_press('Return')
-                source_press('Up',30);source_press('Down',8);source_press('Return')
-                source_press('Down',2);source_press('Return');time.sleep(2)
-                source_press('Down',8);poster_capture('importpreview')
-                assert not receipt.exists(),'Preview created an import snapshot or changed profile state'
-                source_press('Escape');source_press('Return')
-                source_press('Down');source_press('Return')
-                wait(lambda:receipt.is_file(),'Installed importer created a verified snapshot',seconds=90)
-                snapshot=json.loads(receipt.read_text())
-                assert snapshot['profile']==profile and snapshot['sourceEntries']==desktop_before and not snapshot['imported']
-                source_press('Down',2);source_press('Return');poster_capture('importready')
-                assert json.loads(receipt.read_text())['imported'] is False,'First Confirm imported before explicit consent'
-                source_press('Return')
-                wait(lambda:json.loads(receipt.read_text()).get('imported') is True,'Installed import confirmed',seconds=90)
-                assert import_support.inventory(desktop)==desktop_before,'Import changed desktop Kodi'
-                poster_capture('importapplied')
-                source_press('Down');source_press('Return')
-                assert json.loads(receipt.read_text())['imported'] is True,'Rollback applied before confirmation'
-                source_press('Return')
-                wait(lambda:json.loads(receipt.read_text()).get('imported') is False,'Installed rollback confirmed',seconds=90)
-                wait(lambda:(userdata/'sources.xml').read_bytes()==prior_sources,'Rollback restored the original private sources')
-                assert import_support.inventory(desktop)==desktop_before,'Rollback changed desktop Kodi'
-                poster_capture('importrollback')
-                source_press('Up');source_press('Return');source_press('Escape')
-                assert json.loads(receipt.read_text())['imported'] is False,'Cancelled import confirmation changed profile state'
-                (evidence/'import-workflow.json').write_text(json.dumps(dict(profile=profile,sourceUnchanged=True,previewNoWrite=True,confirmationRequired=True,importAndRollback=True,cancelNoWrite=True,sourceEntries=len(desktop_before)),indent=2))
-                desktop_label=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['desktop']['returnLabel']
-                def return_window():
-                    return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]==desktop_label),None)
-                source_press('Home');source_press('Up',20);source_press('Down');source_press('Right');source_press('Return')
-                desktop_return=wait(return_window,'Desktop mode shows its owned return control',seconds=45)
-                poster_capture('kodidesktop')
-                key(desktop_return,'Home')
-                wait(lambda:not return_window(),'Desktop Home returns to Isolde')
-                poster_capture('kodidesktopreturned')
-                key(shell,'Return')
-                desktop_return=wait(return_window,'Confirm reopens the exact Desktop origin')
-                key(desktop_return,'Home')
-                wait(lambda:not return_window(),'Repeat Desktop return completed')
+                run('wmctrl','-i','-a',shell,env=env)
                 for path,digest in hashes.items(): assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
                 if music_pause_failure is not None:
-                    raise RuntimeError('Music pause or resume failed; import/rollback and Desktop return completed') from music_pause_failure
+                    raise RuntimeError('Music pause or resume failed') from music_pause_failure
                 (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"freshProfile":True,
                     "normalProfileUsed":False,"scrapedByKodi":True,"metadataSupplied":False,"playbackVerified":True,
                     "movie":movie,"artworkBytes":len(raw),"artworkSha256":hashlib.sha256(raw).hexdigest(),
@@ -918,8 +966,8 @@ provider.setSettingString("searchlanguage","en-US")
                     "remotePosterCancelNoWrite":True,"remotePosterApplied":True,"unrelatedTitleArtPreserved":True,
                     "freshSourceSetupThroughIsolde":True,"sourcePreviewCancelNoWrite":True,"nativeSourceWriteFailureRecovery":True,"capabilityGuideRemoteRoute":True,"kodiMenusRequired":False,
                     "freshPlaybackReturnThroughIsolde":True,"actualKodiResumeSavedAndRestored":True,"preferenceOffLibraryDirect":True,"remoteHomeMoviesRoute":True,"realAudioTrackSelection":True,"sourceEditPreservesProgress":True,"remoteMusicSourceBrowsePlayback":True,"seekPosition":position,"storedResume":resume,
-                    "installedImportRollback":True,"importSourceUnchanged":True,"preferenceWriteFailureRetained":True,"desktopExactReturn":True,
-                    "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackfailed","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned","importpreview","importready","importapplied","importrollback"]},indent=2))
+                    "preferenceWriteFailureRetained":True,
+                    "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackfailed","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned"]},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
@@ -1010,145 +1058,147 @@ provider.setSettingString("searchlanguage","en-US")
                 run("wmctrl","-i","-a",shell,env=env)
                 press("Up");press("Left",20);press("Right",8);press("Return");time.sleep(1)
                 press("Up");press("Left",20);press("Right",6);press("Return")
-                playlist_capture("playlistname")
-                press("Escape")
-                assert not list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Cancel must not create a playlist"
-                press("Return")
-                remote_text(press,"1")  # Production keyboard layout, including its actual Done action.
-                created=wait(lambda:list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Playlist saved from Isolde UI")
-                assert len(created)==1
-                import xml.etree.ElementTree as ET
-                definition=ET.fromstring(created[0].read_bytes())
-                assert definition.attrib["type"]=="tvshows" and definition.findtext("name")=="1"
-                playlist_capture("playlistsaved")
-                press("Escape");press("Right");press("Return");time.sleep(1)
-                playlist_capture("playlistcatalog")
-                catalog=rpc(directory,"Isolde.GetPlaylists")["playlists"]
-                assert any(p["playlistName"]=="Fixture episodes.xsp" for p in catalog)
-                created_index=next(i for i,p in enumerate(catalog) if p["playlistName"]==created[0].name)
-                press("Down",created_index+2);press("Return");time.sleep(1)
-                saved_items=rpc(directory,"Isolde.GetPlaylistItems",{"name":created[0].name,"kind":"shows","start":0,"end":50})["tvshows"]
-                assert {i["tvshowid"] for i in saved_items}=={show_id}
-                result=rpc(directory,"Isolde.GetPlaylistItems",{"name":"Fixture episodes.xsp","kind":"shows","start":0,"end":50})
-                items=result["tvshows"]
-                assert len(items)==3 and {i["episodeid"] for i in items}=={i["episodeid"] for i in eps}
-                assert all(i["playlistMediaType"]=="episode" and "file" not in i for i in items)
-                def manage_playlist(name):
-                    current=rpc(directory,'Isolde.GetPlaylists')['playlists']
-                    index=next(i for i,row in enumerate(current) if row['playlistName']==name)
-                    press('Up',30);press('Down',index+2);press('Return');time.sleep(.5)
-                    assert rpc(directory,'Isolde.PlaybackStatus')['state'] not in ('starting','playing','paused'), 'Playlist management unexpectedly started playback'
-                original_playlist=created[0].read_bytes()
-                press('Down');press('Return');press('Return');press('Escape')
-                assert created[0].read_bytes()==original_playlist,'Rename cancellation changed the definition'
-                press('Down');press('Return');press('Return');remote_text(press,'renamed.xsp')
-                renamed=playlists/'renamed.xsp'
-                wait(lambda:renamed.exists() and not created[0].exists(),'Remote rename committed without losing the original')
-                assert ET.fromstring(renamed.read_bytes()).findtext('name')=='renamed'
-                manage_playlist(renamed.name);press('Down');press('Return');press('Return')
-                for _ in renamed.name:
-                    press('BackSpace')
-                for character in collision_file.name:
-                    press('period' if character=='.' else character)
-                press('Return')
-                time.sleep(2);playlist_capture('playlistcollision')
-                assert renamed.exists() and collision_file.read_bytes()==collision_bytes,'Collision destroyed a playlist'
-                # Reopen the catalog from a known library origin after a failed
-                # rename, so pending keyboard input cannot leak into management.
-                press('Escape',2);press('Up');press('Left',20);press('Right',7);press('Return')
-                manage_playlist(renamed.name);press('Down',4);press('Return');press('Return');press('Escape')
-                rename_bytes=renamed.read_bytes()
-                assert b'<rule' not in rename_bytes,'Cancelled rule draft changed the saved definition'
-                # Replace rules only after a real read-only Kodi preview and explicit review.
-                press('Down',4);press('Return');press('Return');press('Down');press('Return')
-                for character in 'fixture':
-                    press(character)
-                press('Return')
-                press('Return');time.sleep(2);playlist_capture('playlistrules')
-                assert renamed.read_bytes()==rename_bytes,'Preview wrote the playlist'
-                press('Escape');press('Return');press('Return')
-                wait(lambda:ET.fromstring(renamed.read_bytes()).findtext('rule/value')=='fixture','Reviewed rule replacement committed')
-                manage_playlist(renamed.name);press('Down',2);press('Return');press('Down',2);press('Return');press('Down',3);press('Return');press('Down')
-                sort_bytes=renamed.read_bytes();playlist_capture('playlistorder')
-                assert renamed.read_bytes()==sort_bytes,'Order preview wrote the playlist'
-                press('Return')
-                wait(lambda:(order:=ET.fromstring(renamed.read_bytes()).find('order')) is not None and order.text=='dateadded' and order.get('direction')=='descending','Smart playlist order saved remotely')
-                manage_playlist(member_file.name);press('Down',2);press('Return');time.sleep(1)
-                member_before=member_file.read_bytes()
-                press('Down',2);press('Return');press('Down',2);playlist_capture('playlistmembers')
-                assert member_file.read_bytes()==member_before,'Moving a member wrote before Save'
-                press('Escape');press('Escape')
-                assert member_file.read_bytes()==member_before,'Member move cancellation changed the saved order'
-                press('Down',2);press('Return');time.sleep(1);press('Down',2);press('Return');press('Down',2);press('Return');press('Return')
-                expected_members=('#EXTM3U\n'+member_records[1]+member_records[2]+member_records[0]).encode()
-                wait(lambda:member_file.read_bytes()==expected_members,'Complete D-pad member order saved with matching metadata')
-                manage_playlist(renamed.name);press('Down',3);press('Return');press('Escape')
-                assert renamed.exists(),'Delete cancellation removed the definition'
-                manage_playlist(renamed.name);press('Down',3);press('Return');playlist_capture('playlistdelete');press('Return')
-                wait(lambda:not renamed.exists(),'Confirmed playlist deletion removed only its definition')
-                assert collision_file.read_bytes()==collision_bytes and member_file.read_bytes()==expected_members
-                # Open the real episode playlist through the existing management UI.
-                manage_playlist('Fixture episodes.xsp');press("Return");time.sleep(2)
-                playlist_capture("playlistlibrary")
-                press("Down");press("Return")
-                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Real playlist episode playing")
-                playlist_capture("playlistplaying")
-                key("kodi","Return")  # Focused on-screen Pause control.
-                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Real playlist episode paused")
-                playlist_capture("playlistpaused")
-                before_item=rpc(directory,'Player.GetItem',{'playerid':1,'properties':[]})['item']
-                key('kodi','Menu')
-                def controls_window():
-                    return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None)
-                controls=wait(controls_window,'Native Menu opened the owned Isolde playback controls')
-                playlist_capture('playlistcontrols')
-                # First playlist episode has Next, but no Previous. Exercise
-                # real player presentation and subtitles through the Qt window.
-                for _ in range(6):key(controls,'Down',.08)
-                key(controls,'Return');key(controls,'Down');key(controls,'Return')
-                wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions').get('view')=='zoom','Remote picture-size choice applied by Kodi')
-                playlist_capture('playlistpicture')
-                key(controls,'Escape')
-                for _ in range(20):key(controls,'Up',.04)
-                for _ in range(5):key(controls,'Down',.08)
-                key(controls,'Return')
-                wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions')['subtitles'],'Kodi discovered the local subtitle fixture')
-                key(controls,'Down');key(controls,'Return')
-                wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'],'Remote enabled the local subtitle')
-                key(controls,'Up');key(controls,'Return')
-                assert rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'] is False
-                key(controls,'Escape')
-                for _ in range(20):key(controls,'Up',.04)
-                for _ in range(3):key(controls,'Down',.08)
-                key(controls,'Return')
-                def current_episode():
-                    if rpc(directory,'Isolde.PlaybackStatus').get('state')!='playing':return None
-                    return rpc(directory,'Player.GetItem',{'playerid':1,'properties':[]}).get('item')
-                next_item=wait(lambda:(item if (item:=current_episode()) and item.get('id')!=before_item['id'] else None),'Remote Next opened another actual playlist episode')
-                playlist_capture('playlistnext')
-                key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on next episode')
-                for _ in range(3):key(controls,'Down',.08)
-                key(controls,'Return')
-                wait(lambda:(item if (item:=current_episode()) and item.get('id')==before_item['id'] else None),'Remote Previous restored the original actual episode')
-                key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on original episode')
-                key(controls,'Escape');time.sleep(.5)
-                active_window=run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).strip().split()[-1]
-                assert int(active_window,16)==int(next(row[0] for row in windows() if 'Kodi' in row[-1]),16),'Closing controls did not restore native playback focus'
-                # Kodi logs rejected input during the OSD closing animation.
-                # Let that animation settle before the managed Back -> Stop key.
-                time.sleep(3)
-                key("kodi","Escape")
-                wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Real playlist episode stopped")
-                run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
-                playlist_capture("playlistreturned")
+                if not args.playlist_shelf:
+                    def manage_playlist(name):
+                        current=rpc(directory,'Isolde.GetPlaylists')['playlists']
+                        index=next(i for i,row in enumerate(current) if row['playlistName']==name)
+                        press('Up',30);press('Down',index+2);press('Return');time.sleep(.5)
+                        assert rpc(directory,'Isolde.PlaybackStatus')['state'] not in ('starting','playing','paused'), 'Playlist management unexpectedly started playback'
+                    if args.playlist_playback:
+                        press("Escape");press("Right");press("Return")
+                    else:
+                        playlist_capture("playlistname")
+                        press("Escape")
+                        assert not list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Cancel must not create a playlist"
+                        press("Return")
+                        remote_text(press,"1")  # Production keyboard layout, including its actual Done action.
+                        created=wait(lambda:list((userdata/"playlists/video").glob("Isolde-*.xsp")),"Playlist saved from Isolde UI")
+                        assert len(created)==1
+                        import xml.etree.ElementTree as ET
+                        definition=ET.fromstring(created[0].read_bytes())
+                        assert definition.attrib["type"]=="tvshows" and definition.findtext("name")=="1"
+                        playlist_capture("playlistsaved")
+                        press("Escape");press("Right");press("Return");time.sleep(1)
+                        playlist_capture("playlistcatalog")
+                        catalog=rpc(directory,"Isolde.GetPlaylists")["playlists"]
+                        assert any(p["playlistName"]=="Fixture episodes.xsp" for p in catalog)
+                        created_index=next(i for i,p in enumerate(catalog) if p["playlistName"]==created[0].name)
+                        press("Down",created_index+2);press("Return");time.sleep(1)
+                        saved_items=rpc(directory,"Isolde.GetPlaylistItems",{"name":created[0].name,"kind":"shows","start":0,"end":50})["tvshows"]
+                        assert {i["tvshowid"] for i in saved_items}=={show_id}
+                        result=rpc(directory,"Isolde.GetPlaylistItems",{"name":"Fixture episodes.xsp","kind":"shows","start":0,"end":50})
+                        items=result["tvshows"]
+                        assert len(items)==3 and {i["episodeid"] for i in items}=={i["episodeid"] for i in eps}
+                        assert all(i["playlistMediaType"]=="episode" and "file" not in i for i in items)
+                        original_playlist=created[0].read_bytes()
+                        press('Down');press('Return');press('Return');press('Escape')
+                        assert created[0].read_bytes()==original_playlist,'Rename cancellation changed the definition'
+                        press('Down');press('Return');press('Return');remote_text(press,'renamed.xsp')
+                        renamed=playlists/'renamed.xsp'
+                        wait(lambda:renamed.exists() and not created[0].exists(),'Remote rename committed without losing the original')
+                        assert ET.fromstring(renamed.read_bytes()).findtext('name')=='renamed'
+                        manage_playlist(renamed.name);press('Down');press('Return');press('Return')
+                        remote_text(press,collision_file.name)
+                        time.sleep(2);playlist_capture('playlistcollision')
+                        assert renamed.exists() and collision_file.read_bytes()==collision_bytes,'Collision destroyed a playlist'
+                        manage_playlist(renamed.name);press('Down',4);press('Return');press('Return');press('Escape')
+                        rename_bytes=renamed.read_bytes()
+                        assert b'<rule' not in rename_bytes,'Cancelled rule draft changed the saved definition'
+                        # Replace rules only after a real read-only Kodi preview and explicit review.
+                        press('Down',4);press('Return');press('Return');press('Down');press('Return')
+                        remote_text(press,'fixture')
+                        press('Return');time.sleep(2);playlist_capture('playlistrules')
+                        assert renamed.read_bytes()==rename_bytes,'Preview wrote the playlist'
+                        press('Escape');press('Return');press('Return')
+                        wait(lambda:ET.fromstring(renamed.read_bytes()).findtext('rule/value')=='fixture','Reviewed rule replacement committed')
+                        manage_playlist(renamed.name);press('Down',2);press('Return');press('Down',2);press('Return');press('Down',3);press('Return');press('Down')
+                        sort_bytes=renamed.read_bytes();playlist_capture('playlistorder')
+                        assert renamed.read_bytes()==sort_bytes,'Order preview wrote the playlist'
+                        press('Return')
+                        wait(lambda:(order:=ET.fromstring(renamed.read_bytes()).find('order')) is not None and order.text=='dateadded' and order.get('direction')=='descending','Smart playlist order saved remotely')
+                        manage_playlist(member_file.name);press('Down',2);press('Return');time.sleep(1)
+                        member_before=member_file.read_bytes()
+                        press('Down',2);press('Return');press('Down',2);playlist_capture('playlistmembers')
+                        assert member_file.read_bytes()==member_before,'Moving a member wrote before Save'
+                        press('Escape');press('Escape')
+                        assert member_file.read_bytes()==member_before,'Member move cancellation changed the saved order'
+                        press('Down',2);press('Return');time.sleep(1);press('Down',2);press('Return');press('Down',2);press('Return');press('Return')
+                        expected_members=('#EXTM3U\n'+member_records[1]+member_records[2]+member_records[0]).encode()
+                        wait(lambda:member_file.read_bytes()==expected_members,'Complete D-pad member order saved with matching metadata')
+                        manage_playlist(renamed.name);press('Down',3);press('Return');press('Escape')
+                        assert renamed.exists(),'Delete cancellation removed the definition'
+                        manage_playlist(renamed.name);press('Down',3);press('Return');playlist_capture('playlistdelete');press('Return')
+                        wait(lambda:not renamed.exists(),'Confirmed playlist deletion removed only its definition')
+                        assert collision_file.read_bytes()==collision_bytes and member_file.read_bytes()==expected_members
+                    # Open the real episode playlist through the existing management UI.
+                    manage_playlist('Fixture episodes.xsp');press("Return");time.sleep(2)
+                    playlist_capture("playlistlibrary")
+                    press("Down");press("Return")
+                    wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="playing","Real playlist episode playing")
+                    playlist_capture("playlistplaying")
+                    key("kodi","Return")  # Focused on-screen Pause control.
+                    wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="paused","Real playlist episode paused")
+                    playlist_capture("playlistpaused")
+                    before_item=rpc(directory,'Player.GetItem',{'playerid':1,'properties':[]})['item']
+                    key('kodi','Menu')
+                    def controls_window():
+                        return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None)
+                    controls=wait(controls_window,'Native Menu opened the owned Isolde playback controls')
+                    playlist_capture('playlistcontrols')
+                    # Transport rows vary by available neighbors. The video
+                    # options follow them, immediately above the three final rows.
+                    for _ in range(12):key(controls,'Down',.08)
+                    for _ in range(3):key(controls,'Up',.08)
+                    key(controls,'Return');key(controls,'Down');key(controls,'Return')
+                    wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions').get('view')=='zoom','Remote picture-size choice applied by Kodi')
+                    playlist_capture('playlistpicture')
+                    key(controls,'Escape')
+                    key(controls,'Up',.08)
+                    key(controls,'Return')
+                    wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions')['subtitles'],'Kodi discovered the local subtitle fixture')
+                    key(controls,'Down');key(controls,'Return')
+                    wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'],'Remote enabled the local subtitle')
+                    key(controls,'Up');key(controls,'Return')
+                    assert rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'] is False
+                    key(controls,'Escape')
+                    for _ in range(20):key(controls,'Up',.04)
+                    for _ in range(4):key(controls,'Down',.08)
+                    key(controls,'Return')
+                    def current_episode():
+                        if rpc(directory,'Isolde.PlaybackStatus').get('state')!='playing':return None
+                        return rpc(directory,'Player.GetItem',{'playerid':1,'properties':[]}).get('item')
+                    wait(lambda:(item if (item:=current_episode()) and item.get('id')!=before_item['id'] else None),'Remote Next opened another actual playlist episode')
+                    playlist_capture('playlistnext')
+                    key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on next episode')
+                    for _ in range(3):key(controls,'Down',.08)
+                    key(controls,'Return')
+                    wait(lambda:(item if (item:=current_episode()) and item.get('id')==before_item['id'] else None),'Remote Previous restored the original actual episode')
+                    key('kodi','Menu');controls=wait(controls_window,'Playback controls reopened on original episode')
+                    key(controls,'Escape');time.sleep(.5)
+                    active_window=run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).strip().split()[-1]
+                    assert int(active_window,16)==int(next(row[0] for row in windows() if 'Kodi' in row[-1]),16),'Closing controls did not restore native playback focus'
+                    # Kodi logs rejected input during the OSD closing animation.
+                    # Let that animation settle before the managed Back -> Stop key.
+                    time.sleep(3)
+                    key("kodi","Escape")
+                    wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Real playlist episode stopped")
+                    run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
+                    playlist_capture("playlistreturned")
+                    if args.playlist_playback:
+                        for path,digest in hashes.items():
+                            assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                        (evidence/"result.json").write_text(json.dumps(dict(passed=True, realKodi=True,
+                            remotePictureSize=True, remoteSubtitles=True, realNextPrevious=True,
+                            controlsCloseRestoresVideoFocus=True, mediaUnchanged=True)))
+                        return
                 from importlib.machinery import SourceFileLoader
                 studio_path=Path(__file__).with_name('home-components-acceptance.py')
                 studio_spec=importlib.util.spec_from_loader('playlist_studio',SourceFileLoader('playlist_studio',str(studio_path)))
                 studio=importlib.util.module_from_spec(studio_spec);studio_spec.loader.exec_module(studio)
                 layout=config/'profiles'/profile/'home-layout.json'
-                press('Home');press('Up',30);press('Left',30);press('Right');press('Return')
+                press('Home');press('Up',20);press('Right');press('Return')
                 studio.studio_page_menu(layout,press,'add');studio.studio_catalog_family(press,'library')
-                press('Down',30);press('Return')  # Last packaged media choice: Shows · Kodi playlist.
+                press('Down',30);press('Return')  # Last packaged media choice: Shows Â· Kodi playlist.
                 playlist_capture('playlistpicker')
                 catalog=rpc(directory,'Isolde.GetPlaylists')['playlists']
                 index=next(i for i,row in enumerate(catalog) if row['playlistName']=='Fixture episodes.xsp')
@@ -1163,6 +1213,9 @@ provider.setSettingString("searchlanguage","en-US")
                 wait(saved_playlist_shelf,'Studio saved the real Kodi playlist shelf')
                 press('Escape',3);press('Home');playlist_capture('playlistshelf')
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                if args.playlist_shelf:
+                    (evidence/"result.json").write_text(json.dumps(dict(passed=True,savedPlaylistShelf=True,mediaUnchanged=True)))
+                    return
                 (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"rename_collision_preserved":True,"remote_rule_preview_confirm":True,"smart_sort_saved":True,"member_reorder_remote_cancel_commit":True,"delete_cancel_confirm":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":True,"nativeMenuOwnedIsoldeControls":True,"remotePictureSize":True,"remoteSubtitleEnabled":True,"remoteSubtitleOff":True,"realNextPrevious":True,"controlsCloseRestoresVideoFocus":True},indent=2))
                 print("Evidence: "+str(evidence),flush=True);return
             art = wait(lambda: (a if (a := rpc(directory, "Isolde.GetArtwork", {"kind": "tvshow", "id": show_id})).get("data") else None), "Kodi local artwork ready")
@@ -1212,9 +1265,9 @@ provider.setSettingString("searchlanguage","en-US")
                 captured("blank")
                 assert not layout.exists(),"Blank page creation must stay private until Apply"
                 menu("add",1);press("Down");press("Return")  # Two-column catalog: Media shelf.
-                press("Down",6);press("Return");captured("shelfplacement");press("Return")  # Shows · All, accept placement.
-                menu("add",1);press("Down",2);press("Right");press("Return");press("Return");press("Return")  # Widgets → Clock.
-                menu("add",1);press("Down");press("Right");press("Return");press("Return");press("Return")  # App carousel → all installed apps.
+                press("Down",6);press("Return");captured("shelfplacement");press("Return")  # Shows Â· All, accept placement.
+                menu("add",1);press("Down",2);press("Right");press("Return");press("Return");press("Return")  # Widgets â†’ Clock.
+                menu("add",1);press("Down");press("Right");press("Return");press("Return");press("Return")  # App carousel â†’ all installed apps.
                 captured("blankcomponents")
                 page_navigation(0,1);apply(1)
                 document=wait(lambda:json.loads(layout.read_text()),"Studio blank page and real Shows shelf applied")
@@ -1225,7 +1278,7 @@ provider.setSettingString("searchlanguage","en-US")
                 assert any(i.get("family")=="app-bar" for i in page["components"])
                 assert any(i.get("source",{}).get("libraryKind")=="shows" or i.get("presentation",{}).get("libraryKind")=="shows" for i in page["components"])
                 assert page["composition"]["pageNavigation"]=="left"
-                menu("root");press("Return")  # Root Home page context → Edit page.
+                menu("root");press("Return")  # Root Home page context â†’ Edit page.
                 menu("appearance");press("Down",3);press("Return");press("Down",2);press("Return")
                 press("Down");press("Return");press("Escape",2);apply()
                 wait(lambda:json.loads(layout.read_text())["composition"].get("moviePage")==page_id,"Named page selected as Movies destination")
@@ -1260,22 +1313,22 @@ provider.setSettingString("searchlanguage","en-US")
             key(shell, "Up")
             for _ in range(5): key(shell, "Right")
             key(shell, "Return"); time.sleep(1)
-            key(shell, "Down"); key(shell, "Return"); time.sleep(1)  # Show â†’ seasons.
-            key(shell, "Return"); time.sleep(1)  # Specials â†’ episode.
+            key(shell, "Down"); key(shell, "Return"); time.sleep(1)  # Show Ã¢â€ â€™ seasons.
+            key(shell, "Return"); time.sleep(1)  # Specials Ã¢â€ â€™ episode.
             key(shell, "Return")
             wait(lambda: rpc(directory, "Isolde.PlaybackStatus").get("state") == "playing", "Remote episode playback passed")
             key("kodi", "Return")
             wait(lambda: rpc(directory, "Isolde.PlaybackStatus").get("state") == "paused", "Remote episode pause passed")
             key("kodi", "Escape")
             wait(lambda: rpc(directory, "Isolde.PlaybackStatus").get("state") == "ended", "Remote episode stop and return passed")
-            key(shell, "Escape"); key(shell, "Escape")  # Episode â†’ seasons â†’ shows.
+            key(shell, "Escape"); key(shell, "Escape")  # Episode Ã¢â€ â€™ seasons Ã¢â€ â€™ shows.
             for p, digest in hashes.items(): assert hashlib.sha256(Path(p).read_bytes()).hexdigest() == digest
             (evidence / "result.json").write_text(json.dumps({"passed": True, "profile": profile, "shows": len(shows), "seasons": len(seasons), "episodes": len(eps), "media_unchanged": True}, indent=2))
             print("Evidence: " + str(evidence), flush=True)
     except Exception:
         shell_log=evidence/'shell.log'
         if shell_log.is_file():print('SHELL_FAILURE_DIAGNOSTICS\n'+shell_log.read_text(errors='replace')[-4000:],flush=True)
-        if (args.pages or args.movie_art or args.playlists) and args.inspect and process and process.poll() is None:
+        if (args.pages or args.movie_art or args.playlists or args.kodi_import) and args.inspect and process and process.poll() is None:
             print("FAILED_READY "+str(evidence),flush=True)
             deadline=time.monotonic()+30
             while not (evidence/"failed-captured").exists() and time.monotonic()<deadline:

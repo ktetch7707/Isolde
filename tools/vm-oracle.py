@@ -282,6 +282,9 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "guide-features": ("tv-library-acceptance.py", ["--guide-features", "--inspect"]),
          "guide-soak": ("guide-soak-acceptance.py", []),
          "guide-reopen": ("guide-soak-acceptance.py", ["--cold-reopen"]),
+         "playlist-shelf": ("tv-library-acceptance.py", ["--playlist-shelf", "--inspect"]),
+         "playlist-playback": ("tv-library-acceptance.py", ["--playlist-playback", "--inspect"]),
+         "kodi-import": ("tv-library-acceptance.py", ["--kodi-import", "--inspect"]),
          "music-transport": ("tv-library-acceptance.py", ["--music-transport", "--inspect"]),
          "movieart": ("tv-library-acceptance.py", ["--movie-art", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
@@ -468,12 +471,18 @@ def visual_result_passed(case, result):
                 and result.get("physicalControllerVerified") is False and result.get("captures")==[
                     "emulatorsempty","emulatorssetup","emulatorsinstallreview","emulatorsready","emulatorsadd","emulatorsreview",
                     "emulatorsdetails","emulatorspermission","emulatorsmenu","emulatorsplay","emulatorsaction","emulatorsreturn","emulatorsrestored"])
+    if case == "playlist-shelf":
+        return all(result.get(key) is True for key in ("passed","savedPlaylistShelf","mediaUnchanged"))
+    if case == "playlist-playback":
+        return all(result.get(key) is True for key in ("passed","realKodi","remotePictureSize","remoteSubtitles","realNextPrevious","controlsCloseRestoresVideoFocus","mediaUnchanged"))
+    if case == "kodi-import":
+        return all(result.get(key) is True for key in ("passed","freshProfile","importRollback","desktopExactReturn","mediaUnchanged")) and result.get("normalProfileUsed") is False
     if case == "movieart":
         return (all(result.get(key) is True for key in ("passed","freshProfile","scrapedByKodi","media_unchanged","freshSourceSetupThroughIsolde","sourcePreviewCancelNoWrite","nativeSourceWriteFailureRecovery","remotePosterPreviewNoWrite","remotePosterCancelNoWrite","remotePosterApplied"))
                 and all(result.get(key) is False for key in ("normalProfileUsed","metadataSupplied"))
                 and all(result.get(key) is True for key in ("playbackVerified","freshPlaybackReturnThroughIsolde","actualKodiResumeSavedAndRestored","preferenceOffLibraryDirect","remoteHomeMoviesRoute","realAudioTrackSelection","sourceEditPreservesProgress","remoteMusicSourceBrowsePlayback"))
                 and result.get("kodiMenusRequired") is False
-                and all(result.get(key) is True for key in ("installedImportRollback","importSourceUnchanged","preferenceWriteFailureRetained","desktopExactReturn"))
+                and all(result.get(key) is True for key in ("preferenceWriteFailureRetained",))
                 and result.get("artworkBytes",0)>4096)
     if case == "games":
         return (all(result.get(key) is True for key in ("passed","freshProfile","remoteRegistration","nativeGameStarted","returned"))
@@ -652,11 +661,11 @@ def verified_gallery_evidence(run, result):
     return path,record['sha256']
 
 
-def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None, local_search=False, movie_art=False, music_transport=False):
-    if int(pages)+int(playlists)+int(game_case is not None)+int(local_search)+int(movie_art)+int(music_transport)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
+def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None, local_search=False, movie_art=False, music_transport=False, kodi_import=False, playlist_playback=False, playlist_shelf=False):
+    if int(pages)+int(playlists)+int(game_case is not None)+int(local_search)+int(movie_art)+int(music_transport)+int(kodi_import)+int(playlist_playback)+int(playlist_shelf)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
     frozen='games-acceptance.py' if game_case else 'tv-library-acceptance.py'
-    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--local-search' if local_search else '--pages' if pages else '--playlists' if playlists else '--movie-art' if movie_art else '--music-transport' if music_transport else '--history','--inspect']
+    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--local-search' if local_search else '--pages' if pages else '--playlists' if playlists else '--movie-art' if movie_art else '--music-transport' if music_transport else '--kodi-import' if kodi_import else '--playlist-playback' if playlist_playback else '--playlist-shelf' if playlist_shelf else '--history','--inspect']
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/frozen),str(executable)]+flags
 
 
@@ -985,6 +994,18 @@ def focused_qml_coverage(root, run, base_id, suite):
             original=root/'runs'/base_id/'source'/name;current=run/'source'/name
             if not original.is_file() or not current.is_file() or digest(original)!=before.get(name) or digest(current)!=after.get(name):raise RuntimeError('Exact scan correction sources required')
             old_text=original.read_text();new_text=current.read_text()
+            if name=='src/media/KodiMedia.cpp':
+                empty_help=(
+                    ('Open TV Guide to set up a source, then refresh.',
+                     'Configure a PVR TV source in Kodi, then refresh.'),
+                    ('No albums in this profile. Open Settings, then Media & Playback to add a music source and scan.',
+                     "No albums in this profile's Kodi music library. Add music sources in Kodi, then refresh."),
+                    ('No items in this library view. Open Settings, then Media & Playback to add or scan sources.',
+                     'No items in this Kodi library view. Configure sources in Kodi or refresh to retry.'),
+                )
+                for corrected,previous in empty_help:
+                    new_text=new_text.replace(corrected,previous,1)
+                if new_text==old_text:continue
             if name=='kodi/service.isolde.bridge/bridge.py':
                 music_dispatch='''        if request["method"] == "AudioLibrary.Scan":
             try:
@@ -998,7 +1019,7 @@ def focused_qml_coverage(root, run, base_id, suite):
                     if normalized==old_text or (normalized.count(new)==1 and normalized.replace(new,old,1)==old_text):continue
             if new_text.count(new)!=1 or new_text.replace(new,old,1)!=old_text:raise RuntimeError('Media correction exceeds the scan-only boundary')
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
-            {'src/media/KodiService.h','src/media/KodiService.cpp','src/media/KodiMedia.cpp','config/kodi-capabilities.json','qml/KodiSettingsView.qml','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/bridge.py','kodi/service.isolde.bridge/sources.py','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py','kodi/service.isolde.bridge/playback.py'},
+            {'src/media/KodiService.h','src/media/KodiService.cpp','src/media/KodiMedia.cpp','config/kodi-capabilities.json','qml/KodiSettingsView.qml','qml/KodiLibraryView.qml','qml/LibraryBrowseControls.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/bridge.py','kodi/service.isolde.bridge/sources.py','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py','kodi/service.isolde.bridge/playback.py'},
             {'AGENTS.md','tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_kodi_bridge.py','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
@@ -2167,7 +2188,7 @@ class Oracle:
         if store_helper_digest and case not in ('store','store-web','store-offline','store-updates','store-discovery'):raise RuntimeError('Store helper is Store-only')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
-        if history_helper_digest and case not in ('local-search','history','pages','playlists','movieart','music-transport','games','emulators'):raise RuntimeError('Unsupported library helper case')
+        if history_helper_digest and case not in ('local-search','history','pages','playlists','movieart','music-transport','kodi-import','playlist-playback','playlist-shelf','games','emulators'):raise RuntimeError('Unsupported library helper case')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
         if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
@@ -2194,9 +2215,9 @@ class Oracle:
             command=reference_helper_command(source,helper,executable,flags,collections_helper)
             if reference_collections_digest:self.update(referenceCollectionsHelperSha256=reference_collections_digest)
             self.update(acceptanceHelperSha256=reference_helper_digest)
-        if case in ('local-search','history','pages','playlists','movieart','music-transport','games','emulators') and history_helper_digest:
+        if case in ('local-search','history','pages','playlists','movieart','music-transport','kodi-import','playlist-playback','playlist-shelf','games','emulators') and history_helper_digest:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
-            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',movie_art=case=='movieart',music_transport=case=='music-transport',game_case=case if case in ('games','emulators') else None)
+            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',movie_art=case=='movieart',music_transport=case=='music-transport',kodi_import=case=='kodi-import',playlist_playback=case=='playlist-playback',playlist_shelf=case=='playlist-shelf',game_case=case if case in ('games','emulators') else None)
             self.update(acceptanceHelperSha256=history_helper_digest)
         if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
@@ -2486,7 +2507,7 @@ def collect_evidence(run, case, directories):
             if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
                 paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json","guide-soak-ready.json")]
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
-            if case=="movieart":paths += [directory/name for name in ('source-setup.json','source-recovery-inventory.json','import-workflow.json')]
+            if case in {"movieart","kodi-import"}:paths += [directory/name for name in ('source-setup.json','source-recovery-inventory.json','import-workflow.json')]
             if case=="guide-features":paths += [directory/name for name in ('guide-features.json','guide-soak-ready.json')]
             if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json','cached-artwork-observation.json','original-home-layout.json')]
             if case in {"studio-designs", "studio-search"}:
@@ -2555,7 +2576,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|local-search|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|music-transport|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-updates|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|local-search|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|music-transport|kodi-import|playlist-playback|playlist-shelf|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-updates|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")
