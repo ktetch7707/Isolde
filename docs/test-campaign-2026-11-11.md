@@ -2046,3 +2046,180 @@ strict az63/63 reuse. Source0b4e5e734937389bff8955764886c0fbb302fdec668a798d5692
 deployed releaseb093089c4ca87e2816382419, active/running/zero restarts and
 9.25GiB free. Installed movieart/playlists follows; no music success inferred
 until the actual installed scan/browse/playback completes.
+
+## November 14 coder review and batched continuation
+
+Review starts from clean `agent-backlog-progress` at7bc6c82. T13/T31 remain
+excluded: their recent documentation/installer commits add no acceptance credit.
+Discovery title filtering and terminal-process exclusion are retained. No new
+VM acceptance is inferred from those unverified changes.
+
+BUG-180: f81e19c made bin/isolde-recovery mandatory without updating the
+runner's failed-Android-deployment fixture. Audit a stops at the named runner
+self-test, before any music diagnosis. Update the fixture rather than weaken
+production validation. Audit b passes all129 runner checks and collects the
+existing installed fixture diagnostics. Service is healthy; layouts unchanged.
+
+BUG-181: both signature command wrappers discard subprocess.run's return value,
+so real verification raises AttributeError even for valid signatures. Return
+CompletedProcess; add real Ed25519 sign/verify/tamper tests for install/recovery.
+The original tests mocked the wrapper and therefore missed this defect.
+
+BUG-182: signature digest files use predictable names and write_text follows a
+preexisting symlink. Use private exclusive mkstemp files and retain finally
+cleanup in both paths. No host account/settings changes or new dependency.
+
+BUG-183: the new missing-recovery-binary test incorrectly expects an existing
+release named first despite a fresh prefix. Assert that no current release is
+created. Tests181–183 await the combined guest verification batch.
+
+BUG-184:7bc6c82 erases durable Steam recovery warnings on any newer provider
+state, including starting/unknown, contrary to explicit acknowledgement and
+unknown-save guarantees. Keep durable warnings until the existing Review/Dismiss
+action acknowledges them. Extend the profile-bound persistence regression with
+starting/unknown and ended/normal events and byte-preservation assertions.
+The terminal Z/X/x process exclusion remains intact.
+
+T04 bd installed attempt190119-631 failed again waiting for music songs. Audit b
+shows no MusicInfoScanner/AudioLibrary.Scan entry in that exact fixture log.
+Helper-only current retry adds selected/requested scan captures to establish the
+actual UI receiving Confirm; reuse installed bd and az63/63, no rebuild/full loop.
+Evidence: build/vm-oracle/t04-audit-20261114-{a,b}/ and bd/visual/movieart/.
+Acceptance remains89%, T04=66%; no completed workflow has been inferred.
+
+BUG-185 (helper): retry002655-387 stops before music on a missing Kodi.conf.
+This is correct no-write-on-read behavior for a fresh default-On profile, not a
+product save defect. Persist Off/On through the actual preference control before
+fault injection. All18 captures reviewed; actual movie/audio/seek/resume/source
+recovery succeeds. No music/import acceptance or full suite from this retry.
+
+BUG-186: installed preference retry visibly changes On→Off but retains the old
+Could not save / Previous selection retained error text. Successful set/reset now
+publishes accurate success status and changed(), with native write-failure/retry
+and notification coverage in the existing per-profile preference case.
+
+bd retry003153-405 reaches the exact Scan music row. Its requested frame explains
+that the library disconnected after an invalid empty-library list. This matches
+a244cc5's already implemented BUG-006 correction; bd predates that source change.
+Do not repeat the old installed candidate. Full integration is now justified by
+new native Home/desktop binding, discovery, empty-library parsing and Steam
+changes since az, plus reviewed signature/runner and preference recovery repairs.
+Run one combined candidate, then deploy it for installed media continuation.
+
+Combined frozen candidate review-media-20261114-a is running; source archive
+63d43e1cb03c94d1a381642ee34266d7456ffbcf75f992032e7708d9eba9d8f3.
+No source edits after freeze. All23 installed003153-405 frames are agent-reviewed,
+including explicit disconnected Scan refusal and the stale-error finding186.
+The old installed candidate is not retried again. No acceptance increase yet.
+
+Combined a passes all63 registrations, zero skips,641sec. Manifest sourceDigest
+18b416d854fec39cb6353b613a72117d53abc948031acd34ee33773ef1a323de.
+Actual OpenSSL signature/tamper and exclusive-scratch regressions pass in the
+installer/recovery suites; native Steam warning and Kodi write-failure/retry
+cases pass. Managed service/release identities remain unchanged during Test.
+Deploy installs2395e69bb1f9dbc915843c6e, active/running/zero restarts. Source
+fixes are pushed as5683815,5e10536,23013d3. Only evidence documentation remains
+uncommitted. Installed movieart/playlists now runs against that exact release.
+
+BUG-187: current a005223-755 accepts Music scan but produces no songs. c/d/e
+read-only audits confirm Kodi21 CMusicInfoScanner::Start("") calls GetPaths,
+which reads only existing path-table entries. Saving a fresh music source does
+not seed that library table; the generic scan silently has nothing to inspect.
+This is a product integration defect, not an empty-response or audio-output issue.
+All23 current frames reviewed, including corrected preference success text;
+no music/import credit. Playlist case was not attempted after this named failure.
+
+Repair: managed Sources selects canonical configured/granted local music roots,
+rejects missing/retargeted paths and playback, then invokes typed native scanmusic.
+Kodi validates the complete unchanged source inventory/path set before queuing
+all roots through CMusicLibraryQueue::ScanLibrary. No database edits, executable
+configuration strings, caller paths, implicit scanning on save or host changes.
+Bridge/native transaction, missing source and retargeted-path regressions extend
+existing kodi_local_bridge coverage. f builds only the guest Kodi dependency.
+Next: media_controls with strict a63/63 reuse, then installed music/import/playlist.
+No full rerun: application lifecycle/default rendering is unchanged by this fix.
+
+g passes8/8 affected registrations in111sec,129 runner checks, strict original
+review-media-20261114-a63/63 reuse. Sourceccb56efe3ed000a4d49400dee1bde43ad093c7d10bfd14f9884afbf18f94b2ae;
+installed release3dba9c9ac15b0a21a5fef7cb, active/running/zero restarts. Native
+package7f99ee7a0c6b is installed. Repair pushed as535b7ca. Current installed
+music/import and playlist journeys remain pending; no new milestone from g yet.
+
+BUG-188 (helper): g011050-524 fails before application startup because the
+GStreamer tag-list property quoted individual fields instead of its complete
+value. Correct the property quoting and retain bounded subprocess stderr on
+failure. Retry011250-804 (session48341; identify exact attempt directory from
+visual output) generates both tagged FLACs and starts the shell/backend. Same
+installed g candidate; no build, CTest or acceptance credit from this correction.
+
+h confirms native source-request operation scanmusic with the exact configured
+music root and native ok:true. The original class-name log filter missed Kodi's
+function-named scanner messages; j broadens only that diagnostic filter. j proves
+actual Process/DoScan on the fresh folder, followed by ScanTags - No tag found
+for both generated FLACs. The product root-queue repair is exercised; complete
+music acceptance remains open. No additional application/source change follows.
+
+BUG-188 continuation: the GStreamer pipeline generated valid audio without
+Kodi-readable embedded tags. The helper now writes standard FLAC VORBIS_COMMENT
+metadata (title/artist/album), bounds/parses metadata blocks and checks required
+fields before startup. Same installed g app; no build/CTest rerun. Current retry
+is tool session80109. Preserve all previous failures; do not credit music/import
+until the actual Kodi song results/playback/rollback and capture review pass.
+
+T04 closure preparation: g012159-277 discovers both real tagged tracks and shows
+album/song lists and owned FLAC playback; pause did not complete (BUG-189).
+Use compositor-focused XTEST Confirm/Back with a focus assertion and immediate
+playback status diagnostic; this is a proposed input-path correction, not a
+verified pause fix. The independent playlist journey failed at its legacy Kodi
+Import Library dialog (BUG-190). Replace that fixture-only bootstrap with a
+private local-NFO scan, including real subtitle selection and Off verification.
+Add declarative playlist choices to the Studio catalog, with cancel/placement
+coverage, then exercise the real picker and saved shelf. The installed media
+receipt now requires import/rollback and repeat Desktop origin return.
+
+One full closure run is justified by the shared Studio catalog and packaged
+preset changes, followed by deployment and all installed T04 cases on the same
+payload. Stop at the first named failure; no automatic full-suite retry.
+
+Closure k full63/63 (424sec), source081f2c1960910ba56491db91b3a18e571c2aad36059c993bdc56a71873508ad2;
+deployed8ea86bda72cadf2109b9f52c. Studio add-time playlist shelf code passed
+full-suite coverage and was pushed as176464c. Installed movieart074145-373
+still fails BUG-189: owned controls receive real compositor-focused input and
+capability reports canPause:true, yet Kodi remains playing. No pause credit.
+Playlist074651-450 passes provider discovery but fails local-source apply
+(BUG-191). Offline local-search still uses the obsolete Import Library fixture
+and times out (BUG-190 extended). No playlist, Desktop or import credit.
+New aggregation runner verified restoration and continued each independent case;
+no fresh CTest or application rebuild triggered by these installed failures.
+Lounge and Pastel recreation/reset completed in the same batch. The driver
+reports all three failed media cases and retains their separately named logs.
+
+The l audit passes130 runner self-tests. Kodi's source confirms that its local
+metadata scraper sets path content before loading optional settings, and that
+explicit boolean PlayPause messages take the direct player path. The managed
+adapter accepts an empty settings document for Kodi's local provider when it
+has no settings file. The bridge reads the actual speed, then requests the
+opposite transport state. The m package builds and installs as
+21.3+isolde.a12e64a61200; local playback contracts pass34/34. Installed proof
+for the fixes remains pending. The n reuse preflight refused the documented
+AGENTS.md runner-policy change before building. The focused proof now admits
+that documentation file, keeping production changes within the existing media
+boundary and checking the exact playback delta.
+
+The o focused suite passed8/8 in101sec, with verified k63/63 coverage reuse;
+deployed76064eee7a240e071a3421cd. The local provider correction scanned the
+three playlist episodes and all56 episodes in the network-denied Search case.
+Installed local-search081031-074 completed paging, playback and exact return
+to Fixture1x50, followed by Back to Home. The movieart080200-779 music pause
+and Stop controls still time out. Playlist080722-326 confirmed create and
+rename, but the collision frame remained in the keyboard and the supposed
+rule preview showed episode playback (BUG-192, input route). No rule, import,
+Desktop or music transport credit. Diagnose only the live music transport
+and rerun the affected playlist case without rebuilding.
+
+The o music-transport probe081150-202 reached PAPlayer with one real indexed
+FLAC. Window-targeted Confirm paused it, and the private bridge paused and
+stopped it. The simulated physical-key route used in movieart had failed
+despite X11 reporting the intended focus. Movieart now uses the same
+window-targeted remote commands as the passing video and music workflows
+and checks the exact reopened song ID. The probe is diagnostic only.

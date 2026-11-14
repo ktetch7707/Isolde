@@ -33,7 +33,11 @@ from xml.sax.saxutils import escape
 
 
 def run(*args, **kwargs):
-    return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
+    try:
+        return subprocess.run(args, check=True, text=True, capture_output=True, **kwargs).stdout
+    except subprocess.CalledProcessError as failure:
+        print('Fixture command stderr: '+(failure.stderr or '')[-4096:],file=sys.stderr,flush=True)
+        raise
 
 
 def rpc(directory, method, params=None):
@@ -54,6 +58,32 @@ def rpc(directory, method, params=None):
         os.close(fd)
 
 
+def tag_fixture_flac(path, title):
+    data=path.read_bytes()
+    if not data.startswith(b'fLaC') or len(data)>4*1024*1024:
+        raise RuntimeError('Invalid generated FLAC fixture')
+    offset=4;blocks=[]
+    while True:
+        header=data[offset:offset+4]
+        if len(header)!=4:raise RuntimeError('Truncated FLAC metadata')
+        length=int.from_bytes(header[1:],'big');offset+=4
+        payload=data[offset:offset+length];offset+=length
+        if len(payload)!=length:raise RuntimeError('Truncated FLAC metadata block')
+        if header[0]&127!=4:blocks.append((header[0]&127,payload))
+        if header[0]&128:break
+        if len(blocks)>32:raise RuntimeError('Unbounded FLAC metadata')
+    vendor=b'Isolde acceptance fixture'
+    comments=[('TITLE='+title).encode(),b'ARTIST=Isolde Fixture Artist',b'ALBUM=Isolde Fixture Album']
+    payload=struct.pack('<I',len(vendor))+vendor+struct.pack('<I',len(comments))
+    for comment in comments:payload+=struct.pack('<I',len(comment))+comment
+    blocks.append((4,payload))
+    tagged=b'fLaC'+b''.join(bytes([kind|(128 if index==len(blocks)-1 else 0)])+len(value).to_bytes(3,'big')+value
+        for index,(kind,value) in enumerate(blocks))+data[offset:]
+    path.write_bytes(tagged)
+    # Fail before starting the application if any required embedded field is absent.
+    if any(comment not in tagged for comment in comments):raise RuntimeError('Missing fixture tags')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("executable", type=Path)
@@ -63,6 +93,7 @@ def main():
     parser.add_argument("--playlists", action="store_true", help="Verify saved video playlists against real Kodi in a new synthetic profile")
     parser.add_argument("--history", action="store_true", help="Verify actual Kodi playback updates independent production Recently viewed carousels")
     parser.add_argument("--movie-art", action="store_true", help="Scrape a named synthetic movie using Kodi's TMDB provider; no supplied metadata/art")
+    parser.add_argument("--music-transport", action="store_true", help="Diagnose the owned controls and Kodi transport with one private FLAC fixture")
     parser.add_argument("--guide", action="store_true", help="Configure an isolated real IPTV Simple channel, then import and tune it through the Guide")
     parser.add_argument("--guide-surfaces", action="store_true", help="Also create two local channels through the UI and review compact/overlay/full return")
     parser.add_argument("--guide-lifecycle", action="store_true", help="Extend the real Guide journey with natural transitions, D-pad surfing and actual deleted-file repair")
@@ -80,7 +111,7 @@ def main():
     userdata = data / "Isolde/native-profiles" / profile / "kodi/home/.kodi/userdata"
     if media.exists() or userdata.exists(): raise RuntimeError("Fixture must be new")
     media.mkdir(parents=True); userdata.mkdir(parents=True, mode=0o700)
-    if args.movie_art:
+    if args.movie_art or args.music_transport:
         (userdata/'advancedsettings.xml').write_text('<advancedsettings><loglevel hide="true">1</loglevel></advancedsettings>')
     if args.playlists:
         playlists=userdata/"playlists/video";playlists.mkdir(parents=True)
@@ -112,12 +143,18 @@ def main():
             f"<filenameandpath>{escape(str(file))}</filenameandpath><path>{escape(str(show))}/</path><file>{file.name}</file>"
             f"<art><thumb>{escape(str(poster))}</thumb></art>"
             + ("<resume><position>20</position><total>120</total></resume>" if season == 1 and number == 2 else "") + "</episodedetails>")
+    if args.playlists or args.local_search:
+        (show/'tvshow.nfo').write_text('<tvshow><title>Isolde Television Fixture</title><plot>Local synthetic television acceptance.</plot></tvshow>')
+        for (season, number), episode in zip(fixture_episodes, episodes):
+            (show/f'Fixture S{season:02}E{number:02}.nfo').write_text(episode)
     if args.playlists:
         member_file=playlists/'Member order.m3u8'
         member_paths=[show/f'Fixture S{season:02}E{number:02}.ogv' for season,number in fixture_episodes]
+        for path in member_paths:
+            path.with_suffix('.en.srt').write_text('1\n00:00:01,000 --> 00:01:50,000\nIsolde subtitle fixture\n')
         member_records=[f'#EXTINF:120,Fixture member {i+1}\n{path}\n' for i,path in enumerate(member_paths)]
         member_file.write_text('#EXTM3U\n'+''.join(member_records))
-        collision_file=playlists/'collision.xsp'
+        collision_file=playlists/'1.xsp'
         collision_file.write_text('<smartplaylist type="tvshows"><name>Collision fixture</name><match>all</match><order direction="ascending">title</order></smartplaylist>')
         collision_bytes=collision_file.read_bytes()
     imported = media / "import"; imported.mkdir()
@@ -134,7 +171,7 @@ def main():
         document=(imported/'videodb.xml').read_text().replace('<tvshow><title>','<tvshow><studio>Cartoon Network</studio><title>',1)
         document=document.replace('<paths/>',f'<movie><title>Fixture Movie</title><year>2026</year><studio>Cartoon Network</studio><runtime>2</runtime><filenameandpath>{escape(str(movie))}</filenameandpath><path>{escape(str(media))}/</path><file>{movie.name}</file><basepath>{escape(str(media))}/</basepath><art><poster>{escape(str(poster))}</poster></art></movie><paths/>')
         (imported/'videodb.xml').write_text(document)
-    if args.guide or args.history or args.local_search:
+    if args.guide or args.history:
         # Kodi's native import resolves exported episode entries to these
         # export-relative filenames. Supply actual fixture media there rather
         # than relying on an ignored filenameandpath override in the XML.
@@ -192,18 +229,19 @@ if ''' + repr(str(imported)) + ''' in selected:
             xbmc.executeJSONRPC(json.dumps({"jsonrpc":"2.0", "id":2, "method":"VideoLibrary.SetTVShowDetails",
                 "params":{"tvshowid":show["tvshowid"], "art":{"poster":''' + repr(str(poster)) + '''}}}))
 ''')
-    if args.movie_art:
-        # Fresh source setup is performed by Isolde below, never a Kodi import dialog.
-        movies = media / "movies"
+    if args.movie_art or args.music_transport:
         music = media / "music";music.mkdir()
-        for number in (1,2):
+        for number in ((1,) if args.music_transport else (1,2)):
             song=music/f'Fixture song {number}.flac'
             # Use standard embedded Vorbis comments through the existing media
             # stack, avoiding format-dependent RIFF INFO interpretation.
             run('gst-launch-1.0','-q','audiotestsrc','wave=silence','num-buffers=469','samplesperbuffer=1024',
                 '!','audio/x-raw,rate=8000,channels=1','!','audioconvert','!',
-                'taginject',f'tags=title="Fixture song {number}",artist="Isolde Fixture Artist",album="Isolde Fixture Album"',
-                '!','flacenc','!','filesink','location='+str(song))
+                'flacenc','!','filesink','location='+str(song))
+            tag_fixture_flac(song,f'Fixture song {number}')
+    if args.movie_art:
+        # Fresh source setup is performed by Isolde below, never a Kodi import dialog.
+        movies = media / "movies"
         folder = movies / "Big Buck Bunny (2008)"; folder.mkdir(parents=True)
         movie_file = folder / "Big Buck Bunny (2008).ogv"
         os.link(clip, movie_file)
@@ -255,7 +293,14 @@ provider.setSettingString("searchlanguage","en-US")
         managed_art=config/'profiles'/profile/'artwork';managed_art.mkdir(parents=True)
         managed_poster=managed_art/(hashlib.sha256(poster.read_bytes()).hexdigest()+'.png')
         managed_poster.write_bytes(poster.read_bytes())
-        (config/'profiles'/profile/'home-layout.json').write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),categories=[dict(id='apps',name='Apps')],items=[dict(kind='app',id='movies',appId='movies',size='standard',categoryId='apps')],composition=dict(schemaVersion=1,enabled=False,headerControls=['settings']))))
+        (config/'profiles'/profile/'home-layout.json').write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),categories=[dict(id='apps',name='Apps')],items=[dict(kind='app',id='movies',appId='movies',size='standard',categoryId='apps'),dict(kind='app',id='desktop-mode',appId='desktop-mode',size='standard',categoryId='apps')],composition=dict(schemaVersion=1,enabled=False,headerControls=['settings']))))
+    if args.music_transport:
+        # Use the same Home Movies card and library toolbar as the installed journey.
+        layout=config/'profiles'/profile/'home-layout.json'
+        layout.parent.mkdir(parents=True)
+        layout.write_text(json.dumps(dict(schemaVersion=1,rootPage=dict(name='Home',visible=True,position=0),
+            categories=[dict(id='apps',name='Apps')],items=[dict(kind='app',id='movies',appId='movies',size='standard',categoryId='apps')],
+            composition=dict(schemaVersion=1,enabled=False,headerControls=['settings']))))
     if args.history:
         import copy
         defaults=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())
@@ -298,6 +343,7 @@ provider.setSettingString("searchlanguage","en-US")
     x11.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]; x11.XKeysymToKeycode.restype = ctypes.c_uint
     x11.XFlush.argtypes = [ctypes.c_void_p]; x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
     x11.XSetInputFocus.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    x11.XGetInputFocus.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int)]
     class KeyEvent(ctypes.Structure):
         _fields_ = [("type", ctypes.c_int), ("serial", ctypes.c_ulong), ("send_event", ctypes.c_int), ("display", ctypes.c_void_p),
                     ("window", ctypes.c_ulong), ("root", ctypes.c_ulong), ("subwindow", ctypes.c_ulong), ("time", ctypes.c_ulong),
@@ -324,6 +370,16 @@ provider.setSettingString("searchlanguage","en-US")
         x11.XSync(display, 0)
         if errors: errors.clear(); raise RuntimeError("Test window changed during input; retry acceptance")
         time.sleep(delay)
+    def focused_remote_key(window, name):
+        active=run('xprop','-root','_NET_ACTIVE_WINDOW',env=env,timeout=5).strip().split()[-1]
+        if int(active,16)!=int(window,16):raise RuntimeError('Remote focus is not on the owned playback controls')
+        xtst=ctypes.CDLL(ctypes.util.find_library('Xtst') or 'libXtst.so.6')
+        xtst.XTestFakeKeyEvent.argtypes=[ctypes.c_void_p,ctypes.c_uint,ctypes.c_int,ctypes.c_ulong]
+        code=x11.XKeysymToKeycode(display,x11.XStringToKeysym(name.encode()))
+        if not code or not xtst.XTestFakeKeyEvent(display,code,1,0) or not xtst.XTestFakeKeyEvent(display,code,0,0):
+            raise RuntimeError('Could not deliver remote key '+name)
+        x11.XSync(display,0)
+        time.sleep(.4)
     def wait(predicate, label, seconds=35):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
@@ -369,11 +425,61 @@ provider.setSettingString("searchlanguage","en-US")
                     print('NATIVE_STARTUP_TRACE\n'+'\n'.join(line for line in startup_log.read_text(errors='replace').splitlines() if 'ISOLDE native' in line)[-16000:],flush=True)
             time.sleep(6)  # Finish startup-window replacement and managed minimization.
             kodi = next(r[0] for r in windows() if "Kodi" in r[-1])
-            if not args.movie_art:
+            if not (args.movie_art or args.playlists or args.local_search or args.music_transport):
                 run("wmctrl", "-i", "-a", kodi, env=env)
                 x11.XSetInputFocus(display, int(kodi, 16), 2, 0); x11.XSync(display, 0)
             time.sleep(1)
+            if args.music_transport:
+                source=dict(name='Transport fixture',path=str(music)+'/',category='music',content='music',
+                    scraper='',recursive=True,folderNames=False,noUpdate=False,exclude=False,remove=False)
+                draft=rpc(directory,'Isolde.PreviewSource',{'source':source})
+                assert rpc(directory,'Isolde.ApplySource',{'source':source,'revision':draft['revision']})['applied']
+                assert rpc(directory,'AudioLibrary.Scan')=='OK'
+                songs=wait(lambda:rpc(directory,'AudioLibrary.GetSongs',{'properties':['title']}).get('songs'),
+                    'Kodi indexed the diagnostic song',seconds=60)
+                run('wmctrl','-i','-a',shell,env=env)
+                key(shell,'Home')
+                for _ in range(20):key(shell,'Up',.06)
+                key(shell,'Down');key(shell,'Return')
+                for _ in range(20):key(shell,'Up',.06)
+                for _ in range(20):key(shell,'Right',.06)
+                key(shell,'Return')
+                for _ in range(2):
+                    for _ in range(20):key(shell,'Up',.06)
+                    key(shell,'Down');key(shell,'Return')
+                def state():return rpc(directory,'Isolde.PlaybackStatus')['state']
+                wait(lambda:state()=='playing','Isolde started the diagnostic song')
+                assert rpc(directory,'Player.GetItem',{'playerid':0,'properties':[]})['item']['id']==songs[0]['songid']
+                key('kodi','Menu')
+                controls=wait(lambda:next((row[0] for row in windows() if row[2]==str(process.pid)
+                    and row[-1]=='Isolde playback controls'),None),'Owned controls visible')
+                guide_capture('musictransport')
+                focus=ctypes.c_ulong()
+                revert=ctypes.c_int()
+                x11.XGetInputFocus(display,ctypes.byref(focus),ctypes.byref(revert))
+                print(f'MUSIC_X11_FOCUS controls={controls} focus={focus.value:#x}',flush=True)
+                key(controls,'Return',1)
+                directed=state()
+                focused_remote_key(controls,'Return')
+                focused=state()
+                if focused=='paused':
+                    rpc(directory,'Isolde.PlaybackControl',{'action':'pause'})
+                bridge=rpc(directory,'Isolde.PlaybackControl',{'action':'pause'})
+                print('MUSIC_TRANSPORT_PROBE '+json.dumps(dict(directed=directed,focused=focused,bridge=bridge)),flush=True)
+                rpc(directory,'Isolde.PlaybackControl',{'action':'stop'})
+                wait(lambda:state()=='ended','Bridge stopped the diagnostic song')
+                (evidence/'result.json').write_text(json.dumps(dict(passed=True,diagnosticOnly=True,
+                    directed=directed,focused=focused,bridge=bridge,stopped=True)))
+                return
             if args.guide:guide_capture('guidestartup')
+            elif args.playlists or args.local_search:
+                wait(lambda:any(row['id']=='metadata.local' and row['content']=='tvshows'
+                    for row in rpc(directory,'Isolde.GetSources')['scrapers']),'Kodi local TV metadata provider ready')
+                source=dict(name='Television fixture',path=str(media)+'/',category='video',content='tvshows',
+                    scraper='metadata.local',recursive=True,folderNames=False,noUpdate=False,exclude=False,remove=False)
+                draft=rpc(directory,'Isolde.PreviewSource',{'source':source})
+                assert rpc(directory,'Isolde.ApplySource',{'source':source,'revision':draft['revision']})['applied']
+                assert rpc(directory,'VideoLibrary.Scan')=='OK'
             elif not args.movie_art:
                 key("kodi", "Escape"); key("kodi", "Escape")  # Dismiss first-run dialogs in this new test home.
                 key("kodi", "F9")
@@ -730,12 +836,29 @@ provider.setSettingString("searchlanguage","en-US")
                 poster_capture('musicalbums');source_press('Up',20);source_press('Down');source_press('Return');time.sleep(1)
                 poster_capture('musicsongs');source_press('Up',20);source_press('Down');source_press('Return')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Remote song playback')
+                original_song=rpc(directory,'Player.GetItem',{'playerid':0,'properties':[]})['item']['id']
                 key('kodi','Menu');controls=wait(lambda:next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]=='Isolde playback controls'),None),'Music controls owned by Isolde')
-                poster_capture('musiccontrols');key(controls,'Return')
-                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='paused','Music transport pause')
-                key(controls,'Escape');key('kodi','Escape')
+                poster_capture('musiccontrols')
+                music_pause_failure = None
+                try:
+                    key(controls,'Return',1)
+                    wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='paused','Music transport pause',seconds=12)
+                    key(controls,'Return',1)
+                    wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Music transport resume',seconds=12)
+                except (RuntimeError, TimeoutError) as error:
+                    music_pause_failure = error
+                    print('MUSIC_TRANSPORT_FAILURE '+str(error)+' '+json.dumps(rpc(directory,'Isolde.PlaybackStatus')),flush=True)
+                for _ in range(8):
+                    key(controls,'Down',.16)
+                key(controls,'Return')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Music stopped and returned')
                 run('wmctrl','-i','-a',shell,env=env);poster_capture('musicreturned')
+                source_press('Return')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='playing','Confirm reopens the exact music origin')
+                item=rpc(directory,'Player.GetItem',{'playerid':0,'properties':[]})['item']
+                assert item['id']==original_song
+                key('kodi','Escape')
+                wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Reopened song stopped')
                 # Exercise the installed importer against the guest's existing
                 # desktop Kodi, read-only at the source. All writes remain in
                 # this disposable Isolde profile and its verified snapshots.
@@ -772,7 +895,22 @@ provider.setSettingString("searchlanguage","en-US")
                 source_press('Up');source_press('Return');source_press('Escape')
                 assert json.loads(receipt.read_text())['imported'] is False,'Cancelled import confirmation changed profile state'
                 (evidence/'import-workflow.json').write_text(json.dumps(dict(profile=profile,sourceUnchanged=True,previewNoWrite=True,confirmationRequired=True,importAndRollback=True,cancelNoWrite=True,sourceEntries=len(desktop_before)),indent=2))
+                desktop_label=json.loads((Path(__file__).resolve().parents[1]/'config/studio-defaults.json').read_text())['desktop']['returnLabel']
+                def return_window():
+                    return next((row[0] for row in windows() if row[2]==str(process.pid) and row[-1]==desktop_label),None)
+                source_press('Home');source_press('Up',20);source_press('Down');source_press('Right');source_press('Return')
+                desktop_return=wait(return_window,'Desktop mode shows its owned return control',seconds=45)
+                poster_capture('kodidesktop')
+                key(desktop_return,'Home')
+                wait(lambda:not return_window(),'Desktop Home returns to Isolde')
+                poster_capture('kodidesktopreturned')
+                key(shell,'Return')
+                desktop_return=wait(return_window,'Confirm reopens the exact Desktop origin')
+                key(desktop_return,'Home')
+                wait(lambda:not return_window(),'Repeat Desktop return completed')
                 for path,digest in hashes.items(): assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
+                if music_pause_failure is not None:
+                    raise RuntimeError('Music pause or resume failed; import/rollback and Desktop return completed') from music_pause_failure
                 (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"freshProfile":True,
                     "normalProfileUsed":False,"scrapedByKodi":True,"metadataSupplied":False,"playbackVerified":True,
                     "movie":movie,"artworkBytes":len(raw),"artworkSha256":hashlib.sha256(raw).hexdigest(),
@@ -780,21 +918,22 @@ provider.setSettingString("searchlanguage","en-US")
                     "remotePosterCancelNoWrite":True,"remotePosterApplied":True,"unrelatedTitleArtPreserved":True,
                     "freshSourceSetupThroughIsolde":True,"sourcePreviewCancelNoWrite":True,"nativeSourceWriteFailureRecovery":True,"capabilityGuideRemoteRoute":True,"kodiMenusRequired":False,
                     "freshPlaybackReturnThroughIsolde":True,"actualKodiResumeSavedAndRestored":True,"preferenceOffLibraryDirect":True,"remoteHomeMoviesRoute":True,"realAudioTrackSelection":True,"sourceEditPreservesProgress":True,"remoteMusicSourceBrowsePlayback":True,"seekPosition":position,"storedResume":resume,
-                    "installedImportRollback":True,"importSourceUnchanged":True,"preferenceWriteFailureRetained":True,
+                    "installedImportRollback":True,"importSourceUnchanged":True,"preferenceWriteFailureRetained":True,"desktopExactReturn":True,
                     "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackfailed","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned","importpreview","importready","importapplied","importrollback"]},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")
             seasons = rpc(directory, "VideoLibrary.GetSeasons", {"tvshowid": show_id, "properties": ["season"]})["seasons"]
             assert {s["season"] for s in seasons} == {0, 1}
-            eps = rpc(directory, "VideoLibrary.GetEpisodes", {"tvshowid": show_id, "properties": ["season", "episode", "resume"]})["episodes"]
             if args.local_search:
                 def complete_search_import():
                     imported=[]
                     for start in (0,50):
                         imported+=rpc(directory,'VideoLibrary.GetEpisodes',{'tvshowid':show_id,'properties':['season','episode','resume'],'limits':{'start':start,'end':start+50}}).get('episodes',[])
                     return imported if len(imported)==56 else None
-                eps=wait(complete_search_import,'Kodi imported all56 search fixture episodes',seconds=60)
+                eps=wait(complete_search_import,'Kodi scanned all 56 search fixture episodes',seconds=60)
+            else:
+                eps=rpc(directory, "VideoLibrary.GetEpisodes", {"tvshowid": show_id, "properties": ["season", "episode", "resume"]})["episodes"]
             assert len(eps) == (56 if args.local_search else 3)
             if args.local_search:
                 network=json.loads((evidence/'network-denial.json').read_text())
@@ -898,6 +1037,7 @@ provider.setSettingString("searchlanguage","en-US")
                     current=rpc(directory,'Isolde.GetPlaylists')['playlists']
                     index=next(i for i,row in enumerate(current) if row['playlistName']==name)
                     press('Up',30);press('Down',index+2);press('Return');time.sleep(.5)
+                    assert rpc(directory,'Isolde.PlaybackStatus')['state'] not in ('starting','playing','paused'), 'Playlist management unexpectedly started playback'
                 original_playlist=created[0].read_bytes()
                 press('Down');press('Return');press('Return');press('Escape')
                 assert created[0].read_bytes()==original_playlist,'Rename cancellation changed the definition'
@@ -905,14 +1045,25 @@ provider.setSettingString("searchlanguage","en-US")
                 renamed=playlists/'renamed.xsp'
                 wait(lambda:renamed.exists() and not created[0].exists(),'Remote rename committed without losing the original')
                 assert ET.fromstring(renamed.read_bytes()).findtext('name')=='renamed'
-                manage_playlist(renamed.name);press('Down');press('Return');press('Return');remote_text(press,collision_file.name)
+                manage_playlist(renamed.name);press('Down');press('Return');press('Return')
+                for _ in renamed.name:
+                    press('BackSpace')
+                for character in collision_file.name:
+                    press('period' if character=='.' else character)
+                press('Return')
                 time.sleep(2);playlist_capture('playlistcollision')
                 assert renamed.exists() and collision_file.read_bytes()==collision_bytes,'Collision destroyed a playlist'
+                # Reopen the catalog from a known library origin after a failed
+                # rename, so pending keyboard input cannot leak into management.
+                press('Escape',2);press('Up');press('Left',20);press('Right',7);press('Return')
                 manage_playlist(renamed.name);press('Down',4);press('Return');press('Return');press('Escape')
                 rename_bytes=renamed.read_bytes()
                 assert b'<rule' not in rename_bytes,'Cancelled rule draft changed the saved definition'
                 # Replace rules only after a real read-only Kodi preview and explicit review.
-                press('Down',4);press('Return');press('Return');press('Down');press('Return');remote_text(press,'fixture')
+                press('Down',4);press('Return');press('Return');press('Down');press('Return')
+                for character in 'fixture':
+                    press(character)
+                press('Return')
                 press('Return');time.sleep(2);playlist_capture('playlistrules')
                 assert renamed.read_bytes()==rename_bytes,'Preview wrote the playlist'
                 press('Escape');press('Return');press('Return')
@@ -960,7 +1111,11 @@ provider.setSettingString("searchlanguage","en-US")
                 key(controls,'Escape')
                 for _ in range(20):key(controls,'Up',.04)
                 for _ in range(5):key(controls,'Down',.08)
-                key(controls,'Return');key(controls,'Return')
+                key(controls,'Return')
+                wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions')['subtitles'],'Kodi discovered the local subtitle fixture')
+                key(controls,'Down');key(controls,'Return')
+                wait(lambda:rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'],'Remote enabled the local subtitle')
+                key(controls,'Up');key(controls,'Return')
                 assert rpc(directory,'Isolde.GetPlaybackOptions')['subtitleEnabled'] is False
                 key(controls,'Escape')
                 for _ in range(20):key(controls,'Up',.04)
@@ -986,8 +1141,29 @@ provider.setSettingString("searchlanguage","en-US")
                 wait(lambda:rpc(directory,"Isolde.PlaybackStatus").get("state")=="ended","Real playlist episode stopped")
                 run("wmctrl","-i","-a",shell,env=env);time.sleep(1)
                 playlist_capture("playlistreturned")
+                from importlib.machinery import SourceFileLoader
+                studio_path=Path(__file__).with_name('home-components-acceptance.py')
+                studio_spec=importlib.util.spec_from_loader('playlist_studio',SourceFileLoader('playlist_studio',str(studio_path)))
+                studio=importlib.util.module_from_spec(studio_spec);studio_spec.loader.exec_module(studio)
+                layout=config/'profiles'/profile/'home-layout.json'
+                press('Home');press('Up',30);press('Left',30);press('Right');press('Return')
+                studio.studio_page_menu(layout,press,'add');studio.studio_catalog_family(press,'library')
+                press('Down',30);press('Return')  # Last packaged media choice: Shows · Kodi playlist.
+                playlist_capture('playlistpicker')
+                catalog=rpc(directory,'Isolde.GetPlaylists')['playlists']
+                index=next(i for i,row in enumerate(catalog) if row['playlistName']=='Fixture episodes.xsp')
+                press('Down',index+1);press('Return');playlist_capture('playlistshelfplacement');press('Return')
+                studio.studio_page_menu(layout,press,'apply');press('Return')
+                def saved_playlist_shelf():
+                    if not layout.is_file():return False
+                    document=json.loads(layout.read_text())
+                    return any(item.get('presentation',{}).get('libraryView')=='playlist' and
+                        item.get('presentation',{}).get('libraryValue')=='Fixture episodes.xsp'
+                        for item in document.get('components',[])+document.get('items',[]))
+                wait(saved_playlist_shelf,'Studio saved the real Kodi playlist shelf')
+                press('Escape',3);press('Home');playlist_capture('playlistshelf')
                 for path,digest in hashes.items():assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
-                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"rename_collision_preserved":True,"remote_rule_preview_confirm":True,"smart_sort_saved":True,"member_reorder_remote_cancel_commit":True,"delete_cancel_confirm":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":False,"nativeMenuOwnedIsoldeControls":True,"remotePictureSize":True,"remoteSubtitleOff":True,"realNextPrevious":True,"controlsCloseRestoresVideoFocus":True},indent=2))
+                (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"real_kodi_saved_playlist":True,"playlist_creation_ui_verified":True,"playlist_cancel_no_write":True,"rename_collision_preserved":True,"remote_rule_preview_confirm":True,"smart_sort_saved":True,"member_reorder_remote_cancel_commit":True,"delete_cancel_confirm":True,"episodes":len(items),"play_pause_stop":True,"media_unchanged":True,"normal_profile_used":False,"picker_ui_verified":True,"nativeMenuOwnedIsoldeControls":True,"remotePictureSize":True,"remoteSubtitleEnabled":True,"remoteSubtitleOff":True,"realNextPrevious":True,"controlsCloseRestoresVideoFocus":True},indent=2))
                 print("Evidence: "+str(evidence),flush=True);return
             art = wait(lambda: (a if (a := rpc(directory, "Isolde.GetArtwork", {"kind": "tvshow", "id": show_id})).get("data") else None), "Kodi local artwork ready")
             artwork = base64.b64decode(art["data"])

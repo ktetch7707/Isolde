@@ -282,6 +282,7 @@ CASES = {"sources": ("home-components-acceptance.py", ["--studio", "--sources-on
          "guide-features": ("tv-library-acceptance.py", ["--guide-features", "--inspect"]),
          "guide-soak": ("guide-soak-acceptance.py", []),
          "guide-reopen": ("guide-soak-acceptance.py", ["--cold-reopen"]),
+         "music-transport": ("tv-library-acceptance.py", ["--music-transport", "--inspect"]),
          "movieart": ("tv-library-acceptance.py", ["--movie-art", "--inspect"]),
          "vpn": ("vpn-acceptance.py", []),
          "shell": ("shell-acceptance.py", []),
@@ -363,6 +364,11 @@ def dismiss_guest_disk_banner():
 
 
 def visual_result_passed(case, result):
+    if case=='music-transport':
+        return (result.get('passed') is True and result.get('diagnosticOnly') is True
+                and result.get('stopped') is True
+                and all(result.get(key) in ('playing','paused') for key in ('directed','focused'))
+                and result.get('bridge',{}).get('state') in ('playing','paused'))
     if case=='local-search':
         return (all(result.get(k) is True for k in ('passed','freshProfile','realKodi','mediaUnchanged'))
                 and result.get('normalProfileUsed') is False and result.get('journey')=='local-search'
@@ -646,11 +652,11 @@ def verified_gallery_evidence(run, result):
     return path,record['sha256']
 
 
-def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None, local_search=False, movie_art=False):
-    if int(pages)+int(playlists)+int(game_case is not None)+int(local_search)+int(movie_art)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
+def history_helper_command(source, helper, executable, pages=False, playlists=False, game_case=None, local_search=False, movie_art=False, music_transport=False):
+    if int(pages)+int(playlists)+int(game_case is not None)+int(local_search)+int(movie_art)+int(music_transport)>1 or game_case not in (None,'games','emulators'):raise ValueError("Select one library journey")
     bootstrap="import sys;from pathlib import Path;sys.path.insert(0,sys.argv.pop(1));helper=sys.argv.pop(1);frozen=sys.argv.pop(1);sys.argv=[frozen]+sys.argv[1:];exec(compile(Path(helper).read_bytes(),frozen,'exec'),{'__name__':'__main__','__file__':frozen})"
     frozen='games-acceptance.py' if game_case else 'tv-library-acceptance.py'
-    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--local-search' if local_search else '--pages' if pages else '--playlists' if playlists else '--movie-art' if movie_art else '--history','--inspect']
+    flags=(['--emulator'] if game_case=='emulators' else []) if game_case else ['--local-search' if local_search else '--pages' if pages else '--playlists' if playlists else '--movie-art' if movie_art else '--music-transport' if music_transport else '--history','--inspect']
     return ['python3','-c',bootstrap,str(source/'tools'),str(helper),str(source/'tools'/frozen),str(executable)]+flags
 
 
@@ -2161,7 +2167,7 @@ class Oracle:
         if store_helper_digest and case not in ('store','store-web','store-offline','store-updates','store-discovery'):raise RuntimeError('Store helper is Store-only')
         if reference_collections_digest and (not reference_helper_digest or case not in ('lounge','pastel')):raise RuntimeError('Reference collections helper is Lounge/Pastel-only')
         if reference_helper_digest and case not in ('lounge','pastel'):raise RuntimeError('Reference helper is Lounge/Pastel-only')
-        if history_helper_digest and case not in ('local-search','history','pages','playlists','movieart','games','emulators'):raise RuntimeError('Unsupported library helper case')
+        if history_helper_digest and case not in ('local-search','history','pages','playlists','movieart','music-transport','games','emulators'):raise RuntimeError('Unsupported library helper case')
         if feature_helper_digest and case!='guide-features':raise RuntimeError('Feature helper is guide-features-only')
         if studio_helper_digest and case not in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog'):raise RuntimeError('Studio helper requires a Studio/desktop case')
         if case in ("repairs", "apps", "clients", "vpn", "shell", "androidapps") and not installed:
@@ -2188,9 +2194,9 @@ class Oracle:
             command=reference_helper_command(source,helper,executable,flags,collections_helper)
             if reference_collections_digest:self.update(referenceCollectionsHelperSha256=reference_collections_digest)
             self.update(acceptanceHelperSha256=reference_helper_digest)
-        if case in ('local-search','history','pages','playlists','movieart','games','emulators') and history_helper_digest:
+        if case in ('local-search','history','pages','playlists','movieart','music-transport','games','emulators') and history_helper_digest:
             helper=verified_studio_helper(self.root,history_helper_digest,'history')
-            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',movie_art=case=='movieart',game_case=case if case in ('games','emulators') else None)
+            command=history_helper_command(source,helper,executable,local_search=case=='local-search',pages=case=='pages',playlists=case=='playlists',movie_art=case=='movieart',music_transport=case=='music-transport',game_case=case if case in ('games','emulators') else None)
             self.update(acceptanceHelperSha256=history_helper_digest)
         if case in ('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog') and studio_helper_digest:
             helper=verified_studio_helper(self.root,studio_helper_digest)
@@ -2231,7 +2237,7 @@ class Oracle:
             if case=="guide-lifecycle" or (case in {'guide-features','guide-surfaces'} and any((p/'guide-soak-ready.json').is_file() for p in evidence)):
                 write_soak_receipt(self.run,evidence,executable)
             self.update(visualCase=case, visualPassed=True, visualReview="pending",
-                        visualAcceptance="diagnostic_only" if diagnostic else "pending", semanticAcceptance="not_verified", executable=str(executable))
+                        visualAcceptance="diagnostic_only" if diagnostic or case=='music-transport' else "pending", semanticAcceptance="not_verified", executable=str(executable))
         except (RuntimeError, TimeoutError) as error:
             journey_failure = error
         finally:
@@ -2549,7 +2555,7 @@ def write_report(run):
     with tarfile.open(run / "report.tar.gz.tmp", "w:gz") as archive:
         for path in sorted(run.iterdir()):
             if path.is_file() and not path.is_symlink() and (path.suffix in (".log", ".json", ".xml")
-                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|local-search|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-updates|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
+                    or re.fullmatch(r"evidence-(sources|themecontrols|themecustom|themefaults|themes|studio|studio-designs|studio-search|desktop|collections|catalog|local-search|history|lounge|pastel|pages|guide|guide-surfaces|guide-lifecycle|guide-features|guide-soak|guide-reopen|movieart|music-transport|repairs|apps|clients|vpn|shell|playlists|android|androidapps|store|store-web|store-offline|store-updates|store-discovery|games|emulators)-[0-9]+\.tar\.gz", path.name)
                     or re.fullmatch(r"studio-test-[a-z0-9-]+\.png", path.name)):
                 archive.add(path, arcname=path.name, recursive=False)
     (run / "report.tar.gz.tmp").replace(run / "report.tar.gz")

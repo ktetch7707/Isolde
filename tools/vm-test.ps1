@@ -27,7 +27,7 @@ if ($Diagnostic -and ($Action -ne 'Visual' -or $Installed)) { throw 'Diagnostic 
 if ($ApplyStorageRetention -and ($Action -ne 'Configure' -or $ConfigureTarget -ne 'storage-capacity')) { throw 'ApplyStorageRetention requires Configure storage-capacity.' }
 if ($ResumeRunId -and ($Action -ne 'Test' -or $Suite -ne 'all' -or $ReuseFullRun)) { throw 'Campaign resumption requires Test -Suite all, without coverage reuse.' }
 if ($OrphanVisualPid -and $Action -ne 'Recover') { throw 'OrphanVisualPid is Recover-only.' }
-$validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','local-search','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-updates','store-discovery','games','emulators')
+$validCases = @('studio','studio-designs','studio-search','themes','themecustom','themefaults','themecontrols','sources','desktop','collections','catalog','local-search','history','lounge','pastel','pages','guide','guide-surfaces','guide-lifecycle','guide-features','guide-soak','guide-reopen','movieart','music-transport','repairs','apps','clients','vpn','shell','playlists','android','androidapps','store','store-web','store-offline','store-updates','store-discovery','games','emulators')
 $Cases = @($Cases | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })
 $invalidCases = @($Cases | Where-Object { $_ -notin $validCases })
 if ($FrozenReferenceHelpers -and ($Action -ne 'Visual' -or @($Cases | Where-Object { $_ -notin @('lounge','pastel') }).Count)) { throw 'FrozenReferenceHelpers requires Visual with Lounge/Pastel only.' }
@@ -132,7 +132,7 @@ try {
                 $featureDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/guide-features-$featureDigest.py")) -TimeoutSeconds 30 -Log $transport
             }
-            if ($case -in @('local-search','history','pages','playlists','movieart','games','emulators')) {
+            if ($case -in @('local-search','history','pages','playlists','movieart','music-transport','games','emulators')) {
                 $helper = Join-Path $PSScriptRoot $(if($case -in @('games','emulators')){'games-acceptance.py'}else{'tv-library-acceptance.py'})
                 $historyDigest = (Get-FileHash -LiteralPath $helper -Algorithm SHA256).Hash.ToLowerInvariant()
                 $null = Invoke-OracleProcess -File scp.exe -Arguments ($scpArgs + @($helper,"isolde-dev@127.0.0.1:$guestHome/isolde-oracle/bin/history-helper-$historyDigest.py")) -TimeoutSeconds 30 -Log $transport

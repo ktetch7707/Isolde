@@ -3,6 +3,15 @@ Location: `docs/agent-backlog.md`. Persistent entrypoint: `AGENTS.md`.
 
 ## Current acceptance reconciliation — 2026-11-12
 
+November14 review: acceptance is **89% (2224/25)**,199/238 milestones; T04=71%. Narrow T04.6.aa credits installed Menu/seek/resume/stop/origin/Home evidence under the original fixed weight.
+Recent coder changes are under combined review/verification. BUG-180–185 cover
+the runner recovery-binary fixture, real signature return handling, private
+digest scratch files, an incorrect installer assertion, premature Steam warning
+deletion and a fresh-profile media-helper assumption. Audit b passes129 runner
+checks; combined review-media-20261114-a passes63/63 with zero skips. Release2395e69bb1f9dbc915843c6e is deployed; installed media outcomes are pending. T13/T31
+remain excluded and earn no completion credit. Resume the current T04 checkpoint
+in `docs/execution-queue.md`; details in `docs/test-campaign-2026-11-11.md`.
+
 November13 current: **89% (2219/25 =88.76%)**,197/235 milestones.
 T04 advances51→66%: installed fresh source/content/provider setup, actual scan
 to metadata and visible poster, typed native source save/rollback and remote
@@ -128,7 +137,7 @@ Sequencing: [implementation-order.md](implementation-order.md). Requirements/ame
 
 - ACTIVE: **T01,T03–T05,T09–T12,T14–T30 = 25 tasks**. T02/T06–T08/T13/T31 are excluded. H01–H05 remain a separate physical qualification ledger.
 - Task % = half-up round(100 × mean(original Scope group earned fractions)). Unsplit groups retain checked=1/open=0; split groups earn done children / total children under [the milestone ledger](progress-milestones.md). Each remaining group and task retains its weight. Overall = half-up round(sum of the 25 rounded task percentages / 25), capped at 99% until every in-scope task reaches 100% in that metric. Acceptance remains separate from Coding%. Reproduce acceptance with `pwsh -NoProfile -File tools/backlog-progress.ps1`.
-- Acceptance sum **2219**, Overall **89%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
+- Acceptance sum **2224**, Overall **89%**. Coding sum **2500**, Overall **100%**. No task percentage changed as a result of exclusion.
 - **S1 = 100% when all in-scope redesigned VM software groups and required checks pass.** T13/T31 are not prerequisites. Hardware, external account/region and participant approval remain outside S1.
 - Reuse verified foundations with explicit source-applicability checks. Regressions reopen owning gates. Mocks, plans, source presence, process spawn and provider sign-in do not complete product workflows.
 - Standing software gates: both generic reference recreation/reset pairs; profile/account/data isolation where promised; atomic save/rollback/no rewrite on read; Kodi media/progress ownership; disconnected VM Generator Test; OFF-gated zero requests; reachable Settings/Edit recovery. Physical repetition is H1.
@@ -166,7 +175,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T01 | 16 | Current-source build and visual ledger | 100% | 100% | frozen T21 Linux build/source/reference ledger reconciled |
 | T05 | 17 | Grid renderer evidence reconciliation | 100% | 100% | T17 geometry corroborated by final T21 suite and installed reference pairs |
 | T03 | 18 | Local Kodi search and installed acceptance | 100% | 100% | p62 full/x5 focused; installed56-episode paging/playback/exact Search and library return accepted |
-| T04 | 19 | Complete Kodi interface, preservation and import | 66% | 100% | installed sources/title-art editing, native recovery, fresh scan/real poster and capability routes accepted; playback/playlist/import closure open |
+| T04 | 19 | Complete Kodi interface, preservation and import | 71% | 100% | installed sources/title-art editing, native recovery, fresh scan/real poster and capability routes accepted; playback/playlist/import closure open |
 | T12 | 20 | System/input/keyboard, VPN, apps and screensavers | 54% | 100% | coding claim predates campaign: BUG-078 missing Power software and installed input/contrast defects remain; interface audio output verified narrowly; broad acceptance open |
 | T09 | 21 | Playback preference and viewing controls | 38% | 100% | all code complete: Always Play Locally preference (KodiService + DisplaySettings); T12 keyboard/screencode foundation; playback matrix and viewing controls complete |
 | T10 | 22 | Capture/HDMI/audio software and editors | 67% | 100% | capture and audio software/editor paths implemented; native and installed acceptance deferred; physical H04 separate |
@@ -175,7 +184,7 @@ After Studio/shell and the current exception, follow the table: evidence reconci
 | T30 | 25 | Unified Games, local copies/discs and emulators | 44% | 100% | Six expanded route implementations added for BUG-058; round-two native suite passes; installed provisioning/gameplay open; pre-campaign Coding claim is not verified; expanded generation/VM acceptance remains open; 0/9 software acceptance gates |
 | T13 | — | Appliance software, distribution and user setup guide | 0% | 35% | **Excluded** from project requirements and averages; historical progress retained |
 | T31 | — | Frozen first-product software acceptance | 5% | 10% | **Excluded** from project requirements and averages; historical progress retained |
-| **Overall** | — | **average of 25 ACTIVE software tasks** | **89%** | **100%** | **2219 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
+| **Overall** | — | **average of 25 ACTIVE software tasks** | **89%** | **100%** | **2224 / 25 acceptance and 2500 / 25 coding rounded; S1 incomplete** |
 
 ## Current checkpoint summary
 

@@ -1,6 +1,52 @@
 # Executable backlog queue
 
-## Current checkpoint — November 13 installed media batch
+## Current checkpoint — November 14 review and media continuation
+
+Selected T04; acceptance89% (2224/25),199/238 milestones, T04=71%.
+T04.6.aa now credits independently reviewed native movie Menu/seek/resume/stop/
+origin/Home evidence; original0.45 playback weight is preserved across aa/ab/ac.
+Review fixes180–186 pass combined review-media-20261114-a63/63, zero skips,
+641sec; source18b416d854fec39cb6353b613a72117d53abc948031acd34ee33773ef1a323de.
+Commits5683815,5e10536,23013d3 are pushed. Installed release2395e69bb1f9dbc915843c6e
+is healthy, zero restarts. All23 installed005223-755 frames reviewed. Source/
+poster/movie/audio/seek/resume and preference failure/retry succeed; music/import/
+playlist closure is not credited.
+
+BUG-187: real Music scan accepts but discovers no first songs. Native c/d/e
+audits prove empty-directory scans read only existing Kodi database paths.
+The source save must not scan implicitly. Repair queues canonical configured/
+granted music roots through a typed native operation with complete source/path
+validation. No direct database edits or caller-supplied paths. Existing bridge
+regressions cover missing source, playback refusal, retargeted path and no writes.
+f builds/installs native package7f99ee7a0c6b successfully; service healthy.
+g passed8/8 in111sec with strict a63/63 reuse; installed release3dba9c9ac15b0a21a5fef7cb.
+Native queue/scan repair535b7ca was pushed. g012159-277 proves fresh scan to
+both tagged tracks, album/songs and actual FLAC playback; it stops on pause
+(BUG-189). Independent playlist attempt stopped on the obsolete Kodi fixture
+import dialog (BUG-190). Neither is a closure pass.
+
+t04-closure-20261114-k passed all63 CTest registrations in424sec and deployed
+8ea86bda72cadf2109b9f52c. The installed batch reported movieart music pause,
+playlist local-source save, and offline search fixture bootstrap failures
+together. Lounge and Pastel completed their recreation and reset workflows
+after those failures. The runner confirmed restoration between cases.
+
+t04-audit-20261114-l passed130 runner self-tests, including a real CTest
+failure followed by a passing registration. Kodi's source shows that local
+scraper content is assigned before optional settings are loaded, and that
+boolean pause/resume uses a direct player message. The native adapter now
+accepts setting-free local metadata sources, and the bridge dispatches the
+explicit transport state. Offline search shares the playlist scanner fixture.
+m built and installed managed Kodi a12e64a61200. The o candidate passed all
+eight affected registrations using strict reuse against k, then deployed
+76064eee7a240e071a3421cd. Offline local-search completed 56-episode paging,
+real playback and exact result return. Local TV source apply and scanning now
+work. Movieart music pause and stop still time out (BUG-189). Playlist creation
+and rename worked, but the fixture missed its collision entry and rule preview
+input route (BUG-192). Continue on the same candidate with the short
+music-transport diagnostic and corrected playlist route. T04 is71%.
+
+## Previous checkpoint — November 13 installed media batch
 
 az full integration passes63/63 (687sec), source
 007084cb774fcd4ae59d80af0d4e7ce08ad5455b09d2a4417c53736bfebf6b82;
