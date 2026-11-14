@@ -305,6 +305,12 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=
     elif request["method"] in ("VideoLibrary.Scan","AudioLibrary.Scan"):
         if params:
             return error(-32602, "Scan uses only this profile's configured sources")
+        if request["method"] == "AudioLibrary.Scan":
+            try:
+                if sources is None:raise ValueError("Managed music sources unavailable")
+                return {"jsonrpc":"2.0","id":request_id,"result":sources.handle('Isolde.ScanMusic',{})}
+            except Exception:
+                return error(-32000,"Music scan unavailable. Check configured folders, stop playback and retry.")
         params = {"showdialogs": False}
     elif request["method"] == "XBMC.GetInfoBooleans":
         if params not in ({"booleans": ["Library.IsScanningVideo"]},{"booleans": ["Library.IsScanningMusic"]}):

@@ -44,6 +44,10 @@ class BridgeTests(unittest.TestCase):
                 elif operation=='restore':
                     ok=not fail_restore
                     if ok:state=json.loads(json.dumps(backup))
+                elif operation=='scanmusic':
+                    self.assertEqual(request['expected'],state)
+                    self.assertEqual(request['paths'],[str(media)+'/'])
+                    self.assertFalse((control/'source-journal.json').exists())
                 (control/'source-reply.json').write_text(json.dumps(dict(version=1,token=request['token'],ok=ok,sources=state,sourceFileExists=True)))
             store=module.Sources(profile,execute,builtin,True,[str(media)])
             draft=dict(name='Movies',path=str(media)+'/',category='video',content='movies',scraper='metadata.local',recursive=True,folderNames=False,noUpdate=False,exclude=False,remove=False)
@@ -71,6 +75,27 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(state,saved);playing=False
             music=dict(draft,category='music',content='music',scraper='',name='Music')
             self.assertTrue(store.handle('Isolde.PreviewSource',{'source':music})['preview'])
+            with self.assertRaisesRegex(ValueError,'Add an allowed music source'):
+                store.handle('Isolde.ScanMusic',{})
+            music_preview=store.handle('Isolde.PreviewSource',{'source':music})
+            store.handle('Isolde.ApplySource',dict(source=music,revision=music_preview['revision']))
+            music_saved=json.loads(json.dumps(state))
+            self.assertEqual(store.handle('Isolde.ScanMusic',{}),'OK')
+            self.assertEqual(state,music_saved)
+            moved=Path(temporary)/'original-media'
+            media.rename(moved);media.symlink_to(other,target_is_directory=True)
+            try:
+                with self.assertRaisesRegex(ValueError,'Reconnect'):
+                    store.handle('Isolde.ScanMusic',{})
+            finally:
+                media.unlink();moved.rename(media)
+            playing=True
+            with self.assertRaisesRegex(ValueError,'Stop playback'):
+                store.handle('Isolde.ScanMusic',{})
+            playing=False
+            remove_music=dict(music,remove=True)
+            preview=store.handle('Isolde.PreviewSource',{'source':remove_music})
+            store.handle('Isolde.ApplySource',dict(source=remove_music,revision=preview['revision']))
             remove=dict(draft,remove=True);preview=store.handle('Isolde.PreviewSource',{'source':remove})
             store.handle('Isolde.ApplySource',dict(source=remove,revision=preview['revision']))
             self.assertEqual(state,[]);self.assertTrue(media.is_dir());self.assertFalse((other/'isolde').exists())
@@ -447,9 +472,14 @@ class BridgeTests(unittest.TestCase):
             return '{"jsonrpc":"2.0","id":7,"result":"OK"}'
         self.assertEqual(bridge.dispatch(self.request("VideoLibrary.Scan"), execute)["result"], "OK")
         self.assertEqual(received[0]["params"], {"showdialogs": False})
-        self.assertEqual(bridge.dispatch(self.request("AudioLibrary.Scan"), execute)["result"], "OK")
-        self.assertEqual(received[1]["method"], "AudioLibrary.Scan")
-        self.assertEqual(received[1]["params"], {"showdialogs": False})
+        class MusicSources:
+            def handle(self,method,params):
+                self.request=(method,params)
+                return 'OK'
+        sources=MusicSources()
+        self.assertEqual(bridge.dispatch(self.request("AudioLibrary.Scan"), execute,sources=sources)["result"], "OK")
+        self.assertEqual(sources.request,('Isolde.ScanMusic',{}))
+        self.assertIn('error',bridge.dispatch(self.request("AudioLibrary.Scan"),execute))
         for method, params in (
             ("VideoLibrary.Scan", {"directory": "/etc"}),
             ("VideoLibrary.Scan", {"showdialogs": True}),
@@ -459,9 +489,9 @@ class BridgeTests(unittest.TestCase):
             ("XBMC.GetInfoBooleans", {"booleans": ["System.HasNetwork"]}),
         ):
             self.assertIn("error", bridge.dispatch(self.request(method, params), execute))
-        self.assertEqual(len(received), 2)
+        self.assertEqual(len(received), 1)
         bridge.dispatch(self.request("XBMC.GetInfoBooleans", {"booleans": ["Library.IsScanningVideo"]}), execute)
-        self.assertEqual(len(received), 3)
+        self.assertEqual(len(received), 2)
 
     def test_local_socket_permissions_and_duplicate(self):
         with tempfile.TemporaryDirectory() as directory:

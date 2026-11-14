@@ -14,6 +14,7 @@
 #include "video/VideoInfoScanner.h"
 #include "video/VideoLibraryQueue.h"
 #include "music/MusicLibraryQueue.h"
+#include "music/infoscanner/MusicInfoScanner.h"
 #include <algorithm>
 #include <cstdlib>
 #include <cerrno>
@@ -212,7 +213,28 @@ int IsoldeSources(const std::vector<std::string>& parameters)
       CVideoDatabase database;
       if(!database.Open())throw std::runtime_error("Kodi video library unavailable");
       const auto operation=request["operation"].asString();
-      if(operation=="set" || operation=="restore")
+      if(operation=="scanmusic")
+      {
+        if(request["expected"]!=Inventory(database))throw std::runtime_error("Sources changed before scanning");
+        if(CVideoLibraryQueue::GetInstance().IsScanningLibrary() || CMusicLibraryQueue::GetInstance().IsScanningLibrary())throw std::runtime_error("Wait for the Kodi scan to finish");
+        const auto& paths=request["paths"];
+        const auto* sources=CMediaSourceSettings::GetInstance().GetSources("music");
+        if(!paths.isArray() || paths.size()==0 || paths.size()>128 || !sources)throw std::runtime_error("Choose configured music sources");
+        std::vector<std::string> validated;
+        for(unsigned int index=0;index<paths.size();++index)
+        {
+          const auto path=paths[index].asString();
+          if(path.empty() || path.front()!='/' || path.size()>4096
+             || std::find(validated.begin(),validated.end(),path)!=validated.end()
+             || std::none_of(sources->begin(),sources->end(),[&](const CMediaSource& source){return source.strPath==path && source.vecPaths.size()==1;}))
+            throw std::runtime_error("Music scan path no longer matches its source");
+          validated.push_back(path);
+        }
+        // An empty-directory music scan only revisits database paths. Queue
+        // configured roots explicitly so a fresh library can discover its first song.
+        for(const auto& path:validated)CMusicLibraryQueue::GetInstance().ScanLibrary(path,MUSIC_INFO::CMusicInfoScanner::SCAN_NORMAL,false);
+      }
+      else if(operation=="set" || operation=="restore")
       {
         if(CVideoLibraryQueue::GetInstance().IsScanningLibrary() || CMusicLibraryQueue::GetInstance().IsScanningLibrary())throw std::runtime_error("Wait for the Kodi scan to finish");
         const auto file=SourceFile();Descriptor config(open(file.parent_path().c_str(),O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC));

@@ -974,9 +974,20 @@ def focused_qml_coverage(root, run, base_id, suite):
             original=root/'runs'/base_id/'source'/name;current=run/'source'/name
             if not original.is_file() or not current.is_file() or digest(original)!=before.get(name) or digest(current)!=after.get(name):raise RuntimeError('Exact scan correction sources required')
             old_text=original.read_text();new_text=current.read_text()
+            if name=='kodi/service.isolde.bridge/bridge.py':
+                music_dispatch='''        if request["method"] == "AudioLibrary.Scan":
+            try:
+                if sources is None:raise ValueError("Managed music sources unavailable")
+                return {"jsonrpc":"2.0","id":request_id,"result":sources.handle('Isolde.ScanMusic',{})}
+            except Exception:
+                return error(-32000,"Music scan unavailable. Check configured folders, stop playback and retry.")
+'''
+                if new_text.count(music_dispatch)==1:
+                    normalized=new_text.replace(music_dispatch,'',1)
+                    if normalized==old_text or (normalized.count(new)==1 and normalized.replace(new,old,1)==old_text):continue
             if new_text.count(new)!=1 or new_text.replace(new,old,1)!=old_text:raise RuntimeError('Media correction exceeds the scan-only boundary')
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
-            {'src/media/KodiService.h','src/media/KodiService.cpp','src/media/KodiMedia.cpp','config/kodi-capabilities.json','qml/KodiSettingsView.qml','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/bridge.py','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
+            {'src/media/KodiService.h','src/media/KodiService.cpp','src/media/KodiMedia.cpp','config/kodi-capabilities.json','qml/KodiSettingsView.qml','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/bridge.py','kodi/service.isolde.bridge/sources.py','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
             {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_kodi_bridge.py','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
@@ -1839,6 +1850,7 @@ class Oracle:
                 if len(trees)!=1 or trees[0].resolve()!=trees[0]:raise RuntimeError('One ordinary authenticated Kodi source tree required')
                 audit={}
                 names={'xbmc/application/Application.cpp','xbmc/application/ApplicationPlayerCallback.cpp','xbmc/guilib/GUIWindowManager.cpp','xbmc/guilib/GUIComponent.cpp','xbmc/ServiceManager.cpp'}
+                names.update({'xbmc/interfaces/json-rpc/AudioLibrary.cpp','xbmc/music/MusicLibraryQueue.cpp','xbmc/music/MusicDatabase.cpp','xbmc/music/infoscanner/MusicInfoScanner.cpp','xbmc/interfaces/builtins/LibraryBuiltins.cpp'})
                 candidates=list((trees[0]/'xbmc/application').glob('*.cpp'))
                 if len(candidates)>64:raise RuntimeError('Unbounded native application source inventory')
                 for candidate in candidates:
@@ -1860,7 +1872,7 @@ class Oracle:
                     if not path.is_file() or path.stat().st_size>1024*1024:raise RuntimeError('Unsafe Kodi audit source: '+name)
                     lines=path.read_text().splitlines();selected=set()
                     for index,line in enumerate(lines):
-                        if any(token in line for token in ('GUI_MSG_PLAYBACK_STARTED','AddMsgTarget','AddMessageTarget','m_vecMsgTargets','DispatchThreadMessages','OnPlayBackStarted','ResetCurrentItem','DeInitialize','UnloadSkin','Minimize','TMSG_MINIMIZE','DestroyWindows')):
+                        if any(token in line for token in ('GUI_MSG_PLAYBACK_STARTED','AddMsgTarget','AddMessageTarget','m_vecMsgTargets','DispatchThreadMessages','OnPlayBackStarted','ResetCurrentItem','DeInitialize','UnloadSkin','Minimize','TMSG_MINIMIZE','DestroyWindows','ScanLibrary','StartMusicScan','AudioLibrary::Scan','UpdateLibrary','MusicInfoScanner::Start','CMusicDatabase::GetPaths','m_pathsToScan')):
                             selected.update(range(max(0,index-8),min(len(lines),index+24)))
                     audit[name]=dict(sha256=digest(path),lines=[str(index+1)+': '+lines[index] for index in sorted(selected)])
                 atomic_json(self.run/'kodi-native-source-audit.json',audit)

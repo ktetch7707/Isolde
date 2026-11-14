@@ -149,6 +149,18 @@ class Sources:
             self.recover(directory)
             current=self.native(directory,'get')
             if method=='Isolde.GetSources' and not params:return self.inventory(current)
+            if method=='Isolde.ScanMusic' and not params:
+                if self.rpc('Player.GetActivePlayers',{}):raise ValueError("Stop playback before scanning music")
+                paths=[]
+                for source in self.inventory(current)['sources']:
+                    if source['category']!='music' or not source['editable']:continue
+                    path=source['path']
+                    if not os.path.isdir(path) or os.path.realpath(path).rstrip('/')!=path.rstrip('/'):
+                        raise ValueError("Reconnect the configured music folder before scanning")
+                    if path not in paths:paths.append(path)
+                if not paths:raise ValueError("Add an allowed music source before scanning")
+                self.native(directory,'scanmusic',paths=paths,expected=current['sources'])
+                return 'OK'
             if method not in ('Isolde.PreviewSource','Isolde.ApplySource') or set(params)!=({'source'} if method=='Isolde.PreviewSource' else {'source','revision'}):raise ValueError("Invalid source operation")
             draft=self.draft(params['source'],current)
             revision=self.revision(current)

@@ -196,16 +196,14 @@ if ''' + repr(str(imported)) + ''' in selected:
         # Fresh source setup is performed by Isolde below, never a Kodi import dialog.
         movies = media / "movies"
         music = media / "music";music.mkdir()
-        import wave
         for number in (1,2):
-            song=music/f'Fixture song {number}.wav'
-            with wave.open(str(song),'wb') as output:
-                output.setnchannels(1);output.setsampwidth(2);output.setframerate(8000);output.writeframes(b'\0\0'*8000*60)
-            tags=b'INFO'
-            for tag,value in ((b'INAM',f'Fixture song {number}'),(b'IART','Isolde Fixture Artist'),(b'IPRD','Isolde Fixture Album')):
-                raw=value.encode()+b'\0';tags+=tag+struct.pack('<I',len(raw))+raw+b'\0'*(len(raw)%2)
-            data=song.read_bytes()+b'LIST'+struct.pack('<I',len(tags))+tags
-            song.write_bytes(data[:4]+struct.pack('<I',len(data)-8)+data[8:])
+            song=music/f'Fixture song {number}.flac'
+            # Use standard embedded Vorbis comments through the existing media
+            # stack, avoiding format-dependent RIFF INFO interpretation.
+            run('gst-launch-1.0','-q','audiotestsrc','wave=silence','num-buffers=469','samplesperbuffer=1024',
+                '!','audio/x-raw,rate=8000,channels=1','!','audioconvert','!',
+                'taginject',f'tags=title="Fixture song {number}",artist="Isolde Fixture Artist",album="Isolde Fixture Album"',
+                '!','flacenc','!','filesink','location='+str(song))
         folder = movies / "Big Buck Bunny (2008)"; folder.mkdir(parents=True)
         movie_file = folder / "Big Buck Bunny (2008).ogv"
         os.link(clip, movie_file)
