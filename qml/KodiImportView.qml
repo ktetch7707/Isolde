@@ -44,19 +44,23 @@ Item {
     onVisibleChanged: if (!visible) { pendingAction = ""; selectedIndex = 0; kodiImporter.releasePreview() }
 
     Rectangle { anchors.fill: parent; color: shell.surface }
+    Column {
+        id: header
+        width: parent.width; spacing: 20 * shell.gapScale
+        Text { font.family: shell.fontFamily; text: "KODI DESKTOP IMPORT"; color: shell.text; font.pixelSize: 30 * shell.textScale }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: kodiImporter.importStatus; color: shell.focus; font.pixelSize: 20 * shell.textScale }
+    }
     Flickable {
         id: scroll
-        anchors.fill: parent
+        anchors.top: header.bottom; anchors.topMargin: 20 * shell.gapScale
+        anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
         contentHeight: contents.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         Column {
             id: contents
             width: parent.width; spacing: 20 * shell.gapScale
-            Text { font.family: shell.fontFamily; text: "KODI DESKTOP IMPORT"; color: shell.text; font.pixelSize: 30 * shell.textScale }
             Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Import your existing desktop Kodi setup (skin, sources, add-ons, watch/resume state). A verified copy is installed into this Isolde profile. The original desktop configuration and media stay unchanged. Rollback restores this profile's previous configuration. Stop playback before continuing."; color: shell.muted; font.pixelSize: 18 * shell.textScale }
-            Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: kodiImporter.importStatus; color: shell.focus; font.pixelSize: 20 * shell.textScale }
-
             Repeater {
                 id: actions
                 model: [

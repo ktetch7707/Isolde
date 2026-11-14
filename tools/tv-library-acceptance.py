@@ -688,7 +688,16 @@ provider.setSettingString("searchlanguage","en-US")
                 assert stored_resume()==resume,'Editing source settings changed existing Kodi progress'
                 poster_capture('sourceprogresspreserved')
                 source_press('Escape');source_press('Up');source_press('Return')
-                poster_capture('localplaybackon');source_press('Return');poster_capture('localplaybackoff')
+                poster_capture('localplaybackon')
+                preference_file=config/'Kodi.conf';preference_before=preference_file.read_bytes()
+                directory_mode=config.stat().st_mode & 0o777;preference_mode=preference_file.stat().st_mode & 0o777
+                try:
+                    preference_file.chmod(0o400);config.chmod(0o500)
+                    source_press('Return');poster_capture('localplaybackfailed')
+                    assert preference_file.read_bytes()==preference_before,'Failed preference save changed persisted settings'
+                finally:
+                    config.chmod(directory_mode);preference_file.chmod(preference_mode)
+                source_press('Return');poster_capture('localplaybackoff')
                 preference=(config/'Kodi.conf').read_text()
                 assert 'alwaysPlayLocally=false' in preference,'Remote preference toggle was not persisted'
                 open_movie_card();key(shell,'Return')
@@ -720,6 +729,42 @@ provider.setSettingString("searchlanguage","en-US")
                 key(controls,'Escape');key('kodi','Escape')
                 wait(lambda:rpc(directory,'Isolde.PlaybackStatus').get('state')=='ended','Music stopped and returned')
                 run('wmctrl','-i','-a',shell,env=env);poster_capture('musicreturned')
+                # Exercise the installed importer against the guest's existing
+                # desktop Kodi, read-only at the source. All writes remain in
+                # this disposable Isolde profile and its verified snapshots.
+                import_spec=importlib.util.spec_from_file_location('installed_import_inventory',Path(__file__).with_name('kodi-import.py'))
+                import_support=importlib.util.module_from_spec(import_spec);import_spec.loader.exec_module(import_support)
+                desktop=Path.home()/'.kodi'
+                desktop_before=import_support.inventory(desktop)
+                prior_sources=(userdata/'sources.xml').read_bytes()
+                receipt=config/'kodi-import-backups'/profile/'receipt.json'
+                source_press('Home');source_press('Up',20);source_press('Left',10);source_press('Return')
+                source_press('Up',20);source_press('Down',7);source_press('Return')
+                source_press('Up',30);source_press('Down',8);source_press('Return')
+                source_press('Down',2);source_press('Return');time.sleep(2)
+                source_press('Down',8);poster_capture('importpreview')
+                assert not receipt.exists(),'Preview created an import snapshot or changed profile state'
+                source_press('Escape');source_press('Return')
+                source_press('Down');source_press('Return')
+                wait(lambda:receipt.is_file(),'Installed importer created a verified snapshot',seconds=90)
+                snapshot=json.loads(receipt.read_text())
+                assert snapshot['profile']==profile and snapshot['sourceEntries']==desktop_before and not snapshot['imported']
+                source_press('Down',2);source_press('Return');poster_capture('importready')
+                assert json.loads(receipt.read_text())['imported'] is False,'First Confirm imported before explicit consent'
+                source_press('Return')
+                wait(lambda:json.loads(receipt.read_text()).get('imported') is True,'Installed import confirmed',seconds=90)
+                assert import_support.inventory(desktop)==desktop_before,'Import changed desktop Kodi'
+                poster_capture('importapplied')
+                source_press('Down');source_press('Return')
+                assert json.loads(receipt.read_text())['imported'] is True,'Rollback applied before confirmation'
+                source_press('Return')
+                wait(lambda:json.loads(receipt.read_text()).get('imported') is False,'Installed rollback confirmed',seconds=90)
+                wait(lambda:(userdata/'sources.xml').read_bytes()==prior_sources,'Rollback restored the original private sources')
+                assert import_support.inventory(desktop)==desktop_before,'Rollback changed desktop Kodi'
+                poster_capture('importrollback')
+                source_press('Up');source_press('Return');source_press('Escape')
+                assert json.loads(receipt.read_text())['imported'] is False,'Cancelled import confirmation changed profile state'
+                (evidence/'import-workflow.json').write_text(json.dumps(dict(profile=profile,sourceUnchanged=True,previewNoWrite=True,confirmationRequired=True,importAndRollback=True,cancelNoWrite=True,sourceEntries=len(desktop_before)),indent=2))
                 for path,digest in hashes.items(): assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, path
                 (evidence/"result.json").write_text(json.dumps({"passed":True,"profile":profile,"freshProfile":True,
                     "normalProfileUsed":False,"scrapedByKodi":True,"metadataSupplied":False,"playbackVerified":True,
@@ -728,7 +773,8 @@ provider.setSettingString("searchlanguage","en-US")
                     "remotePosterCancelNoWrite":True,"remotePosterApplied":True,"unrelatedTitleArtPreserved":True,
                     "freshSourceSetupThroughIsolde":True,"sourcePreviewCancelNoWrite":True,"nativeSourceWriteFailureRecovery":True,"capabilityGuideRemoteRoute":True,"kodiMenusRequired":False,
                     "freshPlaybackReturnThroughIsolde":True,"actualKodiResumeSavedAndRestored":True,"preferenceOffLibraryDirect":True,"remoteHomeMoviesRoute":True,"realAudioTrackSelection":True,"sourceEditPreservesProgress":True,"remoteMusicSourceBrowsePlayback":True,"seekPosition":position,"storedResume":resume,
-                    "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned"]},indent=2))
+                    "installedImportRollback":True,"importSourceUnchanged":True,"preferenceWriteFailureRetained":True,
+                    "captures":["mediacapabilities","sourceempty","sourcepreview","sourcesaved","sourcefailed","sourcerecovered","movieart","movieposterpreview","movieposterapplied","moviefreshplaying","moviefreshcontrols","moviefreshaudio","moviefreshreturned","sourceprogresspreserved","localplaybackon","localplaybackfailed","localplaybackoff","movieresumed","moviefreshhome","musicsource","musicalbums","musicsongs","musiccontrols","musicreturned","importpreview","importready","importapplied","importrollback"]},indent=2))
                 return
             shows = wait(lambda: rpc(directory, "VideoLibrary.GetTVShows", {"properties": ["title"]}).get("tvshows"), "Kodi imported TV fixture")
             show_id = next(s["tvshowid"] for s in shows if s["title"] == "Isolde Television Fixture")

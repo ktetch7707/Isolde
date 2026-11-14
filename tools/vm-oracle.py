@@ -2442,7 +2442,7 @@ def collect_evidence(run, case, directories):
             if case in {"guide","guide-surfaces","guide-lifecycle","guide-features"}:
                 paths += [directory / name for name in ("pvr-source.json","guide-surfaces-cache.json","guide-soak-ready.json")]
             if case=="guide-lifecycle":paths += [directory/name for name in ('guide-lifecycle.json','guide-soak-ready.json')]
-            if case=="movieart":paths += [directory/name for name in ('source-setup.json','source-recovery-inventory.json')]
+            if case=="movieart":paths += [directory/name for name in ('source-setup.json','source-recovery-inventory.json','import-workflow.json')]
             if case=="guide-features":paths += [directory/name for name in ('guide-features.json','guide-soak-ready.json')]
             if case in {"guide-soak","guide-reopen"}:paths += [directory/name for name in ('soak-target.json','network-denial.json','cached-artwork-observation.json','original-home-layout.json')]
             if case in {"studio-designs", "studio-search"}:
