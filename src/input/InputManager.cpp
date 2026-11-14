@@ -28,6 +28,17 @@ InputManager::InputManager(const QString &storagePath, QObject *parent)
     loadBindings();
 }
 InputManager::~InputManager() { if (qApp) qApp->removeEventFilter(this); }
+static QString nativeShortcutForKey(int key)
+{
+    if(key==Qt::Key_Home)return QStringLiteral("Home");
+    if(key>=Qt::Key_F1 && key<=Qt::Key_F35)return "F"+QString::number(key-Qt::Key_F1+1);
+    if((key>=Qt::Key_A && key<=Qt::Key_Z) || (key>=Qt::Key_0 && key<=Qt::Key_9))return QString(QChar(key)).toLower();
+    return {};
+}
+QString InputManager::nativeReturnShortcut() const
+{
+    return m_bindings.contains(Home)?nativeShortcutForKey(m_bindings.value(Home)):QString{};
+}
 QVariantMap InputManager::webRemoteOptions(const QVariantMap &appearance) const
 {
     auto options=appearance;QVariantMap bindings;
@@ -212,6 +223,8 @@ bool InputManager::eventFilter(QObject *object, QEvent *event)
     if (commandForKey(key->key()) == Back && m_target != Back) { cancelBinding(); return true; }
     if (!usableKey(key->key()) || (key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         m_error = tr("Use a single remote button, without Ctrl, Alt or Meta.");
+    } else if(m_target==Home && nativeShortcutForKey(key->key()).isEmpty()) {
+        m_error = tr("Home also returns from native apps. Choose a letter, number, function key or the standard Home button.");
     } else {
         const auto assigned = commandForKey(key->key());
         if (assigned != None && assigned != m_target) {
@@ -331,6 +344,7 @@ void InputManager::loadBindings()
         const auto standard = defaultCommandForKey(key);
         if (command <= None || command > Search || it.key() != QString::number(command)
             || !it.value().isDouble() || it.value().toDouble() != key || !usableKey(key)
+            || (command==Home && nativeShortcutForKey(key).isEmpty())
             || keys.contains(key) || (standard != None && standard != command)) { invalid(); return; }
         bindings[command] = key;
         keys.insert(key);

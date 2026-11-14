@@ -194,7 +194,14 @@ struct ProfileRuntime {
     if (!homeLayout.load({}, profiles.layoutPath()))
         qFatal("%s", qPrintable(homeLayout.errorString()));
     sourceManager.setLayout(&homeLayout);
-    desktopMode.setPresentation(homeLayout.studioOptions().value("desktop").toMap());
+    const auto updateNativeReturn=[this]{
+        auto presentation=homeLayout.studioOptions().value("desktop").toMap();
+        const auto shortcut=input.nativeReturnShortcut();
+        if(!shortcut.isEmpty())presentation["returnShortcut"]=shortcut;
+        desktopMode.setPresentation(presentation);
+    };
+    updateNativeReturn();
+    QObject::connect(&input,&InputManager::bindingsChanged,&desktopMode,updateNativeReturn);
     guide=std::make_unique<GuideController>(QFileInfo(profiles.layoutPath()).absoluteDir().filePath("guide.sqlite"),profiles.activeId());
     actions.setGuide(guide.get());
     engine.rootContext()->setContextProperty(QStringLiteral("guideController"),guide.get());

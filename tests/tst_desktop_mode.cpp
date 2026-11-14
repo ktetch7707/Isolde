@@ -22,6 +22,7 @@ public:
     int delay=0,registrationDelay=0,registrations=0,creates=0;
     bool registered=false,rejectRegistration=false,objectPathResult=false;
     QString session;
+    QString expectedTrigger="Home";
     QStringList closed;
     QString introspect(const QString &) const override{return {};}
     bool handleMessage(const QDBusMessage &message,const QDBusConnection &bus) override{
@@ -43,8 +44,8 @@ public:
         if(create){session="/org/freedesktop/portal/desktop/session/"+sender+"/"+options.value("session_handle_token").toString();result["session_handle"]=objectPathResult?QVariant::fromValue(QDBusObjectPath(session)):QVariant(badSession?"/wrong/session":session);}
         else {
             const auto entries=qdbus_cast<QList<DesktopShortcut>>(message.arguments()[1]);
-            validBind=entries.size()==1 && entries.first().id=="return-home" && entries.first().properties.value("preferred_trigger")=="Home";
-            const QList<DesktopShortcut> granted=empty?QList<DesktopShortcut>{}:QList<DesktopShortcut>{{"return-home",{{"trigger_description","Home"}}}};
+            validBind=entries.size()==1 && entries.first().id=="return-home" && entries.first().properties.value("preferred_trigger")==expectedTrigger;
+            const QList<DesktopShortcut> granted=empty?QList<DesktopShortcut>{}:QList<DesktopShortcut>{{"return-home",{{"trigger_description",expectedTrigger}}}};
             result["shortcuts"]=QVariant::fromValue(granted);
         }
         bus.send(message.createReply(QVariant::fromValue(QDBusObjectPath(handle))));
@@ -90,10 +91,18 @@ private slots:
         mode.returnHome();portal->objectPathResult=true;mode.start("again");QTRY_VERIFY(mode.active());QCOMPARE(portal->registrations,1);
     }
     void nativeReturnRequiresGrantAndPreservesOrigin(){
-        DesktopMode mode(nullptr,*client);mode.setPresentation(options);QSignalSpy returned(&mode,&DesktopMode::returned);
+        QTemporaryDir bindingDir;InputManager input(bindingDir.filePath("bindings.json"));
+        QVERIFY(input.beginBinding(InputManager::Home));
+        QObject receiver;QKeyEvent key(QEvent::KeyPress,Qt::Key_F10,Qt::NoModifier);QCoreApplication::sendEvent(&receiver,&key);
+        QVERIFY(input.saveBinding());QCOMPARE(input.nativeReturnShortcut(),QString("F10"));
+        auto custom=options;custom["returnShortcut"]=input.nativeReturnShortcut();portal->expectedTrigger="F10";
+        DesktopMode mode(nullptr,*client);mode.setPresentation(custom);QSignalSpy returned(&mode,&DesktopMode::returned);
         mode.prepareNative("freetube");QVERIFY(mode.nativeMode());QVERIFY(!mode.active());QTRY_VERIFY(mode.active());
+        QVERIFY(portal->validBind);QCOMPARE(mode.shortcutDescription(),QString("F10"));
         portal->activate(*server,"/wrong/session");QTest::qWait(30);QVERIFY(mode.active());
         portal->activate(*server);QTRY_VERIFY(!mode.active());QCOMPARE(returned.count(),1);QCOMPARE(returned.first().first().toString(),QString("freetube"));
+        QVERIFY(input.clearBinding(InputManager::Home));QVERIFY(input.nativeReturnShortcut().isEmpty());
+        mode.setPresentation(options);portal->expectedTrigger="Home";
         portal->deny=true;mode.prepareNative("cbc-gem");QTRY_VERIFY(!mode.busy());QVERIFY(!mode.active());QVERIFY(!mode.errorString().isEmpty());
     }
     void identityRejectionNeverCreatesSession(){

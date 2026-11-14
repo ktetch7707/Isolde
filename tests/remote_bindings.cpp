@@ -64,6 +64,14 @@ void RemoteBindingTests::captureSaveReloadAndProfileIsolation() {
     QVERIFY(manager.resetBindings());
     QCOMPARE(manager.commandForKey(Qt::Key_F7), InputManager::None);
     QVERIFY(manager.webRemoteOptions({}).value("keyBindings").toMap().isEmpty());
+    QVERIFY(manager.nativeReturnShortcut().isEmpty());
+    QVERIFY(manager.beginBinding(InputManager::Home));press(Qt::Key_F10);QVERIFY(manager.saveBinding());
+    QCOMPARE(manager.nativeReturnShortcut(),QString("F10"));
+    { InputManager restored(path);QCOMPARE(restored.nativeReturnShortcut(),QString("F10")); }
+    QVERIFY(manager.beginBinding(InputManager::Home));press(Qt::Key_Help);
+    QVERIFY(manager.listening());QVERIFY(manager.errorString().contains("native apps"));
+    manager.cancelBinding();QCOMPARE(manager.nativeReturnShortcut(),QString("F10"));
+    QVERIFY(manager.clearBinding(InputManager::Home));QVERIFY(manager.nativeReturnShortcut().isEmpty());
 }
 
 void RemoteBindingTests::cancelConflictRepeatAndInvalidInput() {
