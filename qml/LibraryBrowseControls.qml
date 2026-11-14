@@ -255,7 +255,8 @@ Rectangle {
                     refreshPlaylistPending=true;kodiMedia.renamePlaylist(playlistItem.playlistName, text.trim())
                     if(playlistCatalog && !kodiMedia.busy)provider.refresh(playlistCatalog)
                 }
-                mode="playlists";playlistManageMode="";pendingPlaylistIndex=-1;selectedIndex=0;return
+                root.finishPlaylist()
+                return
             }
             else { kodiMedia.setView(root.mode, text); root.mode = "" }
         }
