@@ -956,9 +956,28 @@ def search_origin_main_delta(before,after):
 
 def focused_qml_coverage(root, run, base_id, suite):
     if suite=='media_controls':
+        # Permit only this scan refusal diagnostic; lifecycle changes still
+        # invalidate full coverage and must not hide behind this selector.
+        before=manifest(root/'runs'/base_id/'files.sha256');after=manifest(run/'files.sha256')
+        for name,old,new in (
+            ('src/media/KodiMedia.cpp',
+             '    if (m_busy || m_playbackActive || !m_connected) return;\n',
+             '    if (m_busy || m_playbackActive || !m_connected) {\n'
+             '        m_scanStatus = m_playbackActive ? "Stop playback before scanning, then retry."\n'
+             '            : m_busy ? "Kodi is finishing another operation. Wait, then retry the scan."\n'
+             '            : "Connect to Kodi before scanning. Refresh the library connection, then retry. " + m_status;\n'
+             '        emit changed();\n        return;\n    }\n'),
+            ('kodi/service.isolde.bridge/bridge.py',
+             '    elif request["method"].startswith("AudioLibrary."):',
+             '    elif request["method"] in ("AudioLibrary.GetAlbums", "AudioLibrary.GetSongs"):')):
+            if before.get(name)==after.get(name):continue
+            original=root/'runs'/base_id/'source'/name;current=run/'source'/name
+            if not original.is_file() or not current.is_file() or digest(original)!=before.get(name) or digest(current)!=after.get(name):raise RuntimeError('Exact scan correction sources required')
+            old_text=original.read_text();new_text=current.read_text()
+            if new_text.count(new)!=1 or new_text.replace(new,old,1)!=old_text:raise RuntimeError('Media correction exceeds the scan-only boundary')
         proof=qml_coverage(root,run,base_id,suite,'media_controls',
-            {'src/media/KodiService.h','src/media/KodiService.cpp','config/kodi-capabilities.json','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
-            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
+            {'src/media/KodiService.h','src/media/KodiService.cpp','src/media/KodiMedia.cpp','config/kodi-capabilities.json','qml/KodiSettingsView.qml','qml/KodiLibraryView.qml','qml/KodiSourcesView.qml','qml/KodiImportView.qml','qml/PlaybackOptionsWindow.qml','tools/kodi-window.py','native/kodi/IsoldeSources.cpp','kodi/service.isolde.bridge/bridge.py','kodi/service.isolde.bridge/artwork.py','kodi/service.isolde.bridge/service.py'},
+            {'tests/tst_home_navigation.cpp','tests/tst_kodi_media.cpp','tests/test_kodi_bridge.py','tests/test_vm_oracle.py','tests/test_kodi_artwork.py','tests/test_kodi_playback.py','tools/build-managed-kodi.py','tools/vm-oracle.py','tools/vm-test.ps1','tools/tv-library-acceptance.py','tools/test-all.ps1','tools/run-visual-acceptance.ps1'},'Media',{'docs/vm-storage-policy.md'})
         proof['changedMediaFiles']=proof.pop('changedMediaQml')
         return proof
     if suite=='store':
@@ -1852,6 +1871,20 @@ class Oracle:
                     shell_log=latest/'shell.log'
                     if shell_log.is_file() and not shell_log.is_symlink() and shell_log.stat().st_size<=4*1024*1024:
                         atomic_json(self.run/'kodi-last-fixture-shell.json',{'fixture':str(latest),'lines':shell_log.read_text(errors='replace').splitlines()[-100:]})
+                profile_root=Path.home()/'.local/share/Isolde/native-profiles'
+                logs=[]
+                if fixtures:
+                    profile_file=latest/'config/Isolde/profiles.json'
+                    if profile_file.resolve()!=profile_file or profile_file.stat().st_size>65536:raise RuntimeError('Unsafe fixture profile identity')
+                    fixture_profile=json.loads(profile_file.read_text())['active']
+                    if not re.fullmatch(r'[0-9a-f-]{36}',fixture_profile):raise RuntimeError('Invalid fixture profile identity')
+                    candidate=profile_root/fixture_profile/'kodi/home/.kodi/temp/kodi.log'
+                    if candidate.exists():logs=[candidate]
+                if logs:
+                    native_log=max(logs,key=lambda path:path.stat().st_mtime)
+                    if native_log.resolve()!=native_log or native_log.stat().st_uid!=os.getuid() or native_log.stat().st_size>16*1024*1024:raise RuntimeError('Unsafe native scan log')
+                    lines=native_log.read_text(errors='replace').splitlines()
+                    atomic_json(self.run/'kodi-last-scan-diagnostics.json',{'log':str(native_log),'lines':[line for line in lines if any(token in line.lower() for token in ('musicinfoscanner','audiolibrary.scan','tagloader','music scan','scanmusic','error <general>'))][-100:]})
                 return
             installed=Path('/opt/isolde-managed-kodi')
             if installed.exists():

@@ -2017,3 +2017,32 @@ seeks reaching780sec, retained connection, saved13min resume, scanner edit
 preserving progress, direct library resume with preference OFF and native Home.
 Movie playing/control/returned frames reviewed; complete music/playlist outcome
 and final combined capture review remain open.
+
+BUG-179: corrected helper attempt184547-800 reaches Scan music folders but
+still gets no songs. Source review identifies dispatch ordering: generic
+AudioLibrary.* read validation intercepts AudioLibrary.Scan before its scan
+branch and injects limits, which Kodi's scan method rejects. Restrict that
+read branch to GetAlbums/GetSongs. Existing configured-source scan test now
+asserts exact AudioLibrary.Scan parameters and rejects arbitrary paths/limits.
+The Media music-scan row also incorrectly displayed the service status instead
+of scan/error status, hiding the failure; show the scan status for row11 and
+match movie-scan disabled appearance. Refused busy/playback/disconnected scans
+now explain retry rather than silently returning. Existing media test checks
+playback refusal retains active playback. bc runs8 existing affected tests
+with strict az63/63 reuse; no new registration or full-suite rerun.
+Read-only audit bb retains the actual disposable-profile native scan log.
+ba accidentally selected the newer ordinary-service log and is not fixture
+evidence; the audit now derives the exact UUID from the latest fixture's
+bounded profiles.json, with owner/path/size validation. No service changes.
+
+bc stops at the runner self-test that rejects broad KodiMedia lifecycle reuse.
+Keep that refusal test intact. bd adds exact verified old/new source comparison
+for only startScan's refusal diagnostic and the AudioLibrary dispatch condition;
+any other core change still refuses reuse. This is a focused correction to the
+named scan failure, not permission to reuse unrelated lifecycle changes.
+
+bd passes8/8 affected registrations in111sec and129 runner self-tests, with
+strict az63/63 reuse. Source0b4e5e734937389bff8955764886c0fbb302fdec668a798d5692eb3cf630e86d;
+deployed releaseb093089c4ca87e2816382419, active/running/zero restarts and
+9.25GiB free. Installed movieart/playlists follows; no music success inferred
+until the actual installed scan/browse/playback completes.

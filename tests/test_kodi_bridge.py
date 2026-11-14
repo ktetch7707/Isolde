@@ -447,16 +447,21 @@ class BridgeTests(unittest.TestCase):
             return '{"jsonrpc":"2.0","id":7,"result":"OK"}'
         self.assertEqual(bridge.dispatch(self.request("VideoLibrary.Scan"), execute)["result"], "OK")
         self.assertEqual(received[0]["params"], {"showdialogs": False})
+        self.assertEqual(bridge.dispatch(self.request("AudioLibrary.Scan"), execute)["result"], "OK")
+        self.assertEqual(received[1]["method"], "AudioLibrary.Scan")
+        self.assertEqual(received[1]["params"], {"showdialogs": False})
         for method, params in (
             ("VideoLibrary.Scan", {"directory": "/etc"}),
             ("VideoLibrary.Scan", {"showdialogs": True}),
+            ("AudioLibrary.Scan", {"directory": "/etc"}),
+            ("AudioLibrary.Scan", {"limits": {"start": 0, "end": 50}}),
             ("VideoLibrary.Clean", {}),
             ("XBMC.GetInfoBooleans", {"booleans": ["System.HasNetwork"]}),
         ):
             self.assertIn("error", bridge.dispatch(self.request(method, params), execute))
-        self.assertEqual(len(received), 1)
-        bridge.dispatch(self.request("XBMC.GetInfoBooleans", {"booleans": ["Library.IsScanningVideo"]}), execute)
         self.assertEqual(len(received), 2)
+        bridge.dispatch(self.request("XBMC.GetInfoBooleans", {"booleans": ["Library.IsScanningVideo"]}), execute)
+        self.assertEqual(len(received), 3)
 
     def test_local_socket_permissions_and_duplicate(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -986,6 +986,7 @@ void KodiMediaTests::sourcePreviewAndPlaybackOptionsBoundaries()
     QCOMPARE(server.property("sourceParams").toMap()["revision"].toString(),QString(64,'c'));
     media.previewSource(source);QTRY_VERIFY(!media.busy());media.cancelSourcePreview();media.applySource(source);QVERIFY(!media.busy());QCOMPARE(applied.size(),1);
     media.selectIndex(49);media.playSelected();QTRY_VERIFY(media.playbackActive() && !media.busy());
+    media.scanMusic();QVERIFY(media.scanStatus().contains("Stop playback"));QVERIFY(media.playbackActive());
     QVERIFY(media.playbackCanPrevious());QVERIFY(media.playbackCanNext());
     media.refreshPlaybackOptions();QTRY_VERIFY(!media.busy());QCOMPARE(media.playbackOptions()["audio"].toList().size(),1);
     media.setPlaybackOption("view","zoom");QTRY_VERIFY(!media.busy());QCOMPARE(server.property("optionParams").toMap()["value"].toString(),QString("zoom"));

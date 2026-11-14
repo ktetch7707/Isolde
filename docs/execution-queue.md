@@ -9,7 +9,16 @@ Installed attempt183906-770 proves actual seek to780sec, persisted resume,
 direct preference-OFF resume and native Home return. It stops at music scan:
 the helper reentered retained Playback Preferences and never issued scan.
 BUG-178 helper Back correction is running against the same installed app in
-tool session22085 (movieart/playlists); do not launch another VM job.
+tool session22085 (movieart/playlists); that retry now ended at actual music
+scan BUG-179, generic AudioLibrary read dispatch injecting paging into Scan.
+Fix that branch and hidden music-scan errors together. bc's runner safety test
+correctly refuses broad core-file reuse; bd now permits only the exact scan
+guard diagnostic and music dispatch correction by comparing verified source
+bytes, retaining rejection of lifecycle edits. Current tool session57264 is
+bd media_controls with strict az63/63 reuse. bd now passes8/8 in111sec,
+source0b4e5e734937389bff8955764886c0fbb302fdec668a798d5692eb3cf630e86d;
+deployed releaseb093089c4ca87e2816382419 is healthy, zero restarts,9.25GiB free.
+Installed movieart/playlists is running in session60098. No other VM job active.
 User muted VM output; audible silence is not a failure.
 Use actual player state/time/track evidence. Acceptance remains89% pending
 the installed outcomes and capture review; no further full rerun is required

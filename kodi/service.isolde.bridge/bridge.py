@@ -282,7 +282,7 @@ def dispatch(raw, execute, playback=None, artwork=None, playlists=None, sources=
                 or not 0<=limits["start"]<=100000 or not 0<limits["end"]-limits["start"]<=50):
             return error(-32602,"Choose a configured PVR channel and pages of at most 50 broadcast listings")
         params=dict(params,limits=limits)
-    elif request["method"].startswith("AudioLibrary."):
+    elif request["method"] in ("AudioLibrary.GetAlbums", "AudioLibrary.GetSongs"):
         allowed = {"title", "artist", "year", "art"} if request["method"] == "AudioLibrary.GetAlbums" else {"title", "artist", "album", "albumid", "track", "duration", "art"}
         if set(params) - {"properties", "limits", "sort", "filter"}:
             return error(-32602, "Unsupported music query")

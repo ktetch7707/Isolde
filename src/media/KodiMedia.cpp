@@ -749,7 +749,13 @@ void KodiMedia::scanMusic()
 {startScan("Music");}
 void KodiMedia::startScan(const QString &kind)
 {
-    if (m_busy || m_playbackActive || !m_connected) return;
+    if (m_busy || m_playbackActive || !m_connected) {
+        m_scanStatus = m_playbackActive ? "Stop playback before scanning, then retry."
+            : m_busy ? "Kodi is finishing another operation. Wait, then retry the scan."
+            : "Connect to Kodi before scanning. Refresh the library connection, then retry. " + m_status;
+        emit changed();
+        return;
+    }
     ++m_generation;
     m_busy = true;
     m_stage = 2;

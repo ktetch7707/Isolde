@@ -98,12 +98,12 @@ Item {
                 color: root.selectedIndex === index ? shell.selected : shell.surface
                 border.width: root.selectedIndex === index ? 2 : 0
                 border.color: root.selectedIndex === index ? shell.selectedFocus : shell.focus
-                opacity: kodiService.switching || (index === 5 && kodiService.frontend !== "kodi") || (index === 2 && (!kodiMedia.connected || kodiMedia.busy)) || (index === 3 && kodiMedia.busy) ? 0.45 : 1
+                opacity: kodiService.switching || (index === 5 && kodiService.frontend !== "kodi") || ((index === 2 || index === 11) && (!kodiMedia.connected || kodiMedia.busy || kodiMedia.playbackActive)) || (index === 3 && kodiMedia.busy) ? 0.45 : 1
                 Text { id:actionLabel;font.family: shell.fontFamily; anchors.left:parent.left;anchors.right:parent.right;anchors.top:parent.top; anchors.margins: 18; text: modelData; color: (root.selectedIndex === index) ? shell.selectedText : shell.text; font.pixelSize: 21 * shell.textScale; wrapMode: Text.WordWrap }
                 MouseArea { anchors.fill: parent; onClicked: { root.selectedIndex = index; root.handleCommand(inputManager.confirm) } }
             }
         }
-        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: root.selectedIndex >= 4 ? kodiService.status : (kodiMedia.scanStatus || kodiMedia.status); color: shell.focus; font.pixelSize: 18 * shell.textScale }
+        Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: root.selectedIndex >= 4 && root.selectedIndex !== 11 ? kodiService.status : (kodiMedia.scanStatus || kodiMedia.status); color: shell.focus; font.pixelSize: 18 * shell.textScale }
         Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Both frontends use this Isolde profile's same Kodi home. Switching does not replace your skin, add-ons, sources or library. Exit Kodi normally before switching back."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
         Text { font.family: shell.fontFamily; width: parent.width; wrapMode: Text.WordWrap; text: "Put new movies in your existing movie folder, then scan here. Kodi uses this profile's configured video sources and content settings (including subfolders when enabled). This does not move, rename, import or clean up files. Use Media folder access below to allow a collection, then use Source setup to choose its content and metadata provider. Startup alone does not grant file access."; color: shell.muted; font.pixelSize: 17 * shell.textScale }
     }
