@@ -58,11 +58,13 @@ void OnlineDiscovery::settingsChanged()
         cancel();
         m_results.clear();
         m_availability.clear();
+        m_selectedTitle.clear();
     }
     if (!enabled()) {
         cancel();
         m_results.clear();
         m_availability.clear();
+        m_selectedTitle.clear();
         m_status = QStringLiteral("Web search is off. Local results only.");
         emit changed();
     } else if (!configured()) {
@@ -72,6 +74,17 @@ void OnlineDiscovery::settingsChanged()
         m_status = QStringLiteral("Web is on. Search metadata is provided by TMDB; availability does not imply entitlement.");
         emit changed();
     }
+}
+
+QVariantList OnlineDiscovery::availability() const
+{
+    QVariantList filtered;
+    for (const auto &entry : m_availability) {
+        const auto map = entry.toMap();
+        if (map.value(QStringLiteral("title")).toString() == m_selectedTitle)
+            filtered.append(entry);
+    }
+    return filtered;
 }
 
 void OnlineDiscovery::setRegion(const QString &region)
@@ -179,11 +192,12 @@ void OnlineDiscovery::loadAvailability(const QString &mediaType, int id, const Q
         return;
     }
     cancel();
+    m_selectedTitle.clear();
     m_availability.clear();
-    m_busy = true;
-    const QString requestedRegion = m_region;
     m_requestedTitle = normalizedTitle;
+    const QString requestedRegion = m_region;
     const auto generation = m_generation;
+    m_busy = true;
     m_status = QStringLiteral("Checking TMDB provider listings for %1…").arg(requestedRegion);
     auto *reply = get(endpoint(QStringLiteral("%1/%2/watch/providers").arg(mediaType).arg(id)));
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation, requestedRegion] {
@@ -191,6 +205,7 @@ void OnlineDiscovery::loadAvailability(const QString &mediaType, int id, const Q
         m_replies.removeAll(reply);
         reply->deleteLater();
     });
+    m_selectedTitle = normalizedTitle;
     emit changed();
 }
 
@@ -365,6 +380,7 @@ void OnlineDiscovery::clearResults()
     cancel();
     m_results.clear();
     m_availability.clear();
+    m_selectedTitle.clear();
     if (!enabled())
         m_status = QStringLiteral("Web search is off. Local results only.");
     else if (!configured())

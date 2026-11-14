@@ -20,6 +20,7 @@ class OnlineDiscovery final : public QObject {
     Q_PROPERTY(QString region READ region WRITE setRegion NOTIFY changed)
     Q_PROPERTY(QVariantList results READ results NOTIFY changed)
     Q_PROPERTY(QVariantList availability READ availability NOTIFY changed)
+    Q_PROPERTY(QString selectedTitle READ selectedTitle NOTIFY changed)
 
 public:
     explicit OnlineDiscovery(SearchSettings *settings, QObject *parent = nullptr,
@@ -33,7 +34,8 @@ public:
     QString status() const { return m_status; }
     QString region() const { return m_region; }
     QVariantList results() const { return m_results; }
-    QVariantList availability() const { return m_availability; }
+    QVariantList availability() const;
+    QString selectedTitle() const { return m_selectedTitle; }
 
     Q_INVOKABLE void setRegion(const QString &region);
     Q_INVOKABLE void search(const QString &query);
@@ -59,6 +61,7 @@ private:
     QUrl m_apiBase;
     QString m_readToken, m_region = QStringLiteral("US"), m_status = QStringLiteral("Web discovery is off.");
     QString m_requestedTitle;
+    QString m_selectedTitle;
     QVariantList m_results, m_availability;
     QList<QPointer<QNetworkReply>> m_replies;
     quint64 m_generation = 0;
