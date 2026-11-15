@@ -21,6 +21,38 @@ function method(file, name, context, anchor) {
     vm.runInContext(source.slice(start, end), context, {filename: file + ":" + name});
 }
 
+test("Studio suggests a free cell in the selected section, not another section's grid", () => {
+    const calls = [];
+    const scope = vm.createContext({
+        sectionMode: true, parentScopeId: "", scopeId: "shortcuts",
+        scopedItems: [
+            {categoryId: "shortcuts", placement: {x: 0, y: 0, width: 1, height: 1}},
+            {categoryId: "favorites", placement: {x: 1, y: 0, width: 3, height: 3}},
+        ],
+        grid: {columns: 4, rows: 3}, placementRows: 3,
+        candidate: {x: 0, y: 0, width: 1, height: 1}, origin: {},
+        preview: {revealPlacement(...args) { calls.push(args); }},
+        Qt: {callLater(fn) { fn(); }},
+    });
+    method("PageStudioView.qml", "suggestAdditionPosition", scope);
+    scope.suggestAdditionPosition();
+    assert.deepEqual(JSON.parse(JSON.stringify(scope.candidate)), {x: 1, y: 0, width: 1, height: 1});
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][1], "shortcuts");
+});
+
+test("Studio opens a visual control for numeric settings", () => {
+    let opened = "";
+    const scope = vm.createContext({
+        targets: [], selected: 0,
+        beginScalar() { opened = "slider"; },
+        beginKeyboard() { opened = "keyboard"; },
+    });
+    method("StudioInspector.qml", "activateField", scope);
+    scope.activateField({type: "number", key: "designHeight", min: 480, max: 1440, step: 10});
+    assert.equal(opened, "slider");
+});
+
 test("direct browse filters use the remote chooser and the same next-page query", () => {
     const calls = [];
     const scope = vm.createContext({

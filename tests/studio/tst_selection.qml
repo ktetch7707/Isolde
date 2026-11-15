@@ -134,7 +134,7 @@ Item {
             catalog.chooseFamily(family);catalog.handleCommand(inputManager.navigateRight);catalog.handleCommand(inputManager.confirm)
             compare(catalog.configuration.variant,"round");compare(catalog.view,"links")
             for(let i=0;i<4;++i)catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm);compare(appPickerSpy.count,1)
-            const remote=editor.session.componentPrototype("button",appPickerSpy.signalArguments[0][1]);compare(remote.root.placement.width,2);compare(remote.root.presentation.variant,"orb")
+            const remote=editor.session.componentPrototype("button",appPickerSpy.signalArguments[0][1]);compare(remote.root.placement.width,1);compare(remote.root.placement.height,1);compare(remote.root.presentation.variant,"orb")
             appPickerSpy.clear();catalog.begin();catalog.chooseFamily(family);const round=findChild(catalog,"studioVariant-round");verify(round!==null)
             mouseClick(round,round.width/2,round.height/2);compare(catalog.view,"links");for(let i=0;i<4;++i)catalog.handleCommand(inputManager.navigateDown);catalog.handleCommand(inputManager.confirm)
             compare(appPickerSpy.count,1);const pointer=editor.session.componentPrototype("button",appPickerSpy.signalArguments[0][1]);compare(JSON.stringify(pointer),JSON.stringify(remote))

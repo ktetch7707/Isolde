@@ -14,6 +14,8 @@ Applying a skin replaces the current Home design after an in-app confirmation. S
 
 ## Personalizing a design
 
+In Page Studio, standard and round buttons start at one grid cell and can be resized in Edit component. When adding to a section, placement uses that section's grid; components in other sections do not occupy its cells. Existing saved layouts keep their original placements.
+
 **Settings → Home → Design Home** exposes structured controls for the dashboard, selected section, selected card and navigation tab. No JSON editing is required. Up/Down chooses a control, Left/Right adjusts numbers/options, and OK opens text entry. Changes save immediately.
 
 Dashboard controls include columns, margin, gap, fit, design height, profile label, header style/name/buttons/clock, starting tab and wallpaper. Section controls include name, columns/span/height/centered width, headings, tint/opacity/blur/padding, link label/action and card defaults. Card controls include all seven presentation variants, subtitles, badges, icons, colors, circle/icon/label sizes, opacity, corners, spacing, artwork height, progress and original-pixel artwork cropping. Navigation tabs can be added, removed, renamed, filtered to section IDs and bound to validated actions. Section IDs are shown in the editor. Empty text removes the corresponding override; reset-presentation clears a section/card's overrides.

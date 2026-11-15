@@ -607,7 +607,7 @@ Item {
     }
     function suggestAdditionPosition() {
         const occupied=new Set();let bottom=grid.rows
-        for(const item of scopedItems){const p=item.placement;if(!p)continue;bottom=Math.max(bottom,p.y+p.height);for(let y=p.y;y<p.y+p.height;++y)for(let x=p.x;x<p.x+p.width;++x)occupied.add(y*grid.columns+x)}
+        for(const item of scopedItems){if(sectionMode && !parentScopeId && (item.categoryId || "")!==scopeId)continue;const p=item.placement;if(!p)continue;bottom=Math.max(bottom,p.y+p.height);for(let y=p.y;y<p.y+p.height;++y)for(let x=p.x;x<p.x+p.width;++x)occupied.add(y*grid.columns+x)}
         const rows=Math.min(placementRows,bottom+candidate.height)
         for(let y=0;y+candidate.height<=rows;++y)for(let x=0;x+candidate.width<=grid.columns;++x){
             let free=true
